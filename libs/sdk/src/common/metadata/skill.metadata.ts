@@ -355,6 +355,24 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * ```
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Optional skill quality rating (0..5, one decimal). Surfaced via the
+   * Skills HTTP API for consumers that want to filter by `min-rating` or
+   * sort by quality. Aligns with Glama / Smithery marketplace conventions.
+   *
+   * Hosts may populate this from a SKILL.md frontmatter field, a SaaS
+   * source, or by overlaying their own quality scoring.
+   */
+  rating?: number;
+
+  /**
+   * Optional skill category for grouping in discovery (e.g. "deployment",
+   * "testing"). The static catalog already organizes skills into category
+   * directories; this field surfaces that for HTTP API filtering and for
+   * dynamically registered skills that don't sit under the catalog tree.
+   */
+  category?: string;
 }
 
 // ============================================
@@ -464,6 +482,8 @@ export const skillMetadataSchema = z
     allowedTools: z.string().optional(),
     resources: skillResourcesSchema.optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    rating: z.number().min(0).max(5).optional(),
+    category: z.string().min(1).max(64).optional(),
   } satisfies RawZodShape<SkillMetadata, ExtendFrontMcpSkillMetadata>)
   .passthrough();
 

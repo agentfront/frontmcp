@@ -9,12 +9,13 @@
  * @module skill/resources/skill-resource.helpers
  */
 
+import { pathResolve, readFile } from '@frontmcp/utils';
+
 import type { ScopeEntry, SkillEntry } from '../../common';
-import type { SkillInstance } from '../skill.instance';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
-import { readFile, pathResolve } from '@frontmcp/utils';
+import { PublicMcpError, ResourceNotFoundError } from '../../errors';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
-import { ResourceNotFoundError, PublicMcpError } from '../../errors';
+import type { SkillInstance } from '../skill.instance';
 
 /**
  * Get all MCP-visible skill entries from the scope's skill registry.
@@ -145,6 +146,42 @@ export async function readAndParseSkillFile(
 ): Promise<{ frontmatter: Record<string, unknown>; body: string }> {
   const content = await readSkillFile(instance, resourceType, filename);
   return parseSkillMdFrontmatter(content);
+}
+
+/**
+ * Resolve a single resolved reference / example entry to its markdown body,
+ * honoring the three lookup paths declared on `SkillReferenceInfo` /
+ * `SkillExampleInfo`:
+ *
+ *   1. `content` — return inline (bundle-sourced skills carry the body).
+ *   2. `path`    — read from disk on demand (absolute path).
+ *   3. `filename` — historical lookup via `instance.getResources()[type]`.
+ *
+ * Throws when none of the three paths can produce content. Used by the
+ * `skills://{skillName}/{references,examples}/{name}` resource handlers so
+ * bundle-sourced and catalog-sourced skills surface identically.
+ */
+export async function loadResolvedSkillResourceBody(
+  instance: SkillInstance,
+  resourceType: 'references' | 'examples',
+  entry: { filename?: string; path?: string; content?: string },
+): Promise<string> {
+  if (typeof entry.content === 'string') {
+    return parseSkillMdFrontmatter(entry.content).body;
+  }
+  if (entry.path) {
+    try {
+      const raw = await readFile(entry.path, 'utf-8');
+      return parseSkillMdFrontmatter(raw).body;
+    } catch {
+      throw new Error(`Failed to read ${resourceType} from path "${entry.path}".`);
+    }
+  }
+  if (entry.filename) {
+    const { body } = await readAndParseSkillFile(instance, resourceType, entry.filename);
+    return body;
+  }
+  throw new Error(`Resolved ${resourceType} entry has no content/path/filename to load from.`);
 }
 
 /**

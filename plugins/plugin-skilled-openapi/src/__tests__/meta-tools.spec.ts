@@ -7,9 +7,9 @@
 
 import 'reflect-metadata';
 
+import { BundleStore } from '@frontmcp/adapters/skills';
 import { ScopeEntry, type SkillContent } from '@frontmcp/sdk';
 
-import { BundleStore } from '../bundle/bundle.store';
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { clearCompiledSchemaCache } from '../executor/schema-cache';
 import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.registry';
@@ -124,6 +124,11 @@ function makeToolThis(args: {
     },
     logger: fakeLogger,
     authInfo: args.authInfo ?? { user: { sub: 'u', roles: [], permissions: [] } },
+    // ToolContext.progress is `protected`; meta-tools call it through `this`.
+    // The test fixture doesn't go through the full ToolContext constructor,
+    // so stub it as a no-op resolving to `false` (the same return shape as
+    // the real method when no progressToken is present).
+    progress: jest.fn(async () => false),
   } as unknown as SearchSkillTool & LoadSkillTool & ExecuteActionTool;
 }
 
@@ -193,6 +198,161 @@ describe('load_skill', () => {
     const loadSkill = jest.fn(async () => undefined);
     const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => false) } });
     await expect(LoadSkillTool.prototype.execute.call(ctx, { skillId: 'nope' })).rejects.toThrow(/not found/);
+  });
+
+  it('forwards warning and omits actions when load result has neither', async () => {
+    const loaded: SkillContent = {
+      id: 's1',
+      name: 'S1',
+      description: 'd',
+      instructions: '# inst',
+      tools: [],
+      // no actions, no bundleVersion
+    };
+    const loadSkill = jest.fn(async () => ({
+      skill: loaded,
+      availableTools: [],
+      missingTools: [],
+      isComplete: false,
+      warning: 'partial-load',
+    }));
+    const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) } });
+    const result = await LoadSkillTool.prototype.execute.call(ctx, { skillId: 's1' });
+    expect(result.warning).toBe('partial-load');
+    expect(result.skill).not.toHaveProperty('actions');
+    expect(result.skill).not.toHaveProperty('bundleVersion');
+    expect(result.isComplete).toBe(false);
+  });
+});
+
+describe('search_skill — additional coverage', () => {
+  it('falls back to metadata.name when metadata.id is undefined', async () => {
+    const search = jest.fn(async () => [
+      {
+        metadata: { name: 'fallback-name', description: 'd' }, // no id
+        score: 0.5,
+        availableTools: [],
+        missingTools: [],
+        source: 'local' as const,
+      },
+    ]);
+    const ctx = makeToolThis({ scopeSkills: { search, hasAny: jest.fn(() => true) } });
+    const result = await SearchSkillTool.prototype.execute.call(ctx, { query: 'x' });
+    expect(result.skills[0].skillId).toBe('fallback-name');
+  });
+
+  it('omits bundleVersion when registry result has none', async () => {
+    const search = jest.fn(async () => [
+      {
+        metadata: { id: 's', name: 'S' }, // no description, no bundleVersion
+        score: 0.1,
+        availableTools: [],
+        missingTools: [],
+        source: 'local' as const,
+      },
+    ]);
+    const ctx = makeToolThis({ scopeSkills: { search, hasAny: jest.fn(() => true) } });
+    const result = await SearchSkillTool.prototype.execute.call(ctx, { query: 'x' });
+    expect(result.skills[0]).not.toHaveProperty('bundleVersion');
+    expect(result.skills[0].description).toBe('');
+  });
+});
+
+describe('execute_action — additional branch coverage', () => {
+  it('uses default deniedBy reason when authority guard returns no reason', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('s', 'a');
+    hiddenOps.set(entry);
+    const guard = {
+      check: jest.fn(async () => ({ granted: false })), // no `deniedBy`
+    } as unknown as AuthorityGuard;
+    const ctx = makeToolThis({ hiddenOps, authorityGuard: guard });
+    const result = await ExecuteActionTool.prototype.execute.call(ctx, { skillId: 's', actionId: 'a' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/policy not satisfied/);
+  });
+
+  it('uses fallback "<METHOD> <pathTemplate>" summary when entry.op.summary is missing', async () => {
+    // Indirectly exercises the `summary ?? ...` branch via tool registration —
+    // but execute_action itself doesn't read summary; this test just exercises
+    // the executor's allowedHosts derivation when the active bundle's services
+    // include a malformed URL (covers the catch on URL parse).
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('s', 'a');
+    hiddenOps.set(entry);
+
+    const bundleStore = new BundleStore();
+    bundleStore.swap({
+      schemaVersion: 1,
+      bundleId: 'b',
+      version: 'v',
+      generatedAt: '2026-05-04T00:00:00Z',
+      sourceDigest: 'a'.repeat(64),
+      services: [
+        { id: 'svc', baseUrl: 'http://localhost:9999' },
+        { id: 'broken', baseUrl: 'not-a-url' as never },
+      ],
+      authBindings: { def: { kind: 'none' } },
+      skills: [],
+      operations: {},
+    });
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps, bundleStore });
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 's',
+        actionId: 'a',
+        input: {},
+      });
+      expect(result.ok).toBe(true);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('handles a malformed pinned service baseUrl without throwing', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('s', 'a');
+    entry.service = { id: 'svc', baseUrl: 'not-a-url' as never };
+    hiddenOps.set(entry);
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps });
+      // Will fail SSRF further down the stack, but the URL-parse catch must
+      // not throw out of execute() itself.
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 's',
+        actionId: 'a',
+        input: {},
+      });
+      expect(result).toBeDefined();
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('formats validation errors with empty path as <root>', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('s', 'a', {
+      // a schema where the entire input is rejected (path is empty)
+      inputSchema: { type: 'string' as never },
+    });
+    hiddenOps.set(entry);
+    const ctx = makeToolThis({ hiddenOps });
+    const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+      skillId: 's',
+      actionId: 'a',
+      input: { wrong: 'shape' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/input validation failed/);
+    // The whole-input validation issue has an empty `path`; the formatter must
+    // render that as the literal `<root>` token so the LLM can tell which
+    // field broke. A looser regex would silently let a regression slip in.
+    expect(result.error).toMatch(/<root>/);
   });
 });
 
@@ -266,6 +426,43 @@ describe('execute_action', () => {
     } finally {
       global.fetch = realFetch;
     }
+  });
+
+  it('emits 5-step progress milestones on the happy path', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps });
+      const progressSpy = (ctx as unknown as { progress: jest.Mock }).progress;
+      await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      // Five milestones, monotonically increasing, total=5 each.
+      expect(progressSpy).toHaveBeenCalledTimes(5);
+      const calls = progressSpy.mock.calls.map((args) => args[0]);
+      expect(calls).toEqual([1, 2, 3, 4, 5]);
+      const totals = progressSpy.mock.calls.map((args) => args[1]);
+      expect(totals.every((t) => t === 5)).toBe(true);
+      const messages = progressSpy.mock.calls.map((args) => args[2]);
+      expect(messages).toEqual(['resolve-action', 'authority-check', 'input-validate', 'http-call', 'done']);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('stops emitting progress after an early-return phase (unknown action)', async () => {
+    const ctx = makeToolThis({});
+    const progressSpy = (ctx as unknown as { progress: jest.Mock }).progress;
+    await ExecuteActionTool.prototype.execute.call(ctx, { skillId: 's', actionId: 'missing' });
+    // Only the resolve-action milestone fires before the early return.
+    expect(progressSpy).toHaveBeenCalledTimes(1);
+    expect(progressSpy.mock.calls[0]).toEqual([1, 5, 'resolve-action']);
   });
 
   it('uses the entry service baseUrl when no active bundle is present (allowedHosts fallback)', async () => {

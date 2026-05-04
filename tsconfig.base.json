@@ -28,6 +28,7 @@
       "@frontmcp/lazy-zod": ["libs/lazy-zod/src/index.ts"],
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
       "@frontmcp/adapters/openapi": ["libs/adapters/src/openapi/index.ts"],
+      "@frontmcp/adapters/skills": ["libs/adapters/src/skills/index.ts"],
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/plugin-approval": ["plugins/plugin-approval/src/index.ts"],
       "@frontmcp/plugin-cache": ["plugins/plugin-cache/src/index.ts"],

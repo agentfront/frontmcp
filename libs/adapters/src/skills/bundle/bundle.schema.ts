@@ -130,6 +130,14 @@ const bundledSkillSchema = z
     tags: z.array(z.string().max(64)).max(64).optional(),
     operationIds: z.array(z.string().min(1).max(256)).min(0).max(2000),
     requiredAuthorities: authoritiesPolicySchema.optional(),
+    /**
+     * Other skill ids this skill depends on. Hosts that consume the bundle
+     * register skills in dependency order; cycles and missing deps are caught
+     * at apply time. Field name aligned with the agentskills Skill Package
+     * Manifest proposal (https://github.com/agentskills/agentskills/discussions/210)
+     * so bundles round-trip across runtimes without a schema bump.
+     */
+    requires: z.array(z.string().min(1).max(128)).max(64).optional(),
   })
   .strict();
 

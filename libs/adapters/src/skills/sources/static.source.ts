@@ -10,7 +10,7 @@ import { readFile } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay, type OverlayInput } from '../bundle/overlay-parser';
-import type { StaticSourceOptions } from '../skilled-openapi.types';
+import type { StaticSourceOptions } from '../source-options';
 import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
 /**

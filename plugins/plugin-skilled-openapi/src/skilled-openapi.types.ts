@@ -1,73 +1,25 @@
 // file: plugins/plugin-skilled-openapi/src/skilled-openapi.types.ts
 
+import { bundleSourceSchema, signatureKeySchema } from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 
-// ─── Bundle source configurations ──────────────────────────────────────────
-
-export const staticSourceSchema = z.object({
-  type: z.literal('static'),
-  /** Path to the bundle directory (containing spec.yaml + overlay.yaml) or a single overlay file. */
-  path: z.string().min(1),
-  /** Watch the path for changes (fs.watch). Default false. */
-  watch: z.boolean().default(false),
-});
-
-export const npmSourceSchema = z.object({
-  type: z.literal('npm'),
-  /** npm package specifier, e.g. `@acme/frontmcp-billing-bundle`. */
-  packageName: z.string().min(1),
-  /** Optional named export to read; default is the package's default export. */
-  exportName: z.string().optional(),
-  /**
-   * Verify GitHub artifact attestation / npm provenance for the package before loading.
-   * Defaults to true. Set false (with warning) only for local development packages.
-   */
-  verifyProvenance: z.boolean().default(true),
-});
-
-export const saasSourceSchema = z.object({
-  type: z.literal('saas'),
-  /** SaaS pull endpoint, e.g. `https://cloud.frontmcp.dev/v1/bundles/<bundleId>`. */
-  endpoint: z.string().url(),
-  /** Pinned JWT issued by the SaaS for the customer's FrontMCP server. */
-  authToken: z.string().min(1),
-  /**
-   * RFC 8707 resource indicator the JWT must encode. The plugin verifies
-   * `resource` AND `aud` claims match this on every push/pull.
-   */
-  expectedAudience: z.string().min(1),
-  /** Polling interval in ms (boot pull is always immediate). Default 300000 (5 min). */
-  pollIntervalMs: z.number().int().positive().default(300_000),
-  /**
-   * Mount a webhook handler at `POST /__skilled_openapi/push` so the SaaS can push
-   * updates synchronously. Default false in v1.2 (interval polling only).
-   */
-  enableWebhook: z.boolean().default(false),
-  /** JWKS URL for verifying SaaS-issued tokens. */
-  jwksUrl: z.string().url(),
-  /** Expected issuer (`iss`) claim. */
-  expectedIssuer: z.string().min(1),
-});
-
-export const bundleSourceSchema = z.discriminatedUnion('type', [staticSourceSchema, npmSourceSchema, saasSourceSchema]);
-
-export type StaticSourceOptions = z.infer<typeof staticSourceSchema>;
-export type NpmSourceOptions = z.infer<typeof npmSourceSchema>;
-export type SaasSourceOptions = z.infer<typeof saasSourceSchema>;
-export type BundleSourceOptions = z.infer<typeof bundleSourceSchema>;
-
-// ─── Signature verification ────────────────────────────────────────────────
-
-export const signatureKeySchema = z.object({
-  /** Stable key id (matches `kid` claim in the bundle JWT). */
-  keyId: z.string().min(1),
-  /** Algorithm for the signing key. */
-  alg: z.enum(['RS256', 'EdDSA']),
-  /** PEM-encoded public key (RSA SPKI or Ed25519). */
-  publicKeyPem: z.string().min(1),
-});
-
-export type SignatureKey = z.infer<typeof signatureKeySchema>;
+// Re-export source-layer schemas/types from the Skills Adapter so existing
+// consumers of @frontmcp/plugin-skilled-openapi keep working without a code
+// change. New code should import these directly from @frontmcp/adapters/skills.
+export {
+  bundleSourceSchema,
+  npmSourceSchema,
+  saasSourceSchema,
+  signatureKeySchema,
+  staticSourceSchema,
+} from '@frontmcp/adapters/skills';
+export type {
+  BundleSourceOptions,
+  NpmSourceOptions,
+  SaasSourceOptions,
+  SignatureKey,
+  StaticSourceOptions,
+} from '@frontmcp/adapters/skills';
 
 // ─── Outbound execution / SSRF ─────────────────────────────────────────────
 
@@ -156,6 +108,20 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
    * resolver instead of using this option.
    */
   credentials: z.record(z.string().min(1).max(256), z.string().min(1)).optional(),
+
+  /**
+   * Register each bundle operation as an internal SDK tool (visibility:
+   * 'internal') so other tools, agents, CodeCall scripts, and jobs can
+   * compose with it via `this.callTool('<bundleId>.<operationId>', args)`.
+   *
+   * Internal tools are excluded from `tools/list` and rejected for external
+   * `tools/call` requests — only callable in-process via the SDK helper.
+   *
+   * Default: true. Disable for very large bundles where the additional tool
+   * registry pressure outweighs the composition convenience, or when the
+   * three meta-tools are sufficient.
+   */
+  exposeOperationsAsInternalTools: z.boolean().default(true),
 });
 
 const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {

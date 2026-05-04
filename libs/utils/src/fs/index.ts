@@ -11,8 +11,10 @@ export {
   copyFile,
   cp,
   readdir,
+  realpath,
   rm,
   mkdtemp,
+  symlink,
   access,
   // Higher-level operations
   fileExists,

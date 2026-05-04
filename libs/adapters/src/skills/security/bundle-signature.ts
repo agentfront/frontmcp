@@ -20,7 +20,7 @@ import { createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { BundleIntegrity, ResolvedBundle } from '../bundle/bundle.types';
-import type { SignatureKey } from '../skilled-openapi.types';
+import type { SignatureKey } from '../source-options';
 
 export type SignatureVerifyResult =
   | { ok: true; keyId: string; alg: BundleIntegrity['alg'] }

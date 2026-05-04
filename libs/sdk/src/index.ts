@@ -134,6 +134,13 @@ export type {
 // Tool change events for subscription
 export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
+// Tool registry / instance / provider registry — exposed so plugins can
+// register synthetic tools at runtime (e.g. plugin-skilled-openapi's
+// internal-tool adapter for OpenAPI operations).
+export { default as ToolRegistry } from './tool/tool.registry';
+export { ToolInstance } from './tool/tool.instance';
+export { default as ProviderRegistry } from './provider/provider.registry';
+
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
 export type {

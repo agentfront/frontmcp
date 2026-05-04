@@ -7,6 +7,7 @@ module.exports = {
     ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/adapters/openapi$': '<rootDir>/../../libs/adapters/src/openapi/index.ts',
+    '^@frontmcp/adapters/skills$': '<rootDir>/../../libs/adapters/src/skills/index.ts',
     '^@frontmcp/auth$': '<rootDir>/../../libs/auth/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../../libs/utils/src/index.ts',
   },

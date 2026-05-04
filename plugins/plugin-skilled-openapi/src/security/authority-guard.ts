@@ -5,6 +5,7 @@
 // AuthoritiesEngine. The plugin owns the engine instance because it has its
 // own profile registry (none, in v1.2 — bundles ship inline policies).
 
+import type { AuthoritiesPolicy } from '@frontmcp/adapters/skills';
 import {
   AuthoritiesContextBuilder,
   AuthoritiesEngine,
@@ -15,8 +16,6 @@ import {
   type AuthoritiesResult,
 } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
-
-import type { AuthoritiesPolicy } from '../bundle/bundle.types';
 
 export interface AuthorityCheckArgs {
   /** Required-authorities policy from the bundle (skill-level + op-level merged). */

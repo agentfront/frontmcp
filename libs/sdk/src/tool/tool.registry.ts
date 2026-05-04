@@ -12,6 +12,7 @@ import {
   type ToolType,
 } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
+import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import {
   EntryValidationError,
@@ -289,8 +290,10 @@ export default class ToolRegistry extends RegistryAbstract<
     return [...local, ...adopted].filter((t) => {
       // Availability: hard filter — unavailable entries are excluded from both listing and execution
       if (!isEntryAvailable(t.metadata.availableWhen, ctx)) return false;
-      // Discovery: soft filter — hidden entries can still be called directly
-      if (!includeHidden && t.metadata.hideFromDiscovery === true) return false;
+      // Visibility: soft filter — hidden/internal entries are excluded from listings.
+      // `internal` and `hidden` both behave like the legacy hideFromDiscovery here;
+      // the call-tool flow enforces the additional external-call gate for `internal`.
+      if (!includeHidden && resolveToolVisibility(t.metadata) !== 'public') return false;
       return true;
     });
   }
@@ -298,22 +301,27 @@ export default class ToolRegistry extends RegistryAbstract<
   /**
    * Get tools appropriate for MCP listing based on client elicitation support.
    *
-   * This method handles capability-based tool filtering:
-   * - Always returns non-hidden tools
-   * - If client doesn't support elicitation, includes the sendElicitationResult fallback tool
+   * Filters applied:
+   * - Excludes `visibility !== 'public'` tools (hidden + internal). Hidden tools
+   *   remain externally callable by name; internal tools do not (gate enforced
+   *   in the call-tool flow).
+   * - Adds the sendElicitationResult fallback tool when the client doesn't
+   *   support standard elicitation. The fallback is itself `visibility: 'hidden'`
+   *   (it must remain externally callable), so the elicitation lookup uses
+   *   `getTools(true)` to bypass the visibility filter for that one case.
    *
    * @param supportsElicitation - Whether the client supports MCP elicitation (from session payload)
    * @returns Tools appropriate for this client
    */
   // NOTE: `any` is intentional - see getTools comment above
   getToolsForListing(supportsElicitation?: boolean): ToolEntry<any, any>[] {
-    const tools = this.getTools(false); // Non-hidden tools only
+    const tools = this.getTools(false); // visibility=public only
 
     // If client doesn't support standard elicitation, add the fallback tool
     if (!supportsElicitation) {
-      const allTools = this.getTools(true); // Include hidden to find elicitation tool
+      const allTools = this.getTools(true); // Include hidden/internal to find elicitation tool
       const elicitTool = allTools.find((t) => isSendElicitationResultTool(t.metadata?.name ?? ''));
-      if (elicitTool && !tools.includes(elicitTool)) {
+      if (elicitTool && resolveToolVisibility(elicitTool.metadata) !== 'internal' && !tools.includes(elicitTool)) {
         return [...tools, elicitTool];
       }
     }
@@ -681,6 +689,27 @@ export default class ToolRegistry extends RegistryAbstract<
     // Rebuild indexes
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Unregister a tool instance previously added via `registerToolInstance`.
+   * Returns true if the token was found and removed, false otherwise.
+   *
+   * Used by dynamic registrants (e.g. the OpenAPI internal-tool adapter) when
+   * a bundle swap drops or replaces operations. The instance map and indexed
+   * rows are kept in sync; downstream consumers see the change after `reindex`.
+   */
+  unregisterToolInstance(token: Token): boolean {
+    const typedToken = token as Token<ToolInstance>;
+    const existed = this.instances.delete(typedToken);
+    const before = this.localRows.length;
+    this.localRows = this.localRows.filter((row) => row.token !== token);
+    const removed = existed || this.localRows.length !== before;
+    if (removed) {
+      this.reindex();
+      this.bump('reset');
+    }
+    return removed;
   }
 
   /**

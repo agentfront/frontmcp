@@ -10,6 +10,11 @@ concurrency:
   group: perf-${{ github.ref }}
   cancel-in-progress: true
 
+# Default to least-privilege for all jobs. Jobs that need more (e.g. `report`
+# posts a PR comment) override this with their own `permissions:` block.
+permissions:
+  contents: read
+
 jobs:
   perf:
     runs-on: ubuntu-latest

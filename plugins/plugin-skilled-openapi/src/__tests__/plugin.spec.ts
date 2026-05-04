@@ -15,7 +15,8 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { BundleStore } from '../bundle/bundle.store';
+import { BundleStore } from '@frontmcp/adapters/skills';
+
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
@@ -212,6 +213,144 @@ describe('SkilledOpenApiPlugin', () => {
       }
       expect(sharedWarn.mock.calls.length + sharedError.mock.calls.length).toBeGreaterThan(0);
       await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('builds an OperationToolFactory and registers per-op internal tools when scope.tools is available', async () => {
+      // Use a bundle with an operation so the sync flow drives the factory's
+      // registerToolInstance call — verifying not just construction but the
+      // full wiring: factory → toolRegistry → registerToolInstance.
+      const bundleWithOp = {
+        ...validBundle,
+        skills: [
+          {
+            id: 'invoices',
+            name: 'Invoices',
+            description: 'Manage invoices.',
+            instructions: '# Invoices',
+            operationIds: ['createInvoice'],
+          },
+        ],
+        operations: {
+          createInvoice: {
+            operationId: 'createInvoice',
+            serviceId: 'svc',
+            httpMethod: 'POST',
+            pathTemplate: '/v1/invoices',
+            inputSchema: {},
+            outputSchema: {},
+            mapper: [],
+            authBindingRef: 'def',
+          },
+        },
+      };
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugin-test-'));
+      const bundlePath = path.join(tmpDir, 'bundle.json');
+      await fs.writeFile(bundlePath, JSON.stringify(bundleWithOp), 'utf8');
+
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: bundlePath },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: true,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+
+      const fakeLogger = {
+        warn: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      const fakeTools = {
+        registerToolInstance: jest.fn(),
+        unregisterToolInstance: jest.fn(() => true),
+        getToolsForListing: jest.fn(() => []),
+        getTools: jest.fn(() => []),
+      };
+      const fakeScope = {
+        logger: fakeLogger,
+        skills: {
+          registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
+          unregisterSkill: jest.fn(async () => false),
+        },
+        tools: fakeTools,
+        providers: { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) },
+      };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+
+      // Wait up to 1s for the deferred source.start() → bundle apply → tool
+      // factory registration chain to complete.
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline && fakeTools.registerToolInstance.mock.calls.length === 0) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(fakeTools.registerToolInstance).toHaveBeenCalled();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('warns when exposeOperationsAsInternalTools=true but scope.tools is unavailable', async () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: '/this/does/not/exist' },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: true,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+      const sharedWarn = jest.fn();
+      const childLogger = {
+        warn: sharedWarn,
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn(function self(): unknown {
+          return this;
+        }),
+      };
+      const fakeLogger = {
+        warn: sharedWarn,
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn(() => childLogger),
+      };
+      const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() }, tools: undefined };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+      expect(sharedWarn).toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
+    });
+
+    it('skips OperationToolFactory wiring when exposeOperationsAsInternalTools=false', async () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: '/this/does/not/exist' },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: false,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+      const fakeLogger = {
+        warn: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() } };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+      // The "scope.tools is unavailable" warn must NOT fire when the option is off.
+      expect(fakeLogger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
     });
 
     it('bundle-sync factory tolerates a malformed source config', async () => {

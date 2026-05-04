@@ -249,6 +249,43 @@ export async function stat(p: string): Promise<import('fs').Stats> {
 }
 
 /**
+ * Create a symbolic link at `linkPath` pointing to `target`.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param target - Path the symlink should point to
+ * @param linkPath - Where to create the symlink
+ *
+ * @example
+ * await symlink('/etc/hosts', '/tmp/hosts-link');
+ */
+export async function symlink(target: string, linkPath: string): Promise<void> {
+  const fsp = getFsp();
+  await fsp.symlink(target, linkPath);
+}
+
+/**
+ * Resolve a path, following symbolic links to their final target.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * Unlike `pathResolve`, this returns the canonical path with symlinks
+ * resolved, which is what callers need when validating that a path stays
+ * inside a trusted root (`startsWith` checks on `pathResolve` are
+ * symlink-bypassable).
+ *
+ * @param p - Path to resolve
+ * @returns Canonical absolute path with symlinks resolved
+ *
+ * @example
+ * const real = await realpath('/var/log/app.log');
+ */
+export async function realpath(p: string): Promise<string> {
+  const fsp = getFsp();
+  return fsp.realpath(p);
+}
+
+/**
  * Copy a file.
  *
  * **Node.js only** - throws an error if called in browser.

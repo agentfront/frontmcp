@@ -1,7 +1,6 @@
-import type { SkillContent, SkillRegistryInterface } from '@frontmcp/sdk';
+import { BundleStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import { type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
 
-import { BundleStore } from '../bundle/bundle.store';
-import type { ResolvedBundle } from '../bundle/bundle.types';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 
@@ -281,5 +280,274 @@ describe('BundleSyncService', () => {
     await sync.apply(next);
     expect(hiddenOps.get('invoices', 'createInvoice')).toBeUndefined();
     expect(hiddenOps.get('invoices', 'voidInvoice')?.op.pathTemplate).toBe('/v1/invoices/{id}/void');
+  });
+
+  describe('pinned bundle store', () => {
+    it('short-circuits with applied:false when pinned to a different version', async () => {
+      const fakeReg = new FakeRegistry();
+      const store = new BundleStore();
+      store.commit(buildBundle({ version: '7' }));
+      store.pin('7');
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        store,
+        { requireSignature: false, trustedKeys: [] },
+        fakeLogger,
+      );
+      const result = await sync.apply(buildBundle({ version: '8' }));
+      expect(result.applied).toBe(false);
+      expect(result.reason).toMatch(/pinned to 7.*8 not applied/);
+      expect(fakeReg.registered).toHaveLength(0);
+    });
+
+    it('short-circuits with applied:false when pinned to the same version (would otherwise throw)', async () => {
+      const fakeReg = new FakeRegistry();
+      const store = new BundleStore();
+      store.commit(buildBundle({ version: '7' }));
+      store.pin('7');
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        store,
+        { requireSignature: false, trustedKeys: [] },
+        fakeLogger,
+      );
+      const result = await sync.apply(buildBundle({ version: '7' }));
+      expect(result.applied).toBe(false);
+      expect(result.reason).toMatch(/already active/);
+    });
+  });
+
+  describe('malformed bundle errors are surfaced via rollback', () => {
+    it('throws a descriptive error when an operation references an unknown service', async () => {
+      const fakeReg = new FakeRegistry();
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [] },
+        fakeLogger,
+      );
+      const bundle = buildBundle();
+      // Surgical mutation: clear services so rebuildHiddenOps can't resolve.
+      const broken = { ...bundle, services: [] };
+      const result = await sync.apply(broken as unknown as ResolvedBundle);
+      expect(result.applied).toBe(false);
+      expect(result.reason).toMatch(/unknown serviceId/);
+    });
+
+    it('throws when an operation references an unknown authBindingRef', async () => {
+      const fakeReg = new FakeRegistry();
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [] },
+        fakeLogger,
+      );
+      const bundle = buildBundle();
+      const broken = { ...bundle, authBindings: {} };
+      const result = await sync.apply(broken as unknown as ResolvedBundle);
+      expect(result.applied).toBe(false);
+      expect(result.reason).toMatch(/unknown authBindingRef/);
+    });
+
+    it('throws when a skill references an unknown operationId', async () => {
+      const fakeReg = new FakeRegistry();
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [] },
+        fakeLogger,
+      );
+      const bundle = buildBundle();
+      const broken = { ...bundle, operations: {} };
+      const result = await sync.apply(broken as unknown as ResolvedBundle);
+      expect(result.applied).toBe(false);
+      expect(result.reason).toMatch(/unknown operationId/);
+    });
+  });
+
+  describe('internal tool factory wiring', () => {
+    function makeFakeFactory() {
+      return {
+        register: jest.fn(),
+        unregisterAll: jest.fn(),
+      };
+    }
+
+    it('drives operationToolFactory.register for each hidden-op when exposeOperationsAsInternalTools=true', async () => {
+      const fakeReg = new FakeRegistry();
+      const factory = makeFakeFactory();
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: true },
+        fakeLogger,
+        factory as never,
+      );
+      const result = await sync.apply(buildBundle());
+      expect(result.applied).toBe(true);
+      expect(factory.unregisterAll).toHaveBeenCalled();
+      expect(factory.register).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a warning but applies anyway when an individual register call throws', async () => {
+      const fakeReg = new FakeRegistry();
+      const factory = {
+        register: jest.fn(() => {
+          throw new Error('register-boom');
+        }),
+        unregisterAll: jest.fn(),
+      };
+      const warn = jest.fn();
+      const localLogger = { ...(fakeLogger as unknown as Record<string, unknown>), warn } as never;
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: true },
+        localLogger,
+        factory as never,
+      );
+      const result = await sync.apply(buildBundle());
+      expect(result.applied).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/internal-tool register failed/));
+    });
+
+    it('logs a warning when factory.unregisterAll throws (entire factory bails)', async () => {
+      const fakeReg = new FakeRegistry();
+      const factory = {
+        register: jest.fn(),
+        unregisterAll: jest.fn(() => {
+          throw new Error('unregister-boom');
+        }),
+      };
+      const warn = jest.fn();
+      const localLogger = { ...(fakeLogger as unknown as Record<string, unknown>), warn } as never;
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: true },
+        localLogger,
+        factory as never,
+      );
+      const result = await sync.apply(buildBundle());
+      expect(result.applied).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/internal-tool factory error/));
+    });
+
+    it('on rollback, swallows factory restore errors silently', async () => {
+      let firstApply = true;
+      const registry: Pick<SkillRegistryInterface, 'registerSkillContent' | 'unregisterSkill'> = {
+        async registerSkillContent(content) {
+          if (!firstApply) {
+            throw new Error('synthetic-failure');
+          }
+          return { id: content.id, unregister: async () => undefined };
+        },
+        async unregisterSkill() {
+          return false;
+        },
+      };
+      const factory = {
+        register: jest
+          .fn()
+          .mockImplementationOnce(() => undefined) // first apply succeeds
+          .mockImplementationOnce(() => {
+            throw new Error('rollback-restore-boom');
+          }),
+        unregisterAll: jest
+          .fn()
+          .mockImplementationOnce(() => undefined) // first apply
+          .mockImplementationOnce(() => {
+            throw new Error('rollback-unregister-boom');
+          }),
+      };
+      const sync = new BundleSyncService(
+        registry as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: true },
+        fakeLogger,
+        factory as never,
+      );
+      // First apply succeeds; second triggers rollback path that exercises
+      // both swallow-paths inside the factory rollback block.
+      const first = await sync.apply(buildBundle({ version: '1' }));
+      expect(first.applied).toBe(true);
+      firstApply = false;
+      const second = await sync.apply(buildBundle({ version: '2' }));
+      expect(second.applied).toBe(false);
+      expect(second.reason).toMatch(/synthetic-failure/);
+    });
+  });
+
+  it('logs an error when restoring a prior skill during rollback also fails', async () => {
+    // The rollback "restore prior skill" path only runs when the staged apply
+    // registered at least one skill before failing on a later one — that's
+    // when `newHandles` is non-empty AND has a corresponding entry in
+    // `priorContents`. Use a two-skill bundle so the first register succeeds
+    // and the second throws.
+    let v2RegisterCount = 0;
+    let phase: 'v1' | 'v2' = 'v1';
+    const registry: Pick<SkillRegistryInterface, 'registerSkillContent' | 'unregisterSkill'> = {
+      async registerSkillContent(content) {
+        if (phase === 'v1') {
+          // The rollback re-register call uses the source `:rollback` suffix;
+          // when phase is v1 we accept everything to set up state.
+          return { id: content.id, unregister: async () => undefined };
+        }
+        // phase v2:
+        v2RegisterCount += 1;
+        if (v2RegisterCount === 1) {
+          // first new register succeeds → newHandles populated with `invoices`.
+          return { id: content.id, unregister: async () => undefined };
+        }
+        if (v2RegisterCount === 2) {
+          // second new register throws → triggers rollback path.
+          throw new Error('upgrade-fail');
+        }
+        // rollback restore call → fails.
+        throw new Error('rollback-restore-fail');
+      },
+      async unregisterSkill() {
+        return false;
+      },
+    };
+    const error = jest.fn();
+    const localLogger = { ...(fakeLogger as unknown as Record<string, unknown>), error } as never;
+    const sync = new BundleSyncService(
+      registry as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [] },
+      localLogger,
+    );
+
+    const v1 = buildBundle({
+      version: '1',
+      skills: [
+        { id: 'invoices', name: 'I', description: 'd', instructions: '#', operationIds: ['createInvoice'] },
+        { id: 'reports', name: 'R', description: 'd', instructions: '#', operationIds: ['createInvoice'] },
+      ],
+    });
+    expect((await sync.apply(v1)).applied).toBe(true);
+
+    phase = 'v2';
+    const v2 = buildBundle({
+      version: '2',
+      skills: [
+        { id: 'invoices', name: 'I2', description: 'd', instructions: '#', operationIds: ['createInvoice'] },
+        { id: 'reports', name: 'R2', description: 'd', instructions: '#', operationIds: ['createInvoice'] },
+      ],
+    });
+    const second = await sync.apply(v2);
+    expect(second.applied).toBe(false);
+    expect(error).toHaveBeenCalledWith(expect.stringMatching(/failed to restore prior skill/));
   });
 });

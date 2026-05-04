@@ -2,7 +2,7 @@
 
 import { type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
-import { type AuthInfo } from '@frontmcp/protocol';
+import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
 
 import { ConfigService } from '../../builtin/config/providers/config.service';
@@ -175,6 +175,64 @@ export abstract class ExecutionContextBase<Out = unknown> {
       this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
       return undefined;
     }
+  }
+
+  /**
+   * Invoke another registered tool from inside the current execution context.
+   *
+   * Used by tools, skill actions, agents, CodeCall scripts, and jobs to
+   * compose with internal helper tools (e.g. operations registered by
+   * `@frontmcp/plugin-skilled-openapi`'s OpenAPI internal-tool adapter).
+   *
+   * Trust model: the call runs the standard `tools:call-tool` flow but tags
+   * the request ctx with `internalCall: true`, which the flow honors as a
+   * trusted in-process invocation. This bypasses the external-call gate that
+   * blocks `tools/call` for tools with `metadata.visibility === 'internal'`.
+   * Public and hidden tools are reachable through this helper too.
+   *
+   * Authority/authorization checks still run — an internal call carries the
+   * same `authInfo` as the surrounding request, so ABAC/RBAC guards apply.
+   *
+   * @param name Tool name (or fully-qualified `owner.name`).
+   * @param args Tool arguments — validated by the tool's input schema.
+   * @param opts Optional progress token / abort signal forwarded into `_meta`.
+   * @returns The tool's `CallToolResult`.
+   */
+  async callTool(
+    name: string,
+    args?: Record<string, unknown>,
+    opts?: { progressToken?: string | number; signal?: AbortSignal },
+  ): Promise<CallToolResult> {
+    const scope = this.scope as unknown as {
+      runFlow: (
+        flowName: 'tools:call-tool',
+        input: { request: unknown; ctx: unknown },
+      ) => Promise<{ success: boolean; result?: CallToolResult; error?: Error }>;
+    };
+    const requestMeta: Record<string, unknown> = {};
+    if (opts?.progressToken !== undefined) requestMeta['progressToken'] = opts.progressToken;
+    const request = {
+      method: 'tools/call' as const,
+      params: {
+        name,
+        arguments: args ?? {},
+        ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
+      },
+    };
+    const ctx = {
+      authInfo: this.getAuthInfo(),
+      requestId: this.tryGetContext()?.requestId ?? this.runId,
+      internalCall: true as const,
+      ...(opts?.signal && { signal: opts.signal }),
+    };
+    const outcome = await scope.runFlow('tools:call-tool', { request, ctx });
+    if (!outcome.success) {
+      throw outcome.error ?? new Error(`callTool("${name}") failed`);
+    }
+    if (!outcome.result) {
+      throw new Error(`callTool("${name}") returned no result`);
+    }
+    return outcome.result;
   }
 
   /**

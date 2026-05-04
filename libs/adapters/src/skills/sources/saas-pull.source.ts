@@ -7,7 +7,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
-import type { SaasSourceOptions } from '../skilled-openapi.types';
+import type { SaasSourceOptions } from '../source-options';
 import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';

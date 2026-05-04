@@ -22,6 +22,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import {
   AuthorizationRequiredError,
@@ -331,6 +332,19 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         throw new EntryUnavailableError('Tool', name, unavailable.metadata.availableWhen, ctx);
       }
       this.logger.warn(`findTool: tool "${name}" not found`);
+      throw new ToolNotFoundError(name);
+    }
+
+    // Internal tools are not callable from external MCP clients. The trusted
+    // SDK-side helper (`ExecutionContextBase.callTool`) and other internal
+    // dispatchers tag the request ctx with `internalCall: true` to bypass this
+    // gate. External tools/call requests get the same response shape as a
+    // missing tool — the existence of an internal tool is intentionally not
+    // leaked to clients.
+    const ctxObj = this.input.ctx as { internalCall?: boolean; taskId?: string } | undefined;
+    const visibility = resolveToolVisibility(tool.metadata);
+    if (visibility === 'internal' && !ctxObj?.internalCall) {
+      this.logger.warn(`findTool: rejecting external tools/call for internal tool "${name}"`);
       throw new ToolNotFoundError(name);
     }
 

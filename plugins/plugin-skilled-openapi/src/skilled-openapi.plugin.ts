@@ -1,8 +1,15 @@
 // file: plugins/plugin-skilled-openapi/src/skilled-openapi.plugin.ts
 
-import { DynamicPlugin, FrontMcpLogger, Plugin, ScopeEntry, type ProviderType } from '@frontmcp/sdk';
+import { BundleStore, createBundleSource } from '@frontmcp/adapters/skills';
+import {
+  DynamicPlugin,
+  FrontMcpLogger,
+  Plugin,
+  ScopeEntry,
+  type ProviderRegistry,
+  type ProviderType,
+} from '@frontmcp/sdk';
 
-import { BundleStore } from './bundle/bundle.store';
 import { MemoryCredentialResolver } from './executor/credential-resolver';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
@@ -12,10 +19,10 @@ import {
   type SkilledOpenApiPluginOptions,
   type SkilledOpenApiPluginOptionsInput,
 } from './skilled-openapi.types';
-import { createBundleSource } from './sources';
 import { BundleSyncService } from './sync/bundle-sync.service';
 import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
+import { OperationToolFactory } from './tools/operation-tool.factory';
 import SearchSkillTool from './tools/search-skill.tool';
 
 /**
@@ -111,12 +118,46 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               return typeof v === 'function' ? (v as (...args: unknown[]) => unknown).bind(reg) : v;
             },
           });
+          // Build the OperationToolFactory only when the host opted in AND
+          // a tool registry is reachable from scope. The factory is wired
+          // lazily — like the skill registry above — so scope-init ordering
+          // doesn't matter.
+          let opToolFactory: OperationToolFactory | undefined;
+          if (parsed.exposeOperationsAsInternalTools) {
+            try {
+              const toolRegistry = scope.tools;
+              if (toolRegistry) {
+                opToolFactory = new OperationToolFactory({
+                  toolRegistry,
+                  // ScopeEntry exposes a ProviderRegistryInterface; the factory
+                  // needs the concrete ProviderRegistry to construct ToolInstance.
+                  // The runtime is the same class — the cast is safe by construction.
+                  providers: scope.providers as unknown as ProviderRegistry,
+                  logger: logger.child('op-tool'),
+                });
+              } else {
+                logger.warn(
+                  'exposeOperationsAsInternalTools=true but scope.tools is unavailable; per-op internal tools disabled',
+                );
+              }
+            } catch (e) {
+              logger.warn(
+                `failed to build OperationToolFactory: ${(e as Error).message}; per-op internal tools disabled`,
+              );
+            }
+          }
+
           const sync = new BundleSyncService(
             lazySkillRegistry,
             hiddenOps,
             bundleStore,
-            { requireSignature: parsed.requireSignature, trustedKeys: parsed.trustedKeys },
+            {
+              requireSignature: parsed.requireSignature,
+              trustedKeys: parsed.trustedKeys,
+              exposeOperationsAsInternalTools: parsed.exposeOperationsAsInternalTools,
+            },
             logger,
+            opToolFactory,
           );
           let source;
           try {
