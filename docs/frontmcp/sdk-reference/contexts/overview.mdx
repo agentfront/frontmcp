@@ -12,7 +12,8 @@ ExecutionContextBase<Out>
 ├── ResourceContext<Params, Out>
 ├── AgentContext<InSchema, OutSchema, In, Out>
 ├── JobContext<InSchema, OutSchema, In, Out>
-└── SkillContext
+├── SkillContext
+└── ChannelContext
 
 PromptContext (independent, similar interface)
 ```
@@ -105,6 +106,9 @@ const error = this.error;
   </Card>
   <Card title="JobContext" icon="briefcase" href="/frontmcp/sdk-reference/contexts/job-context">
     Logging, progress, retry tracking
+  </Card>
+  <Card title="ChannelContext" icon="tower-broadcast" href="/frontmcp/sdk-reference/contexts/channel-context">
+    Server→client notifications, broadcasts
   </Card>
   <Card title="ExecutionContextBase" icon="code" href="/frontmcp/sdk-reference/contexts/execution-context-base">
     Base class with shared functionality

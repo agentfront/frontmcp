@@ -125,8 +125,10 @@ import { FastifyHostAdapter } from './adapters/fastify';
 export abstract class HostServerAdapter extends FrontMcpServer {
   abstract prepare(): void;
   abstract getHandler(): unknown;
+  abstract start(port: number, bindAddress?: string): Promise<void> | void;
+  abstract start(socketPath: string): Promise<void> | void;
   abstract start(
-    portOrSocketPath: number | string,
+    portOrSocketPath?: number | string,
     bindAddress?: string
   ): Promise<void> | void;
 }
@@ -161,7 +163,7 @@ server.registerRoute('GET', '/custom', (req, res) => {
 });
 
 // Start server
-server.start();
+await server.start();
 ```
 
 ### Serverless Deployment

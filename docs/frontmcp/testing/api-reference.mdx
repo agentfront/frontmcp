@@ -1325,7 +1325,14 @@ expect(prompts).toContainPrompt(name: string): void
 expect(result).toHaveMessages(count: number): void
 ```
 
-For role and text checks on individual messages, use plain Jest assertions on `message.role` / `message.content.text`.
+For role checks on individual messages, use plain Jest assertions on `message.role`. `message.content` is a discriminated union (`TextContent | ImageContent | EmbeddedResource`), so narrow it before reading `.text`:
+
+```ts
+expect(message.role).toBe('user');
+if (message.content.type === 'text') {
+  expect(message.content.text).toContain('hello');
+}
+```
 
 ### JSON-RPC Matchers
 

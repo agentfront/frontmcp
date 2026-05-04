@@ -316,3 +316,51 @@ Thrown when the orchestrator JWKS endpoint is not available.
 ```typescript
 new OrchestratorJwksNotAvailableError()
 ```
+
+---
+
+### AuthInvalidInputError
+
+Thrown when an auth API receives malformed input (e.g., invalid JWK, malformed scope string).
+
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `AUTH_INVALID_INPUT`   |
+| `statusCode` | `number`  | `500`                  |
+| `isPublic`   | `boolean` | `false`                |
+
+```typescript
+new AuthInvalidInputError(message: string)
+```
+
+---
+
+### CredentialStorageError
+
+Thrown when a credential storage operation fails (vault read/write, key persistence).
+
+| Property     | Type      | Value                       |
+| ------------ | --------- | --------------------------- |
+| `code`       | `string`  | `CREDENTIAL_STORAGE_ERROR`  |
+| `statusCode` | `number`  | `500`                       |
+| `isPublic`   | `boolean` | `false`                     |
+
+```typescript
+new CredentialStorageError(message: string)
+```
+
+---
+
+### AuthFlowError
+
+Thrown when a federated auth flow encounters an error (state mismatch, callback failure, etc.).
+
+| Property     | Type      | Value             |
+| ------------ | --------- | ----------------- |
+| `code`       | `string`  | `AUTH_FLOW_ERROR` (or override via constructor) |
+| `statusCode` | `number`  | `500`                 |
+| `isPublic`   | `boolean` | `false`               |
+
+```typescript
+new AuthFlowError(message: string, code?: string)
+```

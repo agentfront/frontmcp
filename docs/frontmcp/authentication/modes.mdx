@@ -3,41 +3,36 @@ title: Authorization Modes
 sidebarTitle: Modes
 slug: authentication/modes
 icon: layer-group
-description: Deep dive into public, transparent, and orchestrated authentication modes
+description: Deep dive into public, transparent, local, and remote authentication modes
 ---
 
-FrontMCP's three authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
+FrontMCP's four authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
 
 ## Mode Overview
+
+The `auth.mode` literal accepts one of four values: `'public'`, `'transparent'`, `'local'`, `'remote'`.
 
 ```mermaid
 graph TB
     subgraph "Authentication Modes"
-        Public["Public Mode<br/>Anonymous Access"]
-        Transparent["Transparent Mode<br/>Pass-through Tokens"]
-        Orchestrated["Orchestrated Mode<br/>Local Auth Server"]
+        Public["mode: 'public'<br/>Anonymous Access"]
+        Transparent["mode: 'transparent'<br/>Pass-through Tokens"]
+        Local["mode: 'local'<br/>Built-in OAuth Server"]
+        Remote["mode: 'remote'<br/>OAuth Server proxying to upstream IdP"]
     end
-
-    subgraph "Orchestrated Types"
-        Local["Local<br/>Self-contained Auth"]
-        Remote["Remote<br/>Proxy to Upstream IdP"]
-    end
-
-    Orchestrated --> Local
-    Orchestrated --> Remote
 ```
 
 ## Mode Comparison
 
-| Feature            | Public         | Transparent       | Orchestrated           |
-| ------------------ | -------------- | ----------------- | ---------------------- |
-| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued)  |
-| User Identity      | Anonymous      | From upstream IdP | From login or upstream |
-| JWKS Source        | Self-generated | Upstream IdP      | Self-generated         |
-| Session Management | Minimal        | Pass-through      | Full control           |
-| Multi-provider     | No             | Single provider   | Multiple providers     |
-| Progressive Auth   | No             | No                | Yes                    |
-| Consent UI         | No             | No                | Optional               |
+| Feature            | Public         | Transparent       | Local                 | Remote                 |
+| ------------------ | -------------- | ----------------- | --------------------- | ---------------------- |
+| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued) | Yes (FrontMCP-issued)  |
+| User Identity      | Anonymous      | From upstream IdP | From login form       | From upstream IdP      |
+| JWKS Source        | Self-generated | Upstream IdP      | Self-generated        | Self-generated         |
+| Session Management | Minimal        | Pass-through      | Full control          | Full control           |
+| Multi-provider     | No             | Single provider   | Multiple via apps     | Multiple via apps      |
+| Progressive Auth   | No             | No                | Yes                   | Yes                    |
+| Consent UI         | No             | No                | Optional              | Optional               |
 
 ---
 
@@ -198,19 +193,15 @@ sequenceDiagram
 
 ---
 
-## Orchestrated Mode
+## Local Mode
 
-FrontMCP acts as a full OAuth 2.1 authorization server. This mode has two types: **local** and **remote**.
-
-### Local Type
-
-Self-contained auth server with built-in user management.
+FrontMCP acts as a full OAuth 2.1 authorization server with a built-in login form. Self-contained auth server with built-in user management.
 
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'local',
   consent: { enabled: true },
-  tokenStorage: 'memory', // Use 'redis' in production
+  tokenStorage: 'memory', // Use { redis: ... } in production
 };
 ```
 
@@ -218,9 +209,9 @@ const auth: AuthOptionsInput = {
   The built-in login page accepts any email format without validation. Replace with a real identity provider for production use.
 </Warning>
 
-### Remote Type
+## Remote Mode
 
-Local auth server that proxies user authentication to an upstream IdP.
+FrontMCP acts as an OAuth 2.1 authorization server that proxies user authentication to an upstream IdP.
 
 ```typescript
 const auth: AuthOptionsInput = {

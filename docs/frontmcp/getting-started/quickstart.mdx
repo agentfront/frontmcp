@@ -9,8 +9,8 @@ Build and run your first MCP server with FrontMCP. This quickstart gets you from
 
 ## Prerequisites
 
-- **Node.js**: Version 22+ (LTS)
-  - _The CLI's `doctor` command enforces Node 22 or newer; FrontMCP is developed and tested on Node 24._
+- **Node.js**: Version 24+ (LTS)
+  - _The `engines` field in `@frontmcp/sdk` and `frontmcp` requires Node 24+. FrontMCP is developed and tested on Node 24._
 - **npm ≥ 10** (or pnpm/yarn)
 
 ---
@@ -354,7 +354,7 @@ import { CalcApp } from './calc.app';
   info: { name: 'Hello MCP', version: '0.1.0' },
   apps: [CalcApp],
   http: { port: 3000 },
-  logging: { level: LogLevel.INFO },
+  logging: { level: LogLevel.Info },
 })
 export default class Server {}
 ```
@@ -537,7 +537,7 @@ export class CalcApp {}
 <AccordionGroup>
   <Accordion title="Server won't start">
     **Check:**
-    1. Node.js version 22+: `node --version`
+    1. Node.js version 24+: `node --version`
     2. Port 3000 is available
     3. No TypeScript errors: Check console output
 

@@ -156,7 +156,7 @@ subscribe(
 
 ```typescript
 const unsubscribe = registry.subscribe({}, (event) => {
-  console.log(`Agent ${event.kind}:`, event.agentId);
+  console.log(`Agent ${event.kind} (v${event.version}):`, event.agentId ?? 'n/a');
 });
 
 // Later

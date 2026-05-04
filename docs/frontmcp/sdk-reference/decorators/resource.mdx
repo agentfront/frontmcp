@@ -167,7 +167,7 @@ async execute(uri: string, params: Record<string, string>) {
   this.logger.info('Reading resource', { uri });
 
   // Authentication
-  const auth = this.requestContext.authInfo;
+  const auth = this.context.authInfo;
 
   // Access scope
   const tools = this.scope.tools;

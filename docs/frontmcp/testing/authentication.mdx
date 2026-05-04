@@ -275,13 +275,13 @@ test.describe('Public Mode', () => {
 });
 ```
 
-### Orchestrated Mode (Auth Required)
+### Local Mode (Auth Required)
 
 ```ts
-test.describe('Orchestrated Mode', () => {
+test.describe('Local Mode', () => {
   test.use({
     server: './src/main.ts',
-    auth: { mode: 'orchestrated', type: 'local' },
+    auth: { mode: 'local' },
   });
 
   test('requires authentication', async ({ mcp }) => {

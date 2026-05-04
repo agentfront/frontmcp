@@ -12,8 +12,8 @@ import { z } from '@frontmcp/sdk';
   },
 })
 export default class <%= className %>Tool extends ToolContext {
-  async execute(input: unknown) {
+  async execute(input: { value: string }) {
     // TODO: implement
-    return {};
+    return { result: input.value };
   }
 }

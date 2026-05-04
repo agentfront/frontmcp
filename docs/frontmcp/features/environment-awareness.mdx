@@ -228,10 +228,11 @@ Register all variants — the SDK automatically exposes only the one matching th
 ```ts
 import { AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool } from './tools/notes';
 
-@FrontMcp({
+@App({
+  id: 'notes',
   tools: [AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool],
 })
-class MyApp {}
+class NotesApp {}
 ```
 
 <Tip>

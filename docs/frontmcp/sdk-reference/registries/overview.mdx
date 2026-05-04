@@ -133,8 +133,8 @@ class MyTool extends ToolContext {
     // List entries
     const allTools = tools.getTools();
 
-    // Find specific entry
-    const tool = tools.findByName('other_tool');
+    // Find specific entry (ToolRegistry uses getExported())
+    const tool = tools.getExported('other_tool');
   }
 }
 ```
@@ -176,15 +176,19 @@ registry.getSkills();      // SkillRegistry
 
 ### Finding
 
+Lookup methods vary by registry — see the per-registry reference for exact signatures:
+
 ```typescript
-// Find by name
-registry.findByName('name');
+// Tool/Resource registries: getExported(name)
+const tool = scope.tools.getExported('search');
+const resource = scope.resources.getExported('docs/readme');
 
-// Find by qualified name
-registry.findByQualifiedName('app:name');
+// Prompt/Agent/Skill registries: findByName(name)
+const prompt = scope.prompts.findByName('summarize');
+const agent = scope.agents.findByName('research');
 
-// Check existence
-registry.has('name');
+// Skill registry also has findByQualifiedName
+const skill = scope.skills.findByQualifiedName('app:billing');
 ```
 
 ### Capabilities
@@ -232,8 +236,8 @@ Entries track their lineage (chain of owners):
 
 ```typescript
 // Tool in: scope → app → plugin
-const tool = registry.findByName('tool');
-console.log(tool.lineage);
+const tool = scope.tools.getExported('tool');
+console.log(tool?.lineage);
 // [
 //   { kind: 'scope', id: 'main' },
 //   { kind: 'app', id: 'my-app' },

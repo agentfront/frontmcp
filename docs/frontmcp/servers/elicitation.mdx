@@ -566,7 +566,7 @@ import { supportsElicitation } from '@frontmcp/sdk';
 class ConditionalElicitTool extends ToolContext {
   async execute({ action }) {
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.authInfo.sessionId
+      this.context.authInfo?.sessionId
     );
 
     if (supportsElicitation(capabilities, 'form')) {
@@ -1134,7 +1134,7 @@ class ConnectGitHubTool extends ToolContext {
     // Server-side mapping from correlation id to session
     await this.get(OAuthStateStore).set(elicitationId, {
       provider: 'github',
-      sessionId: this.authInfo.sessionId,
+      sessionId: this.context.authInfo?.sessionId,
       startedAt: Date.now(),
     });
 
@@ -1158,7 +1158,7 @@ class ConnectGitHubTool extends ToolContext {
 
     // Store the token and return success
     await this.get(TokenStore).save(
-      this.authInfo.sessionId,
+      this.context.authInfo?.sessionId,
       'github',
       result.content!.accessToken
     );
@@ -1192,7 +1192,7 @@ class DeleteFileTool extends ToolContext {
     // Check if we should/can request confirmation
     const shouldConfirm = !skipConfirmation;
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.authInfo.sessionId
+      this.context.authInfo?.sessionId
     );
     const canElicit = supportsElicitation(capabilities, 'form');
 

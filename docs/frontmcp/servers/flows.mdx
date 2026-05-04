@@ -77,8 +77,7 @@ FrontMCP provides built-in flows for all MCP protocol operations:
 Custom flows are defined with the `@Flow` decorator, a typed `FlowPlan`, and stage handlers attached via `FlowHooksOf(...).Stage(...)`. The plan is keyed by phase (`pre`, `execute`, `post`, `finalize`) and lists the stage names that run in that phase. Each named stage in the plan is implemented by a method on the flow class decorated with `@Stage('<stage-name>')`.
 
 ```ts
-import { z } from '@frontmcp/lazy-zod';
-import { Flow, FlowBase, FlowHooksOf, type FlowPlan } from '@frontmcp/sdk';
+import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan } from '@frontmcp/sdk';
 
 const name = 'custom:my-flow' as const;
 
@@ -105,14 +104,14 @@ const { Stage } = FlowHooksOf(name);
 export default class MyCustomFlow extends FlowBase<typeof name> {
   @Stage('validate')
   async validate() {
-    if (!this.rawInput.query) {
+    if (!this.input.query) {
       this.fail(new Error('Missing query'));
     }
   }
 
   @Stage('process')
   async process() {
-    this.state.set('result', `processed: ${this.rawInput.query}`);
+    this.state.set('result', `processed: ${this.input.query}`);
   }
 
   @Stage('format')

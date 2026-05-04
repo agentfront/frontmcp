@@ -247,6 +247,39 @@ expect(response).toHaveErrorCode(-32700); // Parse error
 
 ---
 
+## UI Matchers
+
+These assert on the rendered UI metadata returned by tools that ship a UI template (see [Building tool UI](/frontmcp/guides/building-tool-ui)). They run against `result._meta` / `result.content[0].text` (the rendered HTML).
+
+| Matcher                     | What it checks                                                       |
+| --------------------------- | -------------------------------------------------------------------- |
+| `toHaveRenderedHtml()`      | Result includes a non-empty rendered HTML payload                    |
+| `toContainHtmlElement(tag)` | Rendered HTML contains an element of `tag` (e.g. `'button'`)         |
+| `toContainBoundValue(v)`    | Rendered HTML contains the bound input/output value                  |
+| `toBeXssSafe()`             | Rendered HTML has been sanitized (no `<script>`, inline event attrs) |
+| `toHaveWidgetMetadata()`    | Result advertises the MCP widget metadata block                      |
+| `toHaveCssClass(name)`      | Rendered HTML contains an element with the given CSS class           |
+| `toNotContainRawContent(s)` | Rendered HTML does not contain the raw (unsanitized) string `s`      |
+| `toHaveProperHtmlStructure()` | Rendered HTML is well-formed (open/close, no obvious truncation)   |
+| `toHavePlatformMeta(p)`     | Result includes the platform-specific meta block (e.g. `'openai'`)   |
+| `toHaveMetaKey(k)`          | Result `_meta` contains key `k`                                       |
+| `toHaveMetaValue(k, v)`     | Result `_meta[k]` deep-equals `v`                                     |
+| `toNotHaveMetaKey(k)`       | Result `_meta` does NOT contain key `k`                               |
+| `toHaveOnlyNamespacedMeta(ns)` | All `_meta` keys are namespaced under `ns`                         |
+| `toHavePlatformMimeType(p)` | Result has the expected MIME type for platform `p`                   |
+| `toHavePlatformHtml(p)`     | Result includes platform-targeted HTML for platform `p`              |
+
+```ts
+const result = await mcp.tools.call('show-card', { id: 'abc' });
+
+expect(result).toHaveRenderedHtml();
+expect(result).toContainHtmlElement('article');
+expect(result).toBeXssSafe();
+expect(result).toHavePlatformMeta('openai');
+```
+
+---
+
 ## Using with Negation
 
 All matchers support `.not` for negation:

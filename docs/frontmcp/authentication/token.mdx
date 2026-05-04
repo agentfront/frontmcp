@@ -246,7 +246,7 @@ Access tokens are JWTs with standard claims:
 
 ### Custom Claims
 
-Custom claims are sourced from the upstream identity provider (or the in-tree IdP for `local` mode) — FrontMCP does not mint extra claims. Configure your IdP to include the claims you need (roles, tenant ID, etc.) and then read them via `this.requestContext.authInfo` inside tools, resources, prompts, and agents.
+Custom claims are sourced from the upstream identity provider (or the in-tree IdP for `local` mode) — FrontMCP does not mint extra claims. Configure your IdP to include the claims you need (roles, tenant ID, etc.) and then read them via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
 
 ---
 

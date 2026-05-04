@@ -142,8 +142,8 @@ class DatabaseService {
     this.pool = createPool(process.env.DATABASE_URL);
   }
 
-  query(sql: string) {
-    return this.pool.query(sql);
+  query(sql: string, params?: unknown[]) {
+    return this.pool.query(sql, params);
   }
 }
 

@@ -183,7 +183,7 @@ auth: {
 
 ## Custom Claims
 
-Custom claims are sourced from the upstream identity provider. Configure your IdP to include the claims you need on the upstream JWT (department, employee_id, roles, etc.); FrontMCP forwards them through `this.requestContext.authInfo`.
+Custom claims are sourced from the upstream identity provider. Configure your IdP to include the claims you need on the upstream JWT (department, employee_id, roles, etc.); FrontMCP forwards them through `this.context.authInfo` (or, for typed access, `this.auth.claims`).
 
 ---
 

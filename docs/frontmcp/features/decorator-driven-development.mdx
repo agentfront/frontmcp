@@ -216,9 +216,11 @@ class Server {}
   access: 'authorized',
 })
 class CallToolFlow extends FlowBase<'tools:call-tool'> {
-  @Stage('parseInput') async parseInput() { /* validate */ }
-  @Stage('runTool')    async runTool() { /* execute */ }
-  @Stage('respond')    async respond() { /* respond */ }
+  @Stage('parseInput')     async parseInput() { /* validate */ }
+  @Stage('authorize')      async authorize() { /* check access */ }
+  @Stage('runTool')        async runTool() { /* execute */ }
+  @Stage('validateOutput') async validateOutput() { /* validate output */ }
+  @Stage('respond')        async respond() { /* respond */ }
 }
 ```
 

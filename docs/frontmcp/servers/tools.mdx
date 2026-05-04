@@ -431,9 +431,9 @@ class ContextExampleTool extends ToolContext {
     this.metadata;           // Tool metadata (name, description, etc.)
 
     // Authentication
-    this.authInfo;           // Partial<AuthInfo> from MCP session
+    this.context.authInfo;   // Partial<AuthInfo> — preferred (token, user, sessionId)
     this.auth;               // FrontMcpAuthContext (typed identity, roles, claims)
-    this.context.authInfo;   // Same authInfo, sourced from FrontMcpContext
+    // this.authInfo is a deprecated alias kept for backward-compat — prefer `this.context.authInfo`
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -704,7 +704,7 @@ class UpdateUserStatusTool extends ToolContext {
       previousStatus: user.status,
       newStatus: status,
       reason,
-      performedBy: this.authInfo?.userId,
+      performedBy: this.context.authInfo?.user?.sub,
     });
 
     return {

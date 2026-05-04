@@ -42,9 +42,9 @@ import { z } from '@frontmcp/sdk';
   },
 })
 export default class FetchContactsTool extends ToolContext {
-  async execute(input: unknown) {
+  async execute(input: { value: string }) {
     // TODO: implement
-    return {};
+    return { result: input.value };
   }
 }
 ```

@@ -64,62 +64,24 @@ for (const provider of providers) {
 
 ## Auth Modes
 
-FrontMCP supports multiple authentication modes:
+FrontMCP supports four authentication modes:
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Public" icon="globe">
-    No authentication required
+    `mode: 'public'` — no authentication
   </Card>
   <Card title="Transparent" icon="eye">
-    Auth handled externally
+    `mode: 'transparent'` — pass-through tokens validated against upstream JWKS
   </Card>
-  <Card title="Orchestrated" icon="shield-check">
-    Full auth flow management
+  <Card title="Local" icon="server">
+    `mode: 'local'` — built-in OAuth 2.1 authorization server
+  </Card>
+  <Card title="Remote" icon="sitemap">
+    `mode: 'remote'` — OAuth 2.1 server proxying to an upstream IdP
   </Card>
 </CardGroup>
 
-### Public Mode
-
-No authentication required:
-
-```typescript
-@FrontMcp({
-  name: 'public-server',
-  auth: { mode: 'public' },
-})
-class PublicServer { }
-```
-
-### Transparent Mode
-
-Auth is handled by an external system (e.g., API gateway):
-
-```typescript
-@FrontMcp({
-  name: 'transparent-server',
-  auth: {
-    mode: 'transparent',
-    headerName: 'X-User-Id',
-  },
-})
-class TransparentServer { }
-```
-
-### Orchestrated Mode
-
-Full auth flow with OAuth support:
-
-```typescript
-@FrontMcp({
-  name: 'orchestrated-server',
-  auth: {
-    mode: 'local',
-    providers: ['google', 'github'],
-    sessionStore: 'redis',
-  },
-})
-class OrchestratedServer { }
-```
+See the [Authentication overview](/frontmcp/authentication/overview) for full mode semantics. The registry exposes `requiresOrchestration` (true for `local`/`remote`) so adapters know whether to mount OAuth routes.
 
 ## Properties
 
@@ -139,9 +101,20 @@ Auth provider detection result across apps in scope.
 
 ```typescript
 interface AuthProviderDetectionResult {
-  hasAuth: boolean;
-  modes: AuthMode[];
-  providers: string[];
+  /** Map of providerId -> DetectedAuthProvider (mode, scopes, appIds, etc.) */
+  providers: Map<string, DetectedAuthProvider>;
+  /** True when local/remote mode requires the OAuth orchestration routes */
+  requiresOrchestration: boolean;
+  /** Provider id at the parent scope (if any) */
+  parentProviderId?: string;
+  /** Provider ids contributed only by child apps */
+  childProviderIds: string[];
+  /** Number of distinct providers */
+  uniqueProviderCount: number;
+  /** Configuration validation errors */
+  validationErrors: string[];
+  /** Non-fatal warnings */
+  warnings: string[];
 }
 ```
 
@@ -153,23 +126,31 @@ The registry detects auth requirements across the scope hierarchy:
 // Check detection result
 const detection = registry.detection;
 
-if (detection.hasAuth) {
-  console.log(`Modes: ${detection.modes.join(', ')}`);
-  console.log(`Providers: ${detection.providers.join(', ')}`);
+if (detection.uniqueProviderCount > 0) {
+  for (const [id, provider] of detection.providers) {
+    console.log(`${id}: mode=${provider.mode} apps=[${provider.appIds.join(', ')}]`);
+  }
+}
+
+if (registry.requiresOrchestration) {
+  // Mount OAuth routes
 }
 ```
 
-## Context Extensions
+## Auth in Context Classes
 
-Orchestrated auth installs context extensions:
+Context classes that extend `ExecutionContextBase` expose two auth surfaces:
 
 ```typescript
 @Tool({ name: 'protected_tool', inputSchema: {} })
 class ProtectedTool extends ToolContext {
   async execute() {
-    // Auth context extension
-    const user = this.auth.getUser();
-    const token = this.auth.getAccessToken();
+    // Typed FrontMcpAuthContext (roles, permissions, claims, scopes)
+    if (!this.auth.hasRole('admin')) throw new Error('Admin required');
+    const tenantId = this.auth.claims['tenantId'];
+
+    // Raw token (Partial<AuthInfo>) for outbound API calls
+    const token = this.context.authInfo?.token;
   }
 }
 ```

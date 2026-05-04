@@ -27,6 +27,8 @@ export class ConfigProvider {
 To inject by interface, register with a token (a class, abstract class, or symbol). The class itself is the most common token:
 
 ```ts
+import { App } from '@frontmcp/sdk';
+
 abstract class ConfigService {
   abstract readonly apiKey: string;
 }

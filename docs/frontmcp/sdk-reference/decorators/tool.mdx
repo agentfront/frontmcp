@@ -136,7 +136,7 @@ class BadTool extends ToolContext {
 class SensitiveTool extends ToolContext {
   async execute(input) {
     // Access is validated before execute() is called
-    const token = this.requestContext.authInfo?.accessToken;
+    const token = this.context.authInfo?.token;
     return await callApi(token, input.data);
   }
 }
@@ -267,9 +267,9 @@ async execute(input) {
 
 ```typescript
 async execute(input) {
-  const auth = this.requestContext.authInfo;
-  const token = auth.accessToken;
-  const user = auth.user;
+  const auth = this.context.authInfo;
+  const token = auth?.token;
+  const user = auth?.user;
 }
 ```
 

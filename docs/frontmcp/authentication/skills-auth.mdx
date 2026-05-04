@@ -6,12 +6,13 @@ icon: key
 description: HTTP authentication for skill endpoints — API key, JWT bearer, and public modes
 ---
 
-When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP supports three authentication modes to protect skill endpoints.
+When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP supports four authentication modes to protect skill endpoints.
 
 ## Auth Modes
 
 | Mode | Header | Validation | Use Case |
 | ---- | ------ | ---------- | -------- |
+| `inherit` (default) | Same as parent server | Same as parent server | Reuse the server's primary auth |
 | `public` | None | None | Development, internal networks |
 | `api-key` | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality | Machine-to-machine, server-to-server |
 | `bearer` | `Authorization: Bearer <jwt>` | JWT signature via JWKS | User-scoped access, IdP integration |
