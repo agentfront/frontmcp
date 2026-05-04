@@ -1,6 +1,7 @@
 import type { McpOpenAPITool, SecurityResolver } from 'mcp-from-openapi';
-import { validateBaseUrl } from '@frontmcp/utils';
+
 import { PublicMcpError } from '@frontmcp/sdk';
+import { trimTrailing, validateBaseUrl } from '@frontmcp/utils';
 
 /**
  * Request configuration for building HTTP requests
@@ -76,7 +77,10 @@ export function buildRequest(
   // Validate server URL from OpenAPI spec to prevent SSRF attacks
   const rawBaseUrl = tool.metadata.servers?.[0]?.url || baseUrl;
   validateBaseUrl(rawBaseUrl); // Throws if invalid protocol (e.g., file://, javascript:)
-  const apiBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+  // Use a non-regex trim — `/\/+$/` is polynomial on inputs with many
+  // trailing slashes (CodeQL js/polynomial-redos). `trimTrailing` is the
+  // shared safe-pattern helper from @frontmcp/utils.
+  const apiBaseUrl = trimTrailing(rawBaseUrl, '/');
   let path = tool.metadata.path;
   const queryParams = new URLSearchParams();
   const headers = new Headers({
