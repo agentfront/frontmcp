@@ -60,8 +60,11 @@ export class RedisJobDefinitionStore implements JobDefinitionStore {
     try {
       return JSON.parse(raw) as T;
     } catch (e) {
+      // Definition payloads can carry sensitive job/workflow data — log only
+      // non-sensitive context so a malformed value never leaks into stdout.
+      const message = e instanceof Error ? e.message : String(e);
       this.logger.error(
-        `[RedisJobDefinitionStore] Failed to parse ${kind} definition for "${jobId}": ${(e as Error).message}; raw="${raw}"`,
+        `[RedisJobDefinitionStore] Failed to parse ${kind} definition for "${jobId}": ${message}; payloadLength=${raw.length}`,
       );
       return null;
     }

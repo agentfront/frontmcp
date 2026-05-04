@@ -16,6 +16,7 @@ import { logAvailabilityFiltering } from '../common/availability';
 import { type SkillContent } from '../common/interfaces';
 import type { SkillMetadata } from '../common/metadata';
 import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/records';
+import { PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
@@ -528,22 +529,39 @@ export default class SkillRegistry
    * Search for skills matching a query.
    *
    * Always merges the dynamic-skill overlay on top of the storage provider's
-   * results, deduping by id. This guarantees skills registered via
-   * `registerSkillContent` are visible to search even when the provider is
-   * read-only (or its index write failed). When the provider already returned
-   * a row for an id we hold in `dynamicContents`, the provider's score wins.
+   * results. For ids present in `dynamicContents`, the provider's score and
+   * ranking are preserved, but the metadata is replaced with the dynamic
+   * projection — otherwise a stale provider row (from a re-registration whose
+   * provider update lagged or failed) would mask the newer dynamic content.
+   * Provider-only rows pass through unchanged; overlay-only rows are appended.
    */
   async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const baseResults = await this.storageProvider.search(query, options);
     if (this.dynamicContents.size === 0) return baseResults;
-    const seen = new Set<string>();
-    for (const r of baseResults) {
+    const baseSeen = new Set<string>();
+    let rewrites = 0;
+    const rewrittenBase: SkillSearchResult[] = baseResults.map((r) => {
       const id = r.metadata.id ?? r.metadata.name;
-      seen.add(id);
-    }
-    const overlay = this.searchDynamicOverlay(query, options, seen);
-    if (overlay.length === 0) return baseResults;
-    const merged = [...baseResults, ...overlay].sort((a, b) => b.score - a.score);
+      baseSeen.add(id);
+      const dyn = this.dynamicContents.get(id);
+      if (!dyn) return r;
+      rewrites++;
+      // Preserve provider's score/source; swap in the live dynamic projection
+      // so re-registrations are reflected even when the provider lagged.
+      const meta = this.dynamicSkillMetadata(dyn);
+      const toolNames = dyn.tools.map((t) => t.name);
+      let availableTools = toolNames;
+      let missingTools: string[] = [];
+      if (this.toolValidator) {
+        const v = this.toolValidator.validate(toolNames);
+        availableTools = v.available;
+        missingTools = v.missing;
+      }
+      return { ...r, metadata: meta, availableTools, missingTools };
+    });
+    const overlayOnly = this.searchDynamicOverlay(query, options, baseSeen);
+    if (overlayOnly.length === 0 && rewrites === 0) return baseResults;
+    const merged = [...rewrittenBase, ...overlayOnly].sort((a, b) => b.score - a.score);
     const topK = options?.topK;
     return typeof topK === 'number' && topK >= 0 ? merged.slice(0, topK) : merged;
   }
@@ -628,6 +646,10 @@ export default class SkillRegistry
   /**
    * Build a SkillLoadResult for a dynamic SkillContent, running tool validation
    * and warning formatting consistently with the SkillInstance.load() path.
+   *
+   * Returns a deep-cloned SkillContent so callers cannot mutate the registry's
+   * stored copy. The matching clone-on-write happens at registration time in
+   * `registerSkillContent`, keeping the registry authoritative.
    */
   private buildDynamicLoadResult(content: SkillContent): SkillLoadResult {
     const toolNames = content.tools.map((t) => t.name);
@@ -642,25 +664,33 @@ export default class SkillRegistry
       isComplete = validation.complete;
       warning = this.toolValidator.formatWarning(validation, content.name);
     }
-    return { skill: content, availableTools, missingTools, isComplete, warning };
+    return { skill: structuredClone(content), availableTools, missingTools, isComplete, warning };
   }
 
   /**
    * List skills with pagination.
    *
-   * Merges the dynamic-skill overlay onto the provider's page so registrations
-   * are visible even when the storage provider is read-only. Pagination is
-   * recomputed against the merged set so `total` and `hasMore` stay correct.
+   * For ids present in `dynamicContents`, the provider's slot is preserved but
+   * its metadata is replaced with the dynamic projection so re-registrations
+   * are visible even when the provider lagged. Overlay-only ids are appended
+   * to the page; pagination is recomputed against the merged set so `total`
+   * and `hasMore` stay correct.
    */
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
     const baseResult = await this.storageProvider.list(options);
     if (this.dynamicContents.size === 0) return baseResult;
     const baseIds = new Set<string>();
-    for (const meta of baseResult.skills) {
-      baseIds.add(meta.id ?? meta.name);
-    }
+    let rewrites = 0;
+    const rewrittenBase: SkillMetadata[] = baseResult.skills.map((meta) => {
+      const id = meta.id ?? meta.name;
+      baseIds.add(id);
+      const dyn = this.dynamicContents.get(id);
+      if (!dyn) return meta;
+      rewrites++;
+      return this.dynamicSkillMetadata(dyn);
+    });
     const overlay = this.collectDynamicMetadata(options).filter((m) => !baseIds.has(m.id ?? m.name));
-    if (overlay.length === 0) return baseResult;
+    if (overlay.length === 0 && rewrites === 0) return baseResult;
 
     // Provider already applied pagination, so the additional overlay rows go
     // at the tail; total is the union of the two sets, hasMore reflects whether
@@ -669,10 +699,10 @@ export default class SkillRegistry
     // the provider's total, slice into the overlay accordingly.
     const limit = options?.limit ?? Number.POSITIVE_INFINITY;
     const offset = options?.offset ?? 0;
-    const room = Math.max(0, limit - baseResult.skills.length);
+    const room = Math.max(0, limit - rewrittenBase.length);
     const overlayStart = Math.max(0, offset - baseResult.total);
     const fittedOverlay = overlay.slice(overlayStart, overlayStart + room);
-    const skills = [...baseResult.skills, ...fittedOverlay];
+    const skills = [...rewrittenBase, ...fittedOverlay];
     const total = baseResult.total + overlay.length;
     const hasMore = baseResult.hasMore || overlayStart + fittedOverlay.length < overlay.length;
     return { skills, total, hasMore };
@@ -967,10 +997,10 @@ export default class SkillRegistry
     opts?: { source?: string },
   ): Promise<{ id: string; unregister: () => Promise<void> }> {
     if (!content || typeof content.id !== 'string' || content.id.length === 0) {
-      throw new Error('registerSkillContent: SkillContent.id is required');
+      throw new PublicMcpError('registerSkillContent: SkillContent.id is required', 'INVALID_PARAMS');
     }
     if (typeof content.name !== 'string' || content.name.length === 0) {
-      throw new Error('registerSkillContent: SkillContent.name is required');
+      throw new PublicMcpError('registerSkillContent: SkillContent.name is required', 'INVALID_PARAMS');
     }
 
     const id = content.id;
@@ -1025,7 +1055,9 @@ export default class SkillRegistry
     const lineage: EntryLineage = this.owner ? [this.owner] : [];
     const row = this.makeRow(provideToken, instance, lineage, this);
     this.dynamicRows.push(row);
-    this.dynamicContents.set(id, content);
+    // Deep-clone so later mutation of the caller's object cannot silently
+    // rewrite registry state without going through register/unregister.
+    this.dynamicContents.set(id, structuredClone(content));
 
     // Bump the generation BEFORE wiring the unregister handle so the closure
     // captures this registration's generation and not a stale earlier value.

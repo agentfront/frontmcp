@@ -99,11 +99,11 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
   setSessionState(sessionId: string, lastEventId?: number): void {
     // Verify session ID matches (or set it if the transport allows)
     if (this.sessionId !== sessionId) {
-      // Session IDs are credentials — log only a short prefix. Matches the
-      // truncation pattern used in transport.sse.adapter.ts:28.
+      // Session IDs are credentials — log only a short prefix.
+      const redact = (id: string): string => `${id.slice(0, 8)}…`;
       console.warn(
         `RecreateableSSEServerTransport: session ID mismatch. ` +
-          `Expected ${sessionId.slice(0, 40)}..., got ${this.sessionId.slice(0, 40)}.... Using constructor value.`,
+          `Expected ${redact(this.sessionId)}, got ${redact(sessionId)}. Using constructor value.`,
       );
     }
 

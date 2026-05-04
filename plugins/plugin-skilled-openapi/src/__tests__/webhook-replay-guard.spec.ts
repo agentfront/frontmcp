@@ -26,10 +26,11 @@ describe('WebhookReplayGuard', () => {
     expect(r.reason).toMatch(/outside/);
   });
 
-  it('rejects non-finite timestamps', () => {
+  it('rejects non-finite timestamps (NaN, +Inf, -Inf)', () => {
     const guard = new WebhookReplayGuard();
-    const r = guard.check({ timestampMs: Number.NaN, nonce: 'abcdefgh' });
-    expect(r.ok).toBe(false);
+    expect(guard.check({ timestampMs: Number.NaN, nonce: 'abcdefgh' }).ok).toBe(false);
+    expect(guard.check({ timestampMs: Number.POSITIVE_INFINITY, nonce: 'abcdefgh' }).ok).toBe(false);
+    expect(guard.check({ timestampMs: Number.NEGATIVE_INFINITY, nonce: 'abcdefgh' }).ok).toBe(false);
   });
 
   it('rejects too-short nonces', () => {
@@ -39,7 +40,12 @@ describe('WebhookReplayGuard', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('LRU evicts the oldest entry when capacity is reached', () => {
+  it('LRU drops the entry with the smallest expiresAt when capacity is reached', () => {
+    // All four entries share the same timestamp (and therefore expiresAt), so
+    // the eviction loop drops whichever was hit first by the iterator —
+    // 'aaaaaaaa'. The remaining three plus the newly-inserted 'dddddddd'
+    // saturate the 3-slot capacity. Verify the survivor set explicitly so the
+    // test fails if eviction order regresses, instead of only asserting size.
     const guard = new WebhookReplayGuard({ capacity: 3 });
     const now = 1;
     guard.setNowProvider(() => now);
@@ -48,6 +54,14 @@ describe('WebhookReplayGuard', () => {
     guard.check({ timestampMs: now, nonce: 'cccccccc' });
     guard.check({ timestampMs: now, nonce: 'dddddddd' });
     expect(guard.size).toBe(3);
+    // 'aaaaaaaa' was evicted — re-using it now must succeed.
+    expect(guard.check({ timestampMs: now, nonce: 'aaaaaaaa' }).ok).toBe(true);
+    // The most-recent insert remains tracked — replay must be rejected.
+    // Re-checking 'aaaaaaaa' above re-inserted it (filling capacity again),
+    // so checking 'dddddddd' here may itself trigger another eviction; we
+    // just need to confirm 'dddddddd' is still treated as a known nonce.
+    const replay = guard.check({ timestampMs: now, nonce: 'dddddddd' });
+    expect(replay.ok).toBe(false);
   });
 
   it('prune drops expired entries', () => {

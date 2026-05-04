@@ -10,6 +10,19 @@ import { supportsChannels, type NotificationService } from '../notification/noti
 const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
 
 /**
+ * Metadata accompanying a channel notification.
+ *
+ * `source` is the channel name and is required — it drives subscription
+ * enforcement, so a missing source would let any caller bypass per-channel
+ * isolation. Encoded as a TypeScript requirement so callers can't omit it
+ * by accident; the runtime check remains as a defense-in-depth assertion.
+ */
+export interface ChannelNotificationMeta {
+  source: string;
+  [key: string]: string;
+}
+
+/**
  * Service responsible for sending channel notifications to subscribed Claude Code sessions.
  *
  * **Session-scoped delivery:** Notifications are ONLY sent to sessions that:
@@ -38,10 +51,10 @@ export class ChannelNotificationService {
    * the specific channel name.
    *
    * @param content - The notification content
-   * @param meta - Metadata key-value pairs (must include `source` for channel name)
+   * @param meta - Metadata (must include `source` for the channel name)
    */
-  sendToSubscribedSessions(content: string, meta: Record<string, string>): void {
-    const channelName = meta['source'];
+  sendToSubscribedSessions(content: string, meta: ChannelNotificationMeta): void {
+    const channelName = meta.source;
     if (!channelName) {
       this.logger.warn('Cannot send channel notification without source in meta');
       return;
@@ -71,7 +84,7 @@ export class ChannelNotificationService {
    * @deprecated Use sendToSubscribedSessions instead. This method now delegates to
    * subscription-aware delivery.
    */
-  sendToAllCapableSessions(content: string, meta: Record<string, string>): void {
+  sendToAllCapableSessions(content: string, meta: ChannelNotificationMeta): void {
     this.sendToSubscribedSessions(content, meta);
   }
 
@@ -84,7 +97,7 @@ export class ChannelNotificationService {
    * @param meta - Metadata key-value pairs
    * @returns true if the notification was sent
    */
-  sendToSession(sessionId: string, content: string, meta: Record<string, string>): boolean {
+  sendToSession(sessionId: string, content: string, meta: ChannelNotificationMeta): boolean {
     const registered = this.notificationService.getRegisteredServer(sessionId);
     if (!registered) {
       this.logger.warn(`Cannot send channel notification to unregistered session: ${sessionId.slice(0, 20)}...`);
@@ -100,7 +113,7 @@ export class ChannelNotificationService {
     // run. Letting messages through without it would let any caller bypass the
     // subscription check, so missing-source is treated as a programming error
     // and we fail closed rather than emitting an unfiltered notification.
-    const channelName = meta['source'];
+    const channelName = meta.source;
     if (!channelName) {
       this.logger.error(
         `Channel notification rejected for session ${sessionId.slice(0, 20)}...: meta.source is required`,
@@ -129,7 +142,7 @@ export class ChannelNotificationService {
    * @param additionalMeta - Additional metadata to include
    */
   send(channelName: string, content: string, additionalMeta?: Record<string, string>): void {
-    const meta: Record<string, string> = {
+    const meta: ChannelNotificationMeta = {
       ...this.defaultMeta,
       ...(additionalMeta ?? {}),
       source: channelName,

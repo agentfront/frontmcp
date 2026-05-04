@@ -13,7 +13,7 @@ import {
 } from '../common';
 import type { ChannelNotification } from '../common/metadata/channel.metadata';
 import type ProviderRegistry from '../provider/provider.registry';
-import type { ChannelNotificationService } from './channel-notification.service';
+import type { ChannelNotificationMeta, ChannelNotificationService } from './channel-notification.service';
 
 /**
  * Concrete implementation of a channel that can receive events and push notifications.
@@ -184,7 +184,7 @@ export class ChannelInstance extends ChannelEntry {
   pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void {
     // Merge static meta from channel metadata with per-notification meta.
     // source is always authoritative (set last to prevent overrides).
-    const mergedMeta: Record<string, string> = {
+    const mergedMeta: ChannelNotificationMeta = {
       ...(this.staticMeta ?? {}),
       ...(meta ?? {}),
       source: this.name,
@@ -227,7 +227,14 @@ export class ChannelInstance extends ChannelEntry {
 
     let count = 0;
     for (const notification of this._replayBuffer) {
-      const replayMeta = { ...notification.meta, replayed: 'true' };
+      // Buffered notifications were emitted by pushNotification(), which always
+      // sets source. Re-pin source here so the type stays narrowed even though
+      // ChannelNotification.meta is the looser Record<string, string>.
+      const replayMeta: ChannelNotificationMeta = {
+        ...(notification.meta ?? {}),
+        source: notification.meta?.['source'] ?? this.name,
+        replayed: 'true',
+      };
       this._channelNotificationService.sendToSession(sessionId, notification.content, replayMeta);
       count++;
     }
