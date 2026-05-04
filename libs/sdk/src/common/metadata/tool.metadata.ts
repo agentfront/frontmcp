@@ -195,6 +195,26 @@ export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[] | und
 export type ToolInputType = z.ZodRawShape;
 
 /**
+ * Tool visibility states. See `ToolMetadata.visibility` for full semantics.
+ *
+ * Symmetric with `SkillVisibility` in `skill.metadata.ts`.
+ */
+export type ToolVisibility = 'public' | 'hidden' | 'internal';
+
+/**
+ * Resolve a tool's effective visibility, honoring the deprecated
+ * `hideFromDiscovery` alias. Used by the registry and call-tool flow.
+ */
+export function resolveToolVisibility(metadata: {
+  visibility?: ToolVisibility;
+  hideFromDiscovery?: boolean;
+}): ToolVisibility {
+  if (metadata.visibility) return metadata.visibility;
+  if (metadata.hideFromDiscovery === true) return 'hidden';
+  return 'public';
+}
+
+/**
  * Declarative metadata describing what an McpTool contributes.
  */
 export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOutputType = ToolOutputType>
@@ -234,10 +254,26 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   annotations?: ToolAnnotations;
 
   /**
-   * If true, the tool will not be shown in the tool/list action results.
-   * this method can still be called directly with tool/call even if hidden.
-   * use case: tools that are intended to be private or internal. (usually for testing / private apis)
-   * Default: false
+   * Visibility of this tool to external MCP clients vs internal SDK callers.
+   *
+   * - `'public'` (default): listed in `tools/list` and callable via `tools/call`.
+   * - `'hidden'`: NOT listed in `tools/list`, but still callable via `tools/call`
+   *   when the client knows the name (parity with the legacy `hideFromDiscovery`
+   *   behavior — used e.g. by `send-elicitation-result.tool.ts`).
+   * - `'internal'`: NOT listed AND NOT callable via external `tools/call` —
+   *   only invocable from within the SDK via `ExecutionContextBase.callTool(name, args)`.
+   *   Other tools, skill actions, agents (when allow-listed), CodeCall scripts,
+   *   and jobs can compose with it; an external MCP client request for this tool
+   *   is rejected with method-not-found.
+   *
+   * @default 'public'
+   */
+  visibility?: ToolVisibility;
+
+  /**
+   * @deprecated Use `visibility: 'hidden'` instead. When `visibility` is unset,
+   * `hideFromDiscovery: true` is treated as `visibility: 'hidden'` for
+   * backwards compatibility. This alias will be removed in a future major.
    */
   hideFromDiscovery?: boolean;
 
@@ -412,6 +448,7 @@ export const frontMcpToolMetadataSchema = z
     outputSchema: toolOutputSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
+    visibility: z.enum(['public', 'hidden', 'internal']).optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
     examples: z.array(toolExampleSchema).optional(),
     ui: z.looseObject({}).optional(),

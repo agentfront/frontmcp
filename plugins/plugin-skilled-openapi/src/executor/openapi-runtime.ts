@@ -25,9 +25,9 @@ import {
   type ParameterMapper,
   type SecurityContext,
 } from '@frontmcp/adapters/openapi';
+import type { AuthBinding } from '@frontmcp/adapters/skills';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
-import type { AuthBinding } from '../bundle/bundle.types';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
 import type { CredentialResolver } from './credential-resolver';

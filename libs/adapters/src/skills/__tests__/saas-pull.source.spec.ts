@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
-import type { SaasSourceOptions } from '../skilled-openapi.types';
+import type { SaasSourceOptions } from '../source-options';
 import { SaasPullSource } from '../sources/saas-pull.source';
 
 const baseBundle = {

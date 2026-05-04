@@ -1,8 +1,8 @@
 // file: plugins/plugin-skilled-openapi/src/tools/execute-action.tool.ts
 
+import { BundleStore } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
-import { BundleStore } from '../bundle/bundle.store';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import { getCompiledOpSchemas } from '../executor/schema-cache';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';

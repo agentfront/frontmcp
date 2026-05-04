@@ -1,23 +1,36 @@
 // file: plugins/plugin-skilled-openapi/src/sync/bundle-sync.service.ts
 
-import { type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
-
-import { diffBundles, formatDiffSummary, type BundleDiff } from '../bundle/bundle-diff';
-import { type BundleStore } from '../bundle/bundle.store';
 import {
   bundleSkillToActions,
+  diffBundles,
+  formatDiffSummary,
+  verifyBundleSignature,
   type AuthBinding,
+  type BundleDiff,
+  type BundleStore,
   type OperationDescriptor,
   type ResolvedBundle,
   type ServiceDescriptor,
-} from '../bundle/bundle.types';
+} from '@frontmcp/adapters/skills';
+import { type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+
 import { type HiddenOpEntry, type HiddenOpRegistry } from '../registry/hidden-op.registry';
-import { verifyBundleSignature } from '../security/bundle-signature';
 import { type SignatureKey } from '../skilled-openapi.types';
+import { type OperationToolFactory } from '../tools/operation-tool.factory';
 
 export interface BundleSyncOptions {
   requireSignature: boolean;
   trustedKeys: SignatureKey[];
+  /**
+   * When true (default), each operation in the bundle is also registered as
+   * an internal tool (visibility: 'internal') in the SDK's tool registry so
+   * other tools / agents / CodeCall scripts / jobs can compose with it via
+   * `this.callTool(name, args)` from `ExecutionContextBase`. Internal tools
+   * are excluded from `tools/list` and rejected for external `tools/call`.
+   * The existing meta-tools (`search_skill` / `load_skill` / `execute_action`)
+   * are unaffected.
+   */
+  exposeOperationsAsInternalTools: boolean;
 }
 
 export interface BundleApplyResult {
@@ -50,6 +63,14 @@ export class BundleSyncService {
     private readonly bundleStore: BundleStore,
     private readonly options: BundleSyncOptions,
     private readonly logger: FrontMcpLogger,
+    /**
+     * Optional factory that registers each operation as an internal SDK tool.
+     * Wired by the plugin's DI factory when `exposeOperationsAsInternalTools`
+     * is true and the SDK ToolRegistry is reachable from scope. Absent when
+     * the host opted out OR when the plugin runs in a context without a
+     * tool registry (e.g. unit tests for the sync service in isolation).
+     */
+    private readonly operationToolFactory?: OperationToolFactory,
   ) {}
 
   /**
@@ -137,7 +158,30 @@ export class BundleSyncService {
         this.skillUnregisterByBundleId.set(h.id, h.unregister);
       }
 
-      // 5) Swap the active bundle pointer (this fires BundleStore listeners).
+      // 5) Sync per-operation internal tools (visibility: 'internal').
+      //    This is best-effort: a registration error logs a warning and
+      //    continues — meta-tools still work, internal-tool composition for
+      //    that op is just unavailable until the next swap.
+      if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
+        try {
+          this.operationToolFactory.unregisterAll();
+          for (const entry of this.hiddenOps.values()) {
+            try {
+              this.operationToolFactory.register(entry);
+            } catch (regErr) {
+              this.logger.warn(
+                `[bundle-sync] internal-tool register failed for ${entry.bundleId}.${entry.op.operationId}: ${(regErr as Error).message}`,
+              );
+            }
+          }
+        } catch (factoryErr) {
+          this.logger.warn(
+            `[bundle-sync] internal-tool factory error: ${(factoryErr as Error).message}; continuing without internal tools`,
+          );
+        }
+      }
+
+      // 6) Swap the active bundle pointer (this fires BundleStore listeners).
       this.bundleStore.swap(bundle);
 
       this.logger.info(`[bundle-sync] applied ${bundle.bundleId}@${bundle.version} (${formatDiffSummary(diff)})`);
@@ -151,6 +195,24 @@ export class BundleSyncService {
       this.hiddenOps.clear();
       for (const entry of snapshotEntries) {
         this.hiddenOps.set(entry);
+      }
+
+      // Rollback step A.1: undo any internal tool registrations from this
+      // failed apply, then re-register the prior bundle's operations so
+      // composition callers continue to see the previous bundle's surface.
+      if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
+        try {
+          this.operationToolFactory.unregisterAll();
+          for (const entry of snapshotEntries) {
+            try {
+              this.operationToolFactory.register(entry);
+            } catch {
+              // best-effort restore
+            }
+          }
+        } catch {
+          // best-effort
+        }
       }
 
       // Rollback step B: tear down anything the staged apply registered. Each

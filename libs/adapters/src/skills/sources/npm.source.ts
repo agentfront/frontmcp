@@ -4,7 +4,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
-import type { NpmSourceOptions } from '../skilled-openapi.types';
+import type { NpmSourceOptions } from '../source-options';
 import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
 /**

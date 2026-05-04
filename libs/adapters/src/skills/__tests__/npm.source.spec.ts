@@ -1,5 +1,5 @@
 import type { ResolvedBundle } from '../bundle/bundle.types';
-import type { NpmSourceOptions } from '../skilled-openapi.types';
+import type { NpmSourceOptions } from '../source-options';
 import { NpmSource } from '../sources/npm.source';
 
 const baseBundle = {

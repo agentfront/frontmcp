@@ -1,7 +1,6 @@
-import type { SkillContent, SkillRegistryInterface } from '@frontmcp/sdk';
+import { BundleStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import { type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
 
-import { BundleStore } from '../bundle/bundle.store';
-import type { ResolvedBundle } from '../bundle/bundle.types';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 

@@ -1,7 +1,8 @@
-// file: plugins/plugin-skilled-openapi/src/bundle/bundle.types.ts
+// file: libs/adapters/src/skills/bundle/bundle.types.ts
 
-import type { ParameterMapper } from '@frontmcp/adapters/openapi';
 import type { SkillAction } from '@frontmcp/sdk';
+
+import type { ParameterMapper } from '../../openapi';
 
 /** HTTP methods we accept in v1.2. Multipart, SSE, websockets are out of scope. */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';

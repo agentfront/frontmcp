@@ -27,12 +27,13 @@
         "thirdParty": false,
         "platform": "node",
         "assets": ["libs/adapters/README.md", "LICENSE", "libs/adapters/package.json"],
-        "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts"],
+        "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts", "libs/adapters/src/skills/index.ts"],
         "esbuildOptions": {
           "outExtension": {
             ".js": ".js"
           },
           "external": [
+            "@frontmcp/auth",
             "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "@frontmcp/sdk",
@@ -41,6 +42,8 @@
             "@modelcontextprotocol/sdk/*",
             "openapi-types",
             "mcp-from-openapi",
+            "js-yaml",
+            "jose",
             "zod"
           ]
         }
@@ -59,12 +62,13 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
-        "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts"],
+        "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts", "libs/adapters/src/skills/index.ts"],
         "esbuildOptions": {
           "outExtension": {
             ".js": ".mjs"
           },
           "external": [
+            "@frontmcp/auth",
             "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "@frontmcp/sdk",
@@ -73,6 +77,8 @@
             "@modelcontextprotocol/sdk/*",
             "openapi-types",
             "mcp-from-openapi",
+            "js-yaml",
+            "jose",
             "zod"
           ]
         }

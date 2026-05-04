@@ -7,9 +7,9 @@
 
 import 'reflect-metadata';
 
+import { BundleStore } from '@frontmcp/adapters/skills';
 import { ScopeEntry, type SkillContent } from '@frontmcp/sdk';
 
-import { BundleStore } from '../bundle/bundle.store';
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { clearCompiledSchemaCache } from '../executor/schema-cache';
 import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.registry';

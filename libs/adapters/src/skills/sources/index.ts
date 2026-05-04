@@ -2,7 +2,7 @@
 
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
-import type { BundleSourceOptions } from '../skilled-openapi.types';
+import type { BundleSourceOptions } from '../source-options';
 import { NpmSource } from './npm.source';
 import { SaasPullSource } from './saas-pull.source';
 import type { SkillBundleSource } from './skill-bundle-source.interface';

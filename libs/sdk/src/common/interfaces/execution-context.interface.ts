@@ -178,6 +178,62 @@ export abstract class ExecutionContextBase<Out = unknown> {
   }
 
   /**
+   * Invoke another registered tool from inside the current execution context.
+   *
+   * Used by tools, skill actions, agents, CodeCall scripts, and jobs to
+   * compose with internal helper tools (e.g. operations registered by
+   * `@frontmcp/plugin-skilled-openapi`'s OpenAPI internal-tool adapter).
+   *
+   * Trust model: the call runs the standard `tools:call-tool` flow but tags
+   * the request ctx with `internalCall: true`, which the flow honors as a
+   * trusted in-process invocation. This bypasses the external-call gate that
+   * blocks `tools/call` for tools with `metadata.visibility === 'internal'`.
+   * Public and hidden tools are reachable through this helper too.
+   *
+   * Authority/authorization checks still run — an internal call carries the
+   * same `authInfo` as the surrounding request, so ABAC/RBAC guards apply.
+   *
+   * @param name Tool name (or fully-qualified `owner.name`).
+   * @param args Tool arguments — validated by the tool's input schema.
+   * @param opts Optional progress token / abort signal forwarded into `_meta`.
+   * @returns The tool's `CallToolResult` (typed as `unknown` because tools
+   *          cross plugin boundaries; cast at the call site if you know the shape).
+   */
+  async callTool(
+    name: string,
+    args?: Record<string, unknown>,
+    opts?: { progressToken?: string | number; signal?: AbortSignal },
+  ): Promise<unknown> {
+    const scope = this.scope as unknown as {
+      runFlow: (
+        flowName: 'tools:call-tool',
+        input: { request: unknown; ctx: unknown },
+      ) => Promise<{ success: boolean; result?: unknown; error?: Error }>;
+    };
+    const requestMeta: Record<string, unknown> = {};
+    if (opts?.progressToken !== undefined) requestMeta['progressToken'] = opts.progressToken;
+    const request = {
+      method: 'tools/call' as const,
+      params: {
+        name,
+        arguments: args ?? {},
+        ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
+      },
+    };
+    const ctx = {
+      authInfo: this._authInfo,
+      requestId: this.tryGetContext()?.requestId ?? this.runId,
+      internalCall: true as const,
+      ...(opts?.signal && { signal: opts.signal }),
+    };
+    const outcome = await scope.runFlow('tools:call-tool', { request, ctx });
+    if (!outcome.success) {
+      throw outcome.error ?? new Error(`callTool("${name}") failed`);
+    }
+    return outcome.result;
+  }
+
+  /**
    * Fail the execution and trigger error handling.
    */
   protected fail(err: Error): never {
