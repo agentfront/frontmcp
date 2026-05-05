@@ -38,7 +38,42 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
-The SDK keeps a per-channel ring buffer of the last `maxEvents` notifications. Replay is delivered via `ChannelInstance.replayBufferedEvents(sessionId)` (defined in `libs/sdk/src/channel/channel.instance.ts`). That method lives on the **channel instance**, not on `ChannelContext`, so you cannot call `this.replayBufferedEvents(...)` from within `onEvent`/`onConnect`. The runtime invokes it for you when a new session subscribes; you only need to author the replay logic if you want to trigger it manually from outside the channel (e.g. in a custom session-connect hook that resolves the `ChannelInstance` from the channel registry).
+The SDK keeps a per-channel ring buffer of the last `maxEvents` notifications. Replay is delivered via `ChannelInstance.replayBufferedEvents(sessionId)` (defined in `libs/sdk/src/channel/channel.instance.ts:223`). That method lives on the **channel instance**, not on `ChannelContext`, so you cannot call `this.replayBufferedEvents(...)` from within `onEvent`/`onConnect`.
+
+Replay is **not** triggered automatically when a new session subscribes — there is no caller of `replayBufferedEvents` inside the SDK today. To deliver buffered events, expose a tool that resolves the channel from the registry and triggers replay explicitly (Claude Code can call this on demand, or your application can call it from a custom hook):
+
+```typescript
+// src/apps/alerts/tools/replay-ci-alerts.tool.ts
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import type ChannelRegistry from '@frontmcp/sdk/channel/channel.registry';
+
+@Tool({
+  name: 'replay-ci-alerts',
+  description: 'Replay buffered CI alerts to the current session.',
+  inputSchema: {
+    channel_name: z.string().default('ci-alerts'),
+  },
+})
+export class ReplayCIAlertsTool extends ToolContext {
+  async execute(input) {
+    // Resolve the channel registry off scope (same cast pattern as ChannelReplyTool)
+    const scope = this.scope as unknown as { channels?: ChannelRegistry };
+    const registry = scope.channels;
+    if (!registry) {
+      return { content: [{ type: 'text', text: 'Channels are not enabled on this server.' }], isError: true };
+    }
+
+    const channel = registry.findByName(input.channel_name);
+    if (!channel) {
+      return { content: [{ type: 'text', text: `Channel "${input.channel_name}" not found.` }], isError: true };
+    }
+
+    const sessionId = this.context.sessionId;
+    const replayed = channel.replayBufferedEvents(sessionId);
+    return { content: [{ type: 'text', text: `Replayed ${replayed} buffered event(s).` }] };
+  }
+}
+```
 
 Replayed events arrive at Claude Code with `replayed: "true"` in their meta so the model can distinguish them from live events.
 
@@ -131,9 +166,9 @@ class AlertsApp {}
 
 1. Events arrive via any source -> `onEvent()` transforms them -> notification pushed to live sessions.
 2. If `replay.enabled`, each pushed notification is also stored in the channel's ring buffer (FIFO, capped at `maxEvents`).
-3. When a new Claude Code session subscribes, the runtime calls `ChannelInstance.replayBufferedEvents(sessionId)` for every replay-enabled channel.
-4. Each buffered notification is sent to the new session with `replayed: "true"` injected into its meta.
-5. The persistent-store pattern above is independent of the in-memory buffer: you replay from Redis on `onConnect()`, while `replay.enabled: true` continues to handle late-joining sessions for the lifetime of the process.
+3. Replay is **user-triggered**: call `ChannelInstance.replayBufferedEvents(sessionId)` yourself — typically from a tool (see `ReplayCIAlertsTool` above) or from a custom session lifecycle hook in your app.
+4. Each buffered notification is sent to the target session with `replayed: "true"` injected into its meta.
+5. The persistent-store pattern shown above is independent of the in-memory buffer: you replay from Redis on `onConnect()` (which fires once when the channel boots), while the in-memory ring buffer is what `replayBufferedEvents` reads from when invoked.
 
 ## What This Demonstrates
 

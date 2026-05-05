@@ -2,19 +2,22 @@
 name: tfidf-keyword-search
 reference: vectoriadb
 level: basic
-description: 'Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.'
+description: 'Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, concatenating fields into one text and calling `reindex()`.'
 tags: [extensibility, vectoriadb, keyword-search, tfidf, keyword, search]
 features:
   - 'Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)'
-  - 'Configuring field weights to control scoring influence'
-  - 'Calling `buildIndex()` after adding documents (required for TFIDFVectoria)'
+  - 'Calling `addDocument(id, text, metadata)` with a single concatenated text string'
+  - 'Calling `reindex()` after adding documents (required for TFIDFVectoria)'
   - 'Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`'
   - 'Injecting the provider into tools via `this.get(FAQSearchProvider)`'
 ---
 
 # TFIDFVectoria: Lightweight Keyword Search Provider
 
-Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.
+Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP
+provider. `TFIDFVectoria` indexes a single text string per document, so multi-field
+documents are concatenated into one searchable blob; the original fields are kept
+in `metadata` for use on search results.
 
 ## Code
 
@@ -24,30 +27,32 @@ import { TFIDFVectoria } from 'vectoriadb';
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
+interface FaqDoc {
+  id: string;
+  question: string;
+  answer: string;
+  tags: string;
+}
+
 @Provider({ name: 'faq-search', scope: ProviderScope.GLOBAL })
 export class FAQSearchProvider {
-  private db = new TFIDFVectoria({
-    fields: {
-      question: { weight: 3 }, // Question matches are 3x more important
-      answer: { weight: 1 }, // Answer matches are baseline
-      tags: { weight: 2 }, // Tag matches are 2x
-    },
+  private db = new TFIDFVectoria<FaqDoc>({
+    defaultTopK: 10,
   });
 
-  async initialize(faqs: Array<{ id: string; question: string; answer: string; tags: string }>) {
+  async initialize(faqs: FaqDoc[]) {
     for (const faq of faqs) {
-      this.db.addDocument(faq.id, {
-        question: faq.question,
-        answer: faq.answer,
-        tags: faq.tags,
-      });
+      // Concatenate fields into a single searchable text string;
+      // preserve the original fields in metadata.
+      const text = `${faq.question} ${faq.answer} ${faq.tags}`;
+      this.db.addDocument(faq.id, text, faq);
     }
-    // Required after adding documents — builds the TF-IDF index
-    this.db.buildIndex();
+    // Required after adding documents — rebuilds IDF and embeddings
+    this.db.reindex();
   }
 
   search(query: string, limit = 5) {
-    return this.db.search(query, limit);
+    return this.db.search(query, { topK: limit });
   }
 }
 ```
@@ -70,6 +75,7 @@ import { FAQSearchProvider } from '../providers/faq-search.provider';
       z.object({
         id: z.string(),
         score: z.number(),
+        question: z.string(),
       }),
     ),
   },
@@ -83,6 +89,7 @@ export class SearchFaqTool extends ToolContext {
       results: results.map((r) => ({
         id: r.id,
         score: r.score,
+        question: r.metadata.question,
       })),
     };
   }
@@ -92,8 +99,8 @@ export class SearchFaqTool extends ToolContext {
 ## What This Demonstrates
 
 - Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)
-- Configuring field weights to control scoring influence
-- Calling `buildIndex()` after adding documents (required for TFIDFVectoria)
+- Calling `addDocument(id, text, metadata)` with a single concatenated text string
+- Calling `reindex()` after adding documents (required for TFIDFVectoria)
 - Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`
 - Injecting the provider into tools via `this.get(FAQSearchProvider)`
 

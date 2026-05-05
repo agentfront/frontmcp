@@ -113,7 +113,7 @@ export class VectorStoreProvider {
     await this.ready;
     const matches = await this.getByDocumentId(documentId);
     for (const match of matches) {
-      await this.db.removeDocument(match.id);
+      this.db.remove(match.id);
     }
     await this.db.saveToStorage();
   }

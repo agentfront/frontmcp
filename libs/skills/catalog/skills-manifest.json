@@ -1646,15 +1646,15 @@
             },
             {
               "name": "tfidf-keyword-search",
-              "description": "Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.",
+              "description": "Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, concatenating fields into one text and calling `reindex()`.",
               "level": "basic",
               "tags": ["extensibility", "vectoriadb", "keyword-search", "tfidf", "keyword", "search"],
               "features": [
                 "Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)",
-                "Configuring field weights to control scoring influence",
-                "Calling `buildIndex()` after adding documents (required for TFIDFVectoria)",
+                "Calling `addDocument(id, text, metadata)` with a single concatenated text string",
+                "Calling `reindex()` after adding documents (required for TFIDFVectoria)",
                 "Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`",
-                "Injecting the provider into tools via `this.get(FAQSearch)`"
+                "Injecting the provider into tools via `this.get(FAQSearchProvider)`"
               ]
             }
           ]

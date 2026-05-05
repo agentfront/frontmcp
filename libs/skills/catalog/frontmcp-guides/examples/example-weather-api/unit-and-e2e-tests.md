@@ -8,7 +8,7 @@ features:
   - 'Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods'
   - 'Using `Object.assign(tool, ctx)` to inject mock context into the tool instance'
   - 'E2E testing with `TestServer.start()` and `McpTestClient.create()`'
-  - 'Using `toContainTool()` custom matcher for asserting tool presence'
+  - 'Asserting tool presence via `tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`'
   - 'Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`'
 ---
 
@@ -121,7 +121,7 @@ describe('Weather Server E2E', () => {
 
   it('should read the cities resource', async () => {
     const result = await client.resources.read('weather://cities');
-    const cities = JSON.parse(result.contents[0].text as string);
+    const cities = result.json<string[]>();
 
     expect(Array.isArray(cities)).toBe(true);
     expect(cities).toContain('London');
@@ -135,7 +135,7 @@ describe('Weather Server E2E', () => {
 - Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods
 - Using `Object.assign(tool, ctx)` to inject mock context into the tool instance
 - E2E testing with `TestServer.start()` and `McpTestClient.create()`
-- Using `toContainTool()` custom matcher for asserting tool presence
+- Asserting tool presence via `tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`
 - Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`
 
 ## Related

@@ -65,7 +65,7 @@ export default class TaskManagerServer {}
 // src/tasks.app.ts
 import { App } from '@frontmcp/sdk';
 
-import { createTaskStoreProvider, TaskStoreProvider } from './providers/task-store.provider';
+import { createTaskStoreProvider } from './providers/task-store.provider';
 import { CreateTaskTool } from './tools/create-task.tool';
 import { DeleteTaskTool } from './tools/delete-task.tool';
 import { ListTasksTool } from './tools/list-tasks.tool';
@@ -74,8 +74,9 @@ import { UpdateTaskTool } from './tools/update-task.tool';
 @App({
   name: 'Tasks',
   description: 'Task management with CRUD operations',
-  // The class itself is the DI token; the AsyncProvider factory below builds the singleton.
-  providers: [TaskStoreProvider, createTaskStoreProvider],
+  // The AsyncProvider factory binds the `TaskStoreProvider` class as the DI token.
+  // Tools inject the same class via `this.get(TaskStoreProvider)`.
+  providers: [createTaskStoreProvider],
   tools: [CreateTaskTool, ListTasksTool, UpdateTaskTool, DeleteTaskTool],
 })
 export class TasksApp {}
@@ -511,7 +512,7 @@ describe('Task Manager E2E', () => {
     const listResult = await client.tools.call('list_tasks', {});
     expect(listResult.isError).toBeFalsy();
 
-    const parsed = JSON.parse(listResult.content[0].text as string);
+    const parsed = listResult.json<{ tasks: Array<{ title: string }> }>();
     expect(parsed.tasks.length).toBeGreaterThan(0);
     expect(parsed.tasks.some((t: { title: string }) => t.title === 'E2E test task')).toBe(true);
   });

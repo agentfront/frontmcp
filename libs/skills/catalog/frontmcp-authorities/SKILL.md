@@ -258,11 +258,18 @@ the `admin:all` scope as the required challenge.
 available to your tools as strongly typed accessors. Declare the resulting fields by
 augmenting `ExtendFrontMcpAuthContext`:
 
-```typescript
-import type { AuthContextPipe } from '@frontmcp/auth';
+A pipe receives the **raw JWT claims** (a `Readonly<Record<string, unknown>>`) and
+returns a `Partial<ExtendFrontMcpAuthContext>` (sync or async). It does **not**
+receive the `AuthInfo` envelope — there is no `.user` accessor on the input.
 
-const tenantPipe: AuthContextPipe = (authInfo) => ({
-  tenantId: authInfo?.user?.tenantId as string | undefined,
+```typescript
+// Pipe signature (defined inline; do not import — AuthContextPipe is not
+// re-exported from `@frontmcp/auth`):
+//   (claims: Readonly<Record<string, unknown>>) =>
+//     Partial<ExtendFrontMcpAuthContext> | Promise<Partial<ExtendFrontMcpAuthContext>>
+
+const tenantPipe = (claims: Readonly<Record<string, unknown>>) => ({
+  tenantId: claims['tenantId'] as string | undefined,
 });
 
 declare global {

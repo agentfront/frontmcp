@@ -99,7 +99,7 @@ export const createTaskStoreProvider = AsyncProvider({
 // src/tasks.app.ts
 import { App } from '@frontmcp/sdk';
 
-import { createTaskStoreProvider, TaskStoreProvider } from './providers/task-store.provider';
+import { createTaskStoreProvider } from './providers/task-store.provider';
 import { CreateTaskTool } from './tools/create-task.tool';
 import { DeleteTaskTool } from './tools/delete-task.tool';
 import { ListTasksTool } from './tools/list-tasks.tool';
@@ -108,8 +108,9 @@ import { UpdateTaskTool } from './tools/update-task.tool';
 @App({
   name: 'Tasks',
   description: 'Task management with CRUD operations',
-  // Register the class as the token, plus the factory that produces the singleton.
-  providers: [TaskStoreProvider, createTaskStoreProvider],
+  // The AsyncProvider factory binds the `TaskStoreProvider` class as the DI token.
+  // Tools inject the same class via `this.get(TaskStoreProvider)`.
+  providers: [createTaskStoreProvider],
   tools: [CreateTaskTool, ListTasksTool, UpdateTaskTool, DeleteTaskTool],
 })
 export class TasksApp {}

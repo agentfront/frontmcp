@@ -42,7 +42,7 @@ Patterns and examples for extending FrontMCP servers with external npm packages.
 
 | Scenario                                      | Reference                                       | Description                                              |
 | --------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
-| Add in-memory semantic search with VectoriaDB | `references/vectoriadb.md`                      | TF-IDF indexing, field weighting, provider+tool pattern  |
+| Add in-memory semantic search with VectoriaDB | `references/vectoriadb.md`                      | TF-IDF or ML semantic indexing, provider+tool pattern    |
 | Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', 'AppName')` pattern        |
 | Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', 'ns')` pattern                |
 | Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks     |

@@ -46,7 +46,7 @@ class TranslateApp {}
   info: { name: 'translate-worker', version: '1.0.0' },
   apps: [TranslateApp],
   transport: {
-    protocol: 'sse',
+    protocol: 'modern',
   },
 })
 class TranslateServer {}

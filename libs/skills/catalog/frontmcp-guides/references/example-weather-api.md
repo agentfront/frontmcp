@@ -270,9 +270,9 @@ describe('Weather Server E2E', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toBeDefined();
+    expect(result.text()).toBeDefined();
 
-    const parsed = JSON.parse(result.content[0].text as string);
+    const parsed = result.json<{ temperature: number; condition: string; humidity: number; city: string }>();
     expect(parsed).toHaveProperty('temperature');
     expect(parsed).toHaveProperty('condition');
     expect(parsed).toHaveProperty('humidity');
@@ -285,7 +285,7 @@ describe('Weather Server E2E', () => {
     expect(citiesResource).toBeDefined();
 
     const result = await client.resources.read('weather://cities');
-    const cities = JSON.parse(result.contents[0].text as string);
+    const cities = result.json<string[]>();
 
     expect(Array.isArray(cities)).toBe(true);
     expect(cities).toContain('London');

@@ -12,11 +12,6 @@ Every channel has a source that determines how events flow into it. FrontMCP sup
 Registers an HTTP POST endpoint. External services (GitHub, CI/CD, monitoring) send payloads to this endpoint.
 
 ```typescript
-@Channel({
-  name: 'ci-alerts',
-  description: 'CI/CD pipeline notifications',
-  source: { type: 'webhook', path: '/hooks/ci' },
-})
 // Webhook payloads have a known shape: { body, headers, method, query? }.
 // Define the slice you need locally rather than importing an internal type.
 interface CIWebhookBody {
@@ -25,6 +20,11 @@ interface CIWebhookBody {
   url: string;
 }
 
+@Channel({
+  name: 'ci-alerts',
+  description: 'CI/CD pipeline notifications',
+  source: { type: 'webhook', path: '/hooks/ci' },
+})
 class CIAlertChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
     const { body } = payload as { body: unknown };

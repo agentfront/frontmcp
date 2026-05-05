@@ -128,7 +128,7 @@ class MyApp {}
   info: { name: 'my-worker', version: '1.0.0' },
   apps: [MyApp],
   transport: {
-    protocol: 'legacy', // 'legacy' | 'sse' | 'streamable' — see configure-transport
+    protocol: 'legacy', // preset: 'legacy' | 'modern' | 'stateless-api' | 'full' — see configure-transport
   },
 })
 class MyServer {}
@@ -136,7 +136,7 @@ class MyServer {}
 export default MyServer;
 ```
 
-> **Note:** The transport schema uses `protocol`, not `type`. Valid values are `'legacy'` (default), `'sse'`, and `'streamable'`. `transport: { type: 'sse' }` will fail Zod validation at startup.
+> **Note:** The transport schema uses `protocol`, not `type`. The preset string accepts `'legacy'` (default), `'modern'`, `'stateless-api'`, or `'full'`. For granular control, pass an object instead, e.g. `protocol: { sse: true, streamable: true }`. `transport: { type: 'sse' }` will fail Zod validation at startup.
 
 For session storage, use Upstash Redis (HTTP) via `redis: { provider: 'vercel-kv' }` or wire Cloudflare KV directly inside your tools — the SDK does not include a built-in Cloudflare KV provider, and ioredis-style `redis: { ... }` configs are rejected by the Cloudflare adapter at build time (no Node TCP on Workers).
 
@@ -197,14 +197,14 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 
 ## Common Patterns
 
-| Pattern            | Correct                                                            | Incorrect                         | Why                                                                                                             |
-| ------------------ | ------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Module format      | CommonJS (`main = "dist/cloudflare/index.js"`)                     | ESM (`type = "module"`)           | FrontMCP Cloudflare builds emit CommonJS at this exact path; the build overwrites `wrangler.toml` to enforce it |
-| Transport key      | `transport: { protocol: 'sse' }`                                   | `transport: { type: 'sse' }`      | The schema field is `protocol`, not `type`                                                                      |
-| Storage binding    | `[[kv_namespaces]]` with matching `binding`                        | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers                                                                     |
-| Compatibility date | Set via `frontmcp.config.deployments[].wrangler.compatibilityDate` | Hand-editing `wrangler.toml`      | The build overwrites `wrangler.toml`; config-driven values survive                                              |
-| Build command      | `frontmcp build --target cloudflare`                               | `frontmcp build` (no target)      | Default target is Node.js, not Workers                                                                          |
-| Secrets            | `wrangler secret put MY_SECRET`                                    | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard                                                              |
+| Pattern            | Correct                                                                    | Incorrect                         | Why                                                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Module format      | CommonJS (`main = "dist/cloudflare/index.js"`)                             | ESM (`type = "module"`)           | FrontMCP Cloudflare builds emit CommonJS at this exact path; the build overwrites `wrangler.toml` to enforce it                          |
+| Transport key      | `transport: { protocol: 'modern' }` (or `{ sse: true, streamable: true }`) | `transport: { type: 'sse' }`      | The schema field is `protocol`; valid presets are `'legacy' \| 'modern' \| 'stateless-api' \| 'full'`, or pass a `ProtocolConfig` object |
+| Storage binding    | `[[kv_namespaces]]` with matching `binding`                                | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers                                                                                              |
+| Compatibility date | Set via `frontmcp.config.deployments[].wrangler.compatibilityDate`         | Hand-editing `wrangler.toml`      | The build overwrites `wrangler.toml`; config-driven values survive                                                                       |
+| Build command      | `frontmcp build --target cloudflare`                                       | `frontmcp build` (no target)      | Default target is Node.js, not Workers                                                                                                   |
+| Secrets            | `wrangler secret put MY_SECRET`                                            | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard                                                                                       |
 
 ## Verification Checklist
 

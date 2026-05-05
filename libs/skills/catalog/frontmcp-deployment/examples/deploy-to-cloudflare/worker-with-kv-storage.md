@@ -40,7 +40,7 @@ class StorageApp {}
   info: { name: 'my-worker', version: '1.0.0' },
   apps: [StorageApp],
   transport: {
-    protocol: 'sse',
+    protocol: 'modern',
   },
 })
 class MyServer {}

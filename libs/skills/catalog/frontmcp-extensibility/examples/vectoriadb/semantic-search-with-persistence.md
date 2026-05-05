@@ -65,13 +65,8 @@ export class KnowledgeBaseProvider {
     } else {
       await this.db.add(id, text, metadata);
     }
-    // Persist to disk — restored without re-embedding on next startup
+    // Persist to disk — initialize() automatically restores from cache on next startup
     await this.db.saveToStorage();
-  }
-
-  async loadFromDisk() {
-    await this.ready;
-    await this.db.loadFromStorage();
   }
 }
 ```

@@ -62,7 +62,7 @@ describe('Task Manager E2E', () => {
     const listResult = await client.tools.call('list_tasks', {});
     expect(listResult.isError).toBeFalsy();
 
-    const parsed = JSON.parse(listResult.content[0].text as string);
+    const parsed = listResult.json<{ tasks: Array<{ title: string }> }>();
     expect(parsed.tasks.length).toBeGreaterThan(0);
     expect(parsed.tasks.some((t: { title: string }) => t.title === 'E2E test task')).toBe(true);
   });
