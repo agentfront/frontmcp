@@ -5,7 +5,7 @@
  * Useful for testing, embedding in applications, and LangChain integration.
  */
 
-import { type AuthInfo, type Transport } from '@frontmcp/protocol';
+import { type AuthInfo, type ServerCapabilities, type Transport } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
@@ -119,18 +119,64 @@ export async function createInMemoryServer(
       }
     : {};
 
+  // Capability fragments from every contributor. SEP-2640 / SEP-2133
+  // capabilities live inside `experimental` / `extensions`, so we lift
+  // those keys out of EVERY fragment (not just `scope.skills`) and merge
+  // them — otherwise an in-memory client would miss extension capabilities
+  // that the HTTP/SSE transport advertises against the same Scope.
+  const skillsCapabilities = scope.skills?.getCapabilities() ?? {};
+  const toolsCapabilities = scope.tools.getCapabilities();
+  const resourcesCapabilities = scope.resources.getCapabilities();
+  const promptsCapabilities = scope.prompts.getCapabilities();
+  const agentsCapabilities = scope.agents.getCapabilities();
+  const taskCapabilities = computeTaskCapabilities(scope);
+
+  const fragments: Array<Record<string, unknown>> = [
+    remoteCapabilities,
+    toolsCapabilities,
+    resourcesCapabilities,
+    promptsCapabilities,
+    agentsCapabilities,
+    skillsCapabilities,
+    completionsCapability,
+    taskCapabilities,
+  ];
+
+  const experimental: Record<string, unknown> = {};
+  const extensions: Record<string, unknown> = {};
+  for (const cap of fragments) {
+    if (cap['experimental'] && typeof cap['experimental'] === 'object') {
+      Object.assign(experimental, cap['experimental']);
+    }
+    if (cap['extensions'] && typeof cap['extensions'] === 'object') {
+      Object.assign(extensions, cap['extensions']);
+    }
+  }
+
+  const baseCapabilities: Record<string, unknown> = {
+    ...remoteCapabilities,
+    ...toolsCapabilities,
+    ...resourcesCapabilities,
+    ...promptsCapabilities,
+    ...agentsCapabilities,
+    ...completionsCapability,
+    ...taskCapabilities,
+    logging: {},
+  };
+  if (Object.keys(experimental).length > 0) baseCapabilities['experimental'] = experimental;
+  if (Object.keys(extensions).length > 0) baseCapabilities['extensions'] = extensions;
+
+  // The MCP `ServerOptions.capabilities` type doesn't model the
+  // forward-compat `extensions` key (reserved for SEP-2133), so we widen
+  // it locally to `ServerCapabilitiesWithExtensions` rather than casting
+  // through `Record<string, never>`. Runtime passthrough is unchanged;
+  // the alias just keeps the typing honest about what we put in the slot.
+  type ServerCapabilitiesWithExtensions = ServerCapabilities & {
+    extensions?: Record<string, unknown>;
+  };
   const serverOptions = {
     instructions: '',
-    capabilities: {
-      ...remoteCapabilities,
-      ...scope.tools.getCapabilities(),
-      ...scope.resources.getCapabilities(),
-      ...scope.prompts.getCapabilities(),
-      ...scope.agents.getCapabilities(),
-      ...completionsCapability,
-      ...computeTaskCapabilities(scope),
-      logging: {},
-    },
+    capabilities: baseCapabilities as unknown as ServerCapabilitiesWithExtensions,
     serverInfo: scope.metadata.info,
   };
 

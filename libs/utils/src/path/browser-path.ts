@@ -30,3 +30,12 @@ export function extname(p: string): string {
   const dotIndex = base.lastIndexOf('.');
   return dotIndex > 0 ? base.slice(dotIndex) : '';
 }
+
+export function isAbsolute(p: string): boolean {
+  // Mirrors Node's `path.isAbsolute`: POSIX root, Windows drive-letter
+  // (`C:\foo` / `C:/foo`), and UNC (`\\server\share`).
+  if (!p) return false;
+  if (p.startsWith('/') || p.startsWith('\\')) return true;
+  if (/^[A-Za-z]:[\\/]/.test(p)) return true;
+  return false;
+}

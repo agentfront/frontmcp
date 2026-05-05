@@ -4,61 +4,64 @@
  * Connects to a FrontMCP server as an MCP client with LLM-aware response formatting.
  */
 
-import type {
-  ServerCapabilities,
-  Implementation,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListResourceTemplatesResult,
-  ListPromptsResult,
-  GetPromptResult,
-  CompleteResult,
+import {
+  Client,
+  type CompleteResult,
+  type GetPromptResult,
+  type Implementation,
+  type ListPromptsResult,
+  type ListResourcesResult,
+  type ListResourceTemplatesResult,
+  type ReadResourceResult,
+  type ServerCapabilities,
 } from '@frontmcp/protocol';
+import { fileExists, pathResolve, randomUUID } from '@frontmcp/utils';
+
+import { PublicMcpError } from '../errors';
+import type { Scope } from '../scope/scope.instance';
+import {
+  SkillsListResultSchema,
+  SkillsLoadResultSchema,
+  SkillsSearchResultSchema,
+} from '../transport/mcp-handlers/skills-mcp.types';
 import type {
-  DirectClient,
-  ConnectOptions,
   ClientInfo,
-  LLMPlatform,
-  SearchSkillsOptions,
-  SearchSkillsResult,
-  LoadSkillsOptions,
-  LoadSkillsResult,
-  ListSkillsOptions,
-  ListSkillsResult,
+  CompleteOptions,
+  ConnectOptions,
+  DirectClient,
   ElicitationHandler,
   ElicitationRequest,
   ElicitationResponse,
-  CompleteOptions,
-  McpLogLevel,
-  ListJobsOptions,
-  ListJobsResult,
   ExecuteJobOptions,
+  ExecuteWorkflowOptions,
   JobExecutionResult,
   JobStatusResult,
+  ListJobsOptions,
+  ListJobsResult,
+  ListSkillsOptions,
+  ListSkillsResult,
   ListWorkflowsOptions,
   ListWorkflowsResult,
-  ExecuteWorkflowOptions,
+  LLMPlatform,
+  LoadSkillsOptions,
+  LoadSkillsResult,
+  McpLogLevel,
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  Sep2640IndexEntry,
+  SkillAssetEntry,
+  SkillAssetManifest,
   WorkflowExecutionResult,
   WorkflowStatusResult,
-  SkillAssetManifest,
-  SkillAssetEntry,
 } from './client.types';
 import {
   detectPlatform,
-  formatToolsForPlatform,
   formatResultForPlatform,
-  type FormattedTools,
+  formatToolsForPlatform,
   type FormattedToolResult,
+  type FormattedTools,
 } from './llm-platform';
-import type { Scope } from '../scope/scope.instance';
-import { PublicMcpError } from '../errors';
-import { randomUUID, pathResolve, fileExists } from '@frontmcp/utils';
-import { Client } from '@frontmcp/protocol';
-import {
-  SkillsSearchResultSchema,
-  SkillsLoadResultSchema,
-  SkillsListResultSchema,
-} from '../transport/mcp-handlers/skills-mcp.types';
+
 /**
  * DirectClient implementation that wraps an MCP client.
  *
@@ -71,7 +74,7 @@ import {
  */
 export class DirectClientImpl implements DirectClient {
   // Use a flexible type to handle dynamic import type differences between ESM/CJS
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private readonly mcpClient: any;
   private readonly sessionId: string;
   private readonly clientInfo: ClientInfo;
@@ -93,7 +96,6 @@ export class DirectClientImpl implements DirectClient {
   private scopeRef?: Scope;
 
   private constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mcpClient: any,
     sessionId: string,
     clientInfo: ClientInfo,
@@ -155,7 +157,7 @@ export class DirectClientImpl implements DirectClient {
       // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
       // between dynamic imports from @frontmcp/protocol
       const mcpClient = new Client(clientInfo, clientCapabilities);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       await mcpClient.connect(clientTransport as any);
 
       // Get server info from handshake
@@ -195,10 +197,7 @@ export class DirectClientImpl implements DirectClient {
    * Wrapped in try-catch to gracefully handle SDK version differences.
    * @internal
    */
-  private async setupNotificationHandlers(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mcpClient: any,
-  ): Promise<void> {
+  private async setupNotificationHandlers(mcpClient: any): Promise<void> {
     try {
       // Dynamic import to handle ESM/CJS compatibility
       const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await import('@frontmcp/protocol');
@@ -437,6 +436,79 @@ export class DirectClientImpl implements DirectClient {
     );
   }
 
+  /**
+   * SEP-2640 convenience wrapper — see `DirectClient.listSep2640Skills`.
+   *
+   * Reads `skill://index.json` via `resources/read`, validates the
+   * agentskills.io v0.2.0 schema URI, and returns the parsed entries.
+   * Returns `[]` (with a console.warn) when the resource isn't present,
+   * per SEP §Discovery: hosts MUST NOT treat absence as proof of zero
+   * skills, but the convenience helper degrades gracefully.
+   */
+  async listSep2640Skills(): Promise<Sep2640IndexEntry[]> {
+    let read;
+    try {
+      read = await this.mcpClient.readResource({ uri: 'skill://index.json' });
+    } catch {
+      // Index resource isn't exposed — common for servers that disable
+      // discovery or only support direct read. Caller can still call
+      // `readSkillUri()` if it knows a URI.
+      return [];
+    }
+    const text = read.contents?.[0]?.text;
+    if (typeof text !== 'string') return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.warn('[DirectClient] skill://index.json was not valid JSON');
+      return [];
+    }
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { skills?: unknown }).skills)) {
+      return [];
+    }
+    const doc = parsed as { $schema?: string; skills: Sep2640IndexEntry[] };
+    if (doc.$schema && !doc.$schema.startsWith('https://schemas.agentskills.io/discovery/')) {
+      console.warn(`[DirectClient] skill://index.json $schema "${doc.$schema}" is not an agentskills.io discovery URI`);
+    }
+    const ALLOWED_TYPES = new Set(['skill-md', 'mcp-resource-template', 'archive']);
+    return doc.skills.filter((e): e is Sep2640IndexEntry => {
+      if (!e || typeof e !== 'object') return false;
+      const entry = e as Sep2640IndexEntry;
+      if (typeof entry.type !== 'string' || !ALLOWED_TYPES.has(entry.type)) return false;
+      if (typeof entry.url !== 'string' || !entry.url.startsWith('skill://')) return false;
+      // `skill-md` MUST carry a name per SEP-2640 §Discovery.
+      if (entry.type === 'skill-md' && typeof (entry as { name?: unknown }).name !== 'string') {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * SEP-2640 convenience wrapper — see `DirectClient.readSkillUri`.
+   *
+   * Performs `resources/read` on a `skill://` URI and returns the body
+   * text directly. Throws when given a non-`skill://` URI to keep
+   * callers from accidentally fetching unrelated resources through the
+   * skill helper.
+   */
+  async readSkillTextUri(uri: string): Promise<string> {
+    if (!uri.startsWith('skill://')) {
+      throw new PublicMcpError(`readSkillTextUri: expected a skill:// URI, got "${uri}"`, 'INVALID_PARAMS', 400);
+    }
+    const read = await this.mcpClient.readResource({ uri });
+    const text = read.contents?.[0]?.text;
+    if (typeof text !== 'string') {
+      throw new PublicMcpError(
+        `readSkillTextUri: resource "${uri}" returned no text content; use readResource() for binary skill assets`,
+        'INVALID_REQUEST',
+        400,
+      );
+    }
+    return text;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Elicitation Operations
   // ─────────────────────────────────────────────────────────────────────────────
@@ -457,7 +529,7 @@ export class DirectClientImpl implements DirectClient {
           result: response,
         },
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       {} as any, // Schema validation happens server-side
     );
   }

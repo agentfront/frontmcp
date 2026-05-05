@@ -10,9 +10,16 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from '../../sdk/src/skill/skill-md-parser';
-import type { SkillManifest, SkillCatalogEntry } from '../src/manifest';
-import { VALID_TARGETS, VALID_CATEGORIES, VALID_BUNDLES, VALID_EXAMPLE_LEVELS } from '../src/manifest';
+import {
+  VALID_BUNDLES,
+  VALID_CATEGORIES,
+  VALID_EXAMPLE_LEVELS,
+  VALID_TARGETS,
+  type SkillCatalogEntry,
+  type SkillManifest,
+} from '../src/manifest';
 
 const CATALOG_DIR = path.resolve(__dirname, '..', 'catalog');
 const MANIFEST_PATH = path.join(CATALOG_DIR, 'skills-manifest.json');
@@ -778,5 +785,80 @@ describe('skills catalog validation', () => {
       expect(content).toContain('### Skip When');
       expect(content).toContain('## Verification Checklist');
     });
+  });
+
+  describe('catalog ↔ SDK parser consistency', () => {
+    function readSkillFile(dir: string): string {
+      return fs.readFileSync(path.join(CATALOG_DIR, dir, 'SKILL.md'), 'utf-8');
+    }
+
+    it.each(findAllSkillDirs().map((d) => [d]))(
+      '"%s" frontmatter category should reach metadata.category (not specMetadata)',
+      (dir) => {
+        const { frontmatter } = parseSkillMdFrontmatter(readSkillFile(dir));
+        // Skip skills that don't declare a category in their frontmatter.
+        if (typeof frontmatter['category'] !== 'string') return;
+
+        const md = skillMdFrontmatterToMetadata(frontmatter, '');
+
+        // Regression guard: prior to the parser fix, `category` fell
+        // through to `specMetadata` and downstream HTTP catalog filters
+        // saw `undefined`.
+        expect(md.category).toBe(frontmatter['category']);
+        expect(md.specMetadata?.['category']).toBeUndefined();
+      },
+    );
+
+    it.each(findAllSkillDirs().map((d) => [d]))(
+      '"%s" frontmatter priority/visibility/license/tags do not leak into specMetadata',
+      (dir) => {
+        const { frontmatter } = parseSkillMdFrontmatter(readSkillFile(dir));
+        const md = skillMdFrontmatterToMetadata(frontmatter, '');
+
+        for (const k of ['priority', 'visibility', 'license', 'tags', 'name', 'description']) {
+          expect(md.specMetadata?.[k]).toBeUndefined();
+        }
+      },
+    );
+
+    it.each(findAllSkillDirs().map((d) => [d]))(
+      '"%s" body contains the canonical sections required by TEMPLATE.md',
+      (dir) => {
+        const body = readSkillFile(dir);
+        // Each catalog skill must, at minimum, have these top-level
+        // sections so consumers see a uniform structure regardless of
+        // which skill they open. (`Examples` and `Accessing This Skill`
+        // were added wholesale; the rest were already enforced by the
+        // migration tracker for migrated skills.)
+        for (const heading of [
+          '## When to Use This Skill',
+          '## Verification Checklist',
+          '## Examples',
+          '## Accessing This Skill',
+          '## Reference',
+        ]) {
+          expect(body).toContain(heading);
+        }
+      },
+    );
+
+    it.each(findAllSkillDirs().map((d) => [d]))(
+      '"%s" Accessing This Skill section names the skill correctly',
+      (dir) => {
+        const body = readSkillFile(dir);
+        const { frontmatter } = parseSkillMdFrontmatter(body);
+        const name = frontmatter['name'];
+        if (typeof name !== 'string') return;
+
+        // The section is generated per skill — the literal name should
+        // appear in the URI examples it documents.
+        const idx = body.indexOf('## Accessing This Skill');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        const section = body.slice(idx);
+        const nextHeading = section.indexOf('\n## ', 1);
+        const sectionBody = nextHeading > 0 ? section.slice(0, nextHeading) : section;
+        expect(sectionBody).toContain(`skill://${name}/SKILL.md`);
+      },
+    );
   });
 });

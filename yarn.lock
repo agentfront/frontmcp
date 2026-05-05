@@ -2348,10 +2348,10 @@
   dependencies:
     langium "^4.0.0"
 
-"@modelcontextprotocol/sdk@1.27.1":
-  version "1.27.1"
-  resolved "https://registry.yarnpkg.com/@modelcontextprotocol/sdk/-/sdk-1.27.1.tgz#a602cf823bf8a68e13e7112f50aeb02b09fb83b9"
-  integrity sha512-sr6GbP+4edBwFndLbM60gf07z0FQ79gaExpnsjMGePXqFcSSb7t6iscpjk9DhFhwd+mTEQrzNafGP8/iGGFYaA==
+"@modelcontextprotocol/sdk@1.29.0":
+  version "1.29.0"
+  resolved "https://registry.yarnpkg.com/@modelcontextprotocol/sdk/-/sdk-1.29.0.tgz#79786d8b525e269de850ac82b1f1f757f3915f44"
+  integrity sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==
   dependencies:
     "@hono/node-server" "^1.19.9"
     ajv "^8.17.1"

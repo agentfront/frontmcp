@@ -50,6 +50,11 @@ export type {
   // Build-time asset types
   SkillAssetEntry,
   SkillAssetManifest,
+  // SEP-2640 (Skills Extension)
+  Sep2640IndexEntry,
+  Sep2640SkillEntry,
+  Sep2640ResourceTemplateEntry,
+  Sep2640ArchiveEntry,
 } from './client.types';
 
 // ─────────────────────────────────────────────────────────────────────────────

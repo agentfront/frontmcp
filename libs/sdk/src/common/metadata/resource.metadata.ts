@@ -17,6 +17,28 @@ declare global {
 }
 
 /**
+ * MCP `Annotations` object on a resource. Mirrors the MCP spec's
+ * `Annotations` shape — used to give hosts hints about audience,
+ * priority, and modification time.
+ */
+export interface ResourceAnnotations {
+  /**
+   * The intended consumer(s). E.g. `["assistant"]` for content the model
+   * should load, `["user", "assistant"]` for content the host may show in
+   * a UI as well.
+   */
+  audience?: Array<'user' | 'assistant'>;
+  /**
+   * Display priority hint in the range [0, 1]. Higher values surface
+   * earlier under progressive disclosure. SEP-2640 recommends 0.8 for
+   * the primary `SKILL.md` and ~0.3 for support files.
+   */
+  priority?: number;
+  /** ISO 8601 timestamp of the last modification. Useful for cache invalidation. */
+  lastModified?: string;
+}
+
+/**
  * A known resource that the server is capable of reading.
  */
 interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
@@ -55,11 +77,33 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
   icons?: Icon[];
 
   /**
+   * MCP annotations for the resource. Forwarded verbatim in
+   * `resources/list` so hosts can route based on `audience`, `priority`,
+   * and `lastModified`.
+   */
+  annotations?: ResourceAnnotations;
+
+  /**
+   * Free-form metadata forwarded in `resources/list` and `resources/read`
+   * responses. Reserve reverse-DNS prefixed keys (e.g.
+   * `io.modelcontextprotocol.skills/...`) per the MCP spec.
+   */
+  _meta?: Record<string, unknown>;
+
+  /**
    * Environment availability constraint.
    * When set, the resource is only discoverable and readable in matching environments.
    */
   availableWhen?: EntryAvailability;
 }
+
+const resourceAnnotationsSchema = z
+  .object({
+    audience: z.array(z.enum(['user', 'assistant'])).optional(),
+    priority: z.number().min(0).max(1).optional(),
+    lastModified: z.string().optional(),
+  })
+  .strict();
 
 export const frontMcpResourceMetadataSchema = z
   .object({
@@ -71,6 +115,8 @@ export const frontMcpResourceMetadataSchema = z
     description: z.string().optional(),
     mimeType: z.string().optional(),
     icons: z.array(IconSchema).optional(),
+    annotations: resourceAnnotationsSchema.optional(),
+    _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
@@ -114,6 +160,19 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
   icons?: Icon[];
 
   /**
+   * MCP annotations for the template. Same shape as resource annotations
+   * — clients use these to route by audience/priority and invalidate
+   * caches via `lastModified`.
+   */
+  annotations?: ResourceAnnotations;
+
+  /**
+   * Free-form metadata forwarded in `resources/list` responses; reserve
+   * reverse-DNS prefixed keys per the MCP spec.
+   */
+  _meta?: Record<string, unknown>;
+
+  /**
    * Environment availability constraint.
    * When set, the resource template is only discoverable in matching environments.
    */
@@ -130,6 +189,8 @@ export const frontMcpResourceTemplateMetadataSchema = z
     description: z.string().optional(),
     mimeType: z.string().optional(),
     icons: z.array(IconSchema).optional(),
+    annotations: resourceAnnotationsSchema.optional(),
+    _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();

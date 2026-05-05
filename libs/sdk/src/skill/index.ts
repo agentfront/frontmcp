@@ -162,24 +162,48 @@ export type { CompactSkillSummary } from './skill-http.utils';
 // Flows
 export { SearchSkillsFlow, LoadSkillFlow } from './flows';
 
-// Resources (skills:// URI scheme)
+// Skill resources are served exclusively under the SEP-2640 `skill://`
+// URI scheme. The legacy plural `skills://` scheme has been removed.
 export {
-  getSkillResources,
-  SkillsCatalogResource,
-  SkillContentResource,
-  SkillContentAliasResource,
-  SkillReferencesListResource,
-  SkillReferenceContentResource,
-  SkillExamplesListResource,
-  SkillExampleContentResource,
-  getMcpVisibleSkills,
-  getMcpVisibleSkillNames,
-  findAndLoadSkill,
-  readSkillFile,
-  readAndParseSkillFile,
-  collectAllReferenceNames,
-  collectAllExampleNames,
-} from './resources';
+  SEP_2640_EXTENSION_ID,
+  SEP_2640_META_NAMESPACE,
+  SKILL_ARCHIVE_MIME_TYPES,
+  SKILL_INDEX_MIME_TYPE,
+  SKILL_INDEX_SCHEMA_URI,
+  SKILL_INDEX_URI,
+  SKILL_MD_MIME_TYPE,
+  SKILL_MD_PRIORITY,
+  SKILL_SUPPORT_PRIORITY,
+  SKILL_URI_SCHEME,
+  buildArchiveIndexEntry,
+  buildResourceTemplateIndexEntry,
+  buildSkillIndex,
+  buildSkillMdIndexEntry,
+  buildSkillUri,
+  isSkillIndexUri,
+  isSkillUri,
+  parseSkillUri,
+  parseSkillUriWithKnownSkill,
+  serializeSkillMd,
+  validateSkillPath,
+  type ParsedSkillUri,
+  type SkillIndexDocument,
+  type SkillIndexEntry,
+  type SkillIndexEntryType,
+} from './sep-2640';
+export {
+  getSep2640Resources,
+  Sep2640SkillFileResource,
+  Sep2640SkillIndexResource,
+  Sep2640SkillMdResource,
+} from './sep-2640/resources';
+export {
+  findAndLoadSkillByPath,
+  findSkillByPath,
+  getSepVisibleSkills,
+  readSkillFileByPath,
+} from './sep-2640/sep-2640.resource-helpers';
+export { findNestedSkillMd } from './skill-directory-loader';
 
 // Session Management
 export { SkillSessionManager } from './session/skill-session.manager';

@@ -149,6 +149,107 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | CORS errors on browser/web clients | HTTP CORS not configured                     | Add CORS config via `configure-http` skill                                      |
 | Build fails with missing module    | Node-only module in browser/edge build       | Use conditional imports or `@frontmcp/utils` cross-platform utilities           |
 
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `build-for-browser`
+
+| Example                                                                                              | Level        | Description                                                                                           |
+| ---------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`browser-build-with-custom-entry`](./examples/build-for-browser/browser-build-with-custom-entry.md) | Intermediate | Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports.          |
+| [`browser-crypto-and-storage`](./examples/build-for-browser/browser-crypto-and-storage.md)           | Advanced     | Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments. |
+| [`react-provider-setup`](./examples/build-for-browser/react-provider-setup.md)                       | Basic        | Connect a React application to a remote FrontMCP server using `@frontmcp/react`.                      |
+
+### `build-for-cli`
+
+| Example                                                                | Level        | Description                                                                                                  |
+| ---------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| [`cli-binary-build`](./examples/build-for-cli/cli-binary-build.md)     | Basic        | Build a FrontMCP server as a standalone binary using Node.js Single Executable Applications (SEA).           |
+| [`unix-socket-daemon`](./examples/build-for-cli/unix-socket-daemon.md) | Intermediate | Run a FrontMCP server as a local daemon accessible via Unix socket for IDE extensions and local MCP clients. |
+
+### `build-for-mcpb`
+
+| Example                                                               | Level | Description                                                                                    |
+| --------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------- |
+| [`mcpb-bundle-build`](./examples/build-for-mcpb/mcpb-bundle-build.md) | Basic | Produce a .mcpb archive for Claude Desktop with metadata, tools, and install-time user_config. |
+
+### `build-for-sdk`
+
+| Example                                                                        | Level        | Description                                                                                                |
+| ------------------------------------------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------- |
+| [`connect-openai`](./examples/build-for-sdk/connect-openai.md)                 | Intermediate | Use `connectOpenAI()` to get tools formatted for OpenAI's function-calling API.                            |
+| [`create-flat-config`](./examples/build-for-sdk/create-flat-config.md)         | Basic        | Spin up an in-memory FrontMCP server from a flat config object using `create()`.                           |
+| [`multi-platform-connect`](./examples/build-for-sdk/multi-platform-connect.md) | Advanced     | Connect the same FrontMCP server to multiple LLM platforms using platform-specific `connect*()` functions. |
+
+### `deploy-to-cloudflare`
+
+| Example                                                                               | Level        | Description                                                                                             |
+| ------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| [`basic-worker-deploy`](./examples/deploy-to-cloudflare/basic-worker-deploy.md)       | Basic        | Deploy a FrontMCP server to Cloudflare Workers with a minimal configuration.                            |
+| [`worker-custom-domain`](./examples/deploy-to-cloudflare/worker-custom-domain.md)     | Advanced     | Scaffold a FrontMCP project targeting Cloudflare, configure a custom domain, and verify the deployment. |
+| [`worker-with-kv-storage`](./examples/deploy-to-cloudflare/worker-with-kv-storage.md) | Intermediate | Deploy a FrontMCP server to Cloudflare Workers with KV namespace for session and state storage.         |
+
+### `deploy-to-lambda`
+
+| Example                                                                               | Level        | Description                                                                                           |
+| ------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`cdk-deployment`](./examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management. |
+| [`lambda-handler-with-cors`](./examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | Create a custom Lambda handler with an explicit API Gateway definition for CORS support.              |
+| [`sam-template-basic`](./examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                         |
+
+### `deploy-to-node-dockerfile`
+
+| Example                                                                                              | Level    | Description                                                                                |
+| ---------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| [`basic-multistage-dockerfile`](./examples/deploy-to-node-dockerfile/basic-multistage-dockerfile.md) | Basic    | A minimal multi-stage Dockerfile for building and running a FrontMCP server in production. |
+| [`secure-nonroot-dockerfile`](./examples/deploy-to-node-dockerfile/secure-nonroot-dockerfile.md)     | Advanced | A production Dockerfile with a non-root user, proper ownership, and security hardening.    |
+
+### `deploy-to-node`
+
+| Example                                                                               | Level        | Description                                                                                               |
+| ------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| [`docker-compose-with-redis`](./examples/deploy-to-node/docker-compose-with-redis.md) | Basic        | Deploy a FrontMCP server with Redis using Docker Compose for production.                                  |
+| [`pm2-with-nginx`](./examples/deploy-to-node/pm2-with-nginx.md)                       | Intermediate | Deploy a FrontMCP server on bare metal using PM2 for process management and NGINX for TLS termination.    |
+| [`resource-limits`](./examples/deploy-to-node/resource-limits.md)                     | Advanced     | Configure resource limits, health checks, and environment variables for a production FrontMCP deployment. |
+
+### `deploy-to-vercel-config`
+
+| Example                                                                                                            | Level        | Description                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------- |
+| [`minimal-vercel-config`](./examples/deploy-to-vercel-config/minimal-vercel-config.md)                             | Basic        | The minimum `vercel.json` needed to deploy a FrontMCP server to Vercel.                            |
+| [`vercel-config-with-security-headers`](./examples/deploy-to-vercel-config/vercel-config-with-security-headers.md) | Intermediate | A complete `vercel.json` with per-route security headers for health, MCP, and all other endpoints. |
+
+### `deploy-to-vercel`
+
+| Example                                                                               | Level        | Description                                                                                     |
+| ------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| [`vercel-mcp-endpoint-test`](./examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.  |
+| [`vercel-with-kv`](./examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. |
+| [`vercel-with-skills-cache`](./examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.             |
+
+### `mcp-client-integration`
+
+| Example                                                                               | Level        | Description                                                                                                  |
+| ------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| [`stdio-npx`](./examples/mcp-client-integration/stdio-npx.md)                         | Basic        | Publish a FrontMCP server to npm and configure MCP clients to use it with npx --stdio.                       |
+| [`http-remote`](./examples/mcp-client-integration/http-remote.md)                     | Basic        | Connect an MCP client to a FrontMCP server running as an HTTP server, locally or remotely.                   |
+| [`stdio-binary-with-env`](./examples/mcp-client-integration/stdio-binary-with-env.md) | Intermediate | Configure a local FrontMCP CLI binary with environment variables and custom arguments in MCP client configs. |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-deployment/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                                 |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-deployment`, `frontmcp skills read frontmcp-deployment:references/<file>.md`, `frontmcp skills install frontmcp-deployment` — no server required.                                                                                                                                                |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-deployment/SKILL.md`, `skill://frontmcp-deployment/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
+
 ## Reference
 
 - [Runtime Modes](https://docs.agentfront.dev/frontmcp/deployment/runtime-modes)

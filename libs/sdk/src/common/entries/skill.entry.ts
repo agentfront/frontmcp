@@ -151,4 +151,23 @@ export abstract class SkillEntry extends BaseEntry<SkillRecord, SkillContext, Sk
   getResources(): SkillResources | undefined {
     return this.metadata.resources;
   }
+
+  /**
+   * Get the skill's effective `<skill-path>` segments per SEP-2640.
+   *
+   * Returns `metadata.skillPath` when set, otherwise `[name]`. The final
+   * segment is always equal to `name` (enforced by the metadata schema).
+   */
+  getSkillPathSegments(): string[] {
+    return this.metadata.skillPath && this.metadata.skillPath.length > 0
+      ? [...this.metadata.skillPath]
+      : [this.metadata.name];
+  }
+
+  /**
+   * Get the skill's `<skill-path>` joined by `/` for URI construction.
+   */
+  getSkillPath(): string {
+    return this.getSkillPathSegments().join('/');
+  }
 }

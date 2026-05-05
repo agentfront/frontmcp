@@ -11,112 +11,285 @@ reviews:
       threshold: 65
 
   path_instructions:
-    - path: "apps/**"
-      instructions: >
-        apps/** directory contains a demo application for testing purposes.
-        It can be used as a reference for SDK usage examples.
-
     # ─────────────────────────────────────────────────────────
-    # DOCS HIERARCHY & WORKFLOW
+    # ROOT-LEVEL CONTRIBUTOR DOCS
     # ─────────────────────────────────────────────────────────
 
-    # Latest rendered docs for current minor – GENERATED ONLY
-    - path: "docs/live/**"
+    - path: "CLAUDE.md"
       instructions: >
-        This folder contains the latest Mintlify documentation for the CURRENT minor
-        version, using SEO-friendly paths (e.g. "docs/getting-started/welcome").
-        These files are generated/updated by the Codex GitHub Action, NOT manually.
-        When reviewing a PR:
-        - If a contributor edits files under docs/docs/** directly, ask them to revert
-          those changes and instead update the corresponding draft under docs/draft/docs/**.
-        - Do NOT suggest manual edits here; suggest editing drafts and letting automation
-          regenerate docs/docs/**.
-        - The release process for a new minor is:
-          1) Copy the current docs/docs/** into docs/v/{previous-minor}/** to freeze them.
-          2) Update docs/docs/** based on docs/draft/docs/** and the code changes.
+        Project-wide guidance for Claude Code (this repo's CLAUDE.md is loaded
+        into every session). When public APIs change, conventions evolve, or
+        new lint/test patterns are introduced, ensure this file is updated so
+        the rules stay in sync with the codebase. Conversely, flag any rule
+        in CLAUDE.md that contradicts the diff (e.g. an import boundary
+        described here that the PR violates) and ask the author to either
+        update the rule or revert.
 
-    # Frozen archived docs for old minors – NEVER EDIT
-    - path: "docs/live/docs/v/**"
+    - path: "AGENTS.md"
       instructions: >
-        This folder contains frozen, archived documentation for previous minor versions,
-        e.g. docs/v/0.1/**, docs/v/0.2/**.
-        These are historical snapshots and must NEVER be edited.
-        When reviewing a PR:
-        - If any file under docs/v/** is modified, treat it as a mistake and ask the author
-          to revert. Explain that archived docs are read-only.
-        - If authors want to fix or improve docs, they should work in docs/draft/docs/**
-          and let the release/automation flow handle new minors.
+        High-level orientation for AI agents working in this repo. Treat
+        edits the same way as CLAUDE.md — keep it accurate as the project
+        evolves; don't let drift accumulate.
 
-    # Drafts – THIS is where humans should edit docs
-    - path: "docs/draft/docs/**"
+    - path: "README.md"
       instructions: >
-        This folder holds the draft/source docs that humans are expected to edit.
-        When authors want to add or change documentation, they should do it here.
-        The Codex workflow uses these drafts, together with the code diff, to generate
-        the latest docs under docs/live/docs/**.
-        As a reviewer:
-        - Encourage contributors to add/update content here instead of docs/live/docs/**.
-        - It is fine to do structural/content feedback here (clarity, examples, etc).
+        Top-level project README. Should reflect the latest install / usage
+        commands and the canonical package names (@frontmcp/sdk,
+        @frontmcp/cli published as `frontmcp`, etc.). If commands or
+        package names change in the diff, ensure README is updated to match.
 
-    # Blogs – human edited, not touched by Codex
-    - path: "docs/live/blogs/**"
+    - path: "ROADMAP.md"
       instructions: >
-        This folder contains blog posts (e.g. "docs/live/blogs/november-2025/...").
-        These are NOT managed by the Codex docs automation.
-        Human-authored changes here are expected and allowed.
-        As a reviewer, ensure the changes look intentional and not like bulk/automated
-        rewrites of the entire blog tree.
+        Forward-looking roadmap. Don't gate PRs on roadmap edits, but flag
+        substantive feature work that lands without a corresponding roadmap
+        update.
 
-    # Mintlify navigation config
-    - path: "docs/live/docs.json"
+    - path: "BREAKING_CHANGES.v1.md"
       instructions: >
-        Mintlify navigation configuration.
-        Important structure:
-        - dropdowns[].dropdown == "Documentation":
-          - Contains a "versions" array.
-          - Latest version entry: "version": "vX.Y (latest)", "default": true, with
-            paths like "docs/live/docs/getting-started/welcome" and "updates" (NO "v/X.Y" prefix).
-          - Older versions: "version": "v0.2", "version": "v0.1", etc., with paths
-            like "docs/live/docs/v/0.2/getting-started/welcome".
-        - dropdowns[].dropdown == "Blog":
-          - Contains blog groups (e.g. "blog/november-2025/introducing-frontmcp").
-        Review guidelines:
-        - Do NOT suggest editing the Blog dropdown unless the PR explicitly adds/changes blogs.
-        - Ensure latest version uses non-versioned "docs/..." paths, and older versions
-          use "docs/v/{minor}/..." paths.
-        - If you see changes that try to route archived versions away from docs/v/**,
-          flag that as incorrect.
+        Manually curated breaking changes for the v1.x line. Any PR that
+        introduces a breaking change MUST update this file (or its JSON
+        sibling `breaking-changes.v1.json`); ask for the entry if missing.
 
-    # Generic docs catch-all (for anything not covered above)
+    # ─────────────────────────────────────────────────────────
+    # MINTLIFY DOCS — FLAT, HUMAN-EDITED
+    # ─────────────────────────────────────────────────────────
+    # Layout reality (no live/draft split, no v/<minor>/ archives):
+    #   docs/
+    #   ├── docs.json                Mintlify navigation
+    #   ├── assets/                  images / static
+    #   └── frontmcp/                section content (mdx)
+    #       ├── adapters/
+    #       ├── authentication/
+    #       ├── deployment/
+    #       ├── extensibility/
+    #       ├── features/
+    #       ├── fundamentals/
+    #       ├── getting-started/
+    #       ├── guides/
+    #       ├── nx-plugin/
+    #       ├── plugins/
+    #       ├── react/
+    #       ├── sdk-reference/
+    #       ├── servers/
+    #       ├── testing/
+    #       └── updates.mdx
+
+    - path: "docs/frontmcp/**"
+      instructions: >
+        Mintlify documentation (MDX). Authors edit these files directly —
+        there is no `draft/` staging area. When reviewing:
+        - When public APIs in libs/** or plugins/** change, ensure the matching
+          docs page under docs/frontmcp/** is updated in the same PR (sdk-reference,
+          adapters, plugins, features, etc.). Flag missing doc updates.
+        - Look for stale `import { ... } from '@frontmcp/...'` snippets,
+          renamed exports, or removed options that no longer exist.
+        - Look for stale URI examples — skills are exposed under the
+          singular SEP-2640 `skill://` scheme (e.g. `skill://index.json`,
+          `skill://{+skillPath}/SKILL.md`). The legacy plural `skills://`
+          scheme has been removed; flag any reintroduced references.
+        - Code examples should match the public surface of the corresponding
+          library (no internal symbols, no removed APIs).
+        - Updates to `docs/frontmcp/updates.mdx` follow the format described
+          in `.github/UPDATES_FORMAT.md`.
+
+    - path: "docs/frontmcp/sdk-reference/**"
+      instructions: >
+        SDK reference pages (organised under `core/`, `decorators/`,
+        `registries/`, `contexts/`, `errors/`, `types/`, `utilities/`,
+        plus standalone pages like `guard.mdx` and `telemetry.mdx`).
+        These should reflect the actual public exports of `@frontmcp/sdk`
+        (see `libs/sdk/src/index.ts`). When new symbols are exported from
+        the SDK barrel, suggest a matching reference page in the right
+        subfolder; when symbols are removed, flag stale entries.
+
+    - path: "docs/docs.json"
+      instructions: >
+        Mintlify navigation. When new docs pages are added under
+        docs/frontmcp/**, the navigation MUST list them or they won't be
+        reachable. Conversely, removed pages MUST be removed from navigation
+        — orphaned entries cause build failures.
+
+    - path: "docs/assets/**"
+      instructions: >
+        Static assets used by the docs (images, diagrams). Flag oversized or
+        non-optimised images (>500KB) and any binary checked in by mistake.
+
     - path: "docs/**"
       instructions: >
-        Repository documentation for the SDK, using MDX and hosted by Mintlify.
-        See more specific rules for:
-        - docs/live/docs/** (latest rendered docs, automation-only)
-        - docs/live/docs/v/** (archived versions, read-only)
-        - docs/draft/docs/** (human-editable drafts)
-        - docs/live/blogs/** (blogs, human edited)
-        - docs/draft/blogs/** (blogs, human edited)
-        - docs/live/docs.json (Mintlify navigation)
-        - docs/draft/docs.json (Mintlify navigation)
+        Mintlify documentation root. See more specific rules above.
+        - There is NO docs/live/** or docs/draft/** split in this repo —
+          authors edit `docs/frontmcp/**` and `docs/docs.json` directly.
+        - There is NO docs/v/{minor}/** archive — versioning is handled by
+          the external docs deployment described in
+          `.github/DOCS_VERSION_STRATEGY.md`.
+        - The `frontmcp build` and `frontmcp` CLI is published as `frontmcp`
+          on npm even though the workspace package is named `@frontmcp/cli`.
+          Examples should reflect this (`npx frontmcp ...`, not
+          `npx @frontmcp/cli`).
 
-    # SDK libs
+    # ─────────────────────────────────────────────────────────
+    # SDK & SUPPORTING LIBRARIES
+    # ─────────────────────────────────────────────────────────
+
+    - path: "libs/sdk/**"
+      instructions: >
+        Core SDK. Strict rules per CLAUDE.md:
+        - MUST import all MCP protocol types/schemas/`McpError` from
+          `@frontmcp/protocol`, never from `@modelcontextprotocol/sdk`
+          directly. Flag any direct upstream import.
+        - MUST use `@frontmcp/utils` for filesystem (`readFile`, `stat`,
+          `readJSON`, etc.) and crypto (`sha256`, `randomUUID`,
+          `generateCodeVerifier`, etc.) — never `node:crypto` or
+          `fs/promises` directly.
+        - Test files MUST end in `.spec.ts` (NOT `.test.ts`).
+        - 95%+ coverage target across statements/branches/functions/lines.
+        - Use specific MCP error classes with JSON-RPC codes; avoid
+          non-null assertions (`!`).
+        - When public exports in `libs/sdk/src/index.ts` change, ensure
+          `docs/frontmcp/sdk-reference/**` has matching updates.
+
+    - path: "libs/protocol/**"
+      instructions: >
+        ONLY library allowed to import from `@modelcontextprotocol/sdk`.
+        This is the boundary that lets us swap or upgrade the upstream
+        package in one place. If a needed type isn't reachable, re-export
+        it here rather than reaching around the boundary in callers.
+
+    - path: "libs/auth/**"
+      instructions: >
+        Standalone auth library (sessions, credential vault, CIMD, OAuth).
+        All authentication-related code belongs here, NOT in libs/sdk/src/auth.
+        Flag PRs that introduce auth logic in libs/sdk/**.
+
+    - path: "libs/skills/**"
+      instructions: >
+        Curated SKILL.md catalog. The catalog manifest
+        (`catalog/skills-manifest.json`) is the single source of truth for
+        scaffolding/install tooling. New skills should add a directory under
+        `catalog/<category>/<name>/`, a SKILL.md, and a manifest entry.
+
+    - path: "libs/cli/**"
+      instructions: >
+        Command-line interface — published as `frontmcp` on npm even though
+        the workspace package is `@frontmcp/cli`. Docs and examples should
+        use `frontmcp` / `npx frontmcp`, not `@frontmcp/cli`.
+
+    - path: "libs/adapters/**"
+      instructions: >
+        Framework adapters (Express, Fastify, Lambda, Vercel, OpenAPI, etc.).
+        Module format must remain CommonJS for Lambda/Vercel adapters per
+        prior fix (#388) — flag any move back to ESM here.
+
     - path: "libs/**"
       instructions: >
-        Contains publishable SDK libraries.
-        Review for API correctness, breaking changes, and consistency with docs.
-        When public APIs change, ensure there is a matching docs/draft/docs/** update
-        (not direct edits under docs/docs/**).
+        Publishable SDK libraries.
+        - Review for API correctness, breaking changes, and consistency with
+          docs.
+        - When public APIs change, ensure there is a matching update under
+          `docs/frontmcp/**` (this repo edits docs directly — there is no
+          `docs/draft/**`).
+        - Internal `@frontmcp/*` dependency versions must stay normalised
+          to the exact release line (per #361/#363); flag drift.
+        - Resource URI scheme for skills is the singular `skill://`
+          (SEP-2640). The legacy `skills://` scheme has been removed and
+          MUST NOT be reintroduced.
 
-    # SDK Plugins
+    # ─────────────────────────────────────────────────────────
+    # PLUGINS
+    # ─────────────────────────────────────────────────────────
+
     - path: "plugins/**"
       instructions: >
-        Contains publishable SDK plugins.
-        Review for API correctness, breaking changes, and consistency with docs.
-        When public APIs change, ensure there is a matching docs/draft/docs/** update
-        (not direct edits under docs/docs/**).
+        Publishable SDK plugins (each its own package).
+        - Review for API correctness, breaking changes, and consistency with
+          `docs/frontmcp/plugins/**`.
+        - Plugins extending `ExecutionContextBase` must follow the
+          module-augmentation + prototype-extension pattern (see
+          `plugin-remember/src/remember.context-extension.ts`).
+        - Use `Plugin({ ... })` decorator metadata, not legacy patterns.
+
+    # ─────────────────────────────────────────────────────────
+    # APPS / DEMOS / E2E
+    # ─────────────────────────────────────────────────────────
+
+    - path: "apps/demo/**"
+      instructions: >
+        Demo application — playground for SDK usage examples and the docs
+        site source for inline snippets. Keep examples idiomatic; they are
+        copied into docs and reviewed by users learning the SDK.
+
+    - path: "apps/e2e/**"
+      instructions: >
+        End-to-end test suites (one project per feature: skills, agents,
+        cache, distributed, channels, etc.). Each E2E project boots a real
+        FrontMCP server via `apps/e2e/<name>/src/main.ts` and exercises it
+        via the `@frontmcp/testing` MCP client harness.
+        - Tests live under `e2e/*.e2e.spec.ts` (NOT `.spec.ts`, NOT `.test.ts`).
+        - Don't suggest mocking the MCP transport here — these tests exist
+          precisely to catch regressions across the wire.
+        - When adding tests, mirror the URI shape used in production code
+          (e.g. `skill://{+skillPath}/SKILL.md`, not the removed `skills://`).
+
+    - path: "apps/**"
+      instructions: >
+        Demo applications and end-to-end test suites. Reference for SDK
+        usage; not published. Breaking changes to library APIs MUST be
+        reflected here so the demos and E2Es continue to compile.
+
+    # ─────────────────────────────────────────────────────────
+    # SCRIPTS / WORKFLOWS / CONFIG
+    # ─────────────────────────────────────────────────────────
+
+    - path: "scripts/**"
+      instructions: >
+        Build / release / coverage scripts. When adding a `.ts`/`.mjs`
+        script that imports `@frontmcp/*` workspace packages, the script
+        runner needs `TSX_TSCONFIG_PATH=tsconfig.base.json` (see
+        `libs/guard/project.json`'s `generate-types` target) — flag scripts
+        that import workspace paths without that env var.
+
+    - path: ".github/workflows/**"
+      instructions: >
+        CI/CD workflows. When adding workflows that run tests, prefer
+        `nx run-many -t test --exclude='demo-e2e-*'` for unit tests and
+        `nx run-many -t test --projects='demo-e2e-*'` for E2E. Don't skip
+        hooks (`--no-verify`) or signing flags unless absolutely necessary.
+
+    - path: ".github/ISSUE_TEMPLATE/**"
+      instructions: >
+        Issue templates. Keep terse and self-explanatory; avoid duplicate
+        templates.
+
+    - path: "**/project.json"
+      instructions: >
+        Nx project configuration. When adding a new build target, follow
+        the existing pattern: `build-cjs` + `build-esm` + `build` (the
+        composite target runs `strip-dist-from-pkg.js`). Flag custom
+        target structures unless the package genuinely needs them.
+
+    - path: "**/package.json"
+      instructions: >
+        Workspace package config.
+        - Internal `@frontmcp/*` dependencies must be pinned to the exact
+          release-line version (per #357/#361/#363). Flag `^` or `~` ranges
+          on `@frontmcp/*` deps.
+        - `engines.node` should match the root package.json (`>=24.0.0`).
+
+    - path: "**/eslint.config.mjs"
+      instructions: >
+        Per-project ESLint config. Keep aligned with the root
+        `eslint.config.mjs` and `eslint.imports.mjs`. New rules should be
+        added at the root, not duplicated per-project, unless a project
+        genuinely needs an exception.
+
+    - path: "**/jest.config.ts"
+      instructions: >
+        Per-project Jest config. Test files MUST match `.spec.ts` (or
+        `.spec.tsx` / `.e2e.spec.ts` / `.perf.spec.ts` / `.pw.spec.ts`).
+        Flag any `.test.ts` patterns.
 
   path_filters:
+    # Standard build/cache outputs
     - "!**/dist/**"
     - "!**/build/**"
     - "!**/coverage/**"
@@ -126,6 +299,7 @@ reviews:
     - "!**/.turbo/**"
     - "!**/.swc/**"
     - "!**/.parcel-cache/**"
+    - "!**/.nx/**"
     - "!**/node_modules/**"
     - "!**/.yarn/**"
     - "!**/.pnpm-store/**"
@@ -134,3 +308,12 @@ reviews:
     - "!**/public/**"
     - "!**/*.svg"
     - "!**/*lock*.{json,yaml,yml}"
+
+    # Generated files committed to git so IDE works without a build.
+    # `*.generated.ts` files (e.g. libs/guard/src/schemas/schemas.generated.ts)
+    # are produced by `scripts/generate-schema-types.mjs` from Zod schemas;
+    # human review of the generated output adds noise without value.
+    - "!**/*.generated.ts"
+
+    # Per-project local Nx cache
+    - "!**/tsconfig.tsbuildinfo"
