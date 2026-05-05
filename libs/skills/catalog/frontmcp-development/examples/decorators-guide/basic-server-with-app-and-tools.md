@@ -49,7 +49,7 @@ import { Resource, ResourceContext } from '@frontmcp/sdk';
   mimeType: 'application/json',
 })
 class AppConfigResource extends ResourceContext {
-  async execute(uri: string) {
+  async execute(uri: string, _params: Record<string, string>) {
     const config = await this.get(ConfigService).getAll();
     return { contents: [{ uri, text: JSON.stringify(config) }] };
   }

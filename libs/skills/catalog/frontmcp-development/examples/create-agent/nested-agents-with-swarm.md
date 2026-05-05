@@ -2,7 +2,7 @@
 name: nested-agents-with-swarm
 reference: create-agent
 level: advanced
-description: Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
+description: Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
 tags:
   - development
   - agent
@@ -18,7 +18,7 @@ features:
 
 # Multi-Agent Swarm Visibility
 
-Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
+Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
 
 ## Code
 

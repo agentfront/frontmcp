@@ -257,6 +257,8 @@ export class TaskStoreProvider {
 **Tool with DI** (`create-tool` + `create-provider`):
 
 ```typescript
+import { Tool, ToolContext, UnauthorizedError, z } from '@frontmcp/sdk';
+
 @Tool({
   name: 'create_task',
   description: 'Create a new task',
@@ -270,7 +272,7 @@ export class CreateTaskTool extends ToolContext {
   async execute(input: { title: string; priority: string }) {
     const store = this.get(TaskStoreProvider);
     const userId = this.auth?.user.sub;
-    if (!userId) this.fail(new Error('Authentication required'));
+    if (!userId) this.fail(new UnauthorizedError('Authentication required'));
     return store.create({ title: input.title, priority: input.priority, status: 'pending', userId });
   }
 }

@@ -2,7 +2,7 @@
 name: sam-template
 reference: production-lambda
 level: basic
-description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-lambda.md`**. This file is checklist-only: it verifies the SAM artifact pairs correctly with the bundle that `frontmcp build --target lambda` produces.'
+description: 'Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-lambda.md`; this file is checklist-only.'
 tags:
   - production
   - lambda
@@ -19,7 +19,7 @@ features:
 
 # SAM Template: Production-Readiness Checklist
 
-> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-lambda.md`**. This file is checklist-only: it verifies the SAM artifact pairs correctly with the bundle that `frontmcp build --target lambda` produces.
+Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-lambda.md`; this file is checklist-only.
 
 ## Build artifact checks
 

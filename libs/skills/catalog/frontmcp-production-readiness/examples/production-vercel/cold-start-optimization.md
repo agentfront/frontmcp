@@ -39,15 +39,19 @@ export class LazyApiClientProvider {
 
   async getClient(): Promise<unknown> {
     if (!this.clientPromise) {
+      // Reset the cache from inside the async initializer so a transient
+      // import/init failure doesn't permanently poison `clientPromise` for
+      // every warm invocation that follows. The initializer itself owns the
+      // try/catch + rethrow, so callers see the original error.
       const promise = (async () => {
-        const { HeavySDK } = await import('heavy-third-party-sdk');
-        return new HeavySDK({ apiKey: process.env.API_KEY });
+        try {
+          const { HeavySDK } = await import('heavy-third-party-sdk');
+          return new HeavySDK({ apiKey: process.env.API_KEY });
+        } catch (err) {
+          if (this.clientPromise === promise) this.clientPromise = undefined;
+          throw err;
+        }
       })();
-      // Reset on failure so a transient import/init error doesn't poison
-      // the cache for every subsequent warm invocation.
-      promise.catch(() => {
-        if (this.clientPromise === promise) this.clientPromise = undefined;
-      });
       this.clientPromise = promise;
     }
     return this.clientPromise;

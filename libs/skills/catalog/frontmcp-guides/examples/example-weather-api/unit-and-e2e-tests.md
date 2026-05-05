@@ -8,7 +8,7 @@ features:
   - 'Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods'
   - 'Using `Object.assign(tool, ctx)` to inject mock context into the tool instance'
   - 'E2E testing with `TestServer.start()` and `McpTestClient.create()`'
-  - 'Asserting tool presence via `tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`'
+  - 'Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`'
   - 'Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`'
 ---
 
@@ -135,7 +135,7 @@ describe('Weather Server E2E', () => {
 - Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods
 - Using `Object.assign(tool, ctx)` to inject mock context into the tool instance
 - E2E testing with `TestServer.start()` and `McpTestClient.create()`
-- Asserting tool presence via `tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`
+- Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`
 - Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`
 
 ## Related

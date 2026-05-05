@@ -54,22 +54,27 @@ function App() {
 }
 
 function ToolUI() {
-  const { data } = useListTools();
-  const { mutate: callTool } = useCallTool();
-  const tools = data?.tools ?? [];
-
+  // useListTools returns ToolInfo[] directly (live-updates from the registry).
+  const tools = useListTools();
   return (
     <ul>
       {tools.map((t) => (
         <li key={t.name}>
-          <button
-            onClick={() => callTool({ name: t.name, arguments: { name: 'World' } })}
-          >
-            {t.name}: {t.description}
-          </button>
+          <ToolButton tool={t} />
         </li>
       ))}
     </ul>
+  );
+}
+
+// useCallTool requires the tool name as a hook arg, so each row owns its own
+// hook instance. The mutate fn takes just the arguments object — not `{ name, arguments }`.
+function ToolButton({ tool }: { tool: { name: string; description?: string } }) {
+  const [callTool] = useCallTool<{ name: string }>(tool.name);
+  return (
+    <button onClick={() => callTool({ name: 'World' })}>
+      {tool.name}: {tool.description}
+    </button>
   );
 }
 

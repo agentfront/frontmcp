@@ -2,7 +2,7 @@
 name: wrangler-config
 reference: production-cloudflare
 level: basic
-description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-cloudflare.md`**. This file is checklist-only: it verifies your already-generated `wrangler.toml` is production-ready.'
+description: 'Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-cloudflare.md`; this file is checklist-only.'
 tags:
   - production
   - cloudflare
@@ -19,7 +19,7 @@ features:
 
 # Wrangler Configuration: Production-Readiness Checklist
 
-> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-cloudflare.md`**. This file is checklist-only: it verifies your already-generated `wrangler.toml` is production-ready.
+Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-cloudflare.md`; this file is checklist-only.
 
 ## Build artifact checks
 
@@ -42,7 +42,7 @@ features:
 - [ ] Durable Objects only used when stateful coordination is required (rate limiting, locks)
 - [ ] R2 binding exists if the server reads/writes blobs (no filesystem in Workers)
 
-## Secrets & env
+## Secrets & environment
 
 - [ ] No secrets in `wrangler.toml` — all set via `wrangler secret put <NAME>`
 - [ ] `[vars]` block contains only non-sensitive config (region names, feature flags)

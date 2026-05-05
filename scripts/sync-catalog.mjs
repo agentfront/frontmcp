@@ -18,9 +18,14 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 
-const REPO = '/Users/davidfrontegg/git/frontmcp-oss';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Repo root is the parent of `scripts/`. Resolved at runtime so the script
+// works for any contributor and in CI without local-path assumptions.
+const REPO = path.resolve(__dirname, '..');
 const CATALOG = path.join(REPO, 'libs/skills/catalog');
 const MANIFEST = path.join(CATALOG, 'skills-manifest.json');
 
@@ -218,15 +223,27 @@ let pass3Changes = 0;
 
 function rewriteExampleTableRow(line, example) {
   // line shape: | [`name`](href) | Level | description |
-  // Update the description cell only (last cell).
+  // cells[0] empty, cells[1] = exampleCell, cells[2] = level, cells[3] = description, cells[4] trailing
+  // Idempotency: only rewrite when the trimmed content actually differs from
+  // the manifest. Prettier pads cells to align the column; if we always
+  // overwrite, we'd fight prettier and churn the file on every sync.
   const cells = line.split('|');
   if (cells.length < 5) return line;
-  // cells[0] empty, cells[1] = exampleCell, cells[2] = level, cells[3] = description, cells[4] empty (trailing)
   const exampleCell = cells[1];
   const nameMatch = exampleCell.match(/\[`([^`]+)`\]/);
   if (!nameMatch || nameMatch[1] !== example.name) return line;
-  cells[3] = ` ${example.description} `;
-  cells[2] = ` ${humanizeLevel(example.level)} `;
+
+  const expectedLevel = humanizeLevel(example.level);
+  const expectedDesc = example.description;
+  const currentLevel = (cells[2] ?? '').trim();
+  const currentDesc = (cells[3] ?? '').trim();
+
+  if (currentLevel === expectedLevel && currentDesc === expectedDesc) {
+    return line; // already aligned — keep prettier's padding intact
+  }
+
+  cells[2] = ` ${expectedLevel} `;
+  cells[3] = ` ${expectedDesc} `;
   return cells.join('|');
 }
 

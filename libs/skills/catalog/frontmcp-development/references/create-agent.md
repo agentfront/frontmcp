@@ -616,11 +616,11 @@ class DocsAgent extends AgentContext {}
 
 ## Examples
 
-| Example                                                                            | Level        | Description                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                                                                                                                                         |
-| [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`.                                                                                                                 |
-| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table. |
+| Example                                                                            | Level        | Description                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                                                                                                                                       |
+| [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`.                                                                                                               |
+| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table. |
 
 > See all examples in [`examples/create-agent/`](../examples/create-agent/)
 

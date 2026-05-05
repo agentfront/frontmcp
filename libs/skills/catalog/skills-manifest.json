@@ -928,7 +928,7 @@
             },
             {
               "name": "nested-agents-with-swarm",
-              "description": "Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.",
+              "description": "Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.",
               "level": "advanced",
               "tags": ["development", "agent", "nested", "agents", "swarm"],
               "features": [
@@ -1789,7 +1789,7 @@
                 "Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods",
                 "Using `Object.assign(tool, ctx)` to inject mock context into the tool instance",
                 "E2E testing with `TestServer.start()` and `McpTestClient.create()`",
-                "Asserting tool presence via `tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`",
+                "Asserting tool presence via `expect(tools.map((t) => t.name)).toContain(...)` and parsing resource JSON via `result.json<T>()`",
                 "Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`"
               ]
             },
@@ -2016,7 +2016,7 @@
             },
             {
               "name": "wrangler-config",
-              "description": "> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-cloudflare.md`**. This file is checklist-only: it verifies your already-generated `wrangler.toml` is production-ready.",
+              "description": "Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-cloudflare.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "cloudflare", "cache", "session", "wrangler", "checklist"],
               "features": [
@@ -2046,7 +2046,7 @@
             },
             {
               "name": "sam-template",
-              "description": "> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-lambda.md`**. This file is checklist-only: it verifies the SAM artifact pairs correctly with the bundle that `frontmcp build --target lambda` produces.",
+              "description": "Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-lambda.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "lambda", "session", "sam", "checklist"],
               "features": [
@@ -2189,7 +2189,7 @@
             },
             {
               "name": "vercel-edge-config",
-              "description": "> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-vercel.md`**. This file is checklist-only: it verifies the artifact produced by `frontmcp build --target vercel` is production-ready.",
+              "description": "Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-vercel.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "vercel-kv", "vercel", "session", "serverless", "checklist"],
               "features": [

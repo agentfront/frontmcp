@@ -2,7 +2,7 @@
 name: vercel-edge-config
 reference: production-vercel
 level: basic
-description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-vercel.md`**. This file is checklist-only: it verifies the artifact produced by `frontmcp build --target vercel` is production-ready.'
+description: 'Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-vercel.md`; this file is checklist-only.'
 tags:
   - production
   - vercel-kv
@@ -19,7 +19,7 @@ features:
 
 # Vercel Deployment: Production-Readiness Checklist
 
-> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-vercel.md`**. This file is checklist-only: it verifies the artifact produced by `frontmcp build --target vercel` is production-ready.
+Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-vercel.md`; this file is checklist-only.
 
 ## Build artifact checks
 
