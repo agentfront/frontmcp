@@ -120,7 +120,7 @@ describe('MyTool', () => {
 
 ### Testing a Resource
 
-Resources extend `ResourceContext` and implement `read()`. Verify the output matches the MCP `ReadResourceResult` shape.
+Resources extend `ResourceContext` and implement `execute(uri, params)`. Verify the output matches the MCP `ReadResourceResult` shape.
 
 ```typescript
 // my-resource.spec.ts
@@ -129,7 +129,7 @@ import { MyResource } from '../my-resource';
 describe('MyResource', () => {
   it('should return resource contents', async () => {
     const resource = new MyResource();
-    const result = await resource.read({ id: '123' });
+    const result = await resource.execute('resource://item/123', { id: '123' });
 
     expect(result).toEqual({
       contents: [
@@ -517,7 +517,7 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 ### Unit Tests
 
 - [ ] Each tool's `execute()` method is tested with valid and invalid inputs
-- [ ] Each resource's `read()` method is tested and output matches `ReadResourceResult` shape
+- [ ] Each resource's `execute(uri, params)` method is tested and output matches `ReadResourceResult` shape
 - [ ] Each prompt's `execute()` method is tested and output matches `GetPromptResult` shape
 - [ ] Constructor validation tests verify throws on invalid config
 - [ ] Error classes are verified with `instanceof` checks and `mcpErrorCode` assertions

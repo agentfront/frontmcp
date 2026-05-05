@@ -5,8 +5,8 @@ level: intermediate
 description: 'A configuration provider with readonly environment settings and an HTTP API client provider.'
 tags: [development, provider, config, api, providers]
 features:
-  - 'A configuration provider using `readonly` properties from environment variables (no lifecycle needed)'
-  - 'An API client provider using `onInit()` for async setup of credentials'
+  - 'A configuration provider using `readonly` properties from environment variables (sync construction)'
+  - 'An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)'
   - 'Registering providers at `@FrontMcp` level for server-wide sharing across all apps'
   - 'Separating token definitions from provider implementations for clean dependency boundaries'
 ---
@@ -40,6 +40,7 @@ export const API_TOKEN: Token<ApiClient> = Symbol('ApiClient');
 ```typescript
 // src/apps/main/providers/config.provider.ts
 import { Provider } from '@frontmcp/sdk';
+
 import type { AppConfig } from '../tokens';
 
 @Provider({ name: 'ConfigProvider' })
@@ -53,16 +54,24 @@ class ConfigProvider implements AppConfig {
 ```typescript
 // src/apps/main/providers/api-client.provider.ts
 import { Provider } from '@frontmcp/sdk';
+
 import type { ApiClient } from '../tokens';
 
 @Provider({ name: 'ApiClientProvider' })
 class ApiClientProvider implements ApiClient {
-  private baseUrl!: string;
-  private apiKey!: string;
+  // `@Provider` has no `onInit` lifecycle hook — read env in the constructor.
+  // First instantiation throws synchronously on missing config (fail fast).
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
 
-  async onInit() {
-    this.baseUrl = process.env.API_URL!;
-    this.apiKey = process.env.API_KEY!;
+  constructor() {
+    const baseUrl = process.env.API_URL;
+    const apiKey = process.env.API_KEY;
+    if (!baseUrl || !apiKey) {
+      throw new Error('ApiClientProvider: API_URL and API_KEY must be set');
+    }
+    this.baseUrl = baseUrl;
+    this.apiKey = apiKey;
   }
 
   async get(path: string) {
@@ -97,8 +106,8 @@ class MyServer {}
 
 ## What This Demonstrates
 
-- A configuration provider using `readonly` properties from environment variables (no lifecycle needed)
-- An API client provider using `onInit()` for async setup of credentials
+- A configuration provider using `readonly` properties from environment variables (sync construction)
+- An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)
 - Registering providers at `@FrontMcp` level for server-wide sharing across all apps
 - Separating token definitions from provider implementations for clean dependency boundaries
 

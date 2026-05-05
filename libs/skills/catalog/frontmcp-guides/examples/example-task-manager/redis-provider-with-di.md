@@ -13,7 +13,7 @@ tags:
 features:
   - 'Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`'
   - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
-  - 'Lifecycle: `onDestroy()` for graceful Redis cleanup on shutdown'
+  - 'Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook'
   - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
   - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 ---
@@ -81,8 +81,10 @@ export class TaskStoreProvider {
     }
   }
 
-  // Lifecycle: close Redis connection on shutdown
-  async onDestroy(): Promise<void> {
+  // `@Provider` has no `onDestroy` hook — expose explicit cleanup that the
+  // host calls before `server.dispose()` (e.g., from the SIGTERM/process
+  // shutdown side-effect handler).
+  async disconnect(): Promise<void> {
     await this.redis.quit();
   }
 }
@@ -126,7 +128,7 @@ export class TasksApp {}
 
 - Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`
 - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
-- Lifecycle: `onDestroy()` for graceful Redis cleanup on shutdown
+- Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook
 - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
 - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 

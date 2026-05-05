@@ -10,7 +10,7 @@ tags:
   - sam
   - checklist
 features:
-  - 'Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)'
+  - 'Verify `Handler: handler.handler` with `CodeUri: dist/lambda/` (the build emits `dist/lambda/handler.cjs`)'
   - No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import
   - DynamoDB session table has TTL enabled for automatic cleanup
   - IAM policies are scoped (no `*` resources / actions)
@@ -24,9 +24,9 @@ Checklist for verifying the SAM template pairs correctly with the bundle produce
 ## Build artifact checks
 
 - [ ] `frontmcp build --target lambda` succeeded with no warnings
-- [ ] `dist/handler.cjs` exists — this is the bundled handler the rspack adapter writes
+- [ ] `dist/lambda/handler.cjs` exists — this is the bundled handler the build adapter writes
 - [ ] No hand-written `src/lambda.ts` importing a fictional `createLambdaHandler` from `@frontmcp/adapters/lambda` — the build adapter generates the entry; your code stays the decorated `@FrontMcp` class
-- [ ] `Handler: dist/handler.handler` in `template.yaml` (filename `handler.cjs` → handler symbol `handler`). NOT `dist/lambda.handler`
+- [ ] `Handler: handler.handler` with `CodeUri: dist/lambda/` in `template.yaml` (filename `handler.cjs` → handler symbol `handler`). NOT `dist/lambda.handler` or `index.handler`
 - [ ] `CodeUri: .` (or pointed at the project root containing `dist/`) so SAM packages the bundled handler
 
 ## Function configuration
@@ -63,7 +63,7 @@ Checklist for verifying the SAM template pairs correctly with the bundle produce
 
 ## What This Demonstrates
 
-- Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)
+- Verify `Handler: handler.handler` with `CodeUri: dist/lambda/` (the build emits `dist/lambda/handler.cjs`)
 - No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import
 - DynamoDB session table has TTL enabled for automatic cleanup
 - IAM policies are scoped (no `*` resources / actions)
