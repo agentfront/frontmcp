@@ -159,20 +159,36 @@ export function expandUriTemplate(template: string, params: Record<string, strin
 }
 
 /**
- * RFC 6570 §3.2.3 reserved expansion: percent-encode each character that
- * is not in the `unreserved` (ALPHA / DIGIT / "-" / "." / "_" / "~") or
- * `reserved` (gen-delims + sub-delims) sets, while leaving already
- * percent-encoded triplets intact.
+ * RFC 6570 §3.2.3 reserved expansion. Percent-encodes every character
+ * that is not in the `unreserved` (ALPHA / DIGIT / "-" / "." / "_" / "~")
+ * or `reserved` (gen-delims + sub-delims) sets.
+ *
+ * Inputs are treated as **raw, unencoded** values to preserve the
+ * round-trip contract with {@link matchUriTemplate} (which decodes
+ * captures via `decodeURIComponent`). Any pre-encoded `%xx` triplets in
+ * the input are first decoded so a literal `%2F` round-trips as `%2F`
+ * rather than as a path separator. Malformed percent sequences are
+ * treated as literal text.
  */
 function encodeReserved(value: string): string {
-  return value
-    .split(/(%[0-9A-Fa-f]{2})/g)
-    .map((part, i) => (i % 2 === 1 ? part : encodeReservedSegment(part)))
-    .join('');
+  const decoded = safeDecode(value);
+  return decoded.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=]/g, (c) => encodeURIComponent(c));
 }
 
-function encodeReservedSegment(segment: string): string {
-  return segment.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=]/g, (c) => encodeURIComponent(c));
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Fall back to a per-triplet decode that keeps malformed sequences
+    // as literal text rather than aborting the whole expansion.
+    return value.replace(/%[0-9A-Fa-f]{2}/g, (triplet) => {
+      try {
+        return decodeURIComponent(triplet);
+      } catch {
+        return triplet;
+      }
+    });
+  }
 }
 
 /**

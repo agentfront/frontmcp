@@ -194,8 +194,18 @@ describe('URI Template Utils', () => {
       expect(result).toBe('skill://spaces%20and%20unicode%20%E2%9C%A8/SKILL.md');
     });
 
-    it('should leave already percent-encoded triplets intact in reserved expansion', () => {
-      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'pre%20encoded' });
+    it('should normalize pre-encoded triplets in reserved-expansion inputs', () => {
+      // Inputs are treated as raw values: any `%xx` triplet is decoded
+      // first, then re-encoded only if outside the unreserved+reserved
+      // sets. So `foo%2Fbar` decodes to `foo/bar`, and `/` is reserved,
+      // leaving `foo/bar`. This matches the RFC 6570 §3.2.3 contract.
+      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'foo%2Fbar' });
+
+      expect(result).toBe('skill://foo/bar/SKILL.md');
+    });
+
+    it('should percent-encode chars that need encoding in reserved expansion', () => {
+      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'pre encoded' });
 
       expect(result).toBe('skill://pre%20encoded/SKILL.md');
     });
