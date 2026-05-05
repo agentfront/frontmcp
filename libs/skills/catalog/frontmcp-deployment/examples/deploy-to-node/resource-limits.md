@@ -46,7 +46,7 @@ services:
           memory: 256M
           cpus: '0.5'
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/healthz']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -74,7 +74,7 @@ volumes:
 
 ```bash
 # Verify health check endpoint
-curl http://localhost:3000/health
+curl http://localhost:3000/healthz
 # {"status":"ok","uptime":12345}
 
 # Monitor resource usage

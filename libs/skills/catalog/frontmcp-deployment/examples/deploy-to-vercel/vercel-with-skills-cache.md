@@ -3,22 +3,22 @@ name: vercel-with-skills-cache
 reference: deploy-to-vercel
 level: intermediate
 description: 'Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.'
-tags: [deployment, vercel-kv, vercel, cache, security, skills]
+tags: [deployment, vercel-kv, vercel, cache, skills]
 features:
   - 'Enabling skills cache backed by Vercel KV with a 60-second TTL'
   - 'Setting environment variables via `vercel env add` instead of hardcoding in source'
-  - 'Adding security headers (`X-Content-Type-Options`, `X-Frame-Options`) in `vercel.json`'
+  - 'Letting `frontmcp build --target vercel` emit the Build Output API v3 structure'
 ---
 
 # Vercel Deployment with Skills Cache
 
-Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.
+Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.
 
 ## Code
 
 ```typescript
-// src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+// src/main.ts
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'MyApp' })
 class MyApp {}
@@ -36,11 +36,12 @@ class MyApp {}
     },
   },
 })
-class MyServer {}
+export default class MyServer {}
 ```
 
 ```bash
-# Set environment variables via Vercel CLI
+# Set environment variables via Vercel CLI (or link KV in the dashboard
+# to inject KV_REST_API_URL/KV_REST_API_TOKEN automatically)
 vercel env add KV_REST_API_URL "https://your-kv-store.kv.vercel-storage.com"
 vercel env add KV_REST_API_TOKEN "your-token"
 vercel env add NODE_ENV production
@@ -48,30 +49,17 @@ vercel env add LOG_LEVEL info
 ```
 
 ```json
-// vercel.json
+// vercel.json — written by `frontmcp build --target vercel` from your lockfile.
+// Do not add functions/rewrites referencing api/frontmcp.* (no such file).
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/frontmcp" }],
-  "functions": {
-    "api/frontmcp.ts": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
-  "regions": ["iad1"],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" }
-      ]
-    }
-  ]
+  "version": 2,
+  "buildCommand": "yarn build",
+  "installCommand": "yarn install"
 }
 ```
 
 ```bash
-# Deploy to production
+# Build, then deploy to production
 frontmcp build --target vercel
 vercel --prod
 
@@ -83,7 +71,7 @@ vercel domains add mcp.example.com
 
 - Enabling skills cache backed by Vercel KV with a 60-second TTL
 - Setting environment variables via `vercel env add` instead of hardcoding in source
-- Adding security headers (`X-Content-Type-Options`, `X-Frame-Options`) in `vercel.json`
+- Letting the CLI emit the Build Output API v3 structure rather than hand-authoring `api/frontmcp.ts`
 
 ## Related
 

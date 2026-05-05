@@ -2,22 +2,23 @@
 name: browser-crypto-and-storage
 reference: build-for-browser
 level: advanced
-description: 'Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments.'
-tags: [deployment, browser, database, remote, node, crypto]
+description: 'Use `@frontmcp/utils` crypto functions (WebCrypto API) and a `DirectMcpServer` in browser environments.'
+tags: [deployment, browser, crypto, react]
 features:
   - 'Using `@frontmcp/utils` for PKCE and hashing in the browser (backed by WebCrypto, not `node:crypto`)'
-  - 'Avoiding filesystem and native database storage in browser builds by relying on a remote server for persistence'
+  - 'Creating a `DirectMcpServer` with `create()` and passing it to `FrontMcpProvider` via `server={...}`'
+  - 'Using `useListTools` for the tools list (the real hook name)'
 ---
 
 # Browser-Safe Crypto and Storage
 
-Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments.
+Use `@frontmcp/utils` crypto in the browser, and create the FrontMCP server with `create()` from `@frontmcp/sdk` so the React provider can consume it via the `server` prop.
 
 ## Code
 
 ```typescript
 // src/browser-auth.ts
-import { generateCodeVerifier, generateCodeChallenge, sha256Base64url, randomUUID } from '@frontmcp/utils';
+import { generateCodeChallenge, generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 // PKCE flow in the browser - uses WebCrypto API automatically
 async function startPkceFlow(): Promise<{
@@ -41,26 +42,43 @@ export { startPkceFlow, hashToken };
 ```
 
 ```typescript
-// src/client-app.tsx
-import { FrontMcpProvider, useTools } from '@frontmcp/react';
+// src/server.ts — in-memory DirectMcpServer for the React app.
+import { create, tool, z } from '@frontmcp/sdk';
 
-// Browser environments cannot use Redis or SQLite.
-// Use in-memory stores or connect to a remote server that handles persistence.
+export const server = await create({
+  info: { name: 'browser-app', version: '1.0.0' },
+  tools: [
+    tool({
+      name: 'echo',
+      description: 'Echo input',
+      inputSchema: { msg: z.string() },
+    })((input) => ({
+      content: [{ type: 'text' as const, text: input.msg }],
+    })),
+  ],
+});
+```
+
+```typescript
+// src/client-app.tsx
+import { FrontMcpProvider, useListTools } from '@frontmcp/react';
+
+import { server } from './server';
+
+// Browser environments cannot use Redis or SQLite. Either keep state in
+// memory (DirectMcpServer is in-process) or call a remote server from your
+// tools — the SDK does NOT include a built-in browser-side persistence layer.
 function App() {
   return (
-    <FrontMcpProvider
-      config={{
-        serverUrl: 'https://my-mcp.example.com',
-        // No local storage config - the remote server handles persistence
-      }}
-    >
+    <FrontMcpProvider server={server}>
       <ToolDashboard />
     </FrontMcpProvider>
   );
 }
 
 function ToolDashboard() {
-  const { tools, callTool } = useTools();
+  const { data } = useListTools();
+  const tools = data?.tools ?? [];
 
   return (
     <div>
@@ -78,7 +96,8 @@ export default App;
 ## What This Demonstrates
 
 - Using `@frontmcp/utils` for PKCE and hashing in the browser (backed by WebCrypto, not `node:crypto`)
-- Avoiding filesystem and native database storage in browser builds by relying on a remote server for persistence
+- Creating a `DirectMcpServer` with `create()` and passing it to `FrontMcpProvider` via `server={...}` (no `config={{ serverUrl }}`)
+- Using `useListTools` (real hook) instead of the non-existent `useTools`
 
 ## Related
 

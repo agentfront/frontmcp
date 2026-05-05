@@ -25,7 +25,7 @@ import { App, connectOpenAI, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sd
   description: 'Search documentation by keyword',
   inputSchema: { query: z.string(), limit: z.number().optional() },
 })
-class SearchDocsTool extends ToolContext<{ query: string; limit?: number }> {
+class SearchDocsTool extends ToolContext {
   async execute(input: { query: string; limit?: number }) {
     return {
       content: [{ type: 'text' as const, text: `Found results for: ${input.query}` }],

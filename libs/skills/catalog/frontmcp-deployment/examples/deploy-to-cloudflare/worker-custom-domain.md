@@ -31,7 +31,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Translate text',
   inputSchema: { text: z.string(), lang: z.string() },
 })
-class TranslateTool extends ToolContext<{ text: string; lang: string }> {
+class TranslateTool extends ToolContext {
   async execute(input: { text: string; lang: string }) {
     return {
       content: [{ type: 'text' as const, text: `[${input.lang}] ${input.text}` }],
@@ -46,7 +46,7 @@ class TranslateApp {}
   info: { name: 'translate-worker', version: '1.0.0' },
   apps: [TranslateApp],
   transport: {
-    type: 'sse',
+    protocol: 'sse',
   },
 })
 class TranslateServer {}
@@ -55,9 +55,11 @@ export default TranslateServer;
 ```
 
 ```toml
-# wrangler.toml
+# wrangler.toml — name/compatibility_date are managed by frontmcp.config;
+# bindings appended below are re-applied after each build (the adapter
+# overwrites the top-level keys on every `frontmcp build --target cloudflare`).
 name = "translate-worker"
-main = "dist/index.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]
@@ -76,8 +78,8 @@ wrangler deploy
 # Add a custom domain
 wrangler domains add mcp.example.com
 
-# Verify health endpoint
-curl https://mcp.example.com/health
+# Verify health endpoint (FrontMCP serves /healthz by default)
+curl https://mcp.example.com/healthz
 
 # Test MCP endpoint
 curl -X POST https://mcp.example.com/mcp \

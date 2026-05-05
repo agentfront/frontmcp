@@ -39,7 +39,7 @@ RUN yarn install --frozen-lockfile --production && \
     yarn cache clean
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1
 CMD ["node", "dist/main.js"]
 ```
 
@@ -49,7 +49,7 @@ docker build -t my-frontmcp-server .
 docker run -p 3000:3000 -e NODE_ENV=production my-frontmcp-server
 
 # Verify
-curl http://localhost:3000/health
+curl http://localhost:3000/healthz
 ```
 
 ## What This Demonstrates

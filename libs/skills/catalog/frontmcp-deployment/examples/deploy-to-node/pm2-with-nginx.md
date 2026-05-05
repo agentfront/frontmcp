@@ -65,7 +65,7 @@ sudo ln -s /etc/nginx/sites-available/mcp.example.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
 # Verify
-curl https://mcp.example.com/health
+curl https://mcp.example.com/healthz
 ```
 
 ## What This Demonstrates

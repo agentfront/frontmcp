@@ -37,7 +37,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/healthz']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -76,7 +76,7 @@ COPY --from=builder /app/yarn.lock ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
-  CMD wget -qO- http://localhost:3000/health || exit 1
+  CMD wget -qO- http://localhost:3000/healthz || exit 1
 CMD ["node", "dist/main.js"]
 ```
 
@@ -86,7 +86,7 @@ docker compose up -d
 
 # Verify
 docker compose ps
-curl http://localhost:3000/health
+curl http://localhost:3000/healthz
 # {"status":"ok","uptime":12345}
 ```
 

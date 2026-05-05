@@ -7,18 +7,18 @@ tags: [deployment, json-rpc, vercel, mcp, endpoint]
 features:
   - 'Testing the health endpoint and MCP JSON-RPC API of a deployed Vercel function'
   - 'Using preview deployments to validate changes before promoting to production'
-  - 'Setting `maxDuration` according to your Vercel plan (Hobby: 10s, Pro: 60s, Enterprise: 900s)'
+  - 'Knowing your Vercel plan limits (Hobby: 10s, Pro: 60s, Enterprise: 900s)'
 ---
 
 # Testing a Vercel MCP Endpoint
 
-Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.
+Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.
 
 ## Code
 
 ```bash
-# Health check
-curl https://your-project.vercel.app/health
+# Health check (FrontMCP serves /healthz by default; /health is a legacy alias)
+curl https://your-project.vercel.app/healthz
 # {"status":"ok"}
 
 # List tools via JSON-RPC
@@ -33,36 +33,33 @@ curl -X POST https://your-project.vercel.app/mcp \
 ```
 
 ```bash
-# Preview deployment for PR testing
+# Build, then preview deployment for PR testing
+frontmcp build --target vercel
 vercel
 # Creates a unique preview URL: https://my-project-abc123.vercel.app
 
 # Test the preview before promoting to production
-curl https://my-project-abc123.vercel.app/health
+curl https://my-project-abc123.vercel.app/healthz
 
 # Promote to production
 vercel --prod
 ```
 
 ```json
-// vercel.json - with maxDuration matching your plan
+// vercel.json — auto-written by the build adapter; do not add `functions` or
+// `rewrites` keyed on `api/frontmcp.ts`/`.js` (no such file exists).
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/frontmcp" }],
-  "functions": {
-    "api/frontmcp.ts": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
-  "regions": ["iad1"]
+  "version": 2,
+  "buildCommand": "yarn build",
+  "installCommand": "yarn install"
 }
 ```
 
 ## What This Demonstrates
 
-- Testing the health endpoint and MCP JSON-RPC API of a deployed Vercel function
+- Testing the health endpoint (`/healthz`) and MCP JSON-RPC API of a deployed Vercel function
 - Using preview deployments to validate changes before promoting to production
-- Setting `maxDuration` according to your Vercel plan (Hobby: 10s, Pro: 60s, Enterprise: 900s)
+- Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) — configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`
 
 ## Related
 

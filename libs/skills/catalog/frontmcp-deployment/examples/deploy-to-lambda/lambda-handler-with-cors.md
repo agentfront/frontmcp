@@ -2,23 +2,22 @@
 name: lambda-handler-with-cors
 reference: deploy-to-lambda
 level: intermediate
-description: 'Create a custom Lambda handler with an explicit API Gateway definition for CORS support.'
+description: 'Use the auto-generated `dist/lambda/handler.cjs` with an explicit API Gateway HTTP API definition for CORS support.'
 tags: [deployment, lambda, handler, cors]
 features:
-  - 'Creating a custom Lambda handler with `createLambdaHandler()` from `@frontmcp/adapters/lambda`'
-  - 'Defining an explicit HTTP API resource with CORS configuration for cross-origin requests'
+  - 'Defining an explicit `AWS::Serverless::HttpApi` resource with a `CorsConfiguration` block'
   - 'Linking the function events to the explicit API via `ApiId: !Ref`'
+  - 'Pointing SAM `CodeUri` at `dist/lambda/` so the auto-generated `handler.cjs` is uploaded'
 ---
 
 # Lambda Handler with CORS and API Gateway
 
-Create a custom Lambda handler with an explicit API Gateway definition for CORS support.
+CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.
 
 ## Code
 
 ```typescript
-// src/lambda.ts
-import { createLambdaHandler } from '@frontmcp/adapters/lambda';
+// src/main.ts — your @FrontMcp server. The CLI emits the Lambda handler.
 import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
@@ -26,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Analyze text content',
   inputSchema: { text: z.string() },
 })
-class AnalyzeTool extends ToolContext<{ text: string }> {
+class AnalyzeTool extends ToolContext {
   async execute(input: { text: string }) {
     return {
       content: [{ type: 'text' as const, text: `Analysis of: ${input.text}` }],
@@ -41,15 +40,11 @@ class AnalyzerApp {}
   info: { name: 'analyzer', version: '1.0.0' },
   apps: [AnalyzerApp],
 })
-class AnalyzerServer {}
-
-export const handler = createLambdaHandler(AnalyzerServer, {
-  streaming: false,
-});
+export default class AnalyzerServer {}
 ```
 
 ```yaml
-# template.yaml - with explicit API Gateway and CORS
+# template.yaml — explicit HTTP API with CORS configuration
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: FrontMCP server with CORS
@@ -80,7 +75,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: handler.handler
-      CodeUri: .
+      CodeUri: dist/lambda/
       Architectures:
         - arm64
       Environment:
@@ -96,6 +91,9 @@ Resources:
 ```
 
 ```bash
+# Make sure the peer dep is installed (the build's validate hook checks)
+npm install @codegenie/serverless-express
+
 # Build and deploy
 frontmcp build --target lambda
 sam build && sam deploy
@@ -103,10 +101,10 @@ sam build && sam deploy
 
 ## What This Demonstrates
 
-- Creating a custom Lambda handler with `createLambdaHandler()` from `@frontmcp/adapters/lambda`
-- Defining an explicit HTTP API resource with CORS configuration for cross-origin requests
+- Configuring CORS at the API Gateway HTTP API layer (not the handler) via `CorsConfiguration`
 - Linking the function events to the explicit API via `ApiId: !Ref`
+- Pointing SAM `CodeUri` at `dist/lambda/` so the auto-generated `handler.cjs` is uploaded
 
 ## Related
 
-- See `deploy-to-lambda` for secrets management, provisioned concurrency, and CDK deployment
+- See `deploy-to-lambda` for the peer-dep flow, secrets management, provisioned concurrency, and CDK deployment.

@@ -478,23 +478,32 @@ export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions>
 
 ---
 
-## Test: Researcher Agent (metadata)
+## Test: Researcher Agent
 
-The agent class has no `execute()` to unit-test — the framework drives the LLM tool-use loop. Verify the decorator metadata via the agent record, and exercise the full loop in an E2E test.
+The agent class has no `execute()` to unit-test — the framework drives the LLM tool-use loop via the `agents:call-agent` flow. Cover the agent end-to-end: register it on a `TestServer`, call it via `client.tools.call('research_topic', ...)` (agents are exposed as tools), and assert on the structured output.
 
 ```typescript
-// test/researcher.agent.spec.ts
-import { getAgentMetadata } from '@frontmcp/sdk';
+// test/researcher.agent.e2e.spec.ts
+import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
-import { ResearcherAgent } from '../src/research/agents/researcher.agent';
+describe('ResearcherAgent E2E', () => {
+  let client: McpTestClient;
+  let server: TestServer;
 
-describe('ResearcherAgent metadata', () => {
-  it('declares a bounded inner-loop and the right inner tools', () => {
-    const meta = getAgentMetadata(ResearcherAgent);
+  beforeAll(async () => {
+    server = await TestServer.start({ command: 'npx tsx src/main.ts' });
+    const token = await new TestTokenFactory().createTestToken({ sub: 'researcher-1', scopes: ['kb'] });
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).withToken(token).buildAndConnect();
+  });
 
-    expect(meta.name).toBe('research_topic');
-    expect(meta.execution?.maxIterations).toBe(5);
-    expect(meta.tools?.length).toBeGreaterThanOrEqual(2);
+  afterAll(async () => {
+    await client.disconnect();
+    await server.stop();
+  });
+
+  it('exposes the research_topic agent in the tool list', async () => {
+    const tools = await client.tools.list();
+    expect(tools.map((t) => t.name)).toContain('research_topic');
   });
 });
 ```
@@ -503,30 +512,40 @@ describe('ResearcherAgent metadata', () => {
 
 ## Test: Audit Log Plugin
 
+Test the hook methods directly with a minimal `FlowCtx` shape. The `state` object is a `Map`-like store and `state.required.toolContext` is the live `ToolContext` exposed to hooks.
+
 ```typescript
 // test/audit-log.plugin.spec.ts
-import type { PluginHookContext } from '@frontmcp/sdk';
+import type { FlowCtxOf } from '@frontmcp/sdk';
 
-import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
+import AuditLogPlugin from '../src/plugins/audit-log.plugin';
+
+type ToolFlowCtx = FlowCtxOf<'tools:call-tool'>;
+
+function makeFlowCtx(toolName: string, userSub: string | undefined): ToolFlowCtx {
+  const map = new Map<string, unknown>();
+  const toolContext = {
+    metadata: { name: toolName },
+    authInfo: userSub ? { user: { sub: userSub } } : {},
+    fetch: jest.fn().mockResolvedValue(new Response(null, { status: 204 })),
+  };
+  return {
+    state: {
+      set: (k: string, v: unknown) => map.set(k, v),
+      get: (k: string) => map.get(k),
+      required: { toolContext },
+    },
+    rawInput: {},
+  } as unknown as ToolFlowCtx;
+}
 
 describe('AuditLogPlugin', () => {
-  let plugin: AuditLogPlugin;
+  it('records a successful tool execution', async () => {
+    const plugin = new AuditLogPlugin();
+    const flowCtx = makeFlowCtx('search_docs', 'user-1');
 
-  beforeEach(() => {
-    plugin = new AuditLogPlugin();
-  });
-
-  it('should record a successful tool execution', async () => {
-    const state = new Map<string, unknown>();
-    const ctx = {
-      toolName: 'search_docs',
-      session: { userId: 'user-1' },
-      state: { set: (k: string, v: unknown) => state.set(k, v), get: (k: string) => state.get(k) },
-      fetch: jest.fn(),
-    } as unknown as PluginHookContext;
-
-    await plugin.onToolExecuteBefore(ctx);
-    await plugin.onToolExecuteAfter(ctx);
+    await plugin.onWillExecute(flowCtx);
+    await plugin.onDidExecute(flowCtx);
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);
@@ -536,17 +555,14 @@ describe('AuditLogPlugin', () => {
     expect(logs[0].duration).toBeGreaterThanOrEqual(0);
   });
 
-  it('should record a failed tool execution', async () => {
-    const state = new Map<string, unknown>();
-    const ctx = {
-      toolName: 'ingest_document',
-      session: undefined,
-      state: { set: (k: string, v: unknown) => state.set(k, v), get: (k: string) => state.get(k) },
-      fetch: jest.fn(),
-    } as unknown as PluginHookContext;
+  it('records a failed tool execution via aroundExecute', async () => {
+    const plugin = new AuditLogPlugin();
+    const flowCtx = makeFlowCtx('ingest_document', undefined);
 
-    await plugin.onToolExecuteBefore(ctx);
-    await plugin.onToolExecuteError(ctx);
+    await plugin.onWillExecute(flowCtx);
+    const failing = () => Promise.reject(new Error('boom'));
+
+    await expect(plugin.aroundExecute(flowCtx, failing)).rejects.toThrow('boom');
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);

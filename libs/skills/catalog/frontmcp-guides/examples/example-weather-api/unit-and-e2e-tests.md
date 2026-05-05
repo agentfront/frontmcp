@@ -21,6 +21,7 @@ Shows how to write unit tests for tools by mocking context methods, and E2E test
 ```typescript
 // test/get-weather.tool.spec.ts
 import { ToolContext } from '@frontmcp/sdk';
+
 import { GetWeatherTool } from '../src/tools/get-weather.tool';
 
 describe('GetWeatherTool', () => {
@@ -49,7 +50,7 @@ describe('GetWeatherTool', () => {
       get: jest.fn(),
       tryGet: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
+      progress: jest.fn(),
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
 
@@ -81,7 +82,7 @@ describe('GetWeatherTool', () => {
       get: jest.fn(),
       tryGet: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
+      progress: jest.fn(),
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
 
@@ -112,15 +113,15 @@ describe('Weather Server E2E', () => {
   });
 
   it('should list tools including get_weather', async () => {
-    const { tools } = await client.listTools();
+    const tools = await client.tools.list();
 
     expect(tools.length).toBeGreaterThan(0);
-    expect(tools).toContainTool('get_weather');
+    expect(tools.map((t) => t.name)).toContain('get_weather');
   });
 
   it('should read the cities resource', async () => {
-    const result = await client.readResource('weather://cities');
-    const cities = JSON.parse(result.contents[0].text);
+    const result = await client.resources.read('weather://cities');
+    const cities = JSON.parse(result.contents[0].text as string);
 
     expect(Array.isArray(cities)).toBe(true);
     expect(cities).toContain('London');

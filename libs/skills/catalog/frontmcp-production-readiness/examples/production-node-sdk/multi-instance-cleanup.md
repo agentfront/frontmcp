@@ -2,10 +2,10 @@
 name: multi-instance-cleanup
 reference: production-node-sdk
 level: advanced
-description: 'Shows how multiple SDK instances can coexist without conflicts, and how to implement proper cleanup to prevent memory leaks from event listeners, timers, and provider resources.'
+description: 'Shows how multiple SDK instances can coexist without conflicts, and how to dispose timers and listeners through `server.dispose()` (since providers have no `onDestroy` lifecycle hook).'
 tags: [production, sdk, node, multi, instance, cleanup]
 features:
-  - 'Implementing `onDestroy()` in providers to clean up timers and listeners'
+  - 'Exposing a `stop()` method on the provider that the host app calls before `server.dispose()`'
   - 'Ensuring multiple instances coexist without sharing global state'
   - 'Testing that dispose removes all event listeners (no leaks)'
   - 'Verifying one instance still works after another is disposed'
@@ -13,7 +13,7 @@ features:
 
 # Multi-Instance Coexistence and Cleanup
 
-Shows how multiple SDK instances can coexist without conflicts, and how to implement proper cleanup to prevent memory leaks from event listeners, timers, and provider resources.
+Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.
 
 ## Code
 
@@ -28,24 +28,28 @@ export class PollingProvider {
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private listeners: Array<() => void> = [];
 
-  async onInit(): Promise<void> {
-    // Start a polling interval
+  constructor() {
+    // Init at construction time — there is no async onInit hook on providers.
     this.intervalId = setInterval(() => {
       this.listeners.forEach((fn) => fn());
     }, 10_000);
+    // Don't keep the event loop alive on its own.
+    this.intervalId.unref?.();
   }
 
   addListener(fn: () => void): void {
     this.listeners.push(fn);
   }
 
-  async onDestroy(): Promise<void> {
-    // Clean up timer — prevents dangling intervals after dispose
+  /**
+   * Explicit cleanup. Host app calls this before `server.dispose()`.
+   * (Providers have no onDestroy hook, so this is the explicit pattern.)
+   */
+  stop(): void {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = undefined;
     }
-    // Remove all listener references — prevents memory leaks
     this.listeners.length = 0;
   }
 }
@@ -100,7 +104,7 @@ describe('Multi-instance coexistence', () => {
 
 ## What This Demonstrates
 
-- Implementing `onDestroy()` in providers to clean up timers and listeners
+- Explicit `stop()` method on providers (since `@Provider` classes have no `onDestroy` lifecycle hook)
 - Ensuring multiple instances coexist without sharing global state
 - Testing that dispose removes all event listeners (no leaks)
 - Verifying one instance still works after another is disposed
