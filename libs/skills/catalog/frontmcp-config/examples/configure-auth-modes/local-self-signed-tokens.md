@@ -6,7 +6,7 @@ description: 'Configure a server that signs its own JWT tokens with consent and 
 tags: [config, auth, redis, local, auth-modes, modes]
 features:
   - "Using `mode: 'local'` so the server signs its own JWTs"
-  - 'Setting `local.issuer` and `local.audience` to control token claims'
+  - 'Setting `local.issuer` and `expectedAudience` to control token claims'
   - 'Enabling `consent` for explicit user authorization flow'
   - 'Enabling `incrementalAuth` to request additional scopes progressively'
   - 'Using Redis for token storage in production'
@@ -40,9 +40,9 @@ class ManageUsersTool extends ToolContext {
     mode: 'local',
     local: {
       issuer: 'my-internal-server',
-      audience: 'internal-api',
     },
-    tokenStorage: 'redis',
+    expectedAudience: 'internal-api',
+    tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
     consent: { enabled: true },
     incrementalAuth: { enabled: true },
   },
@@ -65,7 +65,7 @@ class Server {}
 ## What This Demonstrates
 
 - Using `mode: 'local'` so the server signs its own JWTs
-- Setting `local.issuer` and `local.audience` to control token claims
+- Setting `local.issuer` and `expectedAudience` to control token claims
 - Enabling `consent` for explicit user authorization flow
 - Enabling `incrementalAuth` to request additional scopes progressively
 - Using Redis for token storage in production

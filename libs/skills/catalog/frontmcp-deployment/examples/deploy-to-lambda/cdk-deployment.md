@@ -19,9 +19,9 @@ Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency an
 ```typescript
 // lib/frontmcp-stack.ts
 import * as cdk from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { Construct } from 'constructs';
 
 export class FrontMcpStack extends cdk.Stack {
@@ -31,7 +31,7 @@ export class FrontMcpStack extends cdk.Stack {
     const fn = new lambda.Function(this, 'FrontMcpHandler', {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'handler.handler',
-      code: lambda.Code.fromAsset('.'),
+      code: lambda.Code.fromAsset('dist/lambda'),
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),
       architecture: lambda.Architecture.ARM_64,
@@ -65,7 +65,10 @@ export class FrontMcpStack extends cdk.Stack {
 ```
 
 ```bash
-# Build the FrontMCP server
+# Install the peer dep validated by the lambda adapter
+npm install @codegenie/serverless-express
+
+# Build the FrontMCP server — emits dist/lambda/handler.cjs
 frontmcp build --target lambda
 
 # Store secrets in SSM Parameter Store
@@ -77,8 +80,8 @@ aws ssm put-parameter \
 # Deploy with CDK
 cdk deploy
 
-# Verify
-curl https://abc123.execute-api.us-east-1.amazonaws.com/health
+# Verify (FrontMCP serves /healthz by default)
+curl https://abc123.execute-api.us-east-1.amazonaws.com/healthz
 ```
 
 ## What This Demonstrates

@@ -19,8 +19,9 @@ Full production observability — traces to OTLP, structured logs to stdout, per
 
 ```typescript
 // src/server.ts
-import { FrontMcp } from '@frontmcp/sdk';
 import { setupOTel } from '@frontmcp/observability';
+import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './apps/my-app';
 
 setupOTel({
@@ -51,7 +52,11 @@ setupOTel({
       maxEntries: 500,
       onRequestComplete: async (log) => {
         if (log.status === 'error') {
-          console.error('Request failed:', JSON.stringify(log));
+          // No `this.logger` is available in this callback. Emit a structured
+          // NDJSON line directly to stderr so it flows through the same log
+          // pipeline as the rest of the server (and so it does NOT use
+          // console.* — see the anti-pattern in SKILL.md cross-cutting table).
+          process.stderr.write(JSON.stringify({ event: 'request.error', ...log }) + '\n');
         }
       },
     },

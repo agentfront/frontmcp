@@ -44,7 +44,7 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `webhook`        | `WebhookConfig`                    | No          | --                | Webhook configuration (when trigger is `'webhook'`)   |
 | `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds |
 | `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel           |
-| `permissions`    | `WorkflowPermissions`              | No          | --                | Access control configuration                          |
+| `permissions`    | `WorkflowPermission[]`             | No          | --                | Array of permission rules (one per action)            |
 
 ### WorkflowStep Fields
 
@@ -562,11 +562,7 @@ class BuildArtifactJob extends JobContext {
     url: z.string().url(),
   },
   retry: { maxAttempts: 3, backoffMs: 5000, backoffMultiplier: 2, maxBackoffMs: 30000 },
-  permissions: {
-    actions: ['execute'],
-    roles: ['admin', 'deployer'],
-    scopes: ['deploy:write'],
-  },
+  permissions: [{ action: 'execute', roles: ['admin', 'deployer'], scopes: ['deploy:write'] }],
 })
 class DeployArtifactJob extends JobContext {
   async execute(input: { artifactUrl: string; environment: string }) {
@@ -609,10 +605,12 @@ class NotifyTeamJob extends JobContext {
   },
   timeout: 900000, // 15 minutes
   maxConcurrency: 3,
-  permissions: {
-    actions: ['create', 'read', 'execute', 'list'],
-    roles: ['admin', 'ci-bot'],
-  },
+  permissions: [
+    { action: 'execute', roles: ['admin', 'ci-bot'] },
+    { action: 'create', roles: ['admin', 'ci-bot'] },
+    { action: 'read', roles: ['admin', 'ci-bot'] },
+    { action: 'list', roles: ['admin', 'ci-bot'] },
+  ],
   steps: [
     {
       id: 'checkout',

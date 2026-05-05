@@ -86,7 +86,7 @@ import { Workflow } from '@frontmcp/sdk';
   name: 'deploy_pipeline',
   description: 'Full deployment pipeline',
   trigger: 'webhook',
-  webhookConfig: {
+  webhook: {
     path: '/hooks/deploy',
     secret: process.env.WEBHOOK_SECRET!,
     methods: ['POST'],

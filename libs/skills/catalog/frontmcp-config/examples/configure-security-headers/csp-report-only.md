@@ -18,7 +18,7 @@ Test CSP policies in report-only mode to identify violations before enforcement
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'csp-test-server',

@@ -40,7 +40,13 @@ class QueryDataTool extends ToolContext {
     provider: 'https://auth.example.com',
     clientId: process.env['OAUTH_CLIENT_ID']!,
     clientSecret: process.env['OAUTH_CLIENT_SECRET'],
-    tokenStorage: 'redis',
+    tokenStorage: {
+      redis: {
+        host: process.env['REDIS_HOST'] ?? 'redis.internal',
+        port: Number(process.env['REDIS_PORT'] ?? 6379),
+        password: process.env['REDIS_PASSWORD'],
+      },
+    },
   },
   tools: [QueryDataTool],
 })

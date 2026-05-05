@@ -7,7 +7,7 @@ tags: [guides, weather, api, app, setup]
 features:
   - 'Server entry point with `@FrontMcp` decorator and `info` configuration'
   - 'App registration with `@App` grouping tools and resources together'
-  - 'Static resource that returns JSON data via `read()`'
+  - 'Static resource that returns JSON data via `execute(uri)` and `ReadResourceResult`'
   - 'Clean separation between server, app, tools, and resources'
 ---
 
@@ -20,6 +20,7 @@ Shows the server entry point, app registration, and static resource for a beginn
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { WeatherApp } from './weather.app';
 
 @FrontMcp({
@@ -32,8 +33,9 @@ export default class WeatherServer {}
 ```typescript
 // src/weather.app.ts
 import { App } from '@frontmcp/sdk';
-import { GetWeatherTool } from './tools/get-weather.tool';
+
 import { CitiesResource } from './resources/cities.resource';
+import { GetWeatherTool } from './tools/get-weather.tool';
 
 @App({
   name: 'Weather',
@@ -46,7 +48,7 @@ export class WeatherApp {}
 
 ```typescript
 // src/resources/cities.resource.ts
-import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult, Resource, ResourceContext } from '@frontmcp/sdk';
 
 const SUPPORTED_CITIES = ['London', 'Tokyo', 'New York', 'Paris', 'Sydney', 'Berlin', 'Toronto', 'Mumbai'];
 
@@ -57,8 +59,16 @@ const SUPPORTED_CITIES = ['London', 'Tokyo', 'New York', 'Paris', 'Sydney', 'Ber
   mimeType: 'application/json',
 })
 export class CitiesResource extends ResourceContext {
-  async read() {
-    return JSON.stringify(SUPPORTED_CITIES);
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(SUPPORTED_CITIES),
+        },
+      ],
+    };
   }
 }
 ```
@@ -67,7 +77,7 @@ export class CitiesResource extends ResourceContext {
 
 - Server entry point with `@FrontMcp` decorator and `info` configuration
 - App registration with `@App` grouping tools and resources together
-- Static resource that returns JSON data via `read()`
+- Static resource that returns JSON data via `execute(uri)` and `ReadResourceResult`
 - Clean separation between server, app, tools, and resources
 
 ## Related

@@ -18,10 +18,13 @@ Send both traces and structured logs to Coralogix. Logs include trace_id so Cora
 
 ```typescript
 // src/server.ts
-import { FrontMcp } from '@frontmcp/sdk';
 import { setupOTel } from '@frontmcp/observability';
+import { FrontMcp } from '@frontmcp/sdk';
 
 // Traces → Coralogix via OTLP
+// Auth is supplied via OTEL_EXPORTER_OTLP_HEADERS env var (read automatically
+// by the underlying @opentelemetry/exporter-trace-otlp-http exporter).
+// setupOTel() itself does not accept a `headers` option.
 setupOTel({
   serviceName: 'my-mcp-server',
   exporter: 'otlp',
@@ -54,11 +57,12 @@ setupOTel({
 export default class Server {}
 ```
 
-Environment variables alternative:
+Environment variables (required for trace auth, optional alternative for the rest):
 
 ```bash
 OTEL_SERVICE_NAME=my-mcp-server
 OTEL_EXPORTER_OTLP_ENDPOINT=https://ingress.coralogix.com:443
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${CX_PRIVATE_KEY}"
 CX_PRIVATE_KEY=your-coralogix-private-key
 ```
 

@@ -34,12 +34,13 @@ FrontMCP ships 6 official plugins that extend server behavior with cross-cutting
 All plugins follow the `DynamicPlugin` pattern and are registered via `@FrontMcp({ plugins: [...] })`.
 
 ```typescript
-import { FrontMcp } from '@frontmcp/sdk';
-import CodeCallPlugin from '@frontmcp/plugin-codecall';
-import RememberPlugin from '@frontmcp/plugin-remember';
 import { ApprovalPlugin } from '@frontmcp/plugin-approval';
 import CachePlugin from '@frontmcp/plugin-cache';
+import CodeCallPlugin from '@frontmcp/plugin-codecall';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
+import RememberPlugin from '@frontmcp/plugin-remember';
+import { FrontMcp } from '@frontmcp/sdk';
+
 // import DashboardPlugin from '@frontmcp/plugin-dashboard'; // Beta — not recommended for production
 
 @App({ name: 'MyApp' })

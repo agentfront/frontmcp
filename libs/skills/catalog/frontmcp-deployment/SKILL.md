@@ -98,20 +98,22 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | Lambda     | Streamable HTTP (stateless) | DynamoDB, ElastiCache | ~500ms     | No       | AWS ecosystem, event-driven      |
 | Cloudflare | Streamable HTTP (stateless) | KV, Durable Objects   | ~5ms       | Limited  | Edge-first, global latency       |
 | CLI        | stdio                       | SQLite, memory        | None       | Yes      | Desktop tools, local agents      |
-| Browser    | In-memory                   | memory                | None       | Yes      | Client-side AI, demos            |
+| Browser    | In-process direct client    | memory                | None       | Yes      | Client-side AI, demos            |
 | SDK        | Programmatic                | Configurable          | None       | Yes      | Embedding in existing apps       |
 
-> **Note on storage:** The FrontMCP SDK's `StorageProvider` type supports `'redis'` and `'vercel-kv'` as built-in providers. References to DynamoDB, Cloudflare KV, D1, and Durable Objects in the table above refer to platform-native storage that you configure outside the SDK (e.g., via AWS SDK, Cloudflare bindings). The SDK does not provide a built-in adapter for these — use them directly in your tools/providers.
+> **Note on storage:** Only `redis` and `vercel-kv` are SDK-native providers. DynamoDB, Cloudflare KV, D1, and Durable Objects are platform-side — wire them in your tools using the platform SDK / Workers bindings. The Cloudflare build adapter actively rejects `redis: { ... }` and `sqlite: { ... }` configs at build time because Workers has no Node TCP / fs.
+>
+> **Note on browser:** "In-process direct client" means an in-memory `DirectClient` created via `connect()`/`create()` from `@frontmcp/sdk`. There is no separate "in-memory transport" — the client and server share the same JS heap.
 
 ## Cross-Cutting Patterns
 
-| Pattern               | Rule                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------- |
-| Transport selection   | Stateful servers (Node, CLI) can use stdio or SSE; serverless must use Streamable HTTP (stateless)       |
-| Storage mapping       | Node: Redis or SQLite; Vercel: Vercel KV; Lambda: DynamoDB; Cloudflare: KV; CLI: SQLite; Browser: memory |
-| Environment variables | Never hardcode secrets; use `.env` locally, platform secrets in production                               |
-| Build command         | All targets: `frontmcp build --target <target>` produces optimized output                                |
-| Entry point           | All targets require `export default` of the `@FrontMcp` class from `main.ts`                             |
+| Pattern               | Rule                                                                                                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transport selection   | Stateful servers (Node, CLI) can use stdio or SSE; serverless must use Streamable HTTP (stateless)                                                                                                                                               |
+| Storage mapping       | SDK-native: `redis` (Node, Lambda+ElastiCache, CLI), `vercel-kv` (Vercel, can also work on Cloudflare via Upstash HTTP). Platform-side (you wire it in tools): DynamoDB, Cloudflare KV/D1/DO. Cloudflare build rejects `redis`/`sqlite` configs. |
+| Environment variables | Never hardcode secrets; use `.env` locally, platform secrets in production                                                                                                                                                                       |
+| Build command         | All targets: `frontmcp build --target <target>` produces optimized output                                                                                                                                                                        |
+| Entry point           | All targets require `export default` of the `@FrontMcp` class from `main.ts`                                                                                                                                                                     |
 
 ## Common Patterns
 

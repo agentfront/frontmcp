@@ -2,76 +2,87 @@
 name: oauth-flow-test
 reference: test-auth
 level: advanced
-description: 'Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.'
-tags: [testing, oauth, auth, flow]
+description: Use `MockOAuthServer` to simulate an OAuth/OIDC identity provider. The server publishes a JWKS endpoint backed by your `TestTokenFactory`, so any token created by that factory is valid against the mock IDP.
+tags:
+  - testing
+  - oauth
+  - auth
+  - flow
 features:
-  - 'Setting up `MockOAuthServer` with a mock issuer URL and port'
-  - 'Starting an OAuth flow with `startFlow()` specifying client ID, redirect URI, and scopes'
-  - 'Verifying the authorization URL contains an authorization code'
-  - 'Testing concurrent OAuth flows with different client configurations'
-  - 'Proper cleanup with `mockOAuth.close()` in `afterAll`'
+  - Constructing `MockOAuthServer` with a `TestTokenFactory` and starting it with `.start()`
+  - Reading server info from `mockOAuth.info.baseUrl` / `mockOAuth.info.jwksUrl` after start
+  - Issuing tokens via the same `TestTokenFactory` so the mock JWKS can verify them
+  - Cleaning up with `mockOAuth.stop()` in `afterAll`
 ---
 
-# Testing OAuth Authorization Code Flow
+# Testing with the Mock OAuth Server
 
-Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.
+Use `MockOAuthServer` to simulate an OAuth/OIDC identity provider. The server publishes a JWKS endpoint backed by your `TestTokenFactory`, so any token created by that factory is valid against the mock IDP.
 
 ## Code
 
 ```typescript
 // src/__tests__/oauth-flow.e2e.spec.ts
-import { MockOAuthServer } from '@frontmcp/testing';
+// Real API:
+//   libs/testing/src/auth/mock-oauth-server.ts:159 — `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()`
+//   libs/testing/src/auth/token-factory.ts:97 — `TestTokenFactory.createTestToken(opts)`
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
 
-describe('OAuth Flow', () => {
+describe('Mock OAuth Server', () => {
+  let tokenFactory: TestTokenFactory;
   let mockOAuth: MockOAuthServer;
 
   beforeAll(async () => {
-    mockOAuth = await MockOAuthServer.create({
+    tokenFactory = new TestTokenFactory({
       issuer: 'https://test-idp.example.com',
-      port: 9999,
+      audience: 'my-api',
     });
+
+    mockOAuth = new MockOAuthServer(tokenFactory, {
+      autoApprove: true,
+      testUser: { sub: 'user-123', email: 'test@example.com' },
+      clientId: 'test-client',
+      validRedirectUris: ['http://localhost:3001/callback'],
+    });
+
+    await mockOAuth.start();
   });
 
   afterAll(async () => {
-    await mockOAuth.close();
+    await mockOAuth.stop();
   });
 
-  it('should complete OAuth authorization code flow', async () => {
-    const { authorizationUrl } = await mockOAuth.startFlow({
-      clientId: 'test-client',
-      redirectUri: 'http://localhost:3001/callback',
+  it('exposes a JWKS endpoint with at least one key', async () => {
+    const res = await fetch(mockOAuth.info.jwksUrl);
+    const jwks = (await res.json()) as { keys: Array<{ kid: string }> };
+
+    expect(res.status).toBe(200);
+    expect(jwks.keys.length).toBeGreaterThan(0);
+  });
+
+  it('issues tokens via the same factory the mock server trusts', async () => {
+    const token = await tokenFactory.createTestToken({
+      sub: 'user-123',
       scopes: ['openid', 'profile'],
     });
-    expect(authorizationUrl).toContain('code=');
+
+    expect(typeof token).toBe('string');
+    expect(token.split('.')).toHaveLength(3);
   });
 
-  it('should support multiple concurrent flows', async () => {
-    const flow1 = await mockOAuth.startFlow({
-      clientId: 'client-a',
-      redirectUri: 'http://localhost:3001/callback',
-      scopes: ['openid'],
-    });
-
-    const flow2 = await mockOAuth.startFlow({
-      clientId: 'client-b',
-      redirectUri: 'http://localhost:3002/callback',
-      scopes: ['openid', 'email'],
-    });
-
-    expect(flow1.authorizationUrl).toContain('code=');
-    expect(flow2.authorizationUrl).toContain('code=');
-    expect(flow1.authorizationUrl).not.toBe(flow2.authorizationUrl);
+  it('reports server info after start', () => {
+    expect(mockOAuth.info.baseUrl).toMatch(/^http:\/\/localhost:\d+$/);
+    expect(mockOAuth.info.jwksUrl).toBe(`${mockOAuth.info.baseUrl}/.well-known/jwks.json`);
   });
 });
 ```
 
 ## What This Demonstrates
 
-- Setting up `MockOAuthServer` with a mock issuer URL and port
-- Starting an OAuth flow with `startFlow()` specifying client ID, redirect URI, and scopes
-- Verifying the authorization URL contains an authorization code
-- Testing concurrent OAuth flows with different client configurations
-- Proper cleanup with `mockOAuth.close()` in `afterAll`
+- Constructing `MockOAuthServer` with a `TestTokenFactory` and starting it with `.start()`
+- Reading server info from `mockOAuth.info.baseUrl` / `mockOAuth.info.jwksUrl` after start
+- Issuing tokens via the same `TestTokenFactory` so the mock JWKS can verify them
+- Cleaning up with `mockOAuth.stop()` in `afterAll`
 
 ## Related
 

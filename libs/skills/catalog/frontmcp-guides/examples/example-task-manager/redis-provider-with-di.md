@@ -2,20 +2,25 @@
 name: redis-provider-with-di
 reference: example-task-manager
 level: intermediate
-description: 'Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.'
-tags: [guides, redis, node, task-manager, task, manager]
+description: Shows how to create a Redis-backed provider using the class-as-token DI pattern (`@Provider({ name, scope })`) plus an `AsyncProvider` factory that runs the async Redis setup before any tool is invoked.
+tags:
+  - guides
+  - redis
+  - node
+  - task-manager
+  - task
+  - manager
 features:
-  - "Defining an interface and DI token (`Symbol('TaskStore')`) for the provider"
-  - 'Using `@Provider({ token: TASK_STORE })` to register the provider for DI'
-  - 'Lifecycle hooks: `onInit()` for connection setup, `onDestroy()` for cleanup'
-  - 'Lazy-loading `ioredis` via dynamic `import()` in `onInit()`'
-  - 'Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`'
-  - 'Per-user data isolation using Redis hash keys (`tasks:${userId}`)'
+  - 'Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`'
+  - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
+  - 'Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook'
+  - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
+  - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 ---
 
 # Task Manager: Redis Provider with Dependency Injection
 
-Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.
+Shows how to create a Redis-backed provider using the class-as-token DI pattern (`@Provider({ name, scope })`) plus an `AsyncProvider` factory that runs the async Redis setup before any tool is invoked.
 
 ## Code
 
@@ -33,32 +38,18 @@ export interface Task {
 
 ```typescript
 // src/providers/task-store.provider.ts
-import { Provider } from '@frontmcp/sdk';
-import type { Token } from '@frontmcp/di';
+import Redis, { Redis as RedisClient } from 'ioredis';
+
+import { AsyncProvider, Provider, ProviderScope } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
+
 import type { Task } from '../types/task';
 
-export interface TaskStore {
-  create(task: Omit<Task, 'id' | 'createdAt'>): Promise<Task>;
-  list(userId: string): Promise<Task[]>;
-  update(id: string, userId: string, data: Partial<Pick<Task, 'title' | 'priority' | 'status'>>): Promise<Task>;
-  delete(id: string, userId: string): Promise<void>;
-}
-
-// DI token — tools use this.get(TASK_STORE) to access the provider
-export const TASK_STORE: Token<TaskStore> = Symbol('TaskStore');
-
-@Provider({ token: TASK_STORE })
-export class RedisTaskStoreProvider implements TaskStore {
-  private redis!: import('ioredis').default;
-
-  // Lifecycle: initialize Redis connection
-  async onInit(): Promise<void> {
-    const Redis = (await import('ioredis')).default;
-    this.redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-  }
+@Provider({ name: 'task-store', scope: ProviderScope.GLOBAL })
+export class TaskStoreProvider {
+  constructor(private readonly redis: RedisClient) {}
 
   async create(input: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
-    const { randomUUID } = await import('@frontmcp/utils');
     const task: Task = {
       ...input,
       id: randomUUID(),
@@ -90,26 +81,44 @@ export class RedisTaskStoreProvider implements TaskStore {
     }
   }
 
-  // Lifecycle: close Redis connection on shutdown
-  async onDestroy(): Promise<void> {
+  // `@Provider` has no `onDestroy` hook — expose explicit cleanup that the
+  // host calls before `server.dispose()` (e.g., from the SIGTERM/process
+  // shutdown side-effect handler).
+  async disconnect(): Promise<void> {
     await this.redis.quit();
   }
 }
+
+// AsyncProvider factory: builds the TaskStoreProvider singleton with a connected Redis client.
+// Tools still inject the class itself: `this.get(TaskStoreProvider)`.
+export const createTaskStoreProvider = AsyncProvider({
+  provide: TaskStoreProvider,
+  name: 'task-store-factory',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async () => {
+    const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+    return new TaskStoreProvider(redis);
+  },
+});
 ```
 
 ```typescript
 // src/tasks.app.ts
 import { App } from '@frontmcp/sdk';
-import { RedisTaskStoreProvider } from './providers/task-store.provider';
+
+import { createTaskStoreProvider } from './providers/task-store.provider';
 import { CreateTaskTool } from './tools/create-task.tool';
+import { DeleteTaskTool } from './tools/delete-task.tool';
 import { ListTasksTool } from './tools/list-tasks.tool';
 import { UpdateTaskTool } from './tools/update-task.tool';
-import { DeleteTaskTool } from './tools/delete-task.tool';
 
 @App({
   name: 'Tasks',
   description: 'Task management with CRUD operations',
-  providers: [RedisTaskStoreProvider],
+  // The AsyncProvider factory binds the `TaskStoreProvider` class as the DI token.
+  // Tools inject the same class via `this.get(TaskStoreProvider)`.
+  providers: [createTaskStoreProvider],
   tools: [CreateTaskTool, ListTasksTool, UpdateTaskTool, DeleteTaskTool],
 })
 export class TasksApp {}
@@ -117,10 +126,9 @@ export class TasksApp {}
 
 ## What This Demonstrates
 
-- Defining an interface and DI token (`Symbol('TaskStore')`) for the provider
-- Using `@Provider({ token: TASK_STORE })` to register the provider for DI
-- Lifecycle hooks: `onInit()` for connection setup, `onDestroy()` for cleanup
-- Lazy-loading `ioredis` via dynamic `import()` in `onInit()`
+- Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`
+- Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
+- Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook
 - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
 - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 

@@ -25,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Store a value by key',
   inputSchema: { key: z.string(), value: z.string() },
 })
-class StoreValueTool extends ToolContext<{ key: string; value: string }> {
+class StoreValueTool extends ToolContext {
   async execute(input: { key: string; value: string }) {
     return {
       content: [{ type: 'text' as const, text: `Stored: ${input.key}` }],
@@ -40,7 +40,7 @@ class StorageApp {}
   info: { name: 'my-worker', version: '1.0.0' },
   apps: [StorageApp],
   transport: {
-    type: 'sse',
+    protocol: 'modern',
   },
 })
 class MyServer {}
@@ -49,9 +49,10 @@ export default MyServer;
 ```
 
 ```toml
-# wrangler.toml
+# wrangler.toml — name/main/compatibility_date are rewritten by the build.
+# Bindings below need to be re-applied (or appended) after each build.
 name = "frontmcp-worker"
-main = "dist/index.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]

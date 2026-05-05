@@ -2,106 +2,114 @@
 name: graceful-shutdown-cleanup
 reference: production-cli-daemon
 level: intermediate
-description: 'Shows how to implement graceful shutdown for a daemon process, including completing in-flight requests, closing database connections, removing the socket file, and cleaning up the PID file.'
-tags: [production, unix-socket, cli, database, daemon, graceful]
+description: Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.
+tags:
+  - production
+  - unix-socket
+  - cli
+  - database
+  - daemon
+  - graceful
 features:
-  - 'SIGTERM handler that completes in-flight requests before exiting'
-  - 'Removing the Unix socket file to prevent stale `.sock` files on restart'
-  - 'Cleaning up the PID file on shutdown'
-  - 'Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations'
-  - 'Implementing `onDestroy()` to close database connections'
+  - The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`
+  - Using `server.dispose()` (the only real method) instead of fictional `server.close()`
+  - Removing the Unix socket file to prevent stale `.sock` files on restart
+  - Cleaning up the PID file on shutdown
+  - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
+  - Providers initialize in the constructor — there is no `onInit` / `onDestroy`
 ---
 
 # Daemon Graceful Shutdown with Socket Cleanup
 
-Shows how to implement graceful shutdown for a daemon process, including completing in-flight requests, closing database connections, removing the socket file, and cleaning up the PID file.
+Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.
+
+> The FrontMCP framework already installs `SIGTERM` / `SIGINT` handlers that call `scope.shutdown()` and `mcpServer.close()` (see `libs/sdk/src/front-mcp/front-mcp.ts`). **Do not install your own** competing shutdown handler — only register _additional_ cleanup hooks (e.g. for socket / PID files) that run before the framework exits.
+>
+> `FrontMcpServerInstance` exposes `dispose()` only — there is **no** `server.close()` method.
 
 ## Code
 
 ```typescript
 // src/lifecycle/daemon-shutdown.ts
-import { unlink, fileExists } from '@frontmcp/utils';
+import { fileExists, unlink } from '@frontmcp/utils';
 
-export function setupDaemonShutdown(server: { close: () => Promise<void>; dispose: () => Promise<void> }): void {
+/**
+ * Register daemon-only side-effect cleanup. Run BEFORE the framework's
+ * SIGTERM handler tears down the server. Do not call process.exit() here —
+ * the framework owns that.
+ */
+export function setupDaemonSideEffectCleanup(): void {
   const socketPath = '/tmp/my-daemon.sock';
   const pidFile = `${process.env.HOME}/.config/my-daemon/daemon.pid`;
 
-  const shutdown = async (signal: string) => {
-    console.log(`[daemon] Received ${signal}. Shutting down...`);
-
-    // 1. Stop accepting new connections
-    await server.close();
-    console.log('[daemon] Server closed.');
-
-    // 2. Dispose all resources (SQLite, providers)
-    await server.dispose();
-    console.log('[daemon] Resources disposed.');
-
-    // 3. Remove socket file (prevent stale .sock files)
+  const cleanup = async () => {
     if (await fileExists(socketPath)) {
       await unlink(socketPath);
       console.log(`[daemon] Socket removed: ${socketPath}`);
     }
-
-    // 4. Clean up PID file
     if (await fileExists(pidFile)) {
       await unlink(pidFile);
       console.log(`[daemon] PID file removed: ${pidFile}`);
     }
-
-    process.exit(0);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  // The framework registers its own SIGTERM/SIGINT handlers. Adding ours
+  // means BOTH run on signal — Node.js fires every registered listener.
+  // Keep these idempotent and side-effect-only; framework will exit after.
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
 }
 ```
 
 ```typescript
 // src/providers/sqlite-store.provider.ts
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { dirname } from 'path';
+
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+import { ensureDir } from '@frontmcp/utils';
 
 export const LOCAL_STORE = Symbol('LocalStore');
 
-@Provider({ token: LOCAL_STORE, scope: ProviderScope.GLOBAL })
+// Providers do NOT have onInit/onDestroy lifecycle hooks. Anything async
+// at construction time goes through `AsyncProvider({ useFactory })` so the
+// dir is guaranteed to exist before the database is opened.
 export class SqliteStoreProvider {
-  private db!: { close: () => void; exec: (sql: string) => void };
-
-  async onInit(): Promise<void> {
-    // Database path is configurable, not hardcoded
-    const dbPath = process.env.DB_PATH ?? `${process.env.HOME}/.config/my-daemon/data.db`;
-
-    // Ensure directory exists
-    const { ensureDir } = await import('@frontmcp/utils');
-    const path = await import('path');
-    await ensureDir(path.dirname(dbPath));
-
-    // Initialize with WAL mode for concurrent reads
-    // Auto-migrate on startup
-    this.db = await this.openDatabase(dbPath);
-    this.db.exec('PRAGMA journal_mode=WAL');
-  }
-
-  async onDestroy(): Promise<void> {
-    // Close database connection on shutdown
-    this.db.close();
-  }
-
-  private async openDatabase(path: string) {
-    // Replace with your SQLite driver (e.g., better-sqlite3)
-    throw new Error('Implement with your SQLite driver');
-  }
+  constructor(private readonly db: { close: () => void; exec: (sql: string) => void }) {}
 }
+
+function openDatabase(path: string): { close: () => void; exec: (sql: string) => void } {
+  // Replace with your SQLite driver (e.g., better-sqlite3)
+  throw new Error('Implement with your SQLite driver');
+}
+
+// Async factory binding — `useFactory` runs once at boot and waits for
+// `ensureDir` before opening the database, eliminating the race that
+// `void ensureDir(...)` in a sync constructor would create.
+export const sqliteStoreProvider = AsyncProvider({
+  provide: LOCAL_STORE,
+  name: 'SqliteStoreProvider',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async () => {
+    const dbPath = process.env.DB_PATH ?? `${process.env.HOME}/.config/my-daemon/data.db`;
+    await ensureDir(dirname(dbPath));
+    const db = openDatabase(dbPath);
+    db.exec('PRAGMA journal_mode=WAL');
+    return new SqliteStoreProvider(db);
+  },
+});
 ```
 
 ## What This Demonstrates
 
-- SIGTERM handler that completes in-flight requests before exiting
+- The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`
+- Using `server.dispose()` (the only real method) instead of fictional `server.close()`
 - Removing the Unix socket file to prevent stale `.sock` files on restart
 - Cleaning up the PID file on shutdown
 - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
-- Implementing `onDestroy()` to close database connections
+- Providers initialize in the constructor — there is no `onInit` / `onDestroy`
 
 ## Related
 
 - See `production-cli-daemon` for the full graceful shutdown and security checklist
+- Framework SIGTERM/SIGINT wiring: `libs/sdk/src/front-mcp/front-mcp.ts`

@@ -47,7 +47,7 @@ export class MonitoredOperationTool extends ToolContext {
     }
 
     // Report progress for long-running operations
-    await this.respondProgress(1, 1);
+    this.progress(1, 1);
 
     return { status: 'completed', operationId: input.operationId };
   }

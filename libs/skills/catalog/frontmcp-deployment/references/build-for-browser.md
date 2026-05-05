@@ -59,24 +59,46 @@ Not all FrontMCP features are available in browser environments:
 
 ## Usage with @frontmcp/react
 
-The browser build is commonly paired with `@frontmcp/react` for React applications:
+The browser build is commonly paired with `@frontmcp/react` for React applications. `FrontMcpProvider` takes a pre-created `DirectMcpServer` (via the SDK's `create()` factory) — not a `serverUrl`. Hooks for listing/invoking are `useListTools` / `useCallTool`:
 
 ```typescript
-import { FrontMcpProvider, useTools } from '@frontmcp/react';
+import { create } from '@frontmcp/sdk';
+import { FrontMcpProvider, useListTools, useCallTool } from '@frontmcp/react';
+
+// Create the server once (outside React) and pass the instance to the provider.
+const server = await create({
+  info: { name: 'browser-app', version: '1.0.0' },
+  // tools/resources/prompts as flat config (see build-for-sdk)
+  tools: [/* ... */],
+});
 
 function App() {
   return (
-    <FrontMcpProvider config={{ serverUrl: 'https://my-mcp.example.com' }}>
+    <FrontMcpProvider server={server}>
       <ToolUI />
     </FrontMcpProvider>
   );
 }
 
 function ToolUI() {
-  const { tools, callTool } = useTools();
-  // Use tools in your React components
+  // useListTools returns ToolInfo[] directly (live-updates from the provider's registry).
+  const tools = useListTools();
+  // useCallTool returns [callFn, state, reset]. Pass the tool name to the hook,
+  // and call the returned function with just the arguments object.
+  const [callGetWeather, weatherState] = useCallTool('get_weather');
+  return (
+    <ul>
+      {tools.map((t) => (
+        <li key={t.name}>
+          <button onClick={() => callGetWeather({})}>{t.name}</button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 ```
+
+For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
 ## Browser vs Node vs SDK Target
 
@@ -99,13 +121,14 @@ ls dist/browser/
 
 ## Common Patterns
 
-| Pattern           | Correct                                  | Incorrect                         | Why                                        |
-| ----------------- | ---------------------------------------- | --------------------------------- | ------------------------------------------ |
-| Crypto usage      | `@frontmcp/utils` (uses WebCrypto)       | `node:crypto`                     | `node:crypto` is not available in browsers |
-| Storage           | In-memory stores or remote API           | SQLite / Redis directly           | No filesystem or native TCP in browsers    |
-| File system ops   | Avoid `@frontmcp/utils` fs functions     | `readFile()`, `writeFile()`       | fs utilities throw in browser environments |
-| Entry file        | Separate browser entry (`src/client.ts`) | Reusing server entry point        | Server entry may import Node-only modules  |
-| Server connection | `FrontMcpProvider` with `serverUrl`      | Direct `connect()` with localhost | Browser needs a remote URL, not localhost  |
+| Pattern           | Correct                                           | Incorrect                                   | Why                                                    |
+| ----------------- | ------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------ |
+| Crypto usage      | `@frontmcp/utils` (uses WebCrypto)                | `node:crypto`                               | `node:crypto` is not available in browsers             |
+| Storage           | In-memory stores or remote API                    | SQLite / Redis directly                     | No filesystem or native TCP in browsers                |
+| File system ops   | Avoid `@frontmcp/utils` fs functions              | `readFile()`, `writeFile()`                 | fs utilities throw in browser environments             |
+| Entry file        | Separate browser entry (`src/client.ts`)          | Reusing server entry point                  | Server entry may import Node-only modules              |
+| Provider props    | `<FrontMcpProvider server={await create({...})}>` | `<FrontMcpProvider config={{ serverUrl }}>` | Real prop is `server: DirectMcpServer`; no `serverUrl` |
+| Tool listing hook | `useListTools()` -> `{ data: { tools } }`         | `useTools()` -> `{ tools, callTool }`       | `useTools` is not exported; real hooks are split       |
 
 ## Verification Checklist
 
@@ -139,11 +162,11 @@ ls dist/browser/
 
 ## Examples
 
-| Example                                                                                               | Level        | Description                                                                                           |
-| ----------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
-| [`browser-build-with-custom-entry`](../examples/build-for-browser/browser-build-with-custom-entry.md) | Intermediate | Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports.          |
-| [`browser-crypto-and-storage`](../examples/build-for-browser/browser-crypto-and-storage.md)           | Advanced     | Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments. |
-| [`react-provider-setup`](../examples/build-for-browser/react-provider-setup.md)                       | Basic        | Connect a React application to a remote FrontMCP server using `@frontmcp/react`.                      |
+| Example                                                                                               | Level        | Description                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`browser-build-with-custom-entry`](../examples/build-for-browser/browser-build-with-custom-entry.md) | Intermediate | Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) — `useTools`/`useResources` do not exist. |
+| [`browser-crypto-and-storage`](../examples/build-for-browser/browser-crypto-and-storage.md)           | Advanced     | Use `@frontmcp/utils` crypto in the browser, and create the FrontMCP server with `create()` from `@frontmcp/sdk` so the React provider can consume it via the `server` prop.                                                            |
+| [`react-provider-setup`](../examples/build-for-browser/react-provider-setup.md)                       | Basic        | Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop — there is no `serverUrl` option.                                                 |
 
 > See all examples in [`examples/build-for-browser/`](../examples/build-for-browser/)
 

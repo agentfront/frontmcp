@@ -20,10 +20,11 @@ Shows how to secure a local daemon with restrictive socket permissions, XDG-comp
 
 ```typescript
 // src/lifecycle/daemon-security.ts
-import { stat, writeFile, fileExists, ensureDir, readFile } from '@frontmcp/utils';
 import { chmod } from 'fs/promises';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+
+import { ensureDir, fileExists, readFile, stat, writeFile } from '@frontmcp/utils';
 
 // XDG Base Directory compliance
 function getConfigDir(appName: string): string {
@@ -86,6 +87,7 @@ export async function loadSecrets(configDir: string): Promise<Record<string, str
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({
@@ -100,7 +102,7 @@ import { MyApp } from './my.app';
   // SQLite in the data directory (persistent, writable)
   sqlite: {
     path: `${process.env.XDG_DATA_HOME ?? process.env.HOME + '/.local/share'}/secure-daemon/data.db`,
-    wal: true,
+    walMode: true, // SqliteOptionsInterface — see libs/storage-sqlite
   },
 })
 export default class SecureDaemonServer {}

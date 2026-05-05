@@ -15,129 +15,63 @@ Two-way channels let external users communicate with Claude Code through messagi
 4. **Reply**: Claude calls `channel-reply` tool with response text
 5. **Forward**: `onReply()` sends the reply back to the external platform
 
-## WhatsApp Business API Bridge
+## API Surface
+
+A two-way channel sets `twoWay: true` and implements two hooks on top of the regular `ChannelContext` interface:
 
 ```typescript
-import { Channel, ChannelContext, ChannelNotification } from '@frontmcp/sdk';
-
-// Store verified senders for security
-const allowedSenders = new Set<string>();
-
 @Channel({
   name: 'whatsapp',
-  description: 'WhatsApp Business API bridge for Claude Code',
   source: { type: 'webhook', path: '/hooks/whatsapp' },
   twoWay: true,
   meta: { platform: 'whatsapp' },
 })
 export class WhatsAppChannel extends ChannelContext {
+  // Inbound: shape the external payload into a notification for Claude
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const { body } = payload as { body: Record<string, unknown> };
-
-    // WhatsApp Cloud API webhook payload structure
-    const entry = (body as any).entry?.[0];
-    const change = entry?.changes?.[0];
-    const message = change?.value?.messages?.[0];
-    const contact = change?.value?.contacts?.[0];
-
-    if (!message || !contact) {
-      return { content: 'WhatsApp: received non-message webhook (status update)' };
-    }
-
-    const sender = contact.wa_id;
-    const senderName = contact.profile?.name ?? sender;
-
-    // Security: only allow verified senders
-    if (!allowedSenders.has(sender)) {
-      this.logger.warn(`WhatsApp: rejecting message from unverified sender ${sender}`);
-      return {
-        content: `WhatsApp: message from unverified sender ${senderName} (${sender}). Add to allowlist to process.`,
-        meta: { sender, sender_name: senderName, verified: 'false' },
-      };
-    }
-
-    const text = message.text?.body ?? '[non-text message]';
-
-    return {
-      content: `${senderName}: ${text}`,
-      meta: {
-        sender,
-        sender_name: senderName,
-        message_id: message.id,
-        chat_id: sender,
-      },
-    };
+    /* see whatsapp-bridge example */
   }
 
+  // Outbound: forward Claude's reply back to the platform.
+  // `meta` carries the keys you returned from onEvent (chat_id, sender, ...).
   async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
-    const chatId = meta?.chat_id;
-    if (!chatId) {
-      this.logger.warn('WhatsApp reply: no chat_id in meta');
-      return;
-    }
-
-    // Send via WhatsApp Cloud API
-    const token = process.env['WHATSAPP_TOKEN'];
-    const phoneNumberId = process.env['WHATSAPP_PHONE_ID'];
-
-    await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: chatId,
-        text: { body: reply },
-      }),
-    });
+    /* call platform send-message API */
   }
 }
 ```
 
+The full WhatsApp implementation, including sender allowlisting and the WhatsApp Cloud API call, lives in [`examples/channel-two-way/whatsapp-bridge.md`](../examples/channel-two-way/whatsapp-bridge.md).
+
 ## Telegram Bot Bridge
+
+Telegram works the same way — different webhook path, different reply API:
 
 ```typescript
 @Channel({
   name: 'telegram',
-  description: 'Telegram bot bridge for Claude Code',
   source: { type: 'webhook', path: '/hooks/telegram' },
   twoWay: true,
   meta: { platform: 'telegram' },
 })
 export class TelegramChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const { body } = payload as { body: Record<string, unknown> };
-    const update = body as {
-      message?: {
-        chat: { id: number };
-        from: { username?: string; first_name: string; id: number };
-        text?: string;
+    const { body } = payload as {
+      body: {
+        message?: { chat: { id: number }; from: { username?: string; first_name: string; id: number }; text?: string };
       };
     };
-
-    const msg = update.message;
-    if (!msg?.text) {
-      return { content: 'Telegram: non-text update received' };
-    }
-
+    const msg = body.message;
+    if (!msg?.text) return { content: 'Telegram: non-text update' };
     const sender = msg.from.username ?? msg.from.first_name;
-
     return {
       content: `${sender}: ${msg.text}`,
-      meta: {
-        chat_id: String(msg.chat.id),
-        sender: String(msg.from.id),
-        sender_name: sender,
-      },
+      meta: { chat_id: String(msg.chat.id), sender: String(msg.from.id), sender_name: sender },
     };
   }
 
   async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
     const chatId = meta?.chat_id;
     if (!chatId) return;
-
     const token = process.env['TELEGRAM_BOT_TOKEN'];
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -166,15 +100,52 @@ if (isGroupMember(chatId)) {
 }
 ```
 
-### Webhook Verification
+### Webhook Signature Verification
 
-Validate webhook signatures for each platform:
+Webhook handlers must verify the request actually came from the platform. Use the HMAC helper from `@frontmcp/utils` so the same code runs in Node and Edge runtimes:
 
 ```typescript
-// WhatsApp: verify X-Hub-Signature-256 header
-// Telegram: verify secret_token parameter
-// Slack: verify X-Slack-Signature header
+import { hmacSha256 } from '@frontmcp/utils';
+
+function verifyWhatsAppSignature(rawBody: string, header: string | undefined, appSecret: string): boolean {
+  if (!header?.startsWith('sha256=')) return false;
+  const expected = header.slice('sha256='.length);
+
+  const key = new TextEncoder().encode(appSecret);
+  const data = new TextEncoder().encode(rawBody);
+  const digest = hmacSha256(key, data);
+
+  // Constant-time hex compare
+  const actual = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+  if (actual.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < actual.length; i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+// In onEvent:
+//
+// NOTE: WebhookPayload.body is the parsed JSON. For maximum signature fidelity
+// (Meta computes X-Hub-Signature-256 over the exact raw bytes), capture the raw
+// body in a transport-level middleware (e.g. express.json `verify` hook) and
+// pass that string to `verifyWhatsAppSignature` instead of `JSON.stringify(body)`.
+const { body, headers } = payload as { body: unknown; headers: Record<string, string | string[] | undefined> };
+const sig = headers['x-hub-signature-256'];
+if (
+  !verifyWhatsAppSignature(JSON.stringify(body), Array.isArray(sig) ? sig[0] : sig, process.env['WHATSAPP_APP_SECRET']!)
+) {
+  this.logger.warn('WhatsApp: signature mismatch, dropping');
+  return { content: '', meta: { verified: 'false' } };
+}
 ```
+
+Per-platform header names:
+
+| Platform | Header / mechanism                                              |
+| -------- | --------------------------------------------------------------- |
+| WhatsApp | `X-Hub-Signature-256` (HMAC-SHA256 of raw body with app secret) |
+| Telegram | `secret_token` query parameter (compare with the value you set) |
+| Slack    | `X-Slack-Signature` + `X-Slack-Request-Timestamp` (HMAC-SHA256) |
 
 ### Pairing Codes
 

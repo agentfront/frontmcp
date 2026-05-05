@@ -25,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Translate text to a target language',
   inputSchema: { text: z.string(), targetLang: z.string() },
 })
-class TranslateTool extends ToolContext<{ text: string; targetLang: string }> {
+class TranslateTool extends ToolContext {
   async execute(input: { text: string; targetLang: string }) {
     return {
       content: [{ type: 'text' as const, text: `[${input.targetLang}] ${input.text}` }],

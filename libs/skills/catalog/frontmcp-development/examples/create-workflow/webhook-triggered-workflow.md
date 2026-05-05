@@ -33,10 +33,12 @@ import { Workflow } from '@frontmcp/sdk';
   },
   timeout: 900000, // 15 minutes
   maxConcurrency: 3,
-  permissions: {
-    actions: ['create', 'read', 'execute', 'list'],
-    roles: ['admin', 'ci-bot'],
-  },
+  permissions: [
+    { action: 'execute', roles: ['admin', 'ci-bot'] },
+    { action: 'create', roles: ['admin', 'ci-bot'] },
+    { action: 'read', roles: ['admin', 'ci-bot'] },
+    { action: 'list', roles: ['admin', 'ci-bot'] },
+  ],
   steps: [
     {
       id: 'build',

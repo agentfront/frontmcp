@@ -5,20 +5,38 @@ description: In-memory testing with create() and connectOpenAI/connectClaude wit
 
 # Testing with Direct Client (No HTTP)
 
-Uses `connect()` or `create()` for in-memory testing without HTTP overhead.
+Use `create()` for an in-memory `DirectMcpServer` and `connectOpenAI()` / `connectClaude()` for an in-memory `DirectClient` with platform-specific tool formatting. None of these start an HTTP server — they wire client and server through an in-memory transport.
+
+Real API references:
+
+- `create(config)` — `libs/sdk/src/direct/create.ts`. Returns `DirectMcpServer` with `listTools`, `callTool`, `listResources`, `readResource`, `listPrompts`, `getPrompt`, `dispose`.
+- `connectOpenAI(config, options?)` / `connectClaude(config, options?)` — `libs/sdk/src/direct/connect.ts:159` / `:200`. Both take a `FrontMcpConfigInput` (decorated `@FrontMcp` class or config object) and return a `DirectClient`. There is no `serve` field; the in-memory transport is always used.
+- Tools are class-based using the `@Tool` decorator (`libs/sdk/src/index.ts` — there is no `tool()` factory function).
 
 ```typescript
-import { connectOpenAI, create, tool, z } from '@frontmcp/sdk';
+// direct-client.spec.ts
+import { App, connectOpenAI, create, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
-const AddTool = tool({
+@Tool({
   name: 'add',
   description: 'Add numbers',
   inputSchema: { a: z.number(), b: z.number() },
   outputSchema: { sum: z.number() },
-})((input) => ({ sum: input.a + input.b }));
+})
+class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return { sum: input.a + input.b };
+  }
+}
+
+@App({ name: 'test-app', tools: [AddTool] })
+class TestApp {}
+
+@FrontMcp({ info: { name: 'test', version: '1.0.0' }, apps: [TestApp] })
+class TestServerConfig {}
 
 describe('Direct Client Testing', () => {
-  it('should call tools via create()', async () => {
+  it('calls tools via create() with a flat config', async () => {
     const server = await create({
       info: { name: 'test', version: '1.0.0' },
       tools: [AddTool],
@@ -26,17 +44,14 @@ describe('Direct Client Testing', () => {
     });
 
     const result = await server.callTool('add', { a: 2, b: 3 });
-    expect(result.content[0].text).toContain('5');
+    // execute() returns { sum: 5 }; the framework wraps it as a CallToolResult.
+    expect(result.structuredContent).toEqual({ sum: 5 });
 
     await server.dispose();
   });
 
-  it('should return OpenAI-formatted tools', async () => {
-    const client = await connectOpenAI({
-      info: { name: 'test', version: '1.0.0' },
-      tools: [AddTool],
-      serve: false,
-    });
+  it('returns OpenAI-formatted tools', async () => {
+    const client = await connectOpenAI(TestServerConfig);
 
     const tools = await client.listTools();
     // OpenAI format: [{ type: 'function', function: { name, parameters } }]
@@ -46,13 +61,8 @@ describe('Direct Client Testing', () => {
     await client.close();
   });
 
-  it('should return Claude-formatted tools', async () => {
-    const { connectClaude } = await import('@frontmcp/sdk');
-    const client = await connectClaude({
-      info: { name: 'test', version: '1.0.0' },
-      tools: [AddTool],
-      serve: false,
-    });
+  it('returns Claude-formatted tools', async () => {
+    const client = await connectClaude(TestServerConfig);
 
     const tools = await client.listTools();
     // Claude format: [{ name, description, input_schema }]

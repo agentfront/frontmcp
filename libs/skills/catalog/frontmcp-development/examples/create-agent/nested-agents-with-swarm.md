@@ -2,18 +2,23 @@
 name: nested-agents-with-swarm
 reference: create-agent
 level: advanced
-description: 'Composing specialized sub-agents and configuring swarm-based handoff between agents.'
-tags: [development, agent, nested, agents, swarm]
+description: Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
+tags:
+  - development
+  - agent
+  - nested
+  - agents
+  - swarm
 features:
-  - "Configuring `swarm` with `role: 'coordinator'` for the triage agent and `role: 'specialist'` for domain agents"
-  - 'Defining `handoff` rules with `agent` name and `condition` for declarative LLM-driven routing'
-  - 'Specialist agents can hand back to the triage agent when a request falls outside their scope'
-  - 'Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization'
+  - 'Setting `swarm: { canSeeOtherAgents: true, visibleAgents: [...] }` on the orchestrator so peers appear as `use-agent:*` tools'
+  - 'Setting `swarm: { isVisible: true }` (the default) on specialist peers so they can be called'
+  - Routing is driven by the orchestrator LLM choosing among `use-agent:<peer>` tools, not by a declarative handoff table
+  - Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization
 ---
 
-# Nested Sub-Agents and Swarm Handoff
+# Multi-Agent Swarm Visibility
 
-Composing specialized sub-agents and configuring swarm-based handoff between agents.
+Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<id>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
 
 ## Code
 
@@ -33,14 +38,13 @@ class LookupInvoiceTool extends ToolContext {
 }
 
 @Agent({
+  id: 'billing_agent',
   name: 'billing_agent',
   description: 'Handles billing and payment inquiries',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   tools: [LookupInvoiceTool],
-  swarm: {
-    role: 'specialist',
-    handoff: [{ agent: 'triage_agent', condition: 'Request is outside billing scope' }],
-  },
+  // isVisible defaults to true; specialists do not need swarm config to be callable.
+  swarm: { isVisible: true },
 })
 class BillingAgent extends AgentContext {}
 ```
@@ -50,14 +54,12 @@ class BillingAgent extends AgentContext {}
 import { Agent, AgentContext } from '@frontmcp/sdk';
 
 @Agent({
+  id: 'technical_agent',
   name: 'technical_agent',
   description: 'Handles technical support issues',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   systemInstructions: 'You are a technical support specialist. Diagnose issues and provide solutions.',
-  swarm: {
-    role: 'specialist',
-    handoff: [{ agent: 'triage_agent', condition: 'Request is outside technical scope' }],
-  },
+  swarm: { isVisible: true },
 })
 class TechnicalAgent extends AgentContext {}
 ```
@@ -67,20 +69,21 @@ class TechnicalAgent extends AgentContext {}
 import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
+  id: 'triage_agent',
   name: 'triage_agent',
-  description: 'Triages incoming requests and hands off to specialists',
+  description: 'Triages incoming requests and delegates to specialists',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   inputSchema: {
     request: z.string().describe('The incoming user request'),
   },
+  // Orchestrator: opts in to seeing peers and (optionally) restricts to a whitelist.
   swarm: {
-    role: 'coordinator',
-    handoff: [
-      { agent: 'billing_agent', condition: 'Request is about billing or payments' },
-      { agent: 'technical_agent', condition: 'Request is about technical issues' },
-    ],
+    canSeeOtherAgents: true,
+    visibleAgents: ['billing_agent', 'technical_agent'],
+    maxCallDepth: 3,
   },
-  systemInstructions: 'Analyze the request and hand off to the appropriate specialist agent.',
+  systemInstructions:
+    'Analyze the request and delegate by calling either use-agent:billing_agent (for billing/payments) or use-agent:technical_agent (for technical issues).',
 })
 class TriageAgent extends AgentContext {}
 ```
@@ -98,12 +101,12 @@ class SupportApp {}
 
 ## What This Demonstrates
 
-- Configuring `swarm` with `role: 'coordinator'` for the triage agent and `role: 'specialist'` for domain agents
-- Defining `handoff` rules with `agent` name and `condition` for declarative LLM-driven routing
-- Specialist agents can hand back to the triage agent when a request falls outside their scope
+- Setting `swarm: { canSeeOtherAgents: true, visibleAgents: [...] }` on the orchestrator so peers appear as `use-agent:*` tools
+- Setting `swarm: { isVisible: true }` (the default) on specialist peers so they can be called
+- Routing is driven by the orchestrator LLM choosing among `use-agent:<peer>` tools, not by a declarative handoff table
 - Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization
 
 ## Related
 
-- See `create-agent` for exported tools, function-style builder, providers, and rate limiting
+- See `create-agent` for the full swarm field reference and inner-tool composition
 - See `create-agent-llm-config` for using different LLM providers per agent

@@ -7,9 +7,9 @@ tags: [guides, auth, session, e2e, unit-test, task-manager]
 features:
   - 'Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests'
   - 'Chaining `.withToken(token).buildAndConnect()` for authenticated clients'
-  - 'Unit testing with mocked DI tokens via `this.get()` mock'
-  - 'Mocking session context (`context: { session: { userId } }`) for auth-dependent tools'
-  - 'Testing the unauthenticated error path (no session)'
+  - 'Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter'
+  - 'Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools'
+  - 'Testing the unauthenticated error path (no `auth` / anonymous user)'
 ---
 
 # Task Manager: Authenticated E2E Tests
@@ -43,7 +43,7 @@ describe('Task Manager E2E', () => {
   });
 
   it('should list all CRUD tools', async () => {
-    const { tools } = await client.listTools();
+    const tools = await client.tools.list();
     const names = tools.map((t) => t.name);
 
     expect(names).toContain('create_task');
@@ -53,16 +53,16 @@ describe('Task Manager E2E', () => {
   });
 
   it('should create and list a task', async () => {
-    const createResult = await client.callTool('create_task', {
+    const createResult = await client.tools.call('create_task', {
       title: 'E2E test task',
       priority: 'high',
     });
-    expect(createResult).toBeSuccessful();
+    expect(createResult.isError).toBeFalsy();
 
-    const listResult = await client.callTool('list_tasks', {});
-    expect(listResult).toBeSuccessful();
+    const listResult = await client.tools.call('list_tasks', {});
+    expect(listResult.isError).toBeFalsy();
 
-    const parsed = JSON.parse(listResult.content[0].text);
+    const parsed = listResult.json<{ tasks: Array<{ title: string }> }>();
     expect(parsed.tasks.length).toBeGreaterThan(0);
     expect(parsed.tasks.some((t: { title: string }) => t.title === 'E2E test task')).toBe(true);
   });
@@ -70,15 +70,16 @@ describe('Task Manager E2E', () => {
 ```
 
 ```typescript
-// test/create-task.tool.spec.ts — Unit test with mocked session
+// test/create-task.tool.spec.ts — Unit test with mocked auth context
 import { ToolContext } from '@frontmcp/sdk';
+
+import { TaskStoreProvider } from '../src/providers/task-store.provider';
 import { CreateTaskTool } from '../src/tools/create-task.tool';
-import { TASK_STORE, type TaskStore } from '../src/providers/task-store.provider';
 import type { Task } from '../src/types/task';
 
 describe('CreateTaskTool', () => {
   let tool: CreateTaskTool;
-  let mockStore: jest.Mocked<TaskStore>;
+  let mockStore: jest.Mocked<TaskStoreProvider>;
 
   beforeEach(() => {
     tool = new CreateTaskTool();
@@ -87,13 +88,13 @@ describe('CreateTaskTool', () => {
       list: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-    };
+    } as unknown as jest.Mocked<TaskStoreProvider>;
   });
 
   function applyContext(userId: string | undefined): void {
     const ctx = {
-      get: jest.fn((token: symbol) => {
-        if (token === TASK_STORE) return mockStore;
+      get: jest.fn((token: unknown) => {
+        if (token === TaskStoreProvider) return mockStore;
         throw new Error(`Unknown token: ${String(token)}`);
       }),
       tryGet: jest.fn(),
@@ -101,9 +102,10 @@ describe('CreateTaskTool', () => {
         throw err;
       }),
       mark: jest.fn(),
-      notify: jest.fn(),
-      respondProgress: jest.fn(),
-      context: { session: userId ? { userId } : undefined },
+      notify: jest.fn().mockResolvedValue(true),
+      progress: jest.fn().mockResolvedValue(true),
+      // Stub the FrontMcpAuthContext exposed via the `auth` getter on the real SDK.
+      auth: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
   }
@@ -139,9 +141,9 @@ describe('CreateTaskTool', () => {
 
 - Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests
 - Chaining `.withToken(token).buildAndConnect()` for authenticated clients
-- Unit testing with mocked DI tokens via `this.get()` mock
-- Mocking session context (`context: { session: { userId } }`) for auth-dependent tools
-- Testing the unauthenticated error path (no session)
+- Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter
+- Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools
+- Testing the unauthenticated error path (no `auth` / anonymous user)
 
 ## Related
 

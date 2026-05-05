@@ -2,19 +2,25 @@
 name: auth-and-crud-tools
 reference: example-task-manager
 level: basic
-description: 'Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection.'
-tags: [guides, auth, session, task-manager, task, manager]
+description: Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` (the FrontMcpAuthContext exposed on every execution context) for user isolation and `this.get()` for dependency injection.
+tags:
+  - guides
+  - auth
+  - session
+  - task-manager
+  - task
+  - manager
 features:
-  - 'Using `this.context.session?.userId` for per-user data isolation'
-  - 'Using `this.get(TASK_STORE)` for dependency injection of providers'
-  - 'Enforcing authentication with `this.fail()` when no session exists'
-  - 'Optional input fields with `.optional()` for filtering'
+  - Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation
+  - Using `this.get(TaskStoreProvider)` for dependency injection of providers (class-as-token)
+  - Enforcing authentication with `this.fail()` when no authenticated user is present in `this.auth`
+  - Optional input fields with `.optional()` for filtering
   - '`outputSchema` with nested `z.array(z.object(...))` for structured responses'
 ---
 
 # Task Manager: Authenticated CRUD Tools
 
-Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection.
+Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` (the FrontMcpAuthContext exposed on every execution context) for user isolation and `this.get()` for dependency injection.
 
 ## Code
 
@@ -22,7 +28,7 @@ Shows how to create CRUD tools with authentication, using `this.context.session`
 // src/tools/create-task.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'create_task',
@@ -42,10 +48,11 @@ import { TASK_STORE } from '../providers/task-store.provider';
 export class CreateTaskTool extends ToolContext {
   async execute(input: { title: string; priority: 'low' | 'medium' | 'high' }) {
     // Inject the task store via DI
-    const store = this.get(TASK_STORE);
+    // Inject the task store via DI (the class itself is the token)
+    const store = this.get(TaskStoreProvider);
 
-    // Get the authenticated user's ID from the session
-    const userId = this.context.session?.userId;
+    // Get the authenticated user's id from FrontMcpAuthContext (`this.auth.user.sub`)
+    const userId = this.auth?.user.sub;
     if (!userId) {
       this.fail(new Error('Authentication required'));
     }
@@ -72,7 +79,7 @@ export class CreateTaskTool extends ToolContext {
 // src/tools/list-tasks.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'list_tasks',
@@ -95,8 +102,8 @@ import { TASK_STORE } from '../providers/task-store.provider';
 })
 export class ListTasksTool extends ToolContext {
   async execute(input: { status?: 'pending' | 'in_progress' | 'done' }) {
-    const store = this.get(TASK_STORE);
-    const userId = this.context.session?.userId;
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
 
     if (!userId) {
       this.fail(new Error('Authentication required'));
@@ -124,9 +131,9 @@ export class ListTasksTool extends ToolContext {
 
 ## What This Demonstrates
 
-- Using `this.context.session?.userId` for per-user data isolation
-- Using `this.get(TASK_STORE)` for dependency injection of providers
-- Enforcing authentication with `this.fail()` when no session exists
+- Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation
+- Using `this.get(TaskStoreProvider)` for dependency injection of providers (class-as-token)
+- Enforcing authentication with `this.fail()` when no authenticated user is present in `this.auth`
 - Optional input fields with `.optional()` for filtering
 - `outputSchema` with nested `z.array(z.object(...))` for structured responses
 

@@ -30,7 +30,7 @@ Set Content Security Policy (CSP), HSTS, and other security headers on every HTT
 
 ## Prerequisites
 
-- `@frontmcp/cli` installed
+- `frontmcp` installed
 - A `frontmcp.config.ts` or `.json` file (see `configure-deployment-targets`)
 
 ## Step 1: Add CSP to Your Config
@@ -39,7 +39,7 @@ CSP directives are specified as a record (object) mapping directive names to val
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',

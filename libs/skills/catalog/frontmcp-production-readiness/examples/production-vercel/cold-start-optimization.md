@@ -2,18 +2,26 @@
 name: cold-start-optimization
 reference: production-vercel
 level: intermediate
-description: 'Shows how to minimize cold start time by lazy-loading dependencies, avoiding heavy initialization at module scope, and caching expensive operations.'
-tags: [production, vercel, openapi, performance, cold, start]
+description: Shows how to minimize cold start time by lazy-loading dependencies on first use, avoiding heavy initialization at module scope, and caching expensive operations across warm invocations.
+tags:
+  - production
+  - vercel
+  - openapi
+  - performance
+  - cold
+  - start
 features:
-  - 'Lazy-loading heavy dependencies via dynamic `import()` in `onInit()` instead of module scope'
-  - 'Caching expensive fetches (e.g., OpenAPI specs) across warm invocations'
-  - 'Keeping the module scope lightweight with no side effects'
-  - 'No `top-level await`, no global state, no network calls at import time'
+  - Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)
+  - Caching expensive fetches (e.g., OpenAPI specs) across warm invocations
+  - Keeping the module scope lightweight with no side effects
+  - No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)
 ---
 
 # Cold Start Optimization for Serverless
 
-Shows how to minimize cold start time by lazy-loading dependencies, avoiding heavy initialization at module scope, and caching expensive operations.
+Shows how to minimize cold start time by lazy-loading dependencies on first use, avoiding heavy initialization at module scope, and caching expensive operations across warm invocations.
+
+> `@Provider`-decorated classes do **not** have `onInit` / `onDestroy` lifecycle hooks. Initialize lazily on first method call inside the provider, or in the constructor if synchronous.
 
 ## Code
 
@@ -23,22 +31,30 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const API_CLIENT = Symbol('ApiClient');
 
+// Provider initializes lazily on first getClient() call — heavy SDK is
+// not imported at module scope, so cold starts stay fast.
 @Provider({ token: API_CLIENT, scope: ProviderScope.GLOBAL })
 export class LazyApiClientProvider {
-  // Lazy-loaded — not imported at module scope
-  private client: unknown;
+  private clientPromise: Promise<unknown> | undefined;
 
-  async onInit(): Promise<void> {
-    // Lazy-load heavy dependencies to reduce cold start time
-    // The import only happens when the provider is first used
-    const { HeavySDK } = await import('heavy-third-party-sdk');
-    this.client = new HeavySDK({
-      apiKey: process.env.API_KEY,
-    });
-  }
-
-  getClient() {
-    return this.client;
+  async getClient(): Promise<unknown> {
+    if (!this.clientPromise) {
+      // Reset the cache from inside the async initializer so a transient
+      // import/init failure doesn't permanently poison `clientPromise` for
+      // every warm invocation that follows. The initializer itself owns the
+      // try/catch + rethrow, so callers see the original error.
+      const promise = (async () => {
+        try {
+          const { HeavySDK } = await import('heavy-third-party-sdk');
+          return new HeavySDK({ apiKey: process.env.API_KEY });
+        } catch (err) {
+          if (this.clientPromise === promise) this.clientPromise = undefined;
+          throw err;
+        }
+      })();
+      this.clientPromise = promise;
+    }
+    return this.clientPromise;
   }
 }
 ```
@@ -82,7 +98,8 @@ import { FrontMcp } from '@frontmcp/sdk';
 import { MyApp } from './my.app';
 
 // No heavy initialization here — this runs on every cold start
-// No top-level await, no global state, no network calls
+// No top-level await and no heavy init at import time. The module-scope
+// cachedSpec below is fine — it's a cheap synchronous value populated lazily.
 
 @FrontMcp({
   info: { name: 'fast-start', version: '1.0.0' },
@@ -94,10 +111,10 @@ export default class FastStartServer {}
 
 ## What This Demonstrates
 
-- Lazy-loading heavy dependencies via dynamic `import()` in `onInit()` instead of module scope
+- Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)
 - Caching expensive fetches (e.g., OpenAPI specs) across warm invocations
 - Keeping the module scope lightweight with no side effects
-- No `top-level await`, no global state, no network calls at import time
+- No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)
 
 ## Related
 

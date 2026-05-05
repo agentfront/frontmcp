@@ -96,7 +96,8 @@ export class GreeterService {
 
 ```typescript
 // my-greeter.plugin.ts
-import { Plugin, DynamicPlugin, ProviderType } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+
 import { GreeterService } from './providers/my-greeter.provider';
 
 @Plugin({ name: 'greeter', exports: [GreeterService] })
@@ -110,6 +111,7 @@ export default class GreeterPlugin extends DynamicPlugin<{ prefix: string }> {
 ```typescript
 // server.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import GreeterPlugin from './plugins/my-greeter.plugin';
 
 @FrontMcp({
@@ -136,7 +138,8 @@ export default class AuditLogPlugin {}
 Register it in your server:
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import AuditLogPlugin from './plugins/audit-log.plugin';
 
 @App({ name: 'MyApp' })
@@ -158,8 +161,7 @@ class MyServer {}
 Plugins contribute injectable services via `providers`:
 
 ```typescript
-import { Plugin, Provider } from '@frontmcp/sdk';
-import type { Token } from '@frontmcp/sdk';
+import { Plugin, Provider, type Token } from '@frontmcp/sdk';
 
 export const AuditLoggerToken: Token<AuditLogger> = Symbol('AuditLogger');
 
@@ -202,8 +204,8 @@ declare module '@frontmcp/sdk' {
 The SDK handles runtime installation when you declare `contextExtensions` in plugin metadata. Do not modify `ExecutionContextBase.prototype` directly.
 
 ```typescript
-import { Plugin } from '@frontmcp/sdk';
-import type { Token } from '@frontmcp/sdk';
+import { Plugin, type Token } from '@frontmcp/sdk';
+
 import './audit-log.context-extension'; // Import for type augmentation side effect
 
 export const AuditLoggerToken: Token<AuditLogger> = Symbol('AuditLogger');
@@ -242,8 +244,7 @@ class DeleteRecordTool extends ToolContext {
 For plugins that accept runtime options, extend `DynamicPlugin`:
 
 ```typescript
-import { Plugin, DynamicPlugin, ProviderType } from '@frontmcp/sdk';
-import type { Token } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ProviderType, type Token } from '@frontmcp/sdk';
 
 export interface MyPluginOptions {
   endpoint: string;
@@ -415,6 +416,7 @@ The TypeScript augmentation file must be imported somewhere in your plugin's bar
 ```typescript
 // index.ts
 import './my-plugin.context-extension'; // side-effect import for type augmentation
+
 export { MyPlugin } from './my-plugin.plugin';
 export { MyServiceToken } from './my-plugin.symbols';
 ```

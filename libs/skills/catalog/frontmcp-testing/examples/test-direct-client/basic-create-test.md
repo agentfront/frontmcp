@@ -3,11 +3,11 @@ name: basic-create-test
 reference: test-direct-client
 level: basic
 description: 'Test tools in-memory without any HTTP overhead using the `create()` function from `@frontmcp/sdk`.'
-tags: [testing, sdk, transport, direct-client, direct, client]
+tags: [testing, sdk, direct-client]
 features:
-  - 'Using `create()` to spin up an in-memory server with no HTTP transport'
-  - 'Defining tools inline with the functional `tool()` API and Zod schemas'
-  - 'Calling tools directly via `server.callTool()` and checking text content'
+  - 'Using `create()` to spin up an in-memory `DirectMcpServer` with no HTTP transport'
+  - 'Defining tools as classes with the `@Tool` decorator and Zod schemas'
+  - 'Calling tools directly via `server.callTool()` and checking the structured output'
   - 'Proper cleanup with `server.dispose()` in each test'
 ---
 
@@ -19,17 +19,25 @@ Test tools in-memory without any HTTP overhead using the `create()` function fro
 
 ```typescript
 // src/__tests__/direct-client.spec.ts
-import { create, tool, z } from '@frontmcp/sdk';
+// Real API:
+//   libs/sdk/src/direct/create.ts — `create(config)` returns a DirectMcpServer
+//   libs/sdk/src/index.ts — exports `Tool`, `ToolContext`, `z` (no `tool()` factory)
+import { create, Tool, ToolContext, z } from '@frontmcp/sdk';
 
-const AddTool = tool({
+@Tool({
   name: 'add',
   description: 'Add numbers',
   inputSchema: { a: z.number(), b: z.number() },
   outputSchema: { sum: z.number() },
-})((input) => ({ sum: input.a + input.b }));
+})
+class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return { sum: input.a + input.b };
+  }
+}
 
 describe('Direct Client Testing', () => {
-  it('should call tools via create()', async () => {
+  it('calls a tool via create()', async () => {
     const server = await create({
       info: { name: 'test', version: '1.0.0' },
       tools: [AddTool],
@@ -37,12 +45,14 @@ describe('Direct Client Testing', () => {
     });
 
     const result = await server.callTool('add', { a: 2, b: 3 });
-    expect(result.content[0].text).toContain('5');
+    // The framework wraps the tool's `{ sum: 5 }` return into a CallToolResult
+    // with `structuredContent` set to the typed output.
+    expect(result.structuredContent).toEqual({ sum: 5 });
 
     await server.dispose();
   });
 
-  it('should handle multiple tool calls', async () => {
+  it('handles multiple tool calls', async () => {
     const server = await create({
       info: { name: 'test', version: '1.0.0' },
       tools: [AddTool],
@@ -50,10 +60,10 @@ describe('Direct Client Testing', () => {
     });
 
     const r1 = await server.callTool('add', { a: 10, b: 20 });
-    expect(r1.content[0].text).toContain('30');
+    expect(r1.structuredContent).toEqual({ sum: 30 });
 
     const r2 = await server.callTool('add', { a: -5, b: 5 });
-    expect(r2.content[0].text).toContain('0');
+    expect(r2.structuredContent).toEqual({ sum: 0 });
 
     await server.dispose();
   });
@@ -62,9 +72,9 @@ describe('Direct Client Testing', () => {
 
 ## What This Demonstrates
 
-- Using `create()` to spin up an in-memory server with no HTTP transport
-- Defining tools inline with the functional `tool()` API and Zod schemas
-- Calling tools directly via `server.callTool()` and checking text content
+- Using `create()` to spin up an in-memory `DirectMcpServer` with no HTTP transport
+- Defining tools as classes with the `@Tool` decorator and Zod schemas
+- Calling tools directly via `server.callTool()` and checking the structured output
 - Proper cleanup with `server.dispose()` in each test
 
 ## Related

@@ -21,6 +21,7 @@ Shows how to configure a FrontMCP server as a long-running local daemon with Uni
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({
@@ -35,7 +36,7 @@ import { MyApp } from './my.app';
   // SQLite for local persistence (sessions, cache)
   sqlite: {
     path: `${process.env.HOME}/.config/my-daemon/data.db`,
-    wal: true, // WAL mode for concurrent reads
+    walMode: true, // WAL mode for concurrent reads — see SqliteOptionsInterface
   },
 })
 export default class MyDaemonServer {}

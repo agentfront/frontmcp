@@ -35,7 +35,7 @@ The `frontmcp` CLI generates a complete project structure. Run it with `npx`:
 npx frontmcp create <projectName>
 ```
 
-The CLI will interactively prompt for deployment target, Redis setup, package manager, CI/CD, and skills bundle. To skip prompts, pass flags directly:
+The CLI interactively prompts for project type (standalone vs Nx), deployment target, Redis setup, package manager, and CI/CD. The skills bundle is **not** prompted -- it defaults to `recommended` unless you pass the `--skills` flag explicitly. To skip the prompts entirely, pass flags directly:
 
 ```bash
 npx frontmcp create <projectName> \
@@ -93,10 +93,10 @@ Create `package.json`:
     "frontmcp": "latest",
     "@frontmcp/sdk": "latest",
     "reflect-metadata": "^0.2.0",
-    "zod": "^3.23.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
+    "typescript": "^5.5.3",
     "@types/node": "^22.0.0"
   }
 }
@@ -358,10 +358,21 @@ Or if using package.json scripts:
 yarn dev
 ```
 
-The server starts in stdio mode by default. To test with HTTP transport, set the PORT:
+The server starts in stdio mode by default. To enable HTTP transport, add an `http: { port }` block to the `@FrontMcp` metadata (setting the `PORT` environment variable alone does **not** switch from stdio to HTTP):
+
+```typescript
+@FrontMcp({
+  info: { name: '<projectName>', version: '0.1.0' },
+  apps: [CalcApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+Then start the server normally:
 
 ```bash
-PORT=3000 frontmcp dev
+frontmcp dev
 ```
 
 Test with curl:
@@ -382,6 +393,9 @@ frontmcp build --target cloudflare    # Cloudflare Workers
 frontmcp build --target cli           # CLI with SEA binary
 frontmcp build --target cli --js      # CLI without SEA
 frontmcp build --target sdk           # Library (CJS+ESM+types)
+frontmcp build --target browser       # Browser bundle
+frontmcp build --target distributed   # Distributed runtime bundle
+frontmcp build --target mcpb          # MCPB archive (use --sea for SEA binary)
 ```
 
 ## Step 7 -- Nx Workspace Setup (optional)

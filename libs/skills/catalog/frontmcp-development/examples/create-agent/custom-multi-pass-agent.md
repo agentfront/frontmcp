@@ -90,5 +90,5 @@ class ReviewApp {}
 
 ## Related
 
-- See `create-agent` for streaming with `streamCompletion()`, sub-agents, and swarm handoff
+- See `create-agent` for streaming with `streamCompletion()`, sub-agents, and swarm visibility
 - See `create-agent-llm-config` for provider-specific options like `maxTokens` and `temperature`

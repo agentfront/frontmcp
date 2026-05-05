@@ -31,22 +31,35 @@ frontmcp build --target cloudflare
 ```
 
 ```bash
-# Run unit tests (test files use .spec.ts extension)
-jest
+# Run unit and E2E tests (auto-discovers *.spec.ts and e2e/*.e2e.spec.ts)
+# Do NOT create a standalone jest.e2e.config.ts -- frontmcp test generates one automatically
+frontmcp test
+```
+
+```typescript
+// To run with HTTP transport, set http: { port } in the @FrontMcp metadata.
+// Setting PORT=3000 alone does NOT switch the server from stdio to HTTP.
+import 'reflect-metadata';
+
+import { FrontMcp } from '@frontmcp/sdk';
+
+import { CalcApp } from './calc.app';
+
+@FrontMcp({
+  info: { name: 'demo', version: '0.1.0' },
+  apps: [CalcApp],
+  http: { port: 3000 }, // <-- enables HTTP transport on port 3000
+})
+export default class Server {}
 ```
 
 ```bash
-# Run E2E tests from the e2e/ directory
-jest --config e2e/jest.config.ts
+# With http: { port } configured in metadata, start the dev server
+frontmcp dev
 ```
 
 ```bash
-# Start the dev server with HTTP transport on a specific port
-PORT=3000 frontmcp dev
-```
-
-```bash
-# Test the running server with an MCP initialize request
+# Test the running HTTP server with an MCP initialize request
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}'

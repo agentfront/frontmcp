@@ -27,7 +27,7 @@ Configure the HTTP server — port, CORS policy, unix sockets, and entry path pr
 - Only need rate limiting or IP filtering without changing HTTP binding -- use `configure-throttle`
 - Need to configure TLS/HTTPS termination -- handle at the reverse proxy or load balancer level, not in FrontMCP
 
-> **Decision:** Use this skill when you need to customize how the HTTP listener binds (port, socket, prefix) or how it handles CORS; skip if the default port 3001 with permissive CORS is sufficient.
+> **Decision:** Use this skill when you need to customize how the HTTP listener binds (port, socket, prefix) or how it handles CORS; skip if the default port 3000 with permissive CORS is sufficient.
 
 ## HttpOptionsInput
 
@@ -36,7 +36,7 @@ Configure the HTTP server — port, CORS policy, unix sockets, and entry path pr
   info: { name: 'my-server', version: '1.0.0' },
   apps: [MyApp],
   http: {
-    port: 3001, // default: 3001
+    port: 3000, // default: 3000
     entryPath: '', // default: '' (root)
     socketPath: undefined, // unix socket path (overrides port)
     cors: {
@@ -53,14 +53,14 @@ class Server {}
 ## Port Configuration
 
 ```typescript
-// Default: port 3001
+// Default: port 3000
 http: {
-  port: 3001;
+  port: 3000;
 }
 
 // Use environment variable
 http: {
-  port: Number(process.env.PORT) || 3001;
+  port: Number(process.env.PORT) || 3000;
 }
 
 // Random port (useful for testing)
@@ -103,12 +103,16 @@ http: {
 
 ### Dynamic Origin
 
+The `origin` callback uses Node-style `(origin, callback)` signature so origin checks
+can be async (e.g., look up the allowlist from a database):
+
 ```typescript
 http: {
   cors: {
-    origin: (origin: string) => {
-      // Allow any *.myapp.com subdomain
-      return origin.endsWith('.myapp.com');
+    origin: (origin, callback) => {
+      // origin is `string | undefined` (undefined for same-origin / non-browser requests)
+      const allowed = !!origin && origin.endsWith('.myapp.com');
+      callback(null, allowed);
     },
     credentials: true,
   },
@@ -167,7 +171,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 | Pattern               | Correct                                                      | Incorrect                                    | Why                                                                                                               |
 | --------------------- | ------------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Port from environment | `port: Number(process.env.PORT) \|\| 3001`                   | `port: process.env.PORT`                     | The `port` field expects a number; passing a string causes a silent bind failure                                  |
+| Port from environment | `port: Number(process.env.PORT) \|\| 3000`                   | `port: process.env.PORT`                     | The `port` field expects a number; passing a string causes a silent bind failure                                  |
 | CORS with credentials | `cors: { origin: ['https://myapp.com'], credentials: true }` | `cors: { origin: true, credentials: true }`  | Browsers reject `Access-Control-Allow-Origin: *` when credentials are enabled; you must list explicit origins     |
 | Unix socket mode      | `socketPath: '/tmp/my-mcp.sock'` with no `port` field        | Setting both `socketPath` and `port`         | When `socketPath` is set, `port` is silently ignored which can cause confusion during debugging                   |
 | Entry path prefix     | `entryPath: '/api/mcp'` (no trailing slash)                  | `entryPath: '/api/mcp/'` with trailing slash | Trailing slashes cause double-slash issues in route matching (e.g., `/api/mcp//sse`)                              |
@@ -201,7 +205,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | `EADDRINUSE` on startup                          | Another process is already using the configured port                                       | Change the port, stop the other process, or use `port: 0` for a random available port                   |
 | CORS errors in the browser console               | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin  | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible |
 | Unix socket file not created                     | Missing write permissions on the target directory or stale socket file from a previous run | Check directory permissions and remove the stale `.sock` file before restarting                         |
-| Routes return 404 after setting `entryPath`      | Client is still requesting the root path without the prefix                                | Update client base URL to include the entry path (e.g., `http://localhost:3001/api/mcp`)                |
+| Routes return 404 after setting `entryPath`      | Client is still requesting the root path without the prefix                                | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                |
 | Server binds but external clients cannot connect | Server bound to `localhost` or `127.0.0.1` inside a container                              | Set `host: '0.0.0.0'` or use Docker port mapping to expose the container port                           |
 
 ## Examples

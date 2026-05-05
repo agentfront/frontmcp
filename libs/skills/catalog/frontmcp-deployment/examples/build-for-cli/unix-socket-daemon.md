@@ -25,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Look up a term in the local database',
   inputSchema: { term: z.string() },
 })
-class LookupTool extends ToolContext<{ term: string }> {
+class LookupTool extends ToolContext {
   async execute(input: { term: string }) {
     return { content: [{ type: 'text' as const, text: `Result for: ${input.term}` }] };
   }

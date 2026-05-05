@@ -2,20 +2,26 @@
 name: agent-and-plugin
 reference: example-knowledge-base
 level: advanced
-description: 'Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.'
-tags: [guides, knowledge-base, knowledge, base, agent, plugin]
+description: Shows an autonomous research agent with inner tools and a real `ToolHook`-based plugin that hooks into the `tools:call-tool` flow for audit logging.
+tags:
+  - guides
+  - knowledge-base
+  - knowledge
+  - base
+  - agent
+  - plugin
 features:
-  - 'Agent with `@Agent` decorator, LLM config, inner tools, and system instructions'
-  - 'Using `this.run(prompt, { maxIterations })` to execute the LLM tool-use loop'
-  - "Configurable behavior via input schema (`depth: 'shallow' | 'deep'`)"
-  - 'Plugin hooks: `onToolExecuteBefore`, `onToolExecuteAfter`, `onToolExecuteError`'
-  - 'Using `ctx.state.set/get()` for flow state instead of mutating `rawInput`'
-  - 'Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)'
+  - Agent with `@Agent` decorator, LLM config, inner tools, and system instructions
+  - 'Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)'
+  - 'Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around("execute")`'
+  - Using `flowCtx.state.set/get()` for hook-local state
+  - Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks
+  - Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)
 ---
 
 # Knowledge Base: Research Agent and Audit Log Plugin
 
-Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.
+Shows an autonomous research agent with inner tools and a real `ToolHook`-based plugin that hooks into the `tools:call-tool` flow for audit logging.
 
 ## Code
 
@@ -47,45 +53,38 @@ import { SearchDocsTool } from '../../search/tools/search-docs.tool';
   },
   llm: {
     provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     apiKey: { env: 'ANTHROPIC_API_KEY' },
     maxTokens: 4096,
   },
-  // Inner tools: the agent can call these during its execution
+  // Cap the inner tool-use loop. The framework — not your code — drives iteration.
+  execution: { maxIterations: 5 },
+  // Inner tools: the agent can call these during its execution.
   tools: [SearchDocsTool, IngestDocumentTool],
   systemInstructions: `You are a research assistant with access to a knowledge base.
 Your job is to:
 1. Search the knowledge base for relevant documents using the search_docs tool.
 2. Analyze the results and identify key themes.
-3. If depth is "deep", perform multiple searches with refined queries.
+3. When depth is "deep", perform multiple searches with refined queries; for "shallow", a single search is enough.
 4. Synthesize findings into a structured summary with source attribution.
-Always cite which documents support your findings.`,
+Always cite which documents support your findings, and return JSON matching the output schema.`,
 })
-export class ResearcherAgent extends AgentContext {
-  async execute(input: { topic: string; depth: 'shallow' | 'deep' }) {
-    const maxIterations = input.depth === 'deep' ? 5 : 2;
-    const prompt = [
-      `Research the following topic: "${input.topic}"`,
-      `Depth: ${input.depth} (max ${maxIterations} search iterations)`,
-      'Search the knowledge base, analyze results, and produce a structured summary.',
-      'Return your findings as JSON matching the output schema.',
-    ].join('\n');
-
-    // this.run() executes the LLM loop with inner tools
-    return this.run(prompt, { maxIterations });
-  }
-}
+export class ResearcherAgent extends AgentContext {}
 ```
 
 ```typescript
 // src/plugins/audit-log.plugin.ts
-import { Plugin, type PluginHookContext } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+export interface AuditLogPluginOptions {
+  endpoint?: string;
+}
 
 @Plugin({
-  name: 'AuditLog',
+  name: 'audit-log',
   description: 'Logs all tool invocations for audit compliance',
 })
-export class AuditLogPlugin {
+export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
   private readonly logs: Array<{
     timestamp: string;
     tool: string;
@@ -94,52 +93,63 @@ export class AuditLogPlugin {
     success: boolean;
   }> = [];
 
-  async onToolExecuteBefore(ctx: PluginHookContext): Promise<void> {
-    // Store start time in flow state (not in rawInput)
-    ctx.state.set('audit:startTime', Date.now());
+  constructor(protected options: AuditLogPluginOptions = {}) {
+    super();
   }
 
-  async onToolExecuteAfter(ctx: PluginHookContext): Promise<void> {
-    const startTime = ctx.state.get('audit:startTime') as number;
-    const duration = Date.now() - startTime;
+  // Will('execute') runs immediately before the tool's execute() — record start time on the flow state.
+  @ToolHook.Will('execute', { priority: 100 })
+  async onWillExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
+    flowCtx.state.set('audit:startTime', Date.now());
+  }
+
+  // Did('execute') runs after a successful execute() — compute duration and log success.
+  @ToolHook.Did('execute', { priority: 100 })
+  async onDidExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
+    const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
+    const ctx = flowCtx.state.required.toolContext;
 
     const entry = {
       timestamp: new Date().toISOString(),
-      tool: ctx.toolName,
-      userId: ctx.session?.userId,
-      duration,
+      tool: ctx.metadata.name,
+      userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
+      duration: startTime ? Date.now() - startTime : 0,
       success: true,
     };
     this.logs.push(entry);
 
-    // In production, send to an external logging service
-    if (process.env.AUDIT_LOG_ENDPOINT) {
-      await ctx
-        .fetch(process.env.AUDIT_LOG_ENDPOINT, {
+    if (this.options.endpoint) {
+      // Audit logging should never block tool execution — fire-and-forget.
+      void ctx
+        .fetch(this.options.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(entry),
         })
-        .catch(() => {
-          // Audit logging should not block tool execution
-        });
+        .catch(() => undefined);
     }
   }
 
-  async onToolExecuteError(ctx: PluginHookContext): Promise<void> {
-    const startTime = ctx.state.get('audit:startTime') as number;
-    const duration = Date.now() - startTime;
-
-    this.logs.push({
-      timestamp: new Date().toISOString(),
-      tool: ctx.toolName,
-      userId: ctx.session?.userId,
-      duration,
-      success: false,
-    });
+  // Around('execute') wraps the call so we can capture errors as well.
+  @ToolHook.Around('execute', { priority: 100 })
+  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>): Promise<unknown> {
+    try {
+      return await next();
+    } catch (err) {
+      const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
+      const ctx = flowCtx.state.required.toolContext;
+      this.logs.push({
+        timestamp: new Date().toISOString(),
+        tool: ctx.metadata.name,
+        userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
+        duration: startTime ? Date.now() - startTime : 0,
+        success: false,
+      });
+      throw err;
+    }
   }
 
-  getLogs(): typeof this.logs {
+  getLogs(): ReadonlyArray<(typeof this.logs)[number]> {
     return [...this.logs];
   }
 }
@@ -148,10 +158,10 @@ export class AuditLogPlugin {
 ## What This Demonstrates
 
 - Agent with `@Agent` decorator, LLM config, inner tools, and system instructions
-- Using `this.run(prompt, { maxIterations })` to execute the LLM tool-use loop
-- Configurable behavior via input schema (`depth: 'shallow' | 'deep'`)
-- Plugin hooks: `onToolExecuteBefore`, `onToolExecuteAfter`, `onToolExecuteError`
-- Using `ctx.state.set/get()` for flow state instead of mutating `rawInput`
+- Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)
+- Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around("execute")`
+- Using `flowCtx.state.set/get()` for hook-local state
+- Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks
 - Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)
 
 ## Related

@@ -20,7 +20,7 @@ Configure a FrontMCP project with node + distributed targets, CSP headers, and H
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'secure-server',
@@ -33,13 +33,13 @@ export default defineConfig({
         http: { port: 3000 },
         csp: {
           enabled: true,
-          directives: [
-            "default-src 'self'",
-            "script-src 'self' https://cdn.example.com",
-            "style-src 'self' 'unsafe-inline'",
-            'img-src * data:',
-            'upgrade-insecure-requests',
-          ].join('; '),
+          directives: {
+            'default-src': "'self'",
+            'script-src': "'self' https://cdn.example.com",
+            'style-src': "'self' 'unsafe-inline'",
+            'img-src': '* data:',
+            'upgrade-insecure-requests': '', // value-less directive
+          },
         },
         headers: {
           hsts: 'max-age=31536000; includeSubDomains; preload',
@@ -60,7 +60,10 @@ export default defineConfig({
       server: {
         csp: {
           enabled: true,
-          directives: "default-src 'self'; upgrade-insecure-requests",
+          directives: {
+            'default-src': "'self'",
+            'upgrade-insecure-requests': '',
+          },
           reportUri: 'https://report.example.com/csp',
           reportOnly: false,
         },

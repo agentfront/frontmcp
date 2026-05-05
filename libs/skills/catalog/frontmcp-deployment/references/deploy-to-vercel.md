@@ -7,6 +7,8 @@ description: Deploy a FrontMCP server to Vercel serverless functions with Vercel
 
 This skill guides you through deploying a FrontMCP server to Vercel serverless functions with Vercel KV for persistent storage.
 
+The FrontMCP CLI's Vercel adapter uses Vercel's [Build Output API v3](https://vercel.com/docs/build-output-api/v3): it produces `.vercel/output/functions/index.func/handler.cjs` plus `.vercel/output/config.json`. You do **not** author `api/frontmcp.ts` files, and you do **not** hand-write `rewrites` to `/api/frontmcp` — the build emits the full Build Output structure for you.
+
 ## When to Use This Skill
 
 ### Must Use
@@ -33,7 +35,7 @@ This skill guides you through deploying a FrontMCP server to Vercel serverless f
 
 - A Vercel account (https://vercel.com)
 - Vercel CLI installed: `npm install -g vercel`
-- A built FrontMCP project
+- A FrontMCP project ready to build
 
 ## Step 1: Build for Vercel
 
@@ -41,42 +43,29 @@ This skill guides you through deploying a FrontMCP server to Vercel serverless f
 frontmcp build --target vercel
 ```
 
-This produces a Vercel-compatible output structure with an `api/` directory containing the serverless function entry points, optimized bundles for cold-start performance, and a `vercel.json` configuration file.
+This produces a Vercel Build Output API v3 structure:
 
-## Step 2: Configure vercel.json
+```text
+.vercel/output/
+├── config.json                            # routes /(.*) -> /index function
+└── functions/
+    └── index.func/
+        ├── .vc-config.json                # nodejs24.x runtime + handler.cjs
+        ├── handler.cjs                    # bundled handler (rspack CJS)
+        ├── package.json                   # peer-dep manifest (vercel-kv, etc.)
+        └── node_modules/                  # peer deps that can't be statically bundled
 
-Create or update `vercel.json` in your project root:
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/frontmcp" }],
-  "functions": {
-    "api/frontmcp.ts": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
-  "regions": ["iad1"],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" }
-      ]
-    }
-  ]
-}
+vercel.json                                # version, buildCommand, installCommand
 ```
 
-The rewrite rule sends all requests to the single FrontMCP API handler, which internally routes MCP and HTTP requests.
+The adapter detects your package manager from the lockfile and writes the matching `buildCommand`/`installCommand` into `vercel.json`. No `api/` directory is involved.
 
-## Step 3: Configure Vercel KV Storage
+## Step 2: Configure the Server for Vercel KV
 
 Use the `vercel-kv` provider so FrontMCP stores sessions, skill cache, and plugin state in Vercel KV (powered by Upstash Redis):
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'MyApp' })
 class MyApp {}
@@ -95,11 +84,13 @@ class MyApp {}
   },
 })
 class MyServer {}
+
+export default MyServer;
 ```
 
 Provision the KV store in the Vercel dashboard under **Storage > Create Database > KV (Redis)**, then link it to your project. Vercel automatically injects the required environment variables.
 
-## Step 4: Environment Variables
+## Step 3: Environment Variables
 
 Vercel KV variables are injected automatically when the store is linked. For manual setup or additional configuration, set them in the Vercel dashboard (**Settings > Environment Variables**) or via the CLI:
 
@@ -117,7 +108,7 @@ vercel env add LOG_LEVEL info
 | `NODE_ENV`          | Runtime environment            | Yes         |
 | `LOG_LEVEL`         | Logging verbosity              | No          |
 
-## Step 5: Deploy
+## Step 4: Deploy
 
 ### Preview Deployment
 
@@ -143,11 +134,11 @@ vercel domains add mcp.example.com
 
 Configure your DNS provider to point the domain to Vercel. TLS certificates are provisioned automatically.
 
-## Step 6: Verify
+## Step 5: Verify
 
 ```bash
-# Health check
-curl https://your-project.vercel.app/health
+# Health check (FrontMCP serves /healthz by default; /health is a legacy alias)
+curl https://your-project.vercel.app/healthz
 
 # Test MCP endpoint
 curl -X POST https://your-project.vercel.app/mcp \
@@ -159,9 +150,9 @@ curl -X POST https://your-project.vercel.app/mcp \
 
 Vercel serverless functions experience cold starts after periods of inactivity. To minimize impact:
 
-- The `frontmcp build --target vercel` output is optimized for bundle size. Avoid adding unnecessary dependencies.
+- The `frontmcp build --target vercel` output is bundled with rspack (CJS) for fast load. Avoid adding unnecessary dependencies.
 - Consider Vercel's **Fluid Compute** for latency-sensitive workloads.
-- Keep function memory at 1024 MB for faster initialization.
+- Configure memory in the Vercel dashboard (Project Settings > Functions). The build-generated `.vc-config.json` does not pin memory; Vercel applies project defaults.
 
 ### Execution Limits
 
@@ -179,61 +170,60 @@ Serverless functions are stateless between invocations. All persistent state mus
 
 ## Common Patterns
 
-| Pattern               | Correct                                    | Incorrect                            | Why                                                                             |
-| --------------------- | ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------- |
-| Build command         | `frontmcp build --target vercel`           | `tsc` or generic `npm run build`     | The Vercel target produces optimized bundles and the `api/` directory structure |
-| KV provider config    | `{ provider: 'vercel-kv' }`                | `{ provider: 'redis', host: '...' }` | Vercel KV uses its own REST API; a raw Redis provider will not connect          |
-| Rewrite rule          | `"source": "/(.*)"` to `/api/frontmcp`     | No rewrite or per-route entries      | A single catch-all rewrite lets FrontMCP's internal router handle all paths     |
-| Environment variables | Link KV store in dashboard (auto-injected) | Hardcode `KV_REST_API_URL` in source | Linked stores inject vars automatically and rotate tokens safely                |
-| Function memory       | 1024 MB for faster cold starts             | 128 MB default                       | CPU scales with memory on Vercel; higher memory reduces initialization time     |
+| Pattern               | Correct                                                  | Incorrect                                  | Why                                                                     |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| Build command         | `frontmcp build --target vercel`                         | `tsc` or generic `npm run build`           | The Vercel adapter emits the Build Output API v3 structure              |
+| KV provider config    | `{ provider: 'vercel-kv' }`                              | `{ provider: 'redis', host: '...' }`       | Vercel KV uses its own REST API; a raw Redis provider will not connect  |
+| Function entry        | `.vercel/output/functions/index.func/handler.cjs` (auto) | Hand-written `api/frontmcp.ts`             | The adapter generates the function via Build Output API; no `api/` dir  |
+| Routing               | `.vercel/output/config.json` (auto)                      | Hand-written `rewrites` to `/api/frontmcp` | The adapter writes `routes: [{ src: '/(.*)', dest: '/index' }]` for you |
+| Environment variables | Link KV store in dashboard (auto-injected)               | Hardcode `KV_REST_API_URL` in source       | Linked stores inject vars automatically and rotate tokens safely        |
 
 ## Verification Checklist
 
 **Build**
 
 - [ ] `frontmcp build --target vercel` completes without errors
-- [ ] `api/frontmcp.ts` (or `.js`) exists in the build output
+- [ ] `.vercel/output/functions/index.func/handler.cjs` exists in the build output
+- [ ] `.vercel/output/config.json` contains a route from `/(.*)` to `/index`
 
 **Deployment**
 
 - [ ] `vercel` creates a preview deployment without errors
 - [ ] `vercel --prod` deploys to the production domain
-- [ ] `curl https://your-project.vercel.app/health` returns `{"status":"ok"}`
+- [ ] `curl https://your-project.vercel.app/healthz` returns `{"status":"ok"}`
 
 **Storage and Configuration**
 
 - [ ] Vercel KV store is created and linked to the project
 - [ ] `KV_REST_API_URL` and `KV_REST_API_TOKEN` are present in environment variables
 - [ ] `NODE_ENV` is set to `production`
-- [ ] `vercel.json` has correct rewrite, function config, and region settings
 
 **Production Readiness**
 
 - [ ] Custom domain is configured with DNS pointing to Vercel
 - [ ] TLS certificate is provisioned (automatic on Vercel)
-- [ ] `maxDuration` in `vercel.json` matches your Vercel plan limits
 
 ## Troubleshooting
 
-| Problem              | Cause                                         | Solution                                                                                       |
-| -------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Function timeout     | Operation exceeds `maxDuration` or plan limit | Increase `maxDuration` in `vercel.json`; check plan limits (Hobby: 10s, Pro: 60s)              |
-| KV connection errors | KV store not linked or env vars missing       | Re-link the KV store in the Vercel dashboard; verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` |
-| 404 on API routes    | Rewrite rule missing or misconfigured         | Confirm `vercel.json` has `"source": "/(.*)"` rewriting to `/api/frontmcp`                     |
-| Bundle too large     | Unnecessary dependencies included             | Review dependencies and remove unused packages to reduce bundle size                           |
-| Cold starts too slow | Low function memory or large bundle           | Increase memory to 1024 MB; audit dependencies; consider Vercel Fluid Compute                  |
+| Problem              | Cause                                   | Solution                                                                                       |
+| -------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Function timeout     | Operation exceeds plan's max duration   | Check plan limits (Hobby: 10s, Pro: 60s); upgrade plan or refactor the slow tool               |
+| KV connection errors | KV store not linked or env vars missing | Re-link the KV store in the Vercel dashboard; verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` |
+| 404 on every route   | Build did not produce `.vercel/output/` | Ensure `frontmcp build --target vercel` ran before `vercel` deploys                            |
+| Bundle too large     | Unnecessary dependencies included       | Review dependencies and remove unused packages to reduce bundle size                           |
+| Cold starts too slow | Heavy decorator initialization          | Lazy-load providers; defer heavy work until first tool call                                    |
 
 ## Examples
 
-| Example                                                                                | Level        | Description                                                                                     |
-| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
-| [`vercel-mcp-endpoint-test`](../examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.  |
-| [`vercel-with-kv`](../examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. |
-| [`vercel-with-skills-cache`](../examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.             |
+| Example                                                                                | Level        | Description                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`vercel-mcp-endpoint-test`](../examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`. |
+| [`vercel-with-kv`](../examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you — you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.                                                                       |
+| [`vercel-with-skills-cache`](../examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.                                                                                                             |
 
 > See all examples in [`examples/deploy-to-vercel/`](../examples/deploy-to-vercel/)
 
 ## Reference
 
-- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless
+- **Vercel Build Output API v3:** https://vercel.com/docs/build-output-api/v3
 - **Related skills:** `deploy-to-node`, `deploy-to-lambda`

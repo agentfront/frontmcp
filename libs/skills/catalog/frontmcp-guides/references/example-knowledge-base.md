@@ -56,97 +56,79 @@ export class IngestionApp {}
 
 ### Provider: Vector Store
 
+This example uses the in-tree `vectoriadb` package (already a runtime dep in the SDK). The provider class is its own DI token — tools inject it via `this.get(VectorStoreProvider)`.
+
 ```typescript
 // src/ingestion/providers/vector-store.provider.ts
-import type { Token } from '@frontmcp/di';
-import { Provider } from '@frontmcp/sdk';
+import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
 
-export interface DocumentChunk {
-  id: string;
+import { Provider, ProviderScope } from '@frontmcp/sdk';
+
+export interface DocChunk extends DocumentMetadata {
   documentId: string;
+  title: string;
+  chunkIndex: number;
   content: string;
-  embedding: number[];
-  metadata: Record<string, string>;
+  tags: string;
 }
 
-export interface VectorStore {
-  upsert(chunks: DocumentChunk[]): Promise<void>;
-  search(embedding: number[], topK: number): Promise<DocumentChunk[]>;
-  getByDocumentId(documentId: string): Promise<DocumentChunk[]>;
-  deleteByDocumentId(documentId: string): Promise<void>;
-}
+@Provider({ name: 'vector-store', scope: ProviderScope.GLOBAL })
+export class VectorStoreProvider {
+  private readonly db: VectoriaDB<DocChunk>;
+  private readonly ready: Promise<void>;
 
-export const VECTOR_STORE: Token<VectorStore> = Symbol('VectorStore');
-
-@Provider({ token: VECTOR_STORE })
-export class VectorStoreProvider implements VectorStore {
-  private client!: { upsert: Function; query: Function; delete: Function };
-
-  async onInit(): Promise<void> {
-    const apiKey = process.env.VECTOR_DB_API_KEY;
-    if (!apiKey) {
-      throw new Error('VECTOR_DB_API_KEY environment variable is required');
-    }
-
-    // Initialize your vector DB client (e.g., Pinecone, Weaviate, Qdrant)
-    this.client = await this.createVectorClient(apiKey);
-  }
-
-  async upsert(chunks: DocumentChunk[]): Promise<void> {
-    await this.client.upsert(
-      chunks.map((c) => ({
-        id: c.id,
-        values: c.embedding,
-        metadata: { ...c.metadata, documentId: c.documentId, content: c.content },
-      })),
-    );
-  }
-
-  async search(embedding: number[], topK: number): Promise<DocumentChunk[]> {
-    const results = await this.client.query({ vector: embedding, topK });
-    return results.matches.map((m: Record<string, unknown>) => ({
-      id: m.id as string,
-      documentId: (m.metadata as Record<string, string>).documentId,
-      content: (m.metadata as Record<string, string>).content,
-      embedding: m.values as number[],
-      metadata: m.metadata as Record<string, string>,
-    }));
-  }
-
-  async getByDocumentId(documentId: string): Promise<DocumentChunk[]> {
-    const results = await this.client.query({
-      filter: { documentId },
-      topK: 100,
-      vector: new Array(1536).fill(0),
+  constructor() {
+    this.db = new VectoriaDB<DocChunk>({
+      modelName: 'Xenova/all-MiniLM-L6-v2',
+      cacheDir: './.cache/transformers',
+      useHNSW: true,
+      defaultSimilarityThreshold: 0.3,
+      defaultTopK: 10,
+      storageAdapter: new FileStorageAdapter({ cacheDir: './.cache/kb-vectors' }),
     });
-    return results.matches.map((m: Record<string, unknown>) => ({
-      id: m.id as string,
-      documentId,
-      content: (m.metadata as Record<string, string>).content,
-      embedding: m.values as number[],
-      metadata: m.metadata as Record<string, string>,
-    }));
+    this.ready = this.db.initialize();
+  }
+
+  async upsert(chunks: Array<{ id: string; text: string; metadata: DocChunk }>): Promise<void> {
+    await this.ready;
+    await this.db.addMany(chunks);
+    await this.db.saveToStorage();
+  }
+
+  async search(query: string, topK: number) {
+    await this.ready;
+    return this.db.search(query, { topK });
+  }
+
+  async getByDocumentId(documentId: string) {
+    await this.ready;
+    // VectoriaDB supports metadata filters via the `filter` predicate
+    return this.db.search(documentId, {
+      topK: 100,
+      filter: (meta) => meta.documentId === documentId,
+    });
   }
 
   async deleteByDocumentId(documentId: string): Promise<void> {
-    await this.client.delete({ filter: { documentId } });
-  }
-
-  private async createVectorClient(_apiKey: string): Promise<{ upsert: Function; query: Function; delete: Function }> {
-    // Stub: replace with your vector DB SDK (e.g., Pinecone, Weaviate, Qdrant)
-    // This placeholder focuses on the FrontMCP patterns, not the vector DB integration.
-    throw new Error('Implement with your vector DB provider (e.g., Pinecone, Weaviate, Qdrant)');
+    await this.ready;
+    const matches = await this.getByDocumentId(documentId);
+    for (const match of matches) {
+      this.db.remove(match.id);
+    }
+    await this.db.saveToStorage();
   }
 }
 ```
 
 ### Tool: Ingest Document
 
+VectoriaDB owns embedding generation, so the tool only chunks the text and hands raw strings to the provider.
+
 ```typescript
 // src/ingestion/tools/ingest-document.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { VECTOR_STORE, type DocumentChunk } from '../providers/vector-store.provider';
+import { VectorStoreProvider } from '../providers/vector-store.provider';
 
 @Tool({
   name: 'ingest_document',
@@ -165,35 +147,36 @@ import { VECTOR_STORE, type DocumentChunk } from '../providers/vector-store.prov
 })
 export class IngestDocumentTool extends ToolContext {
   async execute(input: { documentId: string; title: string; content: string; tags: string[] }) {
-    const store = this.get(VECTOR_STORE);
+    const store = this.get(VectorStoreProvider);
 
     this.mark('chunking');
     const textChunks = this.chunkText(input.content, 512);
 
     this.mark('embedding');
-    await this.respondProgress(0, textChunks.length);
+    await this.progress(0, textChunks.length, 'Generating embeddings');
 
-    const chunks: DocumentChunk[] = [];
-    for (let i = 0; i < textChunks.length; i++) {
-      const embedding = await this.generateEmbedding(textChunks[i]);
-      chunks.push({
+    const docs = textChunks.map((text, i) => ({
+      id: `${input.documentId}-chunk-${i}`,
+      text,
+      metadata: {
         id: `${input.documentId}-chunk-${i}`,
         documentId: input.documentId,
-        content: textChunks[i],
-        embedding,
-        metadata: { title: input.title, tags: input.tags.join(','), chunkIndex: String(i) },
-      });
-      await this.respondProgress(i + 1, textChunks.length);
-    }
+        title: input.title,
+        chunkIndex: i,
+        content: text,
+        tags: input.tags.join(','),
+      },
+    }));
 
     this.mark('storing');
-    await store.upsert(chunks);
+    await store.upsert(docs);
+    await this.progress(textChunks.length, textChunks.length, 'Stored');
 
-    await this.notify(`Ingested "${input.title}" with ${chunks.length} chunks`, 'info');
+    await this.notify(`Ingested "${input.title}" with ${docs.length} chunks`, 'info');
 
     return {
       documentId: input.documentId,
-      chunksCreated: chunks.length,
+      chunksCreated: docs.length,
       title: input.title,
     };
   }
@@ -213,19 +196,6 @@ export class IngestDocumentTool extends ToolContext {
     }
     if (current.trim()) chunks.push(current.trim());
     return chunks;
-  }
-
-  private async generateEmbedding(text: string): Promise<number[]> {
-    const response = await this.fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({ input: text, model: 'text-embedding-3-small' }),
-    });
-    const data = await response.json();
-    return data.data[0].embedding;
   }
 }
 ```
@@ -260,7 +230,7 @@ export class SearchApp {}
 // src/search/tools/search-docs.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
+import { VectorStoreProvider } from '../../ingestion/providers/vector-store.provider';
 
 @Tool({
   name: 'search_docs',
@@ -283,35 +253,20 @@ import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 })
 export class SearchDocsTool extends ToolContext {
   async execute(input: { query: string; topK: number }) {
-    const store = this.get(VECTOR_STORE);
+    const store = this.get(VectorStoreProvider);
 
-    this.mark('embedding-query');
-    const queryEmbedding = await this.generateQueryEmbedding(input.query);
-
+    // VectoriaDB handles embedding generation internally — pass the raw query.
     this.mark('searching');
-    const chunks = await store.search(queryEmbedding, input.topK);
+    const matches = await store.search(input.query, input.topK);
 
-    const results = chunks.map((chunk) => ({
-      documentId: chunk.documentId,
-      content: chunk.content,
-      score: chunk.metadata.score ? parseFloat(chunk.metadata.score) : 0,
-      title: chunk.metadata.title ?? 'Untitled',
+    const results = matches.map((m) => ({
+      documentId: m.metadata.documentId,
+      content: m.metadata.content,
+      score: m.score,
+      title: m.metadata.title ?? 'Untitled',
     }));
 
     return { results, total: results.length };
-  }
-
-  private async generateQueryEmbedding(query: string): Promise<number[]> {
-    const response = await this.fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({ input: query, model: 'text-embedding-3-small' }),
-    });
-    const data = await response.json();
-    return data.data[0].embedding;
   }
 }
 ```
@@ -320,10 +275,9 @@ export class SearchDocsTool extends ToolContext {
 
 ```typescript
 // src/search/resources/doc.resource.ts
-import type { ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
+import { ReadResourceResult, ResourceContext, ResourceNotFoundError, ResourceTemplate } from '@frontmcp/sdk';
 
-import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
+import { VectorStoreProvider } from '../../ingestion/providers/vector-store.provider';
 
 @ResourceTemplate({
   name: 'document',
@@ -333,20 +287,20 @@ import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 })
 export class DocResource extends ResourceContext<{ documentId: string }> {
   async execute(uri: string, params: { documentId: string }): Promise<ReadResourceResult> {
-    const store = this.get(VECTOR_STORE);
-    const chunks = await store.getByDocumentId(params.documentId);
+    const store = this.get(VectorStoreProvider);
+    const matches = await store.getByDocumentId(params.documentId);
 
-    if (chunks.length === 0) {
-      this.fail(new Error(`Document not found: ${params.documentId}`));
+    if (matches.length === 0) {
+      // Use a typed MCP error so the protocol response carries the correct JSON-RPC code.
+      throw new ResourceNotFoundError(uri);
     }
 
     const document = {
       documentId: params.documentId,
-      title: chunks[0].metadata.title ?? 'Untitled',
-      chunks: chunks.map((c) => ({
-        chunkIndex: c.metadata.chunkIndex,
-        content: c.content,
-      })),
+      title: matches[0].metadata.title ?? 'Untitled',
+      chunks: matches
+        .map((m) => ({ chunkIndex: m.metadata.chunkIndex, content: m.metadata.content }))
+        .sort((a, b) => a.chunkIndex - b.chunkIndex),
     };
 
     return {
@@ -384,6 +338,8 @@ export class ResearchApp {}
 
 ### Agent: Researcher
 
+The framework drives the LLM tool-use loop via the `agents:call-agent` flow — the agent class doesn't override `execute()`. Configure iteration limits via `@Agent({ execution: { maxIterations } })`.
+
 ```typescript
 // src/research/agents/researcher.agent.ts
 import { Agent, AgentContext, z } from '@frontmcp/sdk';
@@ -412,47 +368,43 @@ import { SearchDocsTool } from '../../search/tools/search-docs.tool';
   },
   llm: {
     provider: 'anthropic', // Any supported provider — 'anthropic', 'openai', etc.
-    model: 'claude-sonnet-4-20250514', // Any supported model for the chosen provider
+    model: 'claude-sonnet-4-6', // Any supported model for the chosen provider
     apiKey: { env: 'ANTHROPIC_API_KEY' },
     maxTokens: 4096,
   },
+  // Cap the inner tool-use loop. The framework — not your code — drives iteration.
+  execution: { maxIterations: 5 },
   tools: [SearchDocsTool, IngestDocumentTool],
   systemInstructions: `You are a research assistant with access to a knowledge base.
 Your job is to:
 1. Search the knowledge base for relevant documents using the search_docs tool.
 2. Analyze the results and identify key themes.
-3. If depth is "deep", perform multiple searches with refined queries.
+3. When depth is "deep", perform multiple searches with refined queries; for "shallow", a single search is enough.
 4. Synthesize findings into a structured summary with source attribution.
-Always cite which documents support your findings.`,
+Always cite which documents support your findings, and return JSON matching the output schema.`,
 })
-export class ResearcherAgent extends AgentContext {
-  async execute(input: { topic: string; depth: 'shallow' | 'deep' }) {
-    const maxIterations = input.depth === 'deep' ? 5 : 2;
-    const prompt = [
-      `Research the following topic: "${input.topic}"`,
-      `Depth: ${input.depth} (max ${maxIterations} search iterations)`,
-      'Search the knowledge base, analyze results, and produce a structured summary.',
-      'Return your findings as JSON matching the output schema.',
-    ].join('\n');
-
-    return this.run(prompt, { maxIterations });
-  }
-}
+export class ResearcherAgent extends AgentContext {}
 ```
 
 ---
 
 ## Plugin: Audit Log
 
+Real plugins extend `DynamicPlugin<Options>` and attach to flows via the `FlowHooksOf` decorators (e.g. `@ToolHook.Will('execute')`, `@ToolHook.Did('execute')`). There is no `PluginHookContext`/`onToolExecute*` lifecycle.
+
 ```typescript
 // src/plugins/audit-log.plugin.ts
-import { Plugin, type PluginHookContext } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+export interface AuditLogPluginOptions {
+  endpoint?: string;
+}
 
 @Plugin({
-  name: 'AuditLog',
+  name: 'audit-log',
   description: 'Logs all tool invocations for audit compliance',
 })
-export class AuditLogPlugin {
+export class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
   private readonly logs: Array<{
     timestamp: string;
     tool: string;
@@ -461,51 +413,64 @@ export class AuditLogPlugin {
     success: boolean;
   }> = [];
 
-  async onToolExecuteBefore(ctx: PluginHookContext): Promise<void> {
-    ctx.state.set('audit:startTime', Date.now());
+  constructor(protected options: AuditLogPluginOptions = {}) {
+    super();
   }
 
-  async onToolExecuteAfter(ctx: PluginHookContext): Promise<void> {
-    const startTime = ctx.state.get('audit:startTime') as number;
-    const duration = Date.now() - startTime;
+  // `Will('execute')` runs immediately before the tool's execute() — record start time on the flow state.
+  @ToolHook.Will('execute', { priority: 100 })
+  async onWillExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
+    flowCtx.state.set('audit:startTime', Date.now());
+  }
+
+  // `Did('execute')` runs after a successful execute() — compute duration and log success.
+  @ToolHook.Did('execute', { priority: 100 })
+  async onDidExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): Promise<void> {
+    const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
+    const duration = startTime ? Date.now() - startTime : 0;
+    const ctx = flowCtx.state.required.toolContext;
 
     const entry = {
       timestamp: new Date().toISOString(),
-      tool: ctx.toolName,
-      userId: ctx.session?.userId,
+      tool: ctx.metadata.name,
+      userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
       duration,
       success: true,
     };
     this.logs.push(entry);
 
-    // In production, send to an external logging service
-    if (process.env.AUDIT_LOG_ENDPOINT) {
+    if (this.options.endpoint) {
+      // Audit logging should never block tool execution.
       await ctx
-        .fetch(process.env.AUDIT_LOG_ENDPOINT, {
+        .fetch(this.options.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(entry),
         })
-        .catch(() => {
-          // Audit logging should not block tool execution
-        });
+        .catch(() => undefined);
     }
   }
 
-  async onToolExecuteError(ctx: PluginHookContext): Promise<void> {
-    const startTime = ctx.state.get('audit:startTime') as number;
-    const duration = Date.now() - startTime;
-
-    this.logs.push({
-      timestamp: new Date().toISOString(),
-      tool: ctx.toolName,
-      userId: ctx.session?.userId,
-      duration,
-      success: false,
-    });
+  // `Around('execute')` wraps the call so we can capture errors as well.
+  @ToolHook.Around('execute', { priority: 100 })
+  async aroundExecute(flowCtx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>): Promise<unknown> {
+    try {
+      return await next();
+    } catch (err) {
+      const startTime = flowCtx.state.get('audit:startTime') as number | undefined;
+      const ctx = flowCtx.state.required.toolContext;
+      this.logs.push({
+        timestamp: new Date().toISOString(),
+        tool: ctx.metadata.name,
+        userId: (ctx.authInfo as any)?.user?.sub as string | undefined,
+        duration: startTime ? Date.now() - startTime : 0,
+        success: false,
+      });
+      throw err;
+    }
   }
 
-  getLogs(): typeof this.logs {
+  getLogs(): ReadonlyArray<(typeof this.logs)[number]> {
     return [...this.logs];
   }
 }
@@ -515,75 +480,30 @@ export class AuditLogPlugin {
 
 ## Test: Researcher Agent
 
+The agent class has no `execute()` to unit-test — the framework drives the LLM tool-use loop via the `agents:call-agent` flow. Cover the agent end-to-end: register it on a `TestServer`, call it via `client.tools.call('research_topic', ...)` (agents are exposed as tools), and assert on the structured output.
+
 ```typescript
-// test/researcher.agent.spec.ts
-import { AgentContext } from '@frontmcp/sdk';
+// test/researcher.agent.e2e.spec.ts
+import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
-import { ResearcherAgent } from '../src/research/agents/researcher.agent';
+describe('ResearcherAgent E2E', () => {
+  let client: McpTestClient;
+  let server: TestServer;
 
-describe('ResearcherAgent', () => {
-  let agent: ResearcherAgent;
-
-  beforeEach(() => {
-    agent = new ResearcherAgent();
+  beforeAll(async () => {
+    server = await TestServer.start({ command: 'npx tsx src/main.ts' });
+    const token = await new TestTokenFactory().createTestToken({ sub: 'researcher-1', scopes: ['kb'] });
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).withToken(token).buildAndConnect();
   });
 
-  it('should configure shallow depth with 2 max iterations', async () => {
-    const runFn = jest.fn().mockResolvedValue({
-      topic: 'TypeScript patterns',
-      summary: 'Key patterns include generics and type guards.',
-      sources: [{ documentId: 'doc-1', title: 'TS Handbook', relevance: 'high' }],
-      confidence: 'medium',
-    });
-
-    const ctx = {
-      run: runFn,
-      get: jest.fn(),
-      tryGet: jest.fn(),
-      fail: jest.fn((err: Error) => {
-        throw err;
-      }),
-      mark: jest.fn(),
-      notify: jest.fn(),
-      respondProgress: jest.fn(),
-    } as unknown as AgentContext;
-    Object.assign(agent, ctx);
-
-    const result = await agent.execute({
-      topic: 'TypeScript patterns',
-      depth: 'shallow',
-    });
-
-    expect(runFn).toHaveBeenCalledWith(expect.stringContaining('TypeScript patterns'), { maxIterations: 2 });
-    expect(result).toHaveProperty('summary');
-    expect(result).toHaveProperty('sources');
-    expect(result.confidence).toBe('medium');
+  afterAll(async () => {
+    await client.disconnect();
+    await server.stop();
   });
 
-  it('should configure deep depth with 5 max iterations', async () => {
-    const runFn = jest.fn().mockResolvedValue({
-      topic: 'Distributed systems',
-      summary: 'Consensus, replication, and partition tolerance.',
-      sources: [],
-      confidence: 'low',
-    });
-
-    const ctx = {
-      run: runFn,
-      get: jest.fn(),
-      tryGet: jest.fn(),
-      fail: jest.fn((err: Error) => {
-        throw err;
-      }),
-      mark: jest.fn(),
-      notify: jest.fn(),
-      respondProgress: jest.fn(),
-    } as unknown as AgentContext;
-    Object.assign(agent, ctx);
-
-    await agent.execute({ topic: 'Distributed systems', depth: 'deep' });
-
-    expect(runFn).toHaveBeenCalledWith(expect.stringContaining('Distributed systems'), { maxIterations: 5 });
+  it('exposes the research_topic agent in the tool list', async () => {
+    const tools = await client.tools.list();
+    expect(tools.map((t) => t.name)).toContain('research_topic');
   });
 });
 ```
@@ -592,30 +512,40 @@ describe('ResearcherAgent', () => {
 
 ## Test: Audit Log Plugin
 
+Test the hook methods directly with a minimal `FlowCtx` shape. The `state` object is a `Map`-like store and `state.required.toolContext` is the live `ToolContext` exposed to hooks.
+
 ```typescript
 // test/audit-log.plugin.spec.ts
-import type { PluginHookContext } from '@frontmcp/sdk';
+import type { FlowCtxOf } from '@frontmcp/sdk';
 
 import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
 
+type ToolFlowCtx = FlowCtxOf<'tools:call-tool'>;
+
+function makeFlowCtx(toolName: string, userSub: string | undefined): ToolFlowCtx {
+  const map = new Map<string, unknown>();
+  const toolContext = {
+    metadata: { name: toolName },
+    authInfo: userSub ? { user: { sub: userSub } } : {},
+    fetch: jest.fn().mockResolvedValue(new Response(null, { status: 204 })),
+  };
+  return {
+    state: {
+      set: (k: string, v: unknown) => map.set(k, v),
+      get: (k: string) => map.get(k),
+      required: { toolContext },
+    },
+    rawInput: {},
+  } as unknown as ToolFlowCtx;
+}
+
 describe('AuditLogPlugin', () => {
-  let plugin: AuditLogPlugin;
+  it('records a successful tool execution', async () => {
+    const plugin = new AuditLogPlugin();
+    const flowCtx = makeFlowCtx('search_docs', 'user-1');
 
-  beforeEach(() => {
-    plugin = new AuditLogPlugin();
-  });
-
-  it('should record a successful tool execution', async () => {
-    const state = new Map<string, unknown>();
-    const ctx = {
-      toolName: 'search_docs',
-      session: { userId: 'user-1' },
-      state: { set: (k: string, v: unknown) => state.set(k, v), get: (k: string) => state.get(k) },
-      fetch: jest.fn(),
-    } as unknown as PluginHookContext;
-
-    await plugin.onToolExecuteBefore(ctx);
-    await plugin.onToolExecuteAfter(ctx);
+    await plugin.onWillExecute(flowCtx);
+    await plugin.onDidExecute(flowCtx);
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);
@@ -625,17 +555,14 @@ describe('AuditLogPlugin', () => {
     expect(logs[0].duration).toBeGreaterThanOrEqual(0);
   });
 
-  it('should record a failed tool execution', async () => {
-    const state = new Map<string, unknown>();
-    const ctx = {
-      toolName: 'ingest_document',
-      session: undefined,
-      state: { set: (k: string, v: unknown) => state.set(k, v), get: (k: string) => state.get(k) },
-      fetch: jest.fn(),
-    } as unknown as PluginHookContext;
+  it('records a failed tool execution via aroundExecute', async () => {
+    const plugin = new AuditLogPlugin();
+    const flowCtx = makeFlowCtx('ingest_document', undefined);
 
-    await plugin.onToolExecuteBefore(ctx);
-    await plugin.onToolExecuteError(ctx);
+    await plugin.onWillExecute(flowCtx);
+    const failing = () => Promise.reject(new Error('boom'));
+
+    await expect(plugin.aroundExecute(flowCtx, failing)).rejects.toThrow('boom');
 
     const logs = plugin.getLogs();
     expect(logs).toHaveLength(1);
@@ -647,10 +574,10 @@ describe('AuditLogPlugin', () => {
 
 ## Examples
 
-| Example                                                                                            | Level        | Description                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`agent-and-plugin`](../examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.    |
-| [`multi-app-composition`](../examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration. |
-| [`vector-search-and-resources`](../examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.           |
+| Example                                                                                            | Level        | Description                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-and-plugin`](../examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and a real `ToolHook`-based plugin that hooks into the `tools:call-tool` flow for audit logging. |
+| [`multi-app-composition`](../examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration.        |
+| [`vector-search-and-resources`](../examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.                  |
 
 > See all examples in [`examples/example-knowledge-base/`](../examples/example-knowledge-base/)

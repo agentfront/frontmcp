@@ -5,7 +5,7 @@ level: basic
 description: "Test a simple tool's `execute()` method with mock context and verify the output."
 tags: [testing, tool, unit]
 features:
-  - 'Creating a mock `ToolContext` with all required methods (`get`, `tryGet`, `fail`, `mark`, `notify`, `respondProgress`)'
+  - 'Mocking the real `ExecutionContextBase` API surface (`get`, `tryGet`, `scope`, `fail`, `mark`, `fetch`) plus `notify` from `ToolContext`'
   - 'Assigning the mock context to the tool instance via `Object.assign`'
   - 'Testing multiple input scenarios including edge cases (negatives, zero)'
 ---
@@ -18,7 +18,11 @@ Test a simple tool's `execute()` method with mock context and verify the output.
 
 ```typescript
 // src/tools/__tests__/add.tool.spec.ts
+// Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
+//   ExecutionContextBase exposes: get, tryGet, scope, fail, mark, fetch
+//   ToolContext additionally exposes: notify (use only when the tool calls this.notify(...))
 import { ToolContext } from '@frontmcp/sdk';
+
 import { AddTool } from '../add.tool';
 
 describe('AddTool', () => {
@@ -30,12 +34,13 @@ describe('AddTool', () => {
     const ctx = {
       get: jest.fn(),
       tryGet: jest.fn(),
+      scope: { get: jest.fn(), tryGet: jest.fn() },
       fail: jest.fn((err) => {
         throw err;
       }),
       mark: jest.fn(),
+      fetch: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
     } as unknown as ToolContext;
 
     Object.assign(tool, ctx);
@@ -60,7 +65,7 @@ describe('AddTool', () => {
 
 ## What This Demonstrates
 
-- Creating a mock `ToolContext` with all required methods (`get`, `tryGet`, `fail`, `mark`, `notify`, `respondProgress`)
+- Mocking the real `ExecutionContextBase` API surface (`get`, `tryGet`, `scope`, `fail`, `mark`, `fetch`) plus `notify` from `ToolContext`
 - Assigning the mock context to the tool instance via `Object.assign`
 - Testing multiple input scenarios including edge cases (negatives, zero)
 

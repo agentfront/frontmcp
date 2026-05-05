@@ -126,7 +126,7 @@ export class GetWeatherTool extends ToolContext {
 
 ```typescript
 // src/resources/cities.resource.ts
-import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult, Resource, ResourceContext } from '@frontmcp/sdk';
 
 const SUPPORTED_CITIES = ['London', 'Tokyo', 'New York', 'Paris', 'Sydney', 'Berlin', 'Toronto', 'Mumbai'];
 
@@ -137,8 +137,16 @@ const SUPPORTED_CITIES = ['London', 'Tokyo', 'New York', 'Paris', 'Sydney', 'Ber
   mimeType: 'application/json',
 })
 export class CitiesResource extends ResourceContext {
-  async read() {
-    return JSON.stringify(SUPPORTED_CITIES);
+  async execute(uri: string, _params: Record<string, string>): Promise<ReadResourceResult> {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(SUPPORTED_CITIES),
+        },
+      ],
+    };
   }
 }
 ```
@@ -179,7 +187,7 @@ describe('GetWeatherTool', () => {
       get: jest.fn(),
       tryGet: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
+      progress: jest.fn(),
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
 
@@ -192,16 +200,6 @@ describe('GetWeatherTool', () => {
       city: 'London',
     });
     expect(ctx.fetch).toHaveBeenCalledWith(expect.stringContaining('city=London'));
-  });
-
-  it('should fail when city is empty (Zod validation)', () => {
-    const { z } = require('zod');
-    const schema = z.object({
-      city: z.string().min(1),
-      units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
-    });
-
-    expect(() => schema.parse({ city: '' })).toThrow();
   });
 
   it('should fail when the weather API returns an error', async () => {
@@ -221,7 +219,7 @@ describe('GetWeatherTool', () => {
       get: jest.fn(),
       tryGet: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
+      progress: jest.fn(),
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
 
@@ -259,22 +257,22 @@ describe('Weather Server E2E', () => {
   });
 
   it('should list tools including get_weather', async () => {
-    const { tools } = await client.listTools();
+    const tools = await client.tools.list();
 
     expect(tools.length).toBeGreaterThan(0);
-    expect(tools).toContainTool('get_weather');
+    expect(tools.map((t) => t.name)).toContain('get_weather');
   });
 
   it('should call get_weather with a valid city', async () => {
-    const result = await client.callTool('get_weather', {
+    const result = await client.tools.call('get_weather', {
       city: 'London',
       units: 'celsius',
     });
 
-    expect(result).toBeSuccessful();
-    expect(result.content[0].text).toBeDefined();
+    expect(result.isError).toBeFalsy();
+    expect(result.text()).toBeDefined();
 
-    const parsed = JSON.parse(result.content[0].text);
+    const parsed = result.json<{ temperature: number; condition: string; humidity: number; city: string }>();
     expect(parsed).toHaveProperty('temperature');
     expect(parsed).toHaveProperty('condition');
     expect(parsed).toHaveProperty('humidity');
@@ -282,12 +280,12 @@ describe('Weather Server E2E', () => {
   });
 
   it('should read the cities resource', async () => {
-    const { resources } = await client.listResources();
+    const resources = await client.resources.list();
     const citiesResource = resources.find((r) => r.uri === 'weather://cities');
     expect(citiesResource).toBeDefined();
 
-    const result = await client.readResource('weather://cities');
-    const cities = JSON.parse(result.contents[0].text);
+    const result = await client.resources.read('weather://cities');
+    const cities = result.json<string[]>();
 
     expect(Array.isArray(cities)).toBe(true);
     expect(cities).toContain('London');

@@ -36,6 +36,13 @@ This skill walks you through deploying a FrontMCP server to AWS Lambda with API 
 - SAM CLI installed: `brew install aws-sam-cli` (macOS) or see AWS docs
 - Node.js 24 or later
 - A FrontMCP project ready to build
+- **Peer dependency:** `@codegenie/serverless-express` installed in your project. The Lambda adapter externalizes it at bundle time and validates its presence at build time:
+
+  ```bash
+  npm install @codegenie/serverless-express
+  ```
+
+  If it isn't installed, `frontmcp build --target lambda` fails with a clear error before producing artifacts.
 
 ## Step 1: Build for Lambda
 
@@ -43,7 +50,16 @@ This skill walks you through deploying a FrontMCP server to AWS Lambda with API 
 frontmcp build --target lambda
 ```
 
-This produces a Lambda-compatible output with a single handler file optimized for cold-start performance, minimized bundle size with tree-shaking, and a `template.yaml` scaffold for SAM.
+This produces a Lambda-compatible output under `dist/lambda/`:
+
+```text
+dist/lambda/
+├── handler.cjs               # Bundled Lambda handler (CJS, exports `handler`)
+├── serverless-setup.js       # Sets FRONTMCP_SERVERLESS=1 before decorators
+└── ...                       # Chunks split out by rspack
+```
+
+The handler is auto-generated. It calls `getServerlessHandlerAsync()` from `@frontmcp/sdk` and wraps the resulting Express app with `@codegenie/serverless-express`. You do **not** need to write a custom `lambda.ts` entry — the build produces `handler.cjs` with a working `handler` export. SAM/CDK reference it as `handler.handler`.
 
 ## Step 2: SAM Template
 
@@ -69,7 +85,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: handler.handler
-      CodeUri: .
+      CodeUri: dist/lambda/
       Description: FrontMCP MCP server
       Architectures:
         - arm64
@@ -82,7 +98,7 @@ Resources:
         HealthCheck:
           Type: HttpApi
           Properties:
-            Path: /health
+            Path: /healthz
             Method: GET
       Environment:
         Variables:
@@ -143,16 +159,9 @@ Resources:
 
 ## Step 4: Handler Configuration
 
-FrontMCP generates a Lambda handler file (`handler.cjs` with a `handler` export) during the build step. In SAM/CDK, reference it as `handler.handler`. To customize the handler, create a `lambda.ts` entry point:
+`frontmcp build --target lambda` generates `dist/lambda/handler.cjs` with a `handler` export. In SAM and CDK, reference it as `handler.handler` and set `CodeUri`/`code.fromAsset` to `dist/lambda/`. There is no user-authored handler factory; the adapter wraps your `@FrontMcp` server with `@codegenie/serverless-express` automatically.
 
-```typescript
-import { createLambdaHandler } from '@frontmcp/adapters/lambda';
-import { AppModule } from './app.module';
-
-export const handler = createLambdaHandler(AppModule, {
-  streaming: false,
-});
-```
+If you need to customize behaviour (CORS, request mapping, streaming), do so in your `@FrontMcp` decorated server class — the same code runs locally with `frontmcp dev`, in containers with `--target node`, and in Lambda with `--target lambda`.
 
 ## Step 5: Environment Variables
 
@@ -202,14 +211,14 @@ If you prefer AWS CDK over SAM:
 
 ```typescript
 import * as cdk from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 const fn = new lambda.Function(this, 'FrontMcpHandler', {
   runtime: lambda.Runtime.NODEJS_24_X,
   handler: 'handler.handler',
-  code: lambda.Code.fromAsset('.'),
+  code: lambda.Code.fromAsset('dist/lambda'),
   memorySize: 512,
   timeout: cdk.Duration.seconds(30),
   architecture: lambda.Architecture.ARM_64,
@@ -239,8 +248,8 @@ aws cloudformation describe-stacks \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
-# Health check
-curl https://abc123.execute-api.us-east-1.amazonaws.com/health
+# Health check (FrontMCP serves /healthz by default; /health is a legacy alias)
+curl https://abc123.execute-api.us-east-1.amazonaws.com/healthz
 ```
 
 ## Cold Start Mitigation
@@ -276,7 +285,7 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 | ------------------ | -------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Build command      | `frontmcp build --target lambda`                               | `tsc` or generic bundler                | The Lambda target produces a single optimized handler with tree-shaking for cold-start performance |
 | Architecture       | `arm64` (Graviton)                                             | `x86_64`                                | ARM64 functions initialize faster and cost less per ms of compute                                  |
-| Handler path       | `handler.handler` in SAM template                              | `index.handler` or `src/lambda.handler` | The FrontMCP build outputs to `dist/`; mismatched paths cause 502 errors                           |
+| Handler path       | `handler.handler` with `CodeUri: dist/lambda/` in SAM          | `index.handler` or `src/lambda.handler` | The FrontMCP Lambda build emits `dist/lambda/handler.cjs`; mismatched paths cause 502 errors       |
 | Secrets management | SSM Parameter Store or Secrets Manager (`{{resolve:ssm:...}}`) | Plaintext env vars in `template.yaml`   | SSM/Secrets Manager encrypts values at rest and supports rotation                                  |
 | Redis connectivity | Lambda in same VPC as ElastiCache with security groups         | Public Redis endpoint from Lambda       | VPC peering ensures low latency and keeps traffic off the public internet                          |
 
@@ -284,8 +293,9 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 
 **Build**
 
+- [ ] `@codegenie/serverless-express` is listed in `package.json` (peer dep validated by the adapter)
 - [ ] `frontmcp build --target lambda` completes without errors
-- [ ] `handler.handler` exists and exports a `handler` function
+- [ ] `dist/lambda/handler.cjs` exists and exports a `handler` function
 
 **SAM / CDK**
 
@@ -295,7 +305,7 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 
 **Runtime**
 
-- [ ] `curl https://<api-id>.execute-api.<region>.amazonaws.com/health` returns `{"status":"ok"}`
+- [ ] `curl https://<api-id>.execute-api.<region>.amazonaws.com/healthz` returns `{"status":"ok"}`
 - [ ] CloudWatch Logs show successful invocations without errors
 - [ ] `NODE_ENV` is set to `production` in the function configuration
 
@@ -311,18 +321,19 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 | Problem                              | Cause                                                           | Solution                                                                                                  |
 | ------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Timeout errors                       | Function timeout too low or waiting on unreachable resource     | Increase `Timeout` in the SAM template; verify network connectivity to dependencies                       |
-| 502 Bad Gateway                      | Handler path mismatch, missing env vars, or unhandled exception | Check CloudWatch Logs; confirm `Handler` matches `handler.handler`                                        |
+| 502 Bad Gateway                      | Handler path mismatch, missing env vars, or unhandled exception | Check CloudWatch Logs; confirm `Handler: handler.handler` and `CodeUri: dist/lambda/`                     |
+| `Cannot find module @codegenie/...`  | Peer dep not installed locally or in Layer                      | `npm install @codegenie/serverless-express` (the build's `validate` hook checks for it)                   |
 | Cold starts too slow                 | Low memory, x86 architecture, or large bundle                   | Increase memory to 512+ MB, use `arm64`, or enable provisioned concurrency                                |
 | Redis connection refused from Lambda | Lambda not in the same VPC as ElastiCache                       | Place the Lambda in the ElastiCache VPC with appropriate security group rules                             |
 | `sam deploy` fails with IAM error    | Insufficient permissions for CloudFormation stack creation      | Ensure the deploying IAM user/role has `cloudformation:*`, `lambda:*`, `apigateway:*`, and `iam:PassRole` |
 
 ## Examples
 
-| Example                                                                                | Level        | Description                                                                                           |
-| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
-| [`cdk-deployment`](../examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management. |
-| [`lambda-handler-with-cors`](../examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | Create a custom Lambda handler with an explicit API Gateway definition for CORS support.              |
-| [`sam-template-basic`](../examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                         |
+| Example                                                                                | Level        | Description                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`cdk-deployment`](../examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management.                                                                                                                                                                                      |
+| [`lambda-handler-with-cors`](../examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway. |
+| [`sam-template-basic`](../examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                                                                                                                                                                                                              |
 
 > See all examples in [`examples/deploy-to-lambda/`](../examples/deploy-to-lambda/)
 

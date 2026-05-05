@@ -33,73 +33,81 @@ const db = new TFIDFVectoria({
   defaultTopK: 10,
 });
 
-// Add documents (id, text)
-db.addDocument('users-list', 'List all users with pagination and filtering');
-db.addDocument('users-create', 'Create a new user account with email and password');
-db.addDocument('orders-list', 'List orders for a customer with date range filters');
+// Add documents (id, text, metadata) — metadata is required
+db.addDocument('users-list', 'List all users with pagination and filtering', { id: 'users-list' });
+db.addDocument('users-create', 'Create a new user account with email and password', { id: 'users-create' });
+db.addDocument('orders-list', 'List orders for a customer with date range filters', { id: 'orders-list' });
 
-// Build the index (required after adding documents)
-db.buildIndex();
+// Reindex (required after adding documents)
+db.reindex();
 
-// Search
-const results = db.search('find users', 5);
+// Search — second arg is SearchOptions
+const results = db.search('find users', { topK: 5 });
 // results: [{ id: 'users-list', score: 0.82 }, { id: 'users-create', score: 0.65 }]
 ```
 
-### With Field Weights
+### Combining Multiple Text Fields
 
-Weight different fields to control scoring influence:
+`TFIDFVectoria` indexes a single text string per document. To match against multiple
+conceptual fields (e.g. name + description + tags), concatenate them into one string
+when calling `addDocument`. Store the original fields in `metadata` so they remain
+available on search results.
 
 ```typescript
-const db = new TFIDFVectoria({
-  fields: {
-    name: { weight: 3 }, // Name matches are 3x more important
-    description: { weight: 2 }, // Description matches are 2x
-    tags: { weight: 1 }, // Tags are baseline
-  },
-});
+interface ToolDoc {
+  id: string;
+  name: string;
+  description: string;
+  tags: string;
+}
 
-db.addDocument('weather-tool', {
+const db = new TFIDFVectoria<ToolDoc>();
+
+const doc = {
+  id: 'weather-tool',
   name: 'get_weather',
   description: 'Fetch current weather conditions for a city',
   tags: 'weather forecast temperature',
-});
+};
 
-db.buildIndex();
-const results = db.search('temperature forecast', 5);
+// Concatenate fields into one searchable text blob
+const text = `${doc.name} ${doc.description} ${doc.tags}`;
+db.addDocument(doc.id, text, doc);
+
+db.reindex();
+const results = db.search('temperature forecast', { topK: 5 });
+// results[0].metadata.name === 'get_weather'
 ```
 
 ### FrontMCP Provider Pattern
 
 ```typescript
-import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { TFIDFVectoria } from 'vectoriadb';
 
-export const FAQSearch = Symbol('FAQSearch');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-@Provider({ name: 'faq-search', provide: FAQSearch, scope: ProviderScope.GLOBAL })
+interface FaqDoc {
+  id: string;
+  question: string;
+  answer: string;
+  tags: string;
+}
+
+@Provider({ name: 'faq-search', scope: ProviderScope.GLOBAL })
 export class FAQSearchProvider {
-  private db = new TFIDFVectoria({
-    fields: {
-      question: { weight: 3 },
-      answer: { weight: 1 },
-      tags: { weight: 2 },
-    },
-  });
+  private db = new TFIDFVectoria<FaqDoc>();
 
-  async initialize(faqs: Array<{ id: string; question: string; answer: string; tags: string }>) {
+  async initialize(faqs: FaqDoc[]) {
     for (const faq of faqs) {
-      this.db.addDocument(faq.id, {
-        question: faq.question,
-        answer: faq.answer,
-        tags: faq.tags,
-      });
+      // Concatenate fields into a single searchable text; preserve fields in metadata
+      const text = `${faq.question} ${faq.answer} ${faq.tags}`;
+      this.db.addDocument(faq.id, text, faq);
     }
-    this.db.buildIndex();
+    this.db.reindex();
   }
 
   search(query: string, limit = 5) {
-    return this.db.search(query, limit);
+    return this.db.search(query, { topK: limit });
   }
 }
 ```
@@ -111,7 +119,7 @@ Uses transformer models for true semantic understanding. "find users" matches "l
 ### Basic Usage
 
 ```typescript
-import { VectoriaDB, DocumentMetadata } from 'vectoriadb';
+import { DocumentMetadata, VectoriaDB } from 'vectoriadb';
 
 interface ProductDoc extends DocumentMetadata {
   name: string;
@@ -179,34 +187,33 @@ const results = await db.search('wireless audio', {
 ### Persistence with Storage Adapters
 
 ```typescript
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
+import { FileStorageAdapter, VectoriaDB } from 'vectoriadb';
 
 const db = new VectoriaDB<MyDoc>({
   storageAdapter: new FileStorageAdapter({ cacheDir: './.cache/vectors' }),
 });
 
+// initialize() automatically loads from cache if available and valid
 await db.initialize();
+
 // After adding documents, persist to disk
 await db.saveToStorage();
-// On next startup, restores without re-embedding
-await db.loadFromStorage();
+// On next startup, calling initialize() again restores without re-embedding
 ```
 
 ### FrontMCP Provider Pattern
 
 ```typescript
-import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
-import type { DocumentMetadata } from 'vectoriadb';
+import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
 
-export const KnowledgeBase = Symbol('KnowledgeBase');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 interface Article extends DocumentMetadata {
   title: string;
   category: string;
 }
 
-@Provider({ name: 'knowledge-base', provide: KnowledgeBase, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'knowledge-base', scope: ProviderScope.GLOBAL })
 export class KnowledgeBaseProvider {
   private db: VectoriaDB<Article>;
   private ready: Promise<void>;
@@ -255,11 +262,14 @@ export class KnowledgeBaseProvider {
 
 ### TFIDFVectoria Options
 
-| Option                       | Type                       | Default | Description              |
-| ---------------------------- | -------------------------- | ------- | ------------------------ |
-| `defaultSimilarityThreshold` | number                     | `0.0`   | Minimum similarity score |
-| `defaultTopK`                | number                     | `10`    | Default results limit    |
-| `fields`                     | Record<string, { weight }> | None    | Field-weighted indexing  |
+| Option                       | Type   | Default | Description              |
+| ---------------------------- | ------ | ------- | ------------------------ |
+| `defaultSimilarityThreshold` | number | `0.0`   | Minimum similarity score |
+| `defaultTopK`                | number | `10`    | Default results limit    |
+
+> `TFIDFVectoria` indexes a single text string per document. To search across multiple
+> conceptual fields, concatenate them when calling `addDocument(id, text, metadata)` and
+> keep the originals in `metadata`.
 
 ## Choosing Between Engines
 
@@ -269,26 +279,26 @@ export class KnowledgeBaseProvider {
 | **Initialization** | Synchronous, instant           | Async, first-run model download           |
 | **Search quality** | Keyword-based (exact/fuzzy)    | Semantic (understands meaning)            |
 | **Best for**       | Tool discovery, FAQ, <10K docs | Knowledge base, recommendations, any size |
-| **Reindex needed** | Yes (`buildIndex()` after add) | No (auto-indexed on add)                  |
+| **Reindex needed** | Yes (`reindex()` after add)    | No (auto-indexed on add)                  |
 | **Persistence**    | Not built-in                   | FileStorageAdapter                        |
 
 ## Verification Checklist
 
 - [ ] Correct engine chosen based on requirements (TFIDFVectoria vs VectoriaDB)
 - [ ] Provider wraps the database with proper initialization
-- [ ] `buildIndex()` called after adding documents (TFIDFVectoria only)
+- [ ] `reindex()` called after adding/removing documents (TFIDFVectoria only)
 - [ ] `await db.initialize()` called before any operations (VectoriaDB only)
-- [ ] Field weights configured based on domain relevance
-- [ ] Storage adapter configured if persistence is needed
-- [ ] Search tool injects provider via `this.get(TOKEN)`
+- [ ] For TFIDFVectoria, multi-field documents concatenated into one text string
+- [ ] Storage adapter configured if persistence is needed (VectoriaDB only)
+- [ ] Search tool injects provider via `this.get(ProviderClass)`
 
 ## Examples
 
-| Example                                                                                          | Level        | Description                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`product-catalog-search`](../examples/vectoriadb/product-catalog-search.md)                     | Advanced     | Shows advanced VectoriaDB usage with typed document metadata, batch operations, filtered search by multiple criteria, and batch indexing of a product catalog. |
-| [`semantic-search-with-persistence`](../examples/vectoriadb/semantic-search-with-persistence.md) | Intermediate | Shows how to use `VectoriaDB` for semantic search with transformer models, filtered search, and `FileStorageAdapter` for persistence across restarts.          |
-| [`tfidf-keyword-search`](../examples/vectoriadb/tfidf-keyword-search.md)                         | Basic        | Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.                             |
+| Example                                                                                          | Level        | Description                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`product-catalog-search`](../examples/vectoriadb/product-catalog-search.md)                     | Advanced     | Shows advanced VectoriaDB usage with typed document metadata, batch operations, filtered search by multiple criteria, and batch indexing of a product catalog.                                                                                                                                   |
+| [`semantic-search-with-persistence`](../examples/vectoriadb/semantic-search-with-persistence.md) | Intermediate | Shows how to use `VectoriaDB` for semantic search with transformer models, filtered search, and `FileStorageAdapter` for persistence across restarts.                                                                                                                                            |
+| [`tfidf-keyword-search`](../examples/vectoriadb/tfidf-keyword-search.md)                         | Basic        | Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider. `TFIDFVectoria` indexes a single text string per document, so multi-field documents are concatenated into one searchable blob; the original fields are kept in `metadata` for use on search results. |
 
 > See all examples in [`examples/vectoriadb/`](../examples/vectoriadb/)
 

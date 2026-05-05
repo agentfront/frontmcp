@@ -27,7 +27,7 @@ Resources:
   McpFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: dist/lambda.handler
+      Handler: dist/handler.handler # Build adapter emits dist/handler.cjs → handler symbol
       CodeUri: .
       Runtime: nodejs20.x
       Timeout: 30
@@ -92,32 +92,42 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const SECRETS = Symbol('Secrets');
 
+// Providers do NOT have onInit/onDestroy — load lazily on first read.
 @Provider({ token: SECRETS, scope: ProviderScope.GLOBAL })
 export class SecretsProvider {
-  private cache = new Map<string, string>();
+  private cache: Map<string, string> | undefined;
 
-  async onInit(): Promise<void> {
-    // Load secrets from AWS SSM Parameter Store (not env vars for sensitive data)
+  private async ensureLoaded(): Promise<Map<string, string>> {
+    if (this.cache) return this.cache;
+    const cache = new Map<string, string>();
     const { SSMClient, GetParametersByPathCommand } = await import('@aws-sdk/client-ssm');
     const ssm = new SSMClient({});
     const path = process.env.SECRETS_PATH ?? '/mcp/production/';
 
-    const result = await ssm.send(
-      new GetParametersByPathCommand({
-        Path: path,
-        WithDecryption: true,
-      }),
-    );
-
-    for (const param of result.Parameters ?? []) {
-      const key = param.Name?.replace(path, '') ?? '';
-      this.cache.set(key, param.Value ?? '');
-    }
+    // Walk every page — GetParametersByPath caps results and returns NextToken
+    // when more parameters exist. Without this loop, large /<env>/ namespaces
+    // silently lose secrets after the first page.
+    let nextToken: string | undefined;
+    do {
+      const result = await ssm.send(
+        new GetParametersByPathCommand({ Path: path, WithDecryption: true, NextToken: nextToken }),
+      );
+      for (const param of result.Parameters ?? []) {
+        const key = param.Name?.replace(path, '') ?? '';
+        cache.set(key, param.Value ?? '');
+      }
+      nextToken = result.NextToken;
+    } while (nextToken);
+    this.cache = cache;
+    return cache;
   }
 
-  get(key: string): string {
-    const value = this.cache.get(key);
-    if (!value) {
+  async get(key: string): Promise<string> {
+    const cache = await this.ensureLoaded();
+    const value = cache.get(key);
+    // `cache.has` / `value === undefined` so empty-string secrets are still
+    // returned (a falsy `!value` check would treat `""` as missing).
+    if (value === undefined) {
       throw new Error(`Secret not found: ${key}`);
     }
     return value;
