@@ -122,7 +122,9 @@ export async function findNestedSkillMd(
   }
 
   await walk(dirPath, 0, '');
-  return found;
+  // Sort for deterministic output across filesystems / Node versions —
+  // `readdir` ordering is not guaranteed.
+  return found.sort();
 }
 
 /**

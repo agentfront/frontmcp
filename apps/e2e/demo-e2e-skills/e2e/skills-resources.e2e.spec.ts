@@ -203,6 +203,14 @@ test.describe('SEP-2640 Skills Resources E2E', () => {
       const result = await mcp.resources.read('skill://docs-skill/../../etc/passwd');
       expect(result).toBeError();
     });
+
+    test('should reject percent-encoded traversal attempts', async ({ mcp }) => {
+      // Without decode-before-split, `references%2F..%2FSKILL.md` survives
+      // the literal `..` and `SKILL.md` guards because it stays a single
+      // segment until decoding, then turns into `references/../SKILL.md`.
+      const result = await mcp.resources.read('skill://docs-skill/references%2F..%2FSKILL.md');
+      expect(result).toBeError();
+    });
   });
 
   test.describe('Auto-Complete', () => {

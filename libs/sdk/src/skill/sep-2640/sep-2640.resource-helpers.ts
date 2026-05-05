@@ -123,15 +123,33 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
-  const segments = filePath
-    .split('/')
-    .filter((s) => s.length > 0)
-    .map((s) => decodeURIComponent(s));
-
-  // Reject any traversal attempt — `..` segments are rejected outright
-  // and pathResolve below adds defence-in-depth for the FS path.
-  if (segments.some((s) => s === '..' || s === '.')) {
-    throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
+  // Decode each split segment AND reject embedded separators inside the
+  // decoded form. Without this, a request like
+  // `references%2F..%2FSKILL.md` survives the traversal/`SKILL.md` guards
+  // because it stays a single segment until after validation.
+  const rawSegments = filePath.split('/').filter((s) => s.length > 0);
+  const segments: string[] = [];
+  for (const raw of rawSegments) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
+    }
+    // Reject embedded separators / traversal tokens / SKILL.md anywhere
+    // post-decode (case-insensitive on the SKILL.md check to match how
+    // most filesystems treat the canonical name).
+    if (decoded.includes('/') || decoded.includes('\\')) {
+      throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
+    }
+    if (decoded === '..' || decoded === '.') {
+      throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
+    }
+    if (decoded === 'SKILL.md') {
+      // Hard block: SKILL.md is reserved for the dedicated SKILL.md route.
+      throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
+    }
+    segments.push(decoded);
   }
 
   // ── In-memory fallback for inline (filesystem-agnostic) skills ────────
@@ -236,7 +254,15 @@ async function tryInMemorySubFile(
   let content;
   try {
     content = await instance.load();
-  } catch {
+  } catch (err) {
+    // Inline-only skills (no base directory) MUST surface a load failure
+    // — there's no filesystem fallback path to recover into, so a 404
+    //   would mask the real error. File-backed skills can fall through
+    //   to the FS branch in `readSkillFileByPath`, where ENOENT becomes
+    //   a true `ResourceNotFoundError`.
+    if (!instance.getBaseDir()) {
+      throw err;
+    }
     return undefined;
   }
 
@@ -283,8 +309,15 @@ function guessMimeType(filePath: string): string {
 
 /**
  * Path-traversal guard: returns true iff `child` is inside `parent`.
+ *
+ * Normalises both sides to POSIX separators before the prefix check so
+ * the guard works on Windows where `pathResolve()` returns
+ * `C:\skill\assets\logo.png` and a hard-coded `/` separator would
+ * mis-classify legitimate child paths as escapes.
  */
 function isInside(child: string, parent: string): boolean {
-  const parentPrefix = parent.endsWith('/') ? parent : `${parent}/`;
-  return child === parent || child.startsWith(parentPrefix);
+  const normChild = child.replace(/\\/g, '/');
+  const normParent = parent.replace(/\\/g, '/');
+  const parentPrefix = normParent.endsWith('/') ? normParent : `${normParent}/`;
+  return normChild === normParent || normChild.startsWith(parentPrefix);
 }

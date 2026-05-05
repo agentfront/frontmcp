@@ -5,7 +5,7 @@
  * Useful for testing, embedding in applications, and LangChain integration.
  */
 
-import { type AuthInfo, type Transport } from '@frontmcp/protocol';
+import { type AuthInfo, type ServerCapabilities, type Transport } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
@@ -167,11 +167,16 @@ export async function createInMemoryServer(
   if (Object.keys(extensions).length > 0) baseCapabilities['extensions'] = extensions;
 
   // The MCP `ServerOptions.capabilities` type doesn't model the
-  // forward-compat `extensions` key yet (it's reserved for SEP-2133).
-  // The runtime passthrough is fine; the cast keeps TS happy.
+  // forward-compat `extensions` key (reserved for SEP-2133), so we widen
+  // it locally to `ServerCapabilitiesWithExtensions` rather than casting
+  // through `Record<string, never>`. Runtime passthrough is unchanged;
+  // the alias just keeps the typing honest about what we put in the slot.
+  type ServerCapabilitiesWithExtensions = ServerCapabilities & {
+    extensions?: Record<string, unknown>;
+  };
   const serverOptions = {
     instructions: '',
-    capabilities: baseCapabilities as Record<string, never>,
+    capabilities: baseCapabilities as unknown as ServerCapabilitiesWithExtensions,
     serverInfo: scope.metadata.info,
   };
 
