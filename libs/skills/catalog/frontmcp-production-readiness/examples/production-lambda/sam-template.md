@@ -41,7 +41,7 @@ Checklist for verifying the SAM template pairs correctly with the bundle produce
 - [ ] DynamoDB session table has `BillingMode: PAY_PER_REQUEST` (or capacity sized correctly)
 - [ ] `TimeToLiveSpecification.AttributeName: ttl` and `Enabled: true` for automatic session cleanup
 - [ ] In `@FrontMcp`, sessions point at DynamoDB / ElastiCache — never in-memory in Lambda
-- [ ] No filesystem writes outside `/tmp` (and `/tmp` capped at 512 MB)
+- [ ] No filesystem writes outside `/tmp` (default 512 MB; configurable up to 10 GB via SAM `EphemeralStorage` if needed)
 
 ## API Gateway / routing
 

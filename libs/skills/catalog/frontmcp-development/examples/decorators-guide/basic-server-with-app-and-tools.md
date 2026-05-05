@@ -8,7 +8,7 @@ features:
   - 'The `@FrontMcp` -> `@App` -> `@Tool`/`@Resource`/`@Prompt` nesting hierarchy'
   - 'Tool classes extend `ToolContext` and implement `execute()`'
   - 'Resource classes extend `ResourceContext` and implement `execute(uri, params)`'
-  - 'Prompt classes extend `PromptContext` and implement `execute()`'
+  - 'Prompt classes extend `PromptContext` and implement `execute(args: Record<string, string>)`'
   - 'Apps group related tools, resources, and prompts into logical modules'
 ---
 
@@ -120,7 +120,7 @@ class MyServer {}
 - The `@FrontMcp` -> `@App` -> `@Tool`/`@Resource`/`@Prompt` nesting hierarchy
 - Tool classes extend `ToolContext` and implement `execute()`
 - Resource classes extend `ResourceContext` and implement `execute(uri, params)`
-- Prompt classes extend `PromptContext` and implement `execute()`
+- Prompt classes extend `PromptContext` and implement `execute(args: Record<string, string>)`
 - Apps group related tools, resources, and prompts into logical modules
 
 ## Related
