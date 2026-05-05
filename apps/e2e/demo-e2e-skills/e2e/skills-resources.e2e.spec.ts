@@ -111,10 +111,13 @@ test.describe('SEP-2640 Skills Resources E2E', () => {
       const doc = extractResourceJson<SkillIndexDocument>(result);
 
       const reviewPr = doc.skills.find((s) => s.name === 'review-pr');
-      expect(reviewPr).toBeDefined();
-      expect(reviewPr!.type).toBe('skill-md');
-      expect(reviewPr!.url).toBe('skill://review-pr/SKILL.md');
-      expect(reviewPr!.description).toBeTruthy();
+      expect(reviewPr).toEqual(
+        expect.objectContaining({
+          type: 'skill-md',
+          url: 'skill://review-pr/SKILL.md',
+          description: expect.any(String),
+        }),
+      );
     });
 
     test('should not include http-only skills', async ({ mcp }) => {

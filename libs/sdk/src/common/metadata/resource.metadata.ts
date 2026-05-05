@@ -160,6 +160,19 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
   icons?: Icon[];
 
   /**
+   * MCP annotations for the template. Same shape as resource annotations
+   * — clients use these to route by audience/priority and invalidate
+   * caches via `lastModified`.
+   */
+  annotations?: ResourceAnnotations;
+
+  /**
+   * Free-form metadata forwarded in `resources/list` responses; reserve
+   * reverse-DNS prefixed keys per the MCP spec.
+   */
+  _meta?: Record<string, unknown>;
+
+  /**
    * Environment availability constraint.
    * When set, the resource template is only discoverable in matching environments.
    */
@@ -176,6 +189,8 @@ export const frontMcpResourceTemplateMetadataSchema = z
     description: z.string().optional(),
     mimeType: z.string().optional(),
     icons: z.array(IconSchema).optional(),
+    annotations: resourceAnnotationsSchema.optional(),
+    _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();

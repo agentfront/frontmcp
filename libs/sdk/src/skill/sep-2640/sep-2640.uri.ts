@@ -21,6 +21,29 @@
 import { SKILL_INDEX_URI, SKILL_URI_SCHEME } from './sep-2640.constants';
 
 /**
+ * Decode a URI segment safely. Returns `undefined` for malformed
+ * percent-escapes instead of throwing — letting parsers short-circuit
+ * cleanly rather than surfacing `URIError` to client read-paths.
+ */
+function safeDecode(s: string): string | undefined {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeDecodeAll(segments: string[]): string[] | undefined {
+  const out: string[] = [];
+  for (const s of segments) {
+    const decoded = safeDecode(s);
+    if (decoded === undefined) return undefined;
+    out.push(decoded);
+  }
+  return out;
+}
+
+/**
  * Parsed `skill://` URI components.
  */
 export interface ParsedSkillUri {
@@ -100,12 +123,8 @@ export function parseSkillUri(uri: string): ParsedSkillUri | undefined {
   // Strip query/fragment if present — SEP doesn't use them but be defensive.
   const cleanRemainder = remainder.split('#')[0].split('?')[0];
 
-  const allSegments = cleanRemainder
-    .split('/')
-    .filter((s) => s.length > 0)
-    .map((s) => decodeURIComponent(s));
-
-  if (allSegments.length === 0) return undefined;
+  const allSegments = safeDecodeAll(cleanRemainder.split('/').filter((s) => s.length > 0));
+  if (!allSegments || allSegments.length === 0) return undefined;
 
   // Identify where <skill-path> ends and <file-path> begins.
   // SEP-2640: the primary skill content lives at <skill-path>/SKILL.md.
@@ -160,7 +179,11 @@ export function parseSkillUriWithKnownSkill(uri: string, knownSkillPath: string)
   if (!isSkillUri(uri) || isSkillIndexUri(uri)) return undefined;
 
   const remainder = uri.slice(SKILL_URI_SCHEME.length);
-  if (!remainder.startsWith(knownSkillPath)) return undefined;
+  // Require either an exact match or a `/` boundary so we don't match
+  // `skill://my-skill-2/SKILL.md` against knownSkillPath `my-skill`.
+  if (remainder !== knownSkillPath && !remainder.startsWith(`${knownSkillPath}/`)) {
+    return undefined;
+  }
 
   const afterSkillPath = remainder.slice(knownSkillPath.length);
   const filePath = afterSkillPath.startsWith('/') ? afterSkillPath.slice(1) : afterSkillPath;
@@ -168,10 +191,8 @@ export function parseSkillUriWithKnownSkill(uri: string, knownSkillPath: string)
   const skillPathSegments = knownSkillPath.split('/').filter((s) => s.length > 0);
   if (skillPathSegments.length === 0) return undefined;
 
-  const filePathSegments = filePath
-    .split('/')
-    .filter((s) => s.length > 0)
-    .map((s) => decodeURIComponent(s));
+  const filePathSegments = safeDecodeAll(filePath.split('/').filter((s) => s.length > 0));
+  if (!filePathSegments) return undefined;
 
   const skillName = skillPathSegments[skillPathSegments.length - 1];
   const prefixSegments = skillPathSegments.slice(0, -1);
@@ -216,6 +237,9 @@ export function validateSkillPath(skillPath: string, expectedName: string): stri
   // Agent Skills naming rule: kebab-case, max 64, no consecutive hyphens.
   // Already enforced by skillMetadataSchema for the name itself; we
   // re-check here in case the path is built directly.
+  if (finalSegment.length > 64) {
+    throw new Error(`skill name "${finalSegment}" exceeds the 64-character limit (Agent Skills spec)`);
+  }
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(finalSegment)) {
     throw new Error(`skill name "${finalSegment}" violates Agent Skills naming rules`);
   }

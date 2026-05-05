@@ -8,7 +8,7 @@
  * display name only.
  */
 
-import { joinPath, pathResolve, readFile } from '@frontmcp/utils';
+import { joinPath, pathResolve, readFileBuffer } from '@frontmcp/utils';
 
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
@@ -75,6 +75,32 @@ export async function findAndLoadSkillByPath(
 }
 
 /**
+ * Result of reading a skill sub-file. Mirrors the MCP
+ * `TextResourceContents` / `BlobResourceContents` split: text resources
+ * carry decoded UTF-8 string content, binary resources carry base64-
+ * encoded bytes that the resource handler emits via `blob`.
+ */
+export type SkillFileReadResult =
+  | { kind: 'text'; content: string; mimeType: string }
+  | { kind: 'blob'; blob: string; mimeType: string };
+
+/**
+ * MIME-type prefixes / values we treat as decodable UTF-8 text. Anything
+ * else is returned as a base64-encoded blob so binary assets (PNG, JPEG,
+ * archives, native binaries) survive intact.
+ */
+function isTextMimeType(mimeType: string): boolean {
+  if (mimeType.startsWith('text/')) return true;
+  if (mimeType.startsWith('application/json')) return true;
+  if (mimeType === 'application/yaml') return true;
+  if (mimeType === 'application/x-sh') return true;
+  if (mimeType === 'image/svg+xml') return true; // SVG is XML/text
+  if (mimeType.startsWith('application/javascript')) return true;
+  if (mimeType.startsWith('application/xml')) return true;
+  return false;
+}
+
+/**
  * Read an arbitrary file inside a skill directory by URI-relative path.
  *
  * Resolution order:
@@ -87,11 +113,11 @@ export async function findAndLoadSkillByPath(
  *      skills with declared `resources.{references,examples,scripts,assets}`
  *      directories or top-level files like `LICENSE`. Path-traversal is
  *      blocked via prefix check + explicit `.` / `..` segment rejection.
+ *
+ * Returns either a text or blob result depending on the MIME type, so
+ * binary assets (images, archives) are not corrupted by UTF-8 decoding.
  */
-export async function readSkillFileByPath(
-  instance: SkillInstance,
-  filePath: string,
-): Promise<{ content: string; mimeType: string }> {
+export async function readSkillFileByPath(instance: SkillInstance, filePath: string): Promise<SkillFileReadResult> {
   // Reject empty / SKILL.md (handled by the dedicated SKILL.md route)
   if (!filePath || filePath === 'SKILL.md') {
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
@@ -112,11 +138,12 @@ export async function readSkillFileByPath(
   // Try matching against `resolvedReferences[].content` /
   // `resolvedExamples[].content`. Match by `.filename` first, then by
   // bare `name` (e.g. 'getting-started' matches an entry named that).
+  // Inline content is always text — bundles can't carry binary data.
   if (segments[0] === 'references' || segments[0] === 'examples') {
     const tail = segments.slice(1).join('/');
     const inline = await tryInMemorySubFile(instance, segments[0], tail);
     if (inline !== undefined) {
-      return { content: inline, mimeType: guessMimeType(filePath) };
+      return { kind: 'text', content: inline, mimeType: guessMimeType(filePath) };
     }
   }
 
@@ -161,12 +188,26 @@ export async function readSkillFileByPath(
     }
   }
 
-  let content: string;
+  const mimeType = guessMimeType(filePath);
+
+  // Read raw bytes first; decode as UTF-8 only for text-shaped MIME
+  // types. Binary assets (PNG, JPEG, archives, etc.) are returned as
+  // base64 so consumers can rebuild the original bytes via
+  // Buffer.from(blob, 'base64').
+  let buffer: Buffer | Uint8Array;
   try {
-    content = await readFile(candidatePath, 'utf-8');
+    buffer = await readFileBuffer(candidatePath);
   } catch {
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
+
+  if (!isTextMimeType(mimeType)) {
+    const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    return { kind: 'blob', blob: buf.toString('base64'), mimeType };
+  }
+
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  const content = buf.toString('utf-8');
 
   // Strip frontmatter from markdown sub-files so the body is what hosts
   // present to the model. Top-level SKILL.md is served raw by a different
@@ -174,10 +215,7 @@ export async function readSkillFileByPath(
   const isMarkdown = filePath.endsWith('.md') || filePath.endsWith('.markdown');
   const body = isMarkdown ? parseSkillMdFrontmatter(content).body : content;
 
-  return {
-    content: body,
-    mimeType: guessMimeType(filePath),
-  };
+  return { kind: 'text', content: body, mimeType };
 }
 
 /**

@@ -972,6 +972,9 @@ export default class SkillRegistry
   addSep2640InstructionUri(uri: string): void {
     if (!this.sep2640InstructionUris.includes(uri)) {
       this.sep2640InstructionUris.push(uri);
+      // Notify observers (resource list, instructions consumers) so the
+      // change propagates without a full re-init.
+      this.bump('reset');
     }
   }
 

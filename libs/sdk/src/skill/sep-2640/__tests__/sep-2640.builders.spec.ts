@@ -112,8 +112,10 @@ describe('SEP-2640 builders', () => {
       };
       const md = serializeSkillMd(skill);
       const fmMatch = md.match(/^---\n([\s\S]*?)\n---/);
-      expect(fmMatch).toBeTruthy();
-      const fm = yaml.load(fmMatch![1]) as Record<string, unknown>;
+      if (!fmMatch) {
+        throw new Error('Expected SKILL.md frontmatter block');
+      }
+      const fm = yaml.load(fmMatch[1]) as Record<string, unknown>;
       expect(fm['license']).toBe('MIT');
       expect(fm['compatibility']).toBe('Node 20+');
       expect(fm['allowed-tools']).toBe('Read Edit Bash(git status)');

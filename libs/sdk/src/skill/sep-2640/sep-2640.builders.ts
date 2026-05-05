@@ -150,5 +150,9 @@ export function metadataToContentStub(metadata: SkillMetadata): IndexEntryInput 
   return {
     name: metadata.name,
     description: metadata.description,
+    // Preserve nested `<skill-path>` so `buildSkillMdIndexEntry` doesn't
+    // flatten URIs like `skill://acme/billing/refunds/SKILL.md` to
+    // `skill://refunds/SKILL.md`.
+    ...(metadata.skillPath && metadata.skillPath.length > 0 ? { skillPathSegments: metadata.skillPath } : {}),
   };
 }

@@ -85,24 +85,32 @@ async function checkDirectory(path: string): Promise<boolean> {
  * Returns the relative paths (from `dirPath`) of any nested SKILL.md
  * files found. The root SKILL.md at `dirPath/SKILL.md` is excluded.
  */
-export async function findNestedSkillMd(dirPath: string, _maxDepth = 8): Promise<string[]> {
+export async function findNestedSkillMd(
+  dirPath: string,
+  maxDepth: number = Number.POSITIVE_INFINITY,
+): Promise<string[]> {
   const found: string[] = [];
 
   async function walk(current: string, depth: number, relPath: string): Promise<void> {
-    if (depth > _maxDepth) return;
+    if (depth > maxDepth) return;
     let entries: string[];
     try {
       entries = await readdir(current);
-    } catch {
-      return;
+    } catch (err: unknown) {
+      // Missing directory is fine (race with removal); any other error
+      // (EACCES, EIO, etc.) signals a real problem and MUST surface so
+      // the SEP-2640 no-nesting invariant isn't silently bypassed.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw err;
     }
     for (const entry of entries) {
       const full = joinPath(current, entry);
       let entryStat;
       try {
         entryStat = await stat(full);
-      } catch {
-        continue;
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw err;
       }
       if (entryStat.isDirectory()) {
         await walk(full, depth + 1, relPath ? `${relPath}/${entry}` : entry);

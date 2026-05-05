@@ -120,8 +120,23 @@ export async function registerPerSkillResources(options: {
   const { scope, resourceRegistry, skills, logger, resolveLastModified } = options;
 
   for (const skill of skills) {
+    // Resolve `lastModified` in its own try/catch so a flaky stat doesn't
+    // suppress the resource registration itself — `lastModified` is just
+    // a cache hint, not load-bearing.
+    let lastModified: string | undefined;
+    if (resolveLastModified) {
+      try {
+        lastModified = await resolveLastModified(skill);
+      } catch (err) {
+        logger.warn(
+          `Failed to resolve SEP-2640 lastModified for "${skill.name}": ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
     try {
-      const lastModified = resolveLastModified ? await resolveLastModified(skill) : undefined;
       const record = buildPerSkillResourceRecord(scope, skill, { lastModified });
       // The resource registry's dynamic-register path accepts a normalised
       // record directly.

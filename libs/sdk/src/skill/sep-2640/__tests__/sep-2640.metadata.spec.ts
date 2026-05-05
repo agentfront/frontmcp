@@ -41,10 +41,18 @@ describe('skillMetadataSchema — SEP-2640 path/name binding', () => {
     }
   });
 
-  it('rejects skillPath with empty segments', () => {
+  it('rejects skillPath that is the empty array (array-level .min(1))', () => {
     const result = skillMetadataSchema.safeParse({
       ...baseSkill,
       skillPath: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects skillPath containing an empty segment (per-element .min(1))', () => {
+    const result = skillMetadataSchema.safeParse({
+      ...baseSkill,
+      skillPath: [''],
     });
     expect(result.success).toBe(false);
   });

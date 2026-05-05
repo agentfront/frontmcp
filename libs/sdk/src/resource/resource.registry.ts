@@ -15,6 +15,7 @@ import {
   type ScopeEntry,
 } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
+import { ResourceTemplateKind } from '../common/records/resource.record';
 import { EntryValidationError, NameDisambiguationError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
@@ -709,14 +710,24 @@ export default class ResourceRegistry extends RegistryAbstract<
    * @param resourceDef - Resource class, function, or template to register
    */
   registerDynamicResource(resourceDef: ResourceType | ResourceRecord | ResourceTemplateRecord): void {
-    // Pre-built records (e.g. SEP-2640 per-skill FUNCTION records) bypass
-    // template detection — they declare their kind directly.
+    // Pre-built records (e.g. SEP-2640 per-skill FUNCTION records) carry
+    // their kind explicitly. We still route them through `normalizeResource`
+    // / `normalizeResourceTemplate` so kind-specific shape validation
+    // (FUNCTION must be callable, ESM/REMOTE must have a token, etc.)
+    // runs at registration time rather than at first read.
     const isPrebuiltRecord =
-      resourceDef && typeof resourceDef === 'object' && 'kind' in resourceDef && 'metadata' in resourceDef;
+      resourceDef &&
+      typeof resourceDef === 'object' &&
+      'kind' in resourceDef &&
+      'metadata' in resourceDef &&
+      'provide' in resourceDef;
 
     let rec: ResourceRecord | ResourceTemplateRecord;
     if (isPrebuiltRecord) {
-      rec = resourceDef as ResourceRecord | ResourceTemplateRecord;
+      const def = resourceDef as ResourceRecord | ResourceTemplateRecord;
+      const isTemplateRecord =
+        def.kind === ResourceTemplateKind.CLASS_TOKEN || def.kind === ResourceTemplateKind.FUNCTION;
+      rec = isTemplateRecord ? normalizeResourceTemplate(def) : normalizeResource(def as ResourceRecord);
     } else {
       const def = resourceDef as ResourceType;
       const isTemplate = isResourceTemplate(def);

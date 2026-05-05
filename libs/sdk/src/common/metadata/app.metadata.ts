@@ -116,7 +116,7 @@ export interface LocalAppMetadata {
    * Skills that teach AI how to perform multi-step tasks using tools.
    * Skills are workflow guides that combine multiple tools into coherent
    * recipes. They can be discovered via the `skill://index.json` MCP
-   * resource and loaded via `skill://{skillPath}/SKILL.md` MCP resources
+   * resource and loaded via `skill://{+skillPath}/SKILL.md` MCP resources
    * (per MCP SEP-2640).
    */
   skills?: SkillType[];

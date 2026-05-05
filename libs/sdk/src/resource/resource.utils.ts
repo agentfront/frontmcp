@@ -59,7 +59,9 @@ export function collectResourceTemplateMetadata(cls: ResourceTemplateType): Reso
 export function normalizeResource(item: any): ResourceRecord {
   // Pre-built record objects: ESM, REMOTE, FUNCTION, or CLASS_TOKEN.
   // FrontMCP internals (e.g. SEP-2640 per-skill registration) build
-  // FUNCTION records directly to attach SEP-conformant metadata.
+  // FUNCTION records directly to attach SEP-conformant metadata. We
+  // validate the kind-specific shape here so malformed records fail at
+  // registration time rather than at first read.
   if (
     item &&
     typeof item === 'object' &&
@@ -68,6 +70,38 @@ export function normalizeResource(item: any): ResourceRecord {
       item.kind === ResourceKind.FUNCTION ||
       item.kind === ResourceKind.CLASS_TOKEN)
   ) {
+    if (item.provide == null || typeof item.metadata !== 'object' || item.metadata === null) {
+      throw new InvalidEntityError(
+        'resource',
+        String(item.metadata?.name ?? item.metadata?.uri ?? 'unknown'),
+        `a pre-built ResourceRecord with both 'provide' and 'metadata' set (kind: ${item.kind})`,
+      );
+    }
+    if (item.kind === ResourceKind.FUNCTION && typeof item.provide !== 'function') {
+      throw new InvalidEntityError(
+        'resource',
+        String(item.metadata?.name ?? item.metadata?.uri ?? 'unknown'),
+        "a FUNCTION ResourceRecord whose 'provide' is a function",
+      );
+    }
+    if (
+      (item.kind === ResourceKind.ESM || item.kind === ResourceKind.REMOTE) &&
+      (typeof item.provide !== 'string' || item.provide.length === 0) &&
+      typeof item.provide !== 'symbol'
+    ) {
+      throw new InvalidEntityError(
+        'resource',
+        String(item.metadata?.name ?? item.metadata?.uri ?? 'unknown'),
+        `a ${item.kind} ResourceRecord whose 'provide' is a non-empty string or symbol token`,
+      );
+    }
+    if (item.kind === ResourceKind.CLASS_TOKEN && typeof item.provide !== 'function') {
+      throw new InvalidEntityError(
+        'resource',
+        String(item.metadata?.name ?? item.metadata?.uri ?? 'unknown'),
+        "a CLASS_TOKEN ResourceRecord whose 'provide' is a class constructor",
+      );
+    }
     return item as ResourceRecord;
   }
 
@@ -99,6 +133,37 @@ export function normalizeResource(item: any): ResourceRecord {
  * Normalize any resource template input (class or function) to a ResourceTemplateRecord
  */
 export function normalizeResourceTemplate(item: any): ResourceTemplateRecord {
+  // Pre-built template records (kind: TemplateKind.FUNCTION/CLASS_TOKEN)
+  // — same shape validation as `normalizeResource` for static records.
+  if (
+    item &&
+    typeof item === 'object' &&
+    (item.kind === ResourceTemplateKind.FUNCTION || item.kind === ResourceTemplateKind.CLASS_TOKEN)
+  ) {
+    if (item.provide == null || typeof item.metadata !== 'object' || item.metadata === null) {
+      throw new InvalidEntityError(
+        'resource template',
+        String(item.metadata?.name ?? item.metadata?.uriTemplate ?? 'unknown'),
+        `a pre-built ResourceTemplateRecord with both 'provide' and 'metadata' set (kind: ${item.kind})`,
+      );
+    }
+    if (item.kind === ResourceTemplateKind.FUNCTION && typeof item.provide !== 'function') {
+      throw new InvalidEntityError(
+        'resource template',
+        String(item.metadata?.name ?? item.metadata?.uriTemplate ?? 'unknown'),
+        "a FUNCTION ResourceTemplateRecord whose 'provide' is a function",
+      );
+    }
+    if (item.kind === ResourceTemplateKind.CLASS_TOKEN && typeof item.provide !== 'function') {
+      throw new InvalidEntityError(
+        'resource template',
+        String(item.metadata?.name ?? item.metadata?.uriTemplate ?? 'unknown'),
+        "a CLASS_TOKEN ResourceTemplateRecord whose 'provide' is a class constructor",
+      );
+    }
+    return item as ResourceTemplateRecord;
+  }
+
   // Function-style decorator: resourceTemplate({ uriTemplate: '...' })(handler)
   if (
     item &&

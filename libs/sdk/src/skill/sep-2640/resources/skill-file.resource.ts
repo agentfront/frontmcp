@@ -84,15 +84,16 @@ export class Sep2640SkillFileResource extends ResourceContext<Params> {
     }
 
     const instance = entry as SkillInstance;
-    const { content, mimeType } = await readSkillFileByPath(instance, params.filePath);
+    const result = await readSkillFileByPath(instance, params.filePath);
 
+    // Emit the MCP `TextResourceContents` branch for text files and the
+    // `BlobResourceContents` branch for binary assets (PNG, JPEG,
+    // archives) so consumers can rebuild the original bytes.
     return {
       contents: [
-        {
-          uri,
-          mimeType,
-          text: content,
-        },
+        result.kind === 'text'
+          ? { uri, mimeType: result.mimeType, text: result.content }
+          : { uri, mimeType: result.mimeType, blob: result.blob },
       ],
     };
   }

@@ -23,16 +23,32 @@ import type { FormattedToolResult, FormattedTools } from './llm-platform';
 export type { FormattedTools, FormattedToolResult };
 
 /**
- * SEP-2640 (`skill://index.json`) discovery entry. Mirrors
- * `SkillIndexEntry` from `@frontmcp/sdk/skill/sep-2640` but copied here
- * to keep the public client surface free of internal module imports.
+ * SEP-2640 (`skill://index.json`) discovery entry. Discriminated union
+ * mirroring `SkillIndexEntry` from `@frontmcp/sdk/skill/sep-2640`.
+ *
+ * Per SEP-2640 §Discovery: `name` is required for `"skill-md"` entries
+ * (it MUST equal the skill's frontmatter `name`), omitted for
+ * `"mcp-resource-template"` entries (the URL is a template, not a
+ * concrete skill), and optional for `"archive"` entries.
  */
-export interface Sep2640IndexEntry {
-  type: 'skill-md' | 'mcp-resource-template' | 'archive';
+export interface Sep2640SkillEntry {
+  type: 'skill-md';
+  name: string;
+  description: string;
+  url: string;
+}
+export interface Sep2640ResourceTemplateEntry {
+  type: 'mcp-resource-template';
+  description: string;
+  url: string;
+}
+export interface Sep2640ArchiveEntry {
+  type: 'archive';
   name?: string;
   description: string;
   url: string;
 }
+export type Sep2640IndexEntry = Sep2640SkillEntry | Sep2640ResourceTemplateEntry | Sep2640ArchiveEntry;
 
 /**
  * Supported LLM platforms for tool/result formatting.
@@ -596,15 +612,21 @@ export interface DirectClient {
   listSep2640Skills(): Promise<Sep2640IndexEntry[]>;
 
   /**
-   * SEP-2640 convenience wrapper: read a `skill://` resource by URI and
-   * return its text content. Equivalent to calling `readResource(uri)`
-   * but typed for skill resources and validates the scheme.
+   * SEP-2640 convenience wrapper: read a **text** `skill://` resource by
+   * URI and return its body as a string. SEP-2640 exposes more than
+   * SKILL.md — `/scripts/*` and `/assets/*` may carry binary content
+   * (images, archives, native binaries) that string decoding would
+   * corrupt. Use this helper only for text resources such as
+   * `SKILL.md`, references, examples, JSON, YAML, and source code; for
+   * arbitrary skill files, call `readResource(uri)` and inspect the
+   * returned `contents[]` for `text` vs `blob`.
    *
-   * @param uri - A `skill://` URI (e.g. `skill://review-pr/SKILL.md`)
-   * @returns The raw text content (frontmatter + body for SKILL.md)
-   * @throws if the URI is not a `skill://` URI
+   * @param uri - A `skill://` URI pointing at a text resource
+   * @returns The raw text body
+   * @throws PublicMcpError if the URI is not a `skill://` URI or the
+   *   resource has no text content
    */
-  readSkillUri(uri: string): Promise<string>;
+  readSkillTextUri(uri: string): Promise<string>;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Elicitation Operations

@@ -119,28 +119,48 @@ export async function createInMemoryServer(
       }
     : {};
 
-  // SEP-2640 capabilities go under `experimental` and `extensions`; merge
-  // those keys carefully so they don't clobber other contributors. The
-  // `extensions` slot is forward-compat (SEP-2133) — the upstream MCP
-  // schema accepts unknown top-level keys, but TS doesn't model that, so
-  // we build the object as `Record<string, unknown>` and cast at the call
-  // site.
+  // Capability fragments from every contributor. SEP-2640 / SEP-2133
+  // capabilities live inside `experimental` / `extensions`, so we lift
+  // those keys out of EVERY fragment (not just `scope.skills`) and merge
+  // them — otherwise an in-memory client would miss extension capabilities
+  // that the HTTP/SSE transport advertises against the same Scope.
   const skillsCapabilities = scope.skills?.getCapabilities() ?? {};
+  const toolsCapabilities = scope.tools.getCapabilities();
+  const resourcesCapabilities = scope.resources.getCapabilities();
+  const promptsCapabilities = scope.prompts.getCapabilities();
+  const agentsCapabilities = scope.agents.getCapabilities();
+  const taskCapabilities = computeTaskCapabilities(scope);
+
+  const fragments: Array<Record<string, unknown>> = [
+    remoteCapabilities,
+    toolsCapabilities,
+    resourcesCapabilities,
+    promptsCapabilities,
+    agentsCapabilities,
+    skillsCapabilities,
+    completionsCapability,
+    taskCapabilities,
+  ];
+
   const experimental: Record<string, unknown> = {};
   const extensions: Record<string, unknown> = {};
-  for (const cap of [skillsCapabilities] as Array<Record<string, unknown>>) {
-    if (cap['experimental']) Object.assign(experimental, cap['experimental']);
-    if (cap['extensions']) Object.assign(extensions, cap['extensions']);
+  for (const cap of fragments) {
+    if (cap['experimental'] && typeof cap['experimental'] === 'object') {
+      Object.assign(experimental, cap['experimental']);
+    }
+    if (cap['extensions'] && typeof cap['extensions'] === 'object') {
+      Object.assign(extensions, cap['extensions']);
+    }
   }
 
   const baseCapabilities: Record<string, unknown> = {
     ...remoteCapabilities,
-    ...scope.tools.getCapabilities(),
-    ...scope.resources.getCapabilities(),
-    ...scope.prompts.getCapabilities(),
-    ...scope.agents.getCapabilities(),
+    ...toolsCapabilities,
+    ...resourcesCapabilities,
+    ...promptsCapabilities,
+    ...agentsCapabilities,
     ...completionsCapability,
-    ...computeTaskCapabilities(scope),
+    ...taskCapabilities,
     logging: {},
   };
   if (Object.keys(experimental).length > 0) baseCapabilities['experimental'] = experimental;

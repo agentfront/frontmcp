@@ -471,13 +471,18 @@ export class DirectClientImpl implements DirectClient {
     if (doc.$schema && !doc.$schema.startsWith('https://schemas.agentskills.io/discovery/')) {
       console.warn(`[DirectClient] skill://index.json $schema "${doc.$schema}" is not an agentskills.io discovery URI`);
     }
-    return doc.skills.filter(
-      (e) =>
-        e &&
-        typeof e === 'object' &&
-        typeof (e as Sep2640IndexEntry).type === 'string' &&
-        typeof (e as Sep2640IndexEntry).url === 'string',
-    );
+    const ALLOWED_TYPES = new Set(['skill-md', 'mcp-resource-template', 'archive']);
+    return doc.skills.filter((e): e is Sep2640IndexEntry => {
+      if (!e || typeof e !== 'object') return false;
+      const entry = e as Sep2640IndexEntry;
+      if (typeof entry.type !== 'string' || !ALLOWED_TYPES.has(entry.type)) return false;
+      if (typeof entry.url !== 'string' || !entry.url.startsWith('skill://')) return false;
+      // `skill-md` MUST carry a name per SEP-2640 §Discovery.
+      if (entry.type === 'skill-md' && typeof (entry as { name?: unknown }).name !== 'string') {
+        return false;
+      }
+      return true;
+    });
   }
 
   /**
@@ -488,14 +493,18 @@ export class DirectClientImpl implements DirectClient {
    * callers from accidentally fetching unrelated resources through the
    * skill helper.
    */
-  async readSkillUri(uri: string): Promise<string> {
+  async readSkillTextUri(uri: string): Promise<string> {
     if (!uri.startsWith('skill://')) {
-      throw new Error(`readSkillUri: expected a skill:// URI, got "${uri}"`);
+      throw new PublicMcpError(`readSkillTextUri: expected a skill:// URI, got "${uri}"`, 'INVALID_PARAMS', 400);
     }
     const read = await this.mcpClient.readResource({ uri });
     const text = read.contents?.[0]?.text;
     if (typeof text !== 'string') {
-      throw new Error(`readSkillUri: resource "${uri}" returned no text content`);
+      throw new PublicMcpError(
+        `readSkillTextUri: resource "${uri}" returned no text content; use readResource() for binary skill assets`,
+        'INVALID_REQUEST',
+        400,
+      );
     }
     return text;
   }

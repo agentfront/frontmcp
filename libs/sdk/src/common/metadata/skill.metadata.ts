@@ -514,7 +514,10 @@ export const skillMetadataSchema = z
           .string()
           .min(1)
           .max(64)
-          .regex(/^[A-Za-z0-9._~!$&'()*+,;=:@%-]+$/, {
+          // RFC 3986 path segment: unreserved / pct-encoded / sub-delims / ":" / "@".
+          // `%` MUST be followed by exactly two hex digits — bare `%` and
+          // malformed escapes like `billing%zz` or trailing `%` are rejected.
+          .regex(/^(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})+$/, {
             message: 'skillPath segment contains characters disallowed by RFC 3986',
           }),
       )
