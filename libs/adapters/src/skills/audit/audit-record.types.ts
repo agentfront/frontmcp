@@ -56,8 +56,8 @@ export type SkillAuditSignatureAlg = 'HS256' | 'RS256';
  *
  * NOTE: this record intentionally stores only HASHES of input/output bodies,
  * not the bodies themselves. Audit logs should not become a covert PII /
- * secret store. A `verbose` mode in `SkillAuditConfig` may attach a redacted
- * preview, but the canonical record schema is hash-only.
+ * secret store. A redacted-preview field may land in a future schema, but
+ * the canonical record schema is hash-only.
  */
 export interface SkillAuditRecord {
   /** UUIDv4 — opaque, useful for correlating with downstream sinks. */

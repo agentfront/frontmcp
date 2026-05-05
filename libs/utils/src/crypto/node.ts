@@ -225,6 +225,69 @@ export function rsaSignBase64Url(jwtAlg: string, data: Buffer | Uint8Array, priv
 }
 
 /**
+ * Verify an RSA / RSA-PSS / EdDSA signature synchronously.
+ *
+ * Node-only — mirrors {@link rsaSignBase64Url}'s sync, JWK-first surface so
+ * server-side callers (audit signer verifier, bundle signature verifier)
+ * have a single utility to call instead of touching `node:crypto` directly.
+ *
+ * - RS256/RS384/RS512 / PS256/PS384/PS512: pass `jwtAlg` and an RSA JWK.
+ * - EdDSA: pass `'EdDSA'` and an Ed25519 JWK (`kty: 'OKP'`, `crv: 'Ed25519'`).
+ *
+ * Returns `false` (never throws) for malformed keys / unsupported algs so
+ * callers can surface a single "verification failed" reason instead of
+ * branching on every internal crypto error.
+ *
+ * @param jwtAlg - JWT algorithm identifier (`'RS256'`, `'PS256'`, `'EdDSA'`, ...)
+ * @param data - Bytes that were signed
+ * @param publicJwk - Public key in JWK format
+ * @param signature - Signature bytes (raw, NOT base64url)
+ */
+export function rsaVerifySync(
+  jwtAlg: string,
+  data: Buffer | Uint8Array,
+  publicJwk: JsonWebKey,
+  signature: Buffer | Uint8Array,
+): boolean {
+  try {
+    const publicKey = crypto.createPublicKey({ key: publicJwk as crypto.JsonWebKey, format: 'jwk' });
+    const dataBuf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const sigBuf = Buffer.isBuffer(signature) ? signature : Buffer.from(signature);
+    if (jwtAlg === 'EdDSA') {
+      // Ed25519 / Ed448: Node uses `null` as the algorithm name; the digest is
+      // internal to the curve operation.
+      return crypto.verify(null, dataBuf, publicKey, sigBuf);
+    }
+    const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
+    const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = isRsaPssAlg(jwtAlg)
+      ? {
+          key: publicKey,
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+        }
+      : publicKey;
+    return crypto.verify(nodeAlgorithm, dataBuf, verifyKey, sigBuf);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Convert a PEM-encoded public key (SPKI) to a JWK.
+ *
+ * Node-only. Used by host code that has historically configured trust roots
+ * as PEMs (bundle-signature trust list, audit verifier trust list) so the
+ * verifier path can normalize to JWK before calling {@link rsaVerifySync}.
+ *
+ * Throws if the PEM cannot be parsed — callers should catch and translate
+ * into a structured "malformed_public_key" reason where appropriate.
+ */
+export function pemToPublicJwk(pem: string): JsonWebKey {
+  const key = crypto.createPublicKey({ key: pem, format: 'pem' });
+  return key.export({ format: 'jwk' }) as JsonWebKey;
+}
+
+/**
  * Create a JWT signed with an RSA key
  *
  * @param payload - JWT payload

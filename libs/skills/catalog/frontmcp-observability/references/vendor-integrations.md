@@ -172,7 +172,9 @@ const meterProvider = new MeterProvider({
 metrics.setGlobalMeterProvider(meterProvider);
 ```
 
-Use the same vendor-specific endpoint for metrics that you use for traces (most vendors accept both on a single OTLP gateway):
+Use the same OTLP gateway family as for traces, but note that vendor-specific
+metrics paths, ports, and auth methods can differ from the trace endpoint
+(the table below lists the per-vendor exceptions):
 
 | Vendor        | Metrics endpoint hint                                                           |
 | ------------- | ------------------------------------------------------------------------------- |

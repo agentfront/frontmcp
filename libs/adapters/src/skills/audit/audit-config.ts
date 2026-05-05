@@ -91,16 +91,6 @@ export interface SkillAuditConfig {
    * detectable by the bundled verifier — see `verifyChain` JSDoc).
    */
   headAnchorIntervalMs?: number;
-
-  /**
-   * Verbose mode persists a redacted preview of the input/output payload
-   * alongside the hashes. Off by default to keep the audit log free of PII.
-   *
-   * NOTE: this is a placeholder for future extension — the current schema
-   * does not include preview fields. When the schema lands, the writer will
-   * read this flag.
-   */
-  verbose?: boolean;
 }
 
 /**

@@ -58,12 +58,16 @@ export const skillsConfigCacheOptionsSchema = z.object({
  * concrete types live in `@frontmcp/adapters/skills` — keeping the SDK free
  * of the upward dependency. Validation here just confirms shape; the helper
  * that consumes the config does the structural duck-type check.
+ *
+ * `subjectMode` and `headAnchorIntervalMs` are surfaced here so the
+ * normalizer preserves them when forwarding the audit block to the helper.
  */
 export const skillsConfigAuditOptionsSchema = z.object({
   enabled: z.boolean().optional().default(false),
   signer: z.unknown().optional(),
   store: z.unknown().optional(),
-  verbose: z.boolean().optional().default(false),
+  subjectMode: z.enum(['plain', 'hash', 'omit']).optional(),
+  headAnchorIntervalMs: z.number().int().positive().optional(),
 });
 
 /**

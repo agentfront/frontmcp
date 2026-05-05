@@ -232,12 +232,17 @@ describe('registerSkillAuditWriter', () => {
     setSkillAuditFactory(() => fakeModule);
     const logger = makeLogger();
     const providers = makeProviders();
-    // Wrap the call in a sentinel that would trip if `eval` was used.
+    // Wrap the call in a sentinel that trips if `eval` is used. The
+    // production helper must never reach `eval(...)` — this assertion is the
+    // safety net. We deliberately do NOT delegate to the original `eval`
+    // (that would (a) re-introduce the lint violation and (b) silently let
+    // the helper continue if it ever did call eval); instead the sentinel
+    // throws so the spec fails loudly with a clear cause.
     const originalEval = globalThis.eval;
     let evalCalled = false;
-    (globalThis as { eval: typeof eval }).eval = ((src: string) => {
+    (globalThis as { eval: typeof eval }).eval = (() => {
       evalCalled = true;
-      return originalEval(src);
+      throw new Error('skill-audit helper must not call eval');
     }) as never;
     try {
       registerSkillAuditWriter({

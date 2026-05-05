@@ -204,7 +204,7 @@ export const _resetCounterCacheForTesting = resetCounterCacheForTesting;
  * this set is coerced to `'unknown'` to prevent cardinality explosions when
  * upstream callers pass URLs, tenant IDs, or other unbounded strings.
  */
-export const KNOWN_BUNDLE_SOURCES = ['static', 'npm', 'saas-pull', 'filesystem', 'unknown'] as const;
+export const KNOWN_BUNDLE_SOURCES = ['static', 'npm', 'saas-pull', 'webhook', 'filesystem', 'unknown'] as const;
 export type KnownBundleSource = (typeof KNOWN_BUNDLE_SOURCES)[number];
 
 /**

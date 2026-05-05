@@ -139,7 +139,7 @@ describe('TelemetryCounter', () => {
 
     it('normalizeBundleSource coerces unknown values to "unknown"', () => {
       expect(normalizeBundleSource('https://attacker.example.com/path')).toBe('unknown');
-      expect(normalizeBundleSource('webhook')).toBe('unknown');
+      expect(normalizeBundleSource('arbitrary-string')).toBe('unknown');
       expect(normalizeBundleSource('')).toBe('unknown');
       expect(normalizeBundleSource(undefined)).toBe('unknown');
       expect(normalizeBundleSource(null)).toBe('unknown');

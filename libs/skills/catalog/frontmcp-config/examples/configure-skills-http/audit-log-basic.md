@@ -19,16 +19,30 @@ Enable the skill audit log with the in-memory store and HS256 signer for develop
 
 ```typescript
 // src/server.ts
-import { Hs256AuditSigner, MemoryAuditStore, setSkillAuditFactory, SkillAuditWriter } from '@frontmcp/adapters/skills';
+import {
+  Hs256AuditSigner,
+  MemoryAuditStore,
+  setSkillAuditFactory,
+  SkillAuditWriter,
+  SkillAuditWriterToken,
+} from '@frontmcp/adapters/skills';
 import { FrontMcp } from '@frontmcp/sdk';
 import { randomBytes } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-// Inject the audit module into the SDK once at boot. The SDK does NOT
+// Register the audit module record with the SDK at boot. The SDK constructs
+// the writer using the positional signature
+// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
+// forwards `subjectMode` from `skillsConfig.audit`. The SDK does NOT
 // statically depend on @frontmcp/adapters/skills — this keeps the static
 // dependency graph clean and works in Edge / CSP runtimes.
-setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+setSkillAuditFactory(() => ({
+  SkillAuditWriterToken,
+  SkillAuditWriter,
+  Hs256AuditSigner,
+  MemoryAuditStore,
+}));
 
 @FrontMcp({
   info: { name: 'dev-server', version: '1.0.0' },
@@ -39,7 +53,8 @@ setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ 
       enabled: true,
       // WARNING: Hs256AuditSigner with a randomBytes() key refuses to fire
       // when NODE_ENV === 'production'. Use Rs256AuditSigner in prod.
-      signer: new Hs256AuditSigner({ keyId: 'dev', secret: randomBytes(32) }),
+      // Constructor signature: new Hs256AuditSigner(secret, keyId)
+      signer: new Hs256AuditSigner(randomBytes(32), 'dev'),
       store: new MemoryAuditStore(),
       subjectMode: 'hash',
     },

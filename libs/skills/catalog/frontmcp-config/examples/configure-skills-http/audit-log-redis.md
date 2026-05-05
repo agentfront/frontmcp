@@ -18,11 +18,18 @@ Production-grade audit log with the Redis-backed StorageAdapterAuditStore and th
 ## Code
 
 ```typescript
-// src/server.ts
+// src/server.ts — must be an ES module (`"type": "module"` in package.json,
+// or `.mts` extension) so the top-level `await createStorageAdapter(...)`
+// below is allowed. CommonJS consumers should wrap the bootstrap inside an
+// `async function init() { ... }` and await it before constructing the
+// FrontMcp class.
 import {
+  Hs256AuditSigner,
+  MemoryAuditStore,
   Rs256AuditSigner,
   setSkillAuditFactory,
   SkillAuditWriter,
+  SkillAuditWriterToken,
   StorageAdapterAuditStore,
 } from '@frontmcp/adapters/skills';
 import { FrontMcp } from '@frontmcp/sdk';
@@ -30,7 +37,16 @@ import { createStorageAdapter } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
-setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+// Register the audit module record with the SDK. The SDK constructs the
+// writer with the positional signature
+// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
+// forwards `subjectMode` from `skillsConfig.audit` into the options bag.
+setSkillAuditFactory(() => ({
+  SkillAuditWriterToken,
+  SkillAuditWriter,
+  Hs256AuditSigner,
+  MemoryAuditStore,
+}));
 
 const auditStorage = await createStorageAdapter({
   provider: 'redis',
@@ -39,10 +55,9 @@ const auditStorage = await createStorageAdapter({
   keyPrefix: 'mcp:skill-audit:',
 });
 
-const auditSigner = new Rs256AuditSigner({
-  keyId: 'bundle-signing-2026-01',
-  privateKeyPem: process.env.BUNDLE_SIGNING_PRIVATE_KEY!,
-});
+// Constructor signature: new Rs256AuditSigner(privateJwk, keyId).
+// Convert a PEM secret to a JWK first if your secret store ships PEMs.
+const auditSigner = new Rs256AuditSigner(JSON.parse(process.env.BUNDLE_SIGNING_PRIVATE_JWK!), 'bundle-signing-2026-01');
 
 @FrontMcp({
   info: { name: 'prod-server', version: '1.0.0' },

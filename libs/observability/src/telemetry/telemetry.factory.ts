@@ -52,10 +52,12 @@ export class TelemetryFactory {
    * context; if none is active it becomes a root span.
    */
   startSpan(name: string, attributes?: Record<string, string | number | boolean>, parent?: OTelContext): TelemetrySpan {
-    const span = parent
-      ? this.tracer.startSpan(name, attributes ? { attributes } : undefined, parent)
-      : this.tracer.startSpan(name, attributes ? { attributes } : undefined);
-    if (attributes) span.setAttributes(attributes);
+    // Attributes flow via `SpanOptions.attributes` so the SDK records them at
+    // span-start time (matters for samplers that read attributes). A second
+    // `span.setAttributes` after construction is redundant and can produce
+    // duplicate entries on some exporters.
+    const opts = attributes ? { attributes } : undefined;
+    const span = parent ? this.tracer.startSpan(name, opts, parent) : this.tracer.startSpan(name, opts);
     return new TelemetrySpan(span);
   }
 

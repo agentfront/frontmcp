@@ -95,10 +95,12 @@ export class MemoryAuditStore implements SkillAuditStore {
   async read(opts?: SkillAuditReadOptions): Promise<SkillAuditRecord[]> {
     const from = opts?.from ?? 1;
     const limit = opts?.limit;
-    const filtered = this.records.filter((r) => r.sequence >= from);
-    const sliced = limit !== undefined ? filtered.slice(0, limit) : filtered;
-    // Stable, sorted by sequence.
-    return [...sliced].sort((a, b) => a.sequence - b.sequence);
+    // Filter → sort → slice (in that order). Sorting before the slice is
+    // load-bearing: if the underlying array ever ended up out-of-sequence
+    // (tests, replayed history, future async ingest), `slice` first would
+    // return an arbitrary N records that may not be the lowest sequences.
+    const filtered = this.records.filter((r) => r.sequence >= from).sort((a, b) => a.sequence - b.sequence);
+    return limit !== undefined ? filtered.slice(0, limit) : filtered;
   }
 }
 
