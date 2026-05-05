@@ -6,7 +6,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
 
 # Configure `skillsConfig`
 
-`skillsConfig` is the single configuration object on `@FrontMcp({ ... })` that controls everything about the Skills HTTP surface (`/skills`, `/llm.txt`, `/llm-full.txt`), the MCP `skills://` resource catalog, the auto-injected `instructions` field on the MCP `initialize` response, and the tamper-evident skill audit log.
+`skillsConfig` is the single configuration object on `@FrontMcp({ ... })` that controls everything about the Skills HTTP surface (`/skills`, `/llm.txt`, `/llm-full.txt`), the MCP `skill://` resource catalog (SEP-2640 — singular scheme), the auto-injected `instructions` field on the MCP `initialize` response, and the tamper-evident skill audit log.
 
 ## Top-Level Shape
 
@@ -20,8 +20,8 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
   instructions: 'You are a helpful assistant for booking flights.',
 
   skillsConfig: {
-    enabled: true, // turn on /skills, /llm.txt, /skills:// resources
-    mcpResources: true, // expose skills as MCP resources (skills://catalog, skills://<name>)
+    enabled: true, // turn on /skills, /llm.txt, /skill:// resources
+    mcpResources: true, // expose skills as MCP resources (skill://catalog, skill://<name>)
     llmTxt: true, // serve /llm.txt
     llmFullTxt: false, // serve /llm-full.txt (full SKILL.md bodies)
     auth: 'api-key', // 'inherit' (default) | 'public' | 'api-key' | 'bearer'
@@ -64,7 +64,7 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 | `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
 | `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
 
-The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skills://catalog` and `skills://{name}/SKILL.md` for full content.
+The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skill://catalog` and `skill://{name}/SKILL.md` for full content (SEP-2640 — singular scheme).
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically.
 

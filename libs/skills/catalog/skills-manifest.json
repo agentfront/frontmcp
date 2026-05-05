@@ -437,77 +437,6 @@
           "examples": []
         },
         {
-          "name": "configure-deployment-targets",
-          "description": "Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, sdk, and mcpb targets",
-          "examples": [
-            {
-              "name": "multi-target-with-security",
-              "description": "Configure a FrontMCP project with node + distributed targets, CSP headers, and HSTS",
-              "level": "intermediate",
-              "tags": ["config", "deployment", "csp", "security", "distributed", "hsts", "multi-target"],
-              "features": [
-                "Using defineConfig() for typed configuration with IDE autocomplete",
-                "Multi-target deployments with per-target server settings",
-                "CSP directives including value-less directives like upgrade-insecure-requests",
-                "Security headers (HSTS, X-Frame-Options, X-Content-Type-Options)",
-                "HA configuration for the distributed target"
-              ]
-            },
-            {
-              "name": "distributed-ha-config",
-              "description": "Configure a distributed deployment target with HA settings for heartbeat, session takeover, and Redis-backed session persistence",
-              "level": "advanced",
-              "tags": ["config", "deployment", "distributed", "ha", "redis", "heartbeat", "session-takeover"],
-              "features": [
-                "Configuring the distributed deployment target with HA options",
-                "Setting custom heartbeat intervals and TTL for pod liveness detection",
-                "Combining server config (CSP, cookies) with HA config in the same target",
-                "Using per-target environment variables for Redis connection"
-              ]
-            },
-            {
-              "name": "json-schema-ide-support",
-              "description": "Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete",
-              "level": "basic",
-              "tags": ["config", "deployment", "json", "schema", "ide", "autocomplete"],
-              "features": [
-                "Adding $schema field for IDE autocomplete in JSON config files",
-                "Configuring multiple deployment targets in JSON format",
-                "Using the frontmcp.schema.json for property validation and hover docs"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "configure-security-headers",
-          "description": "Configure CSP, HSTS, X-Frame-Options, and X-Content-Type-Options via frontmcp.config server settings",
-          "examples": [
-            {
-              "name": "csp-report-only",
-              "description": "Test CSP policies in report-only mode to identify violations before enforcement",
-              "level": "basic",
-              "tags": ["config", "csp", "security", "report-only", "headers"],
-              "features": [
-                "Enabling CSP in report-only mode with reportUri for violation monitoring",
-                "Using the object-format directives in frontmcp.config",
-                "Verifying report-only header is emitted instead of enforcement header"
-              ]
-            },
-            {
-              "name": "full-production-headers",
-              "description": "Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection",
-              "level": "intermediate",
-              "tags": ["config", "csp", "security", "hsts", "production", "headers", "frame-options"],
-              "features": [
-                "Full CSP enforcement with multiple directive types including value-less directives",
-                "HSTS with preload and includeSubDomains for HTTPS enforcement",
-                "X-Frame-Options DENY for clickjacking protection",
-                "Custom headers for additional security controls"
-              ]
-            }
-          ]
-        },
-        {
           "name": "configure-skills-http",
           "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
           "examples": [
@@ -520,7 +449,7 @@
                 "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
                 "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
                 "Dynamic skills are picked up because the composer runs on every initialize request",
-                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skills://catalog"
+                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://catalog"
               ]
             },
             {

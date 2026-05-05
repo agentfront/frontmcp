@@ -8,7 +8,7 @@ features:
   - 'Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients'
   - "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt"
   - 'Dynamic skills are picked up because the composer runs on every initialize request'
-  - 'Catalog summary is bounded at 16 KB with a truncation footer pointing at skills://catalog'
+  - 'Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://catalog'
 ---
 
 # Inject Instructions on Initialize
@@ -51,7 +51,7 @@ export default class FlightBotServer {}
 - Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients
 - `skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt
 - Dynamic skills are picked up because the composer runs on every initialize request
-- Catalog summary is bounded at 16 KB with a truncation footer pointing at skills://catalog
+- Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://catalog
 
 ## Related
 
