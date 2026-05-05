@@ -36,6 +36,7 @@ export function getSepVisibleSkills(scope: ScopeEntry): SkillEntry[] {
 export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntry | undefined {
   const registry = scope.skills;
   if (!registry || !registry.hasAny()) return undefined;
+  if (typeof skillPath !== 'string' || skillPath.length === 0) return undefined;
 
   const visible = getSepVisibleSkills(scope);
   // Exact path match first (multi-segment paths)
@@ -152,24 +153,26 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
     segments.push(decoded);
   }
 
-  // ── In-memory fallback for inline (filesystem-agnostic) skills ────────
-  // Try matching against `resolvedReferences[].content` /
-  // `resolvedExamples[].content`. Match by `.filename` first, then by
-  // bare `name` (e.g. 'getting-started' matches an entry named that).
-  // Inline content is always text — bundles can't carry binary data.
+  // ── Resolved-entry lookup (works for inline + file-backed) ────────────
+  // Try matching against `resolvedReferences` / `resolvedExamples` first.
+  // This handles two cases at once:
+  //   • Inline (filesystem-agnostic) bundles whose entry carries `content`.
+  //   • File-backed skills where entries are organized by reference subdir
+  //     (e.g. `examples/getting-started/basic-setup.md`) but the SEP-2640
+  //     URI references them by leaf name (`examples/basic-setup.md`).
   if (segments[0] === 'references' || segments[0] === 'examples') {
     const tail = segments.slice(1).join('/');
-    const inline = await tryInMemorySubFile(instance, segments[0], tail);
-    if (inline !== undefined) {
-      return { kind: 'text', content: inline, mimeType: guessMimeType(filePath) };
+    const resolved = await tryResolvedSubFile(instance, segments[0], tail);
+    if (resolved !== undefined) {
+      return { kind: 'text', content: resolved, mimeType: guessMimeType(filePath) };
     }
   }
 
   // ── Filesystem path ──────────────────────────────────────────────────
   const baseDir = instance.getBaseDir();
   if (!baseDir) {
-    // No base dir AND no in-memory match — the skill genuinely doesn't
-    // expose this file.
+    // No base dir AND no resolved-entry match — the skill genuinely
+    // doesn't expose this file.
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
@@ -237,15 +240,24 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
 }
 
 /**
- * Look up a sub-file in the skill's in-memory resolved entries.
+ * Look up a sub-file in the skill's resolved entries.
  *
- * Inline skills (defined via `skill({...})` or registered through
- * `registerSkillContent`) often carry their references/examples as
- * `{name, description, content}` objects rather than filesystem paths.
- * This helper matches `tail` against either the entry's `filename` or
- * its `name` (with optional `.md` suffix) and returns the body.
+ * Resolution order for each candidate entry (matched by `filename` ===
+ * `tail`, or `name` === `tail`/`tailNoExt`):
+ *   1. Inline `entry.content` — bundles (e.g. `skill({...})` /
+ *      `registerSkillContent`) carry the body directly.
+ *   2. Absolute `entry.path` — catalog-style entries that point at a
+ *      file on disk.
+ *   3. Filename relative to the skill's configured `resources.<kind>`
+ *      directory (or `<baseDir>/<kind>` when not configured) — covers
+ *      file-backed skills whose entries are organized by reference
+ *      subdirectory (e.g. `examples/getting-started/basic-setup.md`)
+ *      but addressed by leaf name in the SEP-2640 URI.
+ *
+ * Returns the markdown body (frontmatter stripped) so consumers see
+ * exactly what hosts present to the model.
  */
-async function tryInMemorySubFile(
+async function tryResolvedSubFile(
   instance: SkillInstance,
   kind: 'references' | 'examples',
   tail: string,
@@ -272,16 +284,60 @@ async function tryInMemorySubFile(
   for (const entry of entries) {
     const filename = (entry as { filename?: string }).filename;
     const name = (entry as { name?: string }).name;
+    const matches =
+      (filename !== undefined && (filename === tail || filename === tailNoExt)) ||
+      (name !== undefined && (name === tail || name === tailNoExt));
+    if (!matches) continue;
+
     const inline = (entry as { content?: string }).content;
-    if (!inline) continue;
-    if (filename === tail || filename === tailNoExt) {
+    if (inline) {
       return parseSkillMdFrontmatter(inline).body;
     }
-    if (name === tail || name === tailNoExt) {
-      return parseSkillMdFrontmatter(inline).body;
+
+    const absolutePath = (entry as { path?: string }).path;
+    const resolvedPath = resolveEntryPath(instance, kind, absolutePath, filename);
+    if (!resolvedPath) continue;
+
+    try {
+      const buf = await readFileBuffer(resolvedPath);
+      const text = (Buffer.isBuffer(buf) ? buf : Buffer.from(buf)).toString('utf-8');
+      return parseSkillMdFrontmatter(text).body;
+    } catch {
+      // Entry advertised but file missing — fall through to other entries
+      // and ultimately the strict filesystem path so the caller sees the
+      // standard `ResourceNotFoundError`.
+      continue;
     }
   }
   return undefined;
+}
+
+/**
+ * Build the absolute disk path for a resolved-entry filename, mirroring
+ * the directory resolution in `readSkillFileByPath`.
+ *
+ * Skills registered via `@Skill` (kind `CLASS_TOKEN`) often have no
+ * `baseDir`, but their `resources.<kind>` is supplied as an absolute
+ * path — that case is handled here so file-backed entries still resolve.
+ */
+function resolveEntryPath(
+  instance: SkillInstance,
+  kind: 'references' | 'examples',
+  absolutePath: string | undefined,
+  filename: string | undefined,
+): string | undefined {
+  if (absolutePath && absolutePath.startsWith('/')) return absolutePath;
+  if (!filename) return undefined;
+  const baseDir = instance.getBaseDir();
+  const configured = instance.getResources()?.[kind];
+  let dir: string | undefined;
+  if (configured?.startsWith('/')) {
+    dir = configured;
+  } else if (baseDir) {
+    dir = configured ? pathResolve(baseDir, configured) : joinPath(baseDir, kind);
+  }
+  if (!dir) return undefined;
+  return pathResolve(dir, filename);
 }
 
 /**

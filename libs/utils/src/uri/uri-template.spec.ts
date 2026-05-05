@@ -1,9 +1,9 @@
 import {
-  parseUriTemplate,
-  matchUriTemplate,
   expandUriTemplate,
   extractTemplateParams,
   isUriTemplate,
+  matchUriTemplate,
+  parseUriTemplate,
 } from './uri-template';
 
 describe('URI Template Utils', () => {
@@ -57,6 +57,22 @@ describe('URI Template Utils', () => {
       const manyParams = Array.from({ length: 51 }, (_, i) => `{p${i}}`).join('/');
       expect(() => parseUriTemplate(manyParams)).toThrow('too many parameters');
     });
+
+    it('should strip the + operator from reserved expansion param names', () => {
+      const result = parseUriTemplate('skill://{+skillPath}/SKILL.md');
+
+      expect(result.paramNames).toEqual(['skillPath']);
+      expect(result.pattern.test('skill://acme/SKILL.md')).toBe(true);
+      // Reserved expansion can span multiple path segments
+      expect(result.pattern.test('skill://acme/billing/refunds/SKILL.md')).toBe(true);
+    });
+
+    it('should support multiple reserved-expansion params in one template', () => {
+      const result = parseUriTemplate('skill://{+skillPath}/{+filePath}');
+
+      expect(result.paramNames).toEqual(['skillPath', 'filePath']);
+      expect(result.pattern.test('skill://docs/refs/getting-started.md')).toBe(true);
+    });
   });
 
   describe('matchUriTemplate', () => {
@@ -101,6 +117,29 @@ describe('URI Template Utils', () => {
 
       expect(params).toEqual({});
     });
+
+    it('should match multi-segment values with reserved expansion', () => {
+      const params = matchUriTemplate('skill://{+skillPath}/SKILL.md', 'skill://acme/billing/refunds/SKILL.md');
+
+      expect(params).toEqual({ skillPath: 'acme/billing/refunds' });
+    });
+
+    it('should split between two reserved-expansion params at the first slash', () => {
+      const params = matchUriTemplate(
+        'skill://{+skillPath}/{+filePath}',
+        'skill://docs-skill/references/getting-started.md',
+      );
+
+      // Lazy match: first reserved variable claims the smallest viable
+      // prefix, leaving the rest to the second variable.
+      expect(params).toEqual({ skillPath: 'docs-skill', filePath: 'references/getting-started.md' });
+    });
+
+    it('should still reject unrelated URIs for reserved-expansion templates', () => {
+      const params = matchUriTemplate('skill://{+skillPath}/SKILL.md', 'other://acme/SKILL.md');
+
+      expect(params).toBeNull();
+    });
   });
 
   describe('expandUriTemplate', () => {
@@ -142,6 +181,24 @@ describe('URI Template Utils', () => {
 
       expect(result).toBe('static://resource');
     });
+
+    it('should preserve slashes in reserved-expansion params', () => {
+      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'acme/billing' });
+
+      expect(result).toBe('skill://acme/billing/SKILL.md');
+    });
+
+    it('should percent-encode chars outside the reserved+unreserved set', () => {
+      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'spaces and unicode ✨' });
+
+      expect(result).toBe('skill://spaces%20and%20unicode%20%E2%9C%A8/SKILL.md');
+    });
+
+    it('should leave already percent-encoded triplets intact in reserved expansion', () => {
+      const result = expandUriTemplate('skill://{+skillPath}/SKILL.md', { skillPath: 'pre%20encoded' });
+
+      expect(result).toBe('skill://pre%20encoded/SKILL.md');
+    });
   });
 
   describe('extractTemplateParams', () => {
@@ -161,6 +218,12 @@ describe('URI Template Utils', () => {
       const params = extractTemplateParams('{a}/{b}/{c}');
 
       expect(params).toEqual(['a', 'b', 'c']);
+    });
+
+    it('should strip the + operator from reserved-expansion param names', () => {
+      const params = extractTemplateParams('skill://{+skillPath}/{+filePath}');
+
+      expect(params).toEqual(['skillPath', 'filePath']);
     });
   });
 
