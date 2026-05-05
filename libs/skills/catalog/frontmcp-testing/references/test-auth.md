@@ -5,16 +5,26 @@ description: Test authenticated MCP servers with TestTokenFactory, MockOAuthServ
 
 # Testing with Authentication
 
+Real API references:
+
+- `TestTokenFactory.createTestToken(opts)` — `libs/testing/src/auth/token-factory.ts:97` (plus `createAdminToken`, `createUserToken`, `createAnonymousToken`, `createExpiredToken`, `createTokenWithInvalidSignature`).
+- `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()` — `libs/testing/src/auth/mock-oauth-server.ts:159`.
+- `TestServer.start({ command, port })` — `libs/testing/src/server/test-server.ts:101`. Get a client with `McpTestClient.create({ baseUrl }).withToken(token).buildAndConnect()`.
+- Roles, email, and other claims go inside `claims`, not as top-level fields. `CreateTokenOptions` only declares `sub`, `iss`, `aud`, `scopes`, `exp`, `claims`.
+
 ```typescript
-import { McpTestClient, TestServer, TestTokenFactory, MockOAuthServer } from '@frontmcp/testing';
-import Server from '../src/main';
+// auth.e2e.spec.ts
+import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
 describe('Authenticated Server', () => {
   let server: TestServer;
   let tokenFactory: TestTokenFactory;
 
   beforeAll(async () => {
-    server = await TestServer.create(Server);
+    server = await TestServer.start({
+      command: 'npx tsx src/main.ts',
+      port: 3010,
+    });
     tokenFactory = new TestTokenFactory({
       issuer: 'https://test-idp.example.com',
       audience: 'my-api',
@@ -22,81 +32,114 @@ describe('Authenticated Server', () => {
   });
 
   afterAll(async () => {
-    await server.dispose();
+    await server.stop();
   });
 
-  it('should reject unauthenticated requests', async () => {
-    const client = await server.connect();
-    const result = await client.callTool('protected_tool', {});
-    expect(result.isError).toBe(true);
-    await client.close();
+  it('rejects unauthenticated requests', async () => {
+    const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .withPublicMode() // do not request an anonymous token; send no Authorization header
+      .buildAndConnect();
+
+    const result = await client.tools.call('protected_tool', {});
+    expect(result).toBeError();
+
+    await client.disconnect();
   });
 
-  it('should accept valid token', async () => {
-    const token = await tokenFactory.createToken({
+  it('accepts a valid token', async () => {
+    const token = await tokenFactory.createTestToken({
       sub: 'user-123',
       scopes: ['read', 'write'],
     });
 
-    const client = await server.connect({ authToken: token });
-    const result = await client.callTool('protected_tool', { data: 'test' });
+    const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .withToken(token)
+      .buildAndConnect();
+
+    const result = await client.tools.call('protected_tool', { data: 'test' });
     expect(result).toBeSuccessful();
-    await client.close();
+
+    await client.disconnect();
   });
 
-  it('should enforce role-based access', async () => {
-    const adminToken = await tokenFactory.createToken({
+  it('enforces role-based access', async () => {
+    const adminToken = await tokenFactory.createTestToken({
       sub: 'admin-1',
-      roles: ['admin'],
+      claims: { roles: ['admin'] },
     });
-    const userToken = await tokenFactory.createToken({
+    const userToken = await tokenFactory.createTestToken({
       sub: 'user-1',
-      roles: ['user'],
+      claims: { roles: ['user'] },
     });
 
-    const adminClient = await server.connect({ authToken: adminToken });
-    const adminResult = await adminClient.callTool('admin_only_tool', {});
+    const adminClient = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .withToken(adminToken)
+      .buildAndConnect();
+    const adminResult = await adminClient.tools.call('admin_only_tool', {});
     expect(adminResult).toBeSuccessful();
 
-    const userClient = await server.connect({ authToken: userToken });
-    const userResult = await userClient.callTool('admin_only_tool', {});
-    expect(userResult.isError).toBe(true);
+    const userClient = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .withToken(userToken)
+      .buildAndConnect();
+    const userResult = await userClient.tools.call('admin_only_tool', {});
+    expect(userResult).toBeError();
 
-    await adminClient.close();
-    await userClient.close();
-  });
-});
-
-describe('OAuth Flow', () => {
-  let mockOAuth: MockOAuthServer;
-
-  beforeAll(async () => {
-    mockOAuth = await MockOAuthServer.create({
-      issuer: 'https://test-idp.example.com',
-      port: 9999,
-    });
-  });
-
-  afterAll(async () => {
-    await mockOAuth.close();
-  });
-
-  it('should complete OAuth authorization code flow', async () => {
-    const { authorizationUrl } = await mockOAuth.startFlow({
-      clientId: 'test-client',
-      redirectUri: 'http://localhost:3001/callback',
-      scopes: ['openid', 'profile'],
-    });
-    expect(authorizationUrl).toContain('code=');
+    await adminClient.disconnect();
+    await userClient.disconnect();
   });
 });
 ```
+
+## Mock OAuth / OIDC server
+
+`MockOAuthServer` serves JWKS, OAuth metadata, authorization, token, and userinfo endpoints. Construct it with a `TestTokenFactory`, call `.start()` to bind a port, and configure your MCP server to point at the returned `info.issuer` / `info.jwksUrl`.
+
+```typescript
+// mock-oauth.e2e.spec.ts
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+describe('Mock OAuth server', () => {
+  let tokenFactory: TestTokenFactory;
+  let mockOAuth: MockOAuthServer;
+
+  beforeAll(async () => {
+    tokenFactory = new TestTokenFactory();
+    mockOAuth = new MockOAuthServer(tokenFactory, {
+      autoApprove: true,
+      testUser: { sub: 'user-123', email: 'test@example.com' },
+      clientId: 'test-client',
+      validRedirectUris: ['http://localhost:3001/callback'],
+    });
+    await mockOAuth.start();
+  });
+
+  afterAll(async () => {
+    await mockOAuth.stop();
+  });
+
+  it('exposes JWKS that verifies factory-issued tokens', async () => {
+    const jwks = await fetch(mockOAuth.info.jwksUrl).then((r) => r.json());
+    expect(jwks.keys.length).toBeGreaterThan(0);
+  });
+
+  it('issues tokens via the same factory', async () => {
+    const token = await tokenFactory.createTestToken({ sub: 'user-123' });
+    expect(token.split('.')).toHaveLength(3);
+  });
+});
+```
+
+To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set.
 
 ## Examples
 
 | Example                                                                     | Level        | Description                                                                                               |
 | --------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
-| [`oauth-flow-test`](../examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.        |
+| [`oauth-flow-test`](../examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth identity provider and verify JWKS / token issuance.            |
 | [`role-based-access-test`](../examples/test-auth/role-based-access-test.md) | Intermediate | Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints. |
 | [`token-factory-test`](../examples/test-auth/token-factory-test.md)         | Basic        | Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.            |
 

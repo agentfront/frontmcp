@@ -45,7 +45,7 @@ observability: {
 }
 ```
 
-For traces, configure `setupOTel()` with the same endpoint:
+For traces, configure `setupOTel()` with the same endpoint. `setupOTel()` does **not** accept `headers` directly — pass auth via the standard `OTEL_EXPORTER_OTLP_HEADERS` environment variable, which the underlying OTLP trace exporter reads automatically:
 
 ```typescript
 import { setupOTel } from '@frontmcp/observability';
@@ -56,6 +56,13 @@ setupOTel({
   endpoint: 'https://ingress.coralogix.com:443',
 });
 ```
+
+```bash
+# Auth is supplied via env var, not setupOTel options
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${CX_PRIVATE_KEY}"
+```
+
+> The OTLP **logging** sink (`{ type: 'otlp', headers: { ... } }`) does accept `headers` directly — only `setupOTel()` for traces relies on env vars.
 
 ### Datadog
 

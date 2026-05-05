@@ -1,6 +1,6 @@
 ---
 name: configure-deployment-targets
-description: Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, and sdk targets
+description: Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, sdk, and mcpb targets
 ---
 
 # Configure Deployment Targets
@@ -29,14 +29,14 @@ FrontMCP's configuration file defines one or more deployment targets, each with 
 
 ## Prerequisites
 
-- `@frontmcp/cli` installed
+- `frontmcp` installed
 - A working FrontMCP server (see `frontmcp-development`)
 
 ## Step 1: Create Configuration File
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -70,10 +70,13 @@ export default defineConfig({
     {
       target: 'node',
       server: {
-        http: { port: 3000, cors: { origin: 'https://app.example.com' } },
+        http: { port: 3000, cors: { origins: ['https://app.example.com'] } },
         csp: {
           enabled: true,
-          directives: "default-src 'self'; upgrade-insecure-requests",
+          directives: {
+            'default-src': "'self'",
+            'upgrade-insecure-requests': '',
+          },
         },
         headers: {
           hsts: 'max-age=31536000; includeSubDomains',
@@ -117,25 +120,25 @@ frontmcp build --target vercel
 | `browser`     | In-memory        | Memory                | Web browser             |
 | `cli`         | stdio            | SQLite, memory        | Standalone binary       |
 | `sdk`         | Direct           | Configurable          | Library embedding       |
+| `mcpb`        | stdio            | SQLite, memory        | `.mcpb` MCP bundles     |
 
 ### Server HTTP Options
 
-| Field         | Type             | Default | Description                  |
-| ------------- | ---------------- | ------- | ---------------------------- |
-| `port`        | number           | 3000    | Listen port                  |
-| `socketPath`  | string           | ---     | Unix socket (overrides port) |
-| `entryPath`   | string           | `/`     | Base path                    |
-| `cors.origin` | string           | ---     | CORS allowed origin          |
-| `portRange`   | [number, number] | ---     | Auto-find available port     |
+| Field          | Type     | Default | Description                  |
+| -------------- | -------- | ------- | ---------------------------- |
+| `port`         | number   | 3000    | Listen port                  |
+| `socketPath`   | string   | ---     | Unix socket (overrides port) |
+| `entryPath`    | string   | `/`     | Base path                    |
+| `cors.origins` | string[] | ---     | CORS allowed origins         |
 
 ### CSP Options
 
-| Field        | Type    | Default | Description                    |
-| ------------ | ------- | ------- | ------------------------------ |
-| `enabled`    | boolean | false   | Enable CSP headers             |
-| `directives` | string  | ---     | Semicolon-separated directives |
-| `reportUri`  | string  | ---     | Violation report URI           |
-| `reportOnly` | boolean | false   | Report-only mode               |
+| Field        | Type                                 | Default | Description            |
+| ------------ | ------------------------------------ | ------- | ---------------------- |
+| `enabled`    | boolean                              | false   | Enable CSP headers     |
+| `directives` | `Record<string, string \| string[]>` | ---     | Directive-to-value map |
+| `reportUri`  | string                               | ---     | Violation report URI   |
+| `reportOnly` | boolean                              | false   | Report-only mode       |
 
 ### Security Headers
 
@@ -169,7 +172,7 @@ For JSON configs, add `$schema` for autocomplete:
 
 ```json
 {
-  "$schema": "./node_modules/@frontmcp/cli/frontmcp.schema.json",
+  "$schema": "./node_modules/frontmcp/frontmcp.schema.json",
   "name": "my-server",
   "deployments": [{ "target": "node" }]
 }
@@ -177,11 +180,11 @@ For JSON configs, add `$schema` for autocomplete:
 
 ## Common Patterns
 
-| Pattern        | Correct                      | Incorrect                    | Why                           |
-| -------------- | ---------------------------- | ---------------------------- | ----------------------------- |
-| Config helper  | `defineConfig({...})`        | Plain object export          | Loses IDE autocomplete        |
-| HA config      | Only on `distributed` target | On `node` or `vercel` target | HA requires Redis + multi-pod |
-| CSP directives | Semicolon-separated string   | Object or array              | Schema expects a string       |
+| Pattern        | Correct                                                | Incorrect                           | Why                                                          |
+| -------------- | ------------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------ |
+| Config helper  | `defineConfig({...})`                                  | Plain object export                 | Loses IDE autocomplete                                       |
+| HA config      | Only on `distributed` target                           | On `node` or `vercel` target        | HA requires Redis + multi-pod                                |
+| CSP directives | `{ 'default-src': "'self'" }` (record of name → value) | A single semicolon-separated string | Schema is `Record<string, string \| string[]>`, not a string |
 
 ## Verification Checklist
 

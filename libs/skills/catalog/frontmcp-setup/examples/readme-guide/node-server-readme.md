@@ -7,7 +7,7 @@ tags: [setup, docker, readme, node]
 features:
   - 'Standard README sections: Features, Quick Start, Tools table, Resources table, Environment Variables'
   - 'Docker-specific deployment section with build and run commands'
-  - 'Development commands using `frontmcp dev`, `frontmcp test`, `frontmcp inspect`'
+  - 'Development commands using `frontmcp dev`, `frontmcp test`, `frontmcp inspector`'
   - 'Tool and resource tables generated from source code decorators'
 ---
 
@@ -65,7 +65,7 @@ npm run dev
 
 frontmcp dev # Start dev server with hot reload
 frontmcp test # Run tests
-frontmcp inspect # Inspect MCP server capabilities
+frontmcp inspector # Inspect MCP server capabilities
 
 ## Docker Deployment
 
@@ -81,7 +81,7 @@ MIT
 
 - Standard README sections: Features, Quick Start, Tools table, Resources table, Environment Variables
 - Docker-specific deployment section with build and run commands
-- Development commands using `frontmcp dev`, `frontmcp test`, `frontmcp inspect`
+- Development commands using `frontmcp dev`, `frontmcp test`, `frontmcp inspector`
 - Tool and resource tables generated from source code decorators
 
 ## Related

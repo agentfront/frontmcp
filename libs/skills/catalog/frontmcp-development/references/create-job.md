@@ -35,17 +35,17 @@ Create a class extending `JobContext<In, Out>` and implement the `execute(input:
 
 ### JobMetadata Fields
 
-| Field          | Type                     | Required | Default          | Description                            |
-| -------------- | ------------------------ | -------- | ---------------- | -------------------------------------- |
-| `name`         | `string`                 | Yes      | --               | Unique job name                        |
-| `inputSchema`  | `ZodRawShape`            | Yes      | --               | Zod raw shape for input validation     |
-| `outputSchema` | `ZodRawShape \| ZodType` | Yes      | --               | Zod schema for output validation       |
-| `description`  | `string`                 | No       | --               | Human-readable description             |
-| `timeout`      | `number`                 | No       | `300000` (5 min) | Maximum execution time in milliseconds |
-| `retry`        | `RetryPolicy`            | No       | --               | Retry configuration (see below)        |
-| `tags`         | `string[]`               | No       | --               | Categorization tags                    |
-| `labels`       | `Record<string, string>` | No       | --               | Key-value labels for filtering         |
-| `permissions`  | `JobPermissions`         | No       | --               | Access control configuration           |
+| Field          | Type                     | Required | Default          | Description                                |
+| -------------- | ------------------------ | -------- | ---------------- | ------------------------------------------ |
+| `name`         | `string`                 | Yes      | --               | Unique job name                            |
+| `inputSchema`  | `ZodRawShape`            | Yes      | --               | Zod raw shape for input validation         |
+| `outputSchema` | `ZodRawShape \| ZodType` | Yes      | --               | Zod schema for output validation           |
+| `description`  | `string`                 | No       | --               | Human-readable description                 |
+| `timeout`      | `number`                 | No       | `300000` (5 min) | Maximum execution time in milliseconds     |
+| `retry`        | `RetryPolicy`            | No       | --               | Retry configuration (see below)            |
+| `tags`         | `string[]`               | No       | --               | Categorization tags                        |
+| `labels`       | `Record<string, string>` | No       | --               | Key-value labels for filtering             |
+| `permissions`  | `JobPermission[]`        | No       | --               | Array of permission rules (one per action) |
 
 ### Basic Example
 
@@ -139,10 +139,10 @@ Configure automatic retries with exponential backoff using the `retry` field.
 
 | Field               | Type     | Default | Description                                          |
 | ------------------- | -------- | ------- | ---------------------------------------------------- |
-| `maxAttempts`       | `number` | `1`     | Total number of attempts (including the initial run) |
+| `maxAttempts`       | `number` | `3`     | Total number of attempts (including the initial run) |
 | `backoffMs`         | `number` | `1000`  | Initial delay before the first retry in milliseconds |
 | `backoffMultiplier` | `number` | `2`     | Multiplier applied to backoff after each retry       |
-| `maxBackoffMs`      | `number` | `30000` | Maximum backoff duration in milliseconds             |
+| `maxBackoffMs`      | `number` | `60000` | Maximum backoff duration in milliseconds             |
 
 ### Example with Retry
 
@@ -201,15 +201,17 @@ class SyncExternalApiJob extends JobContext {
 }
 ```
 
-With this configuration, if the job fails:
+With this configuration (`maxAttempts: 5`), if the job fails:
 
 - Attempt 1: immediate execution
-- Attempt 2: retry after 2000ms
-- Attempt 3: retry after 4000ms
-- Attempt 4: retry after 8000ms
-- Attempt 5: retry after 16000ms
+- Attempt 2: retry after 2000ms (2s)
+- Attempt 3: retry after 4000ms (4s)
+- Attempt 4: retry after 8000ms (8s)
+- Attempt 5: retry after 16000ms (16s)
 
 The backoff is capped at `maxBackoffMs` (60000ms), so no delay exceeds 60 seconds.
+
+> **Default:** when you omit `retry`, the framework uses `maxAttempts: 3`, `backoffMs: 1000`, `backoffMultiplier: 2`, `maxBackoffMs: 60000` -- i.e., the initial run plus two retries (at ~1s and ~2s).
 
 ## Progress Tracking
 
@@ -262,7 +264,18 @@ class ImportCsvJob extends JobContext {
 
 ## Permissions
 
-Control who can interact with jobs using the `permissions` field. Permissions support action-based access, roles, scopes, and custom predicates.
+Control who can interact with jobs using the `permissions` field. **`permissions` is an array** of rules; each rule grants access to a single `action` and lists the roles, scopes, and/or custom predicate required for that action.
+
+### Permission Rule Shape
+
+```typescript
+interface JobPermission {
+  action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular!
+  roles?: string[]; // user must have one of these roles
+  scopes?: string[]; // token must include all of these scopes
+  custom?: (authInfo: Partial<Record<string, unknown>>) => boolean | Promise<boolean>;
+}
+```
 
 ### Permission Actions
 
@@ -289,16 +302,20 @@ Control who can interact with jobs using the `permissions` field. Permissions su
     exportedRows: z.number().int(),
     location: z.string().url(),
   },
-  permissions: {
-    actions: ['create', 'read', 'execute', 'list'],
-    roles: ['admin', 'data-engineer'],
-    scopes: ['jobs:write', 'data:export'],
-    predicate: (ctx) => ctx.user?.department === 'engineering',
-  },
+  permissions: [
+    {
+      action: 'execute',
+      roles: ['admin', 'data-engineer'],
+      scopes: ['jobs:write', 'data:export'],
+      custom: (authInfo) => (authInfo as { department?: string }).department === 'engineering',
+    },
+    { action: 'read', roles: ['admin', 'data-engineer', 'auditor'] },
+    { action: 'list', roles: ['admin', 'data-engineer', 'auditor'] },
+  ],
 })
 class DataExportJob extends JobContext {
   async execute(input: { dataset: string; destination: string }) {
-    // Only users with the right roles, scopes, or matching the predicate can run this
+    // Only users matching one of the permission rules for this action can run this
     this.log(`Exporting dataset: ${input.dataset}`);
     const rows = await this.exportData(input.dataset, input.destination);
     return { exportedRows: rows, location: input.destination };
@@ -312,25 +329,22 @@ class DataExportJob extends JobContext {
 
 ### Combining Permission Strategies
 
-Permissions fields are additive -- all specified conditions must be met:
+Within a single rule, `roles`, `scopes`, and `custom` are additive -- all specified conditions must be met. Add additional entries to grant other actions (or alternative role/scope sets):
 
 ```typescript
-permissions: {
-  // Actions this job supports
-  actions: ['create', 'read', 'execute', 'delete', 'list'],
-
-  // Role-based: user must have one of these roles
-  roles: ['admin', 'operator'],
-
-  // Scope-based: user token must include these scopes
-  scopes: ['jobs:manage'],
-
-  // Custom predicate: arbitrary logic
-  predicate: (ctx) => {
-    const user = ctx.user;
-    return user?.isActive && user?.emailVerified;
+permissions: [
+  {
+    action: 'execute',
+    roles: ['admin', 'operator'],
+    scopes: ['jobs:manage'],
+    custom: (authInfo) => {
+      const user = (authInfo as { user?: { isActive?: boolean; emailVerified?: boolean } }).user;
+      return Boolean(user?.isActive && user?.emailVerified);
+    },
   },
-}
+  { action: 'read', roles: ['admin', 'operator', 'viewer'] },
+  { action: 'list', roles: ['admin', 'operator', 'viewer'] },
+];
 ```
 
 ## Function Builder
@@ -475,11 +489,12 @@ import { App, FrontMcp, Job, job, JobContext, z } from '@frontmcp/sdk';
   },
   tags: ['etl', 'data-pipeline'],
   labels: { team: 'data-engineering', priority: 'high' },
-  permissions: {
-    actions: ['create', 'read', 'execute', 'list'],
-    roles: ['admin', 'data-engineer'],
-    scopes: ['jobs:execute', 'data:write'],
-  },
+  permissions: [
+    { action: 'execute', roles: ['admin', 'data-engineer'], scopes: ['jobs:execute', 'data:write'] },
+    { action: 'create', roles: ['admin', 'data-engineer'] },
+    { action: 'read', roles: ['admin', 'data-engineer'] },
+    { action: 'list', roles: ['admin', 'data-engineer'] },
+  ],
 })
 class EtlPipelineJob extends JobContext {
   async execute(input: {
@@ -568,13 +583,13 @@ class DataServer {}
 
 ## Common Patterns
 
-| Pattern           | Correct                                                            | Incorrect                                        | Why                                                                            |
-| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------ |
-| Progress tracking | `this.progress(50, 100, 'Processing batch 5')`                     | Not reporting progress                           | Progress is persisted and queryable; essential for long-running visibility     |
-| Retry config      | `retry: { maxAttempts: 3, backoffMs: 2000, backoffMultiplier: 2 }` | Implementing retry logic manually in `execute()` | Framework handles retry with exponential backoff and attempt tracking          |
-| Attempt awareness | Check `this.attempt` for retry-specific logic                      | Ignoring attempt number                          | `this.attempt` is 1-based; use it to log retry context or adjust behavior      |
-| Job logging       | `this.log('message')` for persistent, queryable logs               | Using `console.log()`                            | `this.log()` persists with job state; `console.log` is ephemeral               |
-| Permissions       | Use `permissions: { roles: [...], scopes: [...] }` declaratively   | Checking roles manually inside `execute()`       | Declarative permissions are enforced before execution and are self-documenting |
+| Pattern           | Correct                                                                              | Incorrect                                                            | Why                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Progress tracking | `this.progress(50, 100, 'Processing batch 5')`                                       | Not reporting progress                                               | Progress is persisted and queryable; essential for long-running visibility                                                             |
+| Retry config      | `retry: { maxAttempts: 3, backoffMs: 2000, backoffMultiplier: 2 }`                   | Implementing retry logic manually in `execute()`                     | Framework handles retry with exponential backoff and attempt tracking                                                                  |
+| Attempt awareness | Check `this.attempt` for retry-specific logic                                        | Ignoring attempt number                                              | `this.attempt` is 1-based; use it to log retry context or adjust behavior                                                              |
+| Job logging       | `this.log('message')` for persistent, queryable logs                                 | Using `console.log()`                                                | `this.log()` persists with job state; `console.log` is ephemeral                                                                       |
+| Permissions       | `permissions: [{ action: 'execute', roles: [...] }, ...]` (array, singular `action`) | `permissions: { actions: [...], roles, predicate }` (does not parse) | The schema requires an array of `{ action, roles, scopes, custom }` rules; `actions` plural and top-level `predicate` are not accepted |
 
 ## Verification Checklist
 

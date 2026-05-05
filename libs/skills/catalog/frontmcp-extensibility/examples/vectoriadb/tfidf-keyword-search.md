@@ -9,7 +9,7 @@ features:
   - 'Configuring field weights to control scoring influence'
   - 'Calling `buildIndex()` after adding documents (required for TFIDFVectoria)'
   - 'Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`'
-  - 'Injecting the provider into tools via `this.get(FAQSearch)`'
+  - 'Injecting the provider into tools via `this.get(FAQSearchProvider)`'
 ---
 
 # TFIDFVectoria: Lightweight Keyword Search Provider
@@ -24,9 +24,7 @@ import { TFIDFVectoria } from 'vectoriadb';
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const FAQSearch = Symbol('FAQSearch');
-
-@Provider({ name: 'faq-search', provide: FAQSearch, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'faq-search', scope: ProviderScope.GLOBAL })
 export class FAQSearchProvider {
   private db = new TFIDFVectoria({
     fields: {
@@ -58,7 +56,7 @@ export class FAQSearchProvider {
 // src/tools/search-faq.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { FAQSearch } from '../providers/faq-search.provider';
+import { FAQSearchProvider } from '../providers/faq-search.provider';
 
 @Tool({
   name: 'search_faq',
@@ -78,7 +76,7 @@ import { FAQSearch } from '../providers/faq-search.provider';
 })
 export class SearchFaqTool extends ToolContext {
   async execute(input: { query: string; limit: number }) {
-    const faqSearch = this.get(FAQSearch);
+    const faqSearch = this.get(FAQSearchProvider);
     const results = faqSearch.search(input.query, input.limit);
 
     return {
@@ -97,7 +95,7 @@ export class SearchFaqTool extends ToolContext {
 - Configuring field weights to control scoring influence
 - Calling `buildIndex()` after adding documents (required for TFIDFVectoria)
 - Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`
-- Injecting the provider into tools via `this.get(FAQSearch)`
+- Injecting the provider into tools via `this.get(FAQSearchProvider)`
 
 ## Related
 

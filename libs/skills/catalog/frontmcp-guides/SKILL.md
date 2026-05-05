@@ -160,7 +160,7 @@ export class GetWeatherTool extends ToolContext {
 **Resource** (`create-resource`):
 
 ```typescript
-import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult, Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   uri: 'weather://cities',
@@ -169,8 +169,16 @@ import { Resource, ResourceContext } from '@frontmcp/sdk';
   mimeType: 'application/json',
 })
 export class CitiesResource extends ResourceContext {
-  async read() {
-    return JSON.stringify(['London', 'Tokyo', 'New York', 'Paris', 'Sydney']);
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(['London', 'Tokyo', 'New York', 'Paris', 'Sydney']),
+        },
+      ],
+    };
   }
 }
 ```
@@ -225,23 +233,26 @@ export default class TaskManagerServer {}
 **Provider for shared storage** (`create-provider`):
 
 ```typescript
-import type { Token } from '@frontmcp/di';
-import { Provider } from '@frontmcp/sdk';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export interface TaskStore {
-  create(task: Task): Promise<Task>;
-  list(userId: string): Promise<Task[]>;
-  update(id: string, data: Partial<Task>): Promise<Task>;
-  delete(id: string): Promise<void>;
-}
-
-export const TASK_STORE: Token<TaskStore> = Symbol('TaskStore');
-
-@Provider({ token: TASK_STORE })
-export class RedisTaskStoreProvider implements TaskStore {
-  // Redis-backed implementation
+@Provider({ name: 'task-store', scope: ProviderScope.GLOBAL })
+export class TaskStoreProvider {
+  async create(task: Task): Promise<Task> {
+    /* Redis-backed implementation */
+  }
+  async list(userId: string): Promise<Task[]> {
+    /* ... */
+  }
+  async update(id: string, data: Partial<Task>): Promise<Task> {
+    /* ... */
+  }
+  async delete(id: string): Promise<void> {
+    /* ... */
+  }
 }
 ```
+
+> Use the class itself as the DI token (`this.get(TaskStoreProvider)`). For factory-built singletons (e.g. when you need async setup before the class is constructed), use `AsyncProvider({ provide, name, scope, useFactory })` instead.
 
 **Tool with DI** (`create-tool` + `create-provider`):
 
@@ -257,8 +268,10 @@ export class RedisTaskStoreProvider implements TaskStore {
 })
 export class CreateTaskTool extends ToolContext {
   async execute(input: { title: string; priority: string }) {
-    const store = this.get(TASK_STORE);
-    return store.create({ title: input.title, priority: input.priority, status: 'pending' });
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
+    if (!userId) this.fail(new Error('Authentication required'));
+    return store.create({ title: input.title, priority: input.priority, status: 'pending', userId });
   }
 }
 ```
@@ -325,20 +338,19 @@ export default class KnowledgeBaseServer {}
   },
   llm: {
     provider: 'anthropic',
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     apiKey: { env: 'ANTHROPIC_API_KEY' },
     maxTokens: 4096,
   }, // provider and model are client-configurable
+  execution: { maxIterations: 5 },
+  systemInstructions:
+    'Search for relevant documents using search_docs, synthesize findings, and produce a structured summary with source attribution.',
   tools: [SearchDocsTool, IngestDocumentTool],
 })
-export class ResearcherAgent extends AgentContext {
-  async execute(input: { topic: string; depth: string }) {
-    return this.run(
-      `Research "${input.topic}" at ${input.depth} depth. Search for relevant documents, synthesize findings, and provide a structured summary.`,
-    );
-  }
-}
+export class ResearcherAgent extends AgentContext {}
 ```
+
+> The framework drives the LLM tool-use loop via the `agents:call-agent` flow — you don't override `execute()`. Configure iteration limits and other runtime knobs through the `@Agent({ execution: { maxIterations } })` block.
 
 > **Full working code:** See `references/example-knowledge-base.md`
 
@@ -418,3 +430,4 @@ export class ResearcherAgent extends AgentContext {
 - [Your First Tool](https://docs.agentfront.dev/frontmcp/guides/your-first-tool)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`
 - Core skills: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing`
+- Mandatory boundaries: import MCP protocol types and `McpError` from `@frontmcp/protocol` (never directly from `@modelcontextprotocol/sdk`); use `@frontmcp/utils` for crypto and file-system operations.

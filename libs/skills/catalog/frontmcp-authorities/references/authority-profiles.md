@@ -17,40 +17,40 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   name: 'my-server',
   authorities: {
-    claimsMapping: { roles: 'realm_access.roles', permissions: 'scope' },
+    claimsMapping: {
+      roles: 'realm_access.roles',
+      permissions: 'resource_access.my-client.roles',
+    },
     profiles: {
-        // RBAC: user must have at least one of these roles
-        admin: {
-          roles: { any: ['admin', 'superadmin'] },
-        },
+      // RBAC: user must have at least one of these roles
+      admin: {
+        roles: { any: ['admin', 'superadmin'] },
+      },
 
-        // ABAC: user must be authenticated (sub exists)
-        authenticated: {
-          attributes: {
-            conditions: [{ path: 'user.sub', op: 'exists', value: true }],
-          },
+      // ABAC: user must be authenticated (sub exists)
+      authenticated: {
+        attributes: {
+          conditions: [{ path: 'user.sub', op: 'exists', value: true }],
         },
+      },
 
-        // ABAC: tenant from JWT must match the tenantId input argument
-        matchTenant: {
-          attributes: {
-            conditions: [
-              { path: 'claims.org_id', op: 'eq', value: { fromInput: 'tenantId' } },
-            ],
-          },
+      // ABAC: tenant from JWT must match the tenantId input argument
+      matchTenant: {
+        attributes: {
+          conditions: [{ path: 'claims.org_id', op: 'eq', value: { fromInput: 'tenantId' } }],
         },
+      },
 
-        // RBAC: permission-based
-        canPublish: {
-          permissions: { all: ['content:publish'] },
-        },
+      // RBAC: permission-based
+      canPublish: {
+        permissions: { all: ['content:publish'] },
+      },
 
-        // Combined: role AND permission
-        editorWithPublish: {
-          roles: { any: ['editor'] },
-          permissions: { all: ['content:publish'] },
-          // operator defaults to 'AND', so both must pass
-        },
+      // Combined: role AND permission
+      editorWithPublish: {
+        roles: { any: ['editor'] },
+        permissions: { all: ['content:publish'] },
+        // operator defaults to 'AND', so both must pass
       },
     },
   },
@@ -78,8 +78,11 @@ export default class DeleteUserTool extends ToolContext {
   authorities: 'admin',
 })
 export default class InternalMetricsResource extends ResourceContext {
-  async read() {
-    // only admin can read this resource
+  async execute(uri: string, _params: Record<string, string>) {
+    // only admin can reach here
+    return {
+      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ ok: true }) }],
+    };
   }
 }
 
@@ -246,13 +249,13 @@ This filtering happens automatically. No additional configuration is needed. Ent
 
 ## Profile Design Guidelines
 
-| Guideline | Example |
-| --- | --- |
-| Name profiles after the role or intent, not the technical check | `admin` not `hasAdminRole` |
-| Keep profiles single-purpose | `matchTenant` does tenant check only; combine with `['authenticated', 'matchTenant']` |
-| Use `allOf`/`anyOf` for complex compositions in inline policies | Do not create profiles that duplicate combinator logic |
-| Document your profiles in a central file | `types/authorities.d.ts` with augmentation and comments |
-| Test profiles with both authorized and unauthorized users | See `frontmcp-testing` skill for auth testing patterns |
+| Guideline                                                       | Example                                                                               |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Name profiles after the role or intent, not the technical check | `admin` not `hasAdminRole`                                                            |
+| Keep profiles single-purpose                                    | `matchTenant` does tenant check only; combine with `['authenticated', 'matchTenant']` |
+| Use `allOf`/`anyOf` for complex compositions in inline policies | Do not create profiles that duplicate combinator logic                                |
+| Document your profiles in a central file                        | `types/authorities.d.ts` with augmentation and comments                               |
+| Test profiles with both authorized and unauthorized users       | See `frontmcp-testing` skill for auth testing patterns                                |
 
 ## Reference
 

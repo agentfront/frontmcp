@@ -12,12 +12,12 @@ Verify that your tools create the right spans, log entries include trace context
 
 ```typescript
 import {
-  createTestTracer,
-  getFinishedSpans,
-  assertSpanExists,
   assertSpanAttribute,
+  assertSpanExists,
+  createTestTracer,
   findSpan,
   findSpansByAttribute,
+  getFinishedSpans,
 } from '@frontmcp/observability';
 ```
 
@@ -53,8 +53,7 @@ describe('AnalyzeDataTool', () => {
 Use a `CallbackSink` to capture structured log entries:
 
 ```typescript
-import { StructuredLogTransport, CallbackSink } from '@frontmcp/observability';
-import type { StructuredLogEntry } from '@frontmcp/observability';
+import { CallbackSink, StructuredLogTransport, type StructuredLogEntry } from '@frontmcp/observability';
 
 describe('Structured logging', () => {
   it('should include trace_id in log entries', () => {
@@ -85,55 +84,40 @@ describe('Structured logging', () => {
 });
 ```
 
-## Testing Auto-Instrumentation Hooks
+## Testing Auto-Instrumentation End-to-End
 
-Test that the SDK's hook functions produce correct spans:
+The plugin's hook functions are not part of the public API surface — only top-level helpers from `@frontmcp/observability` are. To verify auto-instrumentation, drive a real tool through the SDK with an isolated tracer and assert spans on the exporter:
 
 ```typescript
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import {
-  onToolWillParse,
-  onToolWillExecute,
-  onToolDidExecute,
-  onToolDidFinalize,
-} from '@frontmcp/observability/plugin/observability.hooks';
+import { trace } from '@opentelemetry/api';
 
-const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-provider.register();
+import { createTestTracer, findSpan, getFinishedSpans } from '@frontmcp/observability';
 
-it('should create RPC + tool spans', () => {
-  const flowCtx = {
-    state: { input: { name: 'my_tool' }, _toolOwnerId: 'MyApp' },
-    get: (token) => {
-      if (token === Symbol.for('frontmcp:CONTEXT')) {
-        return {
-          requestId: 'req-001',
-          sessionId: 'sess',
-          scopeId: 'scope',
-          traceContext: { traceId: 'a'.repeat(32), parentId: 'b'.repeat(16), traceFlags: 1, raw: '...' },
-          authInfo: {},
-          metadata: { customHeaders: {} },
-          set: () => {},
-          get: () => undefined,
-          delete: () => {},
-        };
-      }
-    },
-  };
+// ...your test harness for invoking a FrontMCP tool, e.g. via the SDK's
+// in-process server or your transport adapter under test.
 
-  const opts = { executionSpans: true, flowStageEvents: true };
-  onToolWillParse(opts, flowCtx);
-  onToolWillExecute(opts, flowCtx);
-  onToolDidExecute(opts, flowCtx);
-  onToolDidFinalize(flowCtx);
+it('should create RPC + tool spans for a tool call', async () => {
+  const { tracer, exporter, cleanup } = createTestTracer();
+  // Register the tracer for the duration of the test so the plugin's hooks
+  // see a TracerProvider (without it, all OTel calls are no-ops).
+  trace.setGlobalTracerProvider(tracer);
 
-  const spans = exporter.getFinishedSpans();
-  expect(spans.find((s) => s.name === 'tools/call')).toBeTruthy();
-  expect(spans.find((s) => s.name === 'tool my_tool')).toBeTruthy();
+  try {
+    // Drive a real tool call through your server / harness.
+    await invokeTool('my_tool', {
+      /* args */
+    });
+
+    const spans = getFinishedSpans(exporter);
+    expect(findSpan(spans, 'tools/call')).toBeTruthy();
+    expect(findSpan(spans, 'tool my_tool')).toBeTruthy();
+  } finally {
+    cleanup();
+  }
 });
 ```
+
+Use `createTestTracer()` (top-level import from `@frontmcp/observability`) — never reach into internal hook subpaths, which are not part of the package's `exports` map.
 
 ## Test Isolation
 

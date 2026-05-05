@@ -2,77 +2,55 @@
 name: vercel-edge-config
 reference: production-vercel
 level: basic
-description: 'Shows how to configure a FrontMCP server for Vercel deployment with Vercel KV for session storage and correct route configuration.'
-tags: [production, vercel-kv, vercel, session, serverless, edge]
+description: 'Production-readiness checklist for Vercel deployment — verifies the build adapter produced the correct Build Output API v3 layout and that Vercel KV is wired for shared state.'
+tags: [production, vercel-kv, vercel, session, serverless, checklist]
 features:
-  - 'Correct `vercel.json` with function routes, memory limits, and max duration'
-  - "Using Vercel KV (`provider: 'vercel-kv'`) for session storage instead of in-memory"
-  - 'Setting CORS origins dynamically using `VERCEL_URL`'
-  - 'Serverless function entry point via `createVercelHandler`'
+  - 'Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`'
+  - 'No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3'
+  - "Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state"
+  - 'Verify CORS origins include `VERCEL_URL` and any custom production domain'
 ---
 
-# Vercel Configuration with Edge-Compatible Storage
+# Vercel Deployment: Production-Readiness Checklist
 
-Shows how to configure a FrontMCP server for Vercel deployment with Vercel KV for session storage and correct route configuration.
+> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-vercel.md`**. This file is checklist-only: it verifies the artifact produced by `frontmcp build --target vercel` is production-ready.
 
-## Code
+## Build artifact checks
 
-```jsonc
-// vercel.json
-{
-  "version": 2,
-  "builds": [{ "src": "api/**/*.ts", "use": "@vercel/node" }],
-  "routes": [{ "src": "/mcp/(.*)", "dest": "/api/mcp" }],
-  "functions": {
-    "api/mcp.ts": {
-      "memory": 256,
-      "maxDuration": 30,
-    },
-  },
-}
-```
+- [ ] `frontmcp build --target vercel` completed without warnings
+- [ ] `.vercel/output/config.json` exists (Build Output API v3 — `version: 3`)
+- [ ] `.vercel/output/functions/index.func/handler.cjs` exists — this is the actual function bundle
+- [ ] `.vercel/output/functions/index.func/.vc-config.json` declares `runtime: nodejs20.x` (or as required) and `handler: "handler.cjs"`
+- [ ] No hand-written `vercel.json` with the obsolete `{ "builds": [...], "routes": [...] }` shape — modern adapter emits `{ "version": 2, "buildCommand": ..., "installCommand": ... }` and routes through Build Output API
+- [ ] No hand-written `src/lambda.ts` / `api/mcp.ts` with a fictional `createVercelHandler(...)` import — the build adapter generates `index.js` that requires your decorated `@FrontMcp` class
 
-```typescript
-// src/main.ts
-import { FrontMcp } from '@frontmcp/sdk';
-import { MyApp } from './my.app';
+## Runtime config (`@FrontMcp` decorator)
 
-@FrontMcp({
-  info: { name: 'vercel-mcp', version: '1.0.0' },
-  apps: [MyApp],
+- [ ] `redis: { provider: 'vercel-kv' }` for session/cache state (in-memory is per-invocation only)
+- [ ] `cors.origin` is an explicit allowlist (`VERCEL_URL`, custom domain) — never `*` in production
+- [ ] No SQLite usage (no persistent filesystem on Vercel functions)
+- [ ] No `setInterval` / background timers — they don't survive freeze
 
-  // Vercel KV for session storage (not in-memory, not Redis directly)
-  redis: {
-    provider: 'vercel-kv', // Uses Vercel KV (Redis-compatible, managed)
-  },
+## Cold-start budget
 
-  // CORS: use VERCEL_URL or custom domain
-  cors: {
-    origin: [
-      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000',
-      'https://app.example.com',
-    ],
-  },
-})
-export default class VercelMcpServer {}
-```
+- [ ] No top-level `await` in `src/main.ts`
+- [ ] Heavy SDKs are lazy-imported (`await import('...')`)
+- [ ] Cold start under your function `maxDuration` budget on first request
 
-```typescript
-// api/mcp.ts — Vercel serverless function entry point
-import Server from '../src/main';
+## Env & secrets
 
-// Export the server class directly — FrontMCP handles
-// the Vercel serverless function lifecycle automatically.
-export default Server;
-```
+- [ ] All required env vars set in Vercel project settings (`Production` + `Preview` scopes)
+- [ ] No secrets committed to `vercel.json` or `.env`
+- [ ] `KV_REST_API_URL` / `KV_REST_API_TOKEN` linked from the KV integration
 
-## What This Demonstrates
+## Deploy & monitoring
 
-- Correct `vercel.json` with function routes, memory limits, and max duration
-- Using Vercel KV (`provider: 'vercel-kv'`) for session storage instead of in-memory
-- Setting CORS origins dynamically using `VERCEL_URL`
-- Serverless function entry point via `createVercelHandler`
+- [ ] Preview deployment exercises the full MCP flow (init → `tools/list` → `tools/call`)
+- [ ] `vercel --prod` deploy succeeds and the function appears in the dashboard
+- [ ] Function logs show no warnings on cold start
 
 ## Related
 
-- See `production-vercel` for the full Vercel deployment checklist
+- Configuration source of truth: `frontmcp-deployment/references/deploy-to-vercel.md`
+- Build adapter source: `libs/cli/src/commands/build/adapters/vercel.ts`
+- See `production-vercel` for the edge-runtime / scaling checklist

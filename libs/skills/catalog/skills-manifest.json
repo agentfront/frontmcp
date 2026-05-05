@@ -13,7 +13,7 @@
       "references": [
         {
           "name": "configure-auth-modes",
-          "description": "Detailed comparison of public, transparent, remote, and managed auth modes",
+          "description": "Detailed comparison of public, transparent, local, and remote auth modes",
           "examples": [
             {
               "name": "local-self-signed-tokens",
@@ -22,7 +22,7 @@
               "tags": ["config", "auth", "redis", "local", "auth-modes", "modes"],
               "features": [
                 "Using `mode: 'local'` so the server signs its own JWTs",
-                "Setting `local.issuer` and `local.audience` to control token claims",
+                "Setting `local.issuer` and `expectedAudience` to control token claims",
                 "Enabling `consent` for explicit user authorization flow",
                 "Enabling `incrementalAuth` to request additional scopes progressively",
                 "Using Redis for token storage in production"
@@ -367,7 +367,7 @@
         },
         {
           "name": "configure-deployment-targets",
-          "description": "Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, and sdk targets",
+          "description": "Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, sdk, and mcpb targets",
           "examples": [
             {
               "name": "multi-target-with-security",

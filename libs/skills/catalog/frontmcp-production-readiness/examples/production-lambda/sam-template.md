@@ -2,106 +2,62 @@
 name: sam-template
 reference: production-lambda
 level: basic
-description: 'Shows a complete SAM/CloudFormation template for deploying a FrontMCP server to AWS Lambda with API Gateway routing, DynamoDB for session storage, and proper environment configuration.'
-tags: [production, lambda, session, sam, template]
+description: 'Production-readiness checklist for the SAM template — verifies the handler path matches what `frontmcp build --target lambda` actually emits, plus DynamoDB / IAM hardening.'
+tags: [production, lambda, session, sam, checklist]
 features:
-  - 'Complete SAM template with API Gateway, Lambda function, and DynamoDB table'
-  - 'DynamoDB for session storage with TTL-based automatic cleanup'
-  - 'Lambda handler entry point via `createLambdaHandler`'
-  - 'Pay-per-request billing for cost-effective scaling'
-  - 'IAM policies scoped to the specific DynamoDB table'
+  - 'Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)'
+  - 'No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import'
+  - 'DynamoDB session table has TTL enabled for automatic cleanup'
+  - 'IAM policies are scoped (no `*` resources / actions)'
+  - 'API Gateway proxy route forwards to the function'
 ---
 
-# SAM Template with API Gateway and DynamoDB
+# SAM Template: Production-Readiness Checklist
 
-Shows a complete SAM/CloudFormation template for deploying a FrontMCP server to AWS Lambda with API Gateway routing, DynamoDB for session storage, and proper environment configuration.
+> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-lambda.md`**. This file is checklist-only: it verifies the SAM artifact pairs correctly with the bundle that `frontmcp build --target lambda` produces.
 
-## Code
+## Build artifact checks
 
-```yaml
-# ci/template.yaml
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: FrontMCP Lambda deployment
+- [ ] `frontmcp build --target lambda` succeeded with no warnings
+- [ ] `dist/handler.cjs` exists — this is the bundled handler the rspack adapter writes
+- [ ] No hand-written `src/lambda.ts` importing a fictional `createLambdaHandler` from `@frontmcp/adapters/lambda` — the build adapter generates the entry; your code stays the decorated `@FrontMcp` class
+- [ ] `Handler: dist/handler.handler` in `template.yaml` (filename `handler.cjs` → handler symbol `handler`). NOT `dist/lambda.handler`
+- [ ] `CodeUri: .` (or pointed at the project root containing `dist/`) so SAM packages the bundled handler
 
-Globals:
-  Function:
-    Runtime: nodejs20.x
-    Timeout: 30
-    MemorySize: 256
-    Environment:
-      Variables:
-        NODE_ENV: production
-        SESSION_TABLE: !Ref SessionTable
+## Function configuration
 
-Resources:
-  McpFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: dist/lambda.handler
-      CodeUri: .
-      Events:
-        McpApi:
-          Type: Api
-          Properties:
-            Path: /mcp/{proxy+}
-            Method: ANY
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref SessionTable
+- [ ] `Runtime: nodejs20.x` (or current LTS)
+- [ ] `MemorySize` and `Timeout` sized to your workload (defaults: 256 MB / 30 s)
+- [ ] `Environment.Variables` includes `NODE_ENV: production` and any required app env
+- [ ] Reserved or provisioned concurrency set for latency-sensitive endpoints
 
-  SessionTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: mcp-sessions
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: sessionId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: sessionId
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
+## Session / state
 
-Outputs:
-  ApiEndpoint:
-    Description: API Gateway endpoint URL
-    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp/'
-```
+- [ ] DynamoDB session table has `BillingMode: PAY_PER_REQUEST` (or capacity sized correctly)
+- [ ] `TimeToLiveSpecification.AttributeName: ttl` and `Enabled: true` for automatic session cleanup
+- [ ] In `@FrontMcp`, sessions point at DynamoDB / ElastiCache — never in-memory in Lambda
+- [ ] No filesystem writes outside `/tmp` (and `/tmp` capped at 512 MB)
 
-```typescript
-// src/lambda.ts — Lambda handler entry point
-import { createLambdaHandler } from '@frontmcp/adapters/lambda';
-import Server from './main';
+## API Gateway / routing
 
-export const handler = createLambdaHandler(Server);
-```
+- [ ] Path is `/mcp/{proxy+}` with `Method: ANY` so MCP transport reaches the handler
+- [ ] CORS configured at API Gateway OR via `@FrontMcp` `cors`, not both
+- [ ] Stage names (`Prod` / `Staging`) match deploy pipeline
 
-```typescript
-// src/main.ts
-import { FrontMcp } from '@frontmcp/sdk';
-import { MyApp } from './my.app';
+## IAM hardening
 
-@FrontMcp({
-  info: { name: 'lambda-mcp', version: '1.0.0' },
-  apps: [MyApp],
-  cors: {
-    origin: ['https://app.example.com'],
-  },
-})
-export default class LambdaMcpServer {}
-```
+- [ ] No `Action: '*'` or `Resource: '*'` in the function's policies
+- [ ] DynamoDB access scoped to `!Ref SessionTable` only
+- [ ] Secrets read via SSM / Secrets Manager scoped to `/<app>/<env>/*`
 
-## What This Demonstrates
+## Observability
 
-- Complete SAM template with API Gateway, Lambda function, and DynamoDB table
-- DynamoDB for session storage with TTL-based automatic cleanup
-- Lambda handler entry point via `createLambdaHandler`
-- Pay-per-request billing for cost-effective scaling
-- IAM policies scoped to the specific DynamoDB table
+- [ ] CloudWatch alarm on `Errors` metric
+- [ ] CloudWatch alarm on `Throttles` metric
+- [ ] Dead Letter Queue (SQS) configured for failed async invocations
 
 ## Related
 
-- See `production-lambda` for the full SAM/CloudFormation and Lambda runtime checklist
+- Configuration source of truth: `frontmcp-deployment/references/deploy-to-lambda.md`
+- Build adapter source: `libs/cli/src/commands/build/adapters/lambda.ts`
+- See `production-lambda` for the runtime / scaling checklist

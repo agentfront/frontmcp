@@ -80,6 +80,7 @@ Update the `@FrontMcp` decorator in `src/main.ts`:
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -188,33 +189,39 @@ sqlite: {
 },
 ```
 
-## Step 4 -- Session Store Factory (Advanced)
+## Step 4 -- How the SDK Builds the SQLite Session Store
 
-The SDK creates the SQLite session store automatically from the `sqlite` config in the `@FrontMcp` decorator. For advanced scenarios where you need direct access to the factory function:
+You do not call any factory yourself. The SDK constructs the SQLite session store internally from the `sqlite` field on the `@FrontMcp` decorator. The framework handles:
+
+- Lazy-loading `@frontmcp/storage-sqlite` to avoid bundling native modules when not used
+- WAL mode pragma configuration
+- TTL cleanup interval setup for automatic key expiration
+- Creating the database file and parent directories if they do not exist
+
+In other words, the only public API you interact with is the `sqlite: { ... }` block in the decorator config from Step 2. There is no `createSqliteSessionStore` helper exported from `@frontmcp/sdk` -- session store wiring is an internal concern of the framework.
+
+If you need to share the same SQLite config in another part of your code, declare it once and reuse it:
 
 ```typescript
-import { createSqliteSessionStore } from '@frontmcp/sdk';
+import 'reflect-metadata';
 
-const sessionStore = createSqliteSessionStore({
+import { FrontMcp, type SqliteOptionsInput } from '@frontmcp/sdk';
+
+const sqlite: SqliteOptionsInput = {
   path: '~/.frontmcp/data/sessions.sqlite',
   walMode: true,
   encryption: { secret: process.env['SQLITE_ENCRYPTION_SECRET']! },
-});
+};
+
+@FrontMcp({
+  info: { name: 'my-server', version: '0.1.0' },
+  apps: [
+    /* ... */
+  ],
+  sqlite,
+})
+export default class Server {}
 ```
-
-The `createSqliteSessionStore()` function signature:
-
-```typescript
-function createSqliteSessionStore(options: SqliteOptionsInput, logger?: FrontMcpLogger): SessionStore;
-```
-
-The factory function:
-
-- Lazy-loads `@frontmcp/storage-sqlite` to avoid bundling native modules when not used
-- Handles WAL mode pragma configuration internally
-- Sets up the TTL cleanup interval for automatic key expiration
-- Creates the database file and parent directories if they do not exist
-- Returns synchronously (unlike the Redis `createSessionStore` which is async)
 
 ## Step 5 -- Environment Variables
 

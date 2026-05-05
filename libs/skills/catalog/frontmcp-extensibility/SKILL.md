@@ -59,8 +59,8 @@ The standard pattern for integrating any external library:
 4. **Optionally create resources** — expose data as MCP resources with autocompletion
 
 ```typescript
-// 1. Provider wraps the library
-@Provider({ name: 'my-search', provide: SearchToken, scope: ProviderScope.GLOBAL })
+// 1. Provider wraps the library (the class itself is the DI token)
+@Provider({ name: 'my-search', scope: ProviderScope.GLOBAL })
 export class SearchProvider {
   private client: ExternalLibrary;
   constructor() {
@@ -77,7 +77,7 @@ export class SearchProvider {
 @Tool({ name: 'search', inputSchema: { query: z.string() } })
 export default class SearchTool extends ToolContext {
   async execute(input: { query: string }) {
-    return this.get(SearchToken).search(input.query);
+    return this.get(SearchProvider).search(input.query);
   }
 }
 ```

@@ -43,7 +43,7 @@ class ApiApp {}
   info: { name: 'proxy-server', version: '1.0.0' },
   apps: [ApiApp],
   http: {
-    port: 3001,
+    port: 3000,
     entryPath: '/api/mcp', // no trailing slash
     cors: {
       origin: (origin: string) => {

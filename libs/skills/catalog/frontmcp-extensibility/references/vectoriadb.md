@@ -72,12 +72,11 @@ const results = db.search('temperature forecast', 5);
 ### FrontMCP Provider Pattern
 
 ```typescript
-import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { TFIDFVectoria } from 'vectoriadb';
 
-export const FAQSearch = Symbol('FAQSearch');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-@Provider({ name: 'faq-search', provide: FAQSearch, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'faq-search', scope: ProviderScope.GLOBAL })
 export class FAQSearchProvider {
   private db = new TFIDFVectoria({
     fields: {
@@ -111,7 +110,7 @@ Uses transformer models for true semantic understanding. "find users" matches "l
 ### Basic Usage
 
 ```typescript
-import { VectoriaDB, DocumentMetadata } from 'vectoriadb';
+import { DocumentMetadata, VectoriaDB } from 'vectoriadb';
 
 interface ProductDoc extends DocumentMetadata {
   name: string;
@@ -179,7 +178,7 @@ const results = await db.search('wireless audio', {
 ### Persistence with Storage Adapters
 
 ```typescript
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
+import { FileStorageAdapter, VectoriaDB } from 'vectoriadb';
 
 const db = new VectoriaDB<MyDoc>({
   storageAdapter: new FileStorageAdapter({ cacheDir: './.cache/vectors' }),
@@ -195,18 +194,16 @@ await db.loadFromStorage();
 ### FrontMCP Provider Pattern
 
 ```typescript
-import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
-import type { DocumentMetadata } from 'vectoriadb';
+import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
 
-export const KnowledgeBase = Symbol('KnowledgeBase');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 interface Article extends DocumentMetadata {
   title: string;
   category: string;
 }
 
-@Provider({ name: 'knowledge-base', provide: KnowledgeBase, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'knowledge-base', scope: ProviderScope.GLOBAL })
 export class KnowledgeBaseProvider {
   private db: VectoriaDB<Article>;
   private ready: Promise<void>;

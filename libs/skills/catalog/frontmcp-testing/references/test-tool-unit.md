@@ -12,16 +12,20 @@ import { AddTool } from '../tools/add.tool';
 
 describe('AddTool', () => {
   it('should add two numbers', async () => {
-    // Create mock context
+    // Mock the ExecutionContextBase API surface (`get`, `tryGet`, `scope`, `fail`,
+    // `mark`, `fetch`) plus `notify` from ToolContext. Add `notify` only when the
+    // tool actually calls `this.notify(...)`.
+    // Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
     const ctx = {
       get: jest.fn(),
       tryGet: jest.fn(),
+      scope: { get: jest.fn(), tryGet: jest.fn() },
       fail: jest.fn((err) => {
         throw err;
       }),
       mark: jest.fn(),
+      fetch: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
     } as unknown as ToolContext;
 
     const tool = new AddTool();

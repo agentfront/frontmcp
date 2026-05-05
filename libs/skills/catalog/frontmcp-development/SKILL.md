@@ -76,17 +76,17 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 ## Cross-Cutting Patterns
 
-| Pattern           | Applies To                        | Rule                                                                                   |
-| ----------------- | --------------------------------- | -------------------------------------------------------------------------------------- |
-| Naming convention | Tools                             | Use `snake_case` for tool names (`get_weather`, not `getWeather`)                      |
-| Naming convention | Skills, resources                 | Use `kebab-case` for skill and resource names                                          |
-| File naming       | All components                    | Use `<name>.<type>.ts` pattern (e.g., `fetch-weather.tool.ts`)                         |
-| DI access         | Tools, resources, prompts, agents | Use `this.get(TOKEN)` (throws) or `this.tryGet(TOKEN)` (returns undefined)             |
-| Error handling    | All components                    | Use `this.fail(err)` with MCP error classes, not raw `throw`                           |
-| Input validation  | Tools                             | Always use Zod raw shapes (not `z.object()`) for `inputSchema`                         |
-| Output validation | Tools                             | Always define `outputSchema` to prevent data leaks                                     |
-| Registration      | All components                    | Add to `tools`, `resources`, `prompts`, `agents`, etc. arrays in `@App` or `@FrontMcp` |
-| Test files        | All components                    | Use `.spec.ts` extension, never `.test.ts`                                             |
+| Pattern           | Applies To                        | Rule                                                                                                                                                                                                                   |
+| ----------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Naming convention | Tools                             | Use `snake_case` for tool names (`get_weather`, not `getWeather`)                                                                                                                                                      |
+| Naming convention | Skills, resources                 | Use `kebab-case` for skill and resource names                                                                                                                                                                          |
+| File naming       | All components                    | Use `<name>.<type>.ts` pattern (e.g., `fetch-weather.tool.ts`)                                                                                                                                                         |
+| DI access         | Tools, resources, prompts, agents | Use `this.get(TOKEN)` (throws) or `this.tryGet(TOKEN)` (returns undefined)                                                                                                                                             |
+| Error handling    | All components                    | Use `this.fail(err)` with MCP error classes, not raw `throw`                                                                                                                                                           |
+| Input validation  | Tools                             | Always use Zod raw shapes (not `z.object()`) for `inputSchema`                                                                                                                                                         |
+| Output validation | Tools                             | Always define `outputSchema` to prevent data leaks                                                                                                                                                                     |
+| Registration      | All components                    | Register components in their owning `@App` (`tools`, `resources`, `prompts`, `agents`, etc.). `@FrontMcp` only accepts `tools`, `resources`, and `skills` at the top level — everything else must be inside an `@App`. |
+| Test files        | All components                    | Use `.spec.ts` extension, never `.test.ts`                                                                                                                                                                             |
 
 ## Common Patterns
 

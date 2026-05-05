@@ -74,6 +74,7 @@ Every entity type uses a consistent `<name>.<type>.ts` pattern:
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my-app.app';
 
 @FrontMcp({
@@ -91,8 +92,9 @@ The `@App` class groups tools, resources, prompts, plugins, and providers togeth
 
 ```typescript
 import { App } from '@frontmcp/sdk';
-import { FetchWeatherTool } from './tools/fetch-weather.tool';
+
 import { DatabaseProvider } from './providers/database.provider';
+import { FetchWeatherTool } from './tools/fetch-weather.tool';
 
 @App({
   name: 'my-app',
@@ -121,17 +123,16 @@ frontmcp build --target vercel
 frontmcp build --target lambda
 ```
 
-Valid targets: `cli`, `node`, `sdk`, `browser`, `cloudflare`, `vercel`, `lambda`. The `--target` flag determines the output format and runtime optimizations.
+Valid targets: `cli`, `node`, `sdk`, `browser`, `cloudflare`, `vercel`, `lambda`, `distributed`, `mcpb`. The `--target` flag determines the output format and runtime optimizations.
 
 ### Run tests
 
 ```bash
-# Unit tests
-jest
-
-# E2E tests
-jest --config e2e/jest.config.ts
+# Unit and E2E tests (auto-discovers *.spec.ts and e2e/*.e2e.spec.ts)
+frontmcp test
 ```
+
+> **Do not** create a standalone `jest.e2e.config.ts` -- `frontmcp test` auto-generates the correct Jest/SWC configuration for both unit and E2E tests. The CLI scaffolder explicitly removes `jest.e2e.config.ts` and `tsconfig.e2e.json` for the same reason.
 
 ## Organizing by Feature
 
@@ -192,8 +193,9 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 
 - [ ] `frontmcp dev` starts the development server with file watching
 - [ ] `frontmcp build --target node` produces a valid production build
-- [ ] Unit tests pass with `jest`
+- [ ] Unit and E2E tests pass with `frontmcp test`
 - [ ] E2E tests (if any) are in the `e2e/` directory with `*.e2e.spec.ts` naming
+- [ ] No standalone `jest.e2e.config.ts` exists -- the CLI auto-generates the test config
 
 ### Organization
 
@@ -203,13 +205,14 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 
 ## Troubleshooting
 
-| Problem                        | Cause                                                         | Solution                                                                 |
-| ------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `frontmcp dev` fails to start  | `main.ts` does not default-export the `@FrontMcp` class       | Add `export default MyServer` to `main.ts`                               |
-| Tool not discovered at runtime | Tool class not added to the `tools` array in `@App`           | Register the tool in the `@App` decorator's `tools` array                |
-| Tests not found by Jest        | Test file uses `.test.ts` instead of `.spec.ts`               | Rename to `.spec.ts` to match the FrontMCP test file convention          |
-| Build target error             | Invalid `--target` flag value                                 | Use `node`, `vercel`, `lambda`, or `cloudflare` as the target value      |
-| Catalog skills not loaded      | Skills placed in `src/skills/` instead of top-level `skills/` | Move catalog `SKILL.md` directories to the top-level `skills/` directory |
+| Problem                                  | Cause                                                           | Solution                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `frontmcp dev` fails to start            | `main.ts` does not default-export the `@FrontMcp` class         | Add `export default MyServer` to `main.ts`                                                             |
+| Tool not discovered at runtime           | Tool class not added to the `tools` array in `@App`             | Register the tool in the `@App` decorator's `tools` array                                              |
+| Tests not found by Jest                  | Test file uses `.test.ts` instead of `.spec.ts`                 | Rename to `.spec.ts` to match the FrontMCP test file convention                                        |
+| `frontmcp test` fails to find E2E config | Custom `jest.e2e.config.ts` overrides the auto-generated config | Delete the standalone `jest.e2e.config.ts`; `frontmcp test` generates the correct config automatically |
+| Build target error                       | Invalid `--target` flag value                                   | Use `node`, `vercel`, `lambda`, or `cloudflare` as the target value                                    |
+| Catalog skills not loaded                | Skills placed in `src/skills/` instead of top-level `skills/`   | Move catalog `SKILL.md` directories to the top-level `skills/` directory                               |
 
 ## Examples
 

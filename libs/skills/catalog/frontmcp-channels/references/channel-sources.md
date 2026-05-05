@@ -17,10 +17,18 @@ Registers an HTTP POST endpoint. External services (GitHub, CI/CD, monitoring) s
   description: 'CI/CD pipeline notifications',
   source: { type: 'webhook', path: '/hooks/ci' },
 })
+// Webhook payloads have a known shape: { body, headers, method, query? }.
+// Define the slice you need locally rather than importing an internal type.
+interface CIWebhookBody {
+  pipeline: string;
+  status: string;
+  url: string;
+}
+
 class CIAlertChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const { body } = payload as WebhookPayload;
-    const data = body as { pipeline: string; status: string; url: string };
+    const { body } = payload as { body: unknown };
+    const data = body as CIWebhookBody;
     return {
       content: `CI pipeline "${data.pipeline}" ${data.status}.\nDetails: ${data.url}`,
       meta: { pipeline: data.pipeline, status: data.status },

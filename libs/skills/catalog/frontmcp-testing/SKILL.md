@@ -40,20 +40,20 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 
 ## Scenario Routing Table
 
-| Scenario                                | Skill / Section                 | Description                                                  |
-| --------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
-| Set up Jest, coverage, and test harness | `setup-testing`                 | Full Jest config, test utilities, and coverage thresholds    |
-| Write unit tests for a tool             | `setup-testing` (Unit Testing)  | Mock DI, validate input/output, test error paths             |
-| Write unit tests for a resource         | `setup-testing` (Unit Testing)  | Test URI resolution, template params, read results           |
-| Write unit tests for a prompt           | `setup-testing` (Unit Testing)  | Test argument handling, message generation                   |
-| Write E2E protocol-level tests          | `setup-testing` (E2E Testing)   | Real MCP client/server, full protocol flow                   |
-| Test authenticated endpoints            | `test-auth`                     | E2E with OAuth tokens, session validation, role-based access |
-| Test deployment builds                  | `setup-testing` + `deploy-to-*` | Smoke tests against built output                             |
-| Test browser builds                     | `test-browser-build`            | Testing browser builds                                       |
-| Test CLI binary builds                  | `test-cli-binary`               | Testing CLI binary builds                                    |
-| Test with the direct API client         | `test-direct-client`            | Testing with the direct API client                           |
-| Write E2E test handler patterns         | `test-e2e-handler`              | E2E test handler patterns                                    |
-| Unit test individual tools              | `test-tool-unit`                | Unit testing individual tools                                |
+| Scenario                                | Skill / Section                 | Description                                                                                          |
+| --------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Set up Jest, coverage, and test harness | `setup-testing`                 | Full Jest config, test utilities, and coverage thresholds                                            |
+| Write unit tests for a tool             | `test-tool-unit`                | Mock DI, validate input/output, test error paths                                                     |
+| Write unit tests for a resource         | `setup-testing` (Unit Testing)  | Test URI resolution, template params, read results                                                   |
+| Write unit tests for a prompt           | `setup-testing` (Unit Testing)  | Test argument handling, message generation                                                           |
+| Write E2E protocol-level tests          | `setup-testing` (E2E Testing)   | Real MCP client/server, full protocol flow                                                           |
+| Test authenticated endpoints            | `test-auth`                     | E2E with OAuth tokens, session validation, role-based access                                         |
+| Test deployment builds                  | `setup-testing` + `deploy-to-*` | Smoke tests against built output                                                                     |
+| Test browser builds                     | `test-browser-build`            | Smoke-test a `frontmcp build --target browser` bundle (import the bundle, optional Playwright suite) |
+| Test CLI binary builds                  | `test-cli-binary`               | Spawn-and-curl smoke tests for `frontmcp build --target cli` artifacts                               |
+| Test with the direct API client         | `test-direct-client`            | In-memory testing via `create()`, `connectOpenAI()`, `connectClaude()` (no HTTP)                     |
+| Write E2E test handler patterns         | `test-e2e-handler`              | Manual `McpTestClient` + `TestServer` E2E patterns (alternative to fixture API)                      |
+| Unit test individual tools              | `test-tool-unit`                | Unit testing individual `ToolContext` subclasses with a mock context                                 |
 
 ## Testing Strategy by Component Type
 
@@ -75,7 +75,7 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | File naming        | Always `.spec.ts` (not `.test.ts`); E2E uses `.e2e.spec.ts`                                                                                                                                                                                                                                          |
 | File organization  | Split E2E tests by app/feature: `e2e/calc.e2e.spec.ts`, `e2e/ecommerce.e2e.spec.ts`. Never put all tests in a single `server.e2e.spec.ts`                                                                                                                                                            |
-| Test runner        | Use `frontmcp test` (not `jest --config ...`). It auto-generates the correct Jest/SWC config                                                                                                                                                                                                         |
+| Test runner        | Standalone projects: use `frontmcp test` (auto-generates Jest/SWC config). Nx monorepos: use `nx test <lib>` (resolves the project's `jest.config.ts`). Never invoke `jest --config ...` directly                                                                                                    |
 | Coverage threshold | 95%+ across statements, branches, functions, lines                                                                                                                                                                                                                                                   |
 | Test descriptions  | Plain English, no prefixes like "PT-001"; describe behavior not implementation                                                                                                                                                                                                                       |
 | Mocking            | Mock providers via DI token replacement, never mock the framework                                                                                                                                                                                                                                    |

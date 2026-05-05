@@ -20,8 +20,29 @@ Full WhatsApp Business API bridge allowing users to chat with Claude Code via Wh
 ```typescript
 // src/apps/messaging/channels/whatsapp.channel.ts
 import { Channel, ChannelContext, ChannelNotification } from '@frontmcp/sdk';
+import { hmacSha256 } from '@frontmcp/utils';
 
 const ALLOWED_SENDERS = new Set((process.env['WHATSAPP_ALLOWED_SENDERS'] ?? '').split(',').filter(Boolean));
+
+/**
+ * Verify the X-Hub-Signature-256 header WhatsApp Cloud API attaches to every
+ * webhook delivery. The header is `sha256=<hex>` where the digest is HMAC-SHA256
+ * of the raw request body keyed by the app secret. Uses @frontmcp/utils so the
+ * same code runs in Node and Edge runtimes.
+ */
+function verifyWhatsAppSignature(rawBody: string, header: string | undefined, appSecret: string): boolean {
+  if (!header?.startsWith('sha256=')) return false;
+  const expected = header.slice('sha256='.length);
+
+  const digest = hmacSha256(new TextEncoder().encode(appSecret), new TextEncoder().encode(rawBody));
+  const actual = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+
+  // Constant-time compare to avoid timing leaks
+  if (actual.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < actual.length; i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
 
 @Channel({
   name: 'whatsapp',
@@ -32,7 +53,20 @@ const ALLOWED_SENDERS = new Set((process.env['WHATSAPP_ALLOWED_SENDERS'] ?? '').
 })
 export class WhatsAppChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const { body } = payload as { body: Record<string, unknown> };
+    const { body, headers } = payload as {
+      body: Record<string, unknown>;
+      headers: Record<string, string | string[] | undefined>;
+    };
+
+    // 1. Verify webhook signature before trusting anything in the payload
+    const sigHeader = headers['x-hub-signature-256'];
+    const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+    const appSecret = process.env['WHATSAPP_APP_SECRET'];
+    if (!appSecret || !verifyWhatsAppSignature(JSON.stringify(body), sig, appSecret)) {
+      this.logger.warn('WhatsApp: signature mismatch, dropping payload');
+      return { content: '', meta: { verified: 'false', reason: 'bad_signature' } };
+    }
+
     const entry = (body as any).entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
@@ -96,7 +130,8 @@ export class WhatsAppChannel extends ChannelContext {
 
 ```typescript
 // src/main.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import { WhatsAppChannel } from './apps/messaging/channels/whatsapp.channel';
 
 @App({
@@ -116,7 +151,7 @@ export default class Server {}
 ## Setup
 
 1. Create a WhatsApp Business App at [developers.facebook.com](https://developers.facebook.com)
-2. Set environment variables: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_ALLOWED_SENDERS`
+2. Set environment variables: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ALLOWED_SENDERS`
 3. Configure webhook URL to `https://your-server/hooks/whatsapp`
 4. Subscribe to `messages` webhook field
 

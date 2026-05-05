@@ -13,7 +13,7 @@ Agents are autonomous AI entities that use an LLM to reason, plan, and invoke in
 
 - Building an autonomous AI entity that uses LLM reasoning to decide which tools to call
 - Orchestrating multi-step workflows where the agent plans, acts, and iterates toward a goal
-- Creating multi-agent swarms with handoff between specialized agents
+- Creating multi-agent swarms where peers can discover and call each other via the LLM
 
 ### Recommended
 
@@ -364,40 +364,57 @@ class CodeAuditorAgent extends AgentContext {}
 
 ## Swarm Configuration
 
-Swarm mode enables multi-agent handoff, where agents can transfer control to each other during execution. Configure swarms using the `swarm` field.
+Swarm mode lets agents discover and call each other at runtime. The framework registers visible peers as callable tools (`use-agent:<name>`) on the orchestrator's LLM, so the LLM itself decides when to delegate -- there is no declarative routing table.
+
+### SwarmConfig Fields
+
+| Field               | Type       | Default | Description                                                                          |
+| ------------------- | ---------- | ------- | ------------------------------------------------------------------------------------ |
+| `canSeeOtherAgents` | `boolean`  | `false` | If `true`, this agent can discover and call other agents in the same scope           |
+| `visibleAgents`     | `string[]` | --      | Whitelist of agent IDs this agent is allowed to see (when `canSeeOtherAgents: true`) |
+| `isVisible`         | `boolean`  | `true`  | If `false`, this agent is hidden from peers (cannot be called as `use-agent:<name>`) |
+| `maxCallDepth`      | `number`   | `3`     | Maximum nested agent-to-agent call depth (1-10)                                      |
+
+There is no `role`, `handoff`, or `condition` field -- routing is driven by the orchestrator's LLM choosing among the visible `use-agent:*` tools.
 
 ```typescript
 @Agent({
+  id: 'triage_agent',
   name: 'triage_agent',
-  description: 'Triages incoming requests and hands off to specialists',
+  description: 'Triages incoming requests and delegates to specialists',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   inputSchema: {
     request: z.string().describe('The incoming user request'),
   },
+  // Coordinator sees other agents and can call them.
   swarm: {
-    role: 'coordinator',
-    handoff: [
-      { agent: 'billing_agent', condition: 'Request is about billing or payments' },
-      { agent: 'technical_agent', condition: 'Request is about technical issues' },
-      { agent: 'general_agent', condition: 'Request does not match other categories' },
-    ],
+    canSeeOtherAgents: true,
+    visibleAgents: ['billing_agent', 'technical_agent'],
+    maxCallDepth: 3,
   },
-  systemInstructions: 'Analyze the request and hand off to the appropriate specialist agent.',
+  systemInstructions:
+    'Analyze the request and call use-agent:billing_agent or use-agent:technical_agent depending on the topic.',
 })
 class TriageAgent extends AgentContext {}
 
 @Agent({
+  id: 'billing_agent',
   name: 'billing_agent',
   description: 'Handles billing and payment inquiries',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
   tools: [LookupInvoiceTool, ProcessRefundTool],
-  swarm: {
-    role: 'specialist',
-    handoff: [{ agent: 'triage_agent', condition: 'Request is outside billing scope' }],
-  },
+  // Specialist is visible to peers but does not see others.
+  swarm: { isVisible: true },
 })
 class BillingAgent extends AgentContext {}
 ```
+
+### How Routing Works
+
+- When the orchestrator agent runs its LLM loop, every visible peer is exposed as a tool named `use-agent:<peerName>`.
+- The orchestrator's `systemInstructions` should describe when to call each peer; the LLM decides at runtime.
+- Peers do not need any swarm config to be callable -- they only need `isVisible: true` (the default).
+- Set `canSeeOtherAgents: false` (the default) on agents that should never be able to delegate.
 
 ## Function-Style Builder
 
@@ -566,8 +583,8 @@ class DocsAgent extends AgentContext {}
 | LLM config              | `llm: { provider: 'anthropic', model: '...', apiKey: { env: 'KEY' } }`        | `llm: { provider: 'anthropic', apiKey: 'sk-hardcoded' }`       | Environment variable references prevent leaking secrets in code                 |
 | Inner tools vs exported | `tools: [...]` for agent-private; `exports: { tools: [...] }` for MCP-visible | Putting all tools in `tools` and expecting clients to see them | Inner tools are private to the agent; only exported tools appear in MCP listing |
 | Custom execute          | Override `execute()` for multi-pass orchestration                             | Putting all logic in system instructions                       | Custom `execute()` gives structured control over completion calls and stages    |
-| Sub-agents              | Use `agents: [SubAgent]` for composition                                      | Calling another agent's `execute()` directly                   | The `agents` array enables proper lifecycle, scope isolation, and handoff       |
-| Swarm handoff           | Use `swarm.handoff` with `agent` name and `condition`                         | Manually routing between agents in `execute()`                 | Swarm config enables declarative, LLM-driven handoff between agents             |
+| Sub-agents              | Use `agents: [SubAgent]` for composition                                      | Calling another agent's `execute()` directly                   | The `agents` array enables proper lifecycle and scope isolation                 |
+| Swarm visibility        | `swarm: { canSeeOtherAgents: true, visibleAgents: ['peer'] }`                 | `swarm: { role, handoff }` (those fields do not exist)         | Routing is LLM-driven via `use-agent:*` tools; only visibility is configurable  |
 
 ## Verification Checklist
 
@@ -585,17 +602,17 @@ class DocsAgent extends AgentContext {}
 - [ ] LLM adapter connects successfully to the configured provider
 - [ ] Inner tools are invoked correctly during the agent loop
 - [ ] `this.completion()` and `this.streamCompletion()` return valid responses
-- [ ] Swarm handoff transfers control to the correct specialist agent
+- [ ] Visible peers appear as `use-agent:<name>` tools to the orchestrator agent
 
 ## Troubleshooting
 
-| Problem                             | Cause                                                 | Solution                                                                          |
-| ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Agent not appearing in tool listing | Not registered in `agents` array                      | Add agent class to `@App` or `@FrontMcp` `agents` array                           |
-| LLM authentication error            | API key not set or incorrect env variable             | Verify the environment variable name in `apiKey: { env: '...' }` is set           |
-| Inner tools not being called        | Tools not listed in `tools` array of `@Agent`         | Add tool classes to the `tools` field in the `@Agent` decorator                   |
-| Agent times out                     | No timeout or rate limit configured                   | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options         |
-| Swarm handoff fails                 | Target agent name does not match any registered agent | Ensure `handoff.agent` matches the `name` of a registered agent in the same scope |
+| Problem                             | Cause                                                                                                                     | Solution                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent not appearing in tool listing | Not registered in `agents` array                                                                                          | Add agent class to `@App` or `@FrontMcp` `agents` array                                                                               |
+| LLM authentication error            | API key not set or incorrect env variable                                                                                 | Verify the environment variable name in `apiKey: { env: '...' }` is set                                                               |
+| Inner tools not being called        | Tools not listed in `tools` array of `@Agent`                                                                             | Add tool classes to the `tools` field in the `@Agent` decorator                                                                       |
+| Agent times out                     | No timeout or rate limit configured                                                                                       | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options                                                             |
+| Peer agent not callable             | Peer has `isVisible: false`, or orchestrator lacks `canSeeOtherAgents: true`, or peer is not in `visibleAgents` whitelist | Set `swarm.isVisible: true` on the peer and `swarm.canSeeOtherAgents: true` (and add the peer to `visibleAgents`) on the orchestrator |
 
 ## Examples
 
@@ -603,7 +620,7 @@ class DocsAgent extends AgentContext {}
 | ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
 | [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                         |
 | [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`. |
-| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized sub-agents and configuring swarm-based handoff between agents.              |
+| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized peers in a swarm so an orchestrator can call them as `use-agent:*` tools.   |
 
 > See all examples in [`examples/create-agent/`](../examples/create-agent/)
 

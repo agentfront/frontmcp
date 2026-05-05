@@ -6,8 +6,8 @@ description: 'Demonstrates a server with multiple `@App` modules, a `@Provider` 
 tags: [development, database, multi-app, decorators, multi, app]
 features:
   - 'Organizing a server into multiple `@App` modules (`analytics` and `admin`)'
-  - 'Using `@Provider` with `useFactory` to register a database client for dependency injection'
-  - 'Accessing injected dependencies via `this.get(DatabaseToken)` in tools and resources'
+  - 'Decorating a service class with `@Provider` so it acts as its own DI token'
+  - 'Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources'
   - 'Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources'
   - 'Registering a `@Plugin` at the server level so it applies across all apps'
   - 'Global plugins go in `@FrontMcp({ plugins })`, app-scoped providers go in `@App({ providers })`'
@@ -21,17 +21,38 @@ Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency
 
 ```typescript
 // src/providers/database.provider.ts
-import { Provider } from '@frontmcp/sdk';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const DatabaseToken = Symbol('Database');
-
+// The @Provider decorator schema is strict: it accepts only `id|name|description|scope`.
+// `provide`/`useClass`/`useValue`/`useFactory` are NOT supported.
+// For simple cases, decorate the class itself — it becomes its own DI token.
 @Provider({
-  name: 'database',
-  provide: DatabaseToken,
-  useFactory: () => new DatabaseClient(process.env.DB_URL),
+  name: 'DatabaseClient',
+  scope: ProviderScope.GLOBAL,
 })
-class DatabaseProvider {}
+export class DatabaseClient {
+  constructor(private readonly url = process.env.DB_URL) {}
+
+  async query(sql: string): Promise<unknown[]> {
+    /* ... */
+    return [];
+  }
+
+  async getDataset(id: string): Promise<unknown[]> {
+    /* ... */
+    return [];
+  }
+
+  async getDashboard(id: string): Promise<unknown> {
+    /* ... */
+    return {};
+  }
+}
 ```
+
+> If you need an async factory or want to bind to a separate token, use the
+> `AsyncProvider({ provide, name, scope, inject, useFactory })` helper instead of
+> the `@Provider` decorator.
 
 ```typescript
 // src/plugins/audit.plugin.ts
@@ -58,7 +79,7 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
 })
 class QueryTool extends ToolContext {
   async execute(input: { sql: string }) {
-    const db = this.get(DatabaseToken);
+    const db = this.get(DatabaseClient);
     const results = await db.query(input.sql);
     return { rows: results };
   }
@@ -79,7 +100,7 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
 })
 class ReportTool extends ToolContext {
   async execute(input: { datasetId: string; format: string }) {
-    const db = this.get(DatabaseToken);
+    const db = this.get(DatabaseClient);
     const data = await db.getDataset(input.datasetId);
     return { report: `Report in ${input.format} format`, rows: data.length };
   }
@@ -96,9 +117,9 @@ import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
   description: 'Dashboard data by ID',
   mimeType: 'application/json',
 })
-class DashboardResource extends ResourceContext {
-  async read(uri: string, params: { dashboardId: string }) {
-    const db = this.get(DatabaseToken);
+class DashboardResource extends ResourceContext<{ dashboardId: string }> {
+  async execute(uri: string, params: { dashboardId: string }) {
+    const db = this.get(DatabaseClient);
     const data = await db.getDashboard(params.dashboardId);
     return { contents: [{ uri, text: JSON.stringify(data) }] };
   }
@@ -113,7 +134,7 @@ import { App, FrontMcp } from '@frontmcp/sdk';
   name: 'analytics',
   tools: [QueryTool, ReportTool],
   resources: [DashboardResource],
-  providers: [DatabaseProvider],
+  providers: [DatabaseClient],
 })
 class AnalyticsApp {}
 
@@ -135,8 +156,8 @@ class MyServer {}
 ## What This Demonstrates
 
 - Organizing a server into multiple `@App` modules (`analytics` and `admin`)
-- Using `@Provider` with `useFactory` to register a database client for dependency injection
-- Accessing injected dependencies via `this.get(DatabaseToken)` in tools and resources
+- Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` — use `AsyncProvider` for those)
+- Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources
 - Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources
 - Registering a `@Plugin` at the server level so it applies across all apps
 - Global plugins go in `@FrontMcp({ plugins })`, app-scoped providers go in `@App({ providers })`

@@ -1,6 +1,6 @@
 ---
 name: configure-auth-modes
-description: Detailed comparison of public, transparent, remote, and managed auth modes
+description: Detailed comparison of public, transparent, local, and remote auth modes
 ---
 
 # Auth Modes Detailed Comparison
@@ -44,9 +44,9 @@ auth: {
   mode: 'local',
   local: {
     issuer: 'my-server',
-    audience: 'my-api',
   },
-  tokenStorage: 'redis',
+  expectedAudience: 'my-api',
+  tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
   consent: { enabled: true },
   incrementalAuth: { enabled: true },
 }
@@ -64,7 +64,7 @@ auth: {
   provider: 'https://auth.example.com',
   clientId: 'my-client-id',
   clientSecret: process.env.AUTH_SECRET,
-  tokenStorage: 'redis',
+  tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
 }
 ```
 

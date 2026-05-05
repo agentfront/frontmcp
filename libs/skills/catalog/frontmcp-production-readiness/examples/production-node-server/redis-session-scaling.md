@@ -21,6 +21,7 @@ Shows how to configure Redis-backed session storage, connection pooling, and sta
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({
@@ -66,10 +67,12 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const ENV_VALIDATOR = Symbol('EnvValidator');
 
+// Providers do NOT have onInit/onDestroy lifecycle hooks.
+// Validate env in the constructor — first instantiation throws synchronously
+// on missing config and prevents the server from starting (fail fast).
 @Provider({ token: ENV_VALIDATOR, scope: ProviderScope.GLOBAL })
 export class EnvValidationProvider {
-  async onInit(): Promise<void> {
-    // Fail fast on missing config — don't discover in production at runtime
+  constructor() {
     const required = ['REDIS_HOST', 'NODE_ENV'];
     const missing = required.filter((key) => !process.env[key]);
 

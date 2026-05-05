@@ -56,33 +56,49 @@ frontmcp build --target cloudflare
 This produces:
 
 ```text
-dist/
-  main.js      # Your compiled server (CommonJS)
-  index.js     # Cloudflare handler wrapper
-wrangler.toml  # Wrangler configuration
+dist/cloudflare/
+  index.js       # Cloudflare Workers entry (CommonJS) — wraps your @FrontMcp server
+  main.js        # Your compiled server module (CommonJS)
+wrangler.toml    # Wrangler configuration (overwritten on every build)
 ```
 
 Cloudflare Workers use CommonJS (not ESM). The build command sets `--module commonjs` automatically.
 
+> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true` and overwrites the entire `wrangler.toml` on every build with the three-line template below. Hand-edited bindings (`[[kv_namespaces]]`, `[vars]`, `[[d1_databases]]`, etc.) WILL be erased the next time you run `frontmcp build --target cloudflare`. Configure `name` and `compatibility_date` via your `frontmcp.config` file's `deployments[].wrangler` section, and keep bindings in a separate config file referenced from your toolchain (or re-add them after each build).
+
 ## Step 3: Configure wrangler.toml
 
-The generated `wrangler.toml`:
+The build always writes exactly this:
 
 ```toml
 name = "frontmcp-worker"
-main = "dist/index.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
-
-[vars]
-NODE_ENV = "production"
 ```
 
-To add KV storage for sessions and state:
+`name` and `compatibility_date` come from `frontmcp.config.{ts,js}`'s `deployments` array. Example:
+
+```ts
+// frontmcp.config.ts
+export default {
+  deployments: [
+    {
+      target: 'cloudflare',
+      wrangler: {
+        name: 'my-worker',
+        compatibilityDate: '2025-01-15',
+      },
+    },
+  ],
+};
+```
+
+To add KV storage or other bindings, append them AFTER each build (or use a wrapper script that runs the build then concatenates a `wrangler.bindings.toml` you maintain separately):
 
 ```toml
-name = "frontmcp-worker"
-main = "dist/index.js"
-compatibility_date = "2024-01-01"
+name = "my-worker"
+main = "dist/cloudflare/index.js"
+compatibility_date = "2025-01-15"
 
 [[kv_namespaces]]
 binding = "FRONTMCP_KV"
@@ -103,7 +119,7 @@ Copy the returned `id` into your `wrangler.toml`.
 ## Step 4: Configure the Server
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'MyApp' })
 class MyApp {}
@@ -112,7 +128,7 @@ class MyApp {}
   info: { name: 'my-worker', version: '1.0.0' },
   apps: [MyApp],
   transport: {
-    type: 'sse',
+    protocol: 'legacy', // 'legacy' | 'sse' | 'streamable' — see configure-transport
   },
 })
 class MyServer {}
@@ -120,7 +136,9 @@ class MyServer {}
 export default MyServer;
 ```
 
-For KV-backed session storage, use the Cloudflare KV or Upstash Redis provider.
+> **Note:** The transport schema uses `protocol`, not `type`. Valid values are `'legacy'` (default), `'sse'`, and `'streamable'`. `transport: { type: 'sse' }` will fail Zod validation at startup.
+
+For session storage, use Upstash Redis (HTTP) via `redis: { provider: 'vercel-kv' }` or wire Cloudflare KV directly inside your tools — the SDK does not include a built-in Cloudflare KV provider, and ioredis-style `redis: { ... }` configs are rejected by the Cloudflare adapter at build time (no Node TCP on Workers).
 
 ## Step 5: Deploy
 
@@ -143,8 +161,8 @@ wrangler domains add mcp.example.com
 ## Step 6: Verify
 
 ```bash
-# Health check
-curl https://frontmcp-worker.your-subdomain.workers.dev/health
+# Health check (FrontMCP serves /healthz by default; /health is a legacy alias)
+curl https://frontmcp-worker.your-subdomain.workers.dev/healthz
 
 # Test MCP endpoint
 curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
@@ -179,13 +197,14 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 
 ## Common Patterns
 
-| Pattern            | Correct                                     | Incorrect                         | Why                                                |
-| ------------------ | ------------------------------------------- | --------------------------------- | -------------------------------------------------- |
-| Module format      | CommonJS (`main = "dist/index.js"`)         | ESM (`type = "module"`)           | FrontMCP Cloudflare builds emit CommonJS           |
-| Storage binding    | `[[kv_namespaces]]` with matching `binding` | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers        |
-| Compatibility date | Set to a recent, tested date                | Omitting `compatibility_date`     | Workers behavior changes across compat dates       |
-| Build command      | `frontmcp build --target cloudflare`        | `frontmcp build` (no target)      | Default target is Node.js, not Workers             |
-| Secrets            | `wrangler secret put MY_SECRET`             | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard |
+| Pattern            | Correct                                                            | Incorrect                         | Why                                                                                                             |
+| ------------------ | ------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Module format      | CommonJS (`main = "dist/cloudflare/index.js"`)                     | ESM (`type = "module"`)           | FrontMCP Cloudflare builds emit CommonJS at this exact path; the build overwrites `wrangler.toml` to enforce it |
+| Transport key      | `transport: { protocol: 'sse' }`                                   | `transport: { type: 'sse' }`      | The schema field is `protocol`, not `type`                                                                      |
+| Storage binding    | `[[kv_namespaces]]` with matching `binding`                        | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers                                                                     |
+| Compatibility date | Set via `frontmcp.config.deployments[].wrangler.compatibilityDate` | Hand-editing `wrangler.toml`      | The build overwrites `wrangler.toml`; config-driven values survive                                              |
+| Build command      | `frontmcp build --target cloudflare`                               | `frontmcp build` (no target)      | Default target is Node.js, not Workers                                                                          |
+| Secrets            | `wrangler secret put MY_SECRET`                                    | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard                                                              |
 
 ## Verification Checklist
 

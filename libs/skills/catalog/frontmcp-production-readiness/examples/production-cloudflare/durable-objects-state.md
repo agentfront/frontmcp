@@ -19,8 +19,9 @@ Shows how to use Cloudflare Durable Objects for stateful coordination alongside 
 
 ```toml
 # wrangler.toml — with Durable Objects and R2
+# NOTE: `main` is written by `frontmcp build --target cloudflare`. Do not hand-edit.
 name = "stateful-mcp-worker"
-main = "dist/worker.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
 
 # KV for cache

@@ -25,8 +25,6 @@ import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriad
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const ProductSearch = Symbol('ProductSearch');
-
 // Typed metadata for product documents
 interface ProductDoc extends DocumentMetadata {
   name: string;
@@ -35,7 +33,7 @@ interface ProductDoc extends DocumentMetadata {
   inStock: boolean;
 }
 
-@Provider({ name: 'product-search', provide: ProductSearch, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'product-search', scope: ProviderScope.GLOBAL })
 export class ProductSearchProvider {
   private db: VectoriaDB<ProductDoc>;
   private ready: Promise<void>;
@@ -106,7 +104,7 @@ export class ProductSearchProvider {
 // src/tools/find-products.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { ProductSearch } from '../providers/product-search.provider';
+import { ProductSearchProvider } from '../providers/product-search.provider';
 
 @Tool({
   name: 'find_products',
@@ -134,7 +132,7 @@ import { ProductSearch } from '../providers/product-search.provider';
 })
 export class FindProductsTool extends ToolContext {
   async execute(input: { query: string; category?: string; maxPrice?: number; inStockOnly: boolean; limit: number }) {
-    const search = this.get(ProductSearch);
+    const search = this.get(ProductSearchProvider);
 
     const results = await search.search(
       input.query,

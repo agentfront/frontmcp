@@ -220,14 +220,18 @@ import { Prompt, PromptContext } from '@frontmcp/sdk';
   ],
 })
 class CodeReviewPrompt extends PromptContext {
-  async execute(args: { code: string; language?: string }) {
+  // The framework passes prompt arguments as Record<string, string> — all values
+  // arrive as strings. Parse/coerce inside execute() if you need other types.
+  async execute(args: Record<string, string>) {
+    const code = args.code ?? '';
+    const language = args.language ?? '';
     return {
       messages: [
         {
           role: 'user' as const,
           content: {
             type: 'text' as const,
-            text: `Review this ${args.language ?? ''} code:\n\n${args.code}`,
+            text: `Review this ${language} code:\n\n${code}`,
           },
         },
       ],
@@ -265,9 +269,9 @@ import { Resource, ResourceContext } from '@frontmcp/sdk';
   mimeType: 'application/json',
 })
 class AppConfigResource extends ResourceContext {
-  async read() {
+  async execute(uri: string) {
     const config = await this.get(ConfigService).getAll();
-    return { contents: [{ uri: this.uri, text: JSON.stringify(config) }] };
+    return { contents: [{ uri, text: JSON.stringify(config) }] };
   }
 }
 ```
@@ -301,7 +305,7 @@ import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
   mimeType: 'application/json',
 })
 class UserProfileResource extends ResourceContext {
-  async read(uri: string, params: { userId: string }) {
+  async execute(uri: string, params: { userId: string }) {
     const user = await this.get(UserService).findById(params.userId);
     return { contents: [{ uri, text: JSON.stringify(user) }] };
   }
@@ -457,25 +461,56 @@ class GitHubAdapter {
 
 **When to use:** When you need injectable services, configuration, or factories available via `this.get(Token)`.
 
-**Key fields:**
+**Key fields (strict schema — only these are accepted):**
 
-| Field        | Description                                                     |
-| ------------ | --------------------------------------------------------------- |
-| `name`       | Provider name                                                   |
-| `provide`    | Injection token                                                 |
-| `useClass`   | Class to instantiate (pick one of useClass/useValue/useFactory) |
-| `useValue`   | Static value to inject                                          |
-| `useFactory` | Factory function for dynamic creation                           |
+| Field          | Description                                                                         |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `name`         | Provider name (required)                                                            |
+| `id?`          | Optional stable identifier                                                          |
+| `description?` | Human-readable description                                                          |
+| `scope?`       | `ProviderScope.GLOBAL` (default), `ProviderScope.SCOPE`, or `ProviderScope.REQUEST` |
+
+> **Important:** The `@Provider` schema is strict and rejects `provide`, `useClass`, `useValue`, `useFactory`. There are two real ways to register a provider:
+>
+> 1. **Class-as-token (preferred for simple cases):** Decorate the class itself with `@Provider`. The class becomes its own DI token — inject it with `this.get(MyClass)`.
+> 2. **Factory binding (when you need a token + async construction):** Use the `AsyncProvider({ provide, name, scope, inject, useFactory })` helper instead of the `@Provider` decorator.
+
+**Pattern 1 — Class-as-token (decorator):**
 
 ```typescript
-import { Provider } from '@frontmcp/sdk';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 @Provider({
-  name: 'database',
-  provide: DatabaseToken,
-  useFactory: () => new DatabaseClient(process.env.DB_URL),
+  name: 'DatabaseClient',
+  scope: ProviderScope.GLOBAL,
 })
-class DatabaseProvider {}
+class DatabaseClient {
+  query(sql: string) {
+    /* ... */
+  }
+}
+
+// Use it from a tool:
+//   const db = this.get(DatabaseClient);
+```
+
+**Pattern 2 — `AsyncProvider` factory (token-based binding):**
+
+```typescript
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+
+export const DatabaseRef = Symbol('Database') as symbol;
+
+export const createDatabaseProvider = AsyncProvider({
+  provide: DatabaseRef,
+  name: 'DatabaseProvider',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async () => new DatabaseClient(process.env.DB_URL),
+});
+
+// Register the value returned by AsyncProvider in `providers: [createDatabaseProvider]`.
+// Inject with `this.get(DatabaseRef)`.
 ```
 
 ---
@@ -597,7 +632,7 @@ import { Workflow } from '@frontmcp/sdk';
   name: 'deploy_pipeline',
   description: 'Full deployment pipeline',
   trigger: 'webhook',
-  webhookConfig: { path: '/hooks/deploy', secret: process.env.WEBHOOK_SECRET!, methods: ['POST'] },
+  webhook: { path: '/hooks/deploy', secret: process.env.WEBHOOK_SECRET!, methods: ['POST'] },
   timeout: 600_000,
   steps: [
     { id: 'build', jobName: 'build_app', input: { env: 'production' } },
@@ -678,14 +713,14 @@ class AuditHooks {
 
 ## Common Patterns
 
-| Pattern                     | Correct                                                                       | Incorrect                                                                    | Why                                                                                                                                                        |
-| --------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Grouping tools into modules | Place tools inside `@App({ tools: [...] })`                                   | Register tools directly in `@FrontMcp({ tools: [...] })` for large servers   | Apps provide logical grouping, scoped providers, and isolation; standalone tools in `@FrontMcp` are only appropriate for small servers or global utilities |
-| Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs    | Using `@Tool` to return static data that never changes                       | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
-| Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                      | Adding logging/caching logic directly inside every tool's `execute()` method | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
-| Background processing       | Use `@Job` with a cron schedule for recurring work                            | Using `setTimeout` or manual polling inside a tool                           | Jobs integrate with the scheduler, support persistence, and are visible in server diagnostics                                                              |
-| Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                 | Chaining multiple tool calls manually from the LLM                           | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
-| Injecting services          | Use `@Provider` with `useFactory`/`useClass` and access via `this.get(Token)` | Importing singletons directly or using global state                          | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
+| Pattern                     | Correct                                                                                                                                                                     | Incorrect                                                                                                                                     | Why                                                                                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Grouping tools into modules | Place tools inside `@App({ tools: [...] })`                                                                                                                                 | Register tools directly in `@FrontMcp({ tools: [...] })` for large servers                                                                    | Apps provide logical grouping, scoped providers, and isolation; standalone tools in `@FrontMcp` are only appropriate for small servers or global utilities |
+| Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs                                                                                                  | Using `@Tool` to return static data that never changes                                                                                        | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
+| Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                                                                                                                    | Adding logging/caching logic directly inside every tool's `execute()` method                                                                  | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
+| Background processing       | Use `@Job` with a cron schedule for recurring work                                                                                                                          | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs integrate with the scheduler, support persistence, and are visible in server diagnostics                                                              |
+| Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                                                                                                               | Chaining multiple tool calls manually from the LLM                                                                                            | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
+| Injecting services          | Decorate a service class with `@Provider({ name, scope })` and inject it via `this.get(MyClass)`, or use `AsyncProvider({ provide, useFactory })` for token-based factories | Passing `useFactory`/`useClass` directly to `@Provider` (the schema is strict and rejects them), or importing singletons / using global state | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
 
 ---
 
@@ -701,7 +736,7 @@ class AuditHooks {
 
 - [ ] Every `@Tool` has `name`, `description`, and `inputSchema` defined
 - [ ] Every `@Resource` has `name` and `uri` with a valid scheme (e.g., `config://`, `file://`)
-- [ ] Every `@ResourceTemplate` has `uriTemplate` with `{param}` placeholders matching the `read()` params argument
+- [ ] Every `@ResourceTemplate` has `uriTemplate` with `{param}` placeholders matching the `execute(uri, params)` params argument
 - [ ] Every `@Prompt` has `name` and at least one argument when it accepts input
 - [ ] Every `@Agent` has `name`, `description`, and `llm` configuration
 
@@ -709,7 +744,7 @@ class AuditHooks {
 
 - [ ] Tool classes extend `ToolContext` and implement `execute()`
 - [ ] Prompt classes extend `PromptContext` and implement `execute()`
-- [ ] Resource classes extend `ResourceContext` and implement `read()`
+- [ ] Resource classes extend `ResourceContext` and implement `execute(uri, params)`
 - [ ] Agent classes extend `AgentContext` and implement `execute()`
 - [ ] Job classes extend `JobContext` and implement `execute()`
 
@@ -721,7 +756,7 @@ class AuditHooks {
 
 ### DI and Plugins
 
-- [ ] All `@Provider` entries specify exactly one of `useClass`, `useValue`, or `useFactory`
+- [ ] `@Provider`-decorated classes use only `name` / `id` / `description` / `scope` (the schema is strict). For factory bindings, use `AsyncProvider({ provide, name, scope, inject, useFactory })` instead of the decorator.
 - [ ] Plugins are registered in `@App({ plugins: [...] })` or `@FrontMcp({ plugins: [...] })`
 - [ ] Context extensions installed by plugins match the module augmentation declarations
 

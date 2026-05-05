@@ -3,11 +3,11 @@ name: openai-claude-format-test
 reference: test-direct-client
 level: intermediate
 description: 'Verify that tools are returned in the correct format for OpenAI and Claude clients using `connectOpenAI` and `connectClaude`.'
-tags: [testing, openai, anthropic, direct-client, direct, client]
+tags: [testing, openai, anthropic, direct-client]
 features:
-  - 'Using `connectOpenAI()` with `serve: false` to get an in-memory client without starting an HTTP server'
+  - 'Using `connectOpenAI(ServerConfig)` to get an in-memory `DirectClient` (no HTTP server is started)'
   - "Verifying OpenAI tool format: `{ type: 'function', function: { name, parameters } }`"
-  - 'Using dynamic import for `connectClaude` to test Claude tool format: `{ name, description, input_schema }`'
+  - 'Using `connectClaude(ServerConfig)` to verify Claude format: `{ name, description, input_schema }`'
   - 'Proper cleanup with `client.close()` after each test'
 ---
 
@@ -19,22 +19,33 @@ Verify that tools are returned in the correct format for OpenAI and Claude clien
 
 ```typescript
 // src/__tests__/client-formats.spec.ts
-import { connectOpenAI, tool, z } from '@frontmcp/sdk';
+// Real API:
+//   libs/sdk/src/direct/connect.ts:159 — `connectOpenAI(config, options?)` (no `serve` field)
+//   libs/sdk/src/direct/connect.ts:200 — `connectClaude(config, options?)`
+//   libs/sdk/src/index.ts — exports `Tool`, `ToolContext`, `App`, `FrontMcp`, `z`
+import { App, connectClaude, connectOpenAI, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
-const AddTool = tool({
+@Tool({
   name: 'add',
   description: 'Add numbers',
   inputSchema: { a: z.number(), b: z.number() },
   outputSchema: { sum: z.number() },
-})((input) => ({ sum: input.a + input.b }));
+})
+class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return { sum: input.a + input.b };
+  }
+}
+
+@App({ name: 'test-app', tools: [AddTool] })
+class TestApp {}
+
+@FrontMcp({ info: { name: 'test', version: '1.0.0' }, apps: [TestApp] })
+class TestServerConfig {}
 
 describe('OpenAI format', () => {
-  it('should return OpenAI-formatted tools', async () => {
-    const client = await connectOpenAI({
-      info: { name: 'test', version: '1.0.0' },
-      tools: [AddTool],
-      serve: false,
-    });
+  it('returns OpenAI-formatted tools', async () => {
+    const client = await connectOpenAI(TestServerConfig);
 
     const tools = await client.listTools();
     // OpenAI format: [{ type: 'function', function: { name, parameters } }]
@@ -47,13 +58,8 @@ describe('OpenAI format', () => {
 });
 
 describe('Claude format', () => {
-  it('should return Claude-formatted tools', async () => {
-    const { connectClaude } = await import('@frontmcp/sdk');
-    const client = await connectClaude({
-      info: { name: 'test', version: '1.0.0' },
-      tools: [AddTool],
-      serve: false,
-    });
+  it('returns Claude-formatted tools', async () => {
+    const client = await connectClaude(TestServerConfig);
 
     const tools = await client.listTools();
     // Claude format: [{ name, description, input_schema }]
@@ -67,9 +73,9 @@ describe('Claude format', () => {
 
 ## What This Demonstrates
 
-- Using `connectOpenAI()` with `serve: false` to get an in-memory client without starting an HTTP server
+- Using `connectOpenAI(ServerConfig)` to get an in-memory `DirectClient` (no HTTP server is started)
 - Verifying OpenAI tool format: `{ type: 'function', function: { name, parameters } }`
-- Using dynamic import for `connectClaude` to test Claude tool format: `{ name, description, input_schema }`
+- Using `connectClaude(ServerConfig)` to verify Claude format: `{ name, description, input_schema }`
 - Proper cleanup with `client.close()` after each test
 
 ## Related

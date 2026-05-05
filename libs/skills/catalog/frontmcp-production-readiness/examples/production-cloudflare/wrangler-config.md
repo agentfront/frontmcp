@@ -2,88 +2,54 @@
 name: wrangler-config
 reference: production-cloudflare
 level: basic
-description: 'Shows how to configure `wrangler.toml` with correct routes, KV bindings for session storage, and secret management for a FrontMCP Cloudflare Worker.'
-tags: [production, cloudflare, cache, session, wrangler, config]
+description: 'Production-readiness checklist for Cloudflare Worker wrangler.toml — verifies KV bindings, secret hygiene, and that the build adapter wrote the correct main path.'
+tags: [production, cloudflare, cache, session, wrangler, checklist]
 features:
-  - 'Complete `wrangler.toml` with KV bindings for sessions and cache'
-  - 'Separate staging/production environment configs'
-  - 'Cloudflare Worker entry point via `createCloudflareHandler`'
-  - 'Secrets managed via `wrangler secret put` (not in config files)'
+  - 'Verify `main = "dist/cloudflare/index.js"` (the build adapter writes this — never override)'
+  - 'Verify KV bindings for sessions and cache exist'
+  - 'Verify staging / production environment configs are separated'
+  - 'Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`'
 ---
 
-# Wrangler Configuration with KV Bindings
+# Wrangler Configuration: Production-Readiness Checklist
 
-Shows how to configure `wrangler.toml` with correct routes, KV bindings for session storage, and secret management for a FrontMCP Cloudflare Worker.
+> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-cloudflare.md`**. This file is checklist-only: it verifies your already-generated `wrangler.toml` is production-ready.
 
-## Code
+## Build artifact checks
 
-```toml
-# wrangler.toml
-name = "my-mcp-worker"
-main = "dist/worker.js"
-compatibility_date = "2024-01-01"
+- [ ] `frontmcp build --target cloudflare` runs cleanly with no warnings
+- [ ] The build adapter wrote `main = "dist/cloudflare/index.js"` to `wrangler.toml` — **do not hand-edit this line**; the adapter overwrites it on every build (PR #374 — overriding silently breaks `wrangler deploy`)
+- [ ] `dist/cloudflare/index.js` exists after build and is what `wrangler deploy` uploads
+- [ ] No hand-written `src/worker.ts` with a fictional `createCloudflareHandler(...)` — the build emits the entry; your code stays the decorated `@FrontMcp` class
+- [ ] Bundle size is < 10 MB compressed (Workers limit)
 
-# Custom domain routing
-routes = [
-  { pattern = "mcp.example.com/*", zone_name = "example.com" }
-]
+## Routes & domains
 
-# KV namespace for session storage
-[[kv_namespaces]]
-binding = "MCP_SESSIONS"
-id = "abc123def456"
+- [ ] `routes = [{ pattern = "<host>/*", zone_name = "<zone>" }]` set for the right hostnames
+- [ ] Custom domain or `*.workers.dev` subdomain matches what `cors.origin` accepts in your `@FrontMcp` config
+- [ ] Separate `[env.staging]` and `[env.production]` blocks with distinct names + routes
 
-# KV namespace for cache
-[[kv_namespaces]]
-binding = "MCP_CACHE"
-id = "def456ghi789"
+## KV / Durable Objects / R2
 
-# Environment-specific config
-[env.staging]
-name = "my-mcp-worker-staging"
-routes = [
-  { pattern = "mcp-staging.example.com/*", zone_name = "example.com" }
-]
+- [ ] At least one `[[kv_namespaces]]` block bound for sessions if HA / multi-region (e.g. `binding = "MCP_SESSIONS"`)
+- [ ] Cache binding (KV or Cache API) exists if `CachePlugin` is configured
+- [ ] Durable Objects only used when stateful coordination is required (rate limiting, locks)
+- [ ] R2 binding exists if the server reads/writes blobs (no filesystem in Workers)
 
-[env.production]
-name = "my-mcp-worker-production"
-routes = [
-  { pattern = "mcp.example.com/*", zone_name = "example.com" }
-]
-```
+## Secrets & env
 
-```typescript
-// src/main.ts
-import { FrontMcp } from '@frontmcp/sdk';
-import { MyApp } from './my.app';
+- [ ] No secrets in `wrangler.toml` — all set via `wrangler secret put <NAME>`
+- [ ] `[vars]` block contains only non-sensitive config (region names, feature flags)
+- [ ] `compatibility_date` set to a recent date and locked
 
-@FrontMcp({
-  info: { name: 'cf-mcp', version: '1.0.0' },
-  apps: [MyApp],
+## Deploy & observability
 
-  // CORS: use the workers.dev or custom domain
-  cors: {
-    origin: ['https://app.example.com'],
-  },
-})
-export default class CloudflareMcpServer {}
-```
-
-```typescript
-// src/worker.ts — Cloudflare Worker entry point
-import { createCloudflareHandler } from '@frontmcp/adapters/cloudflare';
-import Server from './main';
-
-export default createCloudflareHandler(Server);
-```
-
-## What This Demonstrates
-
-- Complete `wrangler.toml` with KV bindings for sessions and cache
-- Separate staging/production environment configs
-- Cloudflare Worker entry point via `createCloudflareHandler`
-- Secrets managed via `wrangler secret put` (not in config files)
+- [ ] Deploy with `wrangler deploy --env production` (not the unscoped form)
+- [ ] `wrangler tail` works against the production worker for live debugging
+- [ ] Dashboard shows recent successful deploys
 
 ## Related
 
-- See `production-cloudflare` for the full Cloudflare Workers checklist
+- Configuration source of truth: `frontmcp-deployment/references/deploy-to-cloudflare.md`
+- Build adapter source: `libs/cli/src/commands/build/adapters/cloudflare.ts`
+- See `production-cloudflare` for the Cloudflare runtime / scaling checklist

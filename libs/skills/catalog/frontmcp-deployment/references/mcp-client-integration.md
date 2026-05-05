@@ -39,6 +39,8 @@ Configure MCP clients to connect to your FrontMCP server. Covers all transport t
 | Background daemon on specific port    | HTTP        | `my-server daemon start -p 4000` | `type: "http"`, `url`               |
 | Vibe coding with AI agent (dev mode)  | HTTP        | `frontmcp dev`                   | `type: "http"`, `url`               |
 
+> **About `daemon` subcommands:** `daemon start | stop | status | logs` are subcommands of the **CLI binary you build with `frontmcp build --target cli`** — they are generated into your binary by the exec build. They are NOT subcommands of the global `frontmcp` CLI itself. The framework-level equivalent is `frontmcp socket <entry>` (with `-b` for background, `-s` for socket path). Use whichever matches the binary the user installs.
+
 ## Development with AI Coding Agents
 
 When building a FrontMCP server with a coding agent (Claude Code, Cursor, Windsurf), use **HTTP transport with `frontmcp dev`** for live hot reload. The agent edits code, the server auto-restarts, and the MCP client reconnects — no manual restart needed.

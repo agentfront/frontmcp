@@ -3,12 +3,12 @@ name: role-based-access-test
 reference: test-auth
 level: intermediate
 description: 'Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints.'
-tags: [testing, auth, role, based, access]
+tags: [testing, auth, role-based-access]
 features:
-  - 'Creating tokens with different `roles` arrays to simulate admin and user access'
+  - 'Putting roles inside `claims` (the `CreateTokenOptions` shape has no top-level `roles` field)'
   - 'Testing that admin-only tools accept admin tokens and reject user tokens'
   - 'Verifying that user-level tools remain accessible to users with the correct role'
-  - 'Each test creates and closes its own client for proper isolation'
+  - 'Each test creates and disconnects its own client for proper isolation'
 ---
 
 # Testing Role-Based Access Control
@@ -19,15 +19,22 @@ Verify that tools enforce role-based access by testing admin and user tokens aga
 
 ```typescript
 // src/__tests__/rbac.e2e.spec.ts
+// Real API:
+//   libs/testing/src/server/test-server.ts:101 — `TestServer.start({ command, port })`
+//   libs/testing/src/auth/token-factory.ts:97 — `TestTokenFactory.createTestToken({ sub, scopes, claims })`
+//   libs/testing/src/client/mcp-test-client.builder.ts — `McpTestClient.create(...).withToken(...).buildAndConnect()`
+//   libs/testing/src/client/mcp-test-client.ts:306 — namespaced client API: `client.tools.call(name, args)`
 import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
-import Server from '../src/main';
 
 describe('Role-Based Access', () => {
   let server: TestServer;
   let tokenFactory: TestTokenFactory;
 
   beforeAll(async () => {
-    server = await TestServer.create(Server);
+    server = await TestServer.start({
+      command: 'npx tsx src/main.ts',
+      port: 3011,
+    });
     tokenFactory = new TestTokenFactory({
       issuer: 'https://test-idp.example.com',
       audience: 'my-api',
@@ -35,53 +42,60 @@ describe('Role-Based Access', () => {
   });
 
   afterAll(async () => {
-    await server.dispose();
+    await server.stop();
   });
 
-  it('should allow admin access to admin-only tool', async () => {
-    const adminToken = await tokenFactory.createToken({
+  async function clientWithToken(token: string): Promise<McpTestClient> {
+    return McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .withToken(token)
+      .buildAndConnect();
+  }
+
+  it('allows admin access to an admin-only tool', async () => {
+    const adminToken = await tokenFactory.createTestToken({
       sub: 'admin-1',
-      roles: ['admin'],
+      claims: { roles: ['admin'] },
     });
 
-    const client = await server.connect({ authToken: adminToken });
-    const result = await client.callTool('admin_only_tool', {});
+    const client = await clientWithToken(adminToken);
+    const result = await client.tools.call('admin_only_tool', {});
     expect(result).toBeSuccessful();
-    await client.close();
+    await client.disconnect();
   });
 
-  it('should deny user access to admin-only tool', async () => {
-    const userToken = await tokenFactory.createToken({
+  it('denies user access to an admin-only tool', async () => {
+    const userToken = await tokenFactory.createTestToken({
       sub: 'user-1',
-      roles: ['user'],
+      claims: { roles: ['user'] },
     });
 
-    const client = await server.connect({ authToken: userToken });
-    const result = await client.callTool('admin_only_tool', {});
-    expect(result.isError).toBe(true);
-    await client.close();
+    const client = await clientWithToken(userToken);
+    const result = await client.tools.call('admin_only_tool', {});
+    expect(result).toBeError();
+    await client.disconnect();
   });
 
-  it('should allow user access to user-level tool', async () => {
-    const userToken = await tokenFactory.createToken({
+  it('allows user access to a user-level tool', async () => {
+    const userToken = await tokenFactory.createTestToken({
       sub: 'user-2',
-      roles: ['user'],
+      claims: { roles: ['user'] },
     });
 
-    const client = await server.connect({ authToken: userToken });
-    const result = await client.callTool('user_tool', { data: 'hello' });
+    const client = await clientWithToken(userToken);
+    const result = await client.tools.call('user_tool', { data: 'hello' });
     expect(result).toBeSuccessful();
-    await client.close();
+    await client.disconnect();
   });
 });
 ```
 
 ## What This Demonstrates
 
-- Creating tokens with different `roles` arrays to simulate admin and user access
+- Putting roles inside `claims` (the `CreateTokenOptions` shape has no top-level `roles` field)
 - Testing that admin-only tools accept admin tokens and reject user tokens
 - Verifying that user-level tools remain accessible to users with the correct role
-- Each test creates and closes its own client for proper isolation
+- Each test creates and disconnects its own client for proper isolation
 
 ## Related
 

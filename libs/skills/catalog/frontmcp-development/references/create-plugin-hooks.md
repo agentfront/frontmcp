@@ -52,52 +52,64 @@ const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
 
 ## Available Flow Names
 
-| Flow Name                  | Description              |
-| -------------------------- | ------------------------ |
-| `tools:call-tool`          | Tool execution           |
-| `tools:list-tools`         | Tool listing / discovery |
-| `resources:read-resource`  | Resource reading         |
-| `resources:list-resources` | Resource listing         |
-| `prompts:get-prompt`       | Prompt retrieval         |
-| `prompts:list-prompts`     | Prompt listing           |
-| `http:request`             | HTTP request handling    |
-| `agents:call-agent`        | Agent invocation         |
+These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk` (see "Pre-Built Hook Type Exports" below):
+
+| Flow Name                           | Description               | Pre-built export            |
+| ----------------------------------- | ------------------------- | --------------------------- |
+| `tools:call-tool`                   | Tool execution            | `ToolHook`                  |
+| `tools:list-tools`                  | Tool listing / discovery  | `ListToolsHook`             |
+| `http:request`                      | HTTP request handling     | `HttpHook`                  |
+| `resources:read-resource`           | Resource reading          | `ResourceHook`              |
+| `resources:list-resources`          | Resource listing          | `ListResourcesHook`         |
+| `resources:list-resource-templates` | Resource template listing | `ListResourceTemplatesHook` |
+| `agents:call-agent`                 | Agent invocation          | `AgentCallHook`             |
+| `channels:send-notification`        | Channel notification send | `ChannelSendHook`           |
+| `channels:list`                     | Channel listing           | `ChannelListHook`           |
 
 ## Server Lifecycle Hooks
 
-In addition to flow-based hooks, plugins can register callbacks for server lifecycle events. These are not decorator-based — they use the `scope.onServerStarted()` API.
+In addition to flow-based hooks, the framework exposes a single `scope.onServerStarted(callback)` API for post-startup work. Callbacks register against the active `ScopeEntry` and run after `server.start()` completes.
 
 ### `onServerStarted()`
 
-Runs after the HTTP server is fully initialized and listening. Use for warming caches, starting background indexing, or logging readiness.
+Use for warming caches, starting background indexing, or logging readiness once the server is live.
+
+**Signature:** `scope.onServerStarted(callback: () => void | Promise<void>): void`
+
+- Callbacks are stored on the active scope and invoked when `emitServerStarted()` runs after startup.
+- Supports both sync and async callbacks; multiple callbacks execute in registration order with `await`.
+
+The cleanest place to call it from a plugin is a factory provider whose `useFactory` receives the active scope, or from a class provider's lifecycle. A common pattern is to register the callback from a hook method using the plugin's injected scope (the plugin instance has a `get(token)` accessor available after construction):
 
 ```typescript
-import { DynamicPlugin, Plugin } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
+
+const { Will } = ToolHook;
 
 @Plugin({
   name: 'cache-warmer',
   description: 'Warms caches when the server starts',
   providers: [CacheService],
 })
-class CacheWarmerPlugin extends DynamicPlugin<{}> {
-  constructor(scope: ScopeEntry) {
-    super();
-    // Register lifecycle callback
-    scope.onServerStarted(async () => {
-      const cache = this.get(CacheService);
-      await cache.warmAll();
-      console.log('Cache warmed successfully');
-    });
+export class CacheWarmerPlugin {
+  private registered = false;
+
+  // Lazy-register the lifecycle callback the first time any tool is called.
+  // For pure post-startup work, prefer registering from a Provider with access
+  // to the active scope, or expose the callback registration via a custom Provider.
+  @Will('parseInput', { priority: 1000 })
+  registerOnce() {
+    if (this.registered) return;
+    this.registered = true;
+    const cache = this.get(CacheService);
+    // `this.get` is wired by the plugin registry post-construction; resolve scope similarly
+    // via a Provider that exposes onServerStarted, e.g. a `ScopeAccessor` wrapper.
+    cache.warmAllInBackground();
   }
 }
 ```
 
-**Signature:** `scope.onServerStarted(callback: () => void | Promise<void>): void`
-
-- Callbacks are stored and executed after `server.start()` completes
-- Supports both sync and async callbacks
-- Multiple callbacks are executed in registration order with `await`
-- Typically used in plugin constructors or provider `onInit()` methods
+> **Pattern note:** `ScopeEntry` is not directly DI-injectable into a plugin constructor (it is a scope-level entry, not a token-registered provider). For lifecycle work, prefer wiring `onServerStarted(...)` through a Provider that receives the scope via `providers.getActiveScope()`, or use Provider/Adapter `onInit` hooks where appropriate. See `apps/demo` for working patterns.
 
 ## Pre-Built Hook Type Exports
 
@@ -106,8 +118,11 @@ For convenience, FrontMCP exports typed aliases so you do not need to call `Flow
 ```typescript
 import {
   AgentCallHook, // FlowHooksOf('agents:call-agent')
+  ChannelListHook, // FlowHooksOf('channels:list')
+  ChannelSendHook, // FlowHooksOf('channels:send-notification')
   HttpHook, // FlowHooksOf('http:request')
   ListResourcesHook, // FlowHooksOf('resources:list-resources')
+  ListResourceTemplatesHook, // FlowHooksOf('resources:list-resource-templates')
   ListToolsHook, // FlowHooksOf('tools:list-tools')
   ResourceHook, // FlowHooksOf('resources:read-resource')
   ToolHook, // FlowHooksOf('tools:call-tool')
@@ -119,6 +134,8 @@ Usage:
 ```typescript
 const { Will, Did, Around, Stage } = ToolHook;
 ```
+
+> **Note:** Other internal flows (e.g., `prompts:get-prompt`, `prompts:list-prompts`, `skills:search`, `completion:complete`, transport flows) exist at runtime and can be hooked by passing the flow name to `FlowHooksOf<'flow:name'>('flow:name')`, but they do not currently ship with a pre-built typed export. Prefer the pre-built exports above when one is available.
 
 ## call-tool Flow Stages
 

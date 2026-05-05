@@ -65,7 +65,7 @@ export default class TaskManagerServer {}
 // src/tasks.app.ts
 import { App } from '@frontmcp/sdk';
 
-import { RedisTaskStoreProvider } from './providers/task-store.provider';
+import { createTaskStoreProvider, TaskStoreProvider } from './providers/task-store.provider';
 import { CreateTaskTool } from './tools/create-task.tool';
 import { DeleteTaskTool } from './tools/delete-task.tool';
 import { ListTasksTool } from './tools/list-tasks.tool';
@@ -74,7 +74,8 @@ import { UpdateTaskTool } from './tools/update-task.tool';
 @App({
   name: 'Tasks',
   description: 'Task management with CRUD operations',
-  providers: [RedisTaskStoreProvider],
+  // The class itself is the DI token; the AsyncProvider factory below builds the singleton.
+  providers: [TaskStoreProvider, createTaskStoreProvider],
   tools: [CreateTaskTool, ListTasksTool, UpdateTaskTool, DeleteTaskTool],
 })
 export class TasksApp {}
@@ -100,33 +101,22 @@ export interface Task {
 
 ## Provider: Redis Task Store
 
+The provider class is the DI token (`this.get(TaskStoreProvider)`). For async setup we expose an `AsyncProvider` factory so the framework can build the singleton with a live Redis connection before any tool is invoked.
+
 ```typescript
 // src/providers/task-store.provider.ts
-import type { Token } from '@frontmcp/di';
-import { Provider } from '@frontmcp/sdk';
+import Redis, { Redis as RedisClient } from 'ioredis';
+
+import { AsyncProvider, Provider, ProviderScope } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
 
 import type { Task } from '../types/task';
 
-export interface TaskStore {
-  create(task: Omit<Task, 'id' | 'createdAt'>): Promise<Task>;
-  list(userId: string): Promise<Task[]>;
-  update(id: string, userId: string, data: Partial<Pick<Task, 'title' | 'priority' | 'status'>>): Promise<Task>;
-  delete(id: string, userId: string): Promise<void>;
-}
-
-export const TASK_STORE: Token<TaskStore> = Symbol('TaskStore');
-
-@Provider({ token: TASK_STORE })
-export class RedisTaskStoreProvider implements TaskStore {
-  private redis!: import('ioredis').default;
-
-  async onInit(): Promise<void> {
-    const Redis = (await import('ioredis')).default;
-    this.redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-  }
+@Provider({ name: 'task-store', scope: ProviderScope.GLOBAL })
+export class TaskStoreProvider {
+  constructor(private readonly redis: RedisClient) {}
 
   async create(input: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
-    const { randomUUID } = await import('@frontmcp/utils');
     const task: Task = {
       ...input,
       id: randomUUID(),
@@ -162,6 +152,18 @@ export class RedisTaskStoreProvider implements TaskStore {
     await this.redis.quit();
   }
 }
+
+// AsyncProvider factory — provides the same class as a token, but lets us await async setup.
+export const createTaskStoreProvider = AsyncProvider({
+  provide: TaskStoreProvider,
+  name: 'task-store-factory',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async () => {
+    const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+    return new TaskStoreProvider(redis);
+  },
+});
 ```
 
 ---
@@ -172,7 +174,7 @@ export class RedisTaskStoreProvider implements TaskStore {
 // src/tools/create-task.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'create_task',
@@ -191,8 +193,8 @@ import { TASK_STORE } from '../providers/task-store.provider';
 })
 export class CreateTaskTool extends ToolContext {
   async execute(input: { title: string; priority: 'low' | 'medium' | 'high' }) {
-    const store = this.get(TASK_STORE);
-    const userId = this.context.session?.userId;
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
 
     if (!userId) {
       this.fail(new Error('Authentication required'));
@@ -224,7 +226,7 @@ export class CreateTaskTool extends ToolContext {
 // src/tools/list-tasks.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'list_tasks',
@@ -247,8 +249,8 @@ import { TASK_STORE } from '../providers/task-store.provider';
 })
 export class ListTasksTool extends ToolContext {
   async execute(input: { status?: 'pending' | 'in_progress' | 'done' }) {
-    const store = this.get(TASK_STORE);
-    const userId = this.context.session?.userId;
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
 
     if (!userId) {
       this.fail(new Error('Authentication required'));
@@ -282,7 +284,7 @@ export class ListTasksTool extends ToolContext {
 // src/tools/update-task.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'update_task',
@@ -305,8 +307,8 @@ export class UpdateTaskTool extends ToolContext {
     status?: 'pending' | 'in_progress' | 'done';
     priority?: 'low' | 'medium' | 'high';
   }) {
-    const store = this.get(TASK_STORE);
-    const userId = this.context.session?.userId;
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
 
     if (!userId) {
       this.fail(new Error('Authentication required'));
@@ -336,7 +338,7 @@ export class UpdateTaskTool extends ToolContext {
 // src/tools/delete-task.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { TASK_STORE } from '../providers/task-store.provider';
+import { TaskStoreProvider } from '../providers/task-store.provider';
 
 @Tool({
   name: 'delete_task',
@@ -351,8 +353,8 @@ import { TASK_STORE } from '../providers/task-store.provider';
 })
 export class DeleteTaskTool extends ToolContext {
   async execute(input: { id: string }) {
-    const store = this.get(TASK_STORE);
-    const userId = this.context.session?.userId;
+    const store = this.get(TaskStoreProvider);
+    const userId = this.auth?.user.sub;
 
     if (!userId) {
       this.fail(new Error('Authentication required'));
@@ -389,13 +391,13 @@ export class DeleteTaskTool extends ToolContext {
 // test/create-task.tool.spec.ts
 import { ToolContext } from '@frontmcp/sdk';
 
-import { TASK_STORE, type TaskStore } from '../src/providers/task-store.provider';
+import { TaskStoreProvider } from '../src/providers/task-store.provider';
 import { CreateTaskTool } from '../src/tools/create-task.tool';
 import type { Task } from '../src/types/task';
 
 describe('CreateTaskTool', () => {
   let tool: CreateTaskTool;
-  let mockStore: jest.Mocked<TaskStore>;
+  let mockStore: jest.Mocked<TaskStoreProvider>;
 
   beforeEach(() => {
     tool = new CreateTaskTool();
@@ -404,13 +406,13 @@ describe('CreateTaskTool', () => {
       list: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-    };
+    } as unknown as jest.Mocked<TaskStoreProvider>;
   });
 
   function applyContext(userId: string | undefined): void {
     const ctx = {
-      get: jest.fn((token: symbol) => {
-        if (token === TASK_STORE) return mockStore;
+      get: jest.fn((token: unknown) => {
+        if (token === TaskStoreProvider) return mockStore;
         throw new Error(`Unknown token: ${String(token)}`);
       }),
       tryGet: jest.fn(),
@@ -418,9 +420,10 @@ describe('CreateTaskTool', () => {
         throw err;
       }),
       mark: jest.fn(),
-      notify: jest.fn(),
-      respondProgress: jest.fn(),
-      context: { session: userId ? { userId } : undefined },
+      notify: jest.fn().mockResolvedValue(true),
+      progress: jest.fn().mockResolvedValue(true),
+      // `auth` getter resolves to a FrontMcpAuthContext-like object on the real SDK; we stub it directly here.
+      auth: userId ? { user: { sub: userId }, isAnonymous: false } : undefined,
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
   }
@@ -489,7 +492,7 @@ describe('Task Manager E2E', () => {
   });
 
   it('should list all CRUD tools', async () => {
-    const { tools } = await client.listTools();
+    const tools = await client.tools.list();
     const names = tools.map((t) => t.name);
 
     expect(names).toContain('create_task');
@@ -499,16 +502,16 @@ describe('Task Manager E2E', () => {
   });
 
   it('should create and list a task', async () => {
-    const createResult = await client.callTool('create_task', {
+    const createResult = await client.tools.call('create_task', {
       title: 'E2E test task',
       priority: 'high',
     });
-    expect(createResult).toBeSuccessful();
+    expect(createResult.isError).toBeFalsy();
 
-    const listResult = await client.callTool('list_tasks', {});
-    expect(listResult).toBeSuccessful();
+    const listResult = await client.tools.call('list_tasks', {});
+    expect(listResult.isError).toBeFalsy();
 
-    const parsed = JSON.parse(listResult.content[0].text);
+    const parsed = JSON.parse(listResult.content[0].text as string);
     expect(parsed.tasks.length).toBeGreaterThan(0);
     expect(parsed.tasks.some((t: { title: string }) => t.title === 'E2E test task')).toBe(true);
   });
@@ -517,10 +520,10 @@ describe('Task Manager E2E', () => {
 
 ## Examples
 
-| Example                                                                                  | Level        | Description                                                                                                                                    |
-| ---------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`auth-and-crud-tools`](../examples/example-task-manager/auth-and-crud-tools.md)         | Basic        | Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection. |
-| [`authenticated-e2e-tests`](../examples/example-task-manager/authenticated-e2e-tests.md) | Advanced     | Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.              |
-| [`redis-provider-with-di`](../examples/example-task-manager/redis-provider-with-di.md)   | Intermediate | Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.                  |
+| Example                                                                                  | Level        | Description                                                                                                                                   |
+| ---------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`auth-and-crud-tools`](../examples/example-task-manager/auth-and-crud-tools.md)         | Basic        | Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` for user isolation and `this.get()` for dependency injection. |
+| [`authenticated-e2e-tests`](../examples/example-task-manager/authenticated-e2e-tests.md) | Advanced     | Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.             |
+| [`redis-provider-with-di`](../examples/example-task-manager/redis-provider-with-di.md)   | Intermediate | Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.                 |
 
 > See all examples in [`examples/example-task-manager/`](../examples/example-task-manager/)

@@ -59,24 +59,44 @@ Not all FrontMCP features are available in browser environments:
 
 ## Usage with @frontmcp/react
 
-The browser build is commonly paired with `@frontmcp/react` for React applications:
+The browser build is commonly paired with `@frontmcp/react` for React applications. `FrontMcpProvider` takes a pre-created `DirectMcpServer` (via the SDK's `create()` factory) — not a `serverUrl`. Hooks for listing/invoking are `useListTools` / `useCallTool`:
 
 ```typescript
-import { FrontMcpProvider, useTools } from '@frontmcp/react';
+import { create } from '@frontmcp/sdk';
+import { FrontMcpProvider, useListTools, useCallTool } from '@frontmcp/react';
+
+// Create the server once (outside React) and pass the instance to the provider.
+const server = await create({
+  info: { name: 'browser-app', version: '1.0.0' },
+  // tools/resources/prompts as flat config (see build-for-sdk)
+  tools: [/* ... */],
+});
 
 function App() {
   return (
-    <FrontMcpProvider config={{ serverUrl: 'https://my-mcp.example.com' }}>
+    <FrontMcpProvider server={server}>
       <ToolUI />
     </FrontMcpProvider>
   );
 }
 
 function ToolUI() {
-  const { tools, callTool } = useTools();
-  // Use tools in your React components
+  const { data: toolsResult } = useListTools();
+  const { mutate: callTool } = useCallTool();
+  const tools = toolsResult?.tools ?? [];
+  return (
+    <ul>
+      {tools.map((t) => (
+        <li key={t.name}>
+          <button onClick={() => callTool({ name: t.name, arguments: {} })}>{t.name}</button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 ```
+
+For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpServer` via `connect()` from `@frontmcp/sdk` and pass that instance to the provider.
 
 ## Browser vs Node vs SDK Target
 
@@ -99,13 +119,14 @@ ls dist/browser/
 
 ## Common Patterns
 
-| Pattern           | Correct                                  | Incorrect                         | Why                                        |
-| ----------------- | ---------------------------------------- | --------------------------------- | ------------------------------------------ |
-| Crypto usage      | `@frontmcp/utils` (uses WebCrypto)       | `node:crypto`                     | `node:crypto` is not available in browsers |
-| Storage           | In-memory stores or remote API           | SQLite / Redis directly           | No filesystem or native TCP in browsers    |
-| File system ops   | Avoid `@frontmcp/utils` fs functions     | `readFile()`, `writeFile()`       | fs utilities throw in browser environments |
-| Entry file        | Separate browser entry (`src/client.ts`) | Reusing server entry point        | Server entry may import Node-only modules  |
-| Server connection | `FrontMcpProvider` with `serverUrl`      | Direct `connect()` with localhost | Browser needs a remote URL, not localhost  |
+| Pattern           | Correct                                           | Incorrect                                   | Why                                                    |
+| ----------------- | ------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------ |
+| Crypto usage      | `@frontmcp/utils` (uses WebCrypto)                | `node:crypto`                               | `node:crypto` is not available in browsers             |
+| Storage           | In-memory stores or remote API                    | SQLite / Redis directly                     | No filesystem or native TCP in browsers                |
+| File system ops   | Avoid `@frontmcp/utils` fs functions              | `readFile()`, `writeFile()`                 | fs utilities throw in browser environments             |
+| Entry file        | Separate browser entry (`src/client.ts`)          | Reusing server entry point                  | Server entry may import Node-only modules              |
+| Provider props    | `<FrontMcpProvider server={await create({...})}>` | `<FrontMcpProvider config={{ serverUrl }}>` | Real prop is `server: DirectMcpServer`; no `serverUrl` |
+| Tool listing hook | `useListTools()` -> `{ data: { tools } }`         | `useTools()` -> `{ tools, callTool }`       | `useTools` is not exported; real hooks are split       |
 
 ## Verification Checklist
 
