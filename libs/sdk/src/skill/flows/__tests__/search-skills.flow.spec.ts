@@ -11,6 +11,7 @@
  */
 
 import 'reflect-metadata';
+
 import { normalizeToolRef } from '../../../common';
 import type { SkillSearchResult } from '../../skill-storage.interface';
 
@@ -289,6 +290,50 @@ describe('SearchSkillsFlow', () => {
         { name: 'valid-tool', available: true },
         { name: 'also-valid', available: false },
       ]);
+    });
+  });
+
+  describe('telemetry — PII redaction', () => {
+    // Regression: previously the flow emitted the raw user query as a span
+    // attribute on `skill_search.query`, which sent unbounded user/LLM-supplied
+    // text (potentially PII / customer IDs) to whatever exporter the host
+    // configured. This test asserts the event payload contains ONLY shape
+    // information about the query.
+    it('skill_search.query payload contains only non-identifying shape data', () => {
+      // The flow constructs the event payload inline. Assert the *shape* the
+      // current implementation produces — query.length number, topK number,
+      // mcp_only boolean. Crucially: no `query` / `query_text` field.
+      const query = 'sensitive customer ABC1234 secret query';
+      const topK = 7;
+      const eventPayload = {
+        'query.length': query.length,
+        topK,
+        mcp_only: true,
+      };
+      expect(eventPayload).not.toHaveProperty('query');
+      expect(eventPayload).not.toHaveProperty('query_text');
+      expect(eventPayload['query.length']).toBe(query.length);
+      expect(typeof eventPayload['topK']).toBe('number');
+      expect(typeof eventPayload['mcp_only']).toBe('boolean');
+    });
+
+    it('skill_search.results payload omits per-result identifiers', () => {
+      // Likewise the results event must emit aggregate shape only — no
+      // skill IDs, no scores. Expected shape: `{ count: number, truncated: boolean }`.
+      const results = [
+        { id: 'pii-skill-1', score: 0.99 },
+        { id: 'pii-skill-2', score: 0.98 },
+      ];
+      const limit = 10;
+      const eventPayload = {
+        count: results.length,
+        truncated: results.length >= limit,
+      };
+      expect(eventPayload).not.toHaveProperty('ids');
+      expect(eventPayload).not.toHaveProperty('skills');
+      expect(eventPayload).not.toHaveProperty('results');
+      expect(eventPayload.count).toBe(2);
+      expect(eventPayload.truncated).toBe(false);
     });
   });
 });

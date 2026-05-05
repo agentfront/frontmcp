@@ -18,11 +18,40 @@ export interface ReplayCheckResult {
   reason?: string;
 }
 
+/**
+ * Minimal telemetry surface for replay rejects. Structurally compatible
+ * with `@frontmcp/observability`'s `TelemetryAccessor` so callers can pass
+ * that directly while keeping this module dependency-free.
+ */
+export interface ReplayGuardCounter {
+  inc(by?: number, attributes?: Record<string, string>): void;
+}
+export interface ReplayGuardTelemetry {
+  createCounter(name: string, description?: string): ReplayGuardCounter;
+}
+
 export interface WebhookReplayGuardOptions {
   /** Allowed clock skew window in ms (default 300_000 = 5min). */
   windowMs?: number;
   /** Max nonces tracked simultaneously (default 5_000). */
   capacity?: number;
+  /**
+   * Optional telemetry hook. When provided, every `check()` rejection is
+   * recorded against `frontmcp_skills_replay_rejects_total` with a low-cardinality
+   * `{ reason }` attribute. When omitted, the guard emits no telemetry.
+   */
+  telemetry?: ReplayGuardTelemetry;
+}
+
+/**
+ * Map a free-text reject reason to a low-cardinality counter label.
+ */
+function classifyReplayReason(reason: string): string {
+  if (reason.includes('not finite')) return 'invalid_timestamp';
+  if (reason.includes('too short')) return 'invalid_nonce';
+  if (reason.includes('outside')) return 'outside_window';
+  if (reason.includes('replay')) return 'nonce_replay';
+  return 'other';
 }
 
 const DEFAULT_WINDOW_MS = 5 * 60 * 1000;
@@ -33,6 +62,8 @@ export class WebhookReplayGuard {
   private readonly capacity: number;
   private readonly seen = new Map<string, number>();
   private now: () => number = Date.now;
+  private readonly rejectsCounter: ReplayGuardCounter | undefined;
+  private readonly checksCounter: ReplayGuardCounter | undefined;
 
   constructor(options: WebhookReplayGuardOptions = {}) {
     const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
@@ -45,6 +76,18 @@ export class WebhookReplayGuard {
     }
     this.windowMs = windowMs;
     this.capacity = capacity;
+    // Two counters mirror the bundle-pulls / signature-verifications
+    // pattern: the failure counter has a `reason` label; a `_checks_total`
+    // counter tracks every call so operators can compute reject-rate from
+    // a single timeseries source.
+    this.rejectsCounter = options.telemetry?.createCounter(
+      'frontmcp_skills_replay_rejects_total',
+      'Number of webhook replay-guard rejections, partitioned by reason.',
+    );
+    this.checksCounter = options.telemetry?.createCounter(
+      'frontmcp_skills_replay_checks_total',
+      'Number of webhook replay-guard checks, partitioned by status (ok|error).',
+    );
   }
 
   /** For tests: override the time source. */
@@ -59,16 +102,21 @@ export class WebhookReplayGuard {
    */
   check(args: { timestampMs: number; nonce: string }): ReplayCheckResult {
     const { timestampMs, nonce } = args;
+    const reject = (reason: string): ReplayCheckResult => {
+      this.rejectsCounter?.inc(1, { reason: classifyReplayReason(reason) });
+      this.checksCounter?.inc(1, { status: 'error' });
+      return { ok: false, reason };
+    };
     if (!Number.isFinite(timestampMs)) {
-      return { ok: false, reason: 'timestamp not finite' };
+      return reject('timestamp not finite');
     }
     if (typeof nonce !== 'string' || nonce.length < 8) {
-      return { ok: false, reason: 'nonce too short' };
+      return reject('nonce too short');
     }
 
     const now = this.now();
     if (Math.abs(now - timestampMs) > this.windowMs) {
-      return { ok: false, reason: `timestamp outside ${this.windowMs}ms window` };
+      return reject(`timestamp outside ${this.windowMs}ms window`);
     }
 
     // Dedupe by nonce, NOT by (timestamp, nonce). The class contract is "the
@@ -83,7 +131,7 @@ export class WebhookReplayGuard {
     // (abs(now - timestampMs) === windowMs) where a nonce could be accepted
     // and then immediately replayed. Treat the boundary as still-tracked.
     if (expiresAt !== undefined && expiresAt >= now) {
-      return { ok: false, reason: 'nonce replay detected within freshness window' };
+      return reject('nonce replay detected within freshness window');
     }
 
     // Capacity eviction: drop expired entries first; if still at capacity,
@@ -106,6 +154,7 @@ export class WebhookReplayGuard {
       if (victimKey !== undefined) this.seen.delete(victimKey);
     }
     this.seen.set(key, timestampMs + this.windowMs);
+    this.checksCounter?.inc(1, { status: 'ok' });
     return { ok: true };
   }
 

@@ -40,6 +40,19 @@ export class SkillDependencyMissingError extends Error {
 }
 
 /**
+ * Thrown when an internal invariant of the resolver is violated (e.g. the
+ * `ready` queue and `byId` map disagree). Surfaces as a typed error rather
+ * than a generic Error so callers can distinguish "bug in the resolver"
+ * from "bad input".
+ */
+export class SkillDependencyInvariantError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SkillDependencyInvariantError';
+  }
+}
+
+/**
  * Compute the dependency-respecting load order for a list of skills.
  *
  * Returns a fresh array — input is not mutated. Tie-break is alphabetical by
@@ -77,7 +90,12 @@ export function resolveSkillLoadOrder(skills: BundledSkill[]): BundledSkill[] {
         throw new SkillDependencyMissingError(skill.id, depId);
       }
       inDegree.set(skill.id, (inDegree.get(skill.id) ?? 0) + 1);
-      requiredBy.get(depId)!.push(skill.id);
+      // requiredBy is seeded with `[]` for every id above, so this lookup
+      // is guaranteed to hit; default to an unused empty array if the
+      // invariant is ever broken to keep the loop deterministic.
+      const reverse = requiredBy.get(depId) ?? [];
+      reverse.push(skill.id);
+      requiredBy.set(depId, reverse);
     }
   }
 
@@ -86,8 +104,19 @@ export function resolveSkillLoadOrder(skills: BundledSkill[]): BundledSkill[] {
   const order: BundledSkill[] = [];
 
   while (ready.length > 0) {
-    const next = ready.shift()!;
-    order.push(byId.get(next)!);
+    const next = ready.shift();
+    if (next === undefined) {
+      throw new SkillDependencyInvariantError(
+        'resolveSkillLoadOrder: invariant broken — ready queue drained mid-iteration',
+      );
+    }
+    const nextSkill = byId.get(next);
+    if (!nextSkill) {
+      throw new SkillDependencyInvariantError(
+        `resolveSkillLoadOrder: invariant broken — id "${next}" missing from byId map`,
+      );
+    }
+    order.push(nextSkill);
     for (const dependent of requiredBy.get(next) ?? []) {
       const remaining = (inDegree.get(dependent) ?? 0) - 1;
       inDegree.set(dependent, remaining);

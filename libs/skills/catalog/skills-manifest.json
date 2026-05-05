@@ -2,165 +2,6 @@
   "version": 1,
   "skills": [
     {
-      "name": "frontmcp-authorities",
-      "category": "development",
-      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.",
-      "path": "frontmcp-authorities",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": [
-        "authorization",
-        "rbac",
-        "abac",
-        "rebac",
-        "security",
-        "permissions",
-        "roles",
-        "access-control",
-        "authorities",
-        "jwt"
-      ],
-      "bundle": ["full"],
-      "references": [
-        {
-          "name": "authority-profiles",
-          "description": "Registering, composing, and using named authority profiles for reusable authorization policies",
-          "examples": []
-        },
-        {
-          "name": "claims-mapping",
-          "description": "JWT claims mapping configuration per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg) for the authorities system",
-          "examples": []
-        },
-        {
-          "name": "custom-evaluators",
-          "description": "Creating and registering custom authority evaluators for domain-specific authorization logic beyond RBAC, ABAC, and ReBAC",
-          "examples": []
-        },
-        {
-          "name": "rbac-abac-rebac",
-          "description": "Comparison of RBAC, ABAC, and ReBAC authorization models with when to use each, policy syntax, and examples",
-          "examples": []
-        }
-      ]
-    },
-    {
-      "name": "frontmcp-channels",
-      "category": "development",
-      "description": "Use when you want to push real-time notifications into Claude Code sessions. Build webhook channels, chat bridges (WhatsApp, Telegram, Slack), agent completion alerts, job status notifications, or error forwarding. The skill for CHANNELS and NOTIFICATIONS.",
-      "path": "frontmcp-channels",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": ["channels", "notifications", "claude-code", "webhooks", "messaging", "real-time", "two-way"],
-      "bundle": ["full"],
-      "references": [
-        {
-          "name": "channel-sources",
-          "description": "Configure different channel source types - webhooks, app events, agent/job completion, service connectors, file watchers, and manual push",
-          "examples": [
-            {
-              "name": "agent-notify",
-              "description": "Notify Claude Code when AI agents complete their tasks",
-              "level": "intermediate",
-              "tags": ["agents", "completion", "notifications", "automation"],
-              "features": [
-                "Agent completion source with ID filtering",
-                "Duration and output reporting",
-                "Integration with agent registry emitter"
-              ]
-            },
-            {
-              "name": "app-errors",
-              "description": "Forward application errors to Claude Code via the in-process event bus",
-              "level": "basic",
-              "tags": ["errors", "app-event", "debugging", "monitoring"],
-              "features": [
-                "App event source with ChannelEventBus",
-                "Error severity classification",
-                "Stack trace forwarding"
-              ]
-            },
-            {
-              "name": "file-watcher",
-              "description": "Watch files for changes and notify Claude Code in real-time",
-              "level": "intermediate",
-              "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
-              "features": [
-                "File watcher source type with glob patterns",
-                "onConnect lifecycle for starting the watcher",
-                "pushIncoming for streaming file events",
-                "Log file monitoring example"
-              ]
-            },
-            {
-              "name": "job-completion",
-              "description": "Notify Claude Code when background jobs and workflows complete",
-              "level": "intermediate",
-              "tags": ["jobs", "workflows", "completion", "background", "notifications"],
-              "features": [
-                "Job completion source with name filtering",
-                "Status-aware notification formatting",
-                "Duration and output reporting"
-              ]
-            },
-            {
-              "name": "replay-buffer",
-              "description": "Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.",
-              "level": "advanced",
-              "tags": ["replay", "buffer", "persistence", "offline", "reconnect"],
-              "features": [
-                "Replay configuration with `maxEvents` cap",
-                "In-memory ring buffer for event storage",
-                "Where `replayBufferedEvents` actually lives (on `ChannelInstance`, not on `ChannelContext`)",
-                "Persistent store pattern with `onConnect` and a user-defined Redis provider"
-              ]
-            },
-            {
-              "name": "service-connector",
-              "description": "Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API",
-              "level": "advanced",
-              "tags": ["service", "connector", "whatsapp", "persistent-connection", "bidirectional"],
-              "features": [
-                "Service source type with onConnect/onDisconnect lifecycle",
-                "Channel-contributed tools for outbound messages",
-                "pushIncoming() for feeding service events into the notification pipeline",
-                "Bidirectional conversation flow"
-              ]
-            },
-            {
-              "name": "webhook-github",
-              "description": "Forward GitHub webhook events (PRs, pushes, CI) into Claude Code",
-              "level": "basic",
-              "tags": ["webhook", "github", "ci", "notifications"],
-              "features": [
-                "Webhook source with HTTP POST endpoint",
-                "GitHub event type routing",
-                "Static meta for team context"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "channel-two-way",
-          "description": "Build two-way chat bridges connecting WhatsApp, Telegram, Slack, and Discord to Claude Code",
-          "examples": [
-            {
-              "name": "whatsapp-bridge",
-              "description": "Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp",
-              "level": "advanced",
-              "tags": ["whatsapp", "chat", "two-way", "messaging", "bridge"],
-              "features": [
-                "Two-way channel with reply support",
-                "WhatsApp Cloud API integration",
-                "Sender verification and allowlisting",
-                "Webhook signature validation"
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
       "name": "frontmcp-config",
       "category": "config",
       "description": "Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.",
@@ -594,6 +435,48 @@
           "name": "setup-sqlite",
           "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup",
           "examples": []
+        },
+        {
+          "name": "configure-skills-http",
+          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "examples": [
+            {
+              "name": "inject-instructions",
+              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
+              "level": "basic",
+              "tags": ["config", "skills", "instructions", "injection", "initialize"],
+              "features": [
+                "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
+                "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
+                "Dynamic skills are picked up because the composer runs on every initialize request",
+                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://catalog"
+              ]
+            },
+            {
+              "name": "audit-log-basic",
+              "description": "Enable the skill audit log with the in-memory store and HS256 signer for development and tests.",
+              "level": "basic",
+              "tags": ["config", "skills", "audit", "hs256", "development"],
+              "features": [
+                "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
+                "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
+                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
+                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
+              ]
+            },
+            {
+              "name": "audit-log-redis",
+              "description": "Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key.",
+              "level": "advanced",
+              "tags": ["config", "skills", "audit", "rs256", "redis", "production"],
+              "features": [
+                "StorageAdapterAuditStore persists records to Redis via the standard storage adapter",
+                "Rs256AuditSigner reuses the bundle-signing keypair for forensic-friendly signatures",
+                "Single-writer constraint: only one pod should write the chain in v1.2.0",
+                "verifyChain(records, trustedKeys, defaultAuditSignatureVerifier) detects tampering"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -1820,6 +1703,36 @@
               ]
             }
           ]
+        },
+        {
+          "name": "skill-audit-log",
+          "description": "Tamper-evident, hash-chained audit log for skill action executions — pluggable signer, pluggable store, offline verification.",
+          "examples": [
+            {
+              "name": "verify-chain",
+              "description": "Verify a stored chain offline using verifyChain and the bundle-signing key registry.",
+              "level": "intermediate",
+              "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
+              "features": [
+                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
+                "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
+                "Trusted-keys registry maps signatureKeyId → public key PEM",
+                "iterate() reads the chain in order from any SkillAuditStore implementation"
+              ]
+            },
+            {
+              "name": "custom-store",
+              "description": "Implement a custom SkillAuditStore that streams records to S3 with one object per sequence.",
+              "level": "advanced",
+              "tags": ["extensibility", "audit", "custom", "s3", "store"],
+              "features": [
+                "Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)",
+                "One S3 object per sequence keeps individual records immutable and verifiable",
+                "tail() returns the latest record so the writer can chain prevHash deterministically",
+                "read({ from, limit }) supports incremental verifyChain runs in CI"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -1970,173 +1883,6 @@
       ]
     },
     {
-      "name": "frontmcp-observability",
-      "category": "observability",
-      "description": "Use when you want to add tracing, structured logging, or monitoring to your FrontMCP server. Covers OpenTelemetry instrumentation, vendor integrations (Coralogix, Datadog, Logz.io, Grafana), this.telemetry API for custom spans, structured JSON logging with sinks, and testing observability. Triggers: observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans, datadog, coralogix, logz, grafana, winston, pino.",
-      "path": "frontmcp-observability",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": [
-        "router",
-        "observability",
-        "telemetry",
-        "tracing",
-        "logging",
-        "monitoring",
-        "opentelemetry",
-        "otel",
-        "spans"
-      ],
-      "bundle": ["recommended", "full"],
-      "references": [
-        {
-          "name": "structured-logging",
-          "description": "Add structured JSON logging with trace correlation and configurable sinks (stdout, winston, pino, OTLP).",
-          "examples": [
-            {
-              "name": "stdout-logging",
-              "description": "Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.",
-              "level": "basic",
-              "tags": ["logging", "stdout", "ndjson", "redaction", "basic"],
-              "features": [
-                "NDJSON format for stdout (Docker/K8s log collection)",
-                "Automatic trace context enrichment (trace_id, span_id)",
-                "Sensitive field redaction (token → [REDACTED])"
-              ]
-            },
-            {
-              "name": "winston-integration",
-              "description": "Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata.",
-              "level": "intermediate",
-              "tags": ["logging", "winston", "integration", "intermediate"],
-              "features": [
-                "WinstonSink forwarding structured entries with trace metadata",
-                "Multiple sinks running simultaneously (stdout + winston)",
-                "Winston transports handle file logging, remote forwarding, etc."
-              ]
-            }
-          ]
-        },
-        {
-          "name": "telemetry-api",
-          "description": "Use this.telemetry in tools, plugins, and agents to create custom spans, events, and attributes.",
-          "examples": [
-            {
-              "name": "agent-nested-tracing",
-              "description": "Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.",
-              "level": "advanced",
-              "tags": ["telemetry", "agent", "nested", "tools", "trace-id"],
-              "features": [
-                "Agent span wraps the entire execution (including LLM loop)",
-                "Nested tool calls automatically get their own spans",
-                "All spans share the same trace ID for end-to-end visibility",
-                "this.telemetry works identically in agents and tools"
-              ]
-            },
-            {
-              "name": "plugin-telemetry",
-              "description": "Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace.",
-              "level": "intermediate",
-              "tags": ["telemetry", "plugin", "hooks", "cache", "audit"],
-              "features": [
-                "Plugin hooks can access toolCtx.telemetry to add events to the active span",
-                "Events from plugins appear in the same trace as the tool execution",
-                "Graceful degradation when observability is not enabled"
-              ]
-            },
-            {
-              "name": "tool-custom-spans",
-              "description": "Create child spans, events, and attributes inside a tool's execute method using this.telemetry.",
-              "level": "basic",
-              "tags": ["telemetry", "tool", "spans", "events", "attributes"],
-              "features": [
-                "this.telemetry.withSpan() creates auto-managed child spans",
-                "this.telemetry.addEvent() adds events to the parent tool span",
-                "this.telemetry.setAttributes() adds metadata to the parent tool span",
-                "Child spans inherit the trace ID automatically"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "testing-observability",
-          "description": "Test that your spans, log entries, and telemetry instrumentation work correctly.",
-          "examples": [
-            {
-              "name": "test-custom-spans",
-              "description": "Verify that your tool creates the expected child spans with correct attributes.",
-              "level": "basic",
-              "tags": ["testing", "spans", "assertions", "jest", "basic"],
-              "features": [
-                "createTestTracer() provides isolated OTel setup (no global pollution)",
-                "assertSpanExists() throws helpful errors when spans are missing",
-                "assertSpanAttribute() verifies span attributes",
-                "findSpansByAttribute() queries spans by attribute value"
-              ]
-            },
-            {
-              "name": "test-log-correlation",
-              "description": "Verify that structured log entries include trace context fields for correlation with spans.",
-              "level": "intermediate",
-              "tags": ["testing", "logging", "correlation", "trace-id", "intermediate"],
-              "features": [
-                "CallbackSink captures log entries for test assertions",
-                "StructuredLogTransport with mock context accessor provides trace fields",
-                "Verifying trace_id, span_id, request_id are present",
-                "Testing field redaction behavior"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "tracing-setup",
-          "description": "Enable OpenTelemetry distributed tracing for all FrontMCP flows with zero configuration.",
-          "examples": [
-            {
-              "name": "basic-tracing",
-              "description": "Enable auto-tracing and see spans printed to your terminal.",
-              "level": "basic",
-              "tags": ["tracing", "setup", "console", "basic"],
-              "features": [
-                "Zero-config tracing via observability: true",
-                "Console exporter for local development",
-                "Single trace ID shared across all spans in a request"
-              ]
-            },
-            {
-              "name": "production-tracing",
-              "description": "Full production observability — traces to OTLP, structured logs to stdout, per-request log collection.",
-              "level": "intermediate",
-              "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
-              "features": [
-                "OTLP exporter with env var configuration",
-                "Structured logging with sensitive field redaction",
-                "Request log collection with error alerting",
-                "Full tracing across all SDK flows"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "vendor-integrations",
-          "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
-          "examples": [
-            {
-              "name": "coralogix-setup",
-              "description": "Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically.",
-              "level": "intermediate",
-              "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
-              "features": [
-                "Traces and logs both sent to Coralogix via OTLP",
-                "Automatic trace_id correlation — click a trace, see its logs",
-                "Environment variable configuration for production"
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
       "name": "frontmcp-production-readiness",
       "category": "production",
       "description": "Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.",
@@ -2177,14 +1923,17 @@
             },
             {
               "name": "security-hardening",
-              "description": "Shows how to configure authentication, CORS, input validation, and rate limiting for a production FrontMCP server.",
+              "description": "Shows how to configure authentication, CORS, input validation, rate limiting, audit logging, and observability counters for a production FrontMCP server.",
               "level": "basic",
-              "tags": ["production", "redis", "session", "security", "throttle", "checklist"],
+              "tags": ["production", "redis", "session", "security", "throttle", "audit", "observability", "checklist"],
               "features": [
                 "Restricting CORS origins to known domains instead of using `'*'`",
                 "Configuring rate limiting via the `throttle` option",
                 "Using Redis for session storage in multi-instance deployments",
-                "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks"
+                "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks",
+                "Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier",
+                "Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported",
+                "Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling"
               ]
             }
           ]
@@ -3214,6 +2963,359 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "frontmcp-observability",
+      "category": "observability",
+      "description": "Use when you want to add tracing, structured logging, or monitoring to your FrontMCP server. Covers OpenTelemetry instrumentation, vendor integrations (Coralogix, Datadog, Logz.io, Grafana), this.telemetry API for custom spans, structured JSON logging with sinks, and testing observability. Triggers: observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans, datadog, coralogix, logz, grafana, winston, pino.",
+      "path": "frontmcp-observability",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "router",
+        "observability",
+        "telemetry",
+        "tracing",
+        "logging",
+        "monitoring",
+        "opentelemetry",
+        "otel",
+        "spans"
+      ],
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "tracing-setup",
+          "description": "Enable OpenTelemetry distributed tracing for all FrontMCP flows with zero configuration.",
+          "examples": [
+            {
+              "name": "basic-tracing",
+              "description": "Enable auto-tracing and see spans printed to your terminal.",
+              "level": "basic",
+              "tags": ["tracing", "setup", "console", "basic"],
+              "features": [
+                "Zero-config tracing via observability: true",
+                "Console exporter for local development",
+                "Single trace ID shared across all spans in a request"
+              ]
+            },
+            {
+              "name": "production-tracing",
+              "description": "Full production observability — traces to OTLP, structured logs to stdout, per-request log collection.",
+              "level": "intermediate",
+              "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
+              "features": [
+                "OTLP exporter with env var configuration",
+                "Structured logging with sensitive field redaction",
+                "Request log collection with error alerting",
+                "Full tracing across all SDK flows"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "structured-logging",
+          "description": "Add structured JSON logging with trace correlation and configurable sinks.",
+          "examples": [
+            {
+              "name": "stdout-logging",
+              "description": "Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.",
+              "level": "basic",
+              "tags": ["logging", "stdout", "ndjson", "redaction", "basic"],
+              "features": [
+                "NDJSON format for stdout (Docker/K8s log collection)",
+                "Automatic trace context enrichment (trace_id, span_id)",
+                "Sensitive field redaction (token → [REDACTED])"
+              ]
+            },
+            {
+              "name": "winston-integration",
+              "description": "Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata.",
+              "level": "intermediate",
+              "tags": ["logging", "winston", "integration", "intermediate"],
+              "features": [
+                "WinstonSink forwarding structured entries with trace metadata",
+                "Multiple sinks running simultaneously (stdout + winston)",
+                "Winston transports handle file logging, remote forwarding, etc."
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telemetry-api",
+          "description": "Use this.telemetry in tools, plugins, and agents to create custom spans, events, and attributes.",
+          "examples": [
+            {
+              "name": "tool-custom-spans",
+              "description": "Create child spans, events, and attributes inside a tool's execute method using this.telemetry.",
+              "level": "basic",
+              "tags": ["telemetry", "tool", "spans", "events", "attributes"],
+              "features": [
+                "this.telemetry.withSpan() creates auto-managed child spans",
+                "this.telemetry.addEvent() adds events to the parent tool span",
+                "this.telemetry.setAttributes() adds metadata to the parent tool span",
+                "Child spans inherit the trace ID automatically"
+              ]
+            },
+            {
+              "name": "plugin-telemetry",
+              "description": "Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace.",
+              "level": "intermediate",
+              "tags": ["telemetry", "plugin", "hooks", "cache", "audit"],
+              "features": [
+                "Plugin hooks can access toolCtx.telemetry to add events to the active span",
+                "Events from plugins appear in the same trace as the tool execution",
+                "Graceful degradation when observability is not enabled"
+              ]
+            },
+            {
+              "name": "agent-nested-tracing",
+              "description": "Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.",
+              "level": "advanced",
+              "tags": ["telemetry", "agent", "nested", "tools", "trace-id"],
+              "features": [
+                "Agent span wraps the entire execution (including LLM loop)",
+                "Nested tool calls automatically get their own spans",
+                "All spans share the same trace ID for end-to-end visibility",
+                "this.telemetry works identically in agents and tools"
+              ]
+            },
+            {
+              "name": "skill-counters",
+              "description": "Read built-in skill counters from the in-memory snapshot for tests and wire an OTel MeterProvider so counters export to OTLP in production.",
+              "level": "intermediate",
+              "tags": ["telemetry", "counters", "metrics", "skills", "otel", "meter-provider"],
+              "features": [
+                "this.telemetry.createCounter(name, description) creates a custom counter",
+                "counter.inc(by, attrs) increments with bounded label cardinality",
+                "getMetricSnapshot() reads framework counters in tests without a MeterProvider",
+                "metrics.setGlobalMeterProvider() wires counters into OTLP for production"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "vendor-integrations",
+          "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
+          "examples": [
+            {
+              "name": "coralogix-setup",
+              "description": "Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically.",
+              "level": "intermediate",
+              "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
+              "features": [
+                "Traces and logs both sent to Coralogix via OTLP",
+                "Automatic trace_id correlation — click a trace, see its logs",
+                "Environment variable configuration for production"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "testing-observability",
+          "description": "Test that your spans, log entries, and telemetry instrumentation work correctly.",
+          "examples": [
+            {
+              "name": "test-custom-spans",
+              "description": "Verify that your tool creates the expected child spans with correct attributes.",
+              "level": "basic",
+              "tags": ["testing", "spans", "assertions", "jest", "basic"],
+              "features": [
+                "createTestTracer() provides isolated OTel setup (no global pollution)",
+                "assertSpanExists() throws helpful errors when spans are missing",
+                "assertSpanAttribute() verifies span attributes",
+                "findSpansByAttribute() queries spans by attribute value"
+              ]
+            },
+            {
+              "name": "test-log-correlation",
+              "description": "Verify that structured log entries include trace context fields for correlation with spans.",
+              "level": "intermediate",
+              "tags": ["testing", "logging", "correlation", "trace-id", "intermediate"],
+              "features": [
+                "CallbackSink captures log entries for test assertions",
+                "StructuredLogTransport with mock context accessor provides trace fields",
+                "Verifying trace_id, span_id, request_id are present",
+                "Testing field redaction behavior"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "frontmcp-channels",
+      "category": "development",
+      "description": "Use when you want to push real-time notifications into Claude Code sessions. Build webhook channels, chat bridges (WhatsApp, Telegram, Slack), agent completion alerts, job status notifications, or error forwarding. The skill for CHANNELS and NOTIFICATIONS.",
+      "path": "frontmcp-channels",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "channels",
+        "notifications",
+        "claude-code",
+        "webhooks",
+        "messaging",
+        "real-time",
+        "two-way",
+        "whatsapp",
+        "telegram",
+        "slack",
+        "chat-bridge"
+      ],
+      "bundle": ["full"],
+      "references": [
+        {
+          "name": "channel-sources",
+          "description": "Configure different channel source types - webhooks, app events, agent completion, job completion, and manual push",
+          "examples": [
+            {
+              "name": "webhook-github",
+              "description": "Forward GitHub webhook events (PRs, pushes, CI) into Claude Code",
+              "level": "basic",
+              "tags": ["webhook", "github", "ci", "notifications"],
+              "features": [
+                "Webhook source with HTTP POST endpoint",
+                "GitHub event type routing",
+                "Static meta for team context"
+              ]
+            },
+            {
+              "name": "app-errors",
+              "description": "Forward application errors to Claude Code via the in-process event bus",
+              "level": "basic",
+              "tags": ["errors", "app-event", "debugging", "monitoring"],
+              "features": [
+                "App event source with ChannelEventBus",
+                "Error severity classification",
+                "Stack trace forwarding"
+              ]
+            },
+            {
+              "name": "agent-notify",
+              "description": "Notify Claude Code when AI agents complete their tasks",
+              "level": "intermediate",
+              "tags": ["agents", "completion", "notifications", "automation"],
+              "features": [
+                "Agent completion source with ID filtering",
+                "Duration and output reporting",
+                "Integration with agent registry emitter"
+              ]
+            },
+            {
+              "name": "job-completion",
+              "description": "Notify Claude Code when background jobs and workflows complete",
+              "level": "intermediate",
+              "tags": ["jobs", "workflows", "completion", "background", "notifications"],
+              "features": [
+                "Job completion source with name filtering",
+                "Status-aware notification formatting",
+                "Duration and output reporting"
+              ]
+            },
+            {
+              "name": "service-connector",
+              "description": "Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API",
+              "level": "advanced",
+              "tags": ["service", "connector", "whatsapp", "persistent-connection", "bidirectional"],
+              "features": [
+                "Service source type with onConnect/onDisconnect lifecycle",
+                "Channel-contributed tools for outbound messages",
+                "pushIncoming() for feeding service events into the notification pipeline",
+                "Bidirectional conversation flow"
+              ]
+            },
+            {
+              "name": "file-watcher",
+              "description": "Watch files for changes and notify Claude Code in real-time",
+              "level": "intermediate",
+              "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
+              "features": [
+                "File watcher source type with glob patterns",
+                "onConnect lifecycle for starting the watcher",
+                "pushIncoming for streaming file events",
+                "Log file monitoring example"
+              ]
+            },
+            {
+              "name": "replay-buffer",
+              "description": "Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.",
+              "level": "advanced",
+              "tags": ["replay", "buffer", "persistence", "offline", "reconnect"],
+              "features": [
+                "Replay configuration with `maxEvents` cap",
+                "In-memory ring buffer for event storage",
+                "Where `replayBufferedEvents` actually lives (on `ChannelInstance`, not on `ChannelContext`)",
+                "Persistent store pattern with `onConnect` and a user-defined Redis provider"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "channel-two-way",
+          "description": "Build two-way chat bridges connecting WhatsApp, Telegram, Slack, and Discord to Claude Code",
+          "examples": [
+            {
+              "name": "whatsapp-bridge",
+              "description": "Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp",
+              "level": "advanced",
+              "tags": ["whatsapp", "chat", "two-way", "messaging", "bridge"],
+              "features": [
+                "Two-way channel with reply support",
+                "WhatsApp Cloud API integration",
+                "Sender verification and allowlisting",
+                "Webhook signature validation"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "frontmcp-authorities",
+      "category": "development",
+      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.",
+      "path": "frontmcp-authorities",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "authorization",
+        "rbac",
+        "abac",
+        "rebac",
+        "security",
+        "permissions",
+        "roles",
+        "access-control",
+        "authorities",
+        "jwt"
+      ],
+      "bundle": ["full"],
+      "priority": 9,
+      "visibility": "both",
+      "license": "Apache-2.0",
+      "references": [
+        {
+          "name": "claims-mapping",
+          "description": "JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg)",
+          "examples": []
+        },
+        {
+          "name": "authority-profiles",
+          "description": "Registering and using named authority profiles for reusable access patterns",
+          "examples": []
+        },
+        {
+          "name": "rbac-abac-rebac",
+          "description": "Comparison of RBAC, ABAC, and ReBAC authorization models with usage guidance",
+          "examples": []
+        },
+        {
+          "name": "custom-evaluators",
+          "description": "Creating custom authority evaluators for domain-specific access control",
+          "examples": []
         }
       ]
     }

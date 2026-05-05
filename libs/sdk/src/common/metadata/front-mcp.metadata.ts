@@ -54,6 +54,26 @@ export interface FrontMcpBaseMetadata {
   serve?: boolean; // default to true
 
   /**
+   * Server-level instructions surfaced through the MCP `initialize` response.
+   *
+   * The MCP `InitializeResult.instructions` field lets the server hand the
+   * client a "system prompt" describing how to use available capabilities.
+   * FrontMCP merges this string with channel hints and (optionally) bundle
+   * skill instructions per `skillsConfig.injectInstructions`.
+   *
+   * Keep this short — clients typically include it verbatim in the model
+   * context window. The full skill catalog is exposed via the
+   * `skills://catalog` resource and the `skills://{name}/SKILL.md` resource
+   * template (or the `skills/search` MCP extension method).
+   *
+   * @see `skillsConfig.injectInstructions` for the merge policy. Note that
+   *   `'replace'` falls back to `'append'` semantics when `instructions` is
+   *   empty/undefined so a misconfigured server doesn't silently drop the
+   *   catalog and channel hints.
+   */
+  instructions?: string;
+
+  /**
    * Shared storage configuration
    * Used by transport persistence and auth token storage.
    * Supports both Redis and Vercel KV providers.
@@ -467,6 +487,7 @@ export interface FrontMcpBaseMetadata {
 
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
+  instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
@@ -681,6 +702,9 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
  */
 const frontMcpLiteSchema = z.object({
   info: serverInfoOptionsSchema,
+  // Server-level instructions injected into the MCP `initialize` response.
+  // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
+  instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),

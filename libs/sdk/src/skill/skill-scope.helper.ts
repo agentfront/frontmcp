@@ -23,6 +23,7 @@ import { LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiF
 import { getSep2640Resources } from './sep-2640/resources';
 import { resolveLastModifiedForSkill } from './sep-2640/sep-2640.last-modified';
 import { registerPerSkillResources } from './sep-2640/sep-2640.per-skill';
+import { registerSkillAuditWriter } from './skill-audit.helper';
 import type SkillRegistry from './skill.registry';
 
 /**
@@ -69,6 +70,13 @@ export interface SkillScopeRegistrationOptions {
  */
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
   const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
+
+  // Register the skill audit writer first — registration is independent of
+  // whether any skills are present at scope-init time. Plugins that mount
+  // skills dynamically (e.g. plugin-skilled-openapi loading bundles after
+  // boot) still need the writer wired up; gating on `hasAny()` would silently
+  // disable audit logging in that scenario.
+  registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
 
   // Early exit if no skills registered
   if (!skillRegistry.hasAny()) {

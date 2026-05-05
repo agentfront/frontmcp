@@ -315,6 +315,111 @@ export interface SkillsConfigOptions {
    * ```
    */
   cache?: SkillsConfigCacheOptions;
+
+  /**
+   * Tamper-evident audit log for skill action invocations.
+   *
+   * When enabled, every authority-pass / http-call-success / http-call-failure
+   * inside `execute_action` appends a signed, hash-chained record to the
+   * configured store. The chain can be verified with `verifyChain()` from
+   * `@frontmcp/adapters/skills` — any retroactive edit to a single record
+   * breaks the chain at that point.
+   *
+   * Configuration is held loosely-typed here so the SDK doesn't take a hard
+   * import dependency on `@frontmcp/adapters/skills`. The skill scope helper
+   * inspects this object at scope-init time and registers the
+   * `SkillAuditWriterToken` provider when `enabled: true`.
+   *
+   * @example
+   * ```typescript
+   * import { Hs256AuditSigner, MemoryAuditStore } from '@frontmcp/adapters/skills';
+   *
+   * @FrontMcp({
+   *   skillsConfig: {
+   *     audit: {
+   *       enabled: true,
+   *       signer: new Hs256AuditSigner(process.env.AUDIT_SECRET, 'audit-prod'),
+   *       store: new MemoryAuditStore(),
+   *     },
+   *   },
+   * })
+   * ```
+   *
+   * @default { enabled: false }
+   */
+  audit?: SkillsConfigAuditOptions;
+
+  /**
+   * How to merge bundle skill `instructions` into the MCP `initialize` response.
+   *
+   * The MCP `InitializeResult.instructions` field is a server-side "system
+   * prompt" that clients typically inject verbatim into the model context.
+   * Bundle skills carry their own `instructions` markdown; this option controls
+   * whether and how those are aggregated alongside the server's
+   * `instructions` (from `@FrontMcp({ instructions })`) and any framework
+   * hints (e.g. channel reply-tool guidance).
+   *
+   * - `'append'` (default): `instructions` is sent as-is, followed by a
+   *   `\n\n---\n\n` separator and the per-skill summary (`**Name**: …`
+   *   blocks separated by `---`). Channel hints sit between them.
+   * - `'prepend'`: the skill catalog summary is sent first, then channel
+   *   hints, then the server `instructions`. Useful when bundle guidance
+   *   must appear in the model's prefix.
+   * - `'replace'`: surface ONLY the server `instructions` field — the
+   *   skill catalog summary AND channel hints are dropped. Use when the
+   *   server config is the canonical prompt and skills should be
+   *   discovered via `searchSkills` instead. **When `instructions` is
+   *   empty/undefined this falls back to `'append'` semantics** so a
+   *   misconfigured server doesn't silently drop everything.
+   * - `'off'`: never inject the bundle skill catalog into `initialize`.
+   *   Server `instructions` AND channel hints are still surfaced — only
+   *   the per-skill summary is suppressed. Lowest-cost option for very
+   *   large catalogs (catalog summaries can otherwise blow context).
+   *
+   * @default 'append'
+   */
+  injectInstructions?: 'off' | 'append' | 'prepend' | 'replace';
+}
+
+/**
+ * Loosely-typed audit configuration carried in `skillsConfig.audit`.
+ *
+ * The actual `SkillAuditSigner` / `SkillAuditStore` types live in
+ * `@frontmcp/adapters/skills` — held as `unknown` here to keep the SDK free
+ * of an upward dependency. The skill scope helper does the structural check
+ * and creates default in-memory implementations when omitted.
+ */
+export interface SkillsConfigAuditOptions {
+  /** Master switch. Default: false (opt-in feature). */
+  enabled?: boolean;
+  /**
+   * Pluggable signer implementing the `SkillAuditSigner` interface from
+   * `@frontmcp/adapters/skills`. When omitted, an HMAC-SHA256 signer with
+   * a randomly-generated process-local secret is created. NOT suitable for
+   * production — the secret is lost on restart.
+   */
+  signer?: unknown;
+  /**
+   * Pluggable store implementing the `SkillAuditStore` interface from
+   * `@frontmcp/adapters/skills`. When omitted, an in-memory store is used
+   * (suitable only for dev / single-pod). Production should use
+   * `StorageAdapterAuditStore` against Redis/SQLite/Vercel KV.
+   */
+  store?: unknown;
+  /**
+   * How the `subject` field (typically JWT `sub`) is persisted in each
+   * record. Forwarded to `SkillAuditWriter`. See `SkillAuditSubjectMode` in
+   * `@frontmcp/adapters/skills`.
+   *
+   * @default 'hash'
+   */
+  subjectMode?: 'plain' | 'hash' | 'omit';
+  /**
+   * Periodic head-anchor interval (milliseconds). Reserved for v1.3.0
+   * tail-truncation detection. Validated only — currently the writer does
+   * not consume this value.
+   */
+  headAnchorIntervalMs?: number;
 }
 
 /**

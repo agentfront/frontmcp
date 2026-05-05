@@ -20,6 +20,7 @@ import {
 import { ElicitationNotSupportedError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
+import { buildChannelInstructions, composeInitializeInstructions } from '../../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../../task';
 import { createMcpHandlers } from '../mcp-handlers';
 import { type TransportKey, type TransportType } from '../transport.types';
@@ -199,17 +200,30 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
     // Channel capabilities (experimental extension for Claude Code)
     const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
-    const channelInstructions = this.scope.channels?.hasAny()
-      ? `Events arrive as <channel> tags. ${this.scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''}`
-      : '';
 
     // SEP-2640 (Skills Extension) — capability declaration and optional
-    // skill-URI hints in `instructions`. Merging both `experimental` and
-    // `extensions` keys into the response is handled by `mergeExperimental`
-    // below; the helper preserves keys from other registries (channels) when
-    // both push into the same slot.
+    // skill-URI hints. `skillsCapabilities` advertises the extension; the
+    // SEP-2640 URI hint block (gated by `skillsConfig.sep2640InInstructions`)
+    // is appended to the catalog summary produced by
+    // `composeInitializeInstructions` so both surfaces compose cleanly.
     const skillsCapabilities = this.scope.skills?.getCapabilities() ?? {};
-    const skillsInstructions = this.buildSkillInstructionHints();
+
+    // Compose `instructions` lazily on every `initialize` so dynamic skill
+    // registrations after boot are reflected per-session. The static value
+    // below seeds the McpServer constructor for SDK compatibility; the
+    // actual response is recomputed inside the handler via
+    // `composeInstructions` (see initialize-request.handler.ts).
+    const composeInstructions = (): string => {
+      const composed = composeInitializeInstructions({
+        userInstructions: this.scope.metadata.instructions,
+        channelInstructions: buildChannelInstructions(this.scope.channels),
+        skillRegistry: this.scope.skills,
+        policy: this.scope.metadata.skillsConfig?.injectInstructions,
+      });
+      const sep2640Hints = this.buildSkillInstructionHints();
+      return [composed, sep2640Hints].filter((s) => s.length > 0).join('\n\n---\n\n');
+    };
+    const instructions = composeInstructions();
 
     const mergedCapabilities = mergeExperimental([
       remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
@@ -225,8 +239,6 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       { logging: {} },
       elicitationCapability,
     ]);
-
-    const instructions = [channelInstructions, skillsInstructions].filter((s) => s.length > 0).join('\n\n');
 
     // The MCP `ServerOptions.capabilities` type doesn't model the
     // forward-compat `extensions` key (reserved for SEP-2133). The runtime
@@ -251,6 +263,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const handlers = createMcpHandlers({
       scope: this.scope,
       serverOptions,
+      composeInstructions,
     });
 
     for (const handler of handlers) {

@@ -94,7 +94,24 @@ export type {
 } from './logging';
 
 // ──── Developer Telemetry API ────
-export { TelemetryAccessor, TelemetrySpan, TELEMETRY_ACCESSOR } from './telemetry';
+export {
+  TelemetryAccessor,
+  TelemetrySpan,
+  TelemetryFactory,
+  TELEMETRY_ACCESSOR,
+  TELEMETRY_FACTORY,
+  createCounter,
+  getMetricSnapshot,
+  getCounterTotal,
+  resetMetricSnapshot,
+  resetTelemetrySnapshotForTesting,
+  resetCounterCacheForTesting,
+  normalizeBundleSource,
+  normalizeErrorReason,
+  KNOWN_BUNDLE_SOURCES,
+  KNOWN_ERROR_REASONS,
+} from './telemetry';
+export type { TelemetryCounter, CounterSnapshotEntry, KnownBundleSource, KnownErrorReason } from './telemetry';
 
 // ──── Testing Utilities ────
 export {

@@ -1,6 +1,6 @@
 // file: plugins/plugin-skilled-openapi/src/tools/execute-action.tool.ts
 
-import { BundleStore } from '@frontmcp/adapters/skills';
+import { BundleStore, SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
@@ -37,6 +37,24 @@ export default class ExecuteActionTool extends ToolContext {
     const bundleStore = this.get(BundleStore);
     const guard = this.get(AuthorityGuard);
     const resolver = this.get(SkilledOpenApiCredentialResolver);
+    // Audit writer is opt-in: hosts that want a tamper-evident, signed,
+    // hash-chained log of every skill action invocation register the
+    // SkillAuditWriter token in DI (driven by `skillsConfig.audit.enabled`).
+    // When absent, the tool runs as before with zero overhead.
+    const auditWriter = this.tryGet<SkillAuditWriter>(SkillAuditWriterToken);
+    const auditSubject = this.authInfo?.user?.sub ?? 'anonymous';
+
+    // Detached audit writes — captured via this helper so a rejected promise
+    // (signer/store/backend failure) is logged instead of becoming an
+    // unhandled rejection. Audit failures must never propagate to the caller,
+    // and the writer's hot path mustn't block on a slow backend.
+    const detachAudit = (op: Promise<void>, phase: string): void => {
+      op.catch((error) => {
+        this.logger.warn(
+          `[skill-audit] detached ${phase} write failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    };
 
     // Skill action progress: 5 milestones aligned with the phases of this tool.
     // Each `progress()` call is a no-op when the caller didn't include a
@@ -45,7 +63,29 @@ export default class ExecuteActionTool extends ToolContext {
     const TOTAL_STEPS = 5;
     const tick = (step: number, message: string): Promise<boolean> => this.progress(step, TOTAL_STEPS, message);
 
+    // Telemetry: each phase emits a `skill_action.phase` event on the active
+    // tool span. The accessor is resolved via `tryGet` so the tool runs
+    // cleanly when ObservabilityPlugin isn't installed (no errors, no events).
+    // Reading `this.telemetry` directly would trigger the context-extension
+    // getter, which throws ContextExtensionNotAvailableError when the plugin
+    // is absent — that crash is what this lookup avoids.
+    interface PhaseTelemetry {
+      addEvent(name: string, attrs?: Record<string, string | number | boolean>): void;
+      setAttributes(attrs: Record<string, string | number | boolean>): void;
+    }
+    const TELEMETRY_ACCESSOR_TOKEN = Symbol.for('frontmcp:observability:telemetry-accessor');
+    const tel = this.tryGet<PhaseTelemetry>(TELEMETRY_ACCESSOR_TOKEN);
+    const phaseEvent = (phase: string, attrs?: Record<string, string | number | boolean>): void => {
+      tel?.addEvent('skill_action.phase', {
+        phase,
+        skillId: input.skillId,
+        actionId: input.actionId,
+        ...(attrs ?? {}),
+      });
+    };
+
     await tick(1, 'resolve-action');
+    phaseEvent('resolve-action');
     // 1) Resolve hidden op for (skillId, actionId).
     const entry = hiddenOps.get(input.skillId, input.actionId);
     if (!entry) {
@@ -66,6 +106,7 @@ export default class ExecuteActionTool extends ToolContext {
     const bundle = bundleStore.current();
 
     await tick(2, 'authority-check');
+    phaseEvent('authority-check', { bundleVersion: pinned.bundleVersion });
     // 2) Authority check (skill-level + op-level merged at call site).
     const policy = pinned.op.requiredAuthorities;
     const authResult = await guard.check({
@@ -74,11 +115,51 @@ export default class ExecuteActionTool extends ToolContext {
       input: input.input ?? {},
     });
     if (!authResult.granted) {
+      // Audit: authority denial. Without this record the most security-
+      // relevant events (someone trying to invoke an action they aren't
+      // authorized for) would silently disappear from the audit log. We
+      // detach the write (`void`) so a slow audit backend never blocks
+      // the denial response — audit failures never propagate.
+      if (auditWriter) {
+        detachAudit(
+          auditWriter.writeAuthorityFail(
+            {
+              subject: auditSubject,
+              skillId: input.skillId,
+              actionId: input.actionId,
+              bundleId,
+              bundleVersion: pinned.bundleVersion,
+              input: input.input ?? {},
+            },
+            { reason: authResult.deniedBy ?? 'policy not satisfied' },
+          ),
+          'authority-check-fail',
+        );
+      }
       return {
         ok: false,
         status: 0,
         error: `authority denied: ${authResult.deniedBy ?? 'policy not satisfied'}`,
       };
+    }
+
+    // Audit: authority pass. Captured BEFORE the http call so even invocations
+    // that fail at the network layer still leave a forensic record tying the
+    // input to the policy decision. We detach the write (`void`) so a slow
+    // audit backend never blocks the user's request — audit failures never
+    // propagate.
+    if (auditWriter) {
+      detachAudit(
+        auditWriter.writeAuthorityPass({
+          subject: auditSubject,
+          skillId: input.skillId,
+          actionId: input.actionId,
+          bundleId,
+          bundleVersion: pinned.bundleVersion,
+          input: input.input ?? {},
+        }),
+        'authority-check-pass',
+      );
     }
 
     // 3) Compile (or fetch from cache) the input/output Zod schemas for this op.
@@ -91,6 +172,7 @@ export default class ExecuteActionTool extends ToolContext {
     });
 
     await tick(3, 'input-validate');
+    phaseEvent('input-validate', { bundleVersion: pinned.bundleVersion });
     // 4) Validate input strictly. Mirrors the SDK call-tool flow's parseInput
     //    stage — invalid input never reaches the upstream HTTP call.
     const inputParse = schemas.input.safeParse(input.input ?? {});
@@ -130,12 +212,69 @@ export default class ExecuteActionTool extends ToolContext {
     };
 
     await tick(4, 'http-call');
-    const result = await executeOperation({
-      entry: pinned,
-      bundleId,
-      input: inputParse.data as Record<string, unknown>,
-      deps,
-    });
+    phaseEvent('http-call', { bundleVersion: pinned.bundleVersion });
+    let result: Awaited<ReturnType<typeof executeOperation>>;
+    try {
+      result = await executeOperation({
+        entry: pinned,
+        bundleId,
+        input: inputParse.data as Record<string, unknown>,
+        deps,
+      });
+    } catch (e) {
+      // Audit thrown errors before re-throwing so the chain captures every
+      // post-authority invocation outcome, even ones that never produced an
+      // ok=false envelope. Detached (`void`) — a slow audit backend MUST
+      // NOT delay propagating the failure to the caller.
+      if (auditWriter) {
+        detachAudit(
+          auditWriter.writeHttpCallFailure(
+            {
+              subject: auditSubject,
+              skillId: input.skillId,
+              actionId: input.actionId,
+              bundleId,
+              bundleVersion: pinned.bundleVersion,
+              input: input.input ?? {},
+            },
+            { status: 0, error: e },
+          ),
+          'http-call-failure',
+        );
+      }
+      throw e;
+    }
+
+    // Audit: record the http-call outcome. Both ok=true and ok=false flow
+    // through here so the chain includes the caller-visible status code.
+    // Detached (`void`) — see writeAuthorityPass above.
+    if (auditWriter) {
+      const auditCtx = {
+        subject: auditSubject,
+        skillId: input.skillId,
+        actionId: input.actionId,
+        bundleId,
+        bundleVersion: pinned.bundleVersion,
+        input: input.input ?? {},
+      };
+      if (result.ok) {
+        detachAudit(
+          auditWriter.writeHttpCallSuccess(auditCtx, {
+            status: result.status,
+            output: result.data ?? null,
+          }),
+          'http-call-success',
+        );
+      } else {
+        detachAudit(
+          auditWriter.writeHttpCallFailure(auditCtx, {
+            status: result.status,
+            error: result.error ?? `http call failed with status ${result.status}`,
+          }),
+          'http-call-failure',
+        );
+      }
+    }
 
     // 6) Validate the response body shape against the op's outputSchema.
     //    Only runs on a successful upstream call AND when the response is
@@ -158,6 +297,14 @@ export default class ExecuteActionTool extends ToolContext {
     }
 
     await tick(5, 'done');
+    phaseEvent('done', { bundleVersion: pinned.bundleVersion });
+    tel?.setAttributes({
+      'skill_action.status': result.status,
+      'skill_action.ok': result.ok,
+      'skill_action.skill_id': input.skillId,
+      'skill_action.action_id': input.actionId,
+      'skill_action.bundle_version': pinned.bundleVersion,
+    });
     return {
       ok: result.ok,
       status: result.status,

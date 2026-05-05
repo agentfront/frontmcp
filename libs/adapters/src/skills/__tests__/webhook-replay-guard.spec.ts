@@ -126,6 +126,81 @@ describe('WebhookReplayGuard', () => {
     expect(() => new WebhookReplayGuard({ capacity: -3 })).toThrow(RangeError);
   });
 
+  describe('telemetry', () => {
+    function makeFakeTelemetry(): {
+      telemetry: {
+        createCounter: (n: string, d?: string) => { inc: (by?: number, attrs?: Record<string, string>) => void };
+      };
+      counterCalls: { name: string; by: number; attributes: Record<string, string> }[];
+    } {
+      const counterCalls: { name: string; by: number; attributes: Record<string, string> }[] = [];
+      return {
+        counterCalls,
+        telemetry: {
+          createCounter(name) {
+            return {
+              inc(by = 1, attributes = {}) {
+                counterCalls.push({ name, by, attributes });
+              },
+            };
+          },
+        },
+      };
+    }
+
+    it('records checks_total{status=ok} on accepted nonce and skips the rejects counter', () => {
+      const { telemetry, counterCalls } = makeFakeTelemetry();
+      const guard = new WebhookReplayGuard({ windowMs: 60_000, telemetry });
+      guard.setNowProvider(() => 1_000_000);
+      guard.check({ timestampMs: 1_000_000, nonce: 'abcdefgh' });
+      const rejects = counterCalls.filter((c) => c.name === 'frontmcp_skills_replay_rejects_total');
+      const checks = counterCalls.filter((c) => c.name === 'frontmcp_skills_replay_checks_total');
+      expect(rejects).toHaveLength(0);
+      expect(checks).toHaveLength(1);
+      expect(checks[0].attributes['status']).toBe('ok');
+    });
+
+    it('increments with reason=invalid_timestamp on non-finite timestamp', () => {
+      const { telemetry, counterCalls } = makeFakeTelemetry();
+      const guard = new WebhookReplayGuard({ telemetry });
+      guard.check({ timestampMs: Number.NaN, nonce: 'abcdefgh' });
+      expect(counterCalls[0].name).toBe('frontmcp_skills_replay_rejects_total');
+      expect(counterCalls[0].attributes['reason']).toBe('invalid_timestamp');
+    });
+
+    it('increments with reason=invalid_nonce on too-short nonce', () => {
+      const { telemetry, counterCalls } = makeFakeTelemetry();
+      const guard = new WebhookReplayGuard({ telemetry });
+      guard.setNowProvider(() => 1);
+      guard.check({ timestampMs: 1, nonce: 'tiny' });
+      expect(counterCalls[0].attributes['reason']).toBe('invalid_nonce');
+    });
+
+    it('increments with reason=outside_window on stale timestamp', () => {
+      const { telemetry, counterCalls } = makeFakeTelemetry();
+      const guard = new WebhookReplayGuard({ windowMs: 1_000, telemetry });
+      guard.setNowProvider(() => 1_000_000);
+      guard.check({ timestampMs: 1_000, nonce: 'abcdefgh' });
+      expect(counterCalls[0].attributes['reason']).toBe('outside_window');
+    });
+
+    it('increments with reason=nonce_replay when nonce is reused', () => {
+      const { telemetry, counterCalls } = makeFakeTelemetry();
+      const guard = new WebhookReplayGuard({ windowMs: 60_000, telemetry });
+      guard.setNowProvider(() => 1_000_000);
+      guard.check({ timestampMs: 1_000_000, nonce: 'replayed' });
+      guard.check({ timestampMs: 1_000_000, nonce: 'replayed' });
+      const replayCalls = counterCalls.filter((c) => c.attributes['reason'] === 'nonce_replay');
+      expect(replayCalls).toHaveLength(1);
+    });
+
+    it('omitting telemetry keeps the guard dependency-free', () => {
+      const guard = new WebhookReplayGuard();
+      guard.setNowProvider(() => 1);
+      expect(() => guard.check({ timestampMs: Number.NaN, nonce: 'aaaaaaaa' })).not.toThrow();
+    });
+  });
+
   it('eviction drops the entry with the smallest expiresAt, not the oldest insertion', () => {
     // Mix in a stale-but-in-window timestamp so insertion order != expiry order.
     const guard = new WebhookReplayGuard({ capacity: 2, windowMs: 10_000 });

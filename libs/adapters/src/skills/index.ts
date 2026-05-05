@@ -22,13 +22,21 @@ export { OverlayParseError, parseOverlay, type OverlayInput } from './bundle/ove
 export {
   BundleStore,
   BundlePinnedError,
+  type BundleStoreCounter,
   type BundleStoreOptions,
+  type BundleStoreSpan,
+  type BundleStoreTelemetry,
   type BundleSwapListener,
 } from './bundle/bundle.store';
 export { diffBundles, formatDiffSummary, type BundleDiff } from './bundle/bundle-diff';
 
 // Dependency resolution
-export { resolveSkillLoadOrder, SkillDependencyCycleError, SkillDependencyMissingError } from './dependency/skill-dag';
+export {
+  resolveSkillLoadOrder,
+  SkillDependencyCycleError,
+  SkillDependencyInvariantError,
+  SkillDependencyMissingError,
+} from './dependency/skill-dag';
 
 // Source configuration
 export {
@@ -66,11 +74,60 @@ export {
   bundleDigest,
   canonicalize,
   verifyBundleSignature,
+  type SignatureVerifyCounter,
   type SignatureVerifyResult,
+  type SignatureVerifyTelemetry,
 } from './security/bundle-signature';
 export { BundlePushJwtVerifier, type BundlePushJwtVerifierOptions } from './security/jwt-verifier';
 export {
   WebhookReplayGuard,
   type ReplayCheckResult,
+  type ReplayGuardCounter,
+  type ReplayGuardTelemetry,
   type WebhookReplayGuardOptions,
 } from './security/webhook-replay-guard';
+
+// Audit log (tamper-evident, signed, hash-chained)
+export {
+  canonicalizeRecordForSigning,
+  defaultAuditSignatureVerifier,
+  Hs256AuditSigner,
+  linkRecord,
+  MemoryAuditStore,
+  nextPrevHash,
+  Rs256AuditSigner,
+  SKILL_AUDIT_ERROR_MESSAGE_MAX,
+  SKILL_AUDIT_GENESIS_PREV_HASH,
+  SKILL_AUDIT_KEYS,
+  SKILL_AUDIT_QUEUE_MAX,
+  SkillAuditWriter,
+  SkillAuditWriterToken,
+  StorageAdapterAuditStore,
+  verifyChain,
+  type AuditChainVerifyResult,
+  type AuditSignatureVerifier,
+  type AuditTrustedKey,
+  type SkillAuditAuthorityFailExtras,
+  type SkillAuditConfig,
+  type SkillAuditFailureExtras,
+  type SkillAuditLogger,
+  type SkillAuditMetrics,
+  type SkillAuditPartialRecord,
+  type SkillAuditPhase,
+  type SkillAuditReadOptions,
+  type SkillAuditRecord,
+  type SkillAuditSignatureAlg,
+  type SkillAuditSigner,
+  type SkillAuditSignResult,
+  type SkillAuditSubjectMode,
+  type SkillAuditWriterOptions,
+  type SkillAuditStore,
+  type SkillAuditSuccessExtras,
+  type SkillAuditWriteContext,
+} from './audit';
+
+// `setSkillAuditFactory` lives in the SDK (it registers the audit module
+// against the SDK's lazy DI hook) but every documented integration path
+// imports it alongside the audit signer/store classes from this barrel.
+// Re-exporting here keeps the docs and the public surface in sync.
+export { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';

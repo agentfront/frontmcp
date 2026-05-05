@@ -116,6 +116,11 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Error rate metrics are tracked
 - [ ] Tool execution duration is measured
 - [ ] Error tracking service is integrated (Sentry, Datadog, etc.)
+- [ ] OTel `MeterProvider` registered (not just the tracer)
+- [ ] `frontmcp_skills_bundle_pulls_total` is scraped
+- [ ] `frontmcp_skills_signature_failures_total` is alerted on
+- [ ] `frontmcp_skills_replay_rejects_total` is alerted on
+- [ ] `frontmcp_skills_audit_dropped_total` is alerted on (audit back-pressure)
 
 ## Jobs & Workflows (if enabled)
 
@@ -131,6 +136,13 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Skills caching is enabled for production (`skillsConfig.cache: { enabled: true }`)
 - [ ] Cache TTL is tuned for skill instruction freshness requirements
 - [ ] `/llm.txt` and `/skills` endpoints are tested for correct responses
+- [ ] Skill audit log enabled (`skillsConfig.audit.enabled: true`) for production
+- [ ] Audit signer is RS256 with a key rotation policy (`Rs256AuditSigner` + bundle-signing key)
+- [ ] Audit store is persistent (`StorageAdapterAuditStore` with Redis / Vercel KV / SQLite)
+- [ ] Audit chain verifier (`verifyChain`) runs in CI on the latest tail
+- [ ] Single-writer constraint respected (v1.2.0): writes routed to a single elected leader pod
+- [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
+- [ ] Auto-injected skill catalog summary stays within the 16 KB ceiling (review on each catalog change)
 
 ## ExtApps / Widgets (if enabled)
 
@@ -170,6 +182,6 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 | ------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`caching-and-performance`](../examples/common-checklist/caching-and-performance.md) | Advanced     | Shows how to configure caching with the real `CachePlugin.init(...)` API and how to size connection pools so the server does not exhaust downstream resources. |
 | [`observability-setup`](../examples/common-checklist/observability-setup.md)         | Intermediate | Shows how to configure structured logging, error handling with MCP error codes, and monitoring integration for production.                                     |
-| [`security-hardening`](../examples/common-checklist/security-hardening.md)           | Basic        | Shows how to configure authentication, CORS, input validation, and rate limiting for a production FrontMCP server.                                             |
+| [`security-hardening`](../examples/common-checklist/security-hardening.md)           | Basic        | Shows how to configure authentication, CORS, input validation, rate limiting, audit logging, and observability counters for a production FrontMCP server.      |
 
 > See all examples in [`examples/common-checklist/`](../examples/common-checklist/)

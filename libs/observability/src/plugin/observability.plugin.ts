@@ -25,7 +25,8 @@ import { RequestLogCollector } from '../request-log/request-log.collector';
 import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
 import type { RequestLogCollectorOptions } from '../request-log/request-log.types';
 import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
-import { TELEMETRY_ACCESSOR } from '../telemetry/telemetry.tokens';
+import { TelemetryFactory } from '../telemetry/telemetry.factory';
+import { TELEMETRY_ACCESSOR, TELEMETRY_FACTORY } from '../telemetry/telemetry.tokens';
 import {
   onAgentDidExecute,
   onAgentDidExecuteEnrich,
@@ -933,6 +934,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
         scope: ProviderScope.CONTEXT,
         inject: () => [FRONTMCP_CONTEXT] as const,
         useFactory: (ctx: any) => new TelemetryAccessor(ctx),
+      });
+
+      // TelemetryFactory — GLOBAL/scope-resolvable. Lets scope-lifetime
+      // singletons (BundleStore, security guards) create counters and spans
+      // before any request arrives. Process-global counters and tracers; no
+      // active context required.
+      providers.push({
+        name: 'observability:telemetry-factory',
+        provide: TELEMETRY_FACTORY,
+        useValue: new TelemetryFactory(),
       });
     }
 

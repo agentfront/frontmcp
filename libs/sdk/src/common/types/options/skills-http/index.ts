@@ -5,6 +5,7 @@ export type {
   SkillsConfigOptions,
   SkillsConfigEndpointConfig,
   SkillsConfigAuthMode,
+  SkillsConfigAuditOptions,
   SkillsConfigJwtOptions,
   SkillsConfigCacheOptions,
 } from './interfaces';

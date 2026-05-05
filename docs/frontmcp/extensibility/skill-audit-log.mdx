@@ -1,0 +1,180 @@
+---
+title: Skill Audit Log
+sidebarTitle: Skill Audit Log
+slug: extensibility/skill-audit-log
+icon: shield-check
+description: Tamper-evident, hash-chained audit log for skill action executions — pluggable signer, pluggable store, offline verification.
+---
+
+The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained audit log for skill action executions. Every authority pass / authority fail / HTTP success / HTTP failure phase emitted by the skill action runner is captured, signed, and chained so any later mutation breaks signature verification.
+
+## Why tamper-evident?
+
+Skill action audit trails are often subject to compliance review. A plain log file can be edited; a hash-chained, signed log cannot be modified, reordered, or partially deleted without breaking verification. Pair the log with an out-of-band notarization channel (planned for v1.3.0) and even tail truncation becomes detectable.
+
+## Architecture
+
+```text
+ToolContext.execute()
+  └── audit phase emitted (auth pass | auth fail | http ok | http fail)
+       └── SkillAuditWriter.append({ phase, skillId, actionId, subject, result, ... })
+            ├── compute prevHash from the last record
+            ├── assemble SkillAuditRecord { sequence, prevHash, ...payload }
+            ├── SkillAuditSigner.sign(record)  → { signature, signatureKeyId, signatureAlg }
+            └── SkillAuditStore.append(signedRecord)
+```
+
+Each `SkillAuditRecord` carries:
+
+| Field            | Description                                                             |
+| ---------------- | ----------------------------------------------------------------------- |
+| `sequence`       | Strictly increasing position in the chain                               |
+| `prevHash`       | SHA-256 hash of the previous record (or `null` at sequence 0)           |
+| `signature`      | Base64url signature over the canonical record bytes                     |
+| `signatureKeyId` | The signer key identifier — used by verifiers to look up the public key |
+| `signatureAlg`   | `'HS256'` or `'RS256'`                                                  |
+| `phase`          | `authority_pass`, `authority_fail`, `http_ok`, `http_fail`              |
+| `skillId`        | The skill that owns the action                                          |
+| `actionId`       | The action that was executed                                            |
+| `subject`        | Authenticated principal — redacted per `subjectMode`                    |
+| `bundleVersion`  | The bundle version active at the time of the call                       |
+
+## Configuring via `skillsConfig.audit`
+
+Wire the audit subsystem through `skillsConfig.audit` on `@FrontMcp`. The SDK does **not** statically depend on `@frontmcp/adapters/skills` — call `setSkillAuditFactory(...)` once at boot to inject the audit module. This keeps the static dependency graph clean and works in Edge / CSP runtimes.
+
+```typescript
+import { Hs256AuditSigner, MemoryAuditStore, setSkillAuditFactory, SkillAuditWriter } from '@frontmcp/adapters/skills';
+import { randomBytes } from '@frontmcp/utils';
+
+setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+
+@FrontMcp({
+  info: { name: 'svr', version: '1.0.0' },
+  apps: [MainApp],
+  skillsConfig: {
+    enabled: true,
+    audit: {
+      enabled: true,
+      signer: new Hs256AuditSigner({ keyId: 'dev', secret: randomBytes(32) }),
+      store: new MemoryAuditStore(),
+      subjectMode: 'hash',
+    },
+  },
+})
+class Server {}
+```
+
+## Built-in signers
+
+| Signer             | Key                    | When to use                                                                          |
+| ------------------ | ---------------------- | ------------------------------------------------------------------------------------ |
+| `Hs256AuditSigner` | Symmetric HMAC-SHA-256 | Dev / tests only. Refuses to fire when `NODE_ENV === 'production'` with a random key |
+| `Rs256AuditSigner` | Asymmetric RS256       | **Production.** Reuse the bundle-signing keypair so the same trust root covers both  |
+
+```typescript
+import { Rs256AuditSigner } from '@frontmcp/adapters/skills';
+
+const signer = new Rs256AuditSigner({
+  keyId: 'bundle-signing-2026-01',
+  privateKeyPem: process.env.BUNDLE_SIGNING_PRIVATE_KEY!,
+});
+```
+
+`Rs256AuditSigner` uses `rsaSignBase64Url` from `@frontmcp/utils` under the hood.
+
+## Built-in stores
+
+| Store                      | Persistence                                               | When to use      |
+| -------------------------- | --------------------------------------------------------- | ---------------- |
+| `MemoryAuditStore`         | In-process; lost on restart                               | Tests, local dev |
+| `StorageAdapterAuditStore` | Any `@frontmcp/utils` storage adapter (Redis, KV, SQLite) | Production       |
+
+```typescript
+import { StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+import { createStorageAdapter } from '@frontmcp/utils';
+
+const storage = await createStorageAdapter({ provider: 'redis', host: 'localhost', port: 6379 });
+const store = new StorageAdapterAuditStore(storage);
+```
+
+## Custom stores
+
+A custom store implements:
+
+```typescript
+interface SkillAuditStore {
+  append(record: SkillAuditRecord): Promise<void>;
+  tail(limit: number): Promise<SkillAuditRecord[]>;
+  iterate(after?: number): Promise<SkillAuditRecord[]>;
+}
+```
+
+This is the right extension point for streaming records to S3, Postgres, or a SIEM.
+
+## Verifying the chain
+
+```typescript
+import { defaultAuditSignatureVerifier, verifyChain } from '@frontmcp/adapters/skills';
+
+const records = await store.iterate();
+const trustedKeys = {
+  'bundle-signing-2026-01': PUBLIC_KEY_PEM,
+};
+
+const result = verifyChain(records, trustedKeys, defaultAuditSignatureVerifier);
+
+if (!result.ok) {
+  console.error('Chain broken at sequence', result.breakAt, '—', result.reason);
+}
+```
+
+`verifyChain` returns `{ ok: true } | { ok: false; breakAt: number; reason: string }`. `defaultAuditSignatureVerifier` understands HS256 and RS256 records and dispatches based on `record.signatureAlg`.
+
+## DI integration
+
+`SkillAuditWriterToken` is the DI token for the active writer. Plugins that need to emit additional audit records (e.g., a custom authority gate) can resolve it:
+
+```typescript
+import { SkillAuditWriterToken } from '@frontmcp/adapters/skills';
+
+class MyPlugin extends DynamicPlugin {
+  @ToolHook.Will('execute')
+  willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
+    const writer = flowCtx.scope.tryGet(SkillAuditWriterToken);
+    writer?.append({ phase: 'authority_pass', /* ... */ });
+  }
+}
+```
+
+Plugins should always go through `SkillAuditWriterToken` rather than rolling their own audit log so the chain stays unified.
+
+## Threat model
+
+What the audit log catches:
+
+- **Record mutation** — any byte-level change breaks the signature.
+- **Record reordering** — the `prevHash` chain breaks.
+- **Record deletion in the middle** — `prevHash` mismatch on the next record.
+
+What it does **not** catch by default:
+
+- **Tail truncation** — if an attacker deletes the tail, no record survives to flag it. Mitigation: anchor the chain head out-of-band (queued for v1.3.0 to be wired into the CAS-based atomic head update).
+- **Multi-pod races** — v1.2.0 is single-writer only. Multiple pods writing to the same store will produce a loud warning and may interleave sequences. CAS-based atomic chain head updates are queued for v1.3.0.
+
+## Operational concerns
+
+- **Key rotation:** signers carry a `keyId`; verifiers map `keyId → public key`. Keep historical keys in your verifier's trust map for as long as you keep the records.
+- **Storage growth:** plan for a retention policy. The chain only needs to be intact within the retention window.
+- **Compliance:** RS256 + a persistent store + a CI verifier give you a forensic-grade trail.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@FrontMcp" icon="rocket" href="/frontmcp/sdk-reference/decorators/frontmcp">
+    Configure `skillsConfig.audit` on the server
+  </Card>
+  <Card title="Telemetry API" icon="activity" href="/frontmcp/sdk-reference/telemetry">
+    `frontmcp_skills_audit_dropped_total` counter and other skill metrics
+  </Card>
+</CardGroup>

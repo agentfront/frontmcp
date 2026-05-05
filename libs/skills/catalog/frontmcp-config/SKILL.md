@@ -67,6 +67,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 | Use transport protocol presets                                 | `configure-transport-protocol-presets` | Transport protocol preset configurations                            |
 | Configure multi-target deployments and frontmcp.config.ts      | `configure-deployment-targets`         | Typed config with defineConfig(), 9 deployment targets, JSON schema |
 | Add CSP, HSTS, X-Frame-Options, and other security headers     | `configure-security-headers`           | CSP directives, report-only mode, HSTS preload, custom headers      |
+| Configure skills HTTP, instructions injection, or audit log    | `configure-skills-http`                | Full `skillsConfig` reference: auth, cache, instructions, audit log |
 | Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`                 |
 | Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms       |
 | Enable background jobs and workflows                           | `decorators-guide`                     | `jobs: { enabled: true, store? }` on `@FrontMcp`                    |

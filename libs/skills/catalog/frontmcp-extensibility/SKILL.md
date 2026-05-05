@@ -57,6 +57,7 @@ Patterns and examples for extending FrontMCP servers with external npm packages.
 | Scenario                                      | Reference                                       | Description                                              |
 | --------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
 | Add in-memory semantic search with VectoriaDB | `references/vectoriadb.md`                      | TF-IDF or ML semantic indexing, provider+tool pattern    |
+| Add tamper-evident skill audit logging        | `references/skill-audit-log.md`                 | Hash-chained, signed audit records for skill executions  |
 | Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', 'AppName')` pattern        |
 | Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', 'ns')` pattern                |
 | Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks     |
@@ -98,9 +99,10 @@ export default class SearchTool extends ToolContext {
 
 ## Available Integrations
 
-| Library        | Purpose                          | Reference                  |
-| -------------- | -------------------------------- | -------------------------- |
-| **VectoriaDB** | In-memory TF-IDF semantic search | `references/vectoriadb.md` |
+| Library             | Purpose                                              | Reference                       |
+| ------------------- | ---------------------------------------------------- | ------------------------------- |
+| **VectoriaDB**      | In-memory TF-IDF semantic search                     | `references/vectoriadb.md`      |
+| **Skill audit log** | Tamper-evident hash-chained audit log for skill runs | `references/skill-audit-log.md` |
 
 More integrations can be added as references (e.g., enclave-vm, applescript, database clients).
 

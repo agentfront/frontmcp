@@ -14,6 +14,7 @@ import {
   type OperationDescriptor,
   type ResolvedBundle,
   type ServiceDescriptor,
+  type SignatureVerifyTelemetry,
 } from '@frontmcp/adapters/skills';
 import { type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
 
@@ -24,6 +25,15 @@ import { type OperationToolFactory } from '../tools/operation-tool.factory';
 export interface BundleSyncOptions {
   requireSignature: boolean;
   trustedKeys: SignatureKey[];
+  /**
+   * Optional telemetry hook for the signature verification path. When
+   * provided, every signature check increments
+   * `frontmcp_skills_signature_verifications_total{status}` and failures
+   * additionally increment `frontmcp_skills_signature_failures_total{reason}`.
+   * Wired by the plugin's DI factory when ObservabilityPlugin is installed;
+   * `undefined` in tests / hosts without observability.
+   */
+  telemetry?: SignatureVerifyTelemetry;
   /**
    * When true (default), each operation in the bundle is also registered as
    * an internal tool (visibility: 'internal') in the SDK's tool registry so
@@ -106,7 +116,7 @@ export class BundleSyncService {
 
     // Gate 1: signature verification.
     if (this.options.requireSignature) {
-      const verifyResult = verifyBundleSignature(bundle, this.options.trustedKeys);
+      const verifyResult = verifyBundleSignature(bundle, this.options.trustedKeys, this.options.telemetry);
       if (!verifyResult.ok) {
         this.logger.warn(`[bundle-sync] rejected bundle ${bundle.bundleId}@${bundle.version}: ${verifyResult.reason}`);
         return {

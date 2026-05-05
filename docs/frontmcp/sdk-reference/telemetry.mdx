@@ -135,15 +135,15 @@ Returned by `startSpan()` and passed to `withSpan()` callbacks. All setter metho
 
 ### Methods
 
-| Method | Signature | Description |
-| --- | --- | --- |
-| `setAttribute` | `(key: string, value: string \| number \| boolean) => this` | Set a single attribute |
-| `setAttributes` | `(attrs: Record<string, string \| number \| boolean>) => this` | Set multiple attributes |
-| `addEvent` | `(name: string, attributes?: Record<...>) => this` | Add a named event |
-| `recordError` | `(error: Error) => this` | Record an exception on the span |
-| `end` | `() => void` | End the span with OK status |
-| `endWithError` | `(error: Error \| string) => void` | End with ERROR status |
-| `raw` | `Span` (getter) | Access the underlying OTel Span |
+| Method          | Signature                                                      | Description                     |
+| --------------- | -------------------------------------------------------------- | ------------------------------- |
+| `setAttribute`  | `(key: string, value: string \| number \| boolean) => this`    | Set a single attribute          |
+| `setAttributes` | `(attrs: Record<string, string \| number \| boolean>) => this` | Set multiple attributes         |
+| `addEvent`      | `(name: string, attributes?: Record<...>) => this`             | Add a named event               |
+| `recordError`   | `(error: Error) => this`                                       | Record an exception on the span |
+| `end`           | `() => void`                                                   | End the span with OK status     |
+| `endWithError`  | `(error: Error \| string) => void`                             | End with ERROR status           |
+| `raw`           | `Span` (getter)                                                | Access the underlying OTel Span |
 
 ```typescript
 const span = this.telemetry.startSpan('process');
@@ -157,6 +157,67 @@ if (failed) {
 }
 
 span.end(); // Preserves ERROR status if recordError was called
+```
+
+---
+
+## Counters (Metrics)
+
+Counters are cumulative, monotonically-increasing metrics. Unlike spans (which describe one request) or events (which mark a point on a span), counters aggregate across many requests and are scraped by your monitoring backend at a steady cadence.
+
+### `createCounter(name, description?)`
+
+```typescript
+createCounter(name: string, description?: string): Counter
+
+interface Counter {
+  inc(by?: number, attrs?: Record<string, string | number | boolean>): void;
+}
+```
+
+```typescript
+const counter = this.telemetry.createCounter('my_app_widgets_total', 'Widgets processed');
+counter.inc(1, { status: 'ok' });
+```
+
+### Built-in skill counters
+
+When `skillsConfig.enabled: true` is set on `@FrontMcp`, the framework emits the following counters automatically:
+
+| Counter                                         | Attributes                                                                                                                 | Description                                                |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `frontmcp_skills_bundle_pulls_total`            | `status: 'ok' \| 'error'`, `source: 'static' \| 'npm' \| 'saas-pull' \| 'filesystem' \| 'unknown'`, `reason` (errors only) | Skill bundle pulls / hot-swaps                             |
+| `frontmcp_skills_signature_verifications_total` | `status: 'ok' \| 'error'`                                                                                                  | Bundle signature verifications attempted                   |
+| `frontmcp_skills_signature_failures_total`      | `reason` (bounded vocabulary)                                                                                              | Signature failures, classified by reason                   |
+| `frontmcp_skills_replay_checks_total`           | `status: 'ok' \| 'error'`                                                                                                  | Replay-protection checks                                   |
+| `frontmcp_skills_replay_rejects_total`          | `reason` (bounded vocabulary)                                                                                              | Replay rejections, classified by reason                    |
+| `frontmcp_skills_audit_dropped_total`           | `reason`                                                                                                                   | Audit log records dropped (queue overflow / write failure) |
+
+The framework also emits a `skill.bundle.swap` span (with `source`, `bundle_id`, `version`, `skill_count`, `from_version` attributes), and adds `skill_search.query`, `skill_search.results`, and `skill_action.phase` events to the active flow span when the skill HTTP catalog is exercised.
+
+### Wiring a MeterProvider
+
+Counters become observable once you register a global OTel `MeterProvider`. Without one, counters still increment in an in-memory snapshot (`getMetricSnapshot()` from `@frontmcp/observability`) intended for tests and local debugging only.
+
+```typescript
+import { metrics } from '@opentelemetry/api';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { Resource } from '@opentelemetry/resources';
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+
+const meterProvider = new MeterProvider({
+  resource: new Resource({ 'service.name': 'my-mcp-server' }),
+  readers: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318/v1/metrics',
+      }),
+      exportIntervalMillis: 10_000,
+    }),
+  ],
+});
+
+metrics.setGlobalMeterProvider(meterProvider);
 ```
 
 ---
@@ -240,37 +301,37 @@ const toolSpans = findSpansByAttribute(spans, 'mcp.component.type', 'tool');
 
 The config object for `@FrontMcp({ observability: { ... } })`:
 
-| Property | Type | Default | Description |
-| --- | --- | --- | --- |
-| `tracing` | `boolean \| TracingOptions` | `true` | Enable/configure OTel tracing |
-| `logging` | `boolean \| LoggingOptions` | `false` | Enable/configure structured logging |
+| Property      | Type                           | Default | Description                                 |
+| ------------- | ------------------------------ | ------- | ------------------------------------------- |
+| `tracing`     | `boolean \| TracingOptions`    | `true`  | Enable/configure OTel tracing               |
+| `logging`     | `boolean \| LoggingOptions`    | `false` | Enable/configure structured logging         |
 | `requestLogs` | `boolean \| RequestLogOptions` | `false` | Enable/configure per-request log collection |
 
 ### TracingOptions
 
-| Property | Type | Default | Description |
-| --- | --- | --- | --- |
-| `httpSpans` | `boolean` | `true` | HTTP request spans |
-| `executionSpans` | `boolean` | `true` | Tool/resource/prompt/agent spans |
-| `fetchSpans` | `boolean` | `true` | Outbound `ctx.fetch()` spans |
-| `flowStageEvents` | `boolean` | `true` | Flow stage events on execution spans |
-| `hookSpans` | `boolean` | `false` | Individual hook spans (verbose) |
-| `transportSpans` | `boolean` | `true` | SSE/HTTP transport spans |
-| `authSpans` | `boolean` | `true` | Auth/session verify spans |
-| `oauthSpans` | `boolean` | `true` | OAuth flow spans |
-| `elicitationSpans` | `boolean` | `true` | Elicitation request/result spans |
-| `startupReport` | `boolean` | `true` | Emit startup telemetry on first request |
+| Property           | Type      | Default | Description                             |
+| ------------------ | --------- | ------- | --------------------------------------- |
+| `httpSpans`        | `boolean` | `true`  | HTTP request spans                      |
+| `executionSpans`   | `boolean` | `true`  | Tool/resource/prompt/agent spans        |
+| `fetchSpans`       | `boolean` | `true`  | Outbound `ctx.fetch()` spans            |
+| `flowStageEvents`  | `boolean` | `true`  | Flow stage events on execution spans    |
+| `hookSpans`        | `boolean` | `false` | Individual hook spans (verbose)         |
+| `transportSpans`   | `boolean` | `true`  | SSE/HTTP transport spans                |
+| `authSpans`        | `boolean` | `true`  | Auth/session verify spans               |
+| `oauthSpans`       | `boolean` | `true`  | OAuth flow spans                        |
+| `elicitationSpans` | `boolean` | `true`  | Elicitation request/result spans        |
+| `startupReport`    | `boolean` | `true`  | Emit startup telemetry on first request |
 
 ### SinkConfig
 
-| Type | Description | Platform |
-| --- | --- | --- |
-| `{ type: 'stdout' }` | NDJSON to stdout (12-factor) | Node.js |
-| `{ type: 'console' }` | `console.log/warn/error` | Browser, Node.js |
-| `{ type: 'otlp', endpoint, headers? }` | OTLP HTTP to any backend | Node.js |
-| `{ type: 'winston', logger }` | Forward to winston instance | Node.js |
-| `{ type: 'pino', logger }` | Forward to pino instance | Node.js |
-| `{ type: 'callback', fn }` | Custom callback function | Any |
+| Type                                   | Description                  | Platform         |
+| -------------------------------------- | ---------------------------- | ---------------- |
+| `{ type: 'stdout' }`                   | NDJSON to stdout (12-factor) | Node.js          |
+| `{ type: 'console' }`                  | `console.log/warn/error`     | Browser, Node.js |
+| `{ type: 'otlp', endpoint, headers? }` | OTLP HTTP to any backend     | Node.js          |
+| `{ type: 'winston', logger }`          | Forward to winston instance  | Node.js          |
+| `{ type: 'pino', logger }`             | Forward to pino instance     | Node.js          |
+| `{ type: 'callback', fn }`             | Custom callback function     | Any              |
 
 ---
 

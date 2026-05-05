@@ -188,6 +188,7 @@
               "frontmcp/extensibility/request-context",
               "frontmcp/extensibility/logging",
               "frontmcp/extensibility/config-yaml",
+              "frontmcp/extensibility/skill-audit-log",
               {
                 "group": "Plugins",
                 "pages": [

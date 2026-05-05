@@ -3,8 +3,43 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, normalizeToolRef, type FlowPlan, type FlowRunOptions } from '../../common';
-import { InvalidInputError } from '../../errors';
+import { DependencyNotFoundError, InvalidInputError } from '../../errors';
 import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
+
+/**
+ * Global symbol for the observability TelemetryAccessor token. Mirrors the
+ * `Symbol.for('frontmcp:observability:telemetry-accessor')` declared by
+ * `@frontmcp/observability` so we can probe for it without taking a hard
+ * import dependency on that package (it's an optional peer dep).
+ */
+const TELEMETRY_ACCESSOR_TOKEN = Symbol.for('frontmcp:observability:telemetry-accessor');
+
+/** Minimal duck-typed surface we use from TelemetryAccessor — keeps SDK isolated. */
+interface FlowTelemetryAccessor {
+  addEvent(name: string, attributes?: Record<string, string | number | boolean>): void;
+  setAttributes(attrs: Record<string, string | number | boolean>): void;
+}
+
+/**
+ * Probe for the observability TelemetryAccessor without taking a hard import
+ * dependency. Returns undefined when ObservabilityPlugin is not installed.
+ *
+ * Only swallows `DependencyNotFoundError` — any other error (DI
+ * misconfiguration, circular deps, factory throws) propagates so real bugs
+ * are surfaced rather than silently degrading telemetry.
+ */
+function tryGetTelemetry(flow: SearchSkillsFlow): FlowTelemetryAccessor | undefined {
+  try {
+    const t = flow.get(TELEMETRY_ACCESSOR_TOKEN as never) as unknown;
+    if (t && typeof (t as FlowTelemetryAccessor).addEvent === 'function') {
+      return t as FlowTelemetryAccessor;
+    }
+    return undefined;
+  } catch (err) {
+    if (err instanceof DependencyNotFoundError) return undefined;
+    throw err;
+  }
+}
 
 // Input schema matching MCP request format
 const inputSchema = z.object({
@@ -138,10 +173,26 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     this.logger.verbose('search:start');
     const { query, options } = this.state.required;
 
+    const telemetry = tryGetTelemetry(this);
+    const topK = options.topK ?? 10;
+    // Privacy: emit ONLY non-identifying shape information about the query.
+    // The raw query text is unbounded user/LLM-supplied free text and may
+    // contain PII, tenant/customer identifiers, or confidential strings. It
+    // must never appear in span attributes, since exporters route attributes
+    // to vendor SaaS without redaction.
+    telemetry?.addEvent('skill_search.query', {
+      'query.length': query.length,
+      topK,
+      mcp_only: true,
+    });
+
     const skillRegistry = this.scope.skills;
 
     if (!skillRegistry || !skillRegistry.hasAny()) {
       this.state.set({ results: [] });
+      // Same privacy rule applies to result events: emit only counts/booleans,
+      // never per-result IDs or scores.
+      telemetry?.addEvent('skill_search.results', { count: 0, truncated: false });
       this.logger.verbose('search:no-skills');
       return;
     }
@@ -149,6 +200,11 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     // Search for skills
     const results = await skillRegistry.search(query, options);
     this.state.set({ results });
+
+    telemetry?.addEvent('skill_search.results', {
+      count: results.length,
+      truncated: results.length >= topK,
+    });
 
     this.logger.verbose(`search:found ${results.length} skills`);
   }

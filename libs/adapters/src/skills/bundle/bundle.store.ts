@@ -3,6 +3,41 @@
 import { diffBundles, type BundleDiff } from './bundle-diff';
 import type { ResolvedBundle } from './bundle.types';
 
+/**
+ * Bounded vocabulary for the `source` counter / span attribute. Anything
+ * outside this set coerces to `'unknown'` to prevent cardinality explosions
+ * when callers pass URLs, tenant IDs, or other unbounded strings.
+ *
+ * Mirrors `KNOWN_BUNDLE_SOURCES` in `@frontmcp/observability`. Inlined to
+ * avoid an `@frontmcp/adapters` → `@frontmcp/observability` dependency.
+ */
+const KNOWN_BUNDLE_SOURCES = ['static', 'npm', 'saas-pull', 'webhook', 'filesystem', 'unknown'] as const;
+type KnownBundleSource = (typeof KNOWN_BUNDLE_SOURCES)[number];
+
+function normalizeBundleSource(value: unknown): KnownBundleSource {
+  if (typeof value !== 'string') return 'unknown';
+  return (KNOWN_BUNDLE_SOURCES as readonly string[]).includes(value) ? (value as KnownBundleSource) : 'unknown';
+}
+
+/**
+ * Bounded vocabulary for the `reason` counter attribute on swap failures.
+ * Untrusted thrown errors can have arbitrary `Error.name` values, so we
+ * coerce to a small allowlist instead of echoing them as labels.
+ */
+type KnownSwapReason = 'pinned' | 'invalid_bundle' | 'listener_error' | 'unknown';
+
+function classifySwapError(err: unknown): KnownSwapReason {
+  if (err instanceof BundlePinnedError) return 'pinned';
+  if (err instanceof Error) {
+    const name = err.name;
+    const msg = err.message.toLowerCase();
+    if (name === 'BundlePinnedError') return 'pinned';
+    if (msg.includes('bundle is required') || msg.includes('malformed')) return 'invalid_bundle';
+    if (msg.includes('listener')) return 'listener_error';
+  }
+  return 'unknown';
+}
+
 export type BundleSwapListener = (event: {
   previous: ResolvedBundle | undefined;
   current: ResolvedBundle;
@@ -10,6 +45,34 @@ export type BundleSwapListener = (event: {
   /** Marker that the swap was triggered by `pin(version)` or `rollback()`. */
   reason?: 'normal' | 'pin' | 'rollback';
 }) => void;
+
+/**
+ * Minimal telemetry surface the BundleStore needs. Modeled to be a structural
+ * subset of `@frontmcp/observability`'s `TelemetryAccessor` so callers can
+ * pass that directly, but defined here to keep `@frontmcp/adapters` from
+ * picking up a hard dependency on the observability package.
+ */
+export interface BundleStoreCounter {
+  inc(by?: number, attributes?: Record<string, string>): void;
+}
+
+export interface BundleStoreSpan {
+  setAttributes(attrs: Record<string, string | number | boolean>): void;
+  addEvent(name: string, attrs?: Record<string, string | number | boolean>): void;
+  recordError?(error: Error): void;
+  end(): void;
+  endWithError?(error: Error | string): void;
+}
+
+export interface BundleStoreTelemetry {
+  /** Create (or fetch cached) named counter, e.g. `frontmcp_skills_bundle_pulls_total`. */
+  createCounter(name: string, description?: string): BundleStoreCounter;
+  /**
+   * Start a span. Caller is responsible for `end()` / `endWithError()`.
+   * Synchronous — matches the current sync semantics of `swap()`.
+   */
+  startSpan(name: string, attributes?: Record<string, string | number | boolean>): BundleStoreSpan;
+}
 
 /**
  * Options that control the store's history ring buffer and pin behavior.
@@ -20,6 +83,13 @@ export interface BundleStoreOptions {
    * Used by `pin(version)` and `rollback()`. Default: 3. Must be >= 1.
    */
   historySize?: number;
+  /**
+   * Optional telemetry hook. When provided, `swap()` is wrapped in a
+   * `skill.bundle.swap` span and the bundle-pulls counter is incremented
+   * with `{ status, source, reason? }` attributes. When omitted, the store
+   * emits no telemetry (zero overhead — no span, no counter).
+   */
+  telemetry?: BundleStoreTelemetry;
 }
 
 interface HistoryEntry {
@@ -54,6 +124,8 @@ export class BundleStore {
   private history: HistoryEntry[] = [];
   private pinnedVersion: string | undefined;
   private readonly historySize: number;
+  private readonly telemetry: BundleStoreTelemetry | undefined;
+  private readonly pullsCounter: BundleStoreCounter | undefined;
 
   constructor(options: BundleStoreOptions = {}) {
     const requested = options.historySize ?? 3;
@@ -61,6 +133,11 @@ export class BundleStore {
       throw new Error('BundleStore: historySize must be a positive integer');
     }
     this.historySize = requested;
+    this.telemetry = options.telemetry;
+    this.pullsCounter = this.telemetry?.createCounter(
+      'frontmcp_skills_bundle_pulls_total',
+      'Number of bundle pulls (swaps) attempted, partitioned by status / source.',
+    );
   }
 
   current(): ResolvedBundle | undefined {
@@ -74,10 +151,55 @@ export class BundleStore {
    *
    * Throws when the store is pinned. The caller should check `isPinned()` first
    * if it wants to skip silently rather than throw.
+   *
+   * @param next   - new bundle to activate
+   * @param source - optional source label (e.g. `npm`, `saas-pull`, `webhook`)
+   *                 used as a counter / span attribute. When omitted, `unknown`
+   *                 is reported.
    */
-  swap(next: ResolvedBundle): BundleDiff {
+  swap(next: ResolvedBundle, source?: string): BundleDiff {
     if (!next) {
       throw new Error('BundleStore.swap: bundle is required');
+    }
+    // Cardinality bound: coerce arbitrary source strings to the small
+    // allowlist. Without this, a caller passing a URL or tenant-scoped
+    // identifier would create one timeseries per unique value.
+    const sourceLabel = normalizeBundleSource(source);
+    if (this.telemetry) {
+      const span = this.telemetry.startSpan('skill.bundle.swap', {
+        source: sourceLabel,
+        bundle_id: next.bundleId,
+        version: next.version,
+        skill_count: next.skills.length,
+        ...(this.active?.version ? { from_version: this.active.version } : {}),
+      });
+      try {
+        if (this.pinnedVersion !== undefined) {
+          throw new BundlePinnedError(this.pinnedVersion);
+        }
+        const diff = this.commit(next, 'normal');
+        span.setAttributes({ status: 'ok', is_no_op: diff.isNoOp });
+        span.end();
+        this.pullsCounter?.inc(1, { status: 'ok', source: sourceLabel });
+        return diff;
+      } catch (err) {
+        // Cardinality bound: classify untrusted Error.name into a fixed
+        // vocabulary instead of echoing it as a label.
+        const reason = classifySwapError(err);
+        // M3: pick ONE exception-recording path. `endWithError` already calls
+        // `recordException` internally on every implementation we ship — calling
+        // both `recordError` AND `endWithError` would emit duplicate exception
+        // events. Prefer `endWithError` (which also sets ERROR status); fall
+        // back to plain `end()` only when the implementation doesn't expose it.
+        if (span.endWithError) {
+          span.endWithError(err instanceof Error ? err : String(err));
+        } else {
+          span.recordError?.(err instanceof Error ? err : new Error(String(err)));
+          span.end();
+        }
+        this.pullsCounter?.inc(1, { status: 'error', source: sourceLabel, reason });
+        throw err;
+      }
     }
     if (this.pinnedVersion !== undefined) {
       throw new BundlePinnedError(this.pinnedVersion);

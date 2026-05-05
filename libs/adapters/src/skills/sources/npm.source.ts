@@ -69,7 +69,8 @@ export class NpmSource implements SkillBundleSource {
     const mod = await this.dynamicImport(this.options.packageName);
     const exportName = this.options.exportName ?? 'default';
 
-    const exported = (mod as any)[exportName] ?? (exportName === 'default' ? mod : undefined);
+    const modRecord = mod as Record<string, unknown>;
+    const exported = modRecord[exportName] ?? (exportName === 'default' ? mod : undefined);
     if (exported === undefined || exported === null) {
       throw new Error(`npm source "${this.options.packageName}": export "${exportName}" not found on the package`);
     }

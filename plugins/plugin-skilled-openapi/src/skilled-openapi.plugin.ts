@@ -1,6 +1,12 @@
 // file: plugins/plugin-skilled-openapi/src/skilled-openapi.plugin.ts
 
-import { BundleStore, createBundleSource } from '@frontmcp/adapters/skills';
+import {
+  BundleStore,
+  createBundleSource,
+  type BundleStoreCounter,
+  type BundleStoreSpan,
+  type BundleStoreTelemetry,
+} from '@frontmcp/adapters/skills';
 import {
   DynamicPlugin,
   FrontMcpLogger,
@@ -24,6 +30,50 @@ import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
 import SearchSkillTool from './tools/search-skill.tool';
+
+/**
+ * Symbol used by `@frontmcp/observability` to register the GLOBAL-scoped
+ * TelemetryFactory in the DI container. Unlike `TELEMETRY_ACCESSOR` (which
+ * is CONTEXT-scoped and needs an active request), `TELEMETRY_FACTORY` is
+ * resolvable at scope-init time — so it works for scope-lifetime singletons
+ * like `BundleStore` whose `swap()` may be invoked from a source's onChange
+ * callback before any request arrives. Mirrored here so we can probe for it
+ * without taking a hard dependency on the optional observability peer.
+ */
+const TELEMETRY_FACTORY_TOKEN = Symbol.for('frontmcp:observability:telemetry-factory');
+
+/**
+ * Resolve a `BundleStoreTelemetry` from the scope's provider registry.
+ *
+ * Returns `undefined` when ObservabilityPlugin is not installed — in which
+ * case `BundleStore` falls through its zero-cost no-telemetry path. We avoid
+ * a hard dependency on `@frontmcp/observability` because it is optional.
+ */
+function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undefined {
+  // Defensive: in narrowly-mocked test scopes `scope.providers` may be missing
+  // entirely. `ProviderRegistryInterface` exposes only `get()`, which throws
+  // when a token is unregistered, so we wrap it in a try/catch to detect the
+  // ObservabilityPlugin-not-installed case without taking a hard dependency
+  // on the optional peer.
+  const providers = scope?.providers;
+  if (!providers || typeof providers.get !== 'function') return undefined;
+  interface FactoryLike {
+    createCounter(name: string, description?: string): BundleStoreCounter;
+    startSpan(name: string, attributes?: Record<string, string | number | boolean>): BundleStoreSpan;
+  }
+  let factory: FactoryLike | undefined;
+  try {
+    factory = providers.get<FactoryLike>(TELEMETRY_FACTORY_TOKEN as never);
+  } catch {
+    // Token not registered — observability disabled or plugin not installed.
+    return undefined;
+  }
+  if (!factory || typeof factory.createCounter !== 'function') return undefined;
+  return {
+    createCounter: (name, description) => factory.createCounter(name, description),
+    startSpan: (name, attributes) => factory.startSpan(name, attributes),
+  };
+}
 
 /**
  * `@frontmcp/plugin-skilled-openapi`
@@ -85,7 +135,18 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     return [
       { name: 'skilled-openapi:config', provide: SkilledOpenApiConfig, useValue: config },
       { name: 'skilled-openapi:hidden-ops', provide: HiddenOpRegistry, useValue: new HiddenOpRegistry() },
-      { name: 'skilled-openapi:bundle-store', provide: BundleStore, useValue: new BundleStore() },
+      {
+        name: 'skilled-openapi:bundle-store',
+        provide: BundleStore,
+        // Resolve TelemetryAccessor from the scope's provider registry so the
+        // bundle-pulls counter and `skill.bundle.swap` span actually export.
+        // The accessor is structurally compatible with `BundleStoreTelemetry`.
+        // ObservabilityPlugin is an optional peer dep — when it isn't installed
+        // we resolve `undefined` and the BundleStore falls through its zero-cost
+        // no-telemetry path.
+        inject: () => [ScopeEntry],
+        useFactory: (scope: ScopeEntry) => new BundleStore({ telemetry: resolveBundleTelemetry(scope) }),
+      },
       {
         name: 'skilled-openapi:credential-resolver',
         provide: SkilledOpenApiCredentialResolver,
@@ -155,6 +216,12 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               requireSignature: parsed.requireSignature,
               trustedKeys: parsed.trustedKeys,
               exposeOperationsAsInternalTools: parsed.exposeOperationsAsInternalTools,
+              // Reuse the same telemetry adapter the BundleStore uses so the
+              // signature verification counters are wired through the same
+              // optional ObservabilityPlugin lookup. When observability isn't
+              // installed this is `undefined` and verifyBundleSignature skips
+              // the counter lookup entirely.
+              telemetry: resolveBundleTelemetry(scope),
             },
             logger,
             opToolFactory,

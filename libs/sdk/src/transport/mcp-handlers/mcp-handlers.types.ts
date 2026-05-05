@@ -48,6 +48,18 @@ export interface McpHandler<
 export type McpHandlerOptions = {
   scope: Scope;
   serverOptions: McpServerOptions;
+  /**
+   * Lazily compose the `initialize` response's `instructions` field.
+   *
+   * When provided, the `initialize` handler invokes this on every request so
+   * the catalog reflects skills registered AFTER server boot (e.g. dynamic
+   * `registerSkillContent` calls). When omitted, the handler falls back to
+   * the static `serverOptions.instructions` baked at construction time.
+   *
+   * Must remain synchronous — the MCP `initialize` request must respond
+   * promptly without round-tripping to slow stores.
+   */
+  composeInstructions?: () => string | undefined;
 };
 
 export type McpRequestHandler<
