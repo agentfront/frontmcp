@@ -8,7 +8,7 @@
  * display name only.
  */
 
-import { joinPath, pathResolve, readFileBuffer } from '@frontmcp/utils';
+import { isAbsolute, joinPath, pathResolve, readFileBuffer } from '@frontmcp/utils';
 
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
@@ -119,8 +119,10 @@ function isTextMimeType(mimeType: string): boolean {
  * binary assets (images, archives) are not corrupted by UTF-8 decoding.
  */
 export async function readSkillFileByPath(instance: SkillInstance, filePath: string): Promise<SkillFileReadResult> {
-  // Reject empty / SKILL.md (handled by the dedicated SKILL.md route)
-  if (!filePath || filePath === 'SKILL.md') {
+  // Reject empty / SKILL.md (handled by the dedicated SKILL.md route).
+  // Case-insensitive: macOS / Windows filesystems treat `skill.md`,
+  // `Skill.MD`, etc. as the same file, so the URI guard must too.
+  if (!filePath || filePath.toLowerCase() === 'skill.md') {
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
@@ -146,8 +148,9 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
     if (decoded === '..' || decoded === '.') {
       throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
     }
-    if (decoded === 'SKILL.md') {
+    if (decoded.toLowerCase() === 'skill.md') {
       // Hard block: SKILL.md is reserved for the dedicated SKILL.md route.
+      // Case-insensitive to match macOS / Windows filesystem semantics.
       throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
     }
     segments.push(decoded);
@@ -218,8 +221,14 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
   let buffer: Buffer | Uint8Array;
   try {
     buffer = await readFileBuffer(candidatePath);
-  } catch {
-    throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
+  } catch (err) {
+    // Only "file/dir absent" → 404. Permission errors, EISDIR, I/O
+    // failures, etc. surface as 5xx via the framework error handler;
+    // masking them as 404 hides genuine misconfiguration from operators.
+    if (isFileMissingError(err)) {
+      throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
+    }
+    throw err;
   }
 
   if (!isTextMimeType(mimeType)) {
@@ -302,11 +311,16 @@ async function tryResolvedSubFile(
       const buf = await readFileBuffer(resolvedPath);
       const text = (Buffer.isBuffer(buf) ? buf : Buffer.from(buf)).toString('utf-8');
       return parseSkillMdFrontmatter(text).body;
-    } catch {
-      // Entry advertised but file missing — fall through to other entries
-      // and ultimately the strict filesystem path so the caller sees the
-      // standard `ResourceNotFoundError`.
-      continue;
+    } catch (err) {
+      if (isFileMissingError(err)) {
+        // Entry advertised but file missing — fall through to other
+        // entries and ultimately the strict filesystem path so the
+        // caller sees the standard `ResourceNotFoundError`.
+        continue;
+      }
+      // Permission / I/O / EISDIR — surface to the caller. Silently
+      // skipping would hide misconfigured catalog entries from operators.
+      throw err;
     }
   }
   return undefined;
@@ -326,18 +340,34 @@ function resolveEntryPath(
   absolutePath: string | undefined,
   filename: string | undefined,
 ): string | undefined {
-  if (absolutePath && absolutePath.startsWith('/')) return absolutePath;
+  // Use `isAbsolute` (Node `path.isAbsolute`) so Windows drive-letter
+  // (`C:\foo`) and UNC paths (`\\server\share`) are recognised as absolute
+  // — `startsWith('/')` is POSIX-only.
+  if (absolutePath && isAbsolute(absolutePath)) return absolutePath;
   if (!filename) return undefined;
   const baseDir = instance.getBaseDir();
   const configured = instance.getResources()?.[kind];
   let dir: string | undefined;
-  if (configured?.startsWith('/')) {
+  if (configured && isAbsolute(configured)) {
     dir = configured;
   } else if (baseDir) {
     dir = configured ? pathResolve(baseDir, configured) : joinPath(baseDir, kind);
   }
   if (!dir) return undefined;
   return pathResolve(dir, filename);
+}
+
+/**
+ * Classify a file-read failure as a "missing file/dir" error vs. anything
+ * else. Only ENOENT (and the related ENOTDIR for path-component-not-dir)
+ * should map to `ResourceNotFoundError`; permission errors, EISDIR, and
+ * generic I/O failures must surface to the caller so misconfiguration is
+ * visible to operators rather than silently appearing as a 404.
+ */
+function isFileMissingError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 /**

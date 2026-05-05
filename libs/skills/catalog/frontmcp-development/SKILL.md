@@ -38,6 +38,21 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 > **Decision:** Use this skill when you need to figure out WHAT to build. Use the specific skill when you already know.
 
+## Prerequisites
+
+- A scaffolded FrontMCP project (see `frontmcp-setup` if you don't have one).
+- Familiarity with TypeScript decorators and Zod schemas — every component is decorator-driven and validates I/O via Zod.
+- Decide whether you're adding to an existing `@App` or composing a new one (multi-app projects: see `multi-app-composition`).
+
+## Steps
+
+This is a router skill. The "steps" here are how to choose the right child skill, not how to implement a component.
+
+1. **Identify the component type** using the Scenario Routing Table below.
+2. **Open the matching skill** (e.g. `create-tool`, `create-resource`) and follow its Steps section.
+3. **Compose**, if needed: most non-trivial features need two or more components (e.g. tool + provider, resource + adapter). Read each child skill independently before wiring them together.
+4. **Test before integration** (`frontmcp-testing`) — every component type has a unit-test recipe.
+
 ## Scenario Routing Table
 
 | Scenario                                                 | Skill                             | Description                                                                                   |
@@ -120,6 +135,166 @@ Entry point for building MCP server components. This skill helps you find the ri
 | Component not discovered at runtime      | Not registered in `@App` or `@FrontMcp` arrays | Add to the appropriate array (`tools`, `resources`, `prompts`, etc.)                                                        |
 | DI token not resolving                   | Provider not registered in scope               | Register the provider in the `providers` array of the same `@App`                                                           |
 | Need both AI guidance and tool execution | Used `create-skill` but need tools too         | Switch to `create-skill-with-tools` which combines instructions with registered tools                                       |
+
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `create-adapter`
+
+| Example                                                                 | Level        | Description                                                                                                             |
+| ----------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [`basic-api-adapter`](./examples/create-adapter/basic-api-adapter.md)   | Basic        | A minimal adapter that fetches operation definitions from an external API and generates MCP tools.                      |
+| [`namespaced-adapter`](./examples/create-adapter/namespaced-adapter.md) | Intermediate | An adapter that namespaces generated tools to avoid collisions and includes proper error handling for startup failures. |
+
+### `create-agent-llm-config`
+
+| Example                                                                      | Level | Description                                                                |
+| ---------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| [`anthropic-config`](./examples/create-agent-llm-config/anthropic-config.md) | Basic | Configuring an agent with the Anthropic provider and common model options. |
+| [`openai-config`](./examples/create-agent-llm-config/openai-config.md)       | Basic | Configuring an agent with the OpenAI provider and different model options. |
+
+### `create-agent`
+
+| Example                                                                           | Level        | Description                                                                                       |
+| --------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| [`basic-agent-with-tools`](./examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                         |
+| [`custom-multi-pass-agent`](./examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`. |
+| [`nested-agents-with-swarm`](./examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized sub-agents and configuring swarm-based handoff between agents.              |
+
+### `create-job`
+
+| Example                                                                 | Level        | Description                                                                                                        |
+| ----------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`basic-report-job`](./examples/create-job/basic-report-job.md)         | Basic        | A minimal job that generates a report with progress tracking and structured output.                                |
+| [`job-with-permissions`](./examples/create-job/job-with-permissions.md) | Advanced     | A data export job with declarative permission controls, plus a function-style job for simple tasks.                |
+| [`job-with-retry`](./examples/create-job/job-with-retry.md)             | Intermediate | A job that syncs data from an external API with automatic retry, exponential backoff, and batch progress tracking. |
+
+### `create-plugin-hooks`
+
+| Example                                                                                                              | Level        | Description                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-logging-plugin`](./examples/create-plugin-hooks/basic-logging-plugin.md)                                     | Basic        | Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook decorators from the pre-built `ToolHook` export.                                                                                 |
+| [`caching-with-around`](./examples/create-plugin-hooks/caching-with-around.md)                                       | Intermediate | Demonstrates wrapping tool execution with an `@Around` hook to implement result caching with TTL-based expiry.                                                                                                |
+| [`tool-level-hooks-and-stage-replacement`](./examples/create-plugin-hooks/tool-level-hooks-and-stage-replacement.md) | Advanced     | Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock. |
+
+### `create-plugin`
+
+| Example                                                                                      | Level        | Description                                                                                                               |
+| -------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-plugin-with-provider`](./examples/create-plugin/basic-plugin-with-provider.md)       | Basic        | A minimal plugin that contributes an injectable service via the `providers` and `exports` arrays.                         |
+| [`configurable-dynamic-plugin`](./examples/create-plugin/configurable-dynamic-plugin.md)     | Advanced     | A plugin that accepts runtime configuration via `DynamicPlugin` and extends decorator metadata with custom fields.        |
+| [`plugin-with-context-extension`](./examples/create-plugin/plugin-with-context-extension.md) | Intermediate | A plugin that adds a `this.auditLog` property to all execution contexts using context extensions and module augmentation. |
+
+### `create-prompt`
+
+| Example                                                                            | Level        | Description                                                                                          |
+| ---------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| [`basic-prompt`](./examples/create-prompt/basic-prompt.md)                         | Basic        | A simple prompt that generates a structured code review message from user-provided arguments.        |
+| [`dynamic-rag-prompt`](./examples/create-prompt/dynamic-rag-prompt.md)             | Advanced     | A prompt that queries a knowledge base via DI to build context-aware messages at runtime.            |
+| [`multi-turn-debug-session`](./examples/create-prompt/multi-turn-debug-session.md) | Intermediate | A prompt that uses alternating user/assistant messages to guide a structured debugging conversation. |
+
+### `create-provider`
+
+| Example                                                                              | Level        | Description                                                                                           |
+| ------------------------------------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`basic-database-provider`](./examples/create-provider/basic-database-provider.md)   | Basic        | A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks. |
+| [`config-and-api-providers`](./examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider with readonly environment settings and an HTTP API client provider.          |
+
+### `create-resource`
+
+| Example                                                                              | Level        | Description                                                                          |
+| ------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
+| [`basic-static-resource`](./examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
+| [`binary-and-multi-content`](./examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
+| [`parameterized-template`](./examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+
+### `create-skill-with-tools`
+
+| Example                                                                                          | Level        | Description                                                                                                          |
+| ------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [`basic-tool-orchestration`](./examples/create-skill-with-tools/basic-tool-orchestration.md)     | Basic        | A skill that guides an AI client through a deploy workflow using referenced MCP tools.                               |
+| [`directory-skill-with-tools`](./examples/create-skill-with-tools/directory-skill-with-tools.md) | Advanced     | A directory-based skill loaded with `skillDir()`, plus a class-based skill using Agent Skills spec metadata fields.  |
+| [`incident-response-skill`](./examples/create-skill-with-tools/incident-response-skill.md)       | Intermediate | A skill that uses object-style tool references with purpose descriptions and required flags, plus strict validation. |
+
+### `create-skill`
+
+| Example                                                                     | Level        | Description                                                                                                             |
+| --------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [`basic-inline-skill`](./examples/create-skill/basic-inline-skill.md)       | Basic        | A minimal instruction-only skill with inline content and the function builder alternative.                              |
+| [`directory-based-skill`](./examples/create-skill/directory-based-skill.md) | Advanced     | A skill loaded from a directory structure with SKILL.md frontmatter, plus file-based and URL-based instruction sources. |
+| [`parameterized-skill`](./examples/create-skill/parameterized-skill.md)     | Intermediate | A skill with customizable parameters, usage examples for AI guidance, and controlled visibility.                        |
+
+### `create-tool-annotations`
+
+| Example                                                                                    | Level        | Description                                                                                                                     |
+| ------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`destructive-delete-tool`](./examples/create-tool-annotations/destructive-delete-tool.md) | Intermediate | Demonstrates annotating a tool that deletes data, enabling MCP clients to warn users before execution.                          |
+| [`readonly-query-tool`](./examples/create-tool-annotations/readonly-query-tool.md)         | Basic        | Demonstrates annotating a tool that only reads data, signaling to MCP clients that it has no side effects and is safe to retry. |
+
+### `create-tool-output-schema-types`
+
+| Example                                                                                                    | Level        | Description                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`primitive-and-media-outputs`](./examples/create-tool-output-schema-types/primitive-and-media-outputs.md) | Intermediate | Demonstrates using primitive string literals and media types as `outputSchema` for tools that return plain text, images, or multi-content arrays.              |
+| [`zod-raw-shape-output`](./examples/create-tool-output-schema-types/zod-raw-shape-output.md)               | Basic        | Demonstrates the recommended approach of using a Zod raw shape as `outputSchema` for structured, validated JSON output.                                        |
+| [`zod-schema-advanced-output`](./examples/create-tool-output-schema-types/zod-schema-advanced-output.md)   | Advanced     | Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, including `z.object()`, `z.array()`, `z.union()`, and `z.discriminatedUnion()`. |
+
+### `create-tool`
+
+| Example                                                                                                  | Level        | Description                                                                                                    |
+| -------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| [`basic-class-tool`](./examples/create-tool/basic-class-tool.md)                                         | Basic        | A minimal tool using the class-based pattern with Zod input validation and output schema.                      |
+| [`tool-with-di-and-errors`](./examples/create-tool/tool-with-di-and-errors.md)                           | Intermediate | A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.               |
+| [`tool-with-rate-limiting-and-progress`](./examples/create-tool/tool-with-rate-limiting-and-progress.md) | Advanced     | A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations. |
+
+### `create-workflow`
+
+| Example                                                                                      | Level        | Description                                                                                                                       |
+| -------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-deploy-pipeline`](./examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                             |
+| [`parallel-validation-pipeline`](./examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                |
+| [`webhook-triggered-workflow`](./examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
+
+### `decorators-guide`
+
+| Example                                                                                                       | Level        | Description                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-skill-job-workflow`](./examples/decorators-guide/agent-skill-job-workflow.md)                         | Advanced     | Demonstrates the advanced decorator types: `@Agent` for autonomous AI agents, `@Skill` for knowledge packages, `@Job` for background tasks, and `@Workflow` for multi-step orchestration. |
+| [`basic-server-with-app-and-tools`](./examples/decorators-guide/basic-server-with-app-and-tools.md)           | Basic        | Demonstrates the minimal decorator hierarchy to create a working FrontMCP server with one app containing a tool and a resource.                                                           |
+| [`multi-app-with-plugins-and-providers`](./examples/decorators-guide/multi-app-with-plugins-and-providers.md) | Intermediate | Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency injection, and a `@Plugin` for cross-cutting concerns.                                                   |
+
+### `openapi-adapter`
+
+| Example                                                                                                          | Level        | Description                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-openapi-adapter`](./examples/openapi-adapter/basic-openapi-adapter.md)                                   | Basic        | Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.                              |
+| [`authenticated-adapter-with-polling`](./examples/openapi-adapter/authenticated-adapter-with-polling.md)         | Intermediate | Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.                                           |
+| [`format-resolution-and-custom-resolvers`](./examples/openapi-adapter/format-resolution-and-custom-resolvers.md) | Intermediate | Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.                    |
+| [`ref-security-and-filtering`](./examples/openapi-adapter/ref-security-and-filtering.md)                         | Intermediate | Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.                                |
+| [`multi-api-hub-with-inline-spec`](./examples/openapi-adapter/multi-api-hub-with-inline-spec.md)                 | Advanced     | Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL. |
+
+### `official-plugins`
+
+| Example                                                                                           | Level        | Description                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`cache-and-feature-flags`](./examples/official-plugins/cache-and-feature-flags.md)               | Intermediate | Demonstrates combining the Cache plugin for tool result caching with the Feature Flags plugin for gating tools behind flags.                                                 |
+| [`production-multi-plugin-setup`](./examples/official-plugins/production-multi-plugin-setup.md)   | Advanced     | Demonstrates a production-ready server configuration combining CodeCall, Remember, Approval, Cache, and Feature Flags plugins with Redis storage and external flag services. |
+| [`remember-plugin-session-memory`](./examples/official-plugins/remember-plugin-session-memory.md) | Basic        | Demonstrates installing the Remember plugin and using `this.remember` in tools to store and retrieve session memory.                                                         |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-development/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                                  |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-development`, `frontmcp skills read frontmcp-development:references/<file>.md`, `frontmcp skills install frontmcp-development` — no server required.                                                                                                                                               |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-development/SKILL.md`, `skill://frontmcp-development/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
 
 ## Reference
 

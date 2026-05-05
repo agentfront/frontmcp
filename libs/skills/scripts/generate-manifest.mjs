@@ -25,8 +25,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CATALOG_DIR = path.resolve(__dirname, '..', 'catalog');
 const MANIFEST_PATH = path.join(CATALOG_DIR, 'skills-manifest.json');
 
-// Allow-lists from libs/skills/src/manifest.ts
-const VALID_CATEGORIES = ['setup', 'deployment', 'development', 'config', 'testing', 'guides', 'production', 'extensibility'];
+// Allow-lists from libs/skills/src/manifest.ts — keep in lockstep with VALID_* exports there.
+const VALID_CATEGORIES = ['setup', 'deployment', 'development', 'config', 'testing', 'guides', 'production', 'extensibility', 'observability'];
 const VALID_TARGETS = ['node', 'vercel', 'lambda', 'cloudflare', 'all'];
 const VALID_BUNDLES = ['recommended', 'minimal', 'full'];
 

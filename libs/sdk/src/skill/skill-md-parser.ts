@@ -10,13 +10,15 @@
  */
 
 import * as yaml from 'js-yaml';
+
 import { readFile } from '@frontmcp/utils';
+
 import type {
+  SkillExample,
   SkillMetadata,
+  SkillParameter,
   SkillResources,
   SkillToolRef,
-  SkillParameter,
-  SkillExample,
 } from '../common/metadata/skill.metadata';
 
 /**
@@ -96,11 +98,40 @@ export function skillMdFrontmatterToMetadata(
 ): Partial<SkillMetadata> {
   const result: Partial<SkillMetadata> = {};
 
-  // Direct mappings
+  // Direct string mappings
+  if (typeof frontmatter['id'] === 'string') result.id = frontmatter['id'];
   if (typeof frontmatter['name'] === 'string') result.name = frontmatter['name'];
   if (typeof frontmatter['description'] === 'string') result.description = frontmatter['description'];
   if (typeof frontmatter['license'] === 'string') result.license = frontmatter['license'];
   if (typeof frontmatter['compatibility'] === 'string') result.compatibility = frontmatter['compatibility'];
+  if (typeof frontmatter['category'] === 'string') result.category = frontmatter['category'];
+
+  // Numeric: rating (0..5)
+  if (typeof frontmatter['rating'] === 'number') result.rating = frontmatter['rating'];
+
+  // skillPath: array of path segments (SEP-2640 §Resource Mapping)
+  if (Array.isArray(frontmatter['skillPath'])) {
+    const segments = frontmatter['skillPath'].filter((s): s is string => typeof s === 'string' && s.length > 0);
+    if (segments.length > 0) result.skillPath = segments;
+  }
+
+  // resources: bundled resource directories (scripts/references/assets/examples)
+  if (typeof frontmatter['resources'] === 'object' && frontmatter['resources'] !== null) {
+    const r = frontmatter['resources'] as Record<string, unknown>;
+    const resources: SkillResources = {};
+    if (typeof r['scripts'] === 'string') resources.scripts = r['scripts'];
+    if (typeof r['references'] === 'string') resources.references = r['references'];
+    if (typeof r['assets'] === 'string') resources.assets = r['assets'];
+    if (typeof r['examples'] === 'string') resources.examples = r['examples'];
+    if (Object.keys(resources).length > 0) result.resources = resources;
+  }
+
+  // availableWhen: pass through opaque shape (validated by entryAvailabilitySchema downstream).
+  // Accepts kebab-case `available-when` for parity with other fields.
+  const availableWhen = frontmatter['availableWhen'] ?? frontmatter['available-when'];
+  if (typeof availableWhen === 'object' && availableWhen !== null && !Array.isArray(availableWhen)) {
+    result.availableWhen = availableWhen as SkillMetadata['availableWhen'];
+  }
 
   // Spec `metadata` -> FrontMCP `specMetadata`
   if (typeof frontmatter['metadata'] === 'object' && frontmatter['metadata'] !== null) {
@@ -198,12 +229,20 @@ export function skillMdFrontmatterToMetadata(
     result.toolValidation = tv;
   }
 
-  // Pass unknown fields through to specMetadata (preserves provider-specific fields like user-invocable)
+  // Pass unknown fields through to specMetadata (preserves provider-specific fields like user-invocable
+  // and catalog-only manifest fields like targets/bundle/hasResources/requires/install/storageDefault).
   const knownKeys = new Set([
+    'id',
     'name',
     'description',
     'license',
     'compatibility',
+    'category',
+    'rating',
+    'skillPath',
+    'resources',
+    'availableWhen',
+    'available-when',
     'metadata',
     'allowed-tools',
     'tags',

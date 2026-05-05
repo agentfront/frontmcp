@@ -351,6 +351,24 @@ authorities: {
 | `AuthorityDeniedError` has no detail                                                      | `deniedBy` field shows generic message                                                                                                                                                    | Check the `evaluatedPolicies` array on the error for which policy type failed                                                                                                                |
 | TS error: `evaluators`/`relationshipResolver`/`claimsResolver` not on `AuthoritiesConfig` | The runtime Zod schema accepts these keys but the exported `AuthoritiesConfig` interface in `authorities.profiles.ts` only declares `claimsMapping`, `profiles`, `scopeMapping`, `pipes`. | Pass the config inline (TS infers from the decorator's broader type) or cast the typed config as the interface catches up.                                                                   |
 
+## Examples
+
+This skill currently exposes only references; see [`references/`](./references/) for guidance.
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-authorities/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                                  |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-authorities`, `frontmcp skills read frontmcp-authorities:references/<file>.md`, `frontmcp skills install frontmcp-authorities` — no server required.                                                                                                                                               |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-authorities/SKILL.md`, `skill://frontmcp-authorities/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
+
 ## Reference
 
 - [Auth Architecture](https://docs.agentfront.dev/frontmcp/authentication/architecture) — Full three-layer model: server auth, auth providers, authorities, vault, scope challenges

@@ -427,6 +427,48 @@ export class ResearcherAgent extends AgentContext {}
 | Tests pass but coverage below 95%        | Missing error path or branch tests                     | Run `jest --coverage` and add tests for uncovered lines      |
 | Provider state leaking between requests  | Using module-level state instead of DI                 | Move state into a `@Provider` scoped per request             |
 
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `example-knowledge-base`
+
+| Example                                                                                           | Level        | Description                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-and-plugin`](./examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.    |
+| [`multi-app-composition`](./examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration. |
+| [`vector-search-and-resources`](./examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.           |
+
+### `example-task-manager`
+
+| Example                                                                                 | Level        | Description                                                                                                                                    |
+| --------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`auth-and-crud-tools`](./examples/example-task-manager/auth-and-crud-tools.md)         | Basic        | Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection. |
+| [`authenticated-e2e-tests`](./examples/example-task-manager/authenticated-e2e-tests.md) | Advanced     | Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.              |
+| [`redis-provider-with-di`](./examples/example-task-manager/redis-provider-with-di.md)   | Intermediate | Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.                  |
+
+### `example-weather-api`
+
+| Example                                                                                    | Level        | Description                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [`server-and-app-setup`](./examples/example-weather-api/server-and-app-setup.md)           | Basic        | Shows the server entry point, app registration, and static resource for a beginner FrontMCP weather API server.                        |
+| [`unit-and-e2e-tests`](./examples/example-weather-api/unit-and-e2e-tests.md)               | Intermediate | Shows how to write unit tests for tools by mocking context methods, and E2E tests using `McpTestClient` and `TestServer`.              |
+| [`weather-tool-with-schemas`](./examples/example-weather-api/weather-tool-with-schemas.md) | Basic        | Shows how to create a tool with Zod input and output schemas, use `this.fetch()` for HTTP calls, and handle errors with `this.fail()`. |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-guides/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                             |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-guides`, `frontmcp skills read frontmcp-guides:references/<file>.md`, `frontmcp skills install frontmcp-guides` — no server required.                                                                                                                                                    |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-guides/SKILL.md`, `skill://frontmcp-guides/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
+
 ## Reference
 
 - [Your First Tool](https://docs.agentfront.dev/frontmcp/guides/your-first-tool)
