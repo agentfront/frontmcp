@@ -49,7 +49,13 @@ Each `SkillAuditRecord` carries:
 Wire the audit subsystem through `skillsConfig.audit` on `@FrontMcp`:
 
 ```typescript
-import { Hs256AuditSigner, MemoryAuditStore, setSkillAuditFactory, SkillAuditWriter } from '@frontmcp/adapters/skills';
+import {
+  Hs256AuditSigner,
+  MemoryAuditStore,
+  setSkillAuditFactory,
+  SkillAuditWriter,
+  SkillAuditWriterToken,
+} from '@frontmcp/adapters/skills';
 
 // Inject the audit module into the SDK at boot. The factory returns the
 // module record; the SDK itself constructs SkillAuditWriter from
@@ -90,10 +96,10 @@ class Server {}
 
 ## Built-in Signers
 
-| Signer             | Key                        | When to use                                                                          |
-| ------------------ | -------------------------- | ------------------------------------------------------------------------------------ |
-| `Hs256AuditSigner` | Symmetric HMAC-SHA-256     | Dev / tests only. Refuses to fire when `NODE_ENV === 'production'` with a random key |
-| `Rs256AuditSigner` | Asymmetric RSA-PSS / RS256 | **Production.** Reuse the bundle-signing keypair so the same trust root covers both  |
+| Signer             | Key                                                 | When to use                                                                          |
+| ------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `Hs256AuditSigner` | Symmetric HMAC-SHA-256                              | Dev / tests only. Refuses to fire when `NODE_ENV === 'production'` with a random key |
+| `Rs256AuditSigner` | Asymmetric RSA (RS256, RSASSA-PKCS1-v1_5 + SHA-256) | **Production.** Reuse the bundle-signing keypair so the same trust root covers both  |
 
 ```typescript
 import { Rs256AuditSigner } from '@frontmcp/adapters/skills';
