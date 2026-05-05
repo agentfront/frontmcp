@@ -15,8 +15,8 @@ const tools = scope.tools;
 // List all tools
 const allTools = tools.getTools();
 
-// Find a specific tool
-const tool = tools.findByName('my_tool');
+// Look up a tool by its exported (resolved) name
+const tool = tools.getExported('my_tool');
 ```
 
 ## Methods
@@ -63,38 +63,6 @@ const tools = registry.getToolsForListing(true);
 
 // For clients that don't support elicitation
 const tools = registry.getToolsForListing(false);
-```
-
-### findByName()
-
-Find a tool by its base name.
-
-```typescript
-findByName(name: string): ToolEntry | undefined
-```
-
-**Example:**
-
-```typescript
-const tool = registry.findByName('search');
-if (tool) {
-  console.log(`Found: ${tool.qualifiedId}`);
-}
-```
-
-### findByQualifiedName()
-
-Find a tool by its fully qualified name.
-
-```typescript
-findByQualifiedName(qualifiedName: string): ToolEntry | undefined
-```
-
-**Example:**
-
-```typescript
-// Find tool with owner prefix
-const tool = registry.findByQualifiedName('my-app:search');
 ```
 
 ### getExported()
@@ -195,7 +163,7 @@ subscribe(
 
 ```typescript
 const unsubscribe = registry.subscribe({}, (event) => {
-  console.log(`Tool ${event.kind}:`, event.entry?.name);
+  console.log(`Tool change: ${event.kind} (v${event.version})`);
 });
 
 // Later: stop listening
@@ -247,7 +215,6 @@ interface ToolChangeEvent {
   changeScope: 'global' | 'session';
   version: number;
   snapshot: ReadonlyArray<ToolEntry>;
-  entry?: ToolEntry;
   sessionId?: string;
   relatedRequestId?: string;
 }

@@ -1,0 +1,36 @@
+---
+title: Task Errors
+description: Error classes for the task-augmented tool invocation lifecycle
+icon: list-check
+---
+
+These errors surface from the task-augmented tool invocation system (per the MCP 2025-11-25 task-support protocol). All inherit from `PublicMcpError` (safe to surface to clients) except `TaskStoreNotInitializedError`.
+
+## Reference
+
+| Class                                | Inherits          | JSON-RPC Code | When                                                                          |
+| ------------------------------------ | ----------------- | ------------- | ----------------------------------------------------------------------------- |
+| `TaskNotFoundError`                  | `PublicMcpError`  | `-32602`      | `tasks/get`, `tasks/cancel`, or `tasks/result` referenced an unknown task ID  |
+| `TaskAlreadyTerminalError`           | `PublicMcpError`  | `-32602`      | `tasks/cancel` invoked on a task already in `succeeded`/`failed`/`cancelled`  |
+| `TaskAugmentationNotSupportedError`  | `PublicMcpError`  | `-32601`      | Client invoked `tools/call` with task augmentation on a tool that opts out    |
+| `TaskAugmentationRequiredError`      | `PublicMcpError`  | `-32601`      | Tool declared `taskSupport: 'required'` but client did not request a task     |
+| `TaskStoreNotInitializedError`       | `InternalMcpError`| —             | Internal: task store provider not registered when task subsystem is required  |
+
+## Usage
+
+```typescript
+import { TaskNotFoundError, TaskAlreadyTerminalError } from '@frontmcp/sdk';
+
+if (!task) {
+  throw new TaskNotFoundError(taskId);
+}
+
+if (isTerminal(task.status)) {
+  throw new TaskAlreadyTerminalError(task.status);
+}
+```
+
+## Related
+
+- [Tasks](/frontmcp/servers/tools#task-augmented-tools) — opt a tool into task augmentation
+- [Errors Overview](/frontmcp/sdk-reference/errors/overview)

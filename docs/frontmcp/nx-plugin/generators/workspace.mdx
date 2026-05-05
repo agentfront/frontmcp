@@ -24,7 +24,7 @@ npx frontmcp create my-platform --nx
 | Option            | Type                      | Default | Description                             |
 | ----------------- | ------------------------- | ------- | --------------------------------------- |
 | `name`            | `string`                  | —       | **Required.** The name of the workspace |
-| `packageManager`  | `npm` \| `yarn` \| `pnpm` | `npm`   | Package manager to use                  |
+| `packageManager`  | `npm` \| `yarn` \| `pnpm` \| `bun` | `npm`   | Package manager to use                  |
 | `skipInstall`     | `boolean`                 | `false` | Skip package installation               |
 | `skipGit`         | `boolean`                 | `false` | Skip git initialization. When `false`, runs `git init` and creates an initial commit. |
 | `createSampleApp` | `boolean`                 | `true`  | Create a sample demo application        |
@@ -33,12 +33,18 @@ npx frontmcp create my-platform --nx
 
 ```
 my-platform/
-├── apps/                    # FrontMCP applications
+├── apps/                    # FrontMCP applications (with sample demo app if enabled)
 ├── libs/                    # Shared libraries
 ├── servers/                 # Deployment shells
 ├── nx.json                  # Nx workspace configuration
 ├── tsconfig.base.json       # Shared TypeScript config
 ├── package.json             # Dependencies and scripts
+├── README.md
+├── AGENTS.md                # AI agent guidance
+├── CLAUDE.md                # Claude Code project instructions
+├── .cursorrules             # Cursor editor rules
+├── .mcp.json
+├── .nvmrc
 ├── .gitignore
 └── .prettierrc
 ```

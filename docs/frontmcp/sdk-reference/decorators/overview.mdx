@@ -90,11 +90,9 @@ const metadata = {
 type Input = ToolInputOf<typeof metadata>;   // { a: number; b: number }
 type Output = ToolOutputOf<typeof metadata>; // { result: number }
 
+// Types are auto-inferred from the @Tool decorator — use plain `ToolContext`.
 @Tool(metadata)
-class CalculateTool extends ToolContext<
-  typeof metadata.inputSchema,
-  typeof metadata.outputSchema
-> {
+class CalculateTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return { result: input.a + input.b };
   }
@@ -131,8 +129,37 @@ this.logger.info('Processing request');
 
 // Request context
 const ctx = this.context;
-const auth = this.getAuthInfo();
+const auth = this.context.authInfo;
 ```
+
+## Importing from External Packages
+
+Decorators expose static `.esm()` and `.remote()` factories for declaring entries that come from outside the local source tree:
+
+```typescript
+import { Tool, Resource, Prompt, Agent, Skill, Job, App } from '@frontmcp/sdk';
+
+// Pull a named export from an installed npm package
+const OpenAI_GenImage = Tool.esm('@some-org/some-package', 'generate_image');
+
+// Pull from a remote MCP server
+const SearchAPI = Tool.remote('https://search.example.com/mcp', 'search');
+```
+
+Both factories are available on `Tool`, `Resource`, `Prompt`, `Agent`, `Skill`, `Job`, and `App`. Pass the resulting handle into your `@App` or `@FrontMcp` decorator just like a class-based entry:
+
+```typescript
+@FrontMcp({
+  info: { name: 'gateway', version: '1.0.0' },
+  tools: [
+    Tool.esm('@some-org/some-package', 'generate_image'),
+    Tool.remote('https://search.example.com/mcp', 'search'),
+  ],
+})
+class Gateway {}
+```
+
+See the [ESM Dynamic Loading feature](/frontmcp/features/esm-dynamic-loading) for the full lifecycle, and [Remote MCP servers](/frontmcp/servers/discovery) for remote semantics.
 
 ## Next Steps
 

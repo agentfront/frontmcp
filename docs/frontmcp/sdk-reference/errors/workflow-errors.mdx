@@ -1,0 +1,38 @@
+---
+title: Workflow Errors
+description: Error classes for multi-step workflow execution
+icon: diagram-project
+---
+
+These errors surface from the workflow runtime when a multi-step DAG fails to validate or complete. All inherit from `InternalMcpError` (not safe to surface verbatim to clients — the runtime maps them to a generic JSON-RPC error before sending).
+
+## Reference
+
+| Class                       | Inherits           | When                                                         |
+| --------------------------- | ------------------ | ------------------------------------------------------------ |
+| `WorkflowStepNotFoundError` | `InternalMcpError` | A step alias was referenced before it completed              |
+| `WorkflowTimeoutError`      | `InternalMcpError` | The whole workflow exceeded its `timeoutMs`                  |
+| `WorkflowDagValidationError`| `InternalMcpError` | The declared DAG had a cycle, missing dependency, or bad ref |
+| `WorkflowJobTimeoutError`   | `InternalMcpError` | An individual job step exceeded its `timeoutMs`              |
+
+## Usage
+
+```typescript
+import {
+  WorkflowStepNotFoundError,
+  WorkflowTimeoutError,
+  WorkflowDagValidationError,
+  WorkflowJobTimeoutError,
+} from '@frontmcp/sdk';
+
+// Inside a workflow runtime extension
+if (!completed.has(alias)) {
+  throw new WorkflowStepNotFoundError(alias);
+}
+```
+
+## Related
+
+- [Workflows](/frontmcp/servers/workflows) — declare multi-step workflows
+- [Jobs](/frontmcp/servers/jobs) — long-running jobs invoked by workflow steps
+- [Errors Overview](/frontmcp/sdk-reference/errors/overview)

@@ -67,11 +67,11 @@ Everything else is optional with sensible defaults.
   providers?: [/* provider classes/factories/values */],
 
   http?: {
-    port?: 3001,                // default 3001
+    port?: 3000,                // default: process.env.PORT or 3000
     entryPath?: '',             // MUST match PRM resourcePath in .well-known
     hostFactory?: /* custom host */,
     socketPath?: '/tmp/mcp.sock',  // Unix socket path (overrides port)
-    cors?: CorsOptions | false, // default: permissive with built-in adapter (all origins + credentials)
+    cors?: CorsOptions | false, // default: permissive with built-in adapter (origin: true, credentials: false)
   },
 
   /** Transport & session lifecycle (NEW in v0.6) */
@@ -121,8 +121,10 @@ Everything else is optional with sensible defaults.
 
   /** Server-level default auth (omit if splitByApp: true) */
   auth?: (
-    | { mode: 'remote', name: string, baseUrl: string, ... }
-    | { mode: 'local',  id: string,   name: string,   ... }
+    | { mode: 'public', ... }
+    | { mode: 'transparent', ... }
+    | { mode: 'local', ... }
+    | { mode: 'remote', provider: 'https://auth.example.com', ... }
   ),
 })
 ```
@@ -147,23 +149,23 @@ FrontMCP can host **many apps**. Choose how they’re exposed:
 
 ```ts
 http: {
-  port?: number;                // default 3001
+  port?: number;                // default: process.env.PORT or 3000
   entryPath?: string;           // default ''; MUST match the PRM resourcePath in .well-known
   hostFactory?: FrontMcpServer | ((cfg) => FrontMcpServer);
   socketPath?: string;          // Unix socket path (overrides port)
-  cors?: CorsOptions | false;   // default: permissive with built-in adapter (all origins + credentials)
+  cors?: CorsOptions | false;   // default: permissive with built-in adapter (origin: true, credentials: false)
 }
 ```
 
 | Field         | Description                                                                  |
 | ------------- | ---------------------------------------------------------------------------- |
-| `port`        | HTTP listening port (default: 3001)                                          |
+| `port`        | HTTP listening port (default: `process.env.PORT` or `3000`)                  |
 | `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                      |
 | `hostFactory` | Custom host implementation for advanced setups                               |
 | `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port |
 | `cors`        | CORS configuration (see [CORS](#cors) below)                                 |
 
-- **Port**: listening port for Streamable HTTP.
+- **Port**: listening port for Streamable HTTP. Defaults to `process.env.PORT` or `3000` when omitted.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
 - **hostFactory**: advanced — provide/construct a custom host implementation.
 - **socketPath**: listen on a Unix socket instead of a TCP port. The entire HTTP feature set (streamable HTTP, SSE, elicitation, sessions) works unchanged over Unix sockets.
@@ -246,7 +248,7 @@ FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to t
 ## Transport
 
 <Info>
-**New in v0.6**: Transport configuration has moved from `auth.transport` and `session` to a dedicated top-level `transport` property. This separates transport/session lifecycle concerns from authentication. See [Migration](#migration-from-authttransport) below.
+Transport configuration is a dedicated top-level `transport` property, separate from `auth`. It controls session lifecycle, protocol presets, and persistence.
 </Info>
 
 The `transport` config controls session lifecycle, protocol presets, and session persistence. Configure it at the server level or per-app when using `splitByApp: true`.
@@ -382,7 +384,7 @@ You can apply different transport policies per app when `splitByApp: true`. Sens
 ## Redis
 
 <Info>
-**New in v0.6**: Redis configuration has moved to a dedicated top-level `redis` property, shared by both `transport.persistence` and `auth.tokenStorage`.
+Redis configuration is a dedicated top-level `redis` property, shared by both `transport.persistence` and `auth.tokenStorage`.
 </Info>
 
 Configure Redis once at the server level for use across features:
@@ -429,68 +431,14 @@ The `redis` config is automatically used by:
   },
   auth: {
     mode: 'local',
-    tokenStorage: 'redis',
+    id: 'local',
+    name: 'Local Auth',
+    tokenStorage: { redis: { host: 'localhost' } },
   },
 })
 ```
 
 ---
-
-## Migration from `auth.transport`
-
-<Warning>
-**Deprecated**: The `auth.transport` and `session` properties are deprecated and will be removed in v1.0.0. Migrate to the top-level `transport` config.
-</Warning>
-
-FrontMCP automatically migrates old configs at runtime with a deprecation warning. Update your config manually to remove the warning:
-
-<CodeGroup>
-```ts Before (deprecated)
-@FrontMcp({
-  auth: {
-    mode: 'local',
-    transport: {
-      enableStreamableHttp: true,
-      enableStatefulHttp: true,
-      recreation: {
-        enabled: true,
-        redis: { host: 'localhost' },
-      },
-    },
-  },
-})
-```
-
-```ts After (v0.6+)
-@FrontMcp({
-  redis: {
-    host: 'localhost',
-  },
-  transport: {
-    protocol: 'full',  // Or use custom: { streamable: true, json: true, ... }
-    // persistence auto-enabled when redis is configured
-  },
-  auth: {
-    mode: 'local',
-  },
-})
-```
-
-</CodeGroup>
-
-### Migration Mapping
-
-| Old Path                                     | New Path                           |
-| -------------------------------------------- | ---------------------------------- |
-| `session.platformDetection`                  | `transport.platformDetection`      |
-| `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`        |
-| `auth.transport.enableSseListener`           | `transport.protocol.sse`           |
-| `auth.transport.enableStreamableHttp`        | `transport.protocol.streamable`    |
-| `auth.transport.enableStatelessHttp`         | `transport.protocol.stateless`     |
-| `auth.transport.enableStatefulHttp`          | `transport.protocol.json`          |
-| `auth.transport.requireSessionForStreamable` | `transport.protocol.strictSession` |
-| `auth.transport.recreation`                  | `transport.persistence`            |
-| `auth.transport.recreation.redis`            | `redis` (top-level)                |
 
 <Tip>
 Instead of individual flags, use a **protocol preset**: `'legacy'` (default), `'modern'`, `'stateless-api'`, or `'full'`.
@@ -528,7 +476,7 @@ providers: [
 ];
 ```
 
-Define DI-style singletons available to all apps (and their tools/plugins). Scopes are supported at the provider level (`GLOBAL`, `SESSION`, `REQUEST`).
+Define DI-style singletons available to all apps (and their tools/plugins). Provider lifetime scopes: `'global'` (default, shared across all requests) or `'context'` (one instance per execution context).
 
 ---
 
@@ -541,21 +489,21 @@ Server-level `auth` sets the **default** auth for all apps (unless `splitByApp: 
 ```ts
 auth: {
   mode: 'remote',
-  name: 'frontegg',
-  baseUrl: 'https://auth.example.com',
-  dcrEnabled?: boolean,
-  clientId?: string | ((info) => string), // for non-DCR via local proxy
-  mode?: 'local' | 'remote' | 'transparent',
-  allowAnonymous?: boolean,
-  consent?: boolean,
+  provider: 'https://auth.example.com',   // OAuth provider base URL (required)
+  clientId?: string,
+  clientSecret?: string,
   scopes?: string[],
-  grantTypes?: ['authorization_code','refresh_token'],
-  authEndpoint?: string,
-  tokenEndpoint?: string,
-  registrationEndpoint?: string,
-  userInfoEndpoint?: string,
-  jwks?: JSONWebKeySet,
-  jwksUri?: string,
+  providerConfig?: {
+    dcrEnabled?: boolean,
+    authEndpoint?: string,
+    tokenEndpoint?: string,
+    // ...other advanced provider fields
+  },
+  tokenStorage?: 'memory' | { redis: RedisConfig }, // default: 'memory'
+  consent?: ConsentConfig,
+  publicAccess?: PublicAccessConfig,
+  refresh?: TokenRefreshConfig,
+  expectedAudience?: string | string[],
 }
 ```
 
@@ -564,14 +512,16 @@ auth: {
 ```ts
 auth: {
   mode: 'local',
-  id: 'local',
-  name: 'Local Auth',
-  scopes?: string[],
-  grantTypes?: ['authorization_code','refresh_token'],
-  allowAnonymous?: boolean,  // default true
-  consent?: boolean,         // show tool/resource/prompt consent
-  jwks?: JSONWebKeySet,      // inline keys (optional)
-  signKey?: JWK | Uint8Array // private key (optional; auto-gen if omitted)
+  local?: {                  // local signing config (optional)
+    issuer?: string,
+    signingKey?: JWK | Uint8Array,
+    jwks?: JSONWebKeySet,
+  },
+  tokenStorage?: 'memory' | { redis: RedisConfig }, // default: 'memory'
+  consent?: ConsentConfig,
+  publicAccess?: PublicAccessConfig,
+  allowDefaultPublic?: boolean, // default false
+  anonymousScopes?: string[],   // default ['anonymous']
 }
 ```
 

@@ -173,26 +173,16 @@ const result = await mcp.prompts.get('multi-turn', { context: 'test' });
 expect(result).toHaveMessages(3);
 ```
 
-### toHaveRole
+### Inspecting message role / content
 
-Check the role of a message:
+For role and text-content checks on prompt messages, read the message directly. The `toHaveTextContent` matcher works for tool results; for prompt messages use plain Jest assertions:
 
 ```ts
 const result = await mcp.prompts.get('assistant-prompt', {});
 
-expect(result.messages[0]).toHaveRole('user');
-expect(result.messages[1]).toHaveRole('assistant');
-```
-
-### toContainText
-
-Check if a message contains specific text:
-
-```ts
-const result = await mcp.prompts.get('summarize', { topic: 'TypeScript' });
-
-expect(result.messages[0]).toContainText('TypeScript');
-expect(result.messages[0]).toContainText('summarize');
+expect(result.messages[0].role).toBe('user');
+expect(result.messages[1].role).toBe('assistant');
+expect(result.messages[0].content.text).toContain('TypeScript');
 ```
 
 ---
@@ -253,6 +243,39 @@ Check for a specific error code:
 const response = await mcp.raw.sendRaw('not valid json');
 
 expect(response).toHaveErrorCode(-32700); // Parse error
+```
+
+---
+
+## UI Matchers
+
+These assert on the rendered UI metadata returned by tools that ship a UI template (see [Building tool UI](/frontmcp/guides/building-tool-ui)). They run against `result._meta` / `result.content[0].text` (the rendered HTML).
+
+| Matcher                     | What it checks                                                       |
+| --------------------------- | -------------------------------------------------------------------- |
+| `toHaveRenderedHtml()`      | Result includes a non-empty rendered HTML payload                    |
+| `toContainHtmlElement(tag)` | Rendered HTML contains an element of `tag` (e.g. `'button'`)         |
+| `toContainBoundValue(v)`    | Rendered HTML contains the bound input/output value                  |
+| `toBeXssSafe()`             | Rendered HTML has been sanitized (no `<script>`, inline event attrs) |
+| `toHaveWidgetMetadata()`    | Result advertises the MCP widget metadata block                      |
+| `toHaveCssClass(name)`      | Rendered HTML contains an element with the given CSS class           |
+| `toNotContainRawContent(s)` | Rendered HTML does not contain the raw (unsanitized) string `s`      |
+| `toHaveProperHtmlStructure()` | Rendered HTML is well-formed (open/close, no obvious truncation)   |
+| `toHavePlatformMeta(p)`     | Result includes the platform-specific meta block (e.g. `'openai'`)   |
+| `toHaveMetaKey(k)`          | Result `_meta` contains key `k`                                       |
+| `toHaveMetaValue(k, v)`     | Result `_meta[k]` deep-equals `v`                                     |
+| `toNotHaveMetaKey(k)`       | Result `_meta` does NOT contain key `k`                               |
+| `toHaveOnlyNamespacedMeta(ns)` | All `_meta` keys are namespaced under `ns`                         |
+| `toHavePlatformMimeType(p)` | Result has the expected MIME type for platform `p`                   |
+| `toHavePlatformHtml(p)`     | Result includes platform-targeted HTML for platform `p`              |
+
+```ts
+const result = await mcp.tools.call('show-card', { id: 'abc' });
+
+expect(result).toHaveRenderedHtml();
+expect(result).toContainHtmlElement('article');
+expect(result).toBeXssSafe();
+expect(result).toHavePlatformMeta('openai');
 ```
 
 ---

@@ -78,13 +78,13 @@ mcp.tools.list(): Promise<Tool[]>
 Call a tool with arguments.
 
 ```ts
-mcp.tools.call(name: string, args: Record<string, unknown>): Promise<ToolResult>
+mcp.tools.call(name: string, args?: Record<string, unknown>): Promise<ToolResult>
 ```
 
-| Parameter | Type                      | Description    |
-| --------- | ------------------------- | -------------- |
-| `name`    | `string`                  | Tool name      |
-| `args`    | `Record<string, unknown>` | Tool arguments |
+| Parameter | Type                      | Description              |
+| --------- | ------------------------- | ------------------------ |
+| `name`    | `string`                  | Tool name                |
+| `args`    | `Record<string, unknown>` | Tool arguments (optional) |
 
 **Returns:** `ToolResult` with methods:
 
@@ -241,7 +241,7 @@ mcp.capabilities: ServerCapabilities
 Check for a specific capability.
 
 ```ts
-mcp.hasCapability(name: 'tools' | 'resources' | 'prompts'): boolean
+mcp.hasCapability(name: 'tools' | 'resources' | 'prompts' | 'logging' | 'sampling'): boolean
 ```
 
 #### authenticate
@@ -421,9 +421,9 @@ Pre-built test user configurations.
 
 ```ts
 auth.users: {
-  admin: { sub: 'test-admin', scopes: ['*'] };
-  user: { sub: 'test-user', scopes: ['read', 'write'] };
-  readOnly: { sub: 'test-readonly', scopes: ['read'] };
+  admin: { sub: 'admin-001', scopes: ['admin:*', 'read', 'write', 'delete'], email: 'admin@test.local', name: 'Test Admin' };
+  user: { sub: 'user-001', scopes: ['read', 'write'], email: 'user@test.local', name: 'Test User' };
+  readOnly: { sub: 'readonly-001', scopes: ['read'], email: 'readonly@test.local', name: 'Read Only User' };
 }
 ```
 
@@ -891,20 +891,20 @@ interface CreateTokenOptions {
 Create a token with admin privileges.
 
 ```ts
-factory.createAdminToken(): Promise<string>
+factory.createAdminToken(sub?: string): Promise<string>
 ```
 
-Returns a token with `sub: 'test-admin'` and `scopes: ['*']`.
+Returns a token with `sub: 'admin-001'` (default) and `scopes: ['admin:*', 'read', 'write', 'delete']`.
 
 #### createUserToken
 
 Create a token with standard user privileges.
 
 ```ts
-factory.createUserToken(): Promise<string>
+factory.createUserToken(sub?: string, scopes?: string[]): Promise<string>
 ```
 
-Returns a token with `sub: 'test-user'` and `scopes: ['read', 'write']`.
+Returns a token with `sub: 'user-001'` (default) and `scopes: ['read', 'write']` (default).
 
 #### createAnonymousToken
 
@@ -914,7 +914,7 @@ Create an anonymous token.
 factory.createAnonymousToken(): Promise<string>
 ```
 
-Returns a token with `sub: 'anonymous'` and no scopes.
+Returns a token with `sub: 'anon:{timestamp}'` and `scopes: ['anonymous']`.
 
 #### createExpiredToken
 
@@ -1323,8 +1323,15 @@ expect(templates).toContainResourceTemplate(uriTemplate: string): void
 ```ts
 expect(prompts).toContainPrompt(name: string): void
 expect(result).toHaveMessages(count: number): void
-expect(message).toHaveRole(role: 'user' | 'assistant'): void
-expect(message).toContainText(text: string): void
+```
+
+For role checks on individual messages, use plain Jest assertions on `message.role`. `message.content` is a discriminated union (`TextContent | ImageContent | EmbeddedResource`), so narrow it before reading `.text`:
+
+```ts
+expect(message.role).toBe('user');
+if (message.content.type === 'text') {
+  expect(message.content.text).toContain('hello');
+}
 ```
 
 ### JSON-RPC Matchers
@@ -1334,6 +1341,23 @@ expect(response).toBeValidJsonRpc(): void
 expect(response).toHaveResult(): void
 expect(response).toHaveError(): void
 expect(response).toHaveErrorCode(code: number): void
+```
+
+### UI Matchers (for testing tool UI responses)
+
+```ts
+expect(result).toHaveRenderedHtml(): void
+expect(result).toContainHtmlElement(tag: string): void
+expect(result).toBeXssSafe(): void
+expect(result).toContainBoundValue(value: unknown): void
+expect(result).toHaveWidgetMetadata(): void
+expect(result).toHaveCssClass(className: string): void
+expect(result).toHaveProperHtmlStructure(): void
+expect(result).toHavePlatformMeta(platform: TestPlatformType): void
+expect(result).toHaveMetaKey(key: string): void
+expect(result).toHaveMetaValue(key: string, value: unknown): void
+expect(result).toHavePlatformMimeType(platform: TestPlatformType): void
+expect(result).toHavePlatformHtml(platform: TestPlatformType): void
 ```
 
 ---

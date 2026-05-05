@@ -10,8 +10,8 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
 
 | Platform           | Status       | Module Format | Config File              |
 | ------------------ | ------------ | ------------- | ------------------------ |
-| Vercel             | Stable       | ESM           | `vercel.json`            |
-| AWS Lambda         | Stable       | ESM           | `ci/template.yaml` (SAM) |
+| Vercel             | Stable       | CommonJS      | `vercel.json`            |
+| AWS Lambda         | Stable       | CommonJS      | `ci/template.yaml` (SAM) |
 | Cloudflare Workers | Experimental | CommonJS      | `wrangler.toml`          |
 
 ## Quick Start
@@ -121,22 +121,28 @@ The `buildCommand` and `installCommand` are auto-detected based on the lockfile 
 
 ### How It Works
 
-The generated `index.js` wrapper:
+The generated `serverless-setup.js` + `index.js` wrapper:
 
-1. Sets `FRONTMCP_SERVERLESS=1` environment variable
-2. Imports your compiled `main.js` (which runs the `@FrontMcp` decorator)
-3. Exports an async handler that retrieves the Express app and forwards requests
+1. `serverless-setup.js` sets `FRONTMCP_SERVERLESS=1` (must be required first,
+   before any decorators run)
+2. `index.js` requires your compiled `main.js` (which runs the `@FrontMcp`
+   decorator) and re-exports an async handler that retrieves the Express app
+3. The Vercel adapter compiles to **CommonJS** and bundles everything into a
+   single `handler.cjs` via rspack — that bundle is what Vercel actually runs
 
 ```javascript
 // Generated dist/index.js (simplified)
-process.env.FRONTMCP_SERVERLESS = '1';
-import './main.js';
-import { getServerlessHandlerAsync } from '@frontmcp/sdk';
+require('./serverless-setup.js'); // sets FRONTMCP_SERVERLESS=1
+require('./main.js');             // runs the @FrontMcp decorator
+const { getServerlessHandlerAsync } = require('@frontmcp/sdk');
 
-export default async function handler(req, res) {
-  const app = await getServerlessHandlerAsync();
+let handlerPromise = null;
+module.exports = async function handler(req, res) {
+  if (!handlerPromise) handlerPromise = getServerlessHandlerAsync();
+  const app = await handlerPromise;
   return app(req, res);
-}
+};
+module.exports.default = module.exports;
 ```
 
 ## AWS Lambda
@@ -217,16 +223,10 @@ functions:
           method: ANY
 ```
 
-### ESM Requirements
+### Module Format
 
 <Note>
-AWS Lambda with ESM requires one of:
-- `"type": "module"` in your `package.json`
-- Using `.mjs` extension for handler files
-- Configuring your deployment tool for ESM
-
-The generated `dist/index.js` uses ESM syntax (`import`/`export`).
-
+Lambda, Vercel, and Cloudflare Workers builds emit **CommonJS** (`dist/index.js`), so the bundle works without `"type": "module"` in `package.json`. If your handler must be ESM, you can use the `import()` form to load the bundle from an `.mjs` wrapper.
 </Note>
 
 ### Cold Start Optimization
@@ -317,13 +317,17 @@ Serverless environments require distributed storage since each invocation may ru
     })
     ```
   </Tab>
-  <Tab title="Upstash">
+  <Tab title="Upstash (REST)">
+    Upstash exposes a Vercel-KV-compatible REST API. Use the `vercel-kv`
+    provider with the Upstash REST URL/token to use it from any platform:
+
     ```typescript
     @FrontMcp({
       info: { name: 'My Server', version: '1.0.0' },
       redis: {
-        provider: 'upstash',
-        // Uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from env
+        provider: 'vercel-kv',
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
       },
     })
     ```
@@ -369,8 +373,9 @@ RememberPlugin.init({
 ├─────────────────────────────────────────────────────────────┤
 │  frontmcp build --target vercel                            │
 │       │                                                      │
-│       ├── Compiles TypeScript with --module esnext          │
+│       ├── Compiles TypeScript with --module commonjs        │
 │       ├── Generates platform-specific index.js wrapper      │
+│       ├── Bundles entry + deps with rspack → handler.cjs    │
 │       └── Creates platform config (vercel.json, etc.)       │
 └─────────────────────────────────────────────────────────────┘
                             │
@@ -380,7 +385,7 @@ RememberPlugin.init({
 ├─────────────────────────────────────────────────────────────┤
 │  1. Platform invokes index.js                               │
 │  2. index.js sets FRONTMCP_SERVERLESS=1                     │
-│  3. index.js imports main.js                                │
+│  3. index.js requires main.js                               │
 │  4. @FrontMcp decorator detects serverless mode             │
 │  5. Decorator calls createHandler() instead of bootstrap()  │
 │  6. Express app stored globally via setServerlessHandler()  │
@@ -448,8 +453,8 @@ First requests may be slow due to initialization. Strategies:
 If you see module-related errors:
 
 - The adapter sets the correct module format automatically
-- `--module esnext` for Vercel/Lambda
-- `--module commonjs` for Node.js/Cloudflare
+- `--module commonjs` for all targets (Node.js, Vercel, Lambda, Cloudflare); the
+  Vercel and Lambda adapters then bundle to `handler.cjs` with rspack
 
 Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfig settings.
 
@@ -461,10 +466,10 @@ Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfi
 # Build for Node.js (default, CommonJS)
 frontmcp build
 
-# Build for Vercel (ESM)
+# Build for Vercel (CommonJS)
 frontmcp build --target vercel
 
-# Build for AWS Lambda (ESM)
+# Build for AWS Lambda (CommonJS)
 frontmcp build --target lambda
 
 # Build for Cloudflare Workers (CommonJS)

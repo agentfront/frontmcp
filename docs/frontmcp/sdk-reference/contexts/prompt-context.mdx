@@ -122,10 +122,17 @@ protected fail(err: Error): never
 
 #### outputHistory
 
-History of output changes.
+History of output changes. Entries are `HistoryEntry` records:
 
 ```typescript
-get outputHistory(): ReadonlyArray<GetPromptResult>
+type HistoryEntry<T> = {
+  at: number;
+  stage?: string;
+  value: T | undefined;
+  note?: string;
+};
+
+get outputHistory(): ReadonlyArray<HistoryEntry<GetPromptResult>>
 ```
 
 ## Content Types

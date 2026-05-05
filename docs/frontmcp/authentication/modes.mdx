@@ -3,41 +3,36 @@ title: Authorization Modes
 sidebarTitle: Modes
 slug: authentication/modes
 icon: layer-group
-description: Deep dive into public, transparent, and orchestrated authentication modes
+description: Deep dive into public, transparent, local, and remote authentication modes
 ---
 
-FrontMCP's three authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
+FrontMCP's four authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
 
 ## Mode Overview
+
+The `auth.mode` literal accepts one of four values: `'public'`, `'transparent'`, `'local'`, `'remote'`.
 
 ```mermaid
 graph TB
     subgraph "Authentication Modes"
-        Public["Public Mode<br/>Anonymous Access"]
-        Transparent["Transparent Mode<br/>Pass-through Tokens"]
-        Orchestrated["Orchestrated Mode<br/>Local Auth Server"]
+        Public["mode: 'public'<br/>Anonymous Access"]
+        Transparent["mode: 'transparent'<br/>Pass-through Tokens"]
+        Local["mode: 'local'<br/>Built-in OAuth Server"]
+        Remote["mode: 'remote'<br/>OAuth Server proxying to upstream IdP"]
     end
-
-    subgraph "Orchestrated Types"
-        Local["Local<br/>Self-contained Auth"]
-        Remote["Remote<br/>Proxy to Upstream IdP"]
-    end
-
-    Orchestrated --> Local
-    Orchestrated --> Remote
 ```
 
 ## Mode Comparison
 
-| Feature            | Public         | Transparent       | Orchestrated           |
-| ------------------ | -------------- | ----------------- | ---------------------- |
-| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued)  |
-| User Identity      | Anonymous      | From upstream IdP | From login or upstream |
-| JWKS Source        | Self-generated | Upstream IdP      | Self-generated         |
-| Session Management | Minimal        | Pass-through      | Full control           |
-| Multi-provider     | No             | Single provider   | Multiple providers     |
-| Progressive Auth   | No             | No                | Yes                    |
-| Consent UI         | No             | No                | Optional               |
+| Feature            | Public         | Transparent       | Local                 | Remote                 |
+| ------------------ | -------------- | ----------------- | --------------------- | ---------------------- |
+| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued) | Yes (FrontMCP-issued)  |
+| User Identity      | Anonymous      | From upstream IdP | From login form       | From upstream IdP      |
+| JWKS Source        | Self-generated | Upstream IdP      | Self-generated        | Self-generated         |
+| Session Management | Minimal        | Pass-through      | Full control          | Full control           |
+| Multi-provider     | No             | Single provider   | Multiple via apps     | Multiple via apps      |
+| Progressive Auth   | No             | No                | Yes                   | Yes                    |
+| Consent UI         | No             | No                | Optional              | Optional               |
 
 ---
 
@@ -137,7 +132,7 @@ sequenceDiagram
 | `provider`               | `string`             | Required        | Base URL of the IdP                  |
 | `providerConfig.jwksUri` | `string`             | Auto-discovered | Custom JWKS endpoint                 |
 | `providerConfig.jwks`    | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
-| `expectedAudience`       | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
+| `expectedAudience`       | `string \| string[]` | Required        | Required audience claim value(s) — typically the protected resource URL |
 | `requiredScopes`         | `string[]`           | `[]`            | Scopes that must be present          |
 | `allowAnonymous`         | `boolean`            | `false`         | Allow requests without tokens        |
 
@@ -198,19 +193,15 @@ sequenceDiagram
 
 ---
 
-## Orchestrated Mode
+## Local Mode
 
-FrontMCP acts as a full OAuth 2.1 authorization server. This mode has two types: **local** and **remote**.
-
-### Local Type
-
-Self-contained auth server with built-in user management.
+FrontMCP acts as a full OAuth 2.1 authorization server with a built-in login form. Self-contained auth server with built-in user management.
 
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'local',
   consent: { enabled: true },
-  tokenStorage: 'memory', // Use 'redis' in production
+  tokenStorage: 'memory', // Use { redis: ... } in production
 };
 ```
 
@@ -218,9 +209,9 @@ const auth: AuthOptionsInput = {
   The built-in login page accepts any email format without validation. Replace with a real identity provider for production use.
 </Warning>
 
-### Remote Type
+## Remote Mode
 
-Local auth server that proxies user authentication to an upstream IdP.
+FrontMCP acts as an OAuth 2.1 authorization server that **proxies user authentication to an upstream IdP**. End users never submit credentials to FrontMCP directly — they're redirected to the upstream IdP, and FrontMCP exchanges the resulting upstream code/tokens before issuing its own session token to the MCP client.
 
 ```typescript
 const auth: AuthOptionsInput = {
@@ -240,6 +231,7 @@ sequenceDiagram
     participant User
     participant Client
     participant FrontMCP as FrontMCP Auth Server
+    participant IdP as Upstream IdP
     participant Store as Authorization Store
 
     Note over Client: Generate PKCE<br/>code_verifier & code_challenge
@@ -247,11 +239,14 @@ sequenceDiagram
     Client->>FrontMCP: GET /oauth/authorize<br/>response_type=code<br/>client_id, redirect_uri<br/>code_challenge (S256)<br/>scope, state
 
     FrontMCP->>Store: Store pending authorization
-    FrontMCP-->>User: Show login page
+    FrontMCP-->>User: 302 Redirect to upstream IdP<br/>(authorize URL + upstream PKCE)
 
-    User->>FrontMCP: POST credentials (email)
-    FrontMCP->>FrontMCP: Validate user
-    FrontMCP->>Store: Create authorization code<br/>(60s TTL, single-use)
+    User->>IdP: Authenticate (credentials, MFA, …)
+    IdP-->>FrontMCP: Redirect back with upstream auth code
+    FrontMCP->>IdP: POST /token (exchange upstream code)
+    IdP-->>FrontMCP: { id_token, access_token, refresh_token }
+
+    FrontMCP->>Store: Create FrontMCP authorization code<br/>(60s TTL, single-use)
     FrontMCP-->>Client: Redirect to redirect_uri<br/>?code=xxx&state=yyy
 
     Client->>FrontMCP: POST /oauth/token<br/>grant_type=authorization_code<br/>code, redirect_uri<br/>client_id, code_verifier
@@ -259,8 +254,8 @@ sequenceDiagram
     FrontMCP->>Store: Get & validate code
     FrontMCP->>FrontMCP: Verify PKCE<br/>SHA256(code_verifier) == code_challenge
     FrontMCP->>Store: Mark code as used
-    FrontMCP->>FrontMCP: Sign access token (JWT)
-    FrontMCP->>Store: Store refresh token
+    FrontMCP->>FrontMCP: Sign FrontMCP session token (JWT)<br/>using identity from upstream id_token
+    FrontMCP->>Store: Store refresh token (links to upstream tokens)
     FrontMCP-->>Client: { access_token, refresh_token, expires_in }
 ```
 
@@ -315,7 +310,7 @@ federatedAuth: {
 
 ### OAuth Endpoints
 
-Orchestrated mode exposes standard OAuth endpoints:
+Local and remote modes expose standard OAuth endpoints:
 
 | Endpoint                                  | Method | Description                 |
 | ----------------------------------------- | ------ | --------------------------- |
@@ -344,8 +339,8 @@ Orchestrated mode exposes standard OAuth endpoints:
 </CardGroup>
 
 <Warning>
-  **Do NOT use orchestrated mode when:**
-  - You only have one IdP and don't need federation
+  **Do NOT use `local` or `remote` mode when:**
+  - You only have one IdP and don't need federation (use `transparent` instead)
   - You want to minimize auth complexity
   - Running multiple instances without Redis
 </Warning>
@@ -360,26 +355,26 @@ graph TD
     B -->|No| C[Public Mode]
     B -->|Yes| D{Multiple providers?}
     D -->|No| E{Need progressive auth<br/>or consent UI?}
-    D -->|Yes| F[Orchestrated Mode]
+    D -->|Yes| F[Local/Remote Mode]
     E -->|No| G[Transparent Mode]
     E -->|Yes| F
     F --> H{Have upstream IdP?}
-    H -->|Yes| I[Orchestrated Remote]
-    H -->|No| J[Orchestrated Local]
+    H -->|Yes| I[Remote Mode]
+    H -->|No| J[Local Mode]
 ```
 
 ---
 
 ## Security Comparison
 
-| Security Aspect        | Public         | Transparent           | Orchestrated       |
-| ---------------------- | -------------- | --------------------- | ------------------ |
-| Token Verification     | None           | Against upstream JWKS | Against local JWKS |
-| PKCE Support           | N/A            | Depends on IdP        | Always S256        |
-| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     |
-| Key Management         | Auto-generated | Upstream-managed      | Self-managed       |
-| Consent UI             | No             | No                    | Optional           |
-| Session Revocation     | N/A            | N/A                   | Supported          |
+| Security Aspect        | Public         | Transparent           | Local              | Remote                                         |
+| ---------------------- | -------------- | --------------------- | ------------------ | ---------------------------------------------- |
+| Token Verification     | None           | Against upstream JWKS | Against local JWKS | Against local JWKS (FrontMCP-issued session)   |
+| PKCE Support           | N/A            | Depends on IdP        | Always S256        | Always S256 (downstream); upstream depends on IdP |
+| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     | Depends on upstream IdP                        |
+| Key Management         | Auto-generated | Upstream-managed      | Self-managed       | Self-managed (session JWKS) + upstream JWKS    |
+| Consent UI             | No             | No                    | Optional           | Optional                                       |
+| Session Revocation     | N/A            | N/A                   | Supported          | Supported                                      |
 
 ---
 
@@ -393,7 +388,7 @@ sequenceDiagram
 
     Client->>FrontMCP: Request + Bearer token
 
-    alt Public/Orchestrated Mode
+    alt Public/Local/Remote Mode
         FrontMCP->>JwksService: Get gateway JWKS
         FrontMCP->>FrontMCP: Verify JWT locally
     else Transparent Mode

@@ -91,7 +91,7 @@ const Input = z.object({
   description: 'Echoes the input message back',
   inputSchema: Input,
 })
-export class EchoTool extends ToolContext<typeof Input> {
+export class EchoTool extends ToolContext {
   async execute(input: z.infer<typeof Input>) {
     return this.text(input.message);
   }

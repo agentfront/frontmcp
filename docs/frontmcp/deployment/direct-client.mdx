@@ -51,14 +51,11 @@ FrontMCP supports multiple ways to connect to MCP servers. Choose based on your 
 ### Basic Connection
 
 ```typescript
-import { connect } from '@frontmcp/sdk/direct';
-import { MyServer } from './server';
+import { connect } from '@frontmcp/sdk';
+import MyServer from './server';
 
-// Get your FrontMCP scope
-const scope = await MyServer.createScope();
-
-// Connect directly
-const client = await connect(scope);
+// Connect directly using your decorated server class
+const client = await connect(MyServer);
 
 // Use the client
 const tools = await client.listTools();
@@ -66,6 +63,15 @@ const result = await client.callTool('my-tool', { arg: 'value' });
 
 // Clean up
 await client.close();
+```
+
+You can also pass a flat config object instead of a decorated class:
+
+```typescript
+const client = await connect({
+  info: { name: 'inline', version: '1.0.0' },
+  tools: [MyTool, AnotherTool],
+});
 ```
 
 ### LLM-Specific Connections
@@ -76,20 +82,24 @@ For automatic tool/result formatting based on LLM platform:
 import {
   connectOpenAI,
   connectClaude,
-  connectVercelAI
-} from '@frontmcp/sdk/direct';
+  connectLangChain,
+  connectVercelAI,
+} from '@frontmcp/sdk';
 
 // OpenAI format (function calling)
-const openaiClient = await connectOpenAI(scope, {
+const openaiClient = await connectOpenAI(MyServer, {
   authToken: 'my-token',
-  session: { user: { sub: 'user-123' } }
+  session: { user: { sub: 'user-123' } },
 });
 
 // Claude format (tool_use blocks)
-const claudeClient = await connectClaude(scope);
+const claudeClient = await connectClaude(MyServer);
+
+// LangChain format
+const langchainClient = await connectLangChain(MyServer);
 
 // Vercel AI format
-const vercelClient = await connectVercelAI(scope);
+const vercelClient = await connectVercelAI(MyServer);
 ```
 
 ---
@@ -208,7 +218,7 @@ Elicitation allows tools to request user input during execution. DirectClient ca
 ### Register Handler
 
 ```typescript
-import type { ElicitationHandler } from '@frontmcp/sdk/direct';
+import type { ElicitationHandler } from '@frontmcp/sdk';
 
 const handler: ElicitationHandler = async (request) => {
   // request: { elicitId, message, requestedSchema, mode, expiresAt }
@@ -393,7 +403,7 @@ try {
 
 ## Type Exports
 
-All types are exported from `@frontmcp/sdk/direct`:
+All types are exported from `@frontmcp/sdk`:
 
 ```typescript
 import type {
@@ -423,7 +433,7 @@ import type {
 
   // Logging
   McpLogLevel,
-} from '@frontmcp/sdk/direct';
+} from '@frontmcp/sdk';
 ```
 
 ---

@@ -56,7 +56,11 @@ interface SkillContent {
     required?: boolean;
   }>;
   parameters?: SkillParameter[];
-  examples?: SkillExample[];
+  examples?: Array<{
+    scenario: string;
+    parameters?: Record<string, unknown>;
+    expectedOutcome?: string;
+  }>;
 
   // Agent Skills spec fields
   license?: string;
@@ -64,6 +68,14 @@ interface SkillContent {
   specMetadata?: Record<string, string>;
   allowedTools?: string;
   resources?: SkillResources;
+
+  // Optional fields surfaced by dynamic skill providers
+  rating?: number;
+  category?: string;
+  resolvedReferences?: SkillReferenceInfo[];
+  resolvedExamples?: SkillExampleInfo[];
+  actions?: SkillAction[];
+  bundleVersion?: string;
 }
 
 interface SkillResources {

@@ -18,14 +18,14 @@ Commands for building, testing, and debugging your FrontMCP server.
 | Command              | Description                                                   |
 | -------------------- | ------------------------------------------------------------- |
 | `dev`                | Start in development mode (tsx --watch + async type-check)    |
-| `build`              | Compile entry with TypeScript (tsc)                           |
-| `build --target node` | Build distributable executable bundle (esbuild)               |
+| `build`              | Build for a deployment target (defaults to `--target node`)   |
+| `build --target node` | Build distributable executable bundle (esbuild + tsc)         |
 | `build --target cli`  | Build CLI executable with subcommands per tool                |
 | `build --target mcpb` | Package server as an `.mcpb` archive for MCPB-aware clients   |
 | `mcpb validate <path>` | Validate a `.mcpb` archive against the MCPB v0.3 spec        |
 | `test`               | Run E2E tests with auto-injected Jest configuration           |
 | `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
-| `doctor`             | Check Node/npm versions and tsconfig requirements. Use `--fix` to auto-repair (installs missing deps, creates app directories) |
+| `doctor`             | Check Node/npm versions and tsconfig requirements             |
 | `inspector`          | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`)  |
 | `create [name]`      | Scaffold a new FrontMCP project (interactive if name omitted) |
 | `socket <entry>`     | Start Unix socket daemon for local MCP server                 |
@@ -57,29 +57,6 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 | `install <source>` | Install an MCP app from npm, local path, or git |
 | `uninstall <name>` | Remove an installed MCP app                     |
 | `configure <name>` | Re-run setup questionnaire for an installed app |
-| `esm-update [app-name]` | Check and apply ESM package updates |
-
----
-
-### ESM Update Options
-
-| Option | Description |
-| -------------- | ----------------------------------------------- |
-| `--check-only` | Only check for updates, don't apply them |
-| `--all` | Update all ESM-installed apps |
-
-```bash
-# Check all ESM apps for updates
-frontmcp package esm-update --all --check-only
-
-# Apply updates for a specific app
-frontmcp package esm-update my-esm-app
-
-# Apply all pending updates
-frontmcp package esm-update --all
-```
-
-See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM dynamic loading.
 
 ---
 
@@ -147,6 +124,7 @@ See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM
 | `--cicd`            | Enable GitHub Actions CI/CD                                  |
 | `--no-cicd`         | Disable GitHub Actions CI/CD                                 |
 | `--nx`              | Scaffold an Nx monorepo workspace                            |
+| `--skills <bundle>` | Skills bundle: `recommended`, `minimal`, `full`, `none` (default: `recommended`) |
 
 <Info>
 The `create` command automatically initializes a git repository and creates an initial commit after scaffolding.
@@ -242,25 +220,28 @@ The generated CLI organizes commands into five groups:
 
 ### Configuration
 
-Control the generated CLI via the `cli` block in `frontmcp.config.js`:
+Control the generated CLI via the `cli` block on the `cli` deployment in `frontmcp.config.js`:
 
 ```js
 module.exports = {
   name: 'myapp',
-  cli: {
-    enabled: true,
-    outputDefault: 'text',
-    authRequired: false,
-    description: 'My MCP CLI',
-    excludeTools: [],
-    oauth: {
-      serverUrl: 'https://auth.example.com',
-      clientId: 'my-app',
-      defaultScope: 'read write',
-      portRange: [17830, 17850],
-      timeout: 120000,
+  deployments: [
+    {
+      target: 'cli',
+      cli: {
+        outputDefault: 'text',
+        authRequired: false,
+        description: 'My MCP CLI',
+        excludeTools: [],
+        oauth: {
+          serverUrl: 'https://auth.example.com',
+          clientId: 'my-app',
+          defaultScope: 'read write',
+          portRange: [17830, 17850],
+        },
+      },
     },
-  },
+  ],
 };
 ```
 

@@ -34,6 +34,18 @@ FrontMCP is a TypeScript-first framework for building production-ready MCP serve
   <Card title="Skill-Based Workflows" icon="graduation-cap" href="/frontmcp/features/skill-based-workflows">
     Teach AI multi-step workflows with @Skill and Agent Skills spec support
   </Card>
+  <Card title="Channels" icon="bell" href="/frontmcp/features/channels">
+    Push real-time webhook, event, and chat notifications into Claude Code
+  </Card>
+  <Card title="Background Tasks" icon="clock" href="/frontmcp/features/background-tasks">
+    Durable, pollable state machines for long-running tool calls
+  </Card>
+  <Card title="Observability" icon="activity" href="/frontmcp/features/observability">
+    Built-in OpenTelemetry tracing and structured logging
+  </Card>
+  <Card title="Environment Awareness" icon="microchip" href="/frontmcp/features/environment-awareness">
+    Conditionally expose entries based on platform, runtime, and environment
+  </Card>
   <Card title="Jobs" icon="briefcase" href="/frontmcp/servers/jobs">
     Define typed jobs with retries, timeouts, and background execution
   </Card>
@@ -68,6 +80,7 @@ graph TD
 
     A1 --> J1["@Job: EnrichLead"]
     A1 --> WF1["@Workflow: LeadPipeline"]
+    A1 --> C1["@Channel: DeployAlerts"]
 
     FM -.-> PL["@Plugin: Cache"]
     FM -.-> AD["@Adapter: OpenAPI"]
@@ -91,6 +104,7 @@ graph TD
 | **Adapters**  | Dynamic capability generation        | `@Adapter`    | [Adapters](/frontmcp/adapters/overview)        |
 | **Jobs**      | Reliable executable units of work    | `@Job`        | [Jobs](/frontmcp/servers/jobs)                 |
 | **Workflows** | DAG-based multi-step pipelines       | `@Workflow`   | [Workflows](/frontmcp/servers/workflows)       |
+| **Channels**  | Server-pushed real-time notifications | `@Channel`   | [Channels](/frontmcp/features/channels)        |
 | **Flows**     | Request lifecycle pipelines          | `@Flow`       | [Flows](/frontmcp/servers/flows)               |
 | **Apps**      | Modular capability containers        | `@App`        | [Apps](/frontmcp/servers/apps)                 |
 | **ESM Packages** | Runtime npm package loading       | `App.esm()`   | [ESM Packages](/frontmcp/servers/esm-packages) |

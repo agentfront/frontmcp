@@ -126,6 +126,8 @@
                   "frontmcp/authentication/cimd",
                   "frontmcp/authentication/progressive",
                   "frontmcp/authentication/token",
+                  "frontmcp/authentication/authorities",
+                  "frontmcp/authentication/skills-auth",
                   "frontmcp/authentication/production",
                   "frontmcp/authentication/demo-servers"
                 ]
@@ -185,6 +187,7 @@
               "frontmcp/extensibility/providers",
               "frontmcp/extensibility/request-context",
               "frontmcp/extensibility/logging",
+              "frontmcp/extensibility/config-yaml",
               {
                 "group": "Plugins",
                 "pages": [
@@ -194,6 +197,7 @@
                   "frontmcp/plugins/cache-plugin",
                   "frontmcp/plugins/remember-plugin",
                   "frontmcp/plugins/feature-flags-plugin",
+                  "frontmcp/plugins/approval-plugin",
                   {
                     "group": "CodeCall",
                     "pages": [
@@ -303,7 +307,6 @@
                   "frontmcp/guides/testing-plugins-and-hooks"
                 ]
               },
-              "frontmcp/guides/ui-library",
               {
                 "group": "Nx Plugin",
                 "pages": [
@@ -394,7 +397,9 @@
               "frontmcp/sdk-reference/errors/normalization-errors",
               "frontmcp/sdk-reference/errors/sdk-errors",
               "frontmcp/sdk-reference/errors/auth-internal-errors",
-              "frontmcp/sdk-reference/errors/esm-errors"
+              "frontmcp/sdk-reference/errors/esm-errors",
+              "frontmcp/sdk-reference/errors/task-errors",
+              "frontmcp/sdk-reference/errors/workflow-errors"
             ]
           },
           {
@@ -412,6 +417,7 @@
                   "frontmcp/nx-plugin/generators/resource",
                   "frontmcp/nx-plugin/generators/prompt",
                   "frontmcp/nx-plugin/generators/skill",
+                  "frontmcp/nx-plugin/generators/skill-dir",
                   "frontmcp/nx-plugin/generators/agent",
                   "frontmcp/nx-plugin/generators/provider",
                   "frontmcp/nx-plugin/generators/plugin",

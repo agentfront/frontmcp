@@ -180,7 +180,7 @@ Detect the AI platform making the request.
 get platform(): AIPlatformType
 ```
 
-Values: `'openai' | 'claude' | 'gemini' | 'vercel-ai' | 'unknown'`
+Values: `'openai' | 'claude' | 'gemini' | 'cursor' | 'continue' | 'cody' | 'generic-mcp' | 'ext-apps' | 'unknown'`
 
 ```typescript
 if (this.platform === 'claude') {
@@ -206,12 +206,23 @@ if (client) {
 
 ### History
 
+Entries are `HistoryEntry` records, not bare values:
+
+```typescript
+type HistoryEntry<T> = {
+  at: number;          // ms timestamp
+  stage?: string;      // activeStage at time of change
+  value: T | undefined;
+  note?: string;
+};
+```
+
 #### inputHistory
 
 History of input changes during execution.
 
 ```typescript
-get inputHistory(): ReadonlyArray<In>
+get inputHistory(): ReadonlyArray<HistoryEntry<In>>
 ```
 
 #### outputHistory
@@ -219,7 +230,7 @@ get inputHistory(): ReadonlyArray<In>
 History of output changes during execution.
 
 ```typescript
-get outputHistory(): ReadonlyArray<Out>
+get outputHistory(): ReadonlyArray<HistoryEntry<Out>>
 ```
 
 ## Full Example
@@ -249,10 +260,7 @@ const outputSchema = z.object({
     destructiveHint: true,
   },
 })
-class ManageResourceTool extends ToolContext<
-  typeof inputSchema,
-  typeof outputSchema
-> {
+class ManageResourceTool extends ToolContext {
   async execute(input) {
     // Log start
     await this.notify(`Starting ${input.action} operation`, 'info');

@@ -163,3 +163,31 @@ import { UnsupportedContentTypeError } from '@frontmcp/sdk';
 throw new UnsupportedContentTypeError('text/xml');
 // "Unsupported content-type: text/xml"
 ```
+
+---
+
+### TransportServiceNotAvailableError
+
+Thrown when the transport service is requested but not registered (typically a misconfigured server bootstrap).
+
+| Property     | Type      | Value                              |
+| ------------ | --------- | ---------------------------------- |
+| `code`       | `string`  | `TRANSPORT_SERVICE_NOT_AVAILABLE`  |
+| `isPublic`   | `boolean` | `false`                            |
+
+---
+
+### SessionClaimConflictError
+
+Thrown in HA deployments when another pod claims an active session ID. The local pod must drop its in-memory state for that session.
+
+| Property     | Type      | Value                    |
+| ------------ | --------- | ------------------------ |
+| `code`       | `string`  | `SESSION_CLAIM_CONFLICT` |
+| `isPublic`   | `boolean` | `false`                  |
+
+```typescript
+import { SessionClaimConflictError } from '@frontmcp/sdk';
+
+throw new SessionClaimConflictError(sessionId);
+```

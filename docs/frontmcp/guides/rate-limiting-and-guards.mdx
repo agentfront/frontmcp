@@ -42,7 +42,7 @@ By the end of this guide, your server will have:
         partitionBy: 'userId',
       },
     })
-    class SearchDocumentsTool extends ToolContext<typeof SearchDocumentsTool> {
+    class SearchDocumentsTool extends ToolContext {
       async execute({ query, limit }: { query: string; limit: number }) {
         return { results: await this.get(SearchService).search(query, limit) };
       }
@@ -59,7 +59,7 @@ By the end of this guide, your server will have:
     import { FrontMcp } from '@frontmcp/sdk';
 
     @FrontMcp({
-      name: 'my-server',
+      info: { name: 'my-server', version: '1.0.0' },
       throttle: { enabled: true },
       tools: [SearchDocumentsTool],
     })
@@ -101,7 +101,7 @@ Prevent expensive tools from running too many instances simultaneously.
         queueTimeoutMs: 15_000,
       },
     })
-    class GenerateReportTool extends ToolContext<typeof GenerateReportTool> {
+    class GenerateReportTool extends ToolContext {
       async execute({ reportId }: { reportId: string }) {
         return await this.get(ReportService).generatePdf(reportId);
       }
@@ -140,7 +140,7 @@ Protect against hanging requests by setting a maximum execution time.
       inputSchema: { text: z.string() },
       timeout: { executeMs: 30_000 },
     })
-    class AnalyzeTool extends ToolContext<typeof AnalyzeTool> {
+    class AnalyzeTool extends ToolContext {
       async execute({ text }: { text: string }) {
         return await this.get(LlmService).analyze(text);
       }
@@ -155,7 +155,7 @@ Protect against hanging requests by setting a maximum execution time.
 
     ```typescript
     @FrontMcp({
-      name: 'my-server',
+      info: { name: 'my-server', version: '1.0.0' },
       throttle: {
         enabled: true,
         defaultTimeout: { executeMs: 15_000 },
@@ -179,7 +179,7 @@ Add a server-wide rate limit that applies to all requests, regardless of which t
   <Step title="Configure global limits">
     ```typescript
     @FrontMcp({
-      name: 'my-server',
+      info: { name: 'my-server', version: '1.0.0' },
       throttle: {
         enabled: true,
         global: {
@@ -208,7 +208,7 @@ Add a server-wide rate limit that applies to all requests, regardless of which t
       inputSchema: { id: z.string() },
       rateLimit: { maxRequests: 5, windowMs: 60_000, partitionBy: 'userId' },
     })
-    class ExpensiveTool extends ToolContext<typeof ExpensiveTool> { /* ... */ }
+    class ExpensiveTool extends ToolContext { /* ... */ }
     ```
 
     Even if the global limit allows 500 requests/min per IP, this tool is limited to 5 requests/min per user.
@@ -225,7 +225,7 @@ Block malicious IPs and restrict access to known networks.
   <Step title="Configure IP filtering">
     ```typescript
     @FrontMcp({
-      name: 'my-server',
+      info: { name: 'my-server', version: '1.0.0' },
       throttle: {
         enabled: true,
         ipFilter: {
@@ -282,7 +282,7 @@ In-memory storage works for development but does not persist across restarts or 
   <Step title="Configure Redis storage">
     ```typescript
     @FrontMcp({
-      name: 'production-server',
+      info: { name: 'production-server', version: '1.0.0' },
       throttle: {
         enabled: true,
         storage: {
@@ -333,12 +333,12 @@ Test that your guards work correctly using the FrontMCP testing utilities.
 ### Testing Rate Limits
 
 ```typescript
-import { createTestClient } from '@frontmcp/testing';
+import { connect } from '@frontmcp/sdk';
 import { MyApp } from './app';
 
 describe('SearchDocumentsTool rate limiting', () => {
   it('should reject after exceeding rate limit', async () => {
-    const client = await createTestClient(MyApp);
+    const client = await connect(MyApp);
 
     // Send requests up to the limit
     for (let i = 0; i < 30; i++) {
@@ -358,7 +358,7 @@ describe('SearchDocumentsTool rate limiting', () => {
 ```typescript
 describe('GenerateReportTool concurrency', () => {
   it('should limit concurrent executions', async () => {
-    const client = await createTestClient(MyApp);
+    const client = await connect(MyApp);
 
     // Start 3 concurrent requests (limit is 2, no queue)
     const results = await Promise.allSettled([
@@ -383,7 +383,7 @@ describe('AnalyzeTool timeout', () => {
       () => new Promise((resolve) => setTimeout(resolve, 60_000)),
     );
 
-    const client = await createTestClient(MyApp);
+    const client = await connect(MyApp);
     const result = await client.callTool('llm:analyze', { text: 'test' });
     expect(result.isError).toBe(true);
   });
@@ -407,7 +407,7 @@ import { z } from '@frontmcp/sdk';
   rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
   timeout: { executeMs: 10_000 },
 })
-class SearchTool extends ToolContext<typeof SearchTool> {
+class SearchTool extends ToolContext {
   async execute({ query }: { query: string }) {
     return { results: [] };
   }
@@ -421,14 +421,14 @@ class SearchTool extends ToolContext<typeof SearchTool> {
   concurrency: { maxConcurrent: 2, queueTimeoutMs: 10_000 },
   timeout: { executeMs: 60_000 },
 })
-class ReportTool extends ToolContext<typeof ReportTool> {
+class ReportTool extends ToolContext {
   async execute({ id }: { id: string }) {
     return { url: `/reports/${id}.pdf` };
   }
 }
 
 @FrontMcp({
-  name: 'guarded-server',
+  info: { name: 'guarded-server', version: '1.0.0' },
   throttle: {
     enabled: true,
     storage: {

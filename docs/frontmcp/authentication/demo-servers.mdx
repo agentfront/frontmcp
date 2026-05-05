@@ -11,12 +11,12 @@ FrontMCP bundles three ready-to-serve authentication demos under `apps/e2e/**`. 
 
 | Project                 | Mode                   | Default port | Highlights                                                                      | Serve command                                     |
 | ----------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `demo-e2e-public`       | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `pnpm nx serve demo-e2e-public --port 3003`       |
-| `demo-e2e-orchestrated` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `pnpm nx serve demo-e2e-orchestrated --port 3005` |
-| `demo-e2e-transparent`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `pnpm nx serve demo-e2e-transparent --port 3004`  |
+| `demo-e2e-public`       | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `yarn nx serve demo-e2e-public --port 3003`       |
+| `demo-e2e-orchestrated` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `yarn nx serve demo-e2e-orchestrated --port 3005` |
+| `demo-e2e-transparent`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `yarn nx serve demo-e2e-transparent --port 3004`  |
 
 <Note>
-All commands assume `pnpm install` has already been run at the repo root. Replace the port if it conflicts with another service.
+All commands assume `yarn install` has already been run at the repo root. Replace the port if it conflicts with another service.
 </Note>
 
 ## Run a demo locally
@@ -35,7 +35,7 @@ export IDP_EXPECTED_AUDIENCE="https://api.example.com"
 
 </Step>
 <Step title="Serve the project">
-Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log. Requests are available at `http://localhost:<port>`.
+Run `yarn nx serve <project> --port <port>` and wait for the `Listening on` log. Requests are available at `http://localhost:<port>`.
 
 <Check>
 `curl http://localhost:<port>/health` returns `ok` when the server is ready.
@@ -49,19 +49,16 @@ Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log.
 
 ```ts title="apps/e2e/demo-e2e-public/src/main.ts"
 @FrontMcp({
+  info: { name: 'Demo E2E Public', version: '0.1.0' },
+  apps: [NotesApp],
   auth: {
     mode: 'public',
-    sessionTtl: 3600,
-    anonymousScopes: ['anonymous'],
-  },
-  transport: {
-    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
   },
 });
 ```
 
 - Exercises the `auth.publicAccess` path without any login UI.
-- Uses the `full` protocol preset—all transports enabled with relaxed session requirements—for easy smoke tests.
+- Uses framework defaults for transports (Streamable HTTP + SSE + JSON), suitable for smoke tests.
 
 <Tip>
 Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures that still cover transport-level behavior.
@@ -73,18 +70,32 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
 
 ```ts title="apps/e2e/demo-e2e-orchestrated/src/main.ts"
 @FrontMcp({
+  info: { name: 'Demo Orchestrated Auth', version: '0.1.0' },
+  apps: [NotesApp, TasksApp],
   auth: {
     mode: 'local',
     consent: {
       enabled: true,
       groupByApp: true,
       showDescriptions: true,
+      allowSelectAll: true,
       requireSelection: true,
+      rememberConsent: true,
     },
+    tokenStorage: 'memory', // Use { redis: ... } in production
     allowDefaultPublic: false,
+    anonymousScopes: ['anonymous'],
   },
   transport: {
-    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
+    sessionMode: 'stateful',
+    protocol: {
+      sse: true,
+      streamable: true,
+      json: true,
+      stateless: false,
+      legacy: false,
+      strictSession: false,
+    },
   },
 });
 ```
@@ -112,9 +123,6 @@ The demo login accepts any email address. Replace it with a real IdP before expo
     expectedAudience: process.env.IDP_EXPECTED_AUDIENCE!,
     requiredScopes: [],
     allowAnonymous: false,
-  },
-  transport: {
-    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
   },
 });
 ```

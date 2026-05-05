@@ -119,7 +119,7 @@ import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk'
 const requestLoggerProvider = {
   provide: 'RequestLogger',
   scope: ProviderScope.CONTEXT,
-  factory: (ctx: FrontMcpContext) => ({
+  useFactory: (ctx: FrontMcpContext) => ({
     log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
   }),
   inject: [FRONTMCP_CONTEXT],
@@ -193,7 +193,7 @@ import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@fro
 const sessionCacheProvider = {
   provide: 'SessionCache',
   scope: ProviderScope.CONTEXT,
-  factory: (ctx: FrontMcpContext, redis: RedisProvider) => {
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => {
     const cacheKey = `cache:${ctx.sessionId}`;
     return {
       async get(key: string) {
@@ -216,7 +216,7 @@ import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@fro
 const sessionRedisProvider = {
   provide: 'SessionRedis',
   scope: ProviderScope.CONTEXT,
-  factory: (ctx: FrontMcpContext, redis: RedisProvider) => {
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => {
     const safeSid = ctx.sessionId.replace(/[:\s]/g, '_');
     const prefix = `:session:${safeSid}:`;
 
@@ -251,7 +251,7 @@ When running behind a load balancer:
 const crossRequestDataProvider = {
   provide: 'CrossRequestData',
   scope: ProviderScope.CONTEXT,
-  factory: (ctx: FrontMcpContext, redis: RedisProvider) => ({
+  useFactory: (ctx: FrontMcpContext, redis: RedisProvider) => ({
     async setUserPreference(key: string, value: any) {
       // Data is stored in Redis, accessible from any request/pod
       await redis.setValue(`pref:${ctx.sessionId}:${key}`, value);

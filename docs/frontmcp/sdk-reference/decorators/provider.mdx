@@ -9,7 +9,7 @@ icon: "syringe"
 ```typescript
 import { Provider } from '@frontmcp/sdk';
 
-@Provider()
+@Provider({ name: 'UserService' })
 export class UserService {
   async findById(id: string) {
     return { id, name: 'John Doe' };
@@ -24,21 +24,26 @@ export class UserService {
 ## Signature
 
 ```typescript
-function Provider(providedMetadata?: ProviderMetadata): ClassDecorator
+function Provider(providedMetadata: ProviderMetadata): ClassDecorator
 ```
 
 ## Configuration Options
 
-| Property | Type                                     | Default       | Description              |
-| -------- | ---------------------------------------- | ------------- | ------------------------ |
-| `scope`  | `'singleton' \| 'scoped' \| 'transient'` | `'singleton'` | Provider lifecycle scope |
+| Property      | Type                    | Default    | Description                        |
+| ------------- | ----------------------- | ---------- | ---------------------------------- |
+| `name`        | `string` (required)     | —          | Human-readable provider name       |
+| `id`          | `string`                | —          | Optional unique identifier         |
+| `description` | `string`                | —          | Optional description               |
+| `scope`       | `'global' \| 'context'` | `'global'` | Provider lifetime scope            |
 
-### Singleton (Default)
+`'session'` and `'request'` are kept as deprecated aliases of `'context'`.
+
+### Global (Default)
 
 Single instance shared across all requests:
 
 ```typescript
-@Provider() // or @Provider({ scope: 'singleton' })
+@Provider({ name: 'ConfigService' }) // scope defaults to 'global'
 class ConfigService {
   private config: Record<string, string>;
 
@@ -52,12 +57,12 @@ class ConfigService {
 }
 ```
 
-### Scoped
+### Context
 
-New instance per request/session:
+New instance per execution context (combines session + request scope):
 
 ```typescript
-@Provider({ scope: 'scoped' })
+@Provider({ name: 'RequestLogger', scope: 'context' })
 class RequestLogger {
   private logs: string[] = [];
 
@@ -68,17 +73,6 @@ class RequestLogger {
   getLogs() {
     return this.logs;
   }
-}
-```
-
-### Transient
-
-New instance every time it's injected:
-
-```typescript
-@Provider({ scope: 'transient' })
-class UniqueIdGenerator {
-  readonly id = crypto.randomUUID();
 }
 ```
 
@@ -123,7 +117,10 @@ class DataResource extends ResourceContext {
 import { Agent, AgentContext } from '@frontmcp/sdk';
 import { AnalyticsService } from './analytics.service';
 
-@Agent({ name: 'analyst', llm: { provider: 'openai', model: 'gpt-4o' } })
+@Agent({
+  name: 'analyst',
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
+})
 class AnalystAgent extends AgentContext {
   async execute(input) {
     const analytics = this.get(AnalyticsService);
@@ -137,7 +134,7 @@ class AnalystAgent extends AgentContext {
 Providers can depend on other providers:
 
 ```typescript
-@Provider()
+@Provider({ name: 'DatabaseService' })
 class DatabaseService {
   private pool: Pool;
 
@@ -145,12 +142,12 @@ class DatabaseService {
     this.pool = createPool(process.env.DATABASE_URL);
   }
 
-  query(sql: string) {
-    return this.pool.query(sql);
+  query(sql: string, params?: unknown[]) {
+    return this.pool.query(sql, params);
   }
 }
 
-@Provider()
+@Provider({ name: 'UserRepository' })
 class UserRepository {
   constructor(private db: DatabaseService) {}
 
@@ -232,7 +229,7 @@ export interface CacheInterface {
 }
 
 // Implementation
-@Provider()
+@Provider({ name: 'RedisCacheService' })
 class RedisCacheService implements CacheInterface {
   async get(key: string) { /* ... */ }
   async set(key: string, value: string) { /* ... */ }
@@ -303,7 +300,7 @@ interface NotificationService {
 }
 
 // Provider implementations
-@Provider()
+@Provider({ name: 'ConfigService' })
 class ConfigService {
   private env = process.env;
 
@@ -318,7 +315,7 @@ class ConfigService {
   }
 }
 
-@Provider()
+@Provider({ name: 'EmailNotificationService' })
 class EmailNotificationService implements NotificationService {
   constructor(private config: ConfigService) {}
 
@@ -329,7 +326,7 @@ class EmailNotificationService implements NotificationService {
   }
 }
 
-@Provider({ scope: 'scoped' })
+@Provider({ name: 'RequestTracker', scope: 'context' })
 class RequestTracker {
   private startTime = Date.now();
   private events: string[] = [];

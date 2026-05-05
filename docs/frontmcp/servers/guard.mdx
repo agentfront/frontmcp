@@ -38,7 +38,7 @@ import { z } from '@frontmcp/sdk';
   rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
   timeout: { executeMs: 10_000 },
 })
-class SearchTool extends ToolContext<typeof SearchTool> {
+class SearchTool extends ToolContext {
   async execute({ query }: { query: string }) {
     return { results: await this.get(SearchService).search(query) };
   }
@@ -97,7 +97,7 @@ FrontMCP uses a **sliding window** algorithm for rate limiting. It provides smoo
     partitionBy: 'userId',  // per user
   },
 })
-class ApiCallTool extends ToolContext<typeof ApiCallTool> {
+class ApiCallTool extends ToolContext {
   async execute({ endpoint }: { endpoint: string }) {
     return await this.get(ApiService).call(endpoint);
   }
@@ -150,7 +150,7 @@ Partition keys determine how rate limits are bucketed:
     partitionBy: (ctx) => ctx.userId?.split(':')[0] ?? 'anonymous',
   },
 })
-class TenantQueryTool extends ToolContext<typeof TenantQueryTool> { /* ... */ }
+class TenantQueryTool extends ToolContext { /* ... */ }
 ```
 
 ---
@@ -171,7 +171,7 @@ Concurrency control uses a **distributed semaphore** to limit how many instances
     partitionBy: 'global',   // Shared across all users
   },
 })
-class GenerateReportTool extends ToolContext<typeof GenerateReportTool> {
+class GenerateReportTool extends ToolContext {
   async execute({ reportId }: { reportId: string }) {
     return await this.get(ReportService).generate(reportId);
   }
@@ -188,7 +188,7 @@ Set `maxConcurrent: 1` to ensure only one execution at a time:
   inputSchema: { version: z.string() },
   concurrency: { maxConcurrent: 1 },
 })
-class MigrateTool extends ToolContext<typeof MigrateTool> { /* ... */ }
+class MigrateTool extends ToolContext { /* ... */ }
 ```
 
 ### Queue Behavior
@@ -214,7 +214,7 @@ Timeout wraps the `execute` stage with a deadline. If execution exceeds the conf
   inputSchema: { text: z.string() },
   timeout: { executeMs: 30_000 },  // 30-second deadline
 })
-class SummarizeTool extends ToolContext<typeof SummarizeTool> {
+class SummarizeTool extends ToolContext {
   async execute({ text }: { text: string }) {
     return await this.get(LlmService).summarize(text);
   }
@@ -427,7 +427,7 @@ Agents support the same guard options as tools:
   concurrency: { maxConcurrent: 2 },
   timeout: { executeMs: 120_000 },
 })
-class ResearchAgent extends AgentContext<typeof ResearchAgent> {
+class ResearchAgent extends AgentContext {
   async execute(input: unknown) {
     // Agent execution with guard protection
   }

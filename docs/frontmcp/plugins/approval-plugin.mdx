@@ -426,11 +426,13 @@ The `sessionId` is **never** sent to external webhooks. PKCE ensures only the or
 
 ## Storage Options
 
+The `storage` option uses the `StorageConfig` type from `@frontmcp/utils` and supports `memory`, `redis`, `vercel-kv`, `upstash`, and `auto`.
+
 ### Auto-Detect (Default)
 
 ```ts
 ApprovalPlugin.init({
-  storage: { type: 'auto' }, // Uses Redis if available, else memory
+  storage: { type: 'auto' }, // Detects from env vars (Redis, Vercel KV, Upstash, or memory)
 });
 ```
 
@@ -450,10 +452,14 @@ ApprovalPlugin.init({
 ApprovalPlugin.init({
   storage: {
     type: 'redis',
-    config: {
-      host: 'localhost',
-      port: 6379,
-      password: process.env.REDIS_PASSWORD,
+    redis: {
+      config: {
+        host: 'localhost',
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+      // Or, alternatively: url: 'redis://user:pass@host:6379/0'
+      // Or, alternatively: client: existingIoRedisClient
     },
   },
 });
@@ -464,7 +470,7 @@ ApprovalPlugin.init({
 ```ts
 import { createStorage } from '@frontmcp/utils';
 
-const storage = await createStorage({ type: 'redis', ... });
+const storage = await createStorage({ type: 'redis', redis: { url: 'redis://localhost' } });
 
 ApprovalPlugin.init({
   storageInstance: storage,
@@ -528,9 +534,11 @@ const approvalPlugin = ApprovalPlugin.init({
   },
   storage: {
     type: 'redis',
-    config: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+    redis: {
+      config: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+      },
     },
   },
 });

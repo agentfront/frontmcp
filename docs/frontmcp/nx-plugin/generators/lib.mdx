@@ -21,7 +21,7 @@ nx g @frontmcp/nx:lib my-lib
 | `directory`   | `string`                                              | `libs/<name>` | The directory of the library                         |
 | `libType`     | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic`     | The type of library to generate                      |
 | `publishable` | `boolean`                                             | `false`       | Generate a publishable library with package.json     |
-| `importPath`  | `string`                                              | —             | The npm scope/import path (required for publishable) |
+| `importPath`  | `string`                                              | `@frontmcp/<name>` | The npm scope/import path (required for publishable) |
 | `tags`        | `string`                                              | —             | Comma-separated tags for the project                 |
 
 ## Library Types
@@ -82,10 +82,10 @@ libs/github-tools/src/
 └── index.ts
 ```
 
-Usage in an app:
+Usage in an app (uses the default `@frontmcp/<name>` import path, or pass `--importPath` to override):
 
 ```ts
-import { GithubToolsTools } from '@libs/github-tools';
+import { GithubToolsTools } from '@frontmcp/github-tools';
 
 @App({
   id: 'my-app',

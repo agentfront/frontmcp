@@ -201,7 +201,7 @@ const outputSchema = {
   retry: { maxAttempts: 3, backoffMs: 1000 },
   timeout: 60000,
 })
-class BatchFetchJob extends JobContext<typeof inputSchema, typeof outputSchema> {
+class BatchFetchJob extends JobContext {
   async execute(input) {
     this.log(`Fetching ${input.urls.length} URLs (attempt ${this.attempt})`);
 

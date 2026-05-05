@@ -3,32 +3,38 @@ title: Authentication Overview
 sidebarTitle: Overview
 slug: authentication/overview
 icon: shield-check
-description: Understanding FrontMCP's three-tier authentication system
+description: Understanding FrontMCP's authentication modes
 ---
 
-FrontMCP implements a flexible three-tier authentication system designed for both development simplicity and production security.
+FrontMCP implements a flexible authentication system with four modes designed for both development simplicity and production security.
 
 ## Authentication Modes
 
-FrontMCP supports three authentication modes, each designed for different deployment scenarios:
+FrontMCP supports four authentication modes, each designed for different deployment scenarios:
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Public Mode" icon="unlock">
-    No authentication required. Anonymous sessions are auto-generated for all requests.
+    `mode: 'public'` — No authentication required. Anonymous sessions are auto-generated for all requests.
 
     **Best for:** Development, testing, public APIs
 
   </Card>
   <Card title="Transparent Mode" icon="arrow-right-arrow-left">
-    Pass-through tokens from external identity providers. FrontMCP validates tokens against upstream JWKS.
+    `mode: 'transparent'` — Pass-through tokens from external identity providers. FrontMCP validates tokens against upstream JWKS.
 
     **Best for:** Existing Auth0, Okta, Azure AD integrations
 
   </Card>
-  <Card title="Orchestrated Mode" icon="sitemap">
-    Full OAuth 2.1 authorization server. Can be self-contained (local) or proxy to upstream IdP (remote).
+  <Card title="Local Mode" icon="server">
+    `mode: 'local'` — Built-in OAuth 2.1 authorization server. FrontMCP issues and validates its own tokens.
 
-    **Best for:** Multi-app scenarios, federated auth, progressive authorization
+    **Best for:** Self-contained auth, multi-app scenarios, progressive authorization
+
+  </Card>
+  <Card title="Remote Mode" icon="sitemap">
+    `mode: 'remote'` — FrontMCP runs as an OAuth 2.1 server that proxies user authentication to an upstream IdP.
+
+    **Best for:** Federated auth, IdPs without DCR, custom consent layer
 
   </Card>
 </CardGroup>
@@ -93,11 +99,13 @@ Authentication can be configured at two levels:
 
 ## OAuth 2.1 Compliance
 
-FrontMCP's orchestrated mode is fully OAuth 2.1 compliant:
+FrontMCP's `local` mode is fully OAuth 2.1 compliant. In `remote` mode, FrontMCP's own endpoints (the surface the MCP client talks to) are OAuth 2.1-aligned, but the end-to-end behavior also depends on the upstream identity provider FrontMCP is proxying to.
 
-<Check>**PKCE Required** - Only S256 code challenge method supported</Check>
+The guarantees below apply to FrontMCP's own implementation:
+
+<Check>**PKCE Required** - Only S256 code challenge method supported (downstream)</Check>
 <Check>**Authorization Code Flow** - No implicit or password grants</Check>
-<Check>**Refresh Token Rotation** - Tokens rotate on each use</Check>
+<Check>**Refresh Token Rotation** - FrontMCP-issued refresh tokens rotate on each use (`local` mode; `remote` mode mirrors upstream behavior)</Check>
 <Check>**JWT Access Tokens** - Signed with RS256 or ES256</Check>
 
 ## Session Management
@@ -136,7 +144,7 @@ FrontMCP exposes standard OAuth discovery endpoints:
 
 <CardGroup cols={2}>
   <Card title="Authorization Modes" icon="layer-group" href="/frontmcp/authentication/modes">
-    Deep dive into public, transparent, and orchestrated modes
+    Deep dive into public, transparent, local, and remote modes
   </Card>
   <Card title="Token & Sessions" icon="key" href="/frontmcp/authentication/token">
     Configure token lifetimes and session management

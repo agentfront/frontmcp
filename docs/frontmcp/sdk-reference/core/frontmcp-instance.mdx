@@ -27,7 +27,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
 Create and start an HTTP server.
 
 ```typescript
-static async bootstrap(options: FrontMcpConfigType): Promise<void>
+static async bootstrap(
+  options: FrontMcpConfigInput | FrontMcpConfigType
+): Promise<void>
 ```
 
 Best for: Standalone HTTP server deployments.
@@ -158,7 +160,7 @@ scopes.forEach(scope => {
 Start the HTTP server (called internally by bootstrap).
 
 ```typescript
-start(): void
+start(): Promise<void>
 ```
 
 ## Initialization Sequence

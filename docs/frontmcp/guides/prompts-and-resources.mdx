@@ -128,7 +128,7 @@ Fixed content at a specific URI:
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceResult } from '@frontmcp/sdk';
 
 @Resource({
   name: 'expense-policy',
@@ -177,7 +177,7 @@ Dynamic resources with URI parameters:
 
 ```typescript
 import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceResult } from '@frontmcp/sdk';
 
 type ExpenseParams = {
   expenseId: string;
@@ -322,7 +322,7 @@ A static resource listing available categories:
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceResult } from '@frontmcp/sdk';
 
 @Resource({
   name: 'expense-categories',

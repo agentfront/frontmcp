@@ -10,7 +10,7 @@ FrontMCP applies security headers to every HTTP response, including Content Secu
 Add security headers to `frontmcp.config.ts`:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -19,7 +19,11 @@ export default defineConfig({
     server: {
       csp: {
         enabled: true,
-        directives: "default-src 'self'; script-src 'self' https://cdn.example.com; upgrade-insecure-requests",
+        directives: {
+          'default-src': "'self'",
+          'script-src': "'self' https://cdn.example.com",
+          'upgrade-insecure-requests': '',
+        },
         reportOnly: false,
       },
       headers: {
@@ -39,18 +43,24 @@ Build and deploy --- headers are applied automatically on every response.
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `false` | Enable CSP headers |
-| `directives` | string | --- | Semicolon-separated CSP directives |
+| `directives` | `Record<string, string \| string[]>` | --- | Map of directive name to value(s) |
 | `reportUri` | string | --- | URI for CSP violation reports |
 | `reportOnly` | boolean | `false` | Use `Content-Security-Policy-Report-Only` instead of enforcement |
 
 <Tip>
-  Value-less CSP directives like `upgrade-insecure-requests` and `block-all-mixed-content` are supported. Separate them with semicolons like any other directive.
+  Value-less CSP directives like `upgrade-insecure-requests` and `block-all-mixed-content` are supported — set the value to an empty string (`''`).
 </Tip>
 
 ### Example Directives
 
-```
-default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'; img-src *; upgrade-insecure-requests
+```typescript
+directives: {
+  'default-src': "'self'",
+  'script-src': "'self' https://cdn.example.com",
+  'style-src': "'self' 'unsafe-inline'",
+  'img-src': '*',
+  'upgrade-insecure-requests': '',
+}
 ```
 
 ## Security Headers
@@ -91,31 +101,7 @@ node dist/main.js
 
 ## Programmatic Access
 
-For custom middleware or adapters, use the security header functions directly:
-
-```typescript
-import {
-  readCspFromEnv,
-  buildCspHeaderValue,
-  getCspHeaderName,
-  readSecurityHeadersFromEnv,
-  applySecurityHeaders,
-} from '@frontmcp/sdk';
-
-// Read configuration from environment
-const csp = readCspFromEnv();
-const headers = readSecurityHeadersFromEnv();
-
-// Apply to a response
-applySecurityHeaders(res, headers, csp);
-
-// Or build the CSP header value manually
-if (csp?.enabled) {
-  const headerName = getCspHeaderName(csp.reportOnly); // 'Content-Security-Policy' or '...-Report-Only'
-  const headerValue = buildCspHeaderValue(csp);
-  res.setHeader(headerName, headerValue);
-}
-```
+For built-in HTTP transport targets, FrontMCP applies the configured security headers during HTTP response handling. For custom transport adapters, header application is your adapter's responsibility — wire equivalent logic into the response pipeline yourself. The internal helper utilities are not part of the public `@frontmcp/sdk` API; if you need them re-exported, open a feature request rather than importing from repository-internal source paths.
 
 ## Report-Only Mode
 
@@ -125,7 +111,9 @@ Use `reportOnly: true` to test CSP rules without blocking content:
 server: {
   csp: {
     enabled: true,
-    directives: "default-src 'self'",
+    directives: {
+      'default-src': "'self'",
+    },
     reportUri: 'https://report.example.com/csp',
     reportOnly: true,  // violations are reported, not blocked
   },

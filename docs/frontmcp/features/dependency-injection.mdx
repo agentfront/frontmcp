@@ -9,34 +9,49 @@ FrontMCP includes a built-in dependency injection system. Define services with `
 
 ## Defining Providers
 
-Create a provider with a token and scope:
+Create a provider with a name and (optional) scope:
 
 ```ts
-import { Provider } from '@frontmcp/sdk';
-
-export const CONFIG_TOKEN = Symbol('Config');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 @Provider({
-  token: CONFIG_TOKEN,
-  scope: 'singleton',
+  name: 'ConfigProvider',
+  scope: ProviderScope.GLOBAL,
 })
 export class ConfigProvider {
   readonly apiKey = process.env.API_KEY!;
   readonly baseUrl = process.env.BASE_URL!;
-
-  static factory() {
-    return new ConfigProvider();
-  }
 }
+```
+
+To inject by interface, register with a token (a class, abstract class, or symbol). The class itself is the most common token:
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+abstract class ConfigService {
+  abstract readonly apiKey: string;
+}
+
+class EnvConfigService extends ConfigService {
+  readonly apiKey = process.env.API_KEY!;
+}
+
+@App({
+  name: 'app',
+  providers: [{ provide: ConfigService, useClass: EnvConfigService }],
+})
+class MyApp {}
 ```
 
 ## Provider Scopes
 
-| Scope       | Lifetime                           | Use Case                            |
-| ----------- | ---------------------------------- | ----------------------------------- |
-| `singleton` | One instance per server            | Configuration, database connections |
-| `request`   | One instance per MCP request       | Request-scoped caches, loggers      |
-| `context`   | One instance per execution context | Per-tool state                      |
+| Scope       | Lifetime                                   | Use Case                            |
+| ----------- | ------------------------------------------ | ----------------------------------- |
+| `global`    | One instance per server (default)          | Configuration, database connections |
+| `context`   | One instance per execution context         | Per-request state, logging, caches  |
+
+`'session'` and `'request'` are kept as deprecated aliases of `'context'`.
 
 ## Injecting Providers
 
@@ -49,8 +64,8 @@ Use `this.get()` or `this.tryGet()` inside any context class:
 })
 class FetchDataTool extends ToolContext {
   async execute({ url }: { url: string }) {
-    const config = this.get(CONFIG_TOKEN);    // Throws if not found
-    const cache = this.tryGet(CACHE_TOKEN);   // Returns undefined if not found
+    const config = this.get(ConfigService);   // Throws if not found
+    const cache = this.tryGet(CacheService);  // Returns undefined if not found
 
     const response = await this.fetch(url, {
       headers: { Authorization: `Bearer ${config.apiKey}` },

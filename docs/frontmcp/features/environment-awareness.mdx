@@ -228,10 +228,11 @@ Register all variants — the SDK automatically exposes only the one matching th
 ```ts
 import { AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool } from './tools/notes';
 
-@FrontMcp({
+@App({
+  id: 'notes',
   tools: [AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool],
 })
-class MyApp {}
+class NotesApp {}
 ```
 
 <Tip>
@@ -246,7 +247,7 @@ When a client tries to call a tool that exists but is unavailable in the current
 
 ```json
 {
-  "code": -32603,
+  "code": -32003,
   "message": "Tool \"apple_notes_search\" is not available in the current environment (requires: {\"platform\":[\"darwin\"]}) (current: {\"platform\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})"
 }
 ```

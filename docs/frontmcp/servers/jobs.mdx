@@ -141,7 +141,7 @@ class TextProcessingApp {}
 `Job.esm()` and `Job.remote()` load individual jobs. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
 </Info>
 
-To enable the jobs system on your server, configure `jobsConfig`:
+To enable the jobs system on your server, configure the top-level `jobs` option:
 
 ```ts
 import { FrontMcp } from '@frontmcp/sdk';
@@ -149,7 +149,7 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [TextProcessingApp],
-  jobsConfig: {
+  jobs: {
     enabled: true,
     store: {
       redis: { provider: 'redis', host: 'localhost', port: 6379 },
@@ -161,7 +161,7 @@ export default class MyServer {}
 ```
 
 <Tip>
-When `jobsConfig.enabled` is `true`, the SDK automatically registers MCP tools for job management: `list-jobs`, `execute-job`, `get-job-status`, `register-job`, and `remove-job`.
+When `jobs.enabled` is `true`, the SDK automatically registers MCP tools for job management: `list-jobs`, `execute-job`, `get-job-status`, `register-job`, and `remove-job`.
 </Tip>
 
 ---
@@ -376,7 +376,7 @@ For production, configure Redis storage:
 
 ```ts
 @FrontMcp({
-  jobsConfig: {
+  jobs: {
     enabled: true,
     store: {
       redis: { provider: 'redis', host: 'localhost', port: 6379 },

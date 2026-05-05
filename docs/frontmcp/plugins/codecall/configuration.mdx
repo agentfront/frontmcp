@@ -239,7 +239,7 @@ CodeCallPlugin.init({
 
     // Or override individual settings
     timeoutMs: 5000,
-    maxIterations: 10000,
+    maxSteps: 10000,
     allowConsole: true,
 
     // Blocked identifiers (in addition to preset)
@@ -251,7 +251,7 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset         | Timeout | Max Iterations | Console | Use Case                     |
+| Preset         | Timeout | Max Steps      | Console | Use Case                     |
 | -------------- | ------- | -------------- | ------- | ---------------------------- |
 | `locked_down`  | 2s      | 2,000          | No      | Ultra-sensitive environments |
 | `secure`       | 3.5s    | 5,000          | Yes     | **Production default**       |
@@ -266,7 +266,7 @@ CodeCallPlugin.init({
     {
       preset: 'locked_down',
       timeoutMs: 2000,
-      maxIterations: 2000,
+      maxSteps: 2000,
       allowConsole: false,
       allowLoops: false,  // Only for-of allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
@@ -285,7 +285,7 @@ CodeCallPlugin.init({
     {
       preset: 'secure',
       timeoutMs: 3500,
-      maxIterations: 5000,
+      maxSteps: 5000,
       allowConsole: true,
       allowLoops: false,  // Only for-of allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
@@ -304,7 +304,7 @@ CodeCallPlugin.init({
     {
       preset: 'balanced',
       timeoutMs: 5000,
-      maxIterations: 10000,
+      maxSteps: 10000,
       allowConsole: true,
       allowLoops: true,  // for, for-of, while allowed
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
@@ -319,7 +319,7 @@ CodeCallPlugin.init({
     {
       preset: 'experimental',
       timeoutMs: 10000,
-      maxIterations: 20000,
+      maxSteps: 20000,
       allowConsole: true,
       allowLoops: true,
       disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
@@ -341,12 +341,11 @@ CodeCallPlugin.init({
   },
 
   sidecar: {
-    maxTotalSize: 64 * 1024 * 1024,     // 64MB total storage
+    enabled: true,                       // opt-in (default: false)
+    maxTotalSize: 64 * 1024 * 1024,      // 64MB total storage
     maxReferenceSize: 16 * 1024 * 1024,  // 16MB per reference
     extractionThreshold: 256 * 1024,     // Extract strings > 256KB
     maxResolvedSize: 32 * 1024 * 1024,   // 32MB max when resolving
-    maxReferenceCount: 100,              // Max 100 references
-    maxResolutionDepth: 10,              // Max nesting depth
     allowComposites: false,              // Block reference concatenation
   },
 });
@@ -360,8 +359,6 @@ CodeCallPlugin.init({
 | maxReferenceSize    | 4MB    | 16MB   | 64MB     | 256MB      |
 | extractionThreshold | 64KB   | 256KB  | 1MB      | 4MB        |
 | maxResolvedSize     | 8MB    | 32MB   | 128MB    | 512MB      |
-| maxReferenceCount   | 50     | 100    | 500      | 1,000      |
-| maxResolutionDepth  | 5      | 10     | 20       | 50         |
 | allowComposites     | No     | No     | Yes      | Yes        |
 
 #### How Pass-by-Reference Works

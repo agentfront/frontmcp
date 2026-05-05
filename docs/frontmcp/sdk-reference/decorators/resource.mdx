@@ -51,12 +51,13 @@ The same applies to `@ResourceTemplate`.
 
 ### Optional Properties
 
-| Property      | Type     | Description                          |
-| ------------- | -------- | ------------------------------------ |
-| `title`       | `string` | Human-readable title                 |
-| `description` | `string` | Resource description                 |
-| `mimeType`    | `string` | MIME type (e.g., 'application/json') |
-| `icons`       | `Icon[]` | Icons for display                    |
+| Property        | Type                | Description                          |
+| --------------- | ------------------- | ------------------------------------ |
+| `title`         | `string`            | Human-readable title                 |
+| `description`  | `string`            | Resource description                 |
+| `mimeType`      | `string`            | MIME type (e.g., 'application/json') |
+| `icons`         | `Icon[]`            | Icons for display                    |
+| `availableWhen` | `EntryAvailability` | Environment availability constraint  |
 
 ## URI Schemes
 
@@ -144,7 +145,7 @@ const appConfig = resource({
   name: 'app-config',
   uri: 'config://app',
   mimeType: 'application/json',
-})((uri, params) => ({
+})((uri) => ({
   contents: [{
     uri,
     mimeType: 'application/json',
@@ -166,7 +167,7 @@ async execute(uri: string, params: Record<string, string>) {
   this.logger.info('Reading resource', { uri });
 
   // Authentication
-  const auth = this.getAuthInfo();
+  const auth = this.context.authInfo;
 
   // Access scope
   const tools = this.scope.tools;

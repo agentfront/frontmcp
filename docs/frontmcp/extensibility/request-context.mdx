@@ -64,7 +64,7 @@ import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk'
 const requestLoggerProvider = {
   provide: 'RequestLogger',
   scope: ProviderScope.CONTEXT,
-  factory: (ctx: FrontMcpContext) => ({
+  useFactory: (ctx: FrontMcpContext) => ({
     log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
   }),
   inject: [FRONTMCP_CONTEXT],

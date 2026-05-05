@@ -60,7 +60,7 @@ import { AuthConfigurationError } from '@frontmcp/sdk';
 
 throw new AuthConfigurationError('Invalid auth configuration', {
   errors: ['Transparent mode requires exactly one child provider'],
-  suggestion: 'Set auth.mode to "orchestrated" when using multiple providers.',
+  suggestion: 'Set auth.mode to "local" or "remote" when using multiple providers.',
 });
 ```
 

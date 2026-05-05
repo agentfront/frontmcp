@@ -123,6 +123,11 @@ If your FrontMCP server is configured with `skills_only` mode (set via `?mode=sk
 
 ## What about hidden tools?
 
-The per-operation tools never appear in `tools/list`, are never registered in `scope.tools`, and are not addressable through `tools/call`. They live exclusively in the plugin's `HiddenOpRegistry`, which is **not** exposed as a DI provider — no other plugin or tool can resolve them directly. The only path to invoke them is `execute_action`, which is also where the ABAC checkpoint runs.
+By default (`exposeOperationsAsInternalTools: true`), per-operation tools are registered in `scope.tools` with **internal** visibility. This means they:
 
-This is the security guarantee: removing `execute_action`'s authority check requires removing `execute_action` itself.
+- Are still callable via the SDK / direct client and can participate in DI, hooks, and observability
+- **Do NOT appear** in the public MCP `tools/list` response
+- Are **NOT directly callable** from MCP clients via `tools/call`
+- Always live in the plugin's `HiddenOpRegistry` so the meta-tools (`load_skill`, `execute_action`) can find and run them with the ABAC checkpoint
+
+If you set `exposeOperationsAsInternalTools: false`, the per-operation tools live **only** in `HiddenOpRegistry` (not in `scope.tools`) and the only way to invoke them is `execute_action`. Use this stricter mode when you need to guarantee that nothing — not even other plugins or in-process tooling — can bypass the ABAC checkpoint.

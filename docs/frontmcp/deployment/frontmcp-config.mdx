@@ -10,7 +10,7 @@ FrontMCP uses a typed configuration file to define project settings, deployment 
 Create `frontmcp.config.ts` in your project root:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -113,13 +113,13 @@ export default defineConfig({
     server: {
       http: {
         port: 3000,
-        socketPath: '/tmp/mcp.sock',  // Unix socket (mutually exclusive with port)
-        entryPath: '/',
+        socketPath: '/tmp/mcp.sock',  // Unix socket (alternative to port)
+        entryPath: '/mcp',
         cors: {
-          origin: 'https://app.example.com',
+          origins: ['https://app.example.com'],
           credentials: true,
+          maxAge: 600,
         },
-        portRange: [3000, 3010],  // Auto-find available port in range
       },
       csp: {
         enabled: true,
@@ -136,7 +136,8 @@ export default defineConfig({
         frameOptions: 'DENY',
       },
       cookies: {
-        secure: true,
+        affinity: '__frontmcp_node',
+        domain: 'example.com',
         sameSite: 'Lax',
       },
     },
@@ -148,11 +149,10 @@ export default defineConfig({
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `port` | number | 3000 | HTTP listen port |
-| `socketPath` | string | --- | Unix socket path (overrides port) |
-| `entryPath` | string | `/` | Base path for all endpoints |
-| `cors` | object | --- | CORS configuration (origin, credentials) |
-| `portRange` | [number, number] | --- | Auto-find available port in range |
+| `port` | number | 3000 | HTTP listen port (node / distributed only) |
+| `socketPath` | string | --- | Unix socket path (alternative to port; node / distributed only) |
+| `entryPath` | string | `''` | Base path for the MCP endpoint (e.g. `'/mcp'`) |
+| `cors` | object | --- | CORS configuration — `{ origins?, credentials?, maxAge? }` |
 
 ### CSP Options
 
@@ -185,7 +185,7 @@ export default defineConfig({
 Deploy the same server to Node.js, distributed, and Vercel:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -224,7 +224,7 @@ frontmcp build --target vercel
 ## Helper Functions
 
 ```typescript
-import { defineConfig, loadFrontMcpConfig, findDeployment, getDeploymentTargets } from '@frontmcp/cli';
+import { defineConfig, loadFrontMcpConfig, findDeployment, getDeploymentTargets } from 'frontmcp';
 
 // Load config from a directory
 const config = await loadFrontMcpConfig(process.cwd());

@@ -162,7 +162,7 @@ import { FrontMcpProvider, reduxStore, valtioStore, createStore } from '@frontmc
   server={server}
   stores={[
     reduxStore({
-      store: reduxStore,
+      store: myReduxStore,
       selectors: { count: (s) => s.count },
       actions: { increment: () => increment() },
     }),

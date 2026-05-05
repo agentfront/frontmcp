@@ -1,0 +1,59 @@
+---
+title: Skill Directory Generator
+slug: nx-plugin/generators/skill-dir
+icon: folder-tree
+description: Generate a SKILL.md-based skill directory bundle
+---
+
+Generates a SKILL.md-based skill bundle (a directory containing `SKILL.md` plus optional `references/`). This is the markdown-only skill format — useful when a skill is documentation-driven rather than backed by a `@Skill` class.
+
+For class-based skills with `@Skill` decorators, use the [Skill Generator](/frontmcp/nx-plugin/generators/skill) instead.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:skill-dir code-review --project crm --description "Walk a reviewer through a PR"
+```
+
+## Options
+
+| Option           | Type      | Default      | Description                                    |
+| ---------------- | --------- | ------------ | ---------------------------------------------- |
+| `name`           | `string`  | —            | **Required.** Skill name (kebab-case)          |
+| `project`        | `string`  | —            | **Required.** The project to add the skill to  |
+| `description`    | `string`  | —            | **Required.** Short description of the skill   |
+| `directory`      | `string`  | `skills`     | Custom directory relative to the project root  |
+| `tags`           | `string`  | —            | Comma-separated tags for categorization        |
+| `withReferences` | `boolean` | `false`      | Include a `references/` directory              |
+
+## Generated Files
+
+```
+<project>/skills/<name>/
+├── SKILL.md          # Frontmatter + skill content
+└── references/       # (only when --withReferences)
+```
+
+## Generated SKILL.md
+
+```markdown
+---
+name: code-review
+description: Walk a reviewer through a PR
+tags: [review, quality]
+---
+# code-review
+
+Add your skill instructions here.
+
+## Steps
+
+1. First step
+2. Second step
+3. Third step
+```
+
+## When to Use This vs `@Skill`
+
+- **Use `skill-dir`** for purely documentation-driven skills (markdown-only) that don't need executable behavior or DI access.
+- **Use `skill`** when you need a TypeScript class with access to providers, hooks, or other SDK runtime features.

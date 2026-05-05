@@ -29,25 +29,30 @@ See the [Serverless Deployment](/frontmcp/deployment/serverless) guide.
 
 </CodeGroup>
 
-This compiles TypeScript to `dist/` using `tsconfig.build.json`.
+This compiles TypeScript to `dist/` using your project's `tsconfig.json` (the
+CLI passes `--project tsconfig.json` when present, otherwise falls back to
+inline `tsc` flags).
 
 ## Start
 
-<CodeGroup>
+`frontmcp create` and `frontmcp init` don't add a `start` script by default —
+run the compiled bundle directly. The default `node` target emits a CommonJS
+single-file bundle at `dist/{name}.bundle.js` (where `{name}` is your
+`package.json` name):
 
-    ```bash npm
-    NODE_ENV=production PORT=8080 npm start
-    ```
+```bash
+NODE_ENV=production PORT=8080 node dist/my-server.bundle.js
+```
 
-    ```bash yarn
-    NODE_ENV=production PORT=8080 yarn start
-    ```
+If you prefer a script, add one to `package.json`:
 
-    ```bash pnpm
-    NODE_ENV=production PORT=8080 pnpm start
-    ```
-
-</CodeGroup>
+```json
+{
+  "scripts": {
+    "start": "node dist/my-server.bundle.js"
+  }
+}
+```
 
 ## Recommended runtime setup
 

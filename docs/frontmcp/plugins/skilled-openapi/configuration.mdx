@@ -19,6 +19,7 @@ SkilledOpenApiPlugin.init({
   sourceConflictPolicy?, // default: 'static-wins'
   bundleCacheDir?,    // default: '.frontmcp/skilled-openapi'
   credentials?,       // optional in-memory CredentialResolver seed
+  exposeOperationsAsInternalTools?, // default: true
 })
 ```
 
@@ -39,6 +40,7 @@ SkilledOpenApiPlugin.init({
 | `sourceConflictPolicy` | `'static-wins'\|'last-wins'\|'reject'` | `'static-wins'` | Policy for when multiple sources register the same `bundleId` |
 | `bundleCacheDir` | `string` | `.frontmcp/skilled-openapi` | Where the SaaS source caches the last-good bundle |
 | `credentials` | `Record<string,string>` | `undefined` | In-memory credential map keyed by `vaultRef`. For dev / single-tenant only — production should override the `SkilledOpenApiCredentialResolver` provider with a libs/auth-vault-backed resolver |
+| `exposeOperationsAsInternalTools` | `boolean` | `true` | Register each bundle operation as an internal SDK tool (visibility: `internal`) so other tools / agents / CodeCall scripts / jobs can compose with it via `this.callTool('<bundleId>.<operationId>', args)`. Internal tools are excluded from `tools/list` and rejected for external `tools/call` requests. Disable for very large bundles where the additional registry pressure outweighs the composition convenience, or when the three meta-tools are sufficient |
 
 ## `SignatureKey` shape
 

@@ -43,18 +43,19 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
   </Step>
 
-  <Step title="Configure Token Lifetimes">
-    Set appropriate token expiration based on security requirements.
+  <Step title="Enable Refresh Token Flow">
+    For `local` and `remote` modes, opt into automatic token refresh.
 
     ```typescript
     auth: {
       refresh: {
-        accessTokenTtl: 900,      // 15 minutes
-        refreshTokenTtl: 604800,  // 7 days
-        rotateRefreshToken: true,
+        enabled: true,
+        skewSeconds: 60, // refresh tokens this many seconds before expiry
       },
     }
     ```
+
+    In **remote** mode, token TTLs are controlled by the upstream identity provider — FrontMCP does not mint its own access/refresh tokens. In **local** mode, FrontMCP acts as the authorization server and mints its own tokens (signed with `local.signKey`).
 
   </Step>
 
@@ -201,12 +202,19 @@ graph LR
 
 ### Configuration for Key Rotation
 
+The `local` block accepts a single `signKey` (and optional `jwks` containing previous keys for validation during rollover). Rotation is performed by deploying a new server build with an updated `signKey` while keeping the old key in `jwks` until in-flight tokens expire.
+
 ```typescript
 auth: {
   local: {
-    signKey: currentKey,
-    keyRotationDays: 30,
-    maxKeys: 3, // Keep old keys for validation during rotation
+    // Private key used to sign new tokens
+    signKey: currentPrivateJwk,
+    // Public JWKS — clients/relying parties use this to validate tokens.
+    // Include the previous public key during rollover so old (still-valid)
+    // tokens continue to verify until they expire. NEVER put private key
+    // material in jwks.
+    jwks: { keys: [currentPublicJwk, previousPublicJwk] },
+    issuer: 'https://your-server.example.com',
   },
 }
 ```
@@ -336,10 +344,23 @@ auth: {
 
   // Production settings
   allowDefaultPublic: false,   // No anonymous access
-  dcrEnabled: false,           // Disable DCR in production
 
   // Use local mode login page or remote IdP
   // Never use the demo login page in production
+}
+```
+
+For remote mode, DCR is configured under `providerConfig`:
+
+```typescript
+auth: {
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  clientId: process.env.IDP_CLIENT_ID!,
+  clientSecret: process.env.IDP_CLIENT_SECRET!,
+  providerConfig: {
+    dcrEnabled: false,  // Disable DCR in production; pre-register clients
+  },
 }
 ```
 
@@ -416,7 +437,7 @@ location /oauth/token {
     All instances must share the same Redis and signing keys.
 
     <Info>
-      **Machine ID**: Set the `MACHINE_ID` environment variable to the same value on all instances. Without it, sessions encrypted on one instance cannot be decrypted on another. See [Auth Architecture - Machine ID](/frontmcp/authentication/architecture#14-machine-id).
+      **Machine ID**: Set the `MACHINE_ID` environment variable to the same value on all instances. Without it, sessions encrypted on one instance cannot be decrypted on another. See [Machine ID](/frontmcp/deployment/machine-id).
     </Info>
 
   </Tab>

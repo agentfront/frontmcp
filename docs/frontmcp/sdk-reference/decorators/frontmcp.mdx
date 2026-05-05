@@ -90,13 +90,18 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Shared Components
 
-| Property    | Type             | Description                  |
-| ----------- | ---------------- | ---------------------------- |
-| `providers` | `ProviderType[]` | Gateway-level providers      |
-| `tools`     | `ToolType[]`     | Shared tools across all apps |
-| `resources` | `ResourceType[]` | Shared resources             |
-| `skills`    | `SkillType[]`    | Shared skills                |
-| `plugins`   | `PluginType[]`   | Server-level plugins         |
+| Property      | Type              | Description                            |
+| ------------- | ----------------- | -------------------------------------- |
+| `providers`   | `ProviderType[]`  | Gateway-level providers                |
+| `tools`       | `ToolType[]`      | Shared tools across all apps           |
+| `resources`   | `ResourceType[]`  | Shared resources                       |
+| `skills`      | `SkillType[]`     | Shared skills                          |
+| `plugins`     | `PluginType[]`    | Server-level plugins                   |
+| `splitByApp`  | `boolean`         | Run each app as an isolated sub-server |
+
+<Note>
+Prompts, agents, jobs, workflows, channels, and adapters are declared at the `@App` level — not at the gateway level. See the [@App reference](/frontmcp/sdk-reference/decorators/app) for the full list.
+</Note>
 
 ```typescript
 @FrontMcp({
@@ -110,13 +115,25 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Feature Configuration
 
-| Property       | Type                       | Description                   |
-| -------------- | -------------------------- | ----------------------------- |
-| `logging`      | `LoggingOptionsInput`      | Logging configuration         |
-| `pagination`   | `PaginationOptions`        | List operation pagination     |
-| `elicitation`  | `ElicitationOptionsInput`  | Interactive user input        |
-| `skillsConfig` | `SkillsConfigOptionsInput` | Skills HTTP endpoints         |
-| `extApps`      | `ExtAppsOptionsInput`      | MCP Apps widget configuration |
+| Property        | Type                                        | Description                                      |
+| --------------- | ------------------------------------------- | ------------------------------------------------ |
+| `auth`          | `AuthOptionsInput`                          | Authentication mode + provider configuration     |
+| `authorities`   | `AuthoritiesConfig` (`@frontmcp/auth`)      | RBAC/ABAC/ReBAC profiles & enforcement           |
+| `logging`       | `LoggingOptionsInput`                       | Logging configuration                            |
+| `observability` | `ObservabilityOptionsInterface \| boolean`  | OpenTelemetry tracing + metrics                  |
+| `health`        | `HealthOptionsInput`                        | Health check endpoints                           |
+| `pagination`    | `PaginationOptions`                         | List operation pagination                        |
+| `elicitation`   | `ElicitationOptionsInput`                   | Interactive user input                           |
+| `skillsConfig`  | `SkillsConfigOptionsInput`                  | Skills HTTP endpoints                            |
+| `tasks`         | object — see source for shape               | Background task store + scheduler                |
+| `jobs`          | `{ enabled: boolean; store?: ... }`         | Jobs runtime configuration                       |
+| `throttle`      | `GuardConfig` (`@frontmcp/guard`)           | Per-tool rate limiting / concurrency / timeouts  |
+| `extApps`       | `ExtAppsOptionsInput`                       | External MCP Apps widget configuration           |
+| `loader`        | `PackageLoader`                             | ESM dynamic loader configuration                 |
+| `output`        | `{ allowNonFinite?: boolean }`              | Output-validation policy                         |
+| `sqlite`        | `SqliteOptionsInput`                        | SQLite session/store configuration               |
+| `ui`            | `{ cdnOverrides?: Record<string, string> }` | UI CDN override configuration                    |
+| `channels`      | `ChannelsConfigInput`                       | Channel notifications configuration              |
 
 ```typescript
 @FrontMcp({

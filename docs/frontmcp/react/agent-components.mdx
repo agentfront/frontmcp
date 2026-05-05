@@ -101,9 +101,13 @@ const MetricsCard = mcpComponent(
 
 #### Lazy Loading
 
+Wrap dynamic `import()` factories with `mcpLazy()` so `mcpComponent` can distinguish them from zero-arg components:
+
 ```tsx
+import { mcpComponent, mcpLazy } from '@frontmcp/react';
+
 const HeavyChart = mcpComponent(
-  () => import('./HeavyChart'),
+  mcpLazy(() => import('./HeavyChart')),
   {
     name: 'show_chart',
     schema: z.object({ data: z.array(z.number()), label: z.string() }),

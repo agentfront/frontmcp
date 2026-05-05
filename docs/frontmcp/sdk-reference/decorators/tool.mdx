@@ -64,12 +64,23 @@ class BadTool extends ToolContext {
 
 ### Optional Properties
 
-| Property       | Type       | Description                    |
-| -------------- | ---------- | ------------------------------ |
-| `description`  | `string`   | Tool description for AI        |
-| `outputSchema` | `ZodType`  | Output validation schema       |
-| `id`           | `string`   | Stable identifier for tracking |
-| `tags`         | `string[]` | Categorization tags            |
+| Property         | Type                        | Description                                                                       |
+| ---------------- | --------------------------- | --------------------------------------------------------------------------------- |
+| `description`    | `string`                    | Tool description for AI                                                            |
+| `outputSchema`   | `ZodType`                   | Output validation schema                                                           |
+| `id`             | `string`                    | Stable identifier for tracking                                                     |
+| `tags`           | `string[]`                  | Categorization tags                                                                |
+| `visibility`     | `'public' \| 'hidden' \| 'internal'` | Discovery visibility. `hidden` hides from public lists; `internal` keeps it for in-process callers only |
+| `rateLimit`      | `RateLimitConfig`           | Per-tool rate limit (`maxRequests`, `windowMs`, `partitionBy`)                     |
+| `concurrency`    | `ConcurrencyConfig`         | Per-tool concurrency cap (`maxConcurrent`, optional queue config)                  |
+| `timeout`        | `TimeoutConfig`             | Per-tool execution timeout (`executeMs`)                                           |
+| `availableWhen`  | `EntryAvailability`         | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
+| `execution`      | `{ taskSupport?: 'required' \| 'optional' \| 'forbidden' }` | MCP 2025-11-25 task-execution mode for `tools/list` items |
+| `authProviders`  | `ToolAuthProviderRef[]`     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`) |
+| `annotations`    | `ToolAnnotations`           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) |
+| `examples`       | `ToolExample[]`             | Usage examples (`description`, `input`, optional `output`)                          |
+| `ui`             | `ToolUIConfig`              | UI widget configuration (`template`, `csp`, sanitization options)                   |
+| `hideFromDiscovery` | `boolean`                | Deprecated alias for `visibility: 'hidden'`                                         |
 
 ### Output Types
 
@@ -119,13 +130,13 @@ class BadTool extends ToolContext {
   name: 'sensitive_operation',
   inputSchema: { data: z.string() },
   authProviders: [
-    { ref: 'github', scopes: ['repo', 'user'] },
+    { name: 'github', scopes: ['repo', 'user'] },
   ],
 })
 class SensitiveTool extends ToolContext {
   async execute(input) {
     // Access is validated before execute() is called
-    const token = this.getAuthInfo().accessToken;
+    const token = this.context.authInfo?.token;
     return await callApi(token, input.data);
   }
 }
@@ -154,6 +165,7 @@ class SensitiveTool extends ToolContext {
   inputSchema: { query: z.string(), limit: z.number().optional() },
   examples: [
     {
+      description: 'Search for users named "john"',
       input: { query: 'john', limit: 10 },
       output: { users: [{ id: '1', name: 'John Doe' }], total: 1 },
     },
@@ -163,16 +175,19 @@ class SensitiveTool extends ToolContext {
 
 ### UI Configuration
 
+The `ui.template` field accepts a builder function, an HTML/MDX string, a React component, or a `FileSource` (for client-side transpilation):
+
 ```typescript
 @Tool({
   name: 'user_profile',
   inputSchema: { userId: z.string() },
   ui: {
-    widget: 'user-card',
-    template: 'react',
+    template: (ctx) => `<div>User ${ctx.input.userId}</div>`,
   },
 })
 ```
+
+See the [Tool UI guide](/frontmcp/servers/tools#tool-ui) for the full `ToolUIConfig` shape (CSP, sanitization, helpers, etc.).
 
 ## Function-Based Alternative
 
@@ -252,9 +267,9 @@ async execute(input) {
 
 ```typescript
 async execute(input) {
-  const auth = this.getAuthInfo();
-  const token = auth.accessToken;
-  const user = auth.user;
+  const auth = this.context.authInfo;
+  const token = auth?.token;
+  const user = auth?.user;
 }
 ```
 
@@ -329,10 +344,14 @@ const outputSchema = z.object({
     idempotentHint: true,
   },
   examples: [
-    { input: { operation: 'add', a: 2, b: 3 }, output: { result: 5, operation: 'add' } },
+    {
+      description: 'Add two numbers',
+      input: { operation: 'add', a: 2, b: 3 },
+      output: { result: 5, operation: 'add' },
+    },
   ],
 })
-class CalculateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+class CalculateTool extends ToolContext {
   async execute(input) {
     await this.notify(`Calculating ${input.operation}(${input.a}, ${input.b})`, 'debug');
 

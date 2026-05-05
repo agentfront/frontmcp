@@ -244,22 +244,21 @@ interface SkillResources {
 
 ## Skill Validation
 
-Skills are validated on server startup:
+Skills are validated on server startup. Validation strictness is configured **per skill** via the `toolValidation` field on `@Skill`:
 
 ```typescript
-@FrontMcp({
-  info: { name: 'Server', version: '1.0.0' },
-  apps: [MyApp],
-  skillsConfig: {
-    enabled: true,
-    validation: 'strict', // 'strict' | 'warn' | 'ignore'
-  },
+@Skill({
+  name: 'review-pr',
+  description: 'Review a pull request',
+  tools: ['list_files', 'read_file', 'comment_on_pr'],
+  toolValidation: 'strict', // 'strict' | 'warn' (default) | 'ignore'
 })
+class ReviewPrSkill extends SkillContext {}
 ```
 
 - **strict**: Fail if skill references missing tools
-- **warn**: Log warnings but continue
-- **ignore**: Skip validation
+- **warn** (default): Log warnings but continue
+- **ignore**: Skip tool validation
 
 ## Skill Sessions
 
@@ -400,7 +399,6 @@ class ProjectManagementApp {}
   apps: [ProjectManagementApp],
   skillsConfig: {
     enabled: true,
-    validation: 'strict',
   },
 })
 export default class PMAssistantServer {}
