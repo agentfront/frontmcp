@@ -1677,15 +1677,15 @@
           "examples": [
             {
               "name": "agent-and-plugin",
-              "description": "Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.",
+              "description": "Shows an autonomous research agent with inner tools (framework-driven loop) and a plugin that hooks into the tools:call-tool flow for audit logging.",
               "level": "advanced",
               "tags": ["guides", "knowledge-base", "knowledge", "base", "agent", "plugin"],
               "features": [
                 "Agent with `@Agent` decorator, LLM config, inner tools, and system instructions",
-                "Using `this.run(prompt, { maxIterations })` to execute the LLM tool-use loop",
-                "Configurable behavior via input schema (`depth: 'shallow' | 'deep'`)",
-                "Plugin hooks: `onToolExecuteBefore`, `onToolExecuteAfter`, `onToolExecuteError`",
-                "Using `ctx.state.set/get()` for flow state instead of mutating `rawInput`",
+                "Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)",
+                "Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around(\"execute\")`",
+                "Using `flowCtx.state.set/get()` for hook-local state",
+                "Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks",
                 "Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)"
               ]
             },
@@ -1703,14 +1703,15 @@
             },
             {
               "name": "vector-search-and-resources",
-              "description": "Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.",
+              "description": "Shows a semantic search tool backed by `vectoriadb` (`VectoriaDB`) and a resource template for retrieving documents by ID using URI parameters.",
               "level": "intermediate",
-              "tags": ["guides", "openai", "semantic-search", "knowledge-base", "knowledge", "base"],
+              "tags": ["guides", "vectoriadb", "semantic-search", "knowledge-base", "knowledge", "base"],
               "features": [
-                "Semantic search tool that generates query embeddings via `this.fetch()` to OpenAI",
+                "Semantic search tool that delegates embedding generation to the `vectoriadb` provider",
                 "Using `this.mark()` for execution phase tracing",
                 "Resource template with `uriTemplate: 'kb://documents/{documentId}'` for parameterized URIs",
                 "Typed params via `ResourceContext<{ documentId: string }>` for type-safe URI parameters",
+                "Throwing `ResourceNotFoundError` so the protocol response carries the right JSON-RPC code",
                 "Returning `ReadResourceResult` with proper MCP protocol structure"
               ]
             }
@@ -1722,40 +1723,39 @@
           "examples": [
             {
               "name": "auth-and-crud-tools",
-              "description": "Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection.",
+              "description": "Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` for user isolation and `this.get()` for dependency injection.",
               "level": "basic",
               "tags": ["guides", "auth", "session", "task-manager", "task", "manager"],
               "features": [
-                "Using `this.context.session?.userId` for per-user data isolation",
-                "Using `this.get(TASK_STORE)` for dependency injection of providers",
-                "Enforcing authentication with `this.fail()` when no session exists",
+                "Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation",
+                "Using `this.get(TaskStoreProvider)` for dependency injection (class-as-token)",
+                "Enforcing authentication with `this.fail()` when the user is anonymous",
                 "Optional input fields with `.optional()` for filtering",
                 "`outputSchema` with nested `z.array(z.object(...))` for structured responses"
               ]
             },
             {
               "name": "authenticated-e2e-tests",
-              "description": "Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.",
+              "description": "Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require an auth context.",
               "level": "advanced",
               "tags": ["guides", "auth", "session", "e2e", "unit-test", "task-manager"],
               "features": [
                 "Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests",
                 "Chaining `.withToken(token).buildAndConnect()` for authenticated clients",
-                "Unit testing with mocked DI tokens via `this.get()` mock",
-                "Mocking session context (`context: { session: { userId } }`) for auth-dependent tools",
-                "Testing the unauthenticated error path (no session)"
+                "Unit testing tools by mocking `this.get(TaskStoreProvider)` and the `auth` getter",
+                "Mocking `this.auth = { user: { sub } }` (FrontMcpAuthContext) for auth-dependent tools",
+                "Testing the unauthenticated error path (no `auth` / anonymous user)"
               ]
             },
             {
               "name": "redis-provider-with-di",
-              "description": "Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.",
+              "description": "Shows how to create a Redis-backed provider using class-as-token DI plus an `AsyncProvider` factory for async setup, with `onDestroy()` cleanup, and how tools inject it.",
               "level": "intermediate",
               "tags": ["guides", "redis", "node", "task-manager", "task", "manager"],
               "features": [
-                "Defining an interface and DI token (`Symbol('TaskStore')`) for the provider",
-                "Using `@Provider({ token: TASK_STORE })` to register the provider for DI",
-                "Lifecycle hooks: `onInit()` for connection setup, `onDestroy()` for cleanup",
-                "Lazy-loading `ioredis` via dynamic `import()` in `onInit()`",
+                "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
+                "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
+                "Lifecycle: `onDestroy()` for graceful Redis cleanup on shutdown",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -1774,7 +1774,7 @@
               "features": [
                 "Server entry point with `@FrontMcp` decorator and `info` configuration",
                 "App registration with `@App` grouping tools and resources together",
-                "Static resource that returns JSON data via `read()`",
+                "Static resource that returns JSON data via `execute(uri)` and `ReadResourceResult`",
                 "Clean separation between server, app, tools, and resources"
               ]
             },

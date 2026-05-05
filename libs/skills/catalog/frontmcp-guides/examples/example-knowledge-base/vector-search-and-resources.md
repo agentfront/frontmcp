@@ -22,7 +22,7 @@ Shows a semantic search tool with embedding generation and a resource template f
 // src/search/tools/search-docs.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
+import { VectorStoreProvider } from '../../ingestion/providers/vector-store.provider';
 
 @Tool({
   name: 'search_docs',
@@ -45,46 +45,29 @@ import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 })
 export class SearchDocsTool extends ToolContext {
   async execute(input: { query: string; topK: number }) {
-    const store = this.get(VECTOR_STORE);
+    const store = this.get(VectorStoreProvider);
 
-    // Mark execution phases for observability
-    this.mark('embedding-query');
-    const queryEmbedding = await this.generateQueryEmbedding(input.query);
-
+    // VectoriaDB handles embedding generation internally — pass the raw query.
     this.mark('searching');
-    const chunks = await store.search(queryEmbedding, input.topK);
+    const matches = await store.search(input.query, input.topK);
 
-    const results = chunks.map((chunk) => ({
-      documentId: chunk.documentId,
-      content: chunk.content,
-      score: chunk.metadata.score ? parseFloat(chunk.metadata.score) : 0,
-      title: chunk.metadata.title ?? 'Untitled',
+    const results = matches.map((m) => ({
+      documentId: m.metadata.documentId,
+      content: m.metadata.content,
+      score: m.score,
+      title: m.metadata.title ?? 'Untitled',
     }));
 
     return { results, total: results.length };
-  }
-
-  private async generateQueryEmbedding(query: string): Promise<number[]> {
-    const response = await this.fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({ input: query, model: 'text-embedding-3-small' }),
-    });
-    const data = await response.json();
-    return data.data[0].embedding;
   }
 }
 ```
 
 ```typescript
 // src/search/resources/doc.resource.ts
-import type { ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
+import { ReadResourceResult, ResourceContext, ResourceNotFoundError, ResourceTemplate } from '@frontmcp/sdk';
 
-import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
+import { VectorStoreProvider } from '../../ingestion/providers/vector-store.provider';
 
 @ResourceTemplate({
   name: 'document',
@@ -94,20 +77,20 @@ import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 })
 export class DocResource extends ResourceContext<{ documentId: string }> {
   async execute(uri: string, params: { documentId: string }): Promise<ReadResourceResult> {
-    const store = this.get(VECTOR_STORE);
-    const chunks = await store.getByDocumentId(params.documentId);
+    const store = this.get(VectorStoreProvider);
+    const matches = await store.getByDocumentId(params.documentId);
 
-    if (chunks.length === 0) {
-      this.fail(new Error(`Document not found: ${params.documentId}`));
+    if (matches.length === 0) {
+      // Use a typed MCP error so the protocol response carries the correct JSON-RPC code.
+      throw new ResourceNotFoundError(uri);
     }
 
     const document = {
       documentId: params.documentId,
-      title: chunks[0].metadata.title ?? 'Untitled',
-      chunks: chunks.map((c) => ({
-        chunkIndex: c.metadata.chunkIndex,
-        content: c.content,
-      })),
+      title: matches[0].metadata.title ?? 'Untitled',
+      chunks: matches
+        .map((m) => ({ chunkIndex: m.metadata.chunkIndex, content: m.metadata.content }))
+        .sort((a, b) => a.chunkIndex - b.chunkIndex),
     };
 
     return {
