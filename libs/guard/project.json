@@ -9,7 +9,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["^build"],
       "options": {
-        "command": "npx tsx scripts/generate-schema-types.mjs"
+        "command": "TSX_TSCONFIG_PATH=tsconfig.base.json npx tsx scripts/generate-schema-types.mjs"
       }
     },
     "build-cjs": {

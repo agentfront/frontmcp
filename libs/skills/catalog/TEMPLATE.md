@@ -145,17 +145,22 @@ Add a `## Examples` section at the bottom of each reference file (before `## Ref
 
 ## Resource Access
 
-Skills are accessible via the `skills://` URI scheme as MCP resources with auto-complete:
+Skills are accessible via the `skill://` URI scheme as MCP resources per
+[SEP-2640 (Skills Extension)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640),
+with auto-complete on `skillPath`:
 
-| URI                                               | Returns                                   |
-| ------------------------------------------------- | ----------------------------------------- |
-| `skills://catalog`                                | JSON list of all available skills         |
-| `skills://{skillName}`                            | Full SKILL.md content (formatted for LLM) |
-| `skills://{skillName}/SKILL.md`                   | Same as above (explicit path alias)       |
-| `skills://{skillName}/references`                 | JSON list of references for this skill    |
-| `skills://{skillName}/references/{referenceName}` | Reference markdown content                |
-| `skills://{skillName}/examples`                   | JSON list of examples for this skill      |
-| `skills://{skillName}/examples/{exampleName}`     | Example markdown content                  |
+| URI                                        | Returns                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------ |
+| `skill://index.json`                       | SEP-2640 discovery document (agentskills.io schema)                      |
+| `skill://{skillPath}/SKILL.md`             | Raw SKILL.md (YAML frontmatter + markdown body, identical to filesystem) |
+| `skill://{skillPath}/references/{file}.md` | Reference markdown content                                               |
+| `skill://{skillPath}/examples/{file}.md`   | Example markdown content                                                 |
+| `skill://{skillPath}/scripts/{file}`       | Script asset (any media type)                                            |
+| `skill://{skillPath}/assets/{file}`        | Bundled asset (any media type)                                           |
+
+`{skillPath}` may be a single segment (`git-workflow`) or nested
+(`acme/billing/refunds`). Its final segment must equal the skill's
+frontmatter `name`.
 
 ## Reference
 

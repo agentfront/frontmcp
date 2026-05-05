@@ -17,7 +17,7 @@ yarn tsx apps/demo/src/skilled-openapi-fixtures/skilled-openapi-demo.app.ts
 ## Manual checks
 
 1. `tools/list` returns exactly: `search_skill`, `load_skill`, `execute_action`. The three OpenAPI operations (`createInvoice`, `getInvoice`, `refundInvoice`) MUST NOT appear.
-2. `skills://catalog` lists the `invoices` skill with `bundleVersion: "1.0.0"`.
+2. `skill://index.json` lists the `invoices` skill (type `skill-md`) at `skill://invoices/SKILL.md` with `bundleVersion: "1.0.0"` exposed via the load tool.
 3. `search_skill({ query: "create invoice" })` returns `[{ skillId: "invoices", ... }]`.
 4. `load_skill({ skillId: "invoices" })` returns instructions plus 3 actions with their JSON Schemas.
 5. `execute_action({ skillId: "invoices", actionId: "createInvoice", input: { customerId: "cus_1", amount: 4200 } })` →

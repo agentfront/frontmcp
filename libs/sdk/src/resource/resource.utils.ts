@@ -57,8 +57,17 @@ export function collectResourceTemplateMetadata(cls: ResourceTemplateType): Reso
  * Normalize any resource input (class or function) to a ResourceRecord
  */
 export function normalizeResource(item: any): ResourceRecord {
-  // ESM/REMOTE record objects (from Resource.esm() / Resource.remote())
-  if (item && typeof item === 'object' && (item.kind === ResourceKind.ESM || item.kind === ResourceKind.REMOTE)) {
+  // Pre-built record objects: ESM, REMOTE, FUNCTION, or CLASS_TOKEN.
+  // FrontMCP internals (e.g. SEP-2640 per-skill registration) build
+  // FUNCTION records directly to attach SEP-conformant metadata.
+  if (
+    item &&
+    typeof item === 'object' &&
+    (item.kind === ResourceKind.ESM ||
+      item.kind === ResourceKind.REMOTE ||
+      item.kind === ResourceKind.FUNCTION ||
+      item.kind === ResourceKind.CLASS_TOKEN)
+  ) {
     return item as ResourceRecord;
   }
 

@@ -9,13 +9,12 @@
  * @module skill/skill-directory-loader
  */
 
-import { readFile, fileExists, stat, joinPath, basename } from '@frontmcp/utils';
-import { SkillKind } from '../common/records/skill.record';
-import type { SkillFileRecord } from '../common/records/skill.record';
-import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';
-import { skillMetadataSchema } from '../common/metadata/skill.metadata';
+import { basename, fileExists, joinPath, readdir, readFile, stat } from '@frontmcp/utils';
+
+import { type FrontMcpLogger } from '../common';
+import { skillMetadataSchema, type SkillMetadata, type SkillResources } from '../common/metadata/skill.metadata';
+import { SkillKind, type SkillFileRecord } from '../common/records/skill.record';
 import { InvalidSkillError } from '../errors/sdk.errors';
-import type { FrontMcpLogger } from '../common';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from './skill-md-parser';
 
 /**
@@ -77,6 +76,48 @@ async function checkDirectory(path: string): Promise<boolean> {
 }
 
 /**
+ * Walk a skill directory and reject any nested SKILL.md.
+ *
+ * Per SEP-2640 §Resource Mapping: "A `SKILL.md` MUST NOT appear in any
+ * descendant directory of a skill. The skill directory is the boundary;
+ * skills do not nest inside other skills."
+ *
+ * Returns the relative paths (from `dirPath`) of any nested SKILL.md
+ * files found. The root SKILL.md at `dirPath/SKILL.md` is excluded.
+ */
+export async function findNestedSkillMd(dirPath: string, _maxDepth = 8): Promise<string[]> {
+  const found: string[] = [];
+
+  async function walk(current: string, depth: number, relPath: string): Promise<void> {
+    if (depth > _maxDepth) return;
+    let entries: string[];
+    try {
+      entries = await readdir(current);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = joinPath(current, entry);
+      let entryStat;
+      try {
+        entryStat = await stat(full);
+      } catch {
+        continue;
+      }
+      if (entryStat.isDirectory()) {
+        await walk(full, depth + 1, relPath ? `${relPath}/${entry}` : entry);
+      } else if (entryStat.isFile() && entry === 'SKILL.md' && depth > 0) {
+        // Skip the root SKILL.md (depth 0) — only descendants are violations
+        found.push(relPath ? `${relPath}/SKILL.md` : 'SKILL.md');
+      }
+    }
+  }
+
+  await walk(dirPath, 0, '');
+  return found;
+}
+
+/**
  * Load a full skill directory into a SkillFileRecord.
  *
  * Reads SKILL.md, parses frontmatter, detects resource directories,
@@ -114,6 +155,18 @@ export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogge
   const hasResources = resources.scripts || resources.references || resources.assets || resources.examples;
   if (hasResources) {
     partialMetadata.resources = resources;
+  }
+
+  // SEP-2640 §Resource Mapping: skills MUST NOT contain nested SKILL.md
+  // files in descendant directories. Loading a directory that violates
+  // this would produce ambiguous URIs under `skill://`.
+  const nested = await findNestedSkillMd(dirPath);
+  if (nested.length > 0) {
+    const skillName = partialMetadata.name ?? basename(dirPath);
+    throw new InvalidSkillError(
+      skillName,
+      `Skill directory contains nested SKILL.md files (forbidden by SEP-2640 §Resource Mapping): ${nested.join(', ')}`,
+    );
   }
 
   // Validate name matches directory name (per spec recommendation)

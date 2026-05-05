@@ -708,9 +708,20 @@ export default class ResourceRegistry extends RegistryAbstract<
    *
    * @param resourceDef - Resource class, function, or template to register
    */
-  registerDynamicResource(resourceDef: ResourceType): void {
-    const isTemplate = isResourceTemplate(resourceDef);
-    const rec = isTemplate ? normalizeResourceTemplate(resourceDef) : normalizeResource(resourceDef);
+  registerDynamicResource(resourceDef: ResourceType | ResourceRecord | ResourceTemplateRecord): void {
+    // Pre-built records (e.g. SEP-2640 per-skill FUNCTION records) bypass
+    // template detection — they declare their kind directly.
+    const isPrebuiltRecord =
+      resourceDef && typeof resourceDef === 'object' && 'kind' in resourceDef && 'metadata' in resourceDef;
+
+    let rec: ResourceRecord | ResourceTemplateRecord;
+    if (isPrebuiltRecord) {
+      rec = resourceDef as ResourceRecord | ResourceTemplateRecord;
+    } else {
+      const def = resourceDef as ResourceType;
+      const isTemplate = isResourceTemplate(def);
+      rec = isTemplate ? normalizeResourceTemplate(def) : normalizeResource(def);
+    }
     const token = rec.provide;
 
     // Skip if already registered

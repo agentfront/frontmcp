@@ -285,7 +285,7 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * Where this skill is visible for discovery.
    * Controls which discovery mechanisms can find this skill.
    *
-   * - 'mcp': Only via skills:// MCP resources (skills://catalog, skills://{skillName})
+   * - 'mcp': Only via skill:// MCP resources (skill://index.json, skill://{skillPath}/SKILL.md)
    * - 'http': Only via HTTP API endpoints (/llm.txt, /skills)
    * - 'both': Visible in both MCP and HTTP (default)
    *
@@ -293,7 +293,7 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    *
    * @default 'both'
    *
-   * @example HTTP-only skill (not visible via skills://catalog MCP resource)
+   * @example HTTP-only skill (not visible via skill://index.json MCP resource)
    * ```typescript
    * @Skill({
    *   name: 'internal-process',
@@ -365,6 +365,30 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * source, or by overlaying their own quality scoring.
    */
   rating?: number;
+
+  /**
+   * Multi-segment URI path under the SEP-2640 `skill://` scheme.
+   *
+   * Per SEP-2640 §Resource Mapping the URI is `skill://<skill-path>/SKILL.md`
+   * where `<skill-path>` may be a single segment (`git-workflow`) or nested
+   * (`acme/billing/refunds`). The FINAL segment MUST equal the skill's
+   * `name`; preceding segments are an organisational prefix chosen by the
+   * server.
+   *
+   * When omitted, the skill is exposed at `skill://<name>/SKILL.md` (flat).
+   *
+   * @example Flat
+   * ```typescript
+   * { name: 'git-workflow' } // -> skill://git-workflow/SKILL.md
+   * ```
+   *
+   * @example Nested
+   * ```typescript
+   * { name: 'refunds', skillPath: ['acme', 'billing', 'refunds'] }
+   * // -> skill://acme/billing/refunds/SKILL.md
+   * ```
+   */
+  skillPath?: string[];
 
   /**
    * Optional skill category for grouping in discovery (e.g. "deployment",
@@ -484,8 +508,35 @@ export const skillMetadataSchema = z
     availableWhen: entryAvailabilitySchema.optional(),
     rating: z.number().min(0).max(5).optional(),
     category: z.string().min(1).max(64).optional(),
+    skillPath: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9._~!$&'()*+,;=:@%-]+$/, {
+            message: 'skillPath segment contains characters disallowed by RFC 3986',
+          }),
+      )
+      .min(1)
+      .optional(),
   } satisfies RawZodShape<SkillMetadata, ExtendFrontMcpSkillMetadata>)
-  .passthrough();
+  .passthrough()
+  .superRefine((meta, ctx) => {
+    // SEP-2640 §Resource Mapping: final segment of <skill-path> MUST equal
+    // the skill's frontmatter `name`. This invariant lets clients recover
+    // the name from the URI alone.
+    if (meta.skillPath && meta.skillPath.length > 0) {
+      const last = meta.skillPath[meta.skillPath.length - 1];
+      if (last !== meta.name) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `skillPath final segment "${last}" must equal name "${meta.name}" (SEP-2640 §Resource Mapping)`,
+          path: ['skillPath', meta.skillPath.length - 1],
+        });
+      }
+    }
+  });
 
 /**
  * Type-safe parsed SkillMetadata from Zod schema.

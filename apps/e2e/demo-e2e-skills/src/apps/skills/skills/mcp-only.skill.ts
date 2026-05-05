@@ -1,7 +1,7 @@
 import { Skill } from '@frontmcp/sdk';
 
 /**
- * MCP-Only Skill - only visible via skills:// MCP resources
+ * MCP-Only Skill - only visible via SEP-2640 skill:// MCP resources
  * Not visible via HTTP endpoints (/llm.txt, /skills)
  */
 @Skill({
@@ -10,7 +10,7 @@ import { Skill } from '@frontmcp/sdk';
   instructions: `
 ## MCP-Only Workflow
 
-This skill is only accessible via skills:// MCP resources and should not appear in HTTP endpoint responses.
+This skill is only accessible via skill:// MCP resources and should not appear in HTTP endpoint responses.
 
 ### Steps
 1. Use github_get_pr to fetch PR details

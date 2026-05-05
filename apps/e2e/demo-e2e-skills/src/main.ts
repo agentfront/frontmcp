@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { SkillsE2EApp } from './apps/skills';
 
 const port = parseInt(process.env['PORT'] ?? '3107', 10);
@@ -19,7 +20,7 @@ const port = parseInt(process.env['PORT'] ?? '3107', 10);
   skillsConfig: {
     enabled: true,
     auth: 'public', // Single auth config for all HTTP endpoints
-    mcpResources: true, // Enable skills:// MCP resource templates
+    mcpResources: true, // Enable SEP-2640 skill:// MCP resource templates
   },
 })
 export default class Server {}

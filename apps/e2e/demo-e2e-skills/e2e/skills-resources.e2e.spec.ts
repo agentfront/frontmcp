@@ -1,17 +1,14 @@
 /**
- * E2E Tests for skills:// MCP Resources
+ * E2E Tests for SEP-2640 `skill://` MCP Resources
  *
- * Tests the resource-based skill access via the skills:// URI scheme:
- * - skills://catalog — list all skills
- * - skills://{skillName} — load skill content
- * - skills://{skillName}/SKILL.md — alias for above
- * - skills://{skillName}/references — list references
- * - skills://{skillName}/references/{name} — read reference
- * - skills://{skillName}/examples — list examples
- * - skills://{skillName}/examples/{name} — read example
- * - Auto-complete for skill names
+ * Tests the resource-based skill access via the singular `skill://` URI scheme:
+ * - skill://index.json                — discovery index (agentskills.io schema)
+ * - skill://{skillPath}/SKILL.md      — raw SKILL.md (frontmatter + body)
+ * - skill://{skillPath}/{filePath}    — any file inside the skill directory
+ * - Auto-complete for skill paths
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import type { JsonRpcRequest, JsonRpcResponse } from './helpers/skills-protocol';
 
 interface CompletionPayload {
@@ -58,7 +55,18 @@ async function requestCompletion(
   return completionResult.completion;
 }
 
-test.describe('Skills Resources E2E', () => {
+interface SkillIndexEntry {
+  type: 'skill-md' | 'mcp-resource-template' | 'archive';
+  name?: string;
+  description: string;
+  url: string;
+}
+interface SkillIndexDocument {
+  $schema: string;
+  skills: SkillIndexEntry[];
+}
+
+test.describe('SEP-2640 Skills Resources E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
     project: 'demo-e2e-skills',
@@ -66,146 +74,108 @@ test.describe('Skills Resources E2E', () => {
   });
 
   test.describe('Resource Template Discovery', () => {
-    test('should list skills:// resource templates', async ({ mcp }) => {
+    test('should list skill:// resource templates', async ({ mcp }) => {
       const templates = await mcp.resources.listTemplates();
       const uriTemplates = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
 
-      expect(uriTemplates).toContain('skills://{skillName}');
-      expect(uriTemplates).toContain('skills://{skillName}/SKILL.md');
-      expect(uriTemplates).toContain('skills://{skillName}/references');
-      expect(uriTemplates).toContain('skills://{skillName}/references/{referenceName}');
-      expect(uriTemplates).toContain('skills://{skillName}/examples');
-      expect(uriTemplates).toContain('skills://{skillName}/examples/{exampleName}');
+      expect(uriTemplates).toContain('skill://{+skillPath}/SKILL.md');
+      expect(uriTemplates).toContain('skill://{+skillPath}/{+filePath}');
     });
 
-    test('should list skills://catalog as a static resource', async ({ mcp }) => {
+    test('should list skill://index.json as a static resource', async ({ mcp }) => {
       const resources = await mcp.resources.list();
       const uris = resources.map((r: { uri: string }) => r.uri);
-      expect(uris).toContain('skills://catalog');
+      expect(uris).toContain('skill://index.json');
     });
   });
 
-  test.describe('skills://catalog', () => {
-    test('should return all MCP-visible skills', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://catalog');
+  test.describe('skill://index.json', () => {
+    test('should return the SEP-2640 discovery document', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://index.json');
       expect(result).toBeSuccessful();
 
-      const catalog = extractResourceJson<Array<{ name: string; description: string; tags: string[] }>>(result);
-      expect(Array.isArray(catalog)).toBe(true);
-      expect(catalog.length).toBeGreaterThan(0);
+      const doc = extractResourceJson<SkillIndexDocument>(result);
+      expect(doc.$schema).toBe('https://schemas.agentskills.io/discovery/0.2.0/schema.json');
+      expect(Array.isArray(doc.skills)).toBe(true);
+      expect(doc.skills.length).toBeGreaterThan(0);
 
-      const names = catalog.map((s) => s.name);
+      const names = doc.skills.filter((s) => s.type === 'skill-md').map((s) => s.name);
       expect(names).toContain('review-pr');
       expect(names).toContain('deploy-app');
       expect(names).toContain('notify-team');
       expect(names).toContain('mcp-only-workflow');
     });
 
-    test('should not include http-only skills', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://catalog');
-      expect(result).toBeSuccessful();
+    test('should include skill-md type and full URLs', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://index.json');
+      const doc = extractResourceJson<SkillIndexDocument>(result);
 
-      const catalog = extractResourceJson<Array<{ name: string }>>(result);
-      const names = catalog.map((s) => s.name);
+      const reviewPr = doc.skills.find((s) => s.name === 'review-pr');
+      expect(reviewPr).toBeDefined();
+      expect(reviewPr!.type).toBe('skill-md');
+      expect(reviewPr!.url).toBe('skill://review-pr/SKILL.md');
+      expect(reviewPr!.description).toBeTruthy();
+    });
+
+    test('should not include http-only skills', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://index.json');
+      const doc = extractResourceJson<SkillIndexDocument>(result);
+      const names = doc.skills.map((s) => s.name);
       expect(names).not.toContain('http-only-workflow');
     });
 
     test('should not include hidden skills', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://catalog');
-      expect(result).toBeSuccessful();
-
-      const catalog = extractResourceJson<Array<{ name: string }>>(result);
-      const names = catalog.map((s) => s.name);
+      const result = await mcp.resources.read('skill://index.json');
+      const doc = extractResourceJson<SkillIndexDocument>(result);
+      const names = doc.skills.map((s) => s.name);
       expect(names).not.toContain('hidden-internal');
-    });
-
-    test('should include skill metadata (tags, tools)', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://catalog');
-      expect(result).toBeSuccessful();
-
-      const catalog = extractResourceJson<Array<{ name: string; tags: string[]; tools: string[] }>>(result);
-      const reviewPr = catalog.find((s) => s.name === 'review-pr');
-
-      expect(reviewPr).toBeDefined();
-      expect(reviewPr!.tags).toContain('github');
-      expect(reviewPr!.tags).toContain('code-review');
-      expect(reviewPr!.tools).toContain('github_get_pr');
-      expect(reviewPr!.tools).toContain('github_add_comment');
     });
   });
 
-  test.describe('skills://{skillName}', () => {
-    test('should return formatted skill content', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://review-pr');
+  test.describe('skill://{skillPath}/SKILL.md', () => {
+    test('should return raw SKILL.md (frontmatter + body)', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://review-pr/SKILL.md');
       expect(result).toBeSuccessful();
 
       const text = extractResourceText(result);
-      expect(text).toContain('review-pr');
-      expect(text).toContain('PR Review Process');
-      expect(text).toContain('github_get_pr');
-    });
-
-    test('should return skill content via SKILL.md alias', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://review-pr/SKILL.md');
-      expect(result).toBeSuccessful();
-
-      const text = extractResourceText(result);
+      // SEP-2640 mandates raw frontmatter + body, not formatted-for-LLM markdown
+      expect(text.startsWith('---\n')).toBe(true);
+      expect(text).toContain('name: review-pr');
+      expect(text).toContain('description:');
       expect(text).toContain('PR Review Process');
     });
 
-    test('should include tool availability info', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://deploy-app');
+    test('should return raw SKILL.md for nested deploy-app', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://deploy-app/SKILL.md');
       expect(result).toBeSuccessful();
 
       const text = extractResourceText(result);
-      // Should mention missing tools
-      expect(text).toContain('docker_build');
-      expect(text).toContain('k8s_apply');
+      expect(text).toContain('name: deploy-app');
     });
 
-    test('should return mcp-only skill via resources', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://mcp-only-workflow');
+    test('should return mcp-only skill', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://mcp-only-workflow/SKILL.md');
       expect(result).toBeSuccessful();
 
       const text = extractResourceText(result);
-      expect(text).toContain('MCP-Only Workflow');
+      expect(text).toContain('name: mcp-only-workflow');
     });
 
     test('should fail for non-existent skill', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://nonexistent-skill-xyz');
+      const result = await mcp.resources.read('skill://nonexistent-skill-xyz/SKILL.md');
       expect(result).toBeError();
       expect(result.error?.message).toMatch(/not found/i);
     });
 
     test('should fail for http-only skill', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://http-only-workflow');
+      const result = await mcp.resources.read('skill://http-only-workflow/SKILL.md');
       expect(result).toBeError();
-      expect(result.error?.message).toMatch(/not available via MCP/i);
     });
   });
 
-  test.describe('skills://{skillName}/references', () => {
-    test('should return empty list for skill without references', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://review-pr/references');
-      expect(result).toBeSuccessful();
-
-      const refs = extractResourceJson<Array<{ name: string }>>(result);
-      expect(Array.isArray(refs)).toBe(true);
-      expect(refs.length).toBe(0);
-    });
-
-    test('should list references for docs-skill', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/references');
-      expect(result).toBeSuccessful();
-
-      const refs = extractResourceJson<Array<{ name: string; description: string; uri: string }>>(result);
-      expect(refs.length).toBeGreaterThan(0);
-      const names = refs.map((r) => r.name);
-      expect(names).toContain('getting-started');
-    });
-
-    test('should read a specific reference', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/references/getting-started');
+  test.describe('skill://{skillPath}/{filePath} — sub-files', () => {
+    test('should read a reference file', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://docs-skill/references/getting-started.md');
       expect(result).toBeSuccessful();
 
       const text = extractResourceText(result);
@@ -213,108 +183,60 @@ test.describe('Skills Resources E2E', () => {
       expect(text).toContain('Prerequisites');
     });
 
-    test('should return error for missing reference', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/references/nonexistent-ref');
-      expect(result).toBeError();
-    });
-  });
-
-  test.describe('skills://{skillName}/examples', () => {
-    test('should return empty list for skill without examples', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://review-pr/examples');
-      expect(result).toBeSuccessful();
-
-      const examples = extractResourceJson<Array<{ name: string }>>(result);
-      expect(Array.isArray(examples)).toBe(true);
-      expect(examples.length).toBe(0);
-    });
-
-    test('should list examples for docs-skill', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/examples');
-      expect(result).toBeSuccessful();
-
-      const examples = extractResourceJson<Array<{ name: string; level: string; reference: string }>>(result);
-      expect(examples.length).toBeGreaterThan(0);
-      const names = examples.map((e) => e.name);
-      expect(names).toContain('basic-setup');
-    });
-
-    test('should read a specific example', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/examples/basic-setup');
+    test('should read an example file', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://docs-skill/examples/basic-setup.md');
       expect(result).toBeSuccessful();
 
       const text = extractResourceText(result);
       expect(text).toContain('Basic Setup');
-      expect(text).toContain('What This Demonstrates');
     });
 
-    test('should return error for missing example', async ({ mcp }) => {
-      const result = await mcp.resources.read('skills://docs-skill/examples/nonexistent-example');
+    test('should return error for missing sub-file', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://docs-skill/references/nonexistent.md');
+      expect(result).toBeError();
+    });
+
+    test('should reject path traversal attempts', async ({ mcp }) => {
+      const result = await mcp.resources.read('skill://docs-skill/../../etc/passwd');
       expect(result).toBeError();
     });
   });
 
   test.describe('Auto-Complete', () => {
-    test('should complete skillName with empty prefix', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}', 'skillName', '');
+    test('should complete skillPath with empty prefix', async ({ mcp }) => {
+      const result = await requestCompletion(mcp, 'skill://{+skillPath}/SKILL.md', 'skillPath', '');
       expect(result.values).toBeDefined();
       expect(result.values.length).toBeGreaterThan(0);
       expect(result.values).toContain('review-pr');
       expect(result.values).toContain('deploy-app');
     });
 
-    test('should complete skillName with partial prefix', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}', 'skillName', 'review');
+    test('should complete skillPath with partial prefix', async ({ mcp }) => {
+      const result = await requestCompletion(mcp, 'skill://{+skillPath}/SKILL.md', 'skillPath', 'review');
       expect(result.values).toContain('review-pr');
-      // Should not contain non-matching skills
       expect(result.values).not.toContain('deploy-app');
     });
 
-    test('should complete skillName on SKILL.md template', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}/SKILL.md', 'skillName', 'dep');
-      expect(result.values).toContain('deploy-app');
-    });
-
-    test('should complete skillName on references template', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}/references', 'skillName', '');
-      expect(result.values.length).toBeGreaterThan(0);
-    });
-
     test('should not include http-only skills in completions', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}', 'skillName', '');
+      const result = await requestCompletion(mcp, 'skill://{+skillPath}/SKILL.md', 'skillPath', '');
       expect(result.values).not.toContain('http-only-workflow');
     });
 
     test('should not include hidden skills in completions', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}', 'skillName', '');
+      const result = await requestCompletion(mcp, 'skill://{+skillPath}/SKILL.md', 'skillPath', '');
       expect(result.values).not.toContain('hidden-internal');
-    });
-
-    test('should complete referenceName across all skills', async ({ mcp }) => {
-      const result = await requestCompletion(
-        mcp,
-        'skills://{skillName}/references/{referenceName}',
-        'referenceName',
-        '',
-      );
-      expect(result.values).toContain('getting-started');
-    });
-
-    test('should complete exampleName across all skills', async ({ mcp }) => {
-      const result = await requestCompletion(mcp, 'skills://{skillName}/examples/{exampleName}', 'exampleName', '');
-      expect(result.values).toContain('basic-setup');
     });
   });
 
   test.describe('Concurrent Access', () => {
     test('should handle concurrent resource reads', async ({ mcp }) => {
-      const [catalog, reviewPr, deployApp] = await Promise.all([
-        mcp.resources.read('skills://catalog'),
-        mcp.resources.read('skills://review-pr'),
-        mcp.resources.read('skills://deploy-app'),
+      const [index, reviewPr, deployApp] = await Promise.all([
+        mcp.resources.read('skill://index.json'),
+        mcp.resources.read('skill://review-pr/SKILL.md'),
+        mcp.resources.read('skill://deploy-app/SKILL.md'),
       ]);
 
-      expect(catalog).toBeSuccessful();
+      expect(index).toBeSuccessful();
       expect(reviewPr).toBeSuccessful();
       expect(deployApp).toBeSuccessful();
     });

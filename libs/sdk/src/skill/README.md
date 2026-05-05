@@ -6,7 +6,7 @@ This directory implements the Skill discovery and loading system. It covers:
 - Discovery via TF-IDF search
 - Session-based tool authorization
 - Tool validation at initialization and load time
-- MCP resource integration (`skills://` URI scheme)
+- MCP resource integration (SEP-2640 `skill://` URI scheme)
 
 The README is intended for contributors who want to add skills, integrate external skill providers, or extend the session/authorization system.
 
@@ -83,17 +83,17 @@ Key differences from tools:
 
 Skills are exposed through multiple MCP interfaces:
 
-**MCP Resources (`skills://` URI scheme):**
+**MCP Resources (SEP-2640 `skill://` URI scheme):**
 
-- **resources/skills-catalog.resource.ts** - `skills://catalog` static resource (list all skills)
-- **resources/skill-content.resource.ts** - `skills://{skillName}` template (load skill SKILL.md)
-- **resources/skill-content-alias.resource.ts** - `skills://{skillName}/SKILL.md` template (alias)
-- **resources/skill-references-list.resource.ts** - `skills://{skillName}/references` template
-- **resources/skill-reference-content.resource.ts** - `skills://{skillName}/references/{referenceName}` template
-- **resources/skill-examples-list.resource.ts** - `skills://{skillName}/examples` template
-- **resources/skill-example-content.resource.ts** - `skills://{skillName}/examples/{exampleName}` template
+- **sep-2640/resources/skill-index.resource.ts** — `skill://index.json` static resource (agentskills.io discovery document listing every MCP-visible skill)
+- **sep-2640/resources/skill-md.resource.ts** — `skill://{+skillPath}/SKILL.md` template returning the **raw** SKILL.md (frontmatter + body) so the result is identical to a filesystem-sourced skill, per SEP-2640's "Hosts: Unified Treatment of Filesystem and MCP Skills" guidance
+- **sep-2640/resources/skill-file.resource.ts** — `skill://{+skillPath}/{+filePath}` template exposing every file inside a skill directory (`references/`, `examples/`, `scripts/`, `assets/`, top-level `LICENSE`, etc.) with path-traversal protection
 
-All resource templates support auto-complete for `skillName`, `referenceName`, and `exampleName` parameters.
+`{+skillPath}` may be a single segment (`git-workflow`) or nested
+(`acme/billing/refunds`). The final segment MUST equal the skill's
+frontmatter `name`. The legacy plural `skills://` scheme has been removed.
+
+Both resource templates support auto-complete for `skillPath` and `filePath` parameters.
 
 **MCP Flows (internal):**
 
@@ -393,7 +393,7 @@ Skills support three instruction sources:
 To implement a custom storage provider (e.g., for vector DB search):
 
 ```typescript
-import { SkillStorageProvider, SkillSearchResult, SkillLoadResult } from '@frontmcp/sdk';
+import { SkillLoadResult, SkillSearchResult, SkillStorageProvider } from '@frontmcp/sdk';
 
 export class MyVectorDBProvider implements SkillStorageProvider {
   readonly type = 'vectordb' as const;
@@ -537,16 +537,17 @@ libs/sdk/src/
 │   │   ├── index.ts
 │   │   ├── search-skills.flow.ts
 │   │   └── load-skill.flow.ts
-│   ├── resources/
+│   ├── sep-2640/                                  ← MCP SEP-2640 conformance
 │   │   ├── index.ts
-│   │   ├── skill-resource.helpers.ts
-│   │   ├── skills-catalog.resource.ts
-│   │   ├── skill-content.resource.ts
-│   │   ├── skill-content-alias.resource.ts
-│   │   ├── skill-references-list.resource.ts
-│   │   ├── skill-reference-content.resource.ts
-│   │   ├── skill-examples-list.resource.ts
-│   │   └── skill-example-content.resource.ts
+│   │   ├── sep-2640.constants.ts
+│   │   ├── sep-2640.uri.ts
+│   │   ├── sep-2640.builders.ts
+│   │   ├── sep-2640.resource-helpers.ts
+│   │   └── resources/
+│   │       ├── index.ts
+│   │       ├── skill-index.resource.ts            ← skill://index.json
+│   │       ├── skill-md.resource.ts               ← skill://{+skillPath}/SKILL.md
+│   │       └── skill-file.resource.ts             ← skill://{+skillPath}/{+filePath}
 │   ├── session/
 │   │   ├── index.ts
 │   │   ├── skill-session.manager.ts

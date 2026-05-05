@@ -24,6 +24,7 @@ export const FrontMcpSkillTokens = {
   availableWhen: tokenFactory.meta('skill:availableWhen'),
   rating: tokenFactory.meta('skill:rating'),
   category: tokenFactory.meta('skill:category'),
+  skillPath: tokenFactory.meta('skill:skillPath'),
   metadata: tokenFactory.meta('skill:metadata'), // used in skill({}) construction
 } as const satisfies RawMetadataShape<SkillMetadata, ExtendFrontMcpSkillMetadata>;
 

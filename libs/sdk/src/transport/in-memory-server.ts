@@ -119,18 +119,39 @@ export async function createInMemoryServer(
       }
     : {};
 
+  // SEP-2640 capabilities go under `experimental` and `extensions`; merge
+  // those keys carefully so they don't clobber other contributors. The
+  // `extensions` slot is forward-compat (SEP-2133) — the upstream MCP
+  // schema accepts unknown top-level keys, but TS doesn't model that, so
+  // we build the object as `Record<string, unknown>` and cast at the call
+  // site.
+  const skillsCapabilities = scope.skills?.getCapabilities() ?? {};
+  const experimental: Record<string, unknown> = {};
+  const extensions: Record<string, unknown> = {};
+  for (const cap of [skillsCapabilities] as Array<Record<string, unknown>>) {
+    if (cap['experimental']) Object.assign(experimental, cap['experimental']);
+    if (cap['extensions']) Object.assign(extensions, cap['extensions']);
+  }
+
+  const baseCapabilities: Record<string, unknown> = {
+    ...remoteCapabilities,
+    ...scope.tools.getCapabilities(),
+    ...scope.resources.getCapabilities(),
+    ...scope.prompts.getCapabilities(),
+    ...scope.agents.getCapabilities(),
+    ...completionsCapability,
+    ...computeTaskCapabilities(scope),
+    logging: {},
+  };
+  if (Object.keys(experimental).length > 0) baseCapabilities['experimental'] = experimental;
+  if (Object.keys(extensions).length > 0) baseCapabilities['extensions'] = extensions;
+
+  // The MCP `ServerOptions.capabilities` type doesn't model the
+  // forward-compat `extensions` key yet (it's reserved for SEP-2133).
+  // The runtime passthrough is fine; the cast keeps TS happy.
   const serverOptions = {
     instructions: '',
-    capabilities: {
-      ...remoteCapabilities,
-      ...scope.tools.getCapabilities(),
-      ...scope.resources.getCapabilities(),
-      ...scope.prompts.getCapabilities(),
-      ...scope.agents.getCapabilities(),
-      ...completionsCapability,
-      ...computeTaskCapabilities(scope),
-      logging: {},
-    },
+    capabilities: baseCapabilities as Record<string, never>,
     serverInfo: scope.metadata.info,
   };
 

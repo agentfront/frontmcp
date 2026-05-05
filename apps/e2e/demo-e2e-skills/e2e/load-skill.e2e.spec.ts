@@ -9,7 +9,8 @@
  * - Error handling for missing skills
  * - Format options
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import { loadSkills } from './helpers/skills-protocol';
 
 interface SkillTool {
@@ -309,10 +310,10 @@ test.describe('loadSkills E2E', () => {
   });
 
   test.describe('Resource Template Discovery', () => {
-    test('should expose skills resource templates', async ({ mcp }) => {
+    test('should expose SEP-2640 skill:// resource templates', async ({ mcp }) => {
       const templates = await mcp.resources.listTemplates();
       const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
-      expect(uris).toContain('skills://{skillName}');
+      expect(uris).toContain('skill://{+skillPath}/SKILL.md');
     });
   });
 });
