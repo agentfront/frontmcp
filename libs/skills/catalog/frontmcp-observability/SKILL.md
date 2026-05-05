@@ -91,7 +91,7 @@ Follow the scenario routing table above to find the right reference for your use
 | Connect to monitoring platforms      | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                      |
 | Test spans and log entries           | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns       |
 
-## Cross-Cutting Patterns
+## Common Patterns
 
 | Pattern              | Correct                                     | Incorrect                                         | Why                                                           |
 | -------------------- | ------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------- |
@@ -136,6 +136,70 @@ Follow the scenario routing table above to find the right reference for your use
 - [ ] Tests verify span creation with `createTestTracer()`
 - [ ] Tests verify log entries via `CallbackSink`
 - [ ] No test isolation issues (each test resets exporter)
+
+## Troubleshooting
+
+| Problem                                          | Cause                                                         | Solution                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `this.telemetry` is undefined in a tool          | `observability` not enabled on the parent `@FrontMcp` config  | Set `observability: true` (or a config object) in the `@FrontMcp` decorator; see `tracing-setup`                          |
+| Spans appear without `trace_id` in logs          | Logger not connected to `StructuredLogTransport`              | Use `this.logger`, not `console`; see `structured-logging`                                                                |
+| OTLP exporter silently drops spans               | Endpoint URL points at the UI, not the OTLP collector         | Use the OTLP HTTP/gRPC ingest endpoint exposed by your vendor (Datadog, Coralogix, Logz, etc.); see `vendor-integrations` |
+| Real session ID appears in span attributes       | A custom span attribute writes `session.id` directly          | Use the SDK-provided `mcp.session.id` (already hashed); never log the raw session token                                   |
+| Tests randomly fail with leftover spans          | Exporter retained between tests                               | Reset the in-memory exporter in `afterEach`; see `testing-observability`                                                  |
+| OTel auto-instrumentation double-traces requests | Both `setupOTel()` AND a vendor agent attached to the process | Pick one: either FrontMCP-managed OTel OR the vendor agent — not both                                                     |
+
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `tracing-setup`
+
+| Example                                                                | Level        | Description                                                                                            |
+| ---------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------ |
+| [`basic-tracing`](./examples/tracing-setup/basic-tracing.md)           | Basic        | Enable auto-tracing and see spans printed to your terminal.                                            |
+| [`production-tracing`](./examples/tracing-setup/production-tracing.md) | Intermediate | Full production observability — traces to OTLP, structured logs to stdout, per-request log collection. |
+
+### `structured-logging`
+
+| Example                                                                       | Level        | Description                                                                                                                    |
+| ----------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`stdout-logging`](./examples/structured-logging/stdout-logging.md)           | Basic        | Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.                               |
+| [`winston-integration`](./examples/structured-logging/winston-integration.md) | Intermediate | Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata. |
+
+### `telemetry-api`
+
+| Example                                                                    | Level        | Description                                                                                                                                               |
+| -------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`tool-custom-spans`](./examples/telemetry-api/tool-custom-spans.md)       | Basic        | Create child spans, events, and attributes inside a tool's execute method using this.telemetry.                                                           |
+| [`plugin-telemetry`](./examples/telemetry-api/plugin-telemetry.md)         | Intermediate | Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace. |
+| [`agent-nested-tracing`](./examples/telemetry-api/agent-nested-tracing.md) | Advanced     | Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.                                                |
+
+### `vendor-integrations`
+
+| Example                                                                | Level        | Description                                                                                                               |
+| ---------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| [`coralogix-setup`](./examples/vendor-integrations/coralogix-setup.md) | Intermediate | Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically. |
+
+### `testing-observability`
+
+| Example                                                                            | Level        | Description                                                                                 |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| [`test-custom-spans`](./examples/testing-observability/test-custom-spans.md)       | Basic        | Verify that your tool creates the expected child spans with correct attributes.             |
+| [`test-log-correlation`](./examples/testing-observability/test-log-correlation.md) | Intermediate | Verify that structured log entries include trace context fields for correlation with spans. |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-observability/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                                    |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-observability`, `frontmcp skills read frontmcp-observability:references/<file>.md`, `frontmcp skills install frontmcp-observability` — no server required.                                                                                                                                             |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-observability/SKILL.md`, `skill://frontmcp-observability/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
 
 ## Reference
 

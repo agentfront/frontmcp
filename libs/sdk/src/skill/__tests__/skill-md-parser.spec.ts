@@ -500,6 +500,126 @@ Body.`;
       });
       expect(result.instructions).toBe('# Setup Redis\n\nStep 1...');
     });
+
+    it('should map id, category, and rating as top-level fields', () => {
+      const result = skillMdFrontmatterToMetadata(
+        { id: 'sk_42', name: 'cat-skill', description: 'Test', category: 'deployment', rating: 4.5 },
+        'Body',
+      );
+
+      expect(result.id).toBe('sk_42');
+      expect(result.category).toBe('deployment');
+      expect(result.rating).toBe(4.5);
+      // None of these should leak into specMetadata.
+      expect(result.specMetadata).toBeUndefined();
+    });
+
+    it('should not map non-numeric rating', () => {
+      // Mirrors the priority behaviour: a mistyped value is dropped
+      // rather than coerced or shoved into specMetadata.
+      const result = skillMdFrontmatterToMetadata({ name: 'bad-rating', description: 'Test', rating: 'high' }, 'Body');
+      expect(result.rating).toBeUndefined();
+    });
+
+    it('should reject NaN / ±Infinity / out-of-range rating values', () => {
+      // js-yaml turns `.nan`, `.inf`, `-.inf` into JS NaN / Infinity values,
+      // and a hand-edited frontmatter could specify e.g. `rating: 7.5`.
+      // None of these should reach the typed metadata.
+      for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -0.1, 5.1]) {
+        const result = skillMdFrontmatterToMetadata({ name: 'bad-rating', description: 'Test', rating: bad }, 'Body');
+        expect(result.rating).toBeUndefined();
+      }
+    });
+
+    it('should accept rating at the 0 and 5 endpoints', () => {
+      const zero = skillMdFrontmatterToMetadata({ name: 'r', description: 'd', rating: 0 }, '');
+      const five = skillMdFrontmatterToMetadata({ name: 'r', description: 'd', rating: 5 }, '');
+      expect(zero.rating).toBe(0);
+      expect(five.rating).toBe(5);
+    });
+
+    it('should map skillPath as a string array (SEP-2640 §Resource Mapping)', () => {
+      const result = skillMdFrontmatterToMetadata(
+        { name: 'refunds', description: 'Test', skillPath: ['acme', 'billing', 'refunds'] },
+        'Body',
+      );
+      expect(result.skillPath).toEqual(['acme', 'billing', 'refunds']);
+      expect(result.specMetadata).toBeUndefined();
+    });
+
+    it('should trim whitespace from skillPath segments and drop whitespace-only entries', () => {
+      const result = skillMdFrontmatterToMetadata(
+        { name: 'refunds', description: 'Test', skillPath: ['  acme  ', '   ', 'billing', 'refunds'] },
+        'Body',
+      );
+      expect(result.skillPath).toEqual(['acme', 'billing', 'refunds']);
+    });
+
+    it('should drop non-string skillPath segments', () => {
+      const result = skillMdFrontmatterToMetadata(
+        { name: 'partial', description: 'Test', skillPath: ['acme', 42, '', 'partial'] },
+        'Body',
+      );
+      expect(result.skillPath).toEqual(['acme', 'partial']);
+    });
+
+    it('should map resources object with known subdirectories', () => {
+      const result = skillMdFrontmatterToMetadata(
+        {
+          name: 'res-skill',
+          description: 'Test',
+          resources: {
+            scripts: 'scripts',
+            references: 'references',
+            assets: 'assets',
+            examples: 'examples',
+          },
+        },
+        'Body',
+      );
+
+      expect(result.resources).toEqual({
+        scripts: 'scripts',
+        references: 'references',
+        assets: 'assets',
+        examples: 'examples',
+      });
+      expect(result.specMetadata).toBeUndefined();
+    });
+
+    it('should map availableWhen via either camelCase or kebab-case key', () => {
+      const camel = skillMdFrontmatterToMetadata(
+        { name: 'mac-skill', description: 'Test', availableWhen: { platform: ['darwin'] } },
+        'Body',
+      );
+      const kebab = skillMdFrontmatterToMetadata(
+        { name: 'mac-skill', description: 'Test', 'available-when': { platform: ['darwin'] } },
+        'Body',
+      );
+
+      expect(camel.availableWhen).toEqual({ platform: ['darwin'] });
+      expect(kebab.availableWhen).toEqual({ platform: ['darwin'] });
+    });
+
+    it('should not pass id/category/rating/skillPath/resources/availableWhen through specMetadata', () => {
+      // Regression: prior to this fix, these schema-valid fields all
+      // landed in specMetadata as JSON-stringified strings, silently
+      // breaking downstream consumers (e.g. HTTP catalog category filter).
+      const result = skillMdFrontmatterToMetadata(
+        {
+          id: 'x',
+          name: 'leak-test',
+          description: 'Test',
+          category: 'config',
+          rating: 3.2,
+          skillPath: ['leak-test'],
+          resources: { references: 'references' },
+          availableWhen: { platform: ['linux'] },
+        },
+        'Body',
+      );
+      expect(result.specMetadata).toBeUndefined();
+    });
   });
 
   describe('stripFrontmatter', () => {

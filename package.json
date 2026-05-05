@@ -42,7 +42,7 @@
     "@apidevtools/json-schema-ref-parser": "^11.9.3",
     "@enclave-vm/core": "^2.13.0",
     "@huggingface/transformers": "^3.2.2",
-    "@modelcontextprotocol/sdk": "1.27.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@noble/ciphers": "^2.1.1",
     "@noble/hashes": "^2.0.1",
     "@opentelemetry/api": "^1.9.0",

@@ -159,7 +159,7 @@ export interface FrontMcpBaseMetadata {
    * ```typescript
    * skillsConfig: {
    *   enabled: true,
-   *   mcpResources: false,  // No skills:// MCP resources
+   *   mcpResources: false,  // No skill:// MCP resources
    * }
    * ```
    */

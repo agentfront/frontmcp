@@ -38,6 +38,22 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 
 > **Decision:** Use this skill for testing strategy and routing. Use `setup-testing` for hands-on Jest configuration and test writing.
 
+## Prerequisites
+
+- A FrontMCP project with at least one component to test (see `frontmcp-development`).
+- Jest installed and configured — if not, start with `setup-testing` before opening any other testing skill.
+- The component itself implemented and exported; tests reach decorated classes through the SDK, not by importing internal builders.
+
+## Steps
+
+This is a router skill. Follow this order to pick a testing approach, then move to the target skill.
+
+1. **Pick the test layer** — unit (fastest, mock DI), integration (real DI scope), or E2E (real MCP client + server). Use the Testing Strategy table below.
+2. **Pick the component flavour** — tool / resource / prompt / agent / job — each has a distinct recipe.
+3. **Pick the runtime concern** — auth, browser/CLI build, direct vs streamable transport — and add the matching skill to your reading list.
+4. **Open the target skill** (e.g. `test-tool-unit`, `test-e2e-handler`, `test-auth`) and follow its Steps section.
+5. **Enforce coverage** — confirm the project's 95%+ thresholds are wired into Jest before merging (see `setup-testing`).
+
 ## Scenario Routing Table
 
 | Scenario                                | Skill / Section                 | Description                                                                                          |
@@ -128,6 +144,77 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 | E2E test timeout                   | Server startup too slow or port conflict                | Increase Jest timeout; use random port allocation                                      |
 | DI resolution fails in tests       | Provider not registered in test scope                   | Register mock providers before creating the test context                               |
 | Istanbul shows 0% on async methods | TypeScript source-map mismatch with Istanbul            | Known issue with some TS compilation settings; verify coverage with actual test output |
+
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `setup-testing`
+
+| Example                                                                                        | Level        | Description                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`fixture-based-e2e-test`](./examples/setup-testing/fixture-based-e2e-test.md)                 | Advanced     | Write E2E tests using the fixture API from `@frontmcp/testing` that manages server lifecycle automatically and uses MCP-specific custom matchers. |
+| [`jest-config-with-coverage`](./examples/setup-testing/jest-config-with-coverage.md)           | Basic        | Set up a Jest configuration file that enforces 95%+ coverage across all metrics for a FrontMCP library.                                           |
+| [`unit-test-tool-resource-prompt`](./examples/setup-testing/unit-test-tool-resource-prompt.md) | Intermediate | Write unit tests for the three core MCP primitives, verifying that outputs match the expected MCP response shapes.                                |
+
+### `test-auth`
+
+| Example                                                                    | Level        | Description                                                                                               |
+| -------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| [`oauth-flow-test`](./examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.        |
+| [`role-based-access-test`](./examples/test-auth/role-based-access-test.md) | Intermediate | Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints. |
+| [`token-factory-test`](./examples/test-auth/token-factory-test.md)         | Basic        | Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.            |
+
+### `test-browser-build`
+
+| Example                                                                                   | Level    | Description                                                                                      |
+| ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| [`browser-bundle-validation`](./examples/test-browser-build/browser-bundle-validation.md) | Basic    | Verify that the browser build produces a valid bundle without Node.js-only module references.    |
+| [`playwright-browser-test`](./examples/test-browser-build/playwright-browser-test.md)     | Advanced | Use Playwright to test a browser-based MCP client that loads and calls tools from an MCP server. |
+
+### `test-cli-binary`
+
+| Example                                                                        | Level        | Description                                                                                                        |
+| ------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`binary-startup-test`](./examples/test-cli-binary/binary-startup-test.md)     | Basic        | Verify that a compiled CLI binary starts correctly and responds to health checks.                                  |
+| [`js-bundle-import-test`](./examples/test-cli-binary/js-bundle-import-test.md) | Intermediate | Verify that the compiled JS bundle can be imported and exports the expected modules after a `frontmcp build` step. |
+
+### `test-direct-client`
+
+| Example                                                                                   | Level        | Description                                                                                                                   |
+| ----------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-create-test`](./examples/test-direct-client/basic-create-test.md)                 | Basic        | Test tools in-memory without any HTTP overhead using the `create()` function from `@frontmcp/sdk`.                            |
+| [`openai-claude-format-test`](./examples/test-direct-client/openai-claude-format-test.md) | Intermediate | Verify that tools are returned in the correct format for OpenAI and Claude clients using `connectOpenAI` and `connectClaude`. |
+
+### `test-e2e-handler`
+
+| Example                                                                                       | Level        | Description                                                                                                          |
+| --------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [`basic-e2e-test`](./examples/test-e2e-handler/basic-e2e-test.md)                             | Basic        | Set up a basic E2E test that starts a server, connects a client, and verifies tools are listed.                      |
+| [`manual-client-with-transport`](./examples/test-e2e-handler/manual-client-with-transport.md) | Advanced     | Use `McpTestClient.create()` with explicit transport settings for fine-grained control over E2E tests.               |
+| [`tool-call-and-error-e2e`](./examples/test-e2e-handler/tool-call-and-error-e2e.md)           | Intermediate | Test successful tool calls and verify that invalid inputs produce proper error responses over the full MCP protocol. |
+
+### `test-tool-unit`
+
+| Example                                                                             | Level        | Description                                                                                              |
+| ----------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| [`basic-tool-test`](./examples/test-tool-unit/basic-tool-test.md)                   | Basic        | Test a simple tool's `execute()` method with mock context and verify the output.                         |
+| [`schema-validation-test`](./examples/test-tool-unit/schema-validation-test.md)     | Intermediate | Validate that a tool's Zod input schema rejects invalid data before `execute()` is called.               |
+| [`tool-error-handling-test`](./examples/test-tool-unit/tool-error-handling-test.md) | Advanced     | Test that a tool throws the correct MCP error classes with proper error codes and JSON-RPC error shapes. |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-testing/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                              |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-testing`, `frontmcp skills read frontmcp-testing:references/<file>.md`, `frontmcp skills install frontmcp-testing` — no server required.                                                                                                                                                   |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-testing/SKILL.md`, `skill://frontmcp-testing/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
 
 ## Reference
 

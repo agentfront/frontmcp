@@ -183,8 +183,9 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     }));
 
     const toolNameSet = new Set(tools.map((t) => t.name));
+    // SEP-2640: skills are exposed under the singular `skill://` URI scheme.
     const hasSkillsResources = resourceTemplates.some(
-      (rt) => rt.uriTemplate.startsWith('skills://'),
+      (rt) => rt.uriTemplate.startsWith('skill://'),
     );
     const capabilities: ExtractedCapabilities = {
       skills: hasSkillsResources,

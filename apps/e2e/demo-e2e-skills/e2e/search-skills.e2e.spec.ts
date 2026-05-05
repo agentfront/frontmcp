@@ -8,7 +8,8 @@
  * - Hidden skills exclusion
  * - Result limit
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import { searchSkills } from './helpers/skills-protocol';
 
 test.describe('searchSkills E2E', () => {
@@ -249,10 +250,10 @@ test.describe('searchSkills E2E', () => {
   });
 
   test.describe('Resource Template Discovery', () => {
-    test('should expose skills resource templates', async ({ mcp }) => {
+    test('should expose SEP-2640 skill:// resource templates', async ({ mcp }) => {
       const templates = await mcp.resources.listTemplates();
       const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
-      expect(uris).toContain('skills://{skillName}');
+      expect(uris).toContain('skill://{+skillPath}/SKILL.md');
     });
   });
 

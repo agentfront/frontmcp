@@ -93,6 +93,48 @@
           ]
         },
         {
+          "name": "configure-deployment-targets",
+          "description": "Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, sdk, and mcpb targets",
+          "examples": [
+            {
+              "name": "distributed-ha-config",
+              "description": "Configure a distributed deployment target with HA settings for heartbeat, session takeover, and Redis-backed session persistence",
+              "level": "advanced",
+              "tags": ["config", "deployment", "distributed", "ha", "redis", "heartbeat", "session-takeover"],
+              "features": [
+                "Configuring the distributed deployment target with HA options",
+                "Setting custom heartbeat intervals and TTL for pod liveness detection",
+                "Combining server config (CSP, cookies) with HA config in the same target",
+                "Using per-target environment variables for Redis connection"
+              ]
+            },
+            {
+              "name": "json-schema-ide-support",
+              "description": "Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete",
+              "level": "basic",
+              "tags": ["config", "deployment", "json", "schema", "ide", "autocomplete"],
+              "features": [
+                "Adding $schema field for IDE autocomplete in JSON config files",
+                "Configuring multiple deployment targets in JSON format",
+                "Using the frontmcp.schema.json for property validation and hover docs"
+              ]
+            },
+            {
+              "name": "multi-target-with-security",
+              "description": "Configure a FrontMCP project with node + distributed targets, CSP headers, and HSTS",
+              "level": "intermediate",
+              "tags": ["config", "deployment", "csp", "security", "distributed", "hsts", "multi-target"],
+              "features": [
+                "Using defineConfig() for typed configuration with IDE autocomplete",
+                "Multi-target deployments with per-target server settings",
+                "CSP directives including value-less directives like upgrade-insecure-requests",
+                "Security headers (HSTS, X-Frame-Options, X-Content-Type-Options)",
+                "HA configuration for the distributed target"
+              ]
+            }
+          ]
+        },
+        {
           "name": "configure-elicitation",
           "description": "Configure interactive user input during tool execution for confirmations, choices, and forms",
           "examples": [
@@ -160,6 +202,35 @@
                 "When `socketPath` is set, the `port` field is ignored",
                 "Disabling CORS with `cors: false` since unix sockets are local-only",
                 "Suitable for CLI tools, daemons, and process manager integrations"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "configure-security-headers",
+          "description": "Configure CSP, HSTS, X-Frame-Options, and X-Content-Type-Options via frontmcp.config server settings",
+          "examples": [
+            {
+              "name": "csp-report-only",
+              "description": "Test CSP policies in report-only mode to identify violations before enforcement",
+              "level": "basic",
+              "tags": ["config", "csp", "security", "report-only", "headers"],
+              "features": [
+                "Enabling CSP in report-only mode with reportUri for violation monitoring",
+                "Using the object-format directives in frontmcp.config",
+                "Verifying report-only header is emitted instead of enforcement header"
+              ]
+            },
+            {
+              "name": "full-production-headers",
+              "description": "Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection",
+              "level": "intermediate",
+              "tags": ["config", "csp", "security", "hsts", "production", "headers", "frame-options"],
+              "features": [
+                "Full CSP enforcement with multiple directive types including value-less directives",
+                "HSTS with preload and includeSubDomains for HTTPS enforcement",
+                "X-Frame-Options DENY for clickjacking protection",
+                "Custom headers for additional security controls"
               ]
             }
           ]
@@ -830,18 +901,6 @@
           "description": "Configure MCP clients (Claude Desktop, Claude Code, Cursor, VS Code) to connect to a FrontMCP server via stdio, HTTP, or Unix socket",
           "examples": [
             {
-              "name": "stdio-npx",
-              "description": "Publish a FrontMCP server to npm and configure MCP clients to use it with npx --stdio.",
-              "level": "basic",
-              "tags": ["deployment", "stdio", "npx", "npm", "mcp-client", "claude-code", "claude-desktop"],
-              "features": [
-                "Building a FrontMCP server as a distributable CLI bundle",
-                "Configuring package.json bin field for npx execution",
-                "Setting up Claude Code, Claude Desktop, and Cursor to use the server via stdio",
-                "Passing environment variables from MCP client config to the server"
-              ]
-            },
-            {
               "name": "http-remote",
               "description": "Connect an MCP client to a FrontMCP server running as an HTTP server, locally or remotely.",
               "level": "basic",
@@ -863,6 +922,18 @@
                 "Passing database URLs, API keys, and feature flags via environment variables",
                 "Using absolute paths for reliable binary resolution",
                 "Configuring different environments (dev, staging) via env vars"
+              ]
+            },
+            {
+              "name": "stdio-npx",
+              "description": "Publish a FrontMCP server to npm and configure MCP clients to use it with npx --stdio.",
+              "level": "basic",
+              "tags": ["deployment", "stdio", "npx", "npm", "mcp-client", "claude-code", "claude-desktop"],
+              "features": [
+                "Building a FrontMCP server as a distributable CLI bundle",
+                "Configuring package.json bin field for npx execution",
+                "Setting up Claude Code, Claude Desktop, and Cursor to use the server via stdio",
+                "Passing environment variables from MCP client config to the server"
               ]
             }
           ]
@@ -1527,75 +1598,6 @@
           "examples": []
         },
         {
-          "name": "openapi-adapter",
-          "description": "Convert OpenAPI 3.x specifications into MCP tools with authentication, polling, transforms, format resolution, and $ref security",
-          "examples": [
-            {
-              "name": "basic-openapi-adapter",
-              "description": "Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.",
-              "level": "basic",
-              "tags": ["development", "openapi", "adapters", "adapter"],
-              "features": [
-                "Using `OpenapiAdapter.init()` with just `name` and `url` to auto-generate MCP tools",
-                "Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`",
-                "The adapter is registered in the `adapters` array of `@App`, not in `plugins`",
-                "The `name` field serves as the namespace prefix to prevent tool name collisions"
-              ]
-            },
-            {
-              "name": "authenticated-adapter-with-polling",
-              "description": "Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.",
-              "level": "intermediate",
-              "tags": ["development", "auth", "openapi", "security", "adapters", "authenticated"],
-              "features": [
-                "Three authentication methods: `staticAuth.apiKey`, `staticAuth.jwt`, and dynamic `securityResolver`",
-                "Using `securityResolver` for per-request dynamic authentication based on the calling context",
-                "Enabling `polling` to automatically refresh tool definitions when the upstream spec changes",
-                "Loading secrets from environment variables instead of hardcoding them",
-                "Each adapter has a unique `name` to avoid tool naming collisions"
-              ]
-            },
-            {
-              "name": "format-resolution-and-custom-resolvers",
-              "description": "Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.",
-              "level": "intermediate",
-              "tags": ["development", "openapi", "adapters", "format", "schema", "validation"],
-              "features": [
-                "Enabling built-in format resolvers with `resolveFormats: true` for uuid, date-time, email, int32, etc.",
-                "Adding custom format resolvers for domain-specific formats (phone, currency)",
-                "Merging custom resolvers with built-ins where custom takes precedence",
-                "Using custom-only resolvers without built-ins for full control"
-              ]
-            },
-            {
-              "name": "ref-security-and-filtering",
-              "description": "Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.",
-              "level": "intermediate",
-              "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
-              "features": [
-                "Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers",
-                "Using `allowedHosts` to restrict $refs to trusted schema servers",
-                "Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols",
-                "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
-                "Combining security hardening with operation filtering for a production-ready setup"
-              ]
-            },
-            {
-              "name": "multi-api-hub-with-inline-spec",
-              "description": "Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL.",
-              "level": "advanced",
-              "tags": ["development", "openapi", "remote", "adapters", "multi", "api"],
-              "features": [
-                "Registering multiple adapters in a single `@App` with unique names for tool namespacing",
-                "Using `additionalHeaders` for header-based authentication (GitHub token)",
-                "Providing an inline `spec` object instead of a remote `url` for APIs without hosted specs",
-                "Each adapter's tools are namespaced: `github:*`, `jira:*`, `internal:*`",
-                "Only one of `url` or `spec` should be provided per adapter; `spec` takes precedence"
-              ]
-            }
-          ]
-        },
-        {
           "name": "official-plugins",
           "description": "Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring",
           "examples": [
@@ -1641,6 +1643,75 @@
                 "Using `this.remember.set()` with default `session` scope and explicit `user` scope",
                 "Using `this.remember.get()` with a `defaultValue` fallback",
                 "Using `this.remember.knows()` to check key existence without retrieving the value"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "openapi-adapter",
+          "description": "Convert OpenAPI 3.x specifications into MCP tools with authentication, polling, transforms, format resolution, and $ref security",
+          "examples": [
+            {
+              "name": "authenticated-adapter-with-polling",
+              "description": "Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.",
+              "level": "intermediate",
+              "tags": ["development", "auth", "openapi", "security", "adapters", "authenticated"],
+              "features": [
+                "Three authentication methods: `staticAuth.apiKey`, `staticAuth.jwt`, and dynamic `securityResolver`",
+                "Using `securityResolver` for per-request dynamic authentication based on the calling context",
+                "Enabling `polling` to automatically refresh tool definitions when the upstream spec changes",
+                "Loading secrets from environment variables instead of hardcoding them",
+                "Each adapter has a unique `name` to avoid tool naming collisions"
+              ]
+            },
+            {
+              "name": "basic-openapi-adapter",
+              "description": "Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.",
+              "level": "basic",
+              "tags": ["development", "openapi", "adapters", "adapter"],
+              "features": [
+                "Using `OpenapiAdapter.init()` with just `name` and `url` to auto-generate MCP tools",
+                "Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`",
+                "The adapter is registered in the `adapters` array of `@App`, not in `plugins`",
+                "The `name` field serves as the namespace prefix to prevent tool name collisions"
+              ]
+            },
+            {
+              "name": "format-resolution-and-custom-resolvers",
+              "description": "Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.",
+              "level": "intermediate",
+              "tags": ["development", "openapi", "adapters", "format", "schema", "validation"],
+              "features": [
+                "Enabling built-in format resolvers with `resolveFormats: true` for uuid, date-time, email, int32, etc.",
+                "Adding custom format resolvers for domain-specific formats (phone, currency)",
+                "Merging custom resolvers with built-ins where custom takes precedence",
+                "Using custom-only resolvers without built-ins for full control"
+              ]
+            },
+            {
+              "name": "multi-api-hub-with-inline-spec",
+              "description": "Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL.",
+              "level": "advanced",
+              "tags": ["development", "openapi", "remote", "adapters", "multi", "api"],
+              "features": [
+                "Registering multiple adapters in a single `@App` with unique names for tool namespacing",
+                "Using `additionalHeaders` for header-based authentication (GitHub token)",
+                "Providing an inline `spec` object instead of a remote `url` for APIs without hosted specs",
+                "Each adapter's tools are namespaced: `github:*`, `jira:*`, `internal:*`",
+                "Only one of `url` or `spec` should be provided per adapter; `spec` takes precedence"
+              ]
+            },
+            {
+              "name": "ref-security-and-filtering",
+              "description": "Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.",
+              "level": "intermediate",
+              "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
+              "features": [
+                "Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers",
+                "Using `allowedHosts` to restrict $refs to trusted schema servers",
+                "Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols",
+                "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
+                "Combining security hardening with operation filtering for a production-ready setup"
               ]
             }
           ]
@@ -1934,6 +2005,54 @@
                 "Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier",
                 "Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported",
                 "Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "distributed-ha",
+          "description": "Deploy FrontMCP across multiple pods with heartbeat, session takeover, and notification relay for zero-downtime failover",
+          "examples": [
+            {
+              "name": "ha-kubernetes-3-replicas",
+              "description": "Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubernetes",
+              "level": "intermediate",
+              "tags": ["ha", "kubernetes", "redis", "distributed", "session-takeover", "heartbeat"],
+              "features": [
+                "Configuring @FrontMcp with Redis for distributed deployment",
+                "Kubernetes Deployment YAML with 3 replicas and readiness probes",
+                "Verifying heartbeat keys and session takeover via redis-cli",
+                "NGINX sticky sessions for session affinity"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "health-readiness-endpoints",
+          "description": "Configure /healthz and /readyz endpoints with custom probes, runtime-aware readiness, and dependency health checks",
+          "examples": [
+            {
+              "name": "basic-health-setup",
+              "description": "Default health endpoints with Redis session store, showing /healthz and /readyz responses.",
+              "level": "basic",
+              "tags": ["production", "health", "readiness", "redis", "kubernetes", "docker"],
+              "features": [
+                "Zero-config /healthz and /readyz endpoints enabled by default",
+                "Auto-discovered session-store probe via Redis persistence",
+                "Catalog hash for config drift detection across instances",
+                "Docker HEALTHCHECK directive using /healthz"
+              ]
+            },
+            {
+              "name": "custom-probes",
+              "description": "Custom database and API probes with Kubernetes deployment configuration.",
+              "level": "intermediate",
+              "tags": ["production", "health", "readiness", "kubernetes", "postgres", "probes", "custom"],
+              "features": [
+                "Custom health probes for PostgreSQL and external API dependencies",
+                "Kubernetes liveness and readiness probe configuration",
+                "Production includeDetails: false to hide infrastructure topology",
+                "Per-probe timeout to prevent slow dependencies from blocking readiness"
               ]
             }
           ]
@@ -2272,54 +2391,6 @@
                 "No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3",
                 "Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state",
                 "Verify CORS origins include `VERCEL_URL` and any custom production domain"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "health-readiness-endpoints",
-          "description": "Configure /healthz and /readyz endpoints with custom probes, runtime-aware readiness, and dependency health checks",
-          "examples": [
-            {
-              "name": "basic-health-setup",
-              "description": "Default health endpoints with Redis session store, showing /healthz and /readyz responses.",
-              "level": "basic",
-              "tags": ["production", "health", "readiness", "redis", "kubernetes", "docker"],
-              "features": [
-                "Zero-config /healthz and /readyz endpoints enabled by default",
-                "Auto-discovered session-store probe via Redis persistence",
-                "Catalog hash for config drift detection across instances",
-                "Docker HEALTHCHECK directive using /healthz"
-              ]
-            },
-            {
-              "name": "custom-probes",
-              "description": "Custom database and API probes with Kubernetes deployment configuration.",
-              "level": "intermediate",
-              "tags": ["production", "health", "readiness", "kubernetes", "postgres", "probes", "custom"],
-              "features": [
-                "Custom health probes for PostgreSQL and external API dependencies",
-                "Kubernetes liveness and readiness probe configuration",
-                "Production includeDetails: false to hide infrastructure topology",
-                "Per-probe timeout to prevent slow dependencies from blocking readiness"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "distributed-ha",
-          "description": "Deploy FrontMCP across multiple pods with heartbeat, session takeover, and notification relay for zero-downtime failover",
-          "examples": [
-            {
-              "name": "ha-kubernetes-3-replicas",
-              "description": "Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubernetes",
-              "level": "intermediate",
-              "tags": ["ha", "kubernetes", "redis", "distributed", "session-takeover", "heartbeat"],
-              "features": [
-                "Configuring @FrontMcp with Redis for distributed deployment",
-                "Kubernetes Deployment YAML with 3 replicas and readiness probes",
-                "Verifying heartbeat keys and session takeover via redis-cli",
-                "NGINX sticky sessions for session affinity"
               ]
             }
           ]

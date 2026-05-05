@@ -288,10 +288,36 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
             icons: resource.metadata.icons,
           };
 
-          // Add _meta for MCP Apps widget resources (ui/* namespace per spec)
+          // Forward MCP `annotations` (audience, priority, lastModified) when set
+          // — used by SEP-2640 skill resources to declare assistant-targeted
+          // priority for SKILL.md vs lower priority for sub-files.
+          const annotations = resource.metadata.annotations;
+          if (annotations) {
+            (item as ResponseResourceItem & { annotations?: typeof annotations }).annotations = annotations;
+          }
+
+          // Merge `_meta` from metadata first; the per-mimeType branch below
+          // can still add keys.
+          const metaFromMetadata = resource.metadata._meta;
+          if (metaFromMetadata && Object.keys(metaFromMetadata).length > 0) {
+            item._meta = { ...metaFromMetadata };
+          }
+
+          // Add _meta for MCP Apps widget resources (ui/* namespace per spec).
+          // Nested-merge so existing _meta.ui keys are preserved. Validate
+          // the existing `ui` value at runtime before spreading — a plugin
+          // could legitimately put a non-object there, in which case we
+          // overwrite with our object form rather than throw.
           if (resource.metadata.mimeType === 'text/html;profile=mcp-app') {
+            const rawUi = item._meta?.['ui'];
+            const existingUi: Record<string, unknown> =
+              rawUi !== null && typeof rawUi === 'object' && !Array.isArray(rawUi)
+                ? (rawUi as Record<string, unknown>)
+                : {};
             item._meta = {
+              ...(item._meta ?? {}),
               ui: {
+                ...existingUi,
                 resourceUri: uri,
               },
             };

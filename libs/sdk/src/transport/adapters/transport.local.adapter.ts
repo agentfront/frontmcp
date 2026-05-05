@@ -28,6 +28,39 @@ import { type RecreateableSSEServerTransport } from './sse-transport';
 import { type RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 
 /**
+ * Merge multiple capability fragments while preserving keys inside
+ * `experimental` and `extensions` from every contributor (channels +
+ * SEP-2640 skills both live there). A naive `{...a, ...b}` merge would
+ * have later contributors clobber earlier `experimental` keys.
+ */
+function mergeExperimental(fragments: Array<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const experimental: Record<string, unknown> = {};
+  const extensions: Record<string, unknown> = {};
+  let sawExperimental = false;
+  let sawExtensions = false;
+
+  for (const frag of fragments) {
+    if (!frag) continue;
+    for (const [key, value] of Object.entries(frag)) {
+      if (key === 'experimental' && value && typeof value === 'object') {
+        Object.assign(experimental, value as Record<string, unknown>);
+        sawExperimental = true;
+      } else if (key === 'extensions' && value && typeof value === 'object') {
+        Object.assign(extensions, value as Record<string, unknown>);
+        sawExtensions = true;
+      } else {
+        out[key] = value;
+      }
+    }
+  }
+
+  if (sawExperimental) out['experimental'] = experimental;
+  if (sawExtensions) out['extensions'] = extensions;
+  return out;
+}
+
+/**
  * Base transport type that includes all supported transports.
  * RecreateableStreamableHTTPServerTransport extends StreamableHTTPServerTransport
  * and RecreateableSSEServerTransport extends SSEServerTransport,
@@ -168,35 +201,51 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // Channel capabilities (experimental extension for Claude Code)
     const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
 
+    // SEP-2640 (Skills Extension) — capability declaration and optional
+    // skill-URI hints. `skillsCapabilities` advertises the extension; the
+    // SEP-2640 URI hint block (gated by `skillsConfig.sep2640InInstructions`)
+    // is appended to the catalog summary produced by
+    // `composeInitializeInstructions` so both surfaces compose cleanly.
+    const skillsCapabilities = this.scope.skills?.getCapabilities() ?? {};
+
     // Compose `instructions` lazily on every `initialize` so dynamic skill
     // registrations after boot are reflected per-session. The static value
     // below seeds the McpServer constructor for SDK compatibility; the
     // actual response is recomputed inside the handler via
     // `composeInstructions` (see initialize-request.handler.ts).
-    const composeInstructions = (): string =>
-      composeInitializeInstructions({
+    const composeInstructions = (): string => {
+      const composed = composeInitializeInstructions({
         userInstructions: this.scope.metadata.instructions,
         channelInstructions: buildChannelInstructions(this.scope.channels),
         skillRegistry: this.scope.skills,
         policy: this.scope.metadata.skillsConfig?.injectInstructions,
       });
+      const sep2640Hints = this.buildSkillInstructionHints();
+      return [composed, sep2640Hints].filter((s) => s.length > 0).join('\n\n---\n\n');
+    };
     const instructions = composeInstructions();
 
+    const mergedCapabilities = mergeExperimental([
+      remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
+      this.scope.tools.getCapabilities(),
+      this.scope.resources.getCapabilities(),
+      this.scope.prompts.getCapabilities(),
+      this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
+      channelCapabilities, // Channel capabilities (claude/channel extension)
+      skillsCapabilities, // SEP-2640 extension declaration
+      completionsCapability,
+      computeTaskCapabilities(this.scope),
+      // MCP logging protocol support - allows clients to set log level via logging/setLevel
+      { logging: {} },
+      elicitationCapability,
+    ]);
+
+    // The MCP `ServerOptions.capabilities` type doesn't model the
+    // forward-compat `extensions` key (reserved for SEP-2133). The runtime
+    // passthrough is fine; the cast keeps TS happy.
     const serverOptions = {
       instructions,
-      capabilities: {
-        ...remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
-        ...this.scope.tools.getCapabilities(),
-        ...this.scope.resources.getCapabilities(),
-        ...this.scope.prompts.getCapabilities(),
-        ...this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
-        ...channelCapabilities, // Channel capabilities (claude/channel extension)
-        ...completionsCapability,
-        ...computeTaskCapabilities(this.scope),
-        // MCP logging protocol support - allows clients to set log level via logging/setLevel
-        logging: {},
-        ...elicitationCapability,
-      },
+      capabilities: mergedCapabilities as Record<string, never>,
       serverInfo: info,
     };
 
@@ -478,6 +527,36 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // Remote apps have 'urlType' property indicating they're external MCP servers
     // Standalone apps don't contribute to the main server's capabilities
     return 'urlType' in appObj && appObj['standalone'] !== true;
+  }
+
+  /**
+   * SEP-2640 §Discovery — opt-in `instructions` text listing each
+   * MCP-visible skill's `skill://` URI. Returns an empty string unless
+   * `skillsConfig.sep2640InInstructions` is true.
+   */
+  private buildSkillInstructionHints(): string {
+    const skillRegistry = this.scope.skills;
+    if (!skillRegistry?.hasAny()) return '';
+
+    const skillsConfig = this.scope.metadata?.skillsConfig as { sep2640InInstructions?: boolean } | undefined;
+    if (!skillsConfig?.sep2640InInstructions) return '';
+
+    const visible = skillRegistry.getSkills({ visibility: 'mcp' });
+    if (visible.length === 0) return '';
+
+    const lines = ['Available skills (load via resources/read):'];
+    for (const skill of visible) {
+      const uri = `skill://${skill.getSkillPath()}/SKILL.md`;
+      lines.push(`- ${uri} — ${skill.metadata.description}`);
+    }
+
+    // Include any extra URIs registered programmatically.
+    const extras = skillRegistry.getSep2640InstructionUris?.() ?? [];
+    for (const extra of extras) {
+      lines.push(`- ${extra}`);
+    }
+
+    return lines.join('\n');
   }
 
   /**

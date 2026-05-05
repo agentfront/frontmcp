@@ -7,7 +7,7 @@ tools: []
 
 # Docs Skill
 
-This is a test skill with references and examples for verifying the skills:// resource system.
+This is a test skill with references and examples for verifying the skill:// resource system.
 
 ## Steps
 

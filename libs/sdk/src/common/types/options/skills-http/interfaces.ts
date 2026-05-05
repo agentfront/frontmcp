@@ -26,7 +26,7 @@
  * ## Visibility Control
  *
  * Skills can have a `visibility` property to control where they appear:
- * - `'mcp'`: Only via skills:// MCP resources
+ * - `'mcp'`: Only via skill:// MCP resources
  * - `'http'`: Only via HTTP API endpoints (/llm.txt, /skills)
  * - `'both'`: Visible in both MCP and HTTP (default)
  *
@@ -167,7 +167,7 @@ export interface SkillsConfigEndpointConfig {
  *   skillsConfig: {
  *     enabled: true,
  *     auth: 'public',
- *     mcpResources: false,  // No skills:// MCP resource templates
+ *     mcpResources: false,  // No skill:// MCP resource templates
  *   },
  * })
  * ```
@@ -271,20 +271,30 @@ export interface SkillsConfigOptions {
   api?: SkillsConfigEndpointConfig | boolean;
 
   /**
-   * Whether to register skills:// MCP resource templates.
-   * Set to false to expose skills only via HTTP endpoints.
+   * Whether to register the SEP-2640 (Skills Extension) `skill://`
+   * MCP resource templates. Set to `false` to expose skills only via the
+   * HTTP endpoints (`/llm.txt`, `/llm_full.txt`, `/skills`).
    *
-   * When enabled (default), the following resource templates are registered:
-   * - `skills://catalog` — list all skills
-   * - `skills://{skillName}` — load skill content
-   * - `skills://{skillName}/references` — list references
-   * - `skills://{skillName}/references/{referenceName}` — read reference
-   * - `skills://{skillName}/examples` — list examples
-   * - `skills://{skillName}/examples/{exampleName}` — read example
+   * When enabled (default), the following resources are registered:
+   * - `skill://index.json`               — discovery index (agentskills.io schema)
+   * - `skill://{+skillPath}/SKILL.md`    — raw SKILL.md (frontmatter + body)
+   * - `skill://{+skillPath}/{+filePath}` — any file inside the skill directory
    *
    * @default true
+   * @see https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640
    */
   mcpResources?: boolean;
+
+  /**
+   * SEP-2640 §Discovery — opt-in inclusion of skill URIs in the server's
+   * `instructions` field. When `true`, the transport adapter prepends a
+   * short "Available skills:" block listing each MCP-visible skill's
+   * `skill://` URI so models that only see server instructions can still
+   * find them.
+   *
+   * @default false (opt-in to keep the instructions field lean by default)
+   */
+  sep2640InInstructions?: boolean;
 
   /**
    * Cache configuration for HTTP endpoints.

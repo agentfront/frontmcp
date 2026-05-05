@@ -20,8 +20,9 @@ export type SkillType<T = unknown> = Type<T> | SkillRecord | string;
 /**
  * Metadata for a resolved reference file within a skill's references/ directory.
  *
- * Three lookup paths are supported by the `skills://{skillName}/references/{name}`
- * resource handler — listed in priority order (the first that's set wins):
+ * Three lookup paths are supported by the SEP-2640
+ * `skill://{skillPath}/references/{name}` resource handler — listed in
+ * priority order (the first that's set wins):
  *
  *   1. `path`    — read from disk on demand (filesystem-backed catalog skills)
  *   2. `content` — return the bundled inline markdown (bundle-sourced skills)

@@ -1,1 +1,1 @@
-export { resolve, join, basename, dirname, extname } from 'path';
+export { resolve, join, basename, dirname, extname, isAbsolute } from 'path';

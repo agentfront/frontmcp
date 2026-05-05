@@ -11,7 +11,8 @@
  * to be running within a session context. The behavior of these tests
  * documents the current authorization state based on session availability.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import { loadSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
@@ -416,10 +417,10 @@ test.describe('Tool Authorization E2E', () => {
       expect(tools).toContainTool('slack_notify');
       expect(tools).toContainTool('admin_action');
 
-      // Skills are now exposed as resources, not tools
+      // Skills are exposed as SEP-2640 `skill://` resources, not tools
       const templates = await mcp.resources.listTemplates();
       const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
-      expect(uris).toContain('skills://{skillName}');
+      expect(uris).toContain('skill://{+skillPath}/SKILL.md');
     });
   });
 });

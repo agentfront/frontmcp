@@ -507,6 +507,26 @@ class MyTool extends ToolContext {
 
 ## Skills Feature Organization
 
+### MCP SEP-2640 (Skills Extension)
+
+Skills are served over MCP using the **singular** `skill://` URI scheme per
+[SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640).
+The legacy plural `skills://` scheme has been removed entirely. New URIs:
+
+- `skill://index.json` — discovery document (agentskills.io v0.2.0 schema)
+- `skill://{+skillPath}/SKILL.md` — raw frontmatter + body (identical to filesystem skills)
+- `skill://{+skillPath}/{+filePath}` — any file in the skill directory
+
+`{+skillPath}` may be a single segment (`git-workflow`) or nested
+(`acme/billing/refunds`); the final segment MUST equal frontmatter `name`
+(enforced by `skillMetadataSchema`).
+
+The extension is declared at initialize time under both
+`capabilities.experimental[io.modelcontextprotocol/skills]` and
+`capabilities.extensions[io.modelcontextprotocol/skills]` (forward-compat
+for SEP-2133). All wiring lives in `libs/sdk/src/skill/sep-2640/`. To
+disable the resources entirely, set `skillsConfig.mcpResources: false`.
+
 ### Keep scope.instance.ts Lean
 
 Use helper functions for feature-specific registration logic:

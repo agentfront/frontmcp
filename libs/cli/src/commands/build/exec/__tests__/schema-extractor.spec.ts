@@ -270,11 +270,11 @@ describe('extractSchemas', () => {
   });
 
   describe('capabilities detection', () => {
-    it('should detect skills capability from skills:// resource templates', async () => {
+    it('should detect skills capability from skill:// resource templates', async () => {
       mockListResourceTemplates.mockResolvedValue({
         resourceTemplates: [
-          { uriTemplate: 'skills://{skillName}', name: 'skill-content' },
-          { uriTemplate: 'skills://{skillName}/references', name: 'skill-references-list' },
+          { uriTemplate: 'skill://{+skillPath}/SKILL.md', name: 'sep2640-skill-md' },
+          { uriTemplate: 'skill://{+skillPath}/{+filePath}', name: 'sep2640-skill-file' },
         ],
       });
 
@@ -321,9 +321,9 @@ describe('extractSchemas', () => {
       expect(schema.capabilities).toEqual({ skills: false, jobs: false, workflows: false });
     });
 
-    it('should detect skills capability from a single skills:// resource template', async () => {
+    it('should detect skills capability from a single skill:// resource template', async () => {
       mockListResourceTemplates.mockResolvedValue({
-        resourceTemplates: [{ uriTemplate: 'skills://{skillName}', name: 'skill-content' }],
+        resourceTemplates: [{ uriTemplate: 'skill://{+skillPath}/SKILL.md', name: 'sep2640-skill-md' }],
       });
 
       const schema = await extractSchemas('/fake/bundle.js');

@@ -115,6 +115,42 @@ Build push-based notification channels that stream real-time events into Claude 
 | Duplicate notifications      | Multiple sessions subscribed    | This is correct behavior -- each session gets its own copy         |
 | Events lost on reconnect     | Channels are in-memory          | Channel state resets on server restart; use persistent sources     |
 
+## Examples
+
+Each reference has matching examples under [`examples/<reference>/`](./examples/):
+
+### `channel-sources`
+
+| Example                                                                | Level        | Description                                                                                                                      |
+| ---------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| [`webhook-github`](./examples/channel-sources/webhook-github.md)       | Basic        | Forward GitHub webhook events (PRs, pushes, CI) into Claude Code                                                                 |
+| [`app-errors`](./examples/channel-sources/app-errors.md)               | Basic        | Forward application errors to Claude Code via the in-process event bus                                                           |
+| [`agent-notify`](./examples/channel-sources/agent-notify.md)           | Intermediate | Notify Claude Code when AI agents complete their tasks                                                                           |
+| [`job-completion`](./examples/channel-sources/job-completion.md)       | Intermediate | Notify Claude Code when background jobs and workflows complete                                                                   |
+| [`service-connector`](./examples/channel-sources/service-connector.md) | Advanced     | Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API |
+| [`file-watcher`](./examples/channel-sources/file-watcher.md)           | Intermediate | Watch files for changes and notify Claude Code in real-time                                                                      |
+| [`replay-buffer`](./examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline                       |
+
+### `channel-two-way`
+
+| Example                                                            | Level    | Description                                                                            |
+| ------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------- |
+| [`whatsapp-bridge`](./examples/channel-two-way/whatsapp-bridge.md) | Advanced | Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp |
+
+## Accessing This Skill
+
+Skills are distributed as plain SKILL.md files plus a sibling `references/`
+and `examples/` tree, so consumers can pick whichever access mode fits:
+
+| Mode               | How it works                                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filesystem**     | Read `libs/skills/catalog/frontmcp-channels/` directly from a clone of the catalog repo, or from a published `@frontmcp/skills` install. SKILL.md is the entry point.                                                                                                                                                                               |
+| **`frontmcp` CLI** | `frontmcp skills list`, `frontmcp skills read frontmcp-channels`, `frontmcp skills read frontmcp-channels:references/<file>.md`, `frontmcp skills install frontmcp-channels` — no server required.                                                                                                                                                  |
+| **MCP `skill://`** | When a developer mounts this skill into their own FrontMCP server (`@FrontMcp({ skills: [...] })`), the SDK exposes it via SEP-2640 resources: `skill://frontmcp-channels/SKILL.md`, `skill://frontmcp-channels/references/{file}.md`, etc. The server’s `skill://index.json` returns the SEP-2640 discovery document for everything mounted on it. |
+
+The catalog itself is **not** an MCP server. The `skill://` URIs only resolve
+when a server has been configured to host this skill.
+
 ## Reference
 
 - [Claude Code Channels Reference](https://code.claude.com/docs/en/channels-reference)

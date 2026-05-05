@@ -10,8 +10,9 @@
  * - Fetch skills to create execution plans
  * - Delegate tool execution to sub-agents
  */
-import { test, expect } from '@frontmcp/testing';
-import { searchSkills, loadSkills } from './helpers/skills-protocol';
+import { expect, test } from '@frontmcp/testing';
+
+import { loadSkills, searchSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
   id: string;
@@ -54,10 +55,10 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       expect(tools).toContainTool('slack_notify');
     });
 
-    test('should expose skills resource templates', async ({ mcp }) => {
+    test('should expose SEP-2640 skill:// resource templates', async ({ mcp }) => {
       const templates = await mcp.resources.listTemplates();
       const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
-      expect(uris).toContain('skills://{skillName}');
+      expect(uris).toContain('skill://{+skillPath}/SKILL.md');
     });
   });
 

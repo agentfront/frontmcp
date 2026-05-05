@@ -27,6 +27,7 @@ import {
 } from './errors/skill-validation.error';
 import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
 import { MemorySkillProvider } from './providers/memory-skill.provider';
+import { SEP_2640_EXTENSION_ID, type SkillIndexEntry } from './sep-2640';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -166,6 +167,24 @@ export interface SkillRegistryInterface {
   getCapabilities(): Partial<ServerCapabilities>;
 
   /**
+   * SEP-2640 §Discovery — extra resource-template entries for the
+   * `skill://index.json` document.
+   */
+  getSep2640IndexTemplates?(): SkillIndexEntry[];
+
+  /**
+   * SEP-2640 ADR — extra archive entries for the `skill://index.json`
+   * document.
+   */
+  getSep2640IndexArchives?(): SkillIndexEntry[];
+
+  /**
+   * SEP-2640 §Discovery — opt-in extra `skill://` URIs to surface in the
+   * server `instructions` field.
+   */
+  getSep2640InstructionUris?(): string[];
+
+  /**
    * Validate all skills against the current tool registry.
    * Should be called after all tools (including from plugins/adapters) are registered.
    *
@@ -285,6 +304,15 @@ export default class SkillRegistry
 
   /** Registry-level options for validation behavior */
   private readonly options: SkillRegistryOptions;
+
+  /** SEP-2640 §Discovery — additional `mcp-resource-template` index entries. */
+  private sep2640IndexTemplates: SkillIndexEntry[] = [];
+
+  /** SEP-2640 ADR — additional `archive` index entries. */
+  private sep2640IndexArchives: SkillIndexEntry[] = [];
+
+  /** SEP-2640 §Discovery — extra `skill://` URIs to surface in server `instructions`. */
+  private sep2640InstructionUris: string[] = [];
 
   constructor(providers: ProviderRegistry, list: SkillType[], owner: EntryOwnerRef, options?: SkillRegistryOptions) {
     super('SkillRegistry', providers, list, false);
@@ -868,11 +896,86 @@ export default class SkillRegistry
 
   /**
    * Get MCP capabilities for skills.
+   *
+   * Declares the SEP-2640 (Skills Extension) capability when any skills are
+   * registered, so conformant clients know to look for `skill://` resources
+   * and `skill://index.json`. The extension carries no settings today; an
+   * empty object signals support.
+   *
+   * The SEP itself targets `capabilities.extensions[<id>]` (per the
+   * forthcoming SEP-2133 extensions surface). Until the upstream MCP
+   * schema lands `extensions`, we ride the existing
+   * `capabilities.experimental[<id>]` slot, which the schema accepts as
+   * `Record<string, object>`. Both are emitted so clients on either side
+   * of the schema cutover see the declaration.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    // Skills don't have dedicated MCP capabilities yet
-    // They're exposed via searchSkills and loadSkill tools
-    return {};
+    if (!this.hasAny()) return {};
+    return {
+      experimental: {
+        [SEP_2640_EXTENSION_ID]: {},
+      },
+      // `extensions` is forward-compat: ignored by clients that don't know
+      // it, recognised by SEP-2640-aware clients once SEP-2133 lands.
+      extensions: {
+        [SEP_2640_EXTENSION_ID]: {},
+      },
+    } as Partial<ServerCapabilities>;
+  }
+
+  /**
+   * SEP-2640 §Discovery: extra resource-template entries to include in
+   * `skill://index.json` for parameterised skill namespaces. Default is
+   * empty; hosts populate this via {@link addSep2640IndexTemplate}.
+   */
+  getSep2640IndexTemplates(): SkillIndexEntry[] {
+    return [...this.sep2640IndexTemplates];
+  }
+
+  /**
+   * Register an `mcp-resource-template` index entry.
+   */
+  addSep2640IndexTemplate(entry: SkillIndexEntry): void {
+    if (entry.type !== 'mcp-resource-template') {
+      throw new Error(`addSep2640IndexTemplate: entry.type must be "mcp-resource-template", got "${entry.type}"`);
+    }
+    this.sep2640IndexTemplates.push(entry);
+    this.bump('reset');
+  }
+
+  /**
+   * SEP-2640 ADR 2026-04-19: optional `type: "archive"` entries in the
+   * index. Hosts that pack skills into ZIP/TAR resources for atomic delivery
+   * register them here so `skill://index.json` advertises them.
+   */
+  getSep2640IndexArchives(): SkillIndexEntry[] {
+    return [...this.sep2640IndexArchives];
+  }
+
+  addSep2640IndexArchive(entry: SkillIndexEntry): void {
+    if (entry.type !== 'archive') {
+      throw new Error(`addSep2640IndexArchive: entry.type must be "archive", got "${entry.type}"`);
+    }
+    this.sep2640IndexArchives.push(entry);
+    this.bump('reset');
+  }
+
+  /**
+   * SEP-2640 §Discovery — opt-in pointer to skill URIs from the server's
+   * `instructions` field. When non-empty, the transport adapter prepends a
+   * "Available skills:" block listing the URIs.
+   */
+  getSep2640InstructionUris(): string[] {
+    return [...this.sep2640InstructionUris];
+  }
+
+  addSep2640InstructionUri(uri: string): void {
+    if (!this.sep2640InstructionUris.includes(uri)) {
+      this.sep2640InstructionUris.push(uri);
+      // Notify observers (resource list, instructions consumers) so the
+      // change propagates without a full re-init.
+      this.bump('reset');
+    }
   }
 
   /* -------------------- Validation -------------------- */

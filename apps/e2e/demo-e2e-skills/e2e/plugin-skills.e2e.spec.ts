@@ -9,8 +9,9 @@
  * - Hidden plugin skill handling
  * - Tool authorization with plugin skills
  */
-import { test, expect } from '@frontmcp/testing';
-import { searchSkills, loadSkills } from './helpers/skills-protocol';
+import { expect, test } from '@frontmcp/testing';
+
+import { loadSkills, searchSkills } from './helpers/skills-protocol';
 
 interface SkillTool {
   name: string;
@@ -462,10 +463,10 @@ test.describe('Plugin Skills E2E', () => {
       expect(tools).toContainTool('deploy_application');
       expect(tools).toContainTool('rollback_deployment');
 
-      // Skills are now exposed as resources, not tools
+      // Skills are exposed as SEP-2640 `skill://` resources, not tools
       const templates = await mcp.resources.listTemplates();
       const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
-      expect(uris).toContain('skills://{skillName}');
+      expect(uris).toContain('skill://{+skillPath}/SKILL.md');
     });
   });
 

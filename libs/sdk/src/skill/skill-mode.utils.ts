@@ -5,7 +5,7 @@
  *
  * Skills-only mode is a special operational mode where:
  * - The tools list returns empty (no tools exposed)
- * - Only skill discovery tools are available
+ * - Only skill discovery tools and `skill://` resources are available
  * - Used for planner agents that need skills but not execution tools
  *
  * @module skill/skill-mode.utils

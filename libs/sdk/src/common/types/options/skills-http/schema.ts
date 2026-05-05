@@ -80,6 +80,7 @@ export const skillsConfigOptionsSchema = z.object({
   llmFullTxt: skillsConfigEndpointInputSchema.optional().default(true),
   api: skillsConfigEndpointInputSchema.optional().default(true),
   mcpResources: z.boolean().optional().default(true),
+  sep2640InInstructions: z.boolean().optional().default(false),
   cache: skillsConfigCacheOptionsSchema.optional(),
   audit: skillsConfigAuditOptionsSchema.optional(),
   injectInstructions: z.enum(['off', 'append', 'prepend', 'replace']).optional().default('append'),
