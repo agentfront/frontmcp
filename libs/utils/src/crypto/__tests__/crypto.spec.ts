@@ -1209,7 +1209,7 @@ describe('Crypto Module', () => {
     });
 
     describe('rsaSignBase64Url() and rsaVerifySync()', () => {
-      const { rsaSignBase64Url, rsaVerifySync, pemToPublicJwk } = require('../node');
+      const { rsaSignBase64Url, rsaVerifySync } = require('../node');
 
       it('round-trips RS256: sign + verify with the same JWK', () => {
         const keyPair = generateRsaKeyPair(2048, 'RS256');

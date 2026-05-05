@@ -20,7 +20,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
   instructions: 'You are a helpful assistant for booking flights.',
 
   skillsConfig: {
-    enabled: true, // turn on /skills, /llm.txt, /skill:// resources
+    enabled: true, // turn on /skills, /llm.txt, skill:// resources
     mcpResources: true, // expose skills as MCP resources (skill://index.json, skill://<skillPath>/SKILL.md)
     llmTxt: true, // serve /llm.txt
     llmFullTxt: false, // serve /llm_full.txt (full SKILL.md bodies)
@@ -64,7 +64,7 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 | `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
 | `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
 
-The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skill://index.json` and `skill://{skillPath}/SKILL.md` for full content (SEP-2640 — singular scheme).
+The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skill://index.json` and `skill://<skillPath>/SKILL.md` for full content (SEP-2640 — singular scheme).
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically.
 

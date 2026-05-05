@@ -198,13 +198,27 @@ describe('Rs256AuditSigner', () => {
 });
 
 describe('defaultAuditSignatureVerifier', () => {
-  it('returns false for unknown alg shapes', () => {
+  it('returns false when no trusted key matches the (keyId, alg) pair', () => {
     const ok = defaultAuditSignatureVerifier({
       alg: 'HS256',
       keyId: 'unknown-key',
       data: new Uint8Array(),
       signatureBase64Url: '',
       trustedKeys: [],
+    });
+    expect(ok).toBe(false);
+  });
+
+  it('returns false for an unsupported algorithm', () => {
+    // Cast through `as never` to bypass the TS exhaustiveness check — the
+    // verifier's final fallthrough path must still return false (not throw)
+    // if a future signer alg lands on the wire without a verifier update.
+    const ok = defaultAuditSignatureVerifier({
+      alg: 'UNSUPPORTED_ALG' as never,
+      keyId: 'k',
+      data: new Uint8Array(),
+      signatureBase64Url: '',
+      trustedKeys: [{ keyId: 'k', alg: 'UNSUPPORTED_ALG' as never }],
     });
     expect(ok).toBe(false);
   });

@@ -158,6 +158,15 @@ setSkillAuditFactory(() => ({
 
 const s3Store = new S3AuditStore(new S3Client({ region: 'us-east-1' }), 'audit-prod', 'skill-audit/');
 
+// Fail loudly at boot rather than burying a `JSON.parse(undefined)` stack
+// trace inside the audit writer — operators wiring this up should see a
+// descriptive config error.
+const privateJwkJson = process.env.BUNDLE_SIGNING_PRIVATE_JWK;
+if (!privateJwkJson) {
+  throw new Error('BUNDLE_SIGNING_PRIVATE_JWK env var is required for the RS256 audit signer');
+}
+const privateJwk = JSON.parse(privateJwkJson) as JsonWebKey;
+
 @FrontMcp({
   info: { name: 'svr', version: '1.0.0' },
   apps: [MainApp],
@@ -166,7 +175,7 @@ const s3Store = new S3AuditStore(new S3Client({ region: 'us-east-1' }), 'audit-p
     audit: {
       enabled: true,
       // Constructor signature: new Rs256AuditSigner(privateJwk, keyId)
-      signer: new Rs256AuditSigner(JSON.parse(process.env.BUNDLE_SIGNING_PRIVATE_JWK!), 'bundle-signing-2026-01'),
+      signer: new Rs256AuditSigner(privateJwk, 'bundle-signing-2026-01'),
       store: s3Store,
       subjectMode: 'hash',
     },
