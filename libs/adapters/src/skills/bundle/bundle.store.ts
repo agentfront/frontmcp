@@ -11,7 +11,7 @@ import type { ResolvedBundle } from './bundle.types';
  * Mirrors `KNOWN_BUNDLE_SOURCES` in `@frontmcp/observability`. Inlined to
  * avoid an `@frontmcp/adapters` → `@frontmcp/observability` dependency.
  */
-const KNOWN_BUNDLE_SOURCES = ['static', 'npm', 'saas-pull', 'filesystem', 'unknown'] as const;
+const KNOWN_BUNDLE_SOURCES = ['static', 'npm', 'saas-pull', 'webhook', 'filesystem', 'unknown'] as const;
 type KnownBundleSource = (typeof KNOWN_BUNDLE_SOURCES)[number];
 
 function normalizeBundleSource(value: unknown): KnownBundleSource {

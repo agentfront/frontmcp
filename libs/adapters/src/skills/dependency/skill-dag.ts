@@ -77,7 +77,12 @@ export function resolveSkillLoadOrder(skills: BundledSkill[]): BundledSkill[] {
         throw new SkillDependencyMissingError(skill.id, depId);
       }
       inDegree.set(skill.id, (inDegree.get(skill.id) ?? 0) + 1);
-      requiredBy.get(depId)!.push(skill.id);
+      // requiredBy is seeded with `[]` for every id above, so this lookup
+      // is guaranteed to hit; default to an unused empty array if the
+      // invariant is ever broken to keep the loop deterministic.
+      const reverse = requiredBy.get(depId) ?? [];
+      reverse.push(skill.id);
+      requiredBy.set(depId, reverse);
     }
   }
 
@@ -86,8 +91,13 @@ export function resolveSkillLoadOrder(skills: BundledSkill[]): BundledSkill[] {
   const order: BundledSkill[] = [];
 
   while (ready.length > 0) {
-    const next = ready.shift()!;
-    order.push(byId.get(next)!);
+    const next = ready.shift();
+    if (next === undefined) break;
+    const nextSkill = byId.get(next);
+    if (!nextSkill) {
+      throw new Error(`resolveSkillLoadOrder: invariant broken — id "${next}" missing from byId map`);
+    }
+    order.push(nextSkill);
     for (const dependent of requiredBy.get(next) ?? []) {
       const remaining = (inDegree.get(dependent) ?? 0) - 1;
       inDegree.set(dependent, remaining);

@@ -359,17 +359,22 @@ export interface SkillsConfigOptions {
    * `instructions` (from `@FrontMcp({ instructions })`) and any framework
    * hints (e.g. channel reply-tool guidance).
    *
-   * - `'append'` (default): server instructions, then channel hints, then a
-   *   per-skill summary (`**Name**: …` blocks separated by `---`).
-   * - `'prepend'`: skill summaries first, then channel hints, then server
-   *   instructions. Useful when bundle guidance must be in the model's
-   *   prefix.
-   * - `'replace'`: surface only the server `instructions` field; bundles +
-   *   channels are dropped. Use when the server config is the canonical
-   *   prompt and skills should be discovered via `searchSkills` instead.
-   * - `'off'`: never inject bundle skill `instructions` into `initialize`.
-   *   Server + channel instructions are still surfaced. Lowest-cost option
-   *   for very large catalogs (instructions can otherwise blow context).
+   * - `'append'` (default): `instructions` is sent as-is, followed by a
+   *   `\n\n---\n\n` separator and the per-skill summary (`**Name**: …`
+   *   blocks separated by `---`). Channel hints sit between them.
+   * - `'prepend'`: the skill catalog summary is sent first, then channel
+   *   hints, then the server `instructions`. Useful when bundle guidance
+   *   must appear in the model's prefix.
+   * - `'replace'`: surface ONLY the server `instructions` field — the
+   *   skill catalog summary AND channel hints are dropped. Use when the
+   *   server config is the canonical prompt and skills should be
+   *   discovered via `searchSkills` instead. **When `instructions` is
+   *   empty/undefined this falls back to `'append'` semantics** so a
+   *   misconfigured server doesn't silently drop everything.
+   * - `'off'`: never inject the bundle skill catalog into `initialize`.
+   *   Server `instructions` AND channel hints are still surfaced — only
+   *   the per-skill summary is suppressed. Lowest-cost option for very
+   *   large catalogs (catalog summaries can otherwise blow context).
    *
    * @default 'append'
    */
@@ -401,8 +406,20 @@ export interface SkillsConfigAuditOptions {
    * `StorageAdapterAuditStore` against Redis/SQLite/Vercel KV.
    */
   store?: unknown;
-  /** Reserved for future redacted-preview persistence. Default: false. */
-  verbose?: boolean;
+  /**
+   * How the `subject` field (typically JWT `sub`) is persisted in each
+   * record. Forwarded to `SkillAuditWriter`. See `SkillAuditSubjectMode` in
+   * `@frontmcp/adapters/skills`.
+   *
+   * @default 'hash'
+   */
+  subjectMode?: 'plain' | 'hash' | 'omit';
+  /**
+   * Periodic head-anchor interval (milliseconds). Reserved for v1.3.0
+   * tail-truncation detection. Validated only — currently the writer does
+   * not consume this value.
+   */
+  headAnchorIntervalMs?: number;
 }
 
 /**

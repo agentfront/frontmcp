@@ -26,9 +26,26 @@ import type ProviderRegistry from '../provider/provider.registry';
  * silently skip audit registration, because that would mask a security
  * configuration error.
  */
+/**
+ * Loosely-typed options bag forwarded to `new SkillAuditWriter(...)`. Mirrors
+ * `SkillAuditWriterOptions` in `@frontmcp/adapters/skills` but kept structural
+ * here so the SDK doesn't take an upward dependency.
+ */
+export interface AuditWriterOptionsShape {
+  subjectMode?: 'plain' | 'hash' | 'omit';
+  subjectHashSecret?: Uint8Array;
+  maxQueueDepth?: number;
+}
+
 export interface AuditModuleShape {
   SkillAuditWriterToken: symbol;
-  SkillAuditWriter: new (store: unknown, signer: unknown, logger: FrontMcpLogger, metrics?: unknown) => unknown;
+  SkillAuditWriter: new (
+    store: unknown,
+    signer: unknown,
+    logger: FrontMcpLogger,
+    metrics?: unknown,
+    options?: AuditWriterOptionsShape,
+  ) => unknown;
   Hs256AuditSigner: new (secret: string | Uint8Array, keyId: string) => unknown;
   MemoryAuditStore: new () => unknown;
 }
@@ -151,7 +168,14 @@ export function registerSkillAuditWriter(options: {
   const signer = audit.signer ?? createDefaultSigner(mod, logger);
   const store = audit.store ?? createDefaultStore(mod, logger);
 
-  const writer = new mod.SkillAuditWriter(store, signer, logger);
+  // Forward only the fields the writer currently consumes. `headAnchorIntervalMs`
+  // is captured by the schema so misconfigurations surface (rather than being
+  // silently dropped at parse time) but the writer doesn't read it yet — see
+  // `SkillAuditConfig.headAnchorIntervalMs` for the v1.3.0 plan.
+  const writerOptions: AuditWriterOptionsShape | undefined =
+    audit.subjectMode !== undefined ? { subjectMode: audit.subjectMode } : undefined;
+
+  const writer = new mod.SkillAuditWriter(store, signer, logger, undefined, writerOptions);
 
   providers.injectProvider({
     provide: mod.SkillAuditWriterToken,

@@ -24,7 +24,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection]
     mcpResources: true, // expose skills as MCP resources (skills://catalog, skills://<name>)
     llmTxt: true, // serve /llm.txt
     llmFullTxt: false, // serve /llm-full.txt (full SKILL.md bodies)
-    auth: 'api-key', // 'api-key' | 'bearer' (no auth if omitted)
+    auth: 'api-key', // 'inherit' (default) | 'public' | 'api-key' | 'bearer'
     apiKeys: ['sk-xxx', 'sk-yyy'],
     jwt: { issuer: 'https://auth.example.com', audience: 'skills-api' },
     cache: {
@@ -57,12 +57,12 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 
 ## Skill Catalog Injection Policy
 
-| Mode      | Behavior                                                                                                                              |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `off`     | `instructions` is sent as-is. No skill summary is appended.                                                                           |
-| `append`  | `instructions` is sent, followed by a `\n\n---\n` separator and the skill catalog summary. **(Default.)**                             |
-| `prepend` | The skill catalog summary is sent first, followed by `\n\n---\n` and `instructions`.                                                  |
-| `replace` | The skill catalog summary is sent **instead of** `instructions`. Useful when the entire prompt is data-driven from registered skills. |
+| Mode      | Behavior                                                                                                                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `off`     | The catalog summary is suppressed. Server `instructions` and channel hints are still surfaced.                                                                                                  |
+| `append`  | Server `instructions`, then channel hints, then the catalog summary, joined by `\n\n---\n\n`. **(Default.)**                                                                                    |
+| `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
+| `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
 
 The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skills://catalog` and `skills://{name}/SKILL.md` for full content.
 
@@ -89,7 +89,12 @@ skillsConfig: {
 }
 ```
 
-Without `auth`, the Skills HTTP surface is unauthenticated. **Always set `auth` in production.**
+When `auth` is omitted it defaults to `'inherit'`, which means the Skills HTTP
+surface adopts whatever authentication policy the parent server enforces
+(typically the same `auth` block on `@FrontMcp(...)`). Use `'public'`
+explicitly to opt out of authentication; use `'api-key'` or `'bearer'` to
+override the inherited policy with a Skills-specific one. **In production,
+set `auth` explicitly so the policy is visible at the call site.**
 
 ## Skills HTTP Caching
 

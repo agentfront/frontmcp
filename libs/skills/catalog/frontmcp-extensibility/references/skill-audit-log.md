@@ -10,30 +10,39 @@ The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained a
 
 ## Architecture
 
+The writer exposes one method per phase rather than a generic `append`. Each
+phase method assembles its payload internally and routes through a shared
+chain pipeline:
+
 ```text
-ToolContext.execute()
-  └── audit phase emitted (auth pass | auth fail | http ok | http fail)
-       └── SkillAuditWriter.append({ phase, skillId, actionId, subject, result, ... })
-            ├── compute prevHash from the last record
-            ├── assemble SkillAuditRecord { sequence, prevHash, ...payload }
-            ├── SkillAuditSigner.sign(record)  → { signature, signatureKeyId, signatureAlg }
-            └── SkillAuditStore.append(signedRecord)
+ExecuteActionTool.execute()
+  ├── writer.writeAuthorityPass(ctx)             // authority-check-pass
+  ├── writer.writeAuthorityFail(ctx, { reason }) // authority-check-fail
+  ├── writer.writeHttpCallSuccess(ctx, { status, output })  // http-call-success
+  └── writer.writeHttpCallFailure(ctx, { status, error })   // http-call-failure
+       └── shared pipeline:
+            ├── store.tail()                     → previous record
+            ├── store.nextSequence()             → atomic monotonic counter
+            ├── compute prevHash from previous record
+            ├── assemble SkillAuditRecord { sequence, prevHash, phase, ... }
+            ├── SkillAuditSigner.sign(record)    → { signature, keyId, alg }
+            └── store.appendAtSequence(signedRecord)
 ```
 
 Each `SkillAuditRecord` carries:
 
-| Field            | Description                                                             |
-| ---------------- | ----------------------------------------------------------------------- |
-| `sequence`       | Strictly increasing position in the chain                               |
-| `prevHash`       | SHA-256 hash of the previous record (or `null` at sequence 0)           |
-| `signature`      | Base64url signature over the canonical record bytes                     |
-| `signatureKeyId` | The signer key identifier — used by verifiers to look up the public key |
-| `signatureAlg`   | `'HS256'` or `'RS256'`                                                  |
-| `phase`          | `'authority_pass' \| 'authority_fail' \| 'http_ok' \| 'http_fail'`      |
-| `skillId`        | The skill that owns the action                                          |
-| `actionId`       | The action that was executed                                            |
-| `subject`        | Authenticated principal — redacted per `subjectMode`                    |
-| `bundleVersion`  | The bundle version active at the time of the call                       |
+| Field            | Description                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| `sequence`       | Strictly increasing position in the chain                                                               |
+| `prevHash`       | SHA-256 hex of the previous record's canonical bytes (genesis sentinel `'0'.repeat(64)` for sequence 1) |
+| `signature`      | Base64url signature over the canonical record bytes                                                     |
+| `signatureKeyId` | The signer key identifier — used by verifiers to look up the public key                                 |
+| `signatureAlg`   | `'HS256'` or `'RS256'`                                                                                  |
+| `phase`          | `'authority-check-pass' \| 'authority-check-fail' \| 'http-call-success' \| 'http-call-failure'`        |
+| `skillId`        | The skill that owns the action                                                                          |
+| `actionId`       | The action that was executed                                                                            |
+| `subject`        | Authenticated principal — redacted per `subjectMode`                                                    |
+| `bundleVersion`  | The bundle version active at the time of the call                                                       |
 
 ## Configuration
 
@@ -42,7 +51,16 @@ Wire the audit subsystem through `skillsConfig.audit` on `@FrontMcp`:
 ```typescript
 import { Hs256AuditSigner, MemoryAuditStore, setSkillAuditFactory, SkillAuditWriter } from '@frontmcp/adapters/skills';
 
-setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+// Inject the audit module into the SDK at boot. The factory returns the
+// module record; the SDK itself constructs SkillAuditWriter from
+// (store, signer, logger, metrics?, options?) so that subjectMode and other
+// options pass through skillsConfig.audit verbatim.
+setSkillAuditFactory(() => ({
+  SkillAuditWriterToken,
+  SkillAuditWriter,
+  Hs256AuditSigner,
+  MemoryAuditStore,
+}));
 
 @FrontMcp({
   info: { name: 'svr', version: '1.0.0' },
@@ -51,7 +69,7 @@ setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ 
     enabled: true,
     audit: {
       enabled: true,
-      signer: new Hs256AuditSigner({ keyId: 'dev', secret }),
+      signer: new Hs256AuditSigner(secret, 'dev'),
       store: new MemoryAuditStore(),
       subjectMode: 'hash', // 'plain' | 'hash' | 'omit'
     },
@@ -107,9 +125,17 @@ A custom store implements:
 
 ```typescript
 interface SkillAuditStore {
-  append(record: SkillAuditRecord): Promise<void>;
-  tail(limit: number): Promise<SkillAuditRecord[]>;
-  iterate(after?: number): Promise<SkillAuditRecord[]>;
+  /** Allocate the next monotonic sequence atomically. Maps to StorageAdapter.incr in production. */
+  nextSequence(): Promise<number>;
+
+  /** Persist a record at its claimed sequence. MUST refuse / throw if the slot is taken. */
+  appendAtSequence(record: SkillAuditRecord): Promise<void>;
+
+  /** Most recent record (or undefined for empty chain). Drives prevHash for the next write. */
+  tail(): Promise<SkillAuditRecord | undefined>;
+
+  /** Read records in sequence order; supports `{ from, limit }` for incremental verification. */
+  read(opts?: { from?: number; limit?: number }): Promise<SkillAuditRecord[]>;
 }
 ```
 
@@ -145,7 +171,17 @@ class MyPlugin extends DynamicPlugin {
   @ToolHook.Will('execute')
   willExecute(flowCtx: FlowCtxOf<'tools:call-tool'>): void {
     const writer = flowCtx.scope.tryGet(SkillAuditWriterToken);
-    writer?.append({ phase: 'authority_pass' /* ... */ });
+    // Use the phase-specific method matching the event you're recording.
+    // The writer assembles the canonical record (sequence, prevHash,
+    // signature, signatureKeyId, signatureAlg) for you.
+    writer?.writeAuthorityPass({
+      subject: 'user-id',
+      skillId: 'my-skill',
+      actionId: 'my-action',
+      bundleId: 'bundle:id',
+      bundleVersion: '1.0.0',
+      input: {},
+    });
   }
 }
 ```

@@ -9,7 +9,15 @@
 // stays single-await (`store.append`). All cryptography routes through
 // `@frontmcp/utils` per CLAUDE.md.
 
-import { base64urlDecode, base64urlEncode, hmacSha256, rsaSignBase64Url, timingSafeEqual } from '@frontmcp/utils';
+import {
+  base64urlDecode,
+  base64urlEncode,
+  hmacSha256,
+  pemToPublicJwk,
+  rsaSignBase64Url,
+  rsaVerifySync,
+  timingSafeEqual,
+} from '@frontmcp/utils';
 
 import { canonicalizeRecordForSigning, type AuditSignatureVerifier, type AuditTrustedKey } from './audit-chain';
 import { type SkillAuditRecord, type SkillAuditSignatureAlg } from './audit-record.types';
@@ -189,29 +197,26 @@ export const defaultAuditSignatureVerifier: AuditSignatureVerifier = ({
     return timingSafeEqual(actual, expected);
   }
 
-  // RS256 — fall through to node:crypto verify when public material is
-  // available. We intentionally route through the bundle-signature verifier
-  // shape (PEM) because it's already the canonical surface admins configure.
+  // RS256 — route through `@frontmcp/utils.rsaVerifySync` so all crypto
+  // primitives stay in the single replaceable utility surface (per CLAUDE.md
+  // — direct `node:crypto` usage outside utils is forbidden). Admins can
+  // configure trust roots as either JWK or PEM; we normalize PEM → JWK
+  // up-front so the verifier itself only has to handle one input shape.
   if (alg === 'RS256') {
     if (!trusted.publicKeyPem && !trusted.publicJwk) return false;
+    let publicJwk: JsonWebKey;
     try {
-      // Late require to avoid pulling node:crypto into browser bundles.
-      const nodeCryptoMod = require('node:crypto') as typeof import('node:crypto');
-      const publicKey = trusted.publicKeyPem
-        ? nodeCryptoMod.createPublicKey({ key: trusted.publicKeyPem, format: 'pem' })
-        : // The crypto.JsonWebKey type comes from node:crypto namespace; we can't
-          // reference it through a `require`d value, so we cast through unknown.
-          // The runtime contract holds: createPublicKey accepts any JWK-shaped object.
-          nodeCryptoMod.createPublicKey({
-            key: trusted.publicJwk as unknown as Parameters<typeof nodeCryptoMod.createPublicKey>[0],
-            format: 'jwk',
-          } as never);
-      const sigBuf = Buffer.from(base64urlDecode(signatureBase64Url));
-      const dataBuf = Buffer.from(data);
-      return nodeCryptoMod.verify('sha256', dataBuf, publicKey, sigBuf);
+      publicJwk = trusted.publicJwk ?? pemToPublicJwk(trusted.publicKeyPem as string);
     } catch {
       return false;
     }
+    let sigBytes: Uint8Array;
+    try {
+      sigBytes = base64urlDecode(signatureBase64Url);
+    } catch {
+      return false;
+    }
+    return rsaVerifySync('RS256', data, publicJwk, sigBytes);
   }
 
   // Unknown alg -- the type already constrains this branch unreachable, but

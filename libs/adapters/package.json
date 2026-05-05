@@ -68,6 +68,7 @@
   },
   "dependencies": {
     "@frontmcp/auth": "1.0.4",
+    "@frontmcp/di": "1.0.4",
     "@frontmcp/utils": "1.0.4",
     "@frontmcp/sdk": "1.0.4",
     "js-yaml": "^4.1.0",

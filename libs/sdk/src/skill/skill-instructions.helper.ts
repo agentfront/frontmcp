@@ -61,6 +61,9 @@ interface ComposeOptions {
  * markdown catalog without breaking out of its line context.
  *
  * - Collapses whitespace (newlines, tabs, multiple spaces) to single spaces.
+ * - Escapes backslashes FIRST so a hostile `\*` in the input can't smuggle a
+ *   literal `\` into the output that pairs with our own escape and re-enables
+ *   the metacharacter (CodeQL: js/incomplete-sanitization).
  * - Escapes backticks so embedded code spans don't swallow the closing fence.
  * - Strips standalone `---` lines (would collide with section separators or
  *   render as a horizontal rule).
@@ -71,13 +74,16 @@ interface ComposeOptions {
  * Names themselves are NOT escaped — they pass kebab-case validation
  * (≤64 chars, `[a-z0-9-]+`) and never contain markdown specials. If the name
  * regex is ever relaxed, this helper must escape names too.
+ *
+ * Exported so the security test suite can pin down the escape ordering.
  */
-function sanitizeDescription(raw: string | undefined): string {
+export function sanitizeDescription(raw: string | undefined): string {
   if (!raw) return '';
   return raw
     .replace(/\r?\n/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/^\s*-{3,}\s*$/g, '') // standalone `---` lines
+    .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
     .replace(/\*/g, '\\*')
     .replace(/_/g, '\\_')

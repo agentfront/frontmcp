@@ -71,6 +71,13 @@ export interface SkillScopeRegistrationOptions {
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
   const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
 
+  // Register the skill audit writer first — registration is independent of
+  // whether any skills are present at scope-init time. Plugins that mount
+  // skills dynamically (e.g. plugin-skilled-openapi loading bundles after
+  // boot) still need the writer wired up; gating on `hasAny()` would silently
+  // disable audit logging in that scenario.
+  registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
+
   // Early exit if no skills registered
   if (!skillRegistry.hasAny()) {
     return;
@@ -108,11 +115,6 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
     await flowRegistry.registryFlows([LlmTxtFlow, LlmFullTxtFlow, SkillsApiFlow]);
     logger.verbose('Registered skills HTTP flows (llm.txt, llm_full.txt, /skills API)');
   }
-
-  // Register the skill audit writer when configured. Opt-in: a missing
-  // `audit` block, or `audit.enabled: false`, leaves DI untouched and the
-  // ExecuteActionTool's `tryGet(SkillAuditWriterToken)` returns undefined.
-  registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
 }
 
 /**

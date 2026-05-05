@@ -44,6 +44,18 @@ export default class ExecuteActionTool extends ToolContext {
     const auditWriter = this.tryGet<SkillAuditWriter>(SkillAuditWriterToken);
     const auditSubject = this.authInfo?.user?.sub ?? 'anonymous';
 
+    // Detached audit writes — captured via this helper so a rejected promise
+    // (signer/store/backend failure) is logged instead of becoming an
+    // unhandled rejection. Audit failures must never propagate to the caller,
+    // and the writer's hot path mustn't block on a slow backend.
+    const detachAudit = (op: Promise<void>, phase: string): void => {
+      op.catch((error) => {
+        this.logger.warn(
+          `[skill-audit] detached ${phase} write failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    };
+
     // Skill action progress: 5 milestones aligned with the phases of this tool.
     // Each `progress()` call is a no-op when the caller didn't include a
     // progressToken, so the overhead is a couple of `if (!token) return false`
@@ -109,16 +121,19 @@ export default class ExecuteActionTool extends ToolContext {
       // detach the write (`void`) so a slow audit backend never blocks
       // the denial response — audit failures never propagate.
       if (auditWriter) {
-        void auditWriter.writeAuthorityFail(
-          {
-            subject: auditSubject,
-            skillId: input.skillId,
-            actionId: input.actionId,
-            bundleId,
-            bundleVersion: pinned.bundleVersion,
-            input: input.input ?? {},
-          },
-          { reason: authResult.deniedBy ?? 'policy not satisfied' },
+        detachAudit(
+          auditWriter.writeAuthorityFail(
+            {
+              subject: auditSubject,
+              skillId: input.skillId,
+              actionId: input.actionId,
+              bundleId,
+              bundleVersion: pinned.bundleVersion,
+              input: input.input ?? {},
+            },
+            { reason: authResult.deniedBy ?? 'policy not satisfied' },
+          ),
+          'authority-check-fail',
         );
       }
       return {
@@ -134,14 +149,17 @@ export default class ExecuteActionTool extends ToolContext {
     // audit backend never blocks the user's request — audit failures never
     // propagate.
     if (auditWriter) {
-      void auditWriter.writeAuthorityPass({
-        subject: auditSubject,
-        skillId: input.skillId,
-        actionId: input.actionId,
-        bundleId,
-        bundleVersion: pinned.bundleVersion,
-        input: input.input ?? {},
-      });
+      detachAudit(
+        auditWriter.writeAuthorityPass({
+          subject: auditSubject,
+          skillId: input.skillId,
+          actionId: input.actionId,
+          bundleId,
+          bundleVersion: pinned.bundleVersion,
+          input: input.input ?? {},
+        }),
+        'authority-check-pass',
+      );
     }
 
     // 3) Compile (or fetch from cache) the input/output Zod schemas for this op.
@@ -209,16 +227,19 @@ export default class ExecuteActionTool extends ToolContext {
       // ok=false envelope. Detached (`void`) — a slow audit backend MUST
       // NOT delay propagating the failure to the caller.
       if (auditWriter) {
-        void auditWriter.writeHttpCallFailure(
-          {
-            subject: auditSubject,
-            skillId: input.skillId,
-            actionId: input.actionId,
-            bundleId,
-            bundleVersion: pinned.bundleVersion,
-            input: input.input ?? {},
-          },
-          { status: 0, error: e },
+        detachAudit(
+          auditWriter.writeHttpCallFailure(
+            {
+              subject: auditSubject,
+              skillId: input.skillId,
+              actionId: input.actionId,
+              bundleId,
+              bundleVersion: pinned.bundleVersion,
+              input: input.input ?? {},
+            },
+            { status: 0, error: e },
+          ),
+          'http-call-failure',
         );
       }
       throw e;
@@ -237,15 +258,21 @@ export default class ExecuteActionTool extends ToolContext {
         input: input.input ?? {},
       };
       if (result.ok) {
-        void auditWriter.writeHttpCallSuccess(auditCtx, {
-          status: result.status,
-          output: result.data ?? null,
-        });
+        detachAudit(
+          auditWriter.writeHttpCallSuccess(auditCtx, {
+            status: result.status,
+            output: result.data ?? null,
+          }),
+          'http-call-success',
+        );
       } else {
-        void auditWriter.writeHttpCallFailure(auditCtx, {
-          status: result.status,
-          error: result.error ?? `http call failed with status ${result.status}`,
-        });
+        detachAudit(
+          auditWriter.writeHttpCallFailure(auditCtx, {
+            status: result.status,
+            error: result.error ?? `http call failed with status ${result.status}`,
+          }),
+          'http-call-failure',
+        );
       }
     }
 

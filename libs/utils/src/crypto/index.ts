@@ -7,8 +7,16 @@
 
 import { cryptoProvider } from '#crypto-provider';
 
+// Type-only re-export so callers can import the structural shape without
+// triggering the Node-only runtime path. The underlying value lives in
+// `./node` and is loaded lazily via `require()` in the wrapper functions
+// below.
+import type { RsaJwk as RsaJwkNode, RsaKeyPair as RsaKeyPairNode } from './node';
 import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
+
+export type RsaJwk = RsaJwkNode;
+export type RsaKeyPair = RsaKeyPairNode;
 
 export { isRsaPssAlg, jwtAlgToNodeAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 
@@ -65,6 +73,59 @@ export function rsaSignBase64Url(jwtAlg: string, data: Buffer | Uint8Array, priv
     throw new Error('rsaSignBase64Url is only available in Node.js runtimes');
   }
   return require('./node').rsaSignBase64Url(jwtAlg, data, privateJwk) as string;
+}
+
+/**
+ * Synchronous companion to {@link rsaVerify}. Node-only — server-side audit
+ * verifiers and bundle signature verifiers need a sync surface so the
+ * `AuditSignatureVerifier` interface stays single-await for hot paths.
+ *
+ * Accepts RSA, RSA-PSS, and EdDSA (Ed25519) keys in JWK form. Returns
+ * `false` (never throws) on malformed keys / unsupported algs.
+ *
+ * @param jwtAlg - JWT algorithm identifier (`'RS256'`, `'PS256'`, `'EdDSA'`, ...)
+ * @param data - The signed data bytes
+ * @param publicJwk - Public key in JWK format
+ * @param signature - Raw signature bytes
+ */
+export function rsaVerifySync(
+  jwtAlg: string,
+  data: Buffer | Uint8Array,
+  publicJwk: JsonWebKey,
+  signature: Buffer | Uint8Array,
+): boolean {
+  if (!isNode()) {
+    throw new Error('rsaVerifySync is only available in Node.js runtimes; use the async rsaVerify in browsers');
+  }
+  return require('./node').rsaVerifySync(jwtAlg, data, publicJwk, signature) as boolean;
+}
+
+/**
+ * Convert a PEM-encoded public key (SPKI) into a JWK so callers can route
+ * verification through {@link rsaVerifySync}. Node-only.
+ *
+ * Throws on malformed PEM — server-side callers should catch and translate
+ * to a structured failure reason.
+ */
+export function pemToPublicJwk(pem: string): JsonWebKey {
+  if (!isNode()) {
+    throw new Error('pemToPublicJwk is only available in Node.js runtimes');
+  }
+  return require('./node').pemToPublicJwk(pem) as JsonWebKey;
+}
+
+/**
+ * Generate an RSA key pair (Node-only). Re-exported here so test code and
+ * host bootstrap don't have to reach into `node:crypto` directly.
+ *
+ * @param modulusLength - Key size in bits (default: 2048)
+ * @param alg - JWT algorithm (default: 'RS256')
+ */
+export function generateRsaKeyPair(modulusLength?: number, alg?: string): RsaKeyPair {
+  if (!isNode()) {
+    throw new Error('generateRsaKeyPair is only available in Node.js runtimes');
+  }
+  return require('./node').generateRsaKeyPair(modulusLength, alg) as RsaKeyPair;
 }
 
 // Convenience function exports - delegate to provider

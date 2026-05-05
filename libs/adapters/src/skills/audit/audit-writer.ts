@@ -31,7 +31,7 @@
 // v1.3.0 will introduce a CAS-based chain-head primitive that fuses
 // incr+set+tail-read into a single atomic — TODO(v1.3.0).
 
-import { hmacSha256, randomUUID, sha256Hex } from '@frontmcp/utils';
+import { bytesToHex, hmacSha256, randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { canonicalize } from '../security/bundle-signature';
 import { linkRecord } from './audit-chain';
@@ -406,10 +406,7 @@ export class SkillAuditWriter {
     // (16 bytes) so the on-disk footprint stays compact while keeping
     // collision probability negligible at any audit-log scale.
     const mac = hmacSha256(this.subjectHashSecret, new TextEncoder().encode(subject));
-    let hex = '';
-    for (let i = 0; i < mac.length; i++) {
-      hex += mac[i]!.toString(16).padStart(2, '0');
-    }
+    const hex = bytesToHex(mac);
     return `hashed:${hex.slice(0, 32)}`;
   }
 

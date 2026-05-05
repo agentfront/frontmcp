@@ -8,7 +8,7 @@
 // regressions where a change to the writer breaks the verifier without
 // requiring a heavyweight DI harness in this test.
 
-import { generateKeyPairSync } from 'node:crypto';
+import { generateRsaKeyPair } from '@frontmcp/utils';
 
 import { verifyChain, type AuditTrustedKey } from '../audit-chain';
 import { defaultAuditSignatureVerifier, Hs256AuditSigner, Rs256AuditSigner } from '../audit-signer';
@@ -113,7 +113,7 @@ describe('audit chain — ExecuteActionTool simulated invocation flow', () => {
   });
 
   it('verifies an RS256-signed chain with PEM trust', async () => {
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const { privateKey, publicKey } = generateRsaKeyPair(2048);
     const privJwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
     const pubPem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
 

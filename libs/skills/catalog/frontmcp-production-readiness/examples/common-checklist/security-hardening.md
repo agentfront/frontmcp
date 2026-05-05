@@ -97,20 +97,35 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 import {
+  Hs256AuditSigner,
+  MemoryAuditStore,
   Rs256AuditSigner,
   setSkillAuditFactory,
   SkillAuditWriter,
+  SkillAuditWriterToken,
   StorageAdapterAuditStore,
 } from '@frontmcp/adapters/skills';
 import { createStorageAdapter } from '@frontmcp/utils';
 
 // 1. Audit subsystem
-setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+//
+// `setSkillAuditFactory` registers the audit module with the SDK; the SDK
+// itself constructs the writer using the positional signature
+// `new SkillAuditWriter(store, signer, logger, metrics?, options?)` and
+// forwards `subjectMode` from `skillsConfig.audit` into the options bag.
+setSkillAuditFactory(() => ({
+  SkillAuditWriterToken,
+  SkillAuditWriter,
+  Hs256AuditSigner,
+  MemoryAuditStore,
+}));
 
-export const auditSigner = new Rs256AuditSigner({
-  keyId: 'bundle-signing-2026-01',
-  privateKeyPem: process.env.BUNDLE_SIGNING_PRIVATE_KEY!,
-});
+export const auditSigner = new Rs256AuditSigner(
+  // Private key as a JWK. Convert from a PEM if your secret store hands you
+  // PEMs (e.g. `crypto.createPrivateKey(pem).export({ format: 'jwk' })`).
+  JSON.parse(process.env.BUNDLE_SIGNING_PRIVATE_JWK!),
+  'bundle-signing-2026-01',
+);
 
 export const auditStore = new StorageAdapterAuditStore(
   await createStorageAdapter({ provider: 'redis', host: process.env.REDIS_HOST!, port: 6379 }),

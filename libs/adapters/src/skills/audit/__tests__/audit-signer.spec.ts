@@ -1,6 +1,6 @@
 // file: libs/adapters/src/skills/audit/__tests__/audit-signer.spec.ts
 
-import { generateKeyPairSync } from 'node:crypto';
+import { generateRsaKeyPair } from '@frontmcp/utils';
 
 import {
   canonicalizeRecordForSigning,
@@ -10,6 +10,16 @@ import {
 } from '../audit-chain';
 import { type SkillAuditRecord } from '../audit-record.types';
 import { defaultAuditSignatureVerifier, Hs256AuditSigner, Rs256AuditSigner } from '../audit-signer';
+
+// Tests use the @frontmcp/utils key-pair generator (not node:crypto directly)
+// per CLAUDE.md. We export PEMs from the KeyObjects so the verifier path
+// exercises both PEM and JWK trust-list configurations.
+function generateRsaTestKeys(): { privJwk: JsonWebKey; pubJwk: JsonWebKey; pubPem: string } {
+  const { privateKey, publicKey, publicJwk } = generateRsaKeyPair(2048);
+  const privJwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
+  const pubPem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+  return { privJwk, pubJwk: publicJwk as unknown as JsonWebKey, pubPem };
+}
 
 function makePartial(): SkillAuditPartialRecord {
   return {
@@ -108,9 +118,8 @@ describe('Hs256AuditSigner', () => {
 
 describe('Rs256AuditSigner', () => {
   it('rejects empty keyIds', () => {
-    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    const jwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
-    expect(() => new Rs256AuditSigner(jwk, '')).toThrow(/keyId/);
+    const { privJwk } = generateRsaTestKeys();
+    expect(() => new Rs256AuditSigner(privJwk, '')).toThrow(/keyId/);
   });
 
   it('rejects non-object jwks', () => {
@@ -118,9 +127,7 @@ describe('Rs256AuditSigner', () => {
   });
 
   it('round-trips: sign + verify with PEM public key', () => {
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    const privJwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
-    const pubPem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+    const { privJwk, pubPem } = generateRsaTestKeys();
 
     const signer = new Rs256AuditSigner(privJwk, 'rsa-1');
     const linked = linkRecord(undefined, makePartial());
@@ -147,9 +154,7 @@ describe('Rs256AuditSigner', () => {
   });
 
   it('round-trips with public JWK trust', () => {
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    const privJwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
-    const pubJwk = publicKey.export({ format: 'jwk' }) as JsonWebKey;
+    const { privJwk, pubJwk } = generateRsaTestKeys();
 
     const signer = new Rs256AuditSigner(privJwk, 'rsa-2');
     const linked = linkRecord(undefined, makePartial());
