@@ -7,26 +7,26 @@
  * 3. Known test vectors pass
  */
 
+import { browserCrypto } from '../browser';
 import {
-  getCrypto,
-  randomUUID,
-  randomBytes,
-  sha256,
-  sha256Hex,
-  hmacSha256,
-  hkdfSha256,
-  encryptAesGcm,
-  decryptAesGcm,
-  timingSafeEqual,
-  bytesToHex,
-  base64urlEncode,
   base64urlDecode,
-  sha256Base64url,
-  isNode,
+  base64urlEncode,
+  bytesToHex,
+  decryptAesGcm,
+  encryptAesGcm,
+  getCrypto,
+  hkdfSha256,
+  hmacSha256,
   isBrowser,
+  isNode,
+  randomBytes,
+  randomUUID,
+  sha256,
+  sha256Base64url,
+  sha256Hex,
+  timingSafeEqual,
 } from '../index';
 import { nodeCrypto } from '../node';
-import { browserCrypto } from '../browser';
 
 describe('Crypto Module', () => {
   describe('Runtime Detection', () => {
@@ -1205,6 +1205,85 @@ describe('Crypto Module', () => {
       it('should export isRsaPssAlg from node module', () => {
         expect(isRsaPssAlg('RS256')).toBe(false);
         expect(isRsaPssAlg('PS256')).toBe(true);
+      });
+    });
+
+    describe('rsaSignBase64Url() and rsaVerifySync()', () => {
+      const { rsaSignBase64Url, rsaVerifySync, pemToPublicJwk } = require('../node');
+
+      it('round-trips RS256: sign + verify with the same JWK', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const privateJwk = keyPair.privateKey.export({ format: 'jwk' });
+        const data = Buffer.from('payload');
+
+        const sigB64 = rsaSignBase64Url('RS256', data, privateJwk);
+        expect(typeof sigB64).toBe('string');
+        expect(sigB64.length).toBeGreaterThan(0);
+
+        const sigBytes = Buffer.from(sigB64, 'base64url');
+        expect(rsaVerifySync('RS256', data, keyPair.publicJwk, sigBytes)).toBe(true);
+      });
+
+      it('accepts Uint8Array data on both sign and verify', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const privateJwk = keyPair.privateKey.export({ format: 'jwk' });
+        const data = new TextEncoder().encode('uint8 payload');
+
+        const sigB64 = rsaSignBase64Url('RS256', data, privateJwk);
+        const sigBytes = new Uint8Array(Buffer.from(sigB64, 'base64url'));
+        expect(rsaVerifySync('RS256', data, keyPair.publicJwk, sigBytes)).toBe(true);
+      });
+
+      it('round-trips PS256 (RSA-PSS) with the PSS padding branch', () => {
+        const keyPair = generateRsaKeyPair(2048, 'PS256');
+        const privateJwk = keyPair.privateKey.export({ format: 'jwk' });
+        const data = Buffer.from('pss payload');
+
+        const sigB64 = rsaSignBase64Url('PS256', data, privateJwk);
+        const sigBytes = Buffer.from(sigB64, 'base64url');
+        expect(rsaVerifySync('PS256', data, keyPair.publicJwk, sigBytes)).toBe(true);
+      });
+
+      it('rsaVerifySync returns false on tampered data instead of throwing', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const privateJwk = keyPair.privateKey.export({ format: 'jwk' });
+        const sigB64 = rsaSignBase64Url('RS256', Buffer.from('original'), privateJwk);
+        const sigBytes = Buffer.from(sigB64, 'base64url');
+
+        expect(rsaVerifySync('RS256', Buffer.from('tampered'), keyPair.publicJwk, sigBytes)).toBe(false);
+      });
+
+      it('rsaVerifySync returns false (does not throw) on a malformed JWK', () => {
+        const sigBytes = Buffer.from('AAAA', 'base64url');
+        expect(rsaVerifySync('RS256', Buffer.from('x'), { kty: 'RSA' } as JsonWebKey, sigBytes)).toBe(false);
+      });
+
+      it('rsaVerifySync supports EdDSA (Ed25519) via the null-algorithm branch', () => {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        const data = Buffer.from('ed25519 payload');
+        const signature = crypto.sign(null, data, privateKey);
+        const publicJwk = publicKey.export({ format: 'jwk' });
+
+        expect(rsaVerifySync('EdDSA', data, publicJwk, signature)).toBe(true);
+        expect(rsaVerifySync('EdDSA', Buffer.from('other'), publicJwk, signature)).toBe(false);
+      });
+    });
+
+    describe('pemToPublicJwk()', () => {
+      const { pemToPublicJwk } = require('../node');
+
+      it('converts an SPKI PEM to a JWK with the same modulus', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const pem = keyPair.publicKey.export({ format: 'pem', type: 'spki' }) as string;
+        const jwk = pemToPublicJwk(pem);
+
+        expect(jwk.kty).toBe('RSA');
+        expect(jwk.n).toBe(keyPair.publicJwk.n);
+        expect(jwk.e).toBe(keyPair.publicJwk.e);
+      });
+
+      it('throws when the PEM cannot be parsed', () => {
+        expect(() => pemToPublicJwk('-----BEGIN PUBLIC KEY-----\nnot-a-key\n-----END PUBLIC KEY-----')).toThrow();
       });
     });
   });

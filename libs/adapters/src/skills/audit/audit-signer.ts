@@ -68,10 +68,14 @@ export class Hs256AuditSigner implements SkillAuditSigner {
     }
     if (typeof secret === 'string') {
       if (secret.length === 0) throw new Error('Hs256AuditSigner: secret must be non-empty');
+      // TextEncoder.encode allocates a fresh buffer, so no extra copy needed.
       this.key = new TextEncoder().encode(secret);
     } else {
       if (secret.length === 0) throw new Error('Hs256AuditSigner: secret must be non-empty');
-      this.key = secret;
+      // Defensive clone — caller may zeroize / mutate their buffer after
+      // construction; the signer's key bytes must remain stable for the
+      // process lifetime of the signer.
+      this.key = new Uint8Array(secret);
     }
     this.keyId = keyId;
   }
@@ -138,7 +142,10 @@ export class Rs256AuditSigner implements SkillAuditSigner {
     if (!privateJwk.n || !privateJwk.e || !privateJwk.d) {
       throw new Error('Rs256AuditSigner: privateJwk must include `n`, `e`, and `d` (RSA private key)');
     }
-    this.privateJwk = privateJwk;
+    // Defensive shallow clone — RSA JWK fields are all string primitives, so
+    // a spread is sufficient. Prevents the caller from mutating the JWK they
+    // handed us (e.g. rotating `n`/`d` in place) after construction.
+    this.privateJwk = { ...privateJwk };
     this.keyId = keyId;
   }
 

@@ -420,13 +420,193 @@ describe('execute_action', () => {
     expect(result.ok).toBe(false);
     expect(writeAuthorityFail).toHaveBeenCalledTimes(1);
     expect(writeAuthorityPass).not.toHaveBeenCalled();
-    const [auditCtx, extras] = writeAuthorityFail.mock.calls[0]!;
+    const [auditCtx, extras] = writeAuthorityFail.mock.calls[0] as unknown as [unknown, { reason: unknown }];
     expect(auditCtx).toMatchObject({
       skillId: 'billing',
       actionId: 'createInvoice',
       subject: 'u',
     });
     expect(extras).toMatchObject({ reason: expect.any(String) });
+  });
+
+  it('emits authority-check-pass + http-call-success audit records on the happy path', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const writeAuthorityPass = jest.fn(() => Promise.resolve());
+    const writeHttpCallSuccess = jest.fn(() => Promise.resolve());
+    const writeHttpCallFailure = jest.fn(() => Promise.resolve());
+    const auditWriter = {
+      writeAuthorityFail: jest.fn(() => Promise.resolve()),
+      writeAuthorityPass,
+      writeHttpCallSuccess,
+      writeHttpCallFailure,
+    };
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(
+      async () =>
+        new Response(JSON.stringify({ id: 'inv_1' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        }),
+    ) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps, auditWriter });
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: { amount: 1 },
+      });
+      expect(result.ok).toBe(true);
+      expect(writeAuthorityPass).toHaveBeenCalledTimes(1);
+      expect(writeHttpCallSuccess).toHaveBeenCalledTimes(1);
+      expect(writeHttpCallFailure).not.toHaveBeenCalled();
+      const [, extras] = writeHttpCallSuccess.mock.calls[0] as unknown as [unknown, { status: number }];
+      expect(extras).toMatchObject({ status: 201 });
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('emits http-call-failure audit when the upstream returns a non-2xx envelope', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const writeHttpCallFailure = jest.fn(() => Promise.resolve());
+    const auditWriter = {
+      writeAuthorityFail: jest.fn(() => Promise.resolve()),
+      writeAuthorityPass: jest.fn(() => Promise.resolve()),
+      writeHttpCallSuccess: jest.fn(() => Promise.resolve()),
+      writeHttpCallFailure,
+    };
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(
+      async () =>
+        new Response(JSON.stringify({ error: 'bad gateway' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+    ) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps, auditWriter });
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(502);
+      expect(writeHttpCallFailure).toHaveBeenCalledTimes(1);
+      const [, extras] = writeHttpCallFailure.mock.calls[0] as unknown as [unknown, { status: number }];
+      expect(extras).toMatchObject({ status: 502 });
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('emits http-call-failure audit when an unresolvable credential reference surfaces an error envelope', async () => {
+    // executeOperation catches its internal errors (auth resolution, fetch
+    // failure) and surfaces them as `{ ok:false, status:0, error }`. The audit
+    // writer must capture that under the http-call-failure phase so a denied-
+    // credential lookup leaves the same forensic footprint as a 5xx upstream.
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    entry.authBinding = { kind: 'bearer', vaultRef: 'missing-token-ref' };
+    hiddenOps.set(entry);
+
+    const writeHttpCallFailure = jest.fn(() => Promise.resolve());
+    const auditWriter = {
+      writeAuthorityFail: jest.fn(() => Promise.resolve()),
+      writeAuthorityPass: jest.fn(() => Promise.resolve()),
+      writeHttpCallSuccess: jest.fn(() => Promise.resolve()),
+      writeHttpCallFailure,
+    };
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const resolver = new MemoryCredentialResolver({}) as unknown as SkilledOpenApiCredentialResolver;
+      const ctx = makeToolThis({ hiddenOps, auditWriter, resolver });
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(0);
+      expect(writeHttpCallFailure).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('warns (does not throw) when a detached audit write rejects', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const auditWriter = {
+      writeAuthorityFail: jest.fn(() => Promise.resolve()),
+      writeAuthorityPass: jest.fn(() => Promise.reject(new Error('audit backend down'))),
+      writeHttpCallSuccess: jest.fn(() => Promise.resolve()),
+      writeHttpCallFailure: jest.fn(() => Promise.resolve()),
+    };
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps, auditWriter });
+      const warnSpy = (ctx as unknown as { logger: { warn: jest.Mock } }).logger.warn;
+      const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      // Caller still sees the upstream response; the audit failure is swallowed.
+      expect(result.ok).toBe(true);
+      // Microtask drain so the detached `op.catch(...)` can fire.
+      await new Promise((r) => setImmediate(r));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/skill-audit.*authority-check-pass.*audit backend down/),
+      );
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('falls back to "anonymous" audit subject when authInfo.user.sub is missing', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const writeAuthorityPass = jest.fn(() => Promise.resolve());
+    const auditWriter = {
+      writeAuthorityFail: jest.fn(() => Promise.resolve()),
+      writeAuthorityPass,
+      writeHttpCallSuccess: jest.fn(() => Promise.resolve()),
+      writeHttpCallFailure: jest.fn(() => Promise.resolve()),
+    };
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      // authInfo.user is absent — the helper must default the audit subject to
+      // 'anonymous' rather than throwing while reading `.sub`.
+      const ctx = makeToolThis({ hiddenOps, auditWriter, authInfo: {} });
+      await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      const [auditCtx] = writeAuthorityPass.mock.calls[0] as unknown as [unknown];
+      expect(auditCtx).toMatchObject({ subject: 'anonymous' });
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 
   it('happy path: invokes the executor and returns the structured envelope', async () => {

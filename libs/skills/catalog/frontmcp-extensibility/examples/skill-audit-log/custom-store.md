@@ -30,13 +30,7 @@ Implement a custom SkillAuditStore that streams records to S3 with one object pe
 //     after a partial failure doesn't overwrite the record.
 //   - tail(): return the most recent record for prevHash chaining.
 //   - read({ from, limit }): walk records in order for verifyChain.
-import {
-  ConditionalCheckFailedException,
-  GetObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 import type { SkillAuditRecord, SkillAuditStore } from '@frontmcp/adapters/skills';
 
@@ -57,7 +51,10 @@ export class S3AuditStore implements SkillAuditStore {
     private readonly seq: { next(): Promise<number> } = {
       next: async () => {
         const all = await this.list();
-        return all.length + 1;
+        // Use the highest observed sequence rather than count: a gap in the
+        // prefix (e.g. compacted/migrated history) would otherwise let the
+        // allocator collide with an existing key.
+        return Math.max(0, ...all.map((r) => r.sequence)) + 1;
       },
     },
   ) {}
@@ -79,7 +76,10 @@ export class S3AuditStore implements SkillAuditStore {
         }),
       );
     } catch (e) {
-      if (e instanceof ConditionalCheckFailedException) {
+      // S3 returns 412 PreconditionFailed when IfNoneMatch:'*' rejects the
+      // write. The SDK surfaces it via the error's `name` field — there is
+      // no dedicated S3 exception class to instanceof against.
+      if ((e as { name?: string })?.name === 'PreconditionFailed') {
         throw new Error(`record at sequence ${record.sequence} already exists`);
       }
       throw e;

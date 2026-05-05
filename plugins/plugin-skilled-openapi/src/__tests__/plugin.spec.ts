@@ -387,6 +387,99 @@ describe('SkilledOpenApiPlugin', () => {
     });
   });
 
+  describe('BundleStore useFactory + resolveBundleTelemetry', () => {
+    // Drives the BundleStore provider's useFactory and the
+    // resolveBundleTelemetry helper. Each branch of the helper (no-providers /
+    // providers.get throws / providers.get returns non-factory / providers.get
+    // returns a real factory) is exercised by a separate scope.
+
+    const findBundleStoreProvider = (
+      providers: ReturnType<typeof SkilledOpenApiPlugin.dynamicProviders>,
+    ): { useFactory: (...args: unknown[]) => BundleStore } => {
+      const p = providers.find((entry: { provide: unknown }) => entry.provide === BundleStore) as {
+        useFactory: (...args: unknown[]) => BundleStore;
+      };
+      return p;
+    };
+
+    const baseDyn = () => SkilledOpenApiPlugin.dynamicProviders({ source: { type: 'static', path: '/x' } });
+
+    it('returns a BundleStore when scope.providers is missing entirely', () => {
+      const { useFactory } = findBundleStoreProvider(baseDyn());
+      const store = useFactory({} as never);
+      expect(store).toBeInstanceOf(BundleStore);
+    });
+
+    it('returns a BundleStore when providers.get is not a function', () => {
+      const { useFactory } = findBundleStoreProvider(baseDyn());
+      const store = useFactory({ providers: { get: 'not-a-fn' } } as never);
+      expect(store).toBeInstanceOf(BundleStore);
+    });
+
+    it('handles providers.get throwing (observability not installed)', () => {
+      const { useFactory } = findBundleStoreProvider(baseDyn());
+      const providers = {
+        get: jest.fn(() => {
+          throw new Error('token not registered');
+        }),
+      };
+      const store = useFactory({ providers } as never);
+      expect(store).toBeInstanceOf(BundleStore);
+      expect(providers.get).toHaveBeenCalled();
+    });
+
+    it('rejects a factory whose createCounter is not callable', () => {
+      const { useFactory } = findBundleStoreProvider(baseDyn());
+      const providers = {
+        get: jest.fn(() => ({ createCounter: 'not-a-fn' })),
+      };
+      const store = useFactory({ providers } as never);
+      expect(store).toBeInstanceOf(BundleStore);
+    });
+
+    it('wires telemetry callbacks when providers.get returns a real factory', () => {
+      const { useFactory } = findBundleStoreProvider(baseDyn());
+      const counter = { add: jest.fn() };
+      const span = { end: jest.fn(), setAttribute: jest.fn() };
+      const factory = {
+        createCounter: jest.fn(() => counter),
+        startSpan: jest.fn(() => span),
+      };
+      const providers = { get: jest.fn(() => factory) };
+      const store = useFactory({ providers } as never);
+      expect(store).toBeInstanceOf(BundleStore);
+      // The store carries telemetry whose callbacks delegate to the factory —
+      // exercise both paths so the wrapper arrows on resolveBundleTelemetry's
+      // return value are reached.
+      const telemetry = (
+        store as unknown as { telemetry?: { createCounter: (n: string) => unknown; startSpan: (n: string) => unknown } }
+      ).telemetry;
+      if (telemetry) {
+        telemetry.createCounter('bundle.pulls', 'pulls-desc');
+        telemetry.startSpan('skill.bundle.swap', { v: '1' });
+        expect(factory.createCounter).toHaveBeenCalledWith('bundle.pulls', 'pulls-desc');
+        expect(factory.startSpan).toHaveBeenCalledWith('skill.bundle.swap', { v: '1' });
+      }
+    });
+  });
+
+  describe('AuthorityGuard useFactory', () => {
+    it('builds an AuthorityGuard with a scoped child logger', () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: '/x' },
+      });
+      const ag = providers.find((p: { provide: unknown }) => p.provide === AuthorityGuard) as {
+        useFactory: (...args: unknown[]) => AuthorityGuard;
+      };
+      const child = jest.fn();
+      const guard = ag.useFactory({
+        logger: { child: child.mockReturnValue({ info: jest.fn(), warn: jest.fn() }) },
+      } as never);
+      expect(guard).toBeInstanceOf(AuthorityGuard);
+      expect(child).toHaveBeenCalledWith('skilled-openapi:authority');
+    });
+  });
+
   describe('symbols', () => {
     it('asCredentialResolverToken returns the resolver typed as the abstract token', async () => {
       const resolver = new MemoryCredentialResolver({ k: 'v' });

@@ -125,3 +125,9 @@ export {
   type SkillAuditSuccessExtras,
   type SkillAuditWriteContext,
 } from './audit';
+
+// `setSkillAuditFactory` lives in the SDK (it registers the audit module
+// against the SDK's lazy DI hook) but every documented integration path
+// imports it alongside the audit signer/store classes from this barrel.
+// Re-exporting here keeps the docs and the public surface in sync.
+export { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';

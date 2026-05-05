@@ -168,12 +168,14 @@ const trustedKeys: AuditTrustedKey[] = [
 
 const result = verifyChain(records, trustedKeys, defaultAuditSignatureVerifier);
 
-if (!result.ok) {
+if (result.ok) {
+  console.log(`Chain verified: ${result.verified} record(s) checked`);
+} else {
   console.error('Chain broken at sequence', result.breakAt, '—', result.reason);
 }
 ```
 
-`verifyChain` returns `{ ok: true } | { ok: false; breakAt: number; reason: string }`. `defaultAuditSignatureVerifier` understands HS256 and RS256 records and dispatches based on `record.signatureAlg`.
+`verifyChain` returns `{ ok: true; verified: number } | { ok: false; breakAt: number; reason: string }`. The `verified` count is the number of records whose signature + prevHash checked out — useful for dashboards and CI assertions. `defaultAuditSignatureVerifier` understands HS256 and RS256 records and dispatches based on `record.signatureAlg`.
 
 ## DI Integration
 
