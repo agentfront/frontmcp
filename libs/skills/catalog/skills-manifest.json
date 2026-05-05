@@ -1116,14 +1116,14 @@
           "examples": [
             {
               "name": "basic-database-provider",
-              "description": "A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks.",
+              "description": "A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.",
               "level": "basic",
               "tags": ["development", "database", "provider"],
               "features": [
                 "Defining a typed token with `Token<T>` using a `Symbol` for DI identification",
-                "Using `@Provider` decorator with `onInit()` for async startup and `onDestroy()` for cleanup",
+                "Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution",
                 "Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety",
-                "Registering the provider in the `providers` array so tools can resolve it"
+                "Registering the factory in the `providers` array so tools can resolve it"
               ]
             },
             {
@@ -1132,8 +1132,8 @@
               "level": "intermediate",
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
-                "A configuration provider using `readonly` properties from environment variables (no lifecycle needed)",
-                "An API client provider using `onInit()` for async setup of credentials",
+                "A configuration provider using `readonly` properties from environment variables (sync construction)",
+                "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
                 "Separating token definitions from provider implementations for clean dependency boundaries"
               ]
@@ -1757,7 +1757,7 @@
               "features": [
                 "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
                 "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
-                "Lifecycle: `onDestroy()` for graceful Redis cleanup on shutdown",
+                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -2050,7 +2050,7 @@
               "level": "basic",
               "tags": ["production", "lambda", "session", "sam", "checklist"],
               "features": [
-                "Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)",
+                "Verify `Handler: handler.handler` with `CodeUri: dist/lambda/` (the build emits `dist/lambda/handler.cjs`)",
                 "No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import",
                 "DynamoDB session table has TTL enabled for automatic cleanup",
                 "IAM policies are scoped (no `*` resources / actions)",
@@ -2664,7 +2664,7 @@
               "tags": ["testing", "jest", "unit-test", "setup", "unit", "tool"],
               "features": [
                 "Testing tool `execute()` with a mock context object assigned via `Object.assign`",
-                "Verifying resource `read()` output matches the MCP `ReadResourceResult` shape",
+                "Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape",
                 "Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape",
                 "Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions"
               ]

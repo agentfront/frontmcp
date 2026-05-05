@@ -149,7 +149,9 @@ export class TaskStoreProvider {
     }
   }
 
-  async onDestroy(): Promise<void> {
+  // `@Provider` has no `onDestroy` hook — expose explicit cleanup that the
+  // host calls before `server.dispose()`.
+  async disconnect(): Promise<void> {
     await this.redis.quit();
   }
 }
