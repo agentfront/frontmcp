@@ -192,8 +192,10 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
 
   for (const [subdir, configured] of candidateDirs) {
     if (segments[0] !== subdir) continue;
+    // `isAbsolute` (Node `path.isAbsolute`) covers Windows drive-letter
+    // (`C:\refs`) and UNC (`\\server\share`) — `startsWith('/')` is POSIX-only.
     const dir = configured
-      ? configured.startsWith('/')
+      ? isAbsolute(configured)
         ? configured
         : pathResolve(baseDir, configured)
       : joinPath(baseDir, subdir);

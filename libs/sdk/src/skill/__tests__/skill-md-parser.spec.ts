@@ -521,6 +521,23 @@ Body.`;
       expect(result.rating).toBeUndefined();
     });
 
+    it('should reject NaN / ±Infinity / out-of-range rating values', () => {
+      // js-yaml turns `.nan`, `.inf`, `-.inf` into JS NaN / Infinity values,
+      // and a hand-edited frontmatter could specify e.g. `rating: 7.5`.
+      // None of these should reach the typed metadata.
+      for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -0.1, 5.1]) {
+        const result = skillMdFrontmatterToMetadata({ name: 'bad-rating', description: 'Test', rating: bad }, 'Body');
+        expect(result.rating).toBeUndefined();
+      }
+    });
+
+    it('should accept rating at the 0 and 5 endpoints', () => {
+      const zero = skillMdFrontmatterToMetadata({ name: 'r', description: 'd', rating: 0 }, '');
+      const five = skillMdFrontmatterToMetadata({ name: 'r', description: 'd', rating: 5 }, '');
+      expect(zero.rating).toBe(0);
+      expect(five.rating).toBe(5);
+    });
+
     it('should map skillPath as a string array (SEP-2640 §Resource Mapping)', () => {
       const result = skillMdFrontmatterToMetadata(
         { name: 'refunds', description: 'Test', skillPath: ['acme', 'billing', 'refunds'] },

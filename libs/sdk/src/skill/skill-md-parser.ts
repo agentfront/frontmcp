@@ -106,8 +106,13 @@ export function skillMdFrontmatterToMetadata(
   if (typeof frontmatter['compatibility'] === 'string') result.compatibility = frontmatter['compatibility'];
   if (typeof frontmatter['category'] === 'string') result.category = frontmatter['category'];
 
-  // Numeric: rating (0..5)
-  if (typeof frontmatter['rating'] === 'number') result.rating = frontmatter['rating'];
+  // Numeric: rating (finite, 0..5). `typeof === 'number'` admits NaN /
+  // ±Infinity (js-yaml emits these for `.nan` / `.inf` / `-.inf`); reject
+  // them rather than passing them downstream and tripping zod refinements.
+  const rating = frontmatter['rating'];
+  if (typeof rating === 'number' && Number.isFinite(rating) && rating >= 0 && rating <= 5) {
+    result.rating = rating;
+  }
 
   // skillPath: array of path segments (SEP-2640 §Resource Mapping)
   if (Array.isArray(frontmatter['skillPath'])) {
