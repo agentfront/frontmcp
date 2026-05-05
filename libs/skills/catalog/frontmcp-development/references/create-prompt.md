@@ -34,8 +34,8 @@ Prompts define reusable AI interaction patterns in the MCP protocol. They produc
 Create a class extending `PromptContext` and implement `execute(args)`. The `@Prompt` decorator accepts `name`, optional `description`, and `arguments` (the prompt's input parameters).
 
 ```typescript
-import { Prompt, PromptContext } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'code-review',
@@ -260,8 +260,8 @@ class AnalyzeConfigPrompt extends PromptContext {
 For simple prompts that do not need a class, use the `prompt()` function builder:
 
 ```typescript
-import { prompt } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { prompt } from '@frontmcp/sdk';
 
 const TranslatePrompt = prompt({
   name: 'translate',
@@ -375,7 +375,7 @@ class ResearchReportPrompt extends PromptContext {
 Add prompt classes (or function-style prompts) to the `prompts` array in `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'my-app',

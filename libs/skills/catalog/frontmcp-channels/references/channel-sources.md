@@ -12,6 +12,14 @@ Every channel has a source that determines how events flow into it. FrontMCP sup
 Registers an HTTP POST endpoint. External services (GitHub, CI/CD, monitoring) send payloads to this endpoint.
 
 ```typescript
+// Webhook payloads have a known shape: { body, headers, method, query? }.
+// Define the slice you need locally rather than importing an internal type.
+interface CIWebhookBody {
+  pipeline: string;
+  status: string;
+  url: string;
+}
+
 @Channel({
   name: 'ci-alerts',
   description: 'CI/CD pipeline notifications',
@@ -19,8 +27,8 @@ Registers an HTTP POST endpoint. External services (GitHub, CI/CD, monitoring) s
 })
 class CIAlertChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const { body } = payload as WebhookPayload;
-    const data = body as { pipeline: string; status: string; url: string };
+    const { body } = payload as { body: unknown };
+    const data = body as CIWebhookBody;
     return {
       content: `CI pipeline "${data.pipeline}" ${data.status}.\nDetails: ${data.url}`,
       meta: { pipeline: data.pipeline, status: data.status },
@@ -209,6 +217,6 @@ Buffered events are replayed when a new session connects, with `replayed: "true"
 | [`job-completion`](../examples/channel-sources/job-completion.md)       | Intermediate | Notify Claude Code when background jobs and workflows complete                                                                   |
 | [`service-connector`](../examples/channel-sources/service-connector.md) | Advanced     | Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API |
 | [`file-watcher`](../examples/channel-sources/file-watcher.md)           | Intermediate | Watch files for changes and notify Claude Code in real-time                                                                      |
-| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline                       |
+| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.                      |
 
 > See all examples in [`examples/channel-sources/`](../examples/channel-sources/)

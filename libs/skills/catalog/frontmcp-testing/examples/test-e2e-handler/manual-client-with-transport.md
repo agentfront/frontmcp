@@ -6,7 +6,7 @@ description: 'Use `McpTestClient.create()` with explicit transport settings for 
 tags: [testing, session, transport, e2e, handler, manual]
 features:
   - 'Using `TestServer.start()` with an explicit command and port for process-based server startup'
-  - "Building a client with `McpTestClient.create().withTransport('modern').buildAndConnect()` for streamable HTTP + strict sessions"
+  - "Building a client with `McpTestClient.create().withTransport('streamable-http').buildAndConnect()`"
   - 'Using `server.info.baseUrl` to wire the client to the correct address'
   - 'Separate `disconnect()` / `stop()` calls for client and server teardown'
   - 'The `toBeError()` and `toHaveTextContent()` custom matchers'
@@ -32,7 +32,9 @@ describe('Advanced E2E with Transport Config', () => {
       port: 3004,
     });
 
-    client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).withTransport('modern').buildAndConnect();
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+      .withTransport('streamable-http')
+      .buildAndConnect();
   });
 
   afterAll(async () => {
@@ -61,7 +63,7 @@ describe('Advanced E2E with Transport Config', () => {
 ## What This Demonstrates
 
 - Using `TestServer.start()` with an explicit command and port for process-based server startup
-- Building a client with `McpTestClient.create().withTransport('modern').buildAndConnect()` for streamable HTTP + strict sessions
+- Building a client with `McpTestClient.create().withTransport('streamable-http').buildAndConnect()`
 - Using `server.info.baseUrl` to wire the client to the correct address
 - Separate `disconnect()` / `stop()` calls for client and server teardown
 - The `toBeError()` and `toHaveTextContent()` custom matchers

@@ -53,6 +53,8 @@ my-server serve -p 3005
 
 ### Background daemon on port
 
+`daemon` subcommands are generated INTO your CLI binary by `frontmcp build --target cli` — they are not subcommands of the global `frontmcp` CLI. The block below assumes `my-server` is the binary you built and installed.
+
 ```bash
 # Start as a background daemon on port 4000
 my-server daemon start -p 4000
@@ -66,6 +68,13 @@ my-server daemon logs
 
 # Stop when done
 my-server daemon stop
+```
+
+If you haven't built a CLI binary, use the framework-level alternative:
+
+```bash
+# Start an entry file as a backgrounded socket daemon (Unix socket by default)
+frontmcp socket ./src/main.ts -b
 ```
 
 ```json Claude Code (.mcp.json)

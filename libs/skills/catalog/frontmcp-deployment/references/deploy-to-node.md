@@ -65,7 +65,7 @@ COPY --from=builder /app/package.json ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
-  CMD wget -qO- http://localhost:3000/health || exit 1
+  CMD wget -qO- http://localhost:3000/healthz || exit 1
 CMD ["node", "dist/main.js"]
 ```
 
@@ -95,7 +95,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/healthz']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -149,14 +149,17 @@ LOG_LEVEL=info
 
 ## Step 5: Health Checks
 
-FrontMCP servers expose a `/health` endpoint by default:
+FrontMCP servers expose `/healthz` by default (configurable via `health.healthzPath`). `/health` is registered as a legacy alias for backwards compatibility unless `healthzPath` is explicitly set to `/health`:
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3000/healthz
 # Response: { "status": "ok", "uptime": 12345 }
+
+# /health works too (legacy alias) — prefer /healthz for new infra
+curl http://localhost:3000/health
 ```
 
-For Docker, the `HEALTHCHECK` directive in the Dockerfile and the `healthcheck` block in Compose handle this automatically. Point your load balancer or orchestrator at this endpoint for liveness checks.
+For Docker, the `HEALTHCHECK` directive in the Dockerfile and the `healthcheck` block in Compose handle this automatically. Point your load balancer or orchestrator at `/healthz` for liveness checks.
 
 ## Step 6: PM2 for Bare Metal
 
@@ -236,7 +239,7 @@ services:
 
 - [ ] `docker compose up -d` starts all services without errors
 - [ ] `docker compose ps` shows all containers as healthy
-- [ ] `curl http://localhost:3000/health` returns `{"status":"ok"}`
+- [ ] `curl http://localhost:3000/healthz` returns `{"status":"ok"}`
 
 **Production Readiness**
 

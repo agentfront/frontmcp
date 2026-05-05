@@ -140,10 +140,10 @@ transport: {
 frontmcp dev
 
 # Test SSE endpoint
-curl -N http://localhost:3001/sse
+curl -N http://localhost:3000/sse
 
 # Test streamable HTTP
-curl -X POST http://localhost:3001/ -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
 ## Common Patterns

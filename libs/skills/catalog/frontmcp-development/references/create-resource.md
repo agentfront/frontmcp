@@ -47,8 +47,8 @@ The `@Resource` decorator accepts:
 Create a class extending `ResourceContext` and implement `execute(uri, params)`. It must return a `ReadResourceResult`.
 
 ```typescript
-import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { ReadResourceResult } from '@frontmcp/protocol';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'app-config',
@@ -156,8 +156,8 @@ The `@ResourceTemplate` decorator accepts:
 Use `@ResourceTemplate` with `uriTemplate` instead of `uri`. Type the `ResourceContext` generic parameter to get typed `params`.
 
 ```typescript
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
 import { ReadResourceResult } from '@frontmcp/protocol';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
 
 @ResourceTemplate({
   name: 'user-profile',
@@ -400,7 +400,7 @@ class CachedDataResource extends ResourceContext<{ key: string }> {
 Add resource classes (or function-style resources) to the `resources` array in `@FrontMcp` or `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'my-app',

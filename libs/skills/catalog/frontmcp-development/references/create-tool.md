@@ -31,7 +31,7 @@ Tools are the primary way to expose executable actions to AI clients in the MCP 
 
 ## Class-Based Pattern
 
-Create a class extending `ToolContext<In, Out>` and implement the `execute(input: In): Promise<Out>` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`.
+Create a class extending `ToolContext` and implement the `execute(input)` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`. Do **not** parameterize `ToolContext` with explicit generics — the input/output types are inferred automatically from the `@Tool` decorator.
 
 ```typescript
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
@@ -63,7 +63,7 @@ class GreetUserTool extends ToolContext {
 - `this.mark(stage)` -- set the active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
 - `this.notify(message, level?)` -- send a log-level notification to the client
-- `this.respondProgress(value, total?)` -- send a progress notification to the client
+- `this.progress(progress, total?, message?)` -- send a progress notification to the client (returns `Promise<boolean>`)
 
 **Properties:**
 
@@ -116,7 +116,7 @@ The `execute()` parameter type must match the inferred output of `z.object(input
 
 1. **Output validation** -- Prevents data leaks by ensuring your tool only returns fields you explicitly declare. Without `outputSchema`, any data in the return value passes through unvalidated, risking accidental exposure of sensitive fields (internal IDs, tokens, PII).
 2. **CodeCall plugin compatibility** -- The CodeCall plugin uses `outputSchema` to understand what a tool returns, enabling correct VM-based orchestration and pass-by-reference. Tools without `outputSchema` degrade CodeCall's ability to chain results.
-3. **Type safety** -- The `Out` generic on `ToolContext<In, Out>` is inferred from `outputSchema`, giving you compile-time guarantees that `execute()` returns the correct shape.
+3. **Type safety** -- `ToolContext` infers the output type from `outputSchema` automatically (no explicit generics needed), giving you compile-time guarantees that `execute()` returns the correct shape.
 
 ```typescript
 @Tool({
@@ -159,7 +159,7 @@ class GetWeatherTool extends ToolContext {
 
 ### Typed Output Patterns
 
-The `Out` generic on `ToolContext<InSchema, OutSchema, In, Out>` is inferred from `outputSchema`. You can wire the generics explicitly for full type safety — no `as any` casts needed:
+`ToolContext` infers both input and output types from the `@Tool` decorator's `inputSchema` / `outputSchema`. Do not pass explicit generics — the inference is automatic and gives you full type safety with no `as any` casts:
 
 ```typescript
 const inputSchema = {
@@ -328,7 +328,7 @@ this.fail(new ResourceNotFoundError(`Record ${input.id}`));
 
 ## Progress and Notifications
 
-Use `this.notify(message, level?)` to send log-level notifications and `this.respondProgress(value, total?)` to send progress updates to the client.
+Use `this.notify(message, level?)` to send log-level notifications and `this.progress(progress, total?, message?)` to send progress updates to the client. `this.progress()` returns a `Promise<boolean>` indicating whether the notification was sent (`false` if no progress token was provided in the request).
 
 ```typescript
 @Tool({
@@ -346,7 +346,7 @@ class BatchProcessTool extends ToolContext {
     this.mark('processing');
     const results: string[] = [];
     for (let i = 0; i < input.items.length; i++) {
-      await this.respondProgress(i + 1, input.items.length);
+      await this.progress(i + 1, input.items.length, `Processing item ${i + 1}`);
       const result = await this.processItem(input.items[i]);
       results.push(result);
     }
@@ -421,7 +421,7 @@ const AddNumbers = tool({
 });
 ```
 
-The callback receives `(input, ctx)` where `ctx` provides access to the same context methods (`get`, `tryGet`, `fail`, `mark`, `fetch`, `notify`, `respondProgress`).
+The callback receives `(input, ctx)` where `ctx` provides access to the same context methods (`get`, `tryGet`, `fail`, `mark`, `fetch`, `notify`, `progress`).
 
 Register it the same way as a class tool: `tools: [AddNumbers]`.
 

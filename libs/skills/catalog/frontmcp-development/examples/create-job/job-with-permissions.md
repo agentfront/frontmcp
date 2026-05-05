@@ -5,7 +5,7 @@ level: advanced
 description: 'A data export job with declarative permission controls, plus a function-style job for simple tasks.'
 tags: [development, redis, job, permissions]
 features:
-  - 'Declarative `permissions` with `actions`, `roles`, `scopes`, and a custom `predicate`'
+  - 'Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules'
   - 'Using `tags` and `labels` for categorization and filtering'
   - 'The `job()` function builder for simple jobs that need no class'
   - 'Full server registration with `jobs.enabled: true` and a Redis store'
@@ -34,12 +34,17 @@ import { Job, job, JobContext, z } from '@frontmcp/sdk';
   },
   tags: ['export', 'data'],
   labels: { team: 'data-engineering', priority: 'high' },
-  permissions: {
-    actions: ['create', 'read', 'execute', 'list'],
-    roles: ['admin', 'data-engineer'],
-    scopes: ['jobs:write', 'data:export'],
-    predicate: (ctx) => ctx.user?.department === 'engineering',
-  },
+  permissions: [
+    {
+      action: 'execute',
+      roles: ['admin', 'data-engineer'],
+      scopes: ['jobs:write', 'data:export'],
+      custom: (authInfo) => (authInfo as { department?: string }).department === 'engineering',
+    },
+    { action: 'create', roles: ['admin', 'data-engineer'] },
+    { action: 'read', roles: ['admin', 'data-engineer', 'auditor'] },
+    { action: 'list', roles: ['admin', 'data-engineer', 'auditor'] },
+  ],
 })
 class DataExportJob extends JobContext {
   async execute(input: { dataset: string; destination: string }) {
@@ -106,7 +111,7 @@ class DataServer {}
 
 ## What This Demonstrates
 
-- Declarative `permissions` with `actions`, `roles`, `scopes`, and a custom `predicate`
+- Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules
 - Using `tags` and `labels` for categorization and filtering
 - The `job()` function builder for simple jobs that need no class
 - Full server registration with `jobs.enabled: true` and a Redis store

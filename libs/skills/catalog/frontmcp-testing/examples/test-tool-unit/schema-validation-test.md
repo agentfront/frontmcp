@@ -51,15 +51,18 @@ describe('AddTool schema validation', () => {
 
   it('should coerce valid input and produce correct output', async () => {
     const tool = new AddTool();
+    // Mock the real ExecutionContextBase + ToolContext surface.
+    // Real API: libs/sdk/src/common/interfaces/execution-context.interface.ts
     const ctx = {
       get: jest.fn(),
       tryGet: jest.fn(),
+      scope: { get: jest.fn(), tryGet: jest.fn() },
       fail: jest.fn((err) => {
         throw err;
       }),
       mark: jest.fn(),
+      fetch: jest.fn(),
       notify: jest.fn(),
-      respondProgress: jest.fn(),
     } as unknown as ToolContext;
     Object.assign(tool, ctx);
 

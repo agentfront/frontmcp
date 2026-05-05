@@ -2,24 +2,40 @@
 name: graceful-shutdown
 reference: production-node-server
 level: intermediate
-description: 'Shows how to implement graceful shutdown with SIGTERM handling, in-flight request draining, and health check status transitions.'
-tags: [production, redis, database, node, graceful, shutdown]
+description: Shows how to expose load-balancer drain state without overriding the FrontMCP framework's built-in SIGTERM / SIGINT graceful shutdown.
+tags:
+  - production
+  - redis
+  - database
+  - node
+  - graceful
+  - shutdown
 features:
-  - 'Handling SIGTERM for graceful shutdown in containerized environments'
-  - 'Draining in-flight requests before exiting with a timeout safety net'
-  - 'Disposing all resources (Redis, database) via `server.dispose()`'
-  - 'Returning unhealthy during shutdown so load balancers redirect traffic'
+  - The framework already handles SIGTERM/SIGINT — never call `server.close()` (no such method) or `process.exit()` on top of it
+  - Use `server.dispose()` if you need explicit cleanup in non-server (SDK) contexts
+  - Add a _drain probe_ on `/healthz` so load balancers stop sending traffic during the framework's drain window
+  - "Avoid handler conflicts: registering a second SIGTERM that calls `process.exit(0)` races the framework's own exit path"
 ---
 
 # Graceful Shutdown with SIGTERM Handling
 
-Shows how to implement graceful shutdown with SIGTERM handling, in-flight request draining, and health check status transitions.
+Shows how to expose load-balancer drain state without overriding the FrontMCP framework's built-in SIGTERM / SIGINT graceful shutdown.
+
+> The framework already installs SIGTERM/SIGINT handlers that:
+>
+> 1. Unregister the server from the notification bus
+> 2. Call `scope.shutdown()` to dispose all providers
+> 3. Call `mcpServer.close()` on the underlying transport
+> 4. Exit with code 0 (or 1 after a 5s deadline)
+>
+> See `libs/sdk/src/front-mcp/front-mcp.ts`. **Do not register a second handler that also calls `process.exit()`** — both will fire and race.
 
 ## Code
 
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({
@@ -30,58 +46,58 @@ import { MyApp } from './my.app';
     host: process.env.REDIS_HOST ?? 'localhost',
     port: 6379,
   },
+  // /healthz is auto-registered on Node — see frontmcp-production-readiness
+  // health-readiness-endpoints reference.
 })
 export default class ResilientServer {}
 ```
 
 ```typescript
-// src/lifecycle/shutdown.ts
-// Graceful shutdown handler — wire this in your entry point
+// src/lifecycle/drain-signal.ts
+// Track shutdown state ONLY — the framework owns the actual shutdown sequence.
+// Use this for /healthz custom probes so load balancers stop sending traffic
+// during the framework's drain window.
 
 let isShuttingDown = false;
 
-export function setupGracefulShutdown(server: { close: () => Promise<void>; dispose: () => Promise<void> }): void {
-  const shutdown = async (signal: string) => {
-    if (isShuttingDown) return;
+export function isDraining(): boolean {
+  return isShuttingDown;
+}
+
+export function setupDrainSignal(): void {
+  // Mark as draining as soon as a signal arrives. The framework's handler
+  // also fires (Node calls every listener) and runs the actual shutdown.
+  // We do NOT call process.exit() — the framework owns the exit.
+  const markDraining = () => {
     isShuttingDown = true;
-
-    console.log(`Received ${signal}. Starting graceful shutdown...`);
-
-    // 1. Stop accepting new connections
-    await server.close();
-    console.log('Server closed — no new connections accepted.');
-
-    // 2. Wait for in-flight requests to complete (with timeout)
-    const drainTimeout = setTimeout(() => {
-      console.error('Drain timeout reached. Forcing exit.');
-      process.exit(1);
-    }, 30_000); // 30 second drain period
-
-    // 3. Dispose all resources (Redis, DB connections, providers)
-    await server.dispose();
-    clearTimeout(drainTimeout);
-    console.log('All resources disposed. Exiting.');
-
-    process.exit(0);
+    console.log('[drain] Marking server as draining for /healthz.');
   };
-
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', markDraining);
+  process.on('SIGINT', markDraining);
 }
+```
 
-export function isHealthy(): boolean {
-  // Return unhealthy during shutdown drain so load balancers stop sending traffic
-  return !isShuttingDown;
-}
+```typescript
+// src/probes/drain-probe.ts — wire into health.probes
+import { isDraining } from '../lifecycle/drain-signal';
+
+export const drainProbe = {
+  name: 'drain',
+  async check() {
+    return isDraining() ? { status: 'unhealthy' as const, message: 'shutting down' } : { status: 'healthy' as const };
+  },
+};
 ```
 
 ## What This Demonstrates
 
-- Handling SIGTERM for graceful shutdown in containerized environments
-- Draining in-flight requests before exiting with a timeout safety net
-- Disposing all resources (Redis, database) via `server.dispose()`
-- Returning unhealthy during shutdown so load balancers redirect traffic
+- The framework already handles SIGTERM/SIGINT — never call `server.close()` (no such method) or `process.exit()` on top of it
+- Use `server.dispose()` if you need explicit cleanup in non-server (SDK) contexts
+- Add a _drain probe_ on `/healthz` so load balancers stop sending traffic during the framework's drain window
+- Avoid handler conflicts: registering a second SIGTERM that calls `process.exit(0)` races the framework's own exit path
 
 ## Related
 
 - See `production-node-server` for the full process management and scaling checklist
+- Framework SIGTERM/SIGINT wiring: `libs/sdk/src/front-mcp/front-mcp.ts`
+- Health probes: `references/health-readiness-endpoints.md`

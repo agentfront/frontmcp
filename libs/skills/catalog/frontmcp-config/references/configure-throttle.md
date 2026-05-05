@@ -175,7 +175,7 @@ frontmcp dev
 
 # Test rate limiting (send 101 requests rapidly)
 for i in $(seq 1 101); do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3001/ \
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3000/ \
     -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 done

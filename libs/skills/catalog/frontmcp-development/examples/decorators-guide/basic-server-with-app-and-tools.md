@@ -7,8 +7,8 @@ tags: [development, decorators, app, tools]
 features:
   - 'The `@FrontMcp` -> `@App` -> `@Tool`/`@Resource`/`@Prompt` nesting hierarchy'
   - 'Tool classes extend `ToolContext` and implement `execute()`'
-  - 'Resource classes extend `ResourceContext` and implement `read()`'
-  - 'Prompt classes extend `PromptContext` and implement `execute()`'
+  - 'Resource classes extend `ResourceContext` and implement `execute(uri, params)`'
+  - 'Prompt classes extend `PromptContext` and implement `execute(args: Record<string, string>)`'
   - 'Apps group related tools, resources, and prompts into logical modules'
 ---
 
@@ -49,9 +49,9 @@ import { Resource, ResourceContext } from '@frontmcp/sdk';
   mimeType: 'application/json',
 })
 class AppConfigResource extends ResourceContext {
-  async read() {
+  async execute(uri: string, _params: Record<string, string>) {
     const config = await this.get(ConfigService).getAll();
-    return { contents: [{ uri: this.uri, text: JSON.stringify(config) }] };
+    return { contents: [{ uri, text: JSON.stringify(config) }] };
   }
 }
 ```
@@ -69,14 +69,19 @@ import { Prompt, PromptContext } from '@frontmcp/sdk';
   ],
 })
 class CodeReviewPrompt extends PromptContext {
-  async execute(args: { code: string; language?: string }) {
+  // Prompt arguments arrive as Record<string, string> — coerce to other types as needed.
+  // Required-arg validation is performed before `execute()` is called, so `args.code`
+  // is guaranteed present here. The `language` fallback handles the optional arg.
+  async execute(args: Record<string, string>) {
+    const code = args.code;
+    const language = args.language ?? 'unknown';
     return {
       messages: [
         {
           role: 'user' as const,
           content: {
             type: 'text' as const,
-            text: `Review this ${args.language ?? ''} code:\n\n${args.code}`,
+            text: `Review this ${language} code:\n\n${code}`,
           },
         },
       ],
@@ -114,8 +119,8 @@ class MyServer {}
 
 - The `@FrontMcp` -> `@App` -> `@Tool`/`@Resource`/`@Prompt` nesting hierarchy
 - Tool classes extend `ToolContext` and implement `execute()`
-- Resource classes extend `ResourceContext` and implement `read()`
-- Prompt classes extend `PromptContext` and implement `execute()`
+- Resource classes extend `ResourceContext` and implement `execute(uri, params)`
+- Prompt classes extend `PromptContext` and implement `execute(args: Record<string, string>)`
 - Apps group related tools, resources, and prompts into logical modules
 
 ## Related

@@ -217,7 +217,7 @@ Only update:
 - [ ] README includes all resources and their URIs
 - [ ] Installation instructions match the deployment target
 - [ ] Environment variables match `.env.example`
-- [ ] Development section includes `frontmcp dev`, `frontmcp test`, `frontmcp inspect`
+- [ ] Development section includes `frontmcp dev`, `frontmcp test`, `frontmcp inspector`
 - [ ] License matches `package.json`
 
 ## Examples

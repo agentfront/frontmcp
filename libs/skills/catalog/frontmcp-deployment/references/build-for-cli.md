@@ -57,7 +57,7 @@ frontmcp build --target cli --js               # JS bundle only (no SEA)
 
 ## Requirements
 
-- **Node.js 24+** required for SEA support
+- **Node.js 24+** required for the SEA path (`frontmcp build --target cli`). The plain JS bundle path (`--target cli --js`) only requires the Node version your entry file supports.
 - The entry file must export or instantiate a `@FrontMcp` decorated class
 - SEA binaries are platform-specific (build on macOS for macOS, Linux for Linux)
 
@@ -147,13 +147,13 @@ frontmcp service uninstall my-server
 
 ## Common Patterns
 
-| Pattern               | Correct                                             | Incorrect                        | Why                                                         |
-| --------------------- | --------------------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
-| Node.js version       | Node.js 24+ for SEA builds                          | Node.js 18 or 20                 | SEA support requires Node.js 24+                            |
-| Entry file            | Export or instantiate a `@FrontMcp` decorated class | Export a plain function          | The build expects a FrontMcp entry point                    |
-| Transport for CLI     | `socketPath` or stdin/stdout                        | TCP port binding                 | CLI tools run locally; ports may conflict                   |
-| Cross-platform binary | Build on each target OS separately                  | Build on macOS and ship to Linux | SEA binaries are platform-specific                          |
-| JS-only bundle        | `frontmcp build --target cli --js`                  | `frontmcp build --target node`   | `--target node` assumes server deployment with node_modules |
+| Pattern               | Correct                                              | Incorrect                        | Why                                                         |
+| --------------------- | ---------------------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
+| Node.js version       | Node.js 24+ for SEA builds (not required for `--js`) | Using SEA flow on Node < 24      | SEA support requires Node.js 24+; `--js` bundles do not     |
+| Entry file            | Export or instantiate a `@FrontMcp` decorated class  | Export a plain function          | The build expects a FrontMcp entry point                    |
+| Transport for CLI     | `socketPath` or stdin/stdout                         | TCP port binding                 | CLI tools run locally; ports may conflict                   |
+| Cross-platform binary | Build on each target OS separately                   | Build on macOS and ship to Linux | SEA binaries are platform-specific                          |
+| JS-only bundle        | `frontmcp build --target cli --js`                   | `frontmcp build --target node`   | `--target node` assumes server deployment with node_modules |
 
 ## Verification Checklist
 

@@ -19,9 +19,15 @@ Watch files for changes and notify Claude Code in real-time
 
 ```typescript
 // src/apps/monitoring/channels/log-watcher.channel.ts
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+
+// NOTE: We normally read/write files via `@frontmcp/utils`, but it does not
+// expose a file-watcher helper because watching is platform-specific (inotify
+// on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) and not
+// available in browser/edge runtimes. `node:fs` is the right call here; this
+// channel is Node-only by design.
 import { watch } from 'node:fs';
+
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 import { readFile } from '@frontmcp/utils';
 
 @Channel({

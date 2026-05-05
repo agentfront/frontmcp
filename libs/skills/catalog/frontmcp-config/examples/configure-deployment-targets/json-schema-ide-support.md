@@ -18,7 +18,7 @@ Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete
 
 ```json
 {
-  "$schema": "./node_modules/@frontmcp/cli/frontmcp.schema.json",
+  "$schema": "./node_modules/frontmcp/frontmcp.schema.json",
   "name": "my-server",
   "version": "1.0.0",
   "deployments": [

@@ -19,7 +19,7 @@ Configure CORS to allow only specific frontend origins with credentials.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'my-app' })
 class MyApp {}
@@ -28,7 +28,7 @@ class MyApp {}
   info: { name: 'cors-server', version: '1.0.0' },
   apps: [MyApp],
   http: {
-    port: Number(process.env['PORT']) || 3001,
+    port: Number(process.env['PORT']) || 3000,
     cors: {
       origin: ['https://myapp.com', 'https://staging.myapp.com'],
       credentials: true,

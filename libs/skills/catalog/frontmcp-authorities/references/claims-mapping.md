@@ -234,6 +234,13 @@ authorities: {
     return {
       roles,
       permissions,
+      // Merge order matches the engine's default in
+      // `authorities.context.ts` (`{ ...authorizationClaims, ...user }`):
+      // spread the raw `authorization.claims` first, then `authInfo.user` so
+      // IdP-provided user fields (`sub`, `name`, `email`, `tenantId`, ...)
+      // override any same-named server-side authorization claim on conflict.
+      // Reverse this order only if you intentionally want authorization
+      // claims to win over user identity fields.
       claims: { ...claims, ...user },
     };
   },

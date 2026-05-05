@@ -19,7 +19,7 @@ Complete security headers configuration for production with CSP enforcement, HST
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'production-server',

@@ -33,8 +33,8 @@ The OpenAPI adapter converts OpenAPI 3.x specifications into MCP tools — one t
 ## Quick Start
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'MyApp',

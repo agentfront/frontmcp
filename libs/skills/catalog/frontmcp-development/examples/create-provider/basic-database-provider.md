@@ -2,18 +2,18 @@
 name: basic-database-provider
 reference: create-provider
 level: basic
-description: 'A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks.'
+description: A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.
 tags: [development, database, provider]
 features:
   - 'Defining a typed token with `Token<T>` using a `Symbol` for DI identification'
-  - 'Using `@Provider` decorator with `onInit()` for async startup and `onDestroy()` for cleanup'
+  - 'Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution'
   - 'Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety'
-  - 'Registering the provider in the `providers` array so tools can resolve it'
+  - 'Registering the factory in the `providers` array so tools can resolve it'
 ---
 
-# Basic Database Provider with Lifecycle
+# Basic Database Provider with Async Setup
 
-A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks.
+A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.
 
 ## Code
 
@@ -31,20 +31,14 @@ export const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
 
 ```typescript
 // src/apps/main/providers/database.provider.ts
-import { createPool, Pool } from 'your-db-driver';
+import { createPool, type Pool } from 'your-db-driver';
 
-import { Provider } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 
-@Provider({ name: 'DatabaseProvider' })
-class DatabaseProvider implements DatabaseService {
-  private pool!: Pool;
+import { DB_TOKEN, type DatabaseService } from '../tokens';
 
-  async onInit() {
-    this.pool = await createPool({
-      connectionString: process.env.DATABASE_URL,
-      max: 20,
-    });
-  }
+class DatabasePool implements DatabaseService {
+  constructor(private readonly pool: Pool) {}
 
   async query(sql: string, params?: unknown[]) {
     return this.pool.query(sql, params);
@@ -53,11 +47,24 @@ class DatabaseProvider implements DatabaseService {
   async close() {
     await this.pool.end();
   }
-
-  async onDestroy() {
-    await this.pool.end();
-  }
 }
+
+// `@Provider` does NOT support `onInit`/`onDestroy` lifecycle hooks. For async
+// setup, register the dependency via `AsyncProvider({ useFactory })` — the
+// framework awaits `useFactory` before any tool can resolve the token.
+export const databaseProvider = AsyncProvider({
+  provide: DB_TOKEN,
+  name: 'DatabaseProvider',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async (): Promise<DatabaseService> => {
+    const pool = await createPool({
+      connectionString: process.env.DATABASE_URL,
+      max: 20,
+    });
+    return new DatabasePool(pool);
+  },
+});
 ```
 
 ```typescript
@@ -93,9 +100,12 @@ class QueryUsersTool extends ToolContext {
 // src/apps/main/index.ts
 import { App } from '@frontmcp/sdk';
 
+import { databaseProvider } from './providers/database.provider';
+import QueryUsersTool from './tools/query-users.tool';
+
 @App({
   name: 'main',
-  providers: [DatabaseProvider],
+  providers: [databaseProvider],
   tools: [QueryUsersTool],
 })
 class MainApp {}
@@ -104,9 +114,9 @@ class MainApp {}
 ## What This Demonstrates
 
 - Defining a typed token with `Token<T>` using a `Symbol` for DI identification
-- Using `@Provider` decorator with `onInit()` for async startup and `onDestroy()` for cleanup
+- Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution
 - Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety
-- Registering the provider in the `providers` array so tools can resolve it
+- Registering the factory in the `providers` array so tools can resolve it
 
 ## Related
 

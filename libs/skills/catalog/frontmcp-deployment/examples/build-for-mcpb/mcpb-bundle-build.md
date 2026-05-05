@@ -25,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Greet a user by name',
   inputSchema: { name: z.string() },
 })
-class GreetTool extends ToolContext<{ name: string }> {
+class GreetTool extends ToolContext {
   async execute(input: { name: string }) {
     const apiBase = process.env.API_BASE ?? 'https://api.example.com';
     return {

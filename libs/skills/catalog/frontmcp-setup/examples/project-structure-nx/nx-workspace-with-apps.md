@@ -19,23 +19,26 @@ Scaffold an Nx monorepo with two apps and a server that composes them into a sin
 
 ```bash
 # Scaffold the Nx workspace
+# (creates apps/.gitkeep, libs/.gitkeep, servers/.gitkeep, and a sample apps/demo app)
 npx frontmcp create my-workspace --nx
 
 cd my-workspace
 
-# Generate two apps
+# Generate two apps (billing and crm)
 nx g @frontmcp/nx:app billing
 nx g @frontmcp/nx:app crm
 
-# Generate a server composing both apps
+# Generate a server that composes both apps
+# Servers are NOT created by the workspace generator -- you must add them with this command
 nx g @frontmcp/nx:server gateway --apps=billing,crm
 ```
 
 ```typescript
 // apps/billing/src/billing.app.ts
 import { App } from '@frontmcp/sdk';
-import { CreateInvoiceTool } from './tools/create-invoice.tool';
+
 import { InvoiceResource } from './resources/invoice.resource';
+import { CreateInvoiceTool } from './tools/create-invoice.tool';
 
 @App({
   name: 'billing',
@@ -48,6 +51,7 @@ export class BillingApp {}
 ```typescript
 // apps/crm/src/crm.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { LookupUserTool } from './tools/lookup-user.tool';
 
 @App({
@@ -60,9 +64,11 @@ export class CrmApp {}
 ```typescript
 // servers/gateway/src/main.ts
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+
 import { BillingApp } from '@my-workspace/billing';
 import { CrmApp } from '@my-workspace/crm';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'gateway', version: '1.0.0' },

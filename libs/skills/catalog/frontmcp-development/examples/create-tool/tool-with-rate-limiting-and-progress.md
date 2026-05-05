@@ -6,7 +6,7 @@ description: 'A batch processing tool that uses rate limiting, concurrency contr
 tags: [development, throttle, tool, rate, limiting, progress]
 features:
   - 'Configuring `rateLimit`, `concurrency`, and `timeout` for throttling protection'
-  - 'Sending progress updates to the client with `this.respondProgress(value, total)`'
+  - 'Sending progress updates to the client with `this.progress(progress, total, message?)`'
   - 'Using `this.mark(stage)` for execution stage tracking and debugging'
   - 'Sending log-level notifications with `this.notify(message, level)`'
   - 'Setting tool `annotations` to communicate behavioral hints to clients'
@@ -52,7 +52,7 @@ class BatchProcessTool extends ToolContext {
     this.mark('processing');
     const results: string[] = [];
     for (let i = 0; i < input.items.length; i++) {
-      await this.respondProgress(i + 1, input.items.length);
+      await this.progress(i + 1, input.items.length, `Processing item ${i + 1}`);
       const result = await this.processItem(input.items[i]);
       results.push(result);
     }
@@ -82,7 +82,7 @@ class MainApp {}
 ## What This Demonstrates
 
 - Configuring `rateLimit`, `concurrency`, and `timeout` for throttling protection
-- Sending progress updates to the client with `this.respondProgress(value, total)`
+- Sending progress updates to the client with `this.progress(progress, total, message?)`
 - Using `this.mark(stage)` for execution stage tracking and debugging
 - Sending log-level notifications with `this.notify(message, level)`
 - Setting tool `annotations` to communicate behavioral hints to clients

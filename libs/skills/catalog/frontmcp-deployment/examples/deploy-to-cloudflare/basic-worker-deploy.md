@@ -25,7 +25,7 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
   description: 'Echo back the input',
   inputSchema: { message: z.string() },
 })
-class EchoTool extends ToolContext<{ message: string }> {
+class EchoTool extends ToolContext {
   async execute(input: { message: string }) {
     return { content: [{ type: 'text' as const, text: input.message }] };
   }
@@ -47,13 +47,12 @@ export default MyServer;
 ```
 
 ```toml
-# wrangler.toml
+# wrangler.toml — the Cloudflare adapter overwrites this on every build
+# with exactly these three lines (configure name/compatibility_date via
+# frontmcp.config.deployments[].wrangler).
 name = "frontmcp-worker"
-main = "dist/index.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
-
-[vars]
-NODE_ENV = "production"
 ```
 
 ```bash
@@ -66,8 +65,8 @@ wrangler dev
 # Deploy to production
 wrangler deploy
 
-# Verify
-curl https://frontmcp-worker.your-subdomain.workers.dev/health
+# Verify (FrontMCP serves /healthz by default)
+curl https://frontmcp-worker.your-subdomain.workers.dev/healthz
 ```
 
 ## What This Demonstrates

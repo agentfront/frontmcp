@@ -65,7 +65,7 @@ The simplest way — one config line:
 })
 ```
 
-This enables auto-tracing for all 33 SDK flows. Add structured logging:
+This enables auto-tracing for all SDK flows. Add structured logging:
 
 ```typescript
 @FrontMcp({

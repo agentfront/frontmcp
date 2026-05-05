@@ -2,18 +2,26 @@
 name: cold-start-connection-reuse
 reference: production-lambda
 level: intermediate
-description: 'Shows how to minimize Lambda cold starts with lazy initialization, tree-shaking, and the connection reuse pattern for external services.'
-tags: [production, lambda, performance, cold, start, connection]
+description: Shows how to minimize Lambda cold starts with lazy initialization on first call and the module-scope connection-reuse pattern for external services.
+tags:
+  - production
+  - lambda
+  - performance
+  - cold
+  - start
+  - connection
 features:
-  - 'Connection reuse pattern: caching connections in module scope across warm invocations'
-  - 'Lazy-loading heavy dependencies (`pg`) via dynamic `import()` to reduce cold start'
-  - 'Not closing connections in `onDestroy()` for Lambda (they survive freeze/thaw)'
-  - 'Keeping module scope lightweight with no heavy initialization'
+  - 'Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw'
+  - Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load
+  - Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)
+  - Keeping module scope lightweight with no heavy initialization
 ---
 
 # Cold Start Optimization and Connection Reuse
 
-Shows how to minimize Lambda cold starts with lazy initialization, tree-shaking, and the connection reuse pattern for external services.
+Shows how to minimize Lambda cold starts with lazy initialization on first call and the module-scope connection-reuse pattern for external services.
+
+> `@Provider`-decorated classes do NOT have `onInit` / `onDestroy` lifecycle hooks. Initialize lazily on first method call. For Lambda specifically, do **not** wire any shutdown hook for DB connections — Lambda freezes the execution context between invocations and your connection survives, so explicit close is wrong.
 
 ## Code
 
@@ -23,38 +31,34 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const DB_CLIENT = Symbol('DbClient');
 
-// Connection reuse pattern: connections survive between warm invocations
-// but must handle cold starts and reconnection gracefully
-let cachedConnection: unknown | undefined;
+// Module-scope cache — survives freeze/thaw between Lambda invocations.
+let cachedConnectionPromise: Promise<unknown> | undefined;
 
 @Provider({ token: DB_CLIENT, scope: ProviderScope.GLOBAL })
 export class DbConnectionProvider {
-  private connection: unknown;
-
-  async onInit(): Promise<void> {
-    // Reuse connection across warm invocations
-    if (cachedConnection) {
-      this.connection = cachedConnection;
-      return;
+  // Lazy on first getConnection() — heavy SDK import does not run at module load.
+  async getConnection(): Promise<unknown> {
+    if (!cachedConnectionPromise) {
+      const promise = (async () => {
+        const { Client } = await import('pg');
+        const client = new Client({
+          host: process.env.DB_HOST,
+          connectionTimeoutMillis: 5000, // Don't hang on connection attempts
+        });
+        await client.connect();
+        return client;
+      })();
+      // Reset on failure so the next warm invocation can retry instead of
+      // permanently caching a rejected promise.
+      promise.catch(() => {
+        if (cachedConnectionPromise === promise) cachedConnectionPromise = undefined;
+      });
+      cachedConnectionPromise = promise;
     }
-
-    // Lazy-load the database driver — reduces cold start time
-    const { Client } = await import('pg');
-    this.connection = new Client({
-      host: process.env.DB_HOST,
-      connectionTimeoutMillis: 5000, // Don't hang on connection attempts
-    });
-    await (this.connection as { connect: () => Promise<void> }).connect();
-
-    // Cache for warm invocations
-    cachedConnection = this.connection;
+    return cachedConnectionPromise;
   }
 
-  getConnection() {
-    return this.connection;
-  }
-
-  // Note: Don't close in onDestroy for Lambda — connection survives freeze/thaw
+  // Note: Do NOT close in any shutdown hook for Lambda — connection survives freeze/thaw.
 }
 ```
 
@@ -77,12 +81,11 @@ import { DB_CLIENT } from '../providers/db-connection.provider';
 })
 export class OptimizedQueryTool extends ToolContext {
   async execute(input: { id: string }) {
-    const db = this.get(DB_CLIENT);
+    const db = this.get(DB_CLIENT) as { getConnection: () => Promise<{ query: Function }> };
 
     // Parameterized query — prevents SQL injection
-    const result = await (db as { getConnection: () => { query: Function } })
-      .getConnection()
-      .query('SELECT * FROM records WHERE id = $1', [input.id]);
+    const conn = await db.getConnection();
+    const result = await conn.query('SELECT * FROM records WHERE id = $1', [input.id]);
 
     if (!result.rows[0]) {
       this.fail(new Error(`Record not found: ${input.id}`));
@@ -113,9 +116,9 @@ export default class FastLambdaServer {}
 
 ## What This Demonstrates
 
-- Connection reuse pattern: caching connections in module scope across warm invocations
-- Lazy-loading heavy dependencies (`pg`) via dynamic `import()` to reduce cold start
-- Not closing connections in `onDestroy()` for Lambda (they survive freeze/thaw)
+- Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw
+- Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load
+- Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)
 - Keeping module scope lightweight with no heavy initialization
 
 ## Related

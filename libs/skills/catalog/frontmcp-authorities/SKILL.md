@@ -106,7 +106,12 @@ authorities: {
 }
 ```
 
-If no `claimsMapping` is provided, the engine falls back to `authInfo.user.roles` and `authInfo.user.permissions`. For non-standard token shapes, use `claimsResolver` instead (see Common Patterns below).
+If no `claimsMapping` is provided, the engine falls back to (in order):
+
+- **roles**: `authInfo.user.roles` → `authInfo.extra.authorization.scopes` → `[]`
+- **permissions**: `authInfo.user.permissions` → `[]`
+
+The OAuth-scopes-as-roles fallback means a token with no `roles` claim but with `scope: "admin read"` will be treated as having `roles: ['admin', 'read']`. Configure explicit `claimsMapping.roles` to opt out. For non-standard token shapes, use `claimsResolver` instead (see Common Patterns below).
 
 ### Step 3: Register Named Profiles
 
@@ -198,6 +203,87 @@ export default class PublishContentTool extends ToolContext { ... }
 export default class SensitiveActionTool extends ToolContext { ... }
 ```
 
+**Async guards (one-shot DB/Redis/API checks):**
+
+For dynamic, async authorization that does not warrant a reusable custom evaluator, use the
+`guards` field. Each guard receives the same `AuthoritiesEvaluationContext` and returns
+`true` on grant, or `false`/a denial string on deny. Guards run in sequence and combine with
+other policy fields via `operator` (default AND).
+
+```typescript
+import type { AuthorityGuardFn } from '@frontmcp/auth';
+
+const requireActiveSubscription: AuthorityGuardFn = async (ctx) => {
+  const active = await db.isSubscriptionActive(ctx.user.sub);
+  return active ? true : 'subscription is not active';
+};
+
+@Tool({
+  name: 'premium_feature',
+  authorities: {
+    roles: { any: ['user'] },
+    guards: [requireActiveSubscription],
+  },
+})
+export default class PremiumFeatureTool extends ToolContext { ... }
+```
+
+Use `guards` for one-off async checks; promote to a registered custom evaluator when the
+same logic is reused across many entries (see `references/custom-evaluators.md`).
+
+### Optional: Map Denials to OAuth Scope Challenges (`scopeMapping`)
+
+If your transport layer issues OAuth scope challenges (RFC 6750 `insufficient_scope`),
+declare a `scopeMapping` so authority denials are converted into the right `WWW-Authenticate`
+challenge with the required scopes. Mapping is explicit only — no automatic
+permission-to-scope inference.
+
+```typescript
+authorities: {
+  scopeMapping: {
+    roles: { admin: ['admin:all'] },
+    permissions: { 'repo:write': ['repo'] },
+    profiles: { admin: ['admin:all'] },
+  },
+}
+```
+
+When a request is denied because the user lacks role `admin`, the response surfaces
+the `admin:all` scope as the required challenge.
+
+### Optional: Extract Custom Auth Context Fields (`pipes`)
+
+`pipes` are functions that run during auth context construction and merge their output into
+`FrontMcpAuthContext`. Use them to extract custom typed fields from JWT claims so they are
+available to your tools as strongly typed accessors. Declare the resulting fields by
+augmenting `ExtendFrontMcpAuthContext`:
+
+A pipe receives the **raw JWT claims** (a `Readonly<Record<string, unknown>>`) and
+returns a `Partial<ExtendFrontMcpAuthContext>` (sync or async). It does **not**
+receive the `AuthInfo` envelope — there is no `.user` accessor on the input.
+
+```typescript
+// Pipe signature (defined inline; do not import — AuthContextPipe is not
+// re-exported from `@frontmcp/auth`):
+//   (claims: Readonly<Record<string, unknown>>) =>
+//     Partial<ExtendFrontMcpAuthContext> | Promise<Partial<ExtendFrontMcpAuthContext>>
+
+const tenantPipe = (claims: Readonly<Record<string, unknown>>) => ({
+  tenantId: claims['tenantId'] as string | undefined,
+});
+
+declare global {
+  interface ExtendFrontMcpAuthContext {
+    tenantId?: string;
+  }
+}
+
+// In @FrontMcp({ authorities: { ... } })
+authorities: {
+  pipes: [tenantPipe],
+}
+```
+
 ## Scenario Routing Table
 
 | Scenario                              | Approach                                                         | Reference                          |
@@ -253,16 +339,17 @@ export default class SensitiveActionTool extends ToolContext { ... }
 
 ## Troubleshooting
 
-| Problem                                         | Cause                                                                 | Solution                                                                           |
-| ----------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `profile 'admin' is not registered`             | Profile used in decorator but not in `authorities.profiles` config    | Add the profile to the `profiles` field in `@FrontMcp({ authorities })`            |
-| All users denied despite correct roles          | `claimsMapping.roles` path does not match the actual JWT claim path   | Decode a real JWT and verify the dot-path resolves to the roles array              |
-| `authorities` field not recognized on decorator | `@frontmcp/auth` not imported (metadata augmentation not active)      | Add `import '@frontmcp/auth'` or import any type from `@frontmcp/auth/authorities` |
-| ABAC condition always fails                     | `{ fromInput: 'tenantId' }` but tool input field is named `tenant_id` | The `fromInput` key must exactly match the tool's input schema field name          |
-| ReBAC always denies                             | No `relationshipResolver` provided                                    | Implement `RelationshipResolver` and pass it to plugin options                     |
-| Custom evaluator not found                      | Key in `custom.*` policy does not match registered evaluator name     | Ensure the evaluator is registered with the same key used in the policy            |
-| List endpoints show all entries                 | No `authorities` config in `@FrontMcp()` or hook priority conflict    | Verify `authorities: { ... }` is set on `@FrontMcp()` decorator                    |
-| `AuthorityDeniedError` has no detail            | `deniedBy` field shows generic message                                | Check the `evaluatedPolicies` array on the error for which policy type failed      |
+| Problem                                                                                   | Cause                                                                                                                                                                                     | Solution                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile 'admin' is not registered`                                                       | Profile used in decorator but not in `authorities.profiles` config                                                                                                                        | Add the profile to the `profiles` field in `@FrontMcp({ authorities })`                                                                                                                      |
+| All users denied despite correct roles                                                    | `claimsMapping.roles` path does not match the actual JWT claim path                                                                                                                       | Decode a real JWT and verify the dot-path resolves to the roles array                                                                                                                        |
+| `authorities` field not recognized on decorator                                           | `@frontmcp/auth` not imported (metadata augmentation not active)                                                                                                                          | Add `import '@frontmcp/auth'` (or `import type ... from '@frontmcp/auth'`) anywhere in your project to activate the metadata augmentation. There is no `@frontmcp/auth/authorities` subpath. |
+| ABAC condition always fails                                                               | `{ fromInput: 'tenantId' }` but tool input field is named `tenant_id`                                                                                                                     | The `fromInput` key must exactly match the tool's input schema field name                                                                                                                    |
+| ReBAC always denies                                                                       | No `relationshipResolver` provided                                                                                                                                                        | Implement `RelationshipResolver` and pass it to plugin options                                                                                                                               |
+| Custom evaluator not found                                                                | Key in `custom.*` policy does not match registered evaluator name                                                                                                                         | Ensure the evaluator is registered with the same key used in the policy                                                                                                                      |
+| List endpoints show all entries                                                           | No `authorities` config in `@FrontMcp()` or hook priority conflict                                                                                                                        | Verify `authorities: { ... }` is set on `@FrontMcp()` decorator                                                                                                                              |
+| `AuthorityDeniedError` has no detail                                                      | `deniedBy` field shows generic message                                                                                                                                                    | Check the `evaluatedPolicies` array on the error for which policy type failed                                                                                                                |
+| TS error: `evaluators`/`relationshipResolver`/`claimsResolver` not on `AuthoritiesConfig` | The runtime Zod schema accepts these keys but the exported `AuthoritiesConfig` interface in `authorities.profiles.ts` only declares `claimsMapping`, `profiles`, `scopeMapping`, `pipes`. | Pass the config inline (TS infers from the decorator's broader type) or cast the typed config as the interface catches up.                                                                   |
 
 ## Reference
 

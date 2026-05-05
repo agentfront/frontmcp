@@ -41,10 +41,15 @@ import { MyApp } from './my.app';
     maxAge: 86400, // Cache preflight for 24 hours
   },
 
-  // Rate limiting: prevent abuse
+  // Rate limiting: prevent abuse (GuardConfig — see libs/guard)
   throttle: {
-    windowMs: 60_000, // 1 minute window
-    max: 100, // 100 requests per window per client
+    enabled: true,
+    global: {
+      maxRequests: 100,
+      windowMs: 60_000, // 1 minute window
+      partitionBy: 'ip', // 'ip' | 'session' | 'global'
+    },
+    defaultTimeout: { executeMs: 30_000 },
   },
 
   // Session storage: use Redis (not in-memory) for multi-instance

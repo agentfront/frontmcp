@@ -65,7 +65,7 @@ Target-specific checklist for deploying FrontMCP as a long-running Node.js serve
 | Example                                                                                | Level        | Description                                                                                                                                         |
 | -------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`docker-multi-stage`](../examples/production-node-server/docker-multi-stage.md)       | Basic        | Shows a production-ready Dockerfile with multi-stage build, non-root user, and container health check for a FrontMCP Node.js server.                |
-| [`graceful-shutdown`](../examples/production-node-server/graceful-shutdown.md)         | Intermediate | Shows how to implement graceful shutdown with SIGTERM handling, in-flight request draining, and health check status transitions.                    |
+| [`graceful-shutdown`](../examples/production-node-server/graceful-shutdown.md)         | Intermediate | Shows how to expose load-balancer drain state without overriding the FrontMCP framework's built-in SIGTERM / SIGINT graceful shutdown.              |
 | [`redis-session-scaling`](../examples/production-node-server/redis-session-scaling.md) | Advanced     | Shows how to configure Redis-backed session storage, connection pooling, and stateless server design for horizontal scaling behind a load balancer. |
 
 > See all examples in [`examples/production-node-server/`](../examples/production-node-server/)

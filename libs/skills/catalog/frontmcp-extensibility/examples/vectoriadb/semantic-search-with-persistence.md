@@ -25,14 +25,12 @@ import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriad
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-export const KnowledgeBase = Symbol('KnowledgeBase');
-
 interface Article extends DocumentMetadata {
   title: string;
   category: string;
 }
 
-@Provider({ name: 'knowledge-base', provide: KnowledgeBase, scope: ProviderScope.GLOBAL })
+@Provider({ name: 'knowledge-base', scope: ProviderScope.GLOBAL })
 export class KnowledgeBaseProvider {
   private db: VectoriaDB<Article>;
   private ready: Promise<void>;
@@ -67,13 +65,8 @@ export class KnowledgeBaseProvider {
     } else {
       await this.db.add(id, text, metadata);
     }
-    // Persist to disk — restored without re-embedding on next startup
+    // Persist to disk — initialize() automatically restores from cache on next startup
     await this.db.saveToStorage();
-  }
-
-  async loadFromDisk() {
-    await this.ready;
-    await this.db.loadFromStorage();
   }
 }
 ```
@@ -82,7 +75,7 @@ export class KnowledgeBaseProvider {
 // src/tools/semantic-search.tool.ts
 import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { KnowledgeBase } from '../providers/knowledge-base.provider';
+import { KnowledgeBaseProvider } from '../providers/knowledge-base.provider';
 
 @Tool({
   name: 'semantic_search',
@@ -105,7 +98,7 @@ import { KnowledgeBase } from '../providers/knowledge-base.provider';
 })
 export class SemanticSearchTool extends ToolContext {
   async execute(input: { query: string; category?: string; limit: number }) {
-    const kb = this.get(KnowledgeBase);
+    const kb = this.get(KnowledgeBaseProvider);
 
     const results = await kb.search(input.query, {
       category: input.category,

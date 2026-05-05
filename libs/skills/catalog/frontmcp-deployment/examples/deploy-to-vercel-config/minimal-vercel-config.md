@@ -2,48 +2,72 @@
 name: minimal-vercel-config
 reference: deploy-to-vercel-config
 level: basic
-description: 'The minimum `vercel.json` needed to deploy a FrontMCP server to Vercel.'
-tags: [deployment, vercel, serverless, config, minimal]
+description: '`frontmcp build --target vercel` writes this minimal `vercel.json` for you. The package manager is detected from your lockfile.'
+tags:
+  - deployment
+  - vercel
+  - serverless
+  - config
+  - minimal
 features:
-  - 'The catch-all rewrite (`/(.*) -> /api/frontmcp`) routes all requests to the single FrontMCP handler'
-  - 'Setting `buildCommand` and `outputDirectory` so Vercel uses the FrontMCP build pipeline'
-  - 'Configuring function memory (512 MB) and max duration (30s) for the serverless function'
+  - The exact shape of the auto-generated `vercel.json` — three keys, nothing else
+  - That routing and function configuration live in `.vercel/output/`, not `vercel.json`
+  - That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys
 ---
 
-# Minimal vercel.json Configuration
+# Minimal vercel.json (auto-generated)
 
-The minimum `vercel.json` needed to deploy a FrontMCP server to Vercel.
+`frontmcp build --target vercel` writes this minimal `vercel.json` for you. The package manager is detected from your lockfile.
 
 ## Code
 
 ```json
-// vercel.json
+// vercel.json — yarn project (yarn.lock present)
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "frontmcp build --target vercel",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/frontmcp"
-    }
-  ],
-  "functions": {
-    "api/frontmcp.js": {
-      "memory": 512,
-      "maxDuration": 30
-    }
-  },
-  "regions": ["iad1"]
+  "version": 2,
+  "buildCommand": "yarn build",
+  "installCommand": "yarn install"
 }
+```
+
+```json
+// vercel.json — pnpm project (pnpm-lock.yaml present)
+{
+  "version": 2,
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install"
+}
+```
+
+```json
+// vercel.json — npm project (package-lock.json present)
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install"
+}
+```
+
+The actual function and routes live under `.vercel/output/`:
+
+```text
+.vercel/output/
+├── config.json                            # routes /(.*) -> /index function
+└── functions/
+    └── index.func/
+        ├── .vc-config.json                # nodejs24.x, handler: handler.cjs
+        ├── handler.cjs                    # bundled handler
+        ├── package.json                   # peer-dep manifest
+        └── node_modules/                  # peer deps installed by the adapter
 ```
 
 ## What This Demonstrates
 
-- The catch-all rewrite (`/(.*) -> /api/frontmcp`) routes all requests to the single FrontMCP handler
-- Setting `buildCommand` and `outputDirectory` so Vercel uses the FrontMCP build pipeline
-- Configuring function memory (512 MB) and max duration (30s) for the serverless function
+- The exact shape of the auto-generated `vercel.json` — three keys, nothing else
+- That routing and function configuration live in `.vercel/output/`, not `vercel.json`
+- That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys
 
 ## Related
 
-- See `deploy-to-vercel-config` for the full reference configuration with security headers
+- See `deploy-to-vercel-config` for headers/regions you may safely add on top
+- See `deploy-to-vercel` for the full deployment workflow

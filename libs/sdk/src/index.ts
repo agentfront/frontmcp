@@ -206,6 +206,10 @@ export {
   normalizeSkill,
   isSkillRecord,
   formatSkillForLLM,
+  // Directory loader (used by user-defined directory-based skills)
+  loadSkillDirectory,
+  scanSkillResources,
+  skillDir,
 } from './skill';
 export type {
   SkillRegistryInterface,

@@ -72,7 +72,7 @@ export default class Server {}
 Load an `@App`-decorated class from an npm package at runtime using `app.esm()`. The package is fetched, cached, and its default export is treated as a local app.
 
 ```typescript
-import { FrontMcp, app } from '@frontmcp/sdk';
+import { app, FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'gateway', version: '1.0.0' },
@@ -112,7 +112,7 @@ app.esm('@internal/tools@^2.0.0', {
 Proxy tools, resources, and prompts from an external MCP server using `app.remote()`. The gateway connects via Streamable HTTP (with SSE fallback) and exposes the remote primitives as if they were local.
 
 ```typescript
-import { FrontMcp, app } from '@frontmcp/sdk';
+import { app, FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'gateway', version: '1.0.0' },
@@ -313,7 +313,8 @@ Combining all patterns into a single server:
 
 ```typescript
 import 'reflect-metadata';
-import { FrontMcp, App, app } from '@frontmcp/sdk';
+
+import { App, app, FrontMcp } from '@frontmcp/sdk';
 
 // Local app with per-app auth and plugins
 @App({

@@ -120,7 +120,7 @@ describe('MyTool', () => {
 
 ### Testing a Resource
 
-Resources extend `ResourceContext` and implement `read()`. Verify the output matches the MCP `ReadResourceResult` shape.
+Resources extend `ResourceContext` and implement `execute(uri, params)`. Verify the output matches the MCP `ReadResourceResult` shape.
 
 ```typescript
 // my-resource.spec.ts
@@ -129,7 +129,7 @@ import { MyResource } from '../my-resource';
 describe('MyResource', () => {
   it('should return resource contents', async () => {
     const resource = new MyResource();
-    const result = await resource.read({ id: '123' });
+    const result = await resource.execute('resource://item/123', { id: '123' });
 
     expect(result).toEqual({
       contents: [
@@ -174,7 +174,7 @@ describe('MyPrompt', () => {
 Always verify error classes with `instanceof` checks and error codes:
 
 ```typescript
-import { ResourceNotFoundError, MCP_ERROR_CODES } from '@frontmcp/sdk';
+import { MCP_ERROR_CODES, ResourceNotFoundError } from '@frontmcp/sdk';
 
 describe('ResourceNotFoundError', () => {
   it('should be instanceof ResourceNotFoundError', () => {
@@ -217,48 +217,41 @@ The `@frontmcp/testing` library provides a full E2E testing framework with a tes
 
 ```typescript
 import {
-  // Primary API (fixture-based)
-  test,
+  AuthHeaders,
+  BaselineStore,
+  DefaultInterceptorChain,
+  // Interceptors & mocking
+  DefaultMockRegistry,
   expect,
-
+  httpMock,
+  httpResponse,
+  interceptors,
+  LeakDetector,
+  // Assertions & matchers
+  McpAssertions,
+  // Low-level client
+  McpClient,
+  mcpMatchers,
+  McpStdioClientTransport,
   // Manual client API
   McpTestClient,
   McpTestClientBuilder,
-
-  // Server management
-  TestServer,
-
-  // Auth testing
-  TestTokenFactory,
-  AuthHeaders,
-  TestUsers,
-  MockOAuthServer,
+  MetricsCollector,
   MockAPIServer,
   MockCimdServer,
-
-  // Assertions & matchers
-  McpAssertions,
-  mcpMatchers,
-
-  // Interceptors & mocking
-  DefaultMockRegistry,
-  DefaultInterceptorChain,
+  MockOAuthServer,
   mockResponse,
-  interceptors,
-  httpMock,
-  httpResponse,
-
   // Performance testing
   perfTest,
-  MetricsCollector,
-  LeakDetector,
-  BaselineStore,
   RegressionDetector,
   ReportGenerator,
-
-  // Low-level client
-  McpClient,
-  McpStdioClientTransport,
+  // Primary API (fixture-based)
+  test,
+  // Server management
+  TestServer,
+  // Auth testing
+  TestTokenFactory,
+  TestUsers,
 } from '@frontmcp/testing';
 ```
 
@@ -274,7 +267,7 @@ The fixture API manages server lifecycle automatically:
 
 ```typescript
 // my-server.e2e.spec.ts
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.use({
   server: './src/main.ts',
@@ -316,10 +309,13 @@ test('prompts return well-formed messages', async ({ mcp }) => {
 
 For more control, use `McpTestClient` and `TestServer` directly:
 
-> **Note:** `npx tsx src/main.ts` is correct **only inside E2E tests** (the test framework uses it internally via `resolveServerCommand`). For development and running the server outside of tests, always use `frontmcp dev` (or your package.json `dev` script). Never run `npx tsx src/main.ts` directly for development.
+> **Note:** `TestServer.start({ command })` accepts any command that boots your server — your `dev` npm script, the built artifact (e.g. `node dist/main.js`), or `npx tsx src/main.ts` for unbuilt sources. The example below uses `npx tsx`; substitute whatever you use to start the server in development.
 
 ```typescript
 // advanced.e2e.spec.ts
+// Real API: libs/testing/src/server/test-server.ts:101 (TestServer.start),
+// libs/testing/src/client/mcp-test-client.builder.ts (McpTestClient.create),
+// libs/testing/src/client/mcp-test-client.types.ts:55 (TestTransportType = 'sse' | 'streamable-http')
 import { McpTestClient, TestServer } from '@frontmcp/testing';
 
 describe('Advanced E2E', () => {
@@ -333,7 +329,7 @@ describe('Advanced E2E', () => {
     });
 
     client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
-      .withTransport('modern') // 'modern' preset enables streamable HTTP + strict sessions
+      .withTransport('streamable-http')
       .buildAndConnect();
   });
 
@@ -357,7 +353,7 @@ describe('Advanced E2E', () => {
 ### Testing with Authentication
 
 ```typescript
-import { test, expect, TestTokenFactory } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.use({
   server: './src/main.ts',
@@ -521,7 +517,7 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 ### Unit Tests
 
 - [ ] Each tool's `execute()` method is tested with valid and invalid inputs
-- [ ] Each resource's `read()` method is tested and output matches `ReadResourceResult` shape
+- [ ] Each resource's `execute(uri, params)` method is tested and output matches `ReadResourceResult` shape
 - [ ] Each prompt's `execute()` method is tested and output matches `GetPromptResult` shape
 - [ ] Constructor validation tests verify throws on invalid config
 - [ ] Error classes are verified with `instanceof` checks and `mcpErrorCode` assertions

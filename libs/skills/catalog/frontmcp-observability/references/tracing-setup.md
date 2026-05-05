@@ -6,12 +6,12 @@ tags: [tracing, opentelemetry, spans, setup]
 
 # Tracing Setup
 
-Enable automatic distributed tracing for every flow in your FrontMCP server. When enabled, 103+ hooks create spans for tool calls, resource reads, HTTP requests, auth flows, transport sessions, and more — with zero code changes.
+Enable automatic distributed tracing for every flow in your FrontMCP server. When enabled, hooks across all SDK flows produce spans (and stage events on those spans) for tool calls, resource reads, HTTP requests, auth flows, transport sessions, and more — with zero code changes.
 
 ## How It Works
 
 1. Set `observability: true` in `@FrontMcp` config
-2. The SDK auto-loads `@frontmcp/observability` and registers hooks on all 33 flows
+2. The SDK auto-loads `@frontmcp/observability` and registers hooks on all SDK flows
 3. Every request gets a single W3C trace ID, shared across all spans
 4. Without a TracerProvider, all OTel calls are no-ops (zero overhead)
 
@@ -56,8 +56,8 @@ node server.js
 ### Option C: Your own OTel SDK
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
@@ -102,16 +102,23 @@ observability: {
     httpSpans: true,           // HTTP request spans
     executionSpans: true,      // Tool/resource/prompt/agent spans
     fetchSpans: true,          // Outbound ctx.fetch() spans
-    flowStageEvents: true,     // Flow stage events on execution spans
+    flowStageEvents: true,     // Add stage events (e.g. stage.execute.start) on the parent span
     transportSpans: true,      // SSE/HTTP transport spans
     authSpans: true,           // Auth/session verify spans
     oauthSpans: true,          // OAuth flow spans
     elicitationSpans: true,    // Elicitation spans
-    hookSpans: false,          // Individual hook spans (verbose)
+    hookSpans: false,          // Emit a NEW child span per hook (verbose; default off)
     startupReport: true,       // Emit startup span on first request
   },
 }
 ```
+
+### `flowStageEvents` vs `hookSpans` — what's the difference?
+
+- `flowStageEvents: true` (default) — the plugin's hooks attach **events** (`addEvent('stage.execute.start')`, etc.) onto the existing parent span (e.g. the tool span). One span per request stage; many events per span. Cheap, easy to read.
+- `hookSpans: true` (default off) — the plugin emits a **separate child span** for each hook invocation. Produces a much deeper, noisier trace and is intended for low-level debugging of the SDK pipeline itself. Most users should leave this off.
+
+In other words: events live inside an existing span; hook spans add their own spans to the tree.
 
 ## Local Development
 

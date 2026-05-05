@@ -19,7 +19,7 @@ Configure a distributed deployment target with HA settings for heartbeat, sessio
 
 ```typescript
 // frontmcp.config.ts
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'ha-server',

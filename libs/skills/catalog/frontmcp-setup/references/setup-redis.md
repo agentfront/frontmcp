@@ -94,6 +94,7 @@ Update the `@FrontMcp` decorator in `src/main.ts`:
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -141,6 +142,7 @@ redis: {
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -169,53 +171,39 @@ redis: {
 },
 ```
 
-## Step 3 -- Session Store Factory (Advanced)
+## Step 3 -- How the SDK Builds the Session Store
 
-The SDK creates the session store automatically from the `redis` config. For advanced scenarios where you need direct access to the session store factory:
-
-```typescript
-import { createSessionStore } from '@frontmcp/sdk';
-
-// Redis provider
-const sessionStore = await createSessionStore({
-  provider: 'redis',
-  host: 'localhost',
-  port: 6379,
-  keyPrefix: 'mcp:',
-});
-
-// Vercel KV provider (requires await for pre-connection)
-const sessionStore = await createSessionStore({
-  provider: 'vercel-kv',
-  keyPrefix: 'mcp:',
-});
-```
-
-The `createSessionStore()` function signature:
-
-```typescript
-async function createSessionStore(
-  options: RedisOptions, // RedisProviderOptions | VercelKvProviderOptions | legacy format
-  logger?: FrontMcpLogger,
-): Promise<SessionStore>;
-```
-
-The factory function handles:
+You do not call any factory yourself. The SDK constructs the session store internally from the `redis` field on the `@FrontMcp` decorator. The framework handles:
 
 - Lazy-loading `ioredis` or `@vercel/kv` to avoid bundling unused dependencies
-- Automatic key prefix namespacing (appends `session:` to the base prefix)
-- Pre-connection for Vercel KV (the `await` is required)
+- Automatic key prefix namespacing (appends `session:` to the base prefix you supply)
+- Pre-connection for Vercel KV
+- Falling back to an in-memory store when no `redis` (or `sqlite`) config is provided (single-instance dev only)
 
-There is also a synchronous variant for Redis-only (does not support Vercel KV):
+In other words, the only public API you interact with is the `redis: { ... }` block in the decorator config from Step 2. There is no `createSessionStore` helper exported from `@frontmcp/sdk` -- session store wiring is an internal concern of the framework.
+
+If you need to share the same Redis config in another part of your code, declare it once and reuse it:
 
 ```typescript
-import { createSessionStoreSync } from '@frontmcp/sdk';
+import 'reflect-metadata';
 
-const sessionStore = createSessionStoreSync({
+import { FrontMcp, type RedisOptionsInput } from '@frontmcp/sdk';
+
+const redis: RedisOptionsInput = {
   provider: 'redis',
-  host: 'localhost',
-  port: 6379,
-});
+  host: process.env['REDIS_HOST'] ?? 'localhost',
+  port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
+  keyPrefix: 'mcp:',
+};
+
+@FrontMcp({
+  info: { name: 'my-server', version: '0.1.0' },
+  apps: [
+    /* ... */
+  ],
+  redis,
+})
+export default class Server {}
 ```
 
 ## Step 4 -- Pub/Sub for Resource Subscriptions (Multi-Instance Only)
@@ -321,7 +309,7 @@ You should see session keys like `mcp:session:<session-id>`.
 
 ## Common Patterns
 
-| Pattern                | Correct                                                                                    | Incorrect                                               | Why                                                                                                                                                                                        |
+| Pattern                | Recommended                                                                                | Less explicit                                           | Why                                                                                                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Redis provider field   | `redis: { provider: 'redis', host: '...', port: 6379 }`                                    | `redis: { host: '...', port: 6379 }` without `provider` | Both forms are type-safe (the SDK's `RedisOptions` union accepts both shapes), but explicit `provider: 'redis'` improves clarity and intent                                                |
 | Environment variables  | `host: process.env['REDIS_HOST'] ?? 'localhost'`                                           | Hardcoding `host: 'redis.internal'` in source           | Hardcoded values break across environments (dev, staging, prod); always read from env with a sensible fallback                                                                             |

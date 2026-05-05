@@ -37,7 +37,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: handler.handler
-      CodeUri: .
+      CodeUri: dist/lambda/
       Description: FrontMCP MCP server
       Architectures:
         - arm64
@@ -50,7 +50,7 @@ Resources:
         HealthCheck:
           Type: HttpApi
           Properties:
-            Path: /health
+            Path: /healthz
             Method: GET
 
   FrontMcpLogGroup:
@@ -69,7 +69,10 @@ Outputs:
 ```
 
 ```bash
-# Build for Lambda
+# Install the peer dep validated by the lambda adapter
+npm install @codegenie/serverless-express
+
+# Build for Lambda — emits dist/lambda/handler.cjs with a `handler` export
 frontmcp build --target lambda
 
 # Deploy with guided prompts (first time)
@@ -85,8 +88,8 @@ aws cloudformation describe-stacks \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
-# Verify
-curl https://abc123.execute-api.us-east-1.amazonaws.com/health
+# Verify (FrontMCP serves /healthz by default)
+curl https://abc123.execute-api.us-east-1.amazonaws.com/healthz
 ```
 
 ## What This Demonstrates

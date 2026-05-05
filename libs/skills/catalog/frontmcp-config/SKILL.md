@@ -65,7 +65,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 | Understand auth mode details (public/transparent/local/remote) | `configure-auth-modes`                 | Authentication mode details (public, transparent, local, remote)    |
 | Fine-tune guard configuration for throttling                   | `configure-throttle-guard-config`      | Advanced guard configuration for throttling                         |
 | Use transport protocol presets                                 | `configure-transport-protocol-presets` | Transport protocol preset configurations                            |
-| Configure multi-target deployments and frontmcp.config.ts      | `configure-deployment-targets`         | Typed config with defineConfig(), 8 deployment targets, JSON schema |
+| Configure multi-target deployments and frontmcp.config.ts      | `configure-deployment-targets`         | Typed config with defineConfig(), 9 deployment targets, JSON schema |
 | Add CSP, HSTS, X-Frame-Options, and other security headers     | `configure-security-headers`           | CSP directives, report-only mode, HSTS preload, custom headers      |
 | Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`                 |
 | Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms       |
@@ -144,13 +144,13 @@ Server (@FrontMcp)     ← Global defaults
 
 ## Troubleshooting
 
-| Problem                                 | Cause                                            | Solution                                                                                             |
-| --------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Server fails to start with config error | Invalid or missing required config field         | Check the error message; FrontMCP validates config at startup and reports the specific invalid field |
-| CORS blocked in browser                 | Missing or incorrect CORS origin config          | Add the client's origin to `http.cors.origin`; see `configure-http`                                  |
-| Rate limit too aggressive               | Global limit applied to all tools                | Add per-tool overrides for cheap tools with higher limits; see `configure-throttle`                  |
-| Sessions lost on serverless             | Using memory session store on stateless platform | Switch to Redis or Vercel KV; see `configure-session`                                                |
-| Auth callback fails                     | OAuth redirect URI mismatch                      | Ensure the callback URL in your OAuth provider matches `auth.callbackUrl`; see `configure-auth`      |
+| Problem                                 | Cause                                            | Solution                                                                                                                          |
+| --------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Server fails to start with config error | Invalid or missing required config field         | Check the error message; FrontMCP validates config at startup and reports the specific invalid field                              |
+| CORS blocked in browser                 | Missing or incorrect CORS origin config          | Add the client's origin to `http.cors.origin`; see `configure-http`                                                               |
+| Rate limit too aggressive               | Global limit applied to all tools                | Add per-tool overrides for cheap tools with higher limits; see `configure-throttle`                                               |
+| Sessions lost on serverless             | Using memory session store on stateless platform | Switch to Redis or Vercel KV; see `configure-session`                                                                             |
+| Auth callback fails                     | OAuth redirect URI mismatch                      | Ensure the redirect URI registered with your OAuth provider matches the server's `/oauth/callback` endpoint; see `configure-auth` |
 
 ## Reference
 

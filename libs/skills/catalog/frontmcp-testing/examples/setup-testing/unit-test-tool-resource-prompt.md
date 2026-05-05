@@ -6,7 +6,7 @@ description: 'Write unit tests for the three core MCP primitives, verifying that
 tags: [testing, jest, unit-test, setup, unit, tool]
 features:
   - 'Testing tool `execute()` with a mock context object assigned via `Object.assign`'
-  - 'Verifying resource `read()` output matches the MCP `ReadResourceResult` shape'
+  - 'Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape'
   - 'Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape'
   - 'Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions'
 ---
@@ -66,7 +66,7 @@ import { MyResource } from '../my-resource';
 describe('MyResource', () => {
   it('should return resource contents matching ReadResourceResult', async () => {
     const resource = new MyResource();
-    const result = await resource.read({ id: '123' });
+    const result = await resource.execute('resource://item/123', { id: '123' });
 
     expect(result).toEqual({
       contents: [
@@ -105,7 +105,7 @@ describe('MyPrompt', () => {
 ## What This Demonstrates
 
 - Testing tool `execute()` with a mock context object assigned via `Object.assign`
-- Verifying resource `read()` output matches the MCP `ReadResourceResult` shape
+- Verifying resource `execute(uri, params)` output matches the MCP `ReadResourceResult` shape
 - Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape
 - Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions
 

@@ -12,7 +12,7 @@ When the built-in RBAC, ABAC, and ReBAC models do not cover your authorization r
 Every custom evaluator must implement the `AuthoritiesEvaluator` interface from `@frontmcp/auth`.
 
 ```typescript
-import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext, AuthoritiesResult } from '@frontmcp/auth';
+import type { AuthoritiesEvaluationContext, AuthoritiesEvaluator, AuthoritiesResult } from '@frontmcp/auth';
 
 interface AuthoritiesEvaluator {
   /** Evaluator name (must match the key under `custom.*` in policies) */
@@ -30,12 +30,27 @@ The return value must be an `AuthoritiesResult`:
 interface AuthoritiesResult {
   /** Whether access was granted */
   granted: boolean;
-  /** Human-readable reason for denial */
+  /** Human-readable reason for denial (kept for backward compatibility) */
   deniedBy?: string;
+  /** Structured denial data (machine-parsable) */
+  denial?: AuthoritiesDenial;
   /** List of policy types that were evaluated (for audit) */
   evaluatedPolicies: string[];
   /** Optional detailed message */
   message?: string;
+}
+
+interface AuthoritiesDenial {
+  /** Which policy type caused the denial */
+  kind: 'roles' | 'permissions' | 'attributes' | 'relationships' | 'custom' | 'profile' | 'not' | 'allOf' | 'anyOf';
+  /** Dot-path into the policy that failed (e.g., "custom.ipAllowList") */
+  path: string;
+  /** Values that were required but missing */
+  missing?: string[];
+  /** Expected value */
+  expected?: unknown;
+  /** Actual value found */
+  actual?: unknown;
 }
 ```
 
@@ -45,8 +60,9 @@ Custom evaluators are registered in the `evaluators` field of the `authorities` 
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
-import { ipAllowListEvaluator } from './evaluators/ip-allow-list';
+
 import { featureFlagEvaluator } from './evaluators/feature-flag';
+import { ipAllowListEvaluator } from './evaluators/ip-allow-list';
 import { timeWindowEvaluator } from './evaluators/time-window';
 
 @FrontMcp({
@@ -123,13 +139,41 @@ const featureFlagGuard: AuthoritiesEvaluator = {
 };
 ```
 
-### When to Use Custom Evaluators vs Hooks
+### When to Use Custom Evaluators vs Guards vs Hooks
 
-| Approach                                 | When to Use                                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Custom evaluator**                     | Reusable async check across many tools — register once, reference via `custom` field |
-| **`Will('checkEntryAuthorities')` hook** | One-off async check for a specific plugin/app, not tied to a specific tool           |
-| **Static `authorities` policy**          | Roles, permissions, attributes — no I/O needed                                       |
+| Approach                                 | When to Use                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Custom evaluator**                     | Reusable async check across many tools — register once, reference via `custom.<name>` in policies |
+| **`guards: AuthorityGuardFn[]`**         | One-off async check on a single entry — declare inline, no registration required                  |
+| **`Will('checkEntryAuthorities')` hook** | Cross-cutting pre/post logic across the whole flow stage (audit, logging, replacement)            |
+| **Static `authorities` policy**          | Roles, permissions, attributes — no I/O needed                                                    |
+
+#### Inline `guards` example
+
+```typescript
+import type { AuthorityGuardFn } from '@frontmcp/auth';
+
+const tenantInAllowlist: AuthorityGuardFn = async (ctx) => {
+  const tenantId = ctx.input['tenantId'] as string | undefined;
+  if (!tenantId) return 'tenantId missing from input';
+  const ok = await redis.sismember('allowed-tenants', tenantId);
+  return ok ? true : `tenant '${tenantId}' is not allowlisted`;
+};
+
+@Tool({
+  name: 'tenant_action',
+  authorities: {
+    roles: { any: ['user'] },
+    guards: [tenantInAllowlist],
+  },
+})
+export default class TenantActionTool extends ToolContext { ... }
+```
+
+Guards combine with sibling policy fields via `operator` (default AND). They are the
+simplest async authorization mechanism — no registry, no `name` field, no `custom.*`
+indirection — and are preferred over hooks for "this single entry needs an extra
+async check" scenarios.
 
 ## Using Custom Evaluators in Policies
 
@@ -156,7 +200,7 @@ Restricts access to requests from specific CIDR ranges.
 
 ```typescript
 // evaluators/ip-allow-list.ts
-import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext, AuthoritiesResult } from '@frontmcp/auth';
+import type { AuthoritiesEvaluationContext, AuthoritiesEvaluator, AuthoritiesResult } from '@frontmcp/auth';
 
 interface IpAllowListPolicy {
   cidr: string[];
@@ -174,12 +218,17 @@ export const ipAllowListEvaluator: AuthoritiesEvaluator = {
   name: 'ipAllowList',
   async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { cidr } = policy as IpAllowListPolicy;
+    // The SDK does not populate ctx.env by default — the engine's `env` defaults to `{}`.
+    // To use this evaluator, populate `env.remoteIp` yourself: register an
+    // `Around('checkEntryAuthorities')` hook (or transport adapter middleware) that reads
+    // the request's remote IP (e.g., from `X-Forwarded-For`) and merges it into the
+    // evaluation context env before the engine runs.
     const remoteIp = ctx.env['remoteIp'] as string | undefined;
 
     if (!remoteIp) {
       return {
         granted: false,
-        deniedBy: 'custom.ipAllowList: remoteIp not available in env',
+        deniedBy: 'custom.ipAllowList: remoteIp not populated in env (configure a hook/middleware to set it)',
         evaluatedPolicies: ['custom.ipAllowList'],
       };
     }
@@ -215,7 +264,7 @@ Gates access behind a feature flag service.
 
 ```typescript
 // evaluators/feature-flag.ts
-import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext, AuthoritiesResult } from '@frontmcp/auth';
+import type { AuthoritiesEvaluationContext, AuthoritiesEvaluator, AuthoritiesResult } from '@frontmcp/auth';
 
 interface FeatureFlagPolicy {
   flag: string;
@@ -264,7 +313,7 @@ Restricts access to specific time windows (e.g., business hours only).
 
 ```typescript
 // evaluators/time-window.ts
-import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext, AuthoritiesResult } from '@frontmcp/auth';
+import type { AuthoritiesEvaluationContext, AuthoritiesEvaluator, AuthoritiesResult } from '@frontmcp/auth';
 
 interface TimeWindowPolicy {
   /** Allowed days (0=Sunday, 6=Saturday) */
@@ -334,7 +383,7 @@ Denies access when a per-user rate limit is exceeded.
 
 ```typescript
 // evaluators/rate-limit.ts
-import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext, AuthoritiesResult } from '@frontmcp/auth';
+import type { AuthoritiesEvaluationContext, AuthoritiesEvaluator, AuthoritiesResult } from '@frontmcp/auth';
 
 interface RateLimitPolicy {
   /** Maximum calls allowed */
