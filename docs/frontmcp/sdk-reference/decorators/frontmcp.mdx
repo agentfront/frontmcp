@@ -31,6 +31,12 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 | `info`   | `ServerInfoOptions` | Server metadata (name, version, description) |
 | `apps`   | `AppType[]`         | Array of app classes to register             |
 
+### Server Metadata
+
+| Property       | Type     | Default | Description                                                                                                                                                                                                         |
+| -------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions` | `string` | `''`    | Top-level server-level instructions surfaced as `instructions` in the MCP `initialize` response. See [Skill catalog injection](#skill-catalog-injection) for how it combines with `skillsConfig.injectInstructions` |
+
 ### Server Configuration
 
 | Property | Type               | Default | Description               |
@@ -90,14 +96,14 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Shared Components
 
-| Property      | Type              | Description                            |
-| ------------- | ----------------- | -------------------------------------- |
-| `providers`   | `ProviderType[]`  | Gateway-level providers                |
-| `tools`       | `ToolType[]`      | Shared tools across all apps           |
-| `resources`   | `ResourceType[]`  | Shared resources                       |
-| `skills`      | `SkillType[]`     | Shared skills                          |
-| `plugins`     | `PluginType[]`    | Server-level plugins                   |
-| `splitByApp`  | `boolean`         | Run each app as an isolated sub-server |
+| Property     | Type             | Description                            |
+| ------------ | ---------------- | -------------------------------------- |
+| `providers`  | `ProviderType[]` | Gateway-level providers                |
+| `tools`      | `ToolType[]`     | Shared tools across all apps           |
+| `resources`  | `ResourceType[]` | Shared resources                       |
+| `skills`     | `SkillType[]`    | Shared skills                          |
+| `plugins`    | `PluginType[]`   | Server-level plugins                   |
+| `splitByApp` | `boolean`        | Run each app as an isolated sub-server |
 
 <Note>
 Prompts, agents, jobs, workflows, channels, and adapters are declared at the `@App` level — not at the gateway level. See the [@App reference](/frontmcp/sdk-reference/decorators/app) for the full list.
@@ -115,25 +121,25 @@ Prompts, agents, jobs, workflows, channels, and adapters are declared at the `@A
 
 ### Feature Configuration
 
-| Property        | Type                                        | Description                                      |
-| --------------- | ------------------------------------------- | ------------------------------------------------ |
-| `auth`          | `AuthOptionsInput`                          | Authentication mode + provider configuration     |
-| `authorities`   | `AuthoritiesConfig` (`@frontmcp/auth`)      | RBAC/ABAC/ReBAC profiles & enforcement           |
-| `logging`       | `LoggingOptionsInput`                       | Logging configuration                            |
-| `observability` | `ObservabilityOptionsInterface \| boolean`  | OpenTelemetry tracing + metrics                  |
-| `health`        | `HealthOptionsInput`                        | Health check endpoints                           |
-| `pagination`    | `PaginationOptions`                         | List operation pagination                        |
-| `elicitation`   | `ElicitationOptionsInput`                   | Interactive user input                           |
-| `skillsConfig`  | `SkillsConfigOptionsInput`                  | Skills HTTP endpoints                            |
-| `tasks`         | object — see source for shape               | Background task store + scheduler                |
-| `jobs`          | `{ enabled: boolean; store?: ... }`         | Jobs runtime configuration                       |
-| `throttle`      | `GuardConfig` (`@frontmcp/guard`)           | Per-tool rate limiting / concurrency / timeouts  |
-| `extApps`       | `ExtAppsOptionsInput`                       | External MCP Apps widget configuration           |
-| `loader`        | `PackageLoader`                             | ESM dynamic loader configuration                 |
-| `output`        | `{ allowNonFinite?: boolean }`              | Output-validation policy                         |
-| `sqlite`        | `SqliteOptionsInput`                        | SQLite session/store configuration               |
-| `ui`            | `{ cdnOverrides?: Record<string, string> }` | UI CDN override configuration                    |
-| `channels`      | `ChannelsConfigInput`                       | Channel notifications configuration              |
+| Property        | Type                                        | Description                                                                                                                                                                |
+| --------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`          | `AuthOptionsInput`                          | Authentication mode + provider configuration                                                                                                                               |
+| `authorities`   | `AuthoritiesConfig` (`@frontmcp/auth`)      | RBAC/ABAC/ReBAC profiles & enforcement                                                                                                                                     |
+| `logging`       | `LoggingOptionsInput`                       | Logging configuration                                                                                                                                                      |
+| `observability` | `ObservabilityOptionsInterface \| boolean`  | OpenTelemetry tracing + metrics                                                                                                                                            |
+| `health`        | `HealthOptionsInput`                        | Health check endpoints                                                                                                                                                     |
+| `pagination`    | `PaginationOptions`                         | List operation pagination                                                                                                                                                  |
+| `elicitation`   | `ElicitationOptionsInput`                   | Interactive user input                                                                                                                                                     |
+| `skillsConfig`  | `SkillsConfigOptionsInput`                  | Skills HTTP endpoints, `injectInstructions` policy, tamper-evident `audit` log — see [Skill catalog injection](#skill-catalog-injection) and [Audit log](#audit-log) below |
+| `tasks`         | object — see source for shape               | Background task store + scheduler                                                                                                                                          |
+| `jobs`          | `{ enabled: boolean; store?: ... }`         | Jobs runtime configuration                                                                                                                                                 |
+| `throttle`      | `GuardConfig` (`@frontmcp/guard`)           | Per-tool rate limiting / concurrency / timeouts                                                                                                                            |
+| `extApps`       | `ExtAppsOptionsInput`                       | External MCP Apps widget configuration                                                                                                                                     |
+| `loader`        | `PackageLoader`                             | ESM dynamic loader configuration                                                                                                                                           |
+| `output`        | `{ allowNonFinite?: boolean }`              | Output-validation policy                                                                                                                                                   |
+| `sqlite`        | `SqliteOptionsInput`                        | SQLite session/store configuration                                                                                                                                         |
+| `ui`            | `{ cdnOverrides?: Record<string, string> }` | UI CDN override configuration                                                                                                                                              |
+| `channels`      | `ChannelsConfigInput`                       | Channel notifications configuration                                                                                                                                        |
 
 ```typescript
 @FrontMcp({
@@ -192,6 +198,71 @@ class MainApp {}
 })
 export default class GreetingServer {}
 ```
+
+## Skill catalog injection
+
+The optional `skillsConfig.injectInstructions` field controls how the server's auto-built skill catalog summary is merged into the `instructions` field on the MCP `initialize` response.
+
+| Mode      | Behavior                                                                             |
+| --------- | ------------------------------------------------------------------------------------ |
+| `off`     | `instructions` is sent as-is. No skill summary is appended.                          |
+| `append`  | `instructions` first, then a separator and the skill catalog summary. **(Default.)** |
+| `prepend` | The skill catalog summary first, then a separator and `instructions`.                |
+| `replace` | The skill catalog summary is sent **instead of** `instructions`.                     |
+
+The summary is generated by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer that points clients at `skills://catalog` and `skills://{name}/SKILL.md` for the full content. The composer is re-evaluated on every `initialize` request, so skills registered dynamically after server boot are picked up automatically.
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MainApp],
+  instructions: 'You are a helpful assistant for booking flights.',
+  skillsConfig: {
+    enabled: true,
+    injectInstructions: 'append',
+  },
+})
+class Server {}
+```
+
+## Audit log
+
+`skillsConfig.audit` enables a tamper-evident, hash-chained audit log of skill action executions (authority pass / authority fail / HTTP success / HTTP failure phases). Records are signed and chained so that any later mutation breaks verification.
+
+| Field                  | Type                          | Default   | Description                                                                                               |
+| ---------------------- | ----------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
+| `enabled`              | `boolean`                     | `false`   | Turn the audit writer on                                                                                  |
+| `signer`               | `SkillAuditSigner`            | dev HS256 | Signs each record. Use `Rs256AuditSigner` in production (HS256 with a random key refuses to fire in prod) |
+| `store`                | `SkillAuditStore`             | memory    | Where records are persisted. Use `StorageAdapterAuditStore` for Redis/Vercel KV/SQLite-backed storage     |
+| `subjectMode`          | `'plain' \| 'hash' \| 'omit'` | `'hash'`  | Redaction policy for the principal embedded in each record                                                |
+| `headAnchorIntervalMs` | `number`                      | unset     | Periodically anchor the chain head out-of-band so tail truncation is detectable                           |
+
+See the [skill audit log extensibility page](/frontmcp/extensibility/skill-audit-log) for the full architecture, threat model, and chain verification recipe.
+
+```typescript
+import { Rs256AuditSigner, setSkillAuditFactory, SkillAuditWriter, StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
+
+setSkillAuditFactory(({ signer, store, subjectMode }) => new SkillAuditWriter({ signer, store, subjectMode }));
+
+@FrontMcp({
+  info: { name: 'prod-server', version: '1.0.0' },
+  apps: [MainApp],
+  skillsConfig: {
+    enabled: true,
+    audit: {
+      enabled: true,
+      signer: new Rs256AuditSigner({ keyId: 'bundle-2026-01', privateKeyPem: process.env.PRIVATE_KEY! }),
+      store: new StorageAdapterAuditStore(redisStorageAdapter),
+      subjectMode: 'hash',
+    },
+  },
+})
+class ProdServer {}
+```
+
+<Note>
+v1.2.0 ships **single-writer** chain semantics. Multiple pods writing to the same store will produce loud warnings; CAS-based atomic chain head updates are queued for v1.3.0. Until then, route audit writes to a single elected leader pod or use per-pod chains and stitch offline.
+</Note>
 
 ## Bootstrap Methods
 

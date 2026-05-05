@@ -68,6 +68,8 @@ export function createMcpHandlers(options: McpHandlerOptions) {
     : [];
 
   return [
+    // initializeRequestHandler reads `composeInstructions` from `options` so
+    // the response reflects dynamic skill registrations made after boot.
     initializeRequestHandler(options),
     initializedNotificationHandler(options),
     rootsListChangedNotificationHandler(options),

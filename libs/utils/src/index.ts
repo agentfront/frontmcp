@@ -71,6 +71,7 @@ export {
   // Core crypto
   getCrypto,
   rsaVerify,
+  rsaSignBase64Url,
   jwtAlgToNodeAlg,
   isRsaPssAlg,
   randomUUID,

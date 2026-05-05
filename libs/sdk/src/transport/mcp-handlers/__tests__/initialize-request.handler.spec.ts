@@ -5,9 +5,12 @@
  * session payload updates for clientName, clientVersion, supportsElicitation, and platformType.
  */
 import type { InitializeRequest } from '@frontmcp/protocol';
-import { McpHandlerOptions } from '../mcp-handlers.types';
-import { SessionIdPayload } from '../../../common';
+
+import { type SessionIdPayload } from '../../../common';
 import { UnsupportedClientVersionError } from '../../../errors';
+// Import after mocking
+import initializeRequestHandler from '../initialize-request.handler';
+import { type McpHandlerOptions } from '../mcp-handlers.types';
 
 // Mock dependencies before importing the handler
 const mockUpdateSessionPayload = jest.fn();
@@ -23,9 +26,6 @@ jest.mock('../../../notification', () => ({
   detectPlatformFromCapabilities: (...args: any[]) => mockDetectPlatformFromCapabilities(...args),
   detectAIPlatform: (...args: any[]) => mockDetectAIPlatform(...args),
 }));
-
-// Import after mocking
-import initializeRequestHandler from '../initialize-request.handler';
 
 describe('initializeRequestHandler', () => {
   // Mock logger
@@ -618,6 +618,46 @@ describe('initializeRequestHandler', () => {
       const result = await handler.handler(request, ctx as any);
 
       expect(result.instructions).toBe('Test instructions');
+    });
+
+    it('should prefer composeInstructions over static serverOptions.instructions', async () => {
+      let counter = 0;
+      const optionsWithComposer: McpHandlerOptions = {
+        ...handlerOptions,
+        composeInstructions: () => `dynamic-instructions-#${++counter}`,
+      };
+      const handler = initializeRequestHandler(optionsWithComposer);
+
+      const first = await handler.handler(createRequest(), createContext() as any);
+      const second = await handler.handler(createRequest(), createContext() as any);
+
+      expect(first.instructions).toBe('dynamic-instructions-#1');
+      expect(second.instructions).toBe('dynamic-instructions-#2');
+    });
+
+    it('should fall back to static instructions when composer returns undefined', async () => {
+      const optionsWithComposer: McpHandlerOptions = {
+        ...handlerOptions,
+        composeInstructions: () => undefined,
+      };
+      const handler = initializeRequestHandler(optionsWithComposer);
+
+      const result = await handler.handler(createRequest(), createContext() as any);
+
+      expect(result.instructions).toBe('Test instructions');
+    });
+
+    it('should omit instructions when both composer and static value are empty', async () => {
+      const optionsNoInstructions: McpHandlerOptions = {
+        ...handlerOptions,
+        serverOptions: { ...mockServerOptions, instructions: '' } as any,
+        composeInstructions: () => '',
+      };
+      const handler = initializeRequestHandler(optionsNoInstructions);
+
+      const result = await handler.handler(createRequest(), createContext() as any);
+
+      expect(result.instructions).toBeUndefined();
     });
   });
 });

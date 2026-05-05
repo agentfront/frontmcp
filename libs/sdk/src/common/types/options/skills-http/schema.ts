@@ -54,6 +54,19 @@ export const skillsConfigCacheOptionsSchema = z.object({
 });
 
 /**
+ * Audit options schema. Signer/store are typed as `unknown` because their
+ * concrete types live in `@frontmcp/adapters/skills` — keeping the SDK free
+ * of the upward dependency. Validation here just confirms shape; the helper
+ * that consumes the config does the structural duck-type check.
+ */
+export const skillsConfigAuditOptionsSchema = z.object({
+  enabled: z.boolean().optional().default(false),
+  signer: z.unknown().optional(),
+  store: z.unknown().optional(),
+  verbose: z.boolean().optional().default(false),
+});
+
+/**
  * Skills HTTP options Zod schema.
  * Auth is configured at the top level and applies to all HTTP endpoints.
  */
@@ -68,6 +81,8 @@ export const skillsConfigOptionsSchema = z.object({
   api: skillsConfigEndpointInputSchema.optional().default(true),
   mcpResources: z.boolean().optional().default(true),
   cache: skillsConfigCacheOptionsSchema.optional(),
+  audit: skillsConfigAuditOptionsSchema.optional(),
+  injectInstructions: z.enum(['off', 'append', 'prepend', 'replace']).optional().default('append'),
 } satisfies RawZodShape<SkillsConfigOptionsInterface>);
 
 /**

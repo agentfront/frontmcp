@@ -213,9 +213,22 @@ export type { SkillValidationResult, SkillValidationReport } from './errors/skil
 export { registerSkillCapabilities } from './skill-scope.helper';
 export type { SkillScopeRegistrationOptions } from './skill-scope.helper';
 
+// Skill Audit Helper
+export { registerSkillAuditWriter, setSkillAuditFactory, hasSkillAuditFactory } from './skill-audit.helper';
+export type { AuditModuleShape, SkillAuditFactory } from './skill-audit.helper';
+
 // Mode Utilities
 export { detectSkillsOnlyMode, isSkillsOnlySession } from './skill-mode.utils';
 export type { SkillsOnlySessionPayload } from './skill-mode.utils';
+
+// Initialize-instructions composition (used by stdio + HTTP transports;
+// re-exported so embedders can build their own initialize response strings).
+export {
+  buildSkillsCatalogSummary,
+  composeInitializeInstructions,
+  buildChannelInstructions,
+} from './skill-instructions.helper';
+export type { InjectInstructionsPolicy } from './skill-instructions.helper';
 
 // HTTP Authentication
 export { SkillHttpAuthValidator, createSkillHttpAuthValidator } from './auth';

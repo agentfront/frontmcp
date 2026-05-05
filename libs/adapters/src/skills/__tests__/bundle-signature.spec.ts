@@ -158,6 +158,119 @@ describe('verifyBundleSignature — RS256', () => {
   });
 });
 
+describe('verifyBundleSignature telemetry', () => {
+  function makeFakeTelemetry(): {
+    telemetry: {
+      createCounter: (n: string, d?: string) => { inc: (by?: number, attrs?: Record<string, string>) => void };
+    };
+    counterCalls: { name: string; by: number; attributes: Record<string, string> }[];
+  } {
+    const counterCalls: { name: string; by: number; attributes: Record<string, string> }[] = [];
+    return {
+      counterCalls,
+      telemetry: {
+        createCounter(name) {
+          return {
+            inc(by = 1, attributes = {}) {
+              counterCalls.push({ name, by, attributes });
+            },
+          };
+        },
+      },
+    };
+  }
+
+  it('records verifications_total{status=ok} on success and skips the failures counter', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    const { keyPem, integrity } = signBundleRsa(bundle);
+    bundle.integrity = integrity;
+    const result = verifyBundleSignature(bundle, [{ keyId: 'key1', alg: 'RS256', publicKeyPem: keyPem }], telemetry);
+    expect(result.ok).toBe(true);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    const verifications = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_verifications_total');
+    expect(failures).toHaveLength(0);
+    expect(verifications).toHaveLength(1);
+    expect(verifications[0].attributes['status']).toBe('ok');
+  });
+
+  it('increments with reason=missing_integrity when integrity is absent', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    verifyBundleSignature(makeBundle(), [], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    const verifications = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_verifications_total');
+    expect(failures).toHaveLength(1);
+    expect(failures[0].attributes['reason']).toBe('missing_integrity');
+    expect(verifications).toHaveLength(1);
+    expect(verifications[0].attributes['status']).toBe('error');
+  });
+
+  it('increments with reason=digest_mismatch on tampered bundle', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    const { keyPem, integrity } = signBundleRsa(bundle);
+    bundle.integrity = integrity;
+    bundle.version = 'TAMPERED';
+    verifyBundleSignature(bundle, [{ keyId: 'key1', alg: 'RS256', publicKeyPem: keyPem }], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    expect(failures[0].attributes['reason']).toBe('digest_mismatch');
+  });
+
+  it('increments with reason=unknown_key_id when keyId is unknown', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    const { integrity } = signBundleRsa(bundle);
+    bundle.integrity = integrity;
+    verifyBundleSignature(bundle, [{ keyId: 'OTHER', alg: 'RS256', publicKeyPem: 'x' }], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    expect(failures[0].attributes['reason']).toBe('unknown_key_id');
+  });
+
+  it('increments with reason=alg_mismatch on alg disagreement', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    const { keyPem, integrity } = signBundleRsa(bundle);
+    bundle.integrity = integrity;
+    verifyBundleSignature(bundle, [{ keyId: 'key1', alg: 'EdDSA', publicKeyPem: keyPem }], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    expect(failures[0].attributes['reason']).toBe('alg_mismatch');
+  });
+
+  it('increments with reason=malformed_public_key on PEM parse failure', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    bundle.integrity = { alg: 'RS256', keyId: 'k', signature: 'x', digest: bundleDigest(bundle) };
+    verifyBundleSignature(bundle, [{ keyId: 'k', alg: 'RS256', publicKeyPem: 'not-a-pem' }], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    expect(failures[0].attributes['reason']).toBe('malformed_public_key');
+  });
+
+  it('increments with reason=verify_failed when signature does not verify', () => {
+    const { telemetry, counterCalls } = makeFakeTelemetry();
+    const bundle = makeBundle();
+    const { keyPem } = signBundleRsa(bundle);
+    bundle.integrity = {
+      alg: 'RS256',
+      keyId: 'key1',
+      // 256-byte signature with all zeroes — well-formed length but invalid bytes.
+      signature: 'A'.repeat(342),
+      digest: bundleDigest(bundle),
+    };
+    verifyBundleSignature(bundle, [{ keyId: 'key1', alg: 'RS256', publicKeyPem: keyPem }], telemetry);
+    const failures = counterCalls.filter((c) => c.name === 'frontmcp_skills_signature_failures_total');
+    expect(failures).toHaveLength(1);
+    // Either verify_failed or verify_threw is acceptable depending on the
+    // node-crypto implementation — both indicate a signature rejection and
+    // both are low-cardinality.
+    expect(['verify_failed', 'verify_threw']).toContain(failures[0].attributes['reason']);
+  });
+
+  it('omitting telemetry leaves the function dependency-free', () => {
+    const bundle = makeBundle();
+    expect(verifyBundleSignature(bundle, []).ok).toBe(false);
+  });
+});
+
 describe('verifyBundleSignature — EdDSA / Ed25519', () => {
   it('accepts a valid signature', () => {
     const bundle = makeBundle();

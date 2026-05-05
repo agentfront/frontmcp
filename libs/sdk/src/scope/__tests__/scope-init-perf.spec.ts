@@ -107,6 +107,21 @@ describe('Scope initialization performance', () => {
     expect(result.serve).toBe(false);
   });
 
+  it('parseFrontMcpConfigLite should preserve top-level instructions (CLI parity with full schema)', () => {
+    const { parseFrontMcpConfigLite, frontMcpMetadataSchema } = require('../../common/metadata/front-mcp.metadata');
+
+    const input = {
+      info: { name: 'inst-test', version: '1.0.0' },
+      apps: [],
+      instructions: 'Use the foo tool first.',
+    };
+
+    const lite = parseFrontMcpConfigLite(input);
+    const full = frontMcpMetadataSchema.parse(input);
+    expect(lite.instructions).toBe('Use the foo tool first.');
+    expect(full.instructions).toBe('Use the foo tool first.');
+  });
+
   it('parseFrontMcpConfigLite should not be dramatically slower than full parse', () => {
     const { parseFrontMcpConfigLite, frontMcpMetadataSchema } = require('../../common/metadata/front-mcp.metadata');
 

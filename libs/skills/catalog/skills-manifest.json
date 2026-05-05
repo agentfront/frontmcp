@@ -435,6 +435,48 @@
               ]
             }
           ]
+        },
+        {
+          "name": "configure-skills-http",
+          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "examples": [
+            {
+              "name": "inject-instructions",
+              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
+              "level": "basic",
+              "tags": ["config", "skills", "instructions", "injection", "initialize"],
+              "features": [
+                "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
+                "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
+                "Dynamic skills are picked up because the composer runs on every initialize request",
+                "Catalog summary is bounded at 16 KB with a truncation footer pointing at skills://catalog"
+              ]
+            },
+            {
+              "name": "audit-log-basic",
+              "description": "Enable the skill audit log with the in-memory store and HS256 signer for development and tests.",
+              "level": "basic",
+              "tags": ["config", "skills", "audit", "hs256", "development"],
+              "features": [
+                "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
+                "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
+                "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
+                "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
+              ]
+            },
+            {
+              "name": "audit-log-redis",
+              "description": "Production-grade audit log with the Redis-backed StorageAdapterAuditStore and the RS256 bundle-signing key.",
+              "level": "advanced",
+              "tags": ["config", "skills", "audit", "rs256", "redis", "production"],
+              "features": [
+                "StorageAdapterAuditStore persists records to Redis via the standard storage adapter",
+                "Rs256AuditSigner reuses the bundle-signing keypair for forensic-friendly signatures",
+                "Single-writer constraint: only one pod should write the chain in v1.2.0",
+                "verifyChain(records, trustedKeys, defaultAuditSignatureVerifier) detects tampering"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -1661,6 +1703,36 @@
               ]
             }
           ]
+        },
+        {
+          "name": "skill-audit-log",
+          "description": "Tamper-evident, hash-chained audit log for skill action executions — pluggable signer, pluggable store, offline verification.",
+          "examples": [
+            {
+              "name": "verify-chain",
+              "description": "Verify a stored chain offline using verifyChain and the bundle-signing key registry.",
+              "level": "intermediate",
+              "tags": ["extensibility", "audit", "verification", "chain", "rs256"],
+              "features": [
+                "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
+                "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
+                "Trusted-keys registry maps signatureKeyId → public key PEM",
+                "iterate() reads the chain in order from any SkillAuditStore implementation"
+              ]
+            },
+            {
+              "name": "custom-store",
+              "description": "Implement a custom SkillAuditStore that streams records to S3 with one object per sequence.",
+              "level": "advanced",
+              "tags": ["extensibility", "audit", "custom", "s3", "store"],
+              "features": [
+                "Implements the SkillAuditStore interface (append, tail, iterate)",
+                "One S3 object per sequence keeps individual records immutable and verifiable",
+                "tail(limit) lists the last N keys in lexical order — sequences are zero-padded",
+                "iterate(after?) supports incremental verifyChain runs in CI"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -1851,14 +1923,17 @@
             },
             {
               "name": "security-hardening",
-              "description": "Shows how to configure authentication, CORS, input validation, and rate limiting for a production FrontMCP server.",
+              "description": "Shows how to configure authentication, CORS, input validation, rate limiting, audit logging, and observability counters for a production FrontMCP server.",
               "level": "basic",
-              "tags": ["production", "redis", "session", "security", "throttle", "checklist"],
+              "tags": ["production", "redis", "session", "security", "throttle", "audit", "observability", "checklist"],
               "features": [
                 "Restricting CORS origins to known domains instead of using `'*'`",
                 "Configuring rate limiting via the `throttle` option",
                 "Using Redis for session storage in multi-instance deployments",
-                "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks"
+                "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks",
+                "Enabling the tamper-evident skill audit log with RS256 + a persistent store and a CI verifier",
+                "Wiring an OTel MeterProvider so framework counters (bundle pulls, signature failures, replay rejects) are exported",
+                "Keeping the auto-injected skill catalog summary inside the 16 KB initialize ceiling"
               ]
             }
           ]
@@ -3005,6 +3080,18 @@
                 "Nested tool calls automatically get their own spans",
                 "All spans share the same trace ID for end-to-end visibility",
                 "this.telemetry works identically in agents and tools"
+              ]
+            },
+            {
+              "name": "skill-counters",
+              "description": "Read built-in skill counters from the in-memory snapshot for tests and wire an OTel MeterProvider so counters export to OTLP in production.",
+              "level": "intermediate",
+              "tags": ["telemetry", "counters", "metrics", "skills", "otel", "meter-provider"],
+              "features": [
+                "this.telemetry.createCounter(name, description) creates a custom counter",
+                "counter.inc(by, attrs) increments with bounded label cardinality",
+                "getMetricSnapshot() reads framework counters in tests without a MeterProvider",
+                "metrics.setGlobalMeterProvider() wires counters into OTLP for production"
               ]
             }
           ]

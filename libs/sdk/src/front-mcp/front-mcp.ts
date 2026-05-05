@@ -20,6 +20,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
+import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 
@@ -461,15 +462,22 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Channel capabilities (experimental extension for Claude Code)
     const channelCapabilities = scope.channels?.getCapabilities() ?? {};
 
-    // Build channel instructions for Claude Code if channels exist
-    const channelInstructions = scope.channels?.hasAny()
-      ? `Events arrive as <channel> tags. ${
-          scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''
-        }`
-      : '';
+    // Compose `instructions` lazily on every `initialize` so dynamic skill
+    // registrations after boot are reflected without restarting the server.
+    // The static value below seeds the McpServer constructor for SDK
+    // compatibility; the actual response is recomputed inside the handler
+    // via `composeInstructions` (see initialize-request.handler.ts).
+    const composeInstructions = (): string =>
+      composeInitializeInstructions({
+        userInstructions: scope.metadata.instructions,
+        channelInstructions: buildChannelInstructions(scope.channels),
+        skillRegistry: scope.skills,
+        policy: scope.metadata.skillsConfig?.injectInstructions,
+      });
+    const instructions = composeInstructions();
 
     const serverOptions = {
-      instructions: channelInstructions,
+      instructions,
       capabilities: {
         ...remoteCapabilities,
         ...scope.tools.getCapabilities(),
@@ -491,7 +499,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const sessionId = `stdio:${randomUUID()}`;
 
     // Register handlers with auth context injection
-    const handlers = createMcpHandlers({ scope, serverOptions });
+    const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
     for (const handler of handlers) {
       // Wrap handler to inject auth context (same pattern as in-memory-server)
       const originalHandler = handler.handler;

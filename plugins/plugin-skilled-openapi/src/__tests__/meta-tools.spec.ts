@@ -7,7 +7,7 @@
 
 import 'reflect-metadata';
 
-import { BundleStore } from '@frontmcp/adapters/skills';
+import { BundleStore, SkillAuditWriterToken } from '@frontmcp/adapters/skills';
 import { ScopeEntry, type SkillContent } from '@frontmcp/sdk';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
@@ -91,6 +91,7 @@ function makeToolThis(args: {
   resolver?: SkilledOpenApiCredentialResolver;
   config?: SkilledOpenApiConfig;
   authInfo?: Record<string, unknown>;
+  auditWriter?: unknown;
 }) {
   const skills = {
     search: args.scopeSkills?.search ?? jest.fn(),
@@ -113,6 +114,9 @@ function makeToolThis(args: {
   // call passes the class as the token; register the scope under the same
   // identity here. The scope object is duck-typed (only `skills` is used).
   map.set(ScopeEntry, scope);
+  if (args.auditWriter) {
+    map.set(SkillAuditWriterToken, args.auditWriter);
+  }
 
   return {
     get<T>(token: { new (...args: never[]): T } | unknown): T {
@@ -121,6 +125,11 @@ function makeToolThis(args: {
         throw new Error(`mock get() missing token: ${(token as { name?: string })?.name ?? '<anonymous>'}`);
       }
       return v as T;
+    },
+    // tryGet returns undefined for unregistered tokens — mirrors the real
+    // ExecutionContextBase.tryGet behavior used by the audit-writer wire-in.
+    tryGet<T>(token: unknown): T | undefined {
+      return map.has(token) ? (map.get(token) as T) : undefined;
     },
     logger: fakeLogger,
     authInfo: args.authInfo ?? { user: { sub: 'u', roles: [], permissions: [] } },
@@ -383,6 +392,43 @@ describe('execute_action', () => {
     expect(result.error).toMatch(/authority denied/);
   });
 
+  it('emits an authority-check-fail audit record when the guard denies', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice');
+    entry.op.requiredAuthorities = { roles: { all: ['admin'] } };
+    hiddenOps.set(entry);
+
+    const writeAuthorityFail = jest.fn(() => Promise.resolve());
+    const writeAuthorityPass = jest.fn(() => Promise.resolve());
+    const auditWriter = {
+      writeAuthorityFail,
+      writeAuthorityPass,
+      writeHttpCallSuccess: jest.fn(() => Promise.resolve()),
+      writeHttpCallFailure: jest.fn(() => Promise.resolve()),
+    };
+
+    const ctx = makeToolThis({
+      hiddenOps,
+      authInfo: { user: { sub: 'u', roles: ['user'], permissions: [] } },
+      auditWriter,
+    });
+    const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+      skillId: 'billing',
+      actionId: 'createInvoice',
+      input: { amount: 100 },
+    });
+    expect(result.ok).toBe(false);
+    expect(writeAuthorityFail).toHaveBeenCalledTimes(1);
+    expect(writeAuthorityPass).not.toHaveBeenCalled();
+    const [auditCtx, extras] = writeAuthorityFail.mock.calls[0]!;
+    expect(auditCtx).toMatchObject({
+      skillId: 'billing',
+      actionId: 'createInvoice',
+      subject: 'u',
+    });
+    expect(extras).toMatchObject({ reason: expect.any(String) });
+  });
+
   it('happy path: invokes the executor and returns the structured envelope', async () => {
     const hiddenOps = new HiddenOpRegistry();
     const entry = buildEntry('billing', 'createInvoice', {
@@ -591,5 +637,85 @@ describe('execute_action', () => {
     } finally {
       global.fetch = realFetch;
     }
+  });
+
+  describe('telemetry — ObservabilityPlugin absent', () => {
+    // Regression: previously execute_action read `(this as { telemetry?: ... }).telemetry`,
+    // which triggered the context-extension getter and threw
+    // ContextExtensionNotAvailableError when ObservabilityPlugin wasn't
+    // installed. The fix routes the lookup through `this.tryGet(...)` so the
+    // tool runs cleanly with no events, no errors.
+    it('runs cleanly without ObservabilityPlugin (no telemetry token registered)', async () => {
+      const hiddenOps = new HiddenOpRegistry();
+      const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+      hiddenOps.set(entry);
+
+      const realFetch = global.fetch;
+      global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+      try {
+        // makeToolThis registers no telemetry token — `tryGet(TELEMETRY_ACCESSOR)`
+        // returns undefined and the tool's phase events become silent no-ops.
+        const ctx = makeToolThis({ hiddenOps });
+        const result = await ExecuteActionTool.prototype.execute.call(ctx, {
+          skillId: 'billing',
+          actionId: 'createInvoice',
+          input: {},
+        });
+        expect(result.ok).toBe(true);
+      } finally {
+        global.fetch = realFetch;
+      }
+    });
+
+    it('forwards phase events to a registered TelemetryAccessor when present', async () => {
+      const hiddenOps = new HiddenOpRegistry();
+      const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+      hiddenOps.set(entry);
+
+      const events: { name: string; attrs?: Record<string, string | number | boolean> }[] = [];
+      const attrSets: Record<string, string | number | boolean>[] = [];
+      const fakeTelemetry = {
+        addEvent(name: string, attrs?: Record<string, string | number | boolean>): void {
+          events.push({ name, attrs });
+        },
+        setAttributes(attrs: Record<string, string | number | boolean>): void {
+          attrSets.push(attrs);
+        },
+      };
+      const TELEMETRY_TOKEN = Symbol.for('frontmcp:observability:telemetry-accessor');
+
+      const realFetch = global.fetch;
+      global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+      try {
+        const baseCtx = makeToolThis({ hiddenOps });
+        // Splice the telemetry token into the mock context's tryGet map so
+        // execute_action can resolve it. Other lookups continue to work.
+        const ctx = {
+          ...baseCtx,
+          tryGet<T>(token: unknown): T | undefined {
+            if (token === TELEMETRY_TOKEN) return fakeTelemetry as unknown as T;
+            return (baseCtx as { tryGet: <U>(t: unknown) => U | undefined }).tryGet(token);
+          },
+        } as typeof baseCtx;
+        await ExecuteActionTool.prototype.execute.call(ctx, {
+          skillId: 'billing',
+          actionId: 'createInvoice',
+          input: {},
+        });
+        // Five phase events fire: resolve-action / authority-check /
+        // input-validate / http-call / done.
+        const phaseEvents = events.filter((e) => e.name === 'skill_action.phase');
+        expect(phaseEvents.length).toBeGreaterThanOrEqual(5);
+        expect(phaseEvents[0].attrs?.['phase']).toBe('resolve-action');
+        // Final setAttributes records skill_action.* on the active span.
+        expect(attrSets.length).toBeGreaterThanOrEqual(1);
+        expect(attrSets[attrSets.length - 1]).toMatchObject({
+          'skill_action.skill_id': 'billing',
+          'skill_action.action_id': 'createInvoice',
+        });
+      } finally {
+        global.fetch = realFetch;
+      }
+    });
   });
 });

@@ -20,6 +20,7 @@ import {
 import { ElicitationNotSupportedError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
+import { buildChannelInstructions, composeInitializeInstructions } from '../../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../../task';
 import { createMcpHandlers } from '../mcp-handlers';
 import { type TransportKey, type TransportType } from '../transport.types';
@@ -166,12 +167,23 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
     // Channel capabilities (experimental extension for Claude Code)
     const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
-    const channelInstructions = this.scope.channels?.hasAny()
-      ? `Events arrive as <channel> tags. ${this.scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''}`
-      : '';
+
+    // Compose `instructions` lazily on every `initialize` so dynamic skill
+    // registrations after boot are reflected per-session. The static value
+    // below seeds the McpServer constructor for SDK compatibility; the
+    // actual response is recomputed inside the handler via
+    // `composeInstructions` (see initialize-request.handler.ts).
+    const composeInstructions = (): string =>
+      composeInitializeInstructions({
+        userInstructions: this.scope.metadata.instructions,
+        channelInstructions: buildChannelInstructions(this.scope.channels),
+        skillRegistry: this.scope.skills,
+        policy: this.scope.metadata.skillsConfig?.injectInstructions,
+      });
+    const instructions = composeInstructions();
 
     const serverOptions = {
-      instructions: channelInstructions,
+      instructions,
       capabilities: {
         ...remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
         ...this.scope.tools.getCapabilities(),
@@ -202,6 +214,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const handlers = createMcpHandlers({
       scope: this.scope,
       serverOptions,
+      composeInstructions,
     });
 
     for (const handler of handlers) {

@@ -5,9 +5,11 @@
  * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
+import { cryptoProvider } from '#crypto-provider';
+
 import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
-import { cryptoProvider } from '#crypto-provider';
+
 export { isRsaPssAlg, jwtAlgToNodeAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 
 /**
@@ -43,6 +45,26 @@ export function rsaVerify(
 
   const { rsaVerifyBrowser } = require('./browser');
   return rsaVerifyBrowser(jwtAlg, data, publicJwk, signature) as Promise<boolean>;
+}
+
+/**
+ * Sign data with an RSA private JWK and return a base64url-encoded signature.
+ *
+ * Node-only: signs synchronously using `crypto.createPrivateKey` + `crypto.sign`.
+ * Throws in non-Node runtimes since WebCrypto requires async key import and
+ * the audit signer needs a synchronous interface; production hosts that need
+ * RS256 audit signing run on Node.
+ *
+ * @param jwtAlg - JWT algorithm identifier (e.g. 'RS256', 'PS256')
+ * @param data - Bytes to sign
+ * @param privateJwk - Private key in JWK format
+ * @returns Base64url-encoded signature
+ */
+export function rsaSignBase64Url(jwtAlg: string, data: Buffer | Uint8Array, privateJwk: JsonWebKey): string {
+  if (!isNode()) {
+    throw new Error('rsaSignBase64Url is only available in Node.js runtimes');
+  }
+  return require('./node').rsaSignBase64Url(jwtAlg, data, privateJwk) as string;
 }
 
 // Convenience function exports - delegate to provider

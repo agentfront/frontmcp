@@ -147,6 +147,42 @@ observability: {
 
 Structured log entries (with `trace_id`) are forwarded to your logger, which sends them to wherever it's configured.
 
+## Exporting Metrics (Counters)
+
+Counters created by `this.telemetry.createCounter(...)` and the built-in framework counters (`frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_failures_total`, `frontmcp_skills_replay_rejects_total`, etc.) become observable once you register a global OTel `MeterProvider`. Mirror your trace setup with `@opentelemetry/sdk-metrics` and an OTLP metric exporter:
+
+```typescript
+import { metrics } from '@opentelemetry/api';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { Resource } from '@opentelemetry/resources';
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+
+const meterProvider = new MeterProvider({
+  resource: new Resource({ 'service.name': 'my-mcp-server' }),
+  readers: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318/v1/metrics',
+      }),
+      exportIntervalMillis: 10_000,
+    }),
+  ],
+});
+
+metrics.setGlobalMeterProvider(meterProvider);
+```
+
+Use the same vendor-specific endpoint for metrics that you use for traces (most vendors accept both on a single OTLP gateway):
+
+| Vendor        | Metrics endpoint hint                                                           |
+| ------------- | ------------------------------------------------------------------------------- |
+| Coralogix     | `https://ingress.coralogix.com:443` — auth via `OTEL_EXPORTER_OTLP_HEADERS`     |
+| Datadog       | Use the Datadog OTLP intake (`/api/v2/otlp/v1/metrics`) with `DD-API-KEY`       |
+| Grafana Cloud | `https://otlp-gateway-<region>.grafana.net/otlp/v1/metrics` (Basic auth)        |
+| Logz.io       | Use the dedicated Metrics token endpoint (`https://otlp-listener.logz.io:8053`) |
+
+Without a registered `MeterProvider`, counters still increment in an in-memory snapshot (readable via `getMetricSnapshot()` from `@frontmcp/observability`) but are **not** exported. Use the snapshot for tests and local debugging only.
+
 ## OTLP Sink Options
 
 | Option            | Type                     | Default                                                  | Description                                 |

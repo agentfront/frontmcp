@@ -5,8 +5,10 @@
  */
 
 import crypto from 'node:crypto';
-import type { CryptoProvider } from './types';
+
 import { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
+import type { CryptoProvider } from './types';
+
 export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
 /**
@@ -190,6 +192,36 @@ export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, s
       }
     : publicKey;
   return crypto.verify(nodeAlgorithm, data, verifyKey, signature);
+}
+
+/**
+ * Sign data with an RSA private JWK and return a base64url-encoded signature.
+ *
+ * Mirror of {@link rsaVerify} on the signing side: takes a JWT alg name
+ * (`RS256`/`RS384`/`RS512`/`PS256`/`PS384`/`PS512`), a private key in JWK
+ * format, and the data bytes; returns the detached signature as a base64url
+ * string suitable for inline JSON envelopes (e.g. tamper-evident audit
+ * records that re-use the same key registry as bundle signing).
+ *
+ * Node-only — `crypto.createPrivateKey({ format: 'jwk' })` is not exposed in
+ * WebCrypto with the same shape, so audit signing is gated to Node runtimes.
+ *
+ * @param jwtAlg - JWT algorithm identifier (e.g. 'RS256', 'PS256')
+ * @param data - Bytes to sign
+ * @param privateJwk - Private key in JWK format
+ * @returns Base64url-encoded signature
+ */
+export function rsaSignBase64Url(jwtAlg: string, data: Buffer | Uint8Array, privateJwk: JsonWebKey): string {
+  const privateKey = crypto.createPrivateKey({ key: privateJwk as crypto.JsonWebKey, format: 'jwk' });
+  const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const sig = isRsaPssAlg(jwtAlg)
+    ? rsaSign(nodeAlgorithm, buf, privateKey, {
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      })
+    : rsaSign(nodeAlgorithm, buf, privateKey);
+  return sig.toString('base64url');
 }
 
 /**

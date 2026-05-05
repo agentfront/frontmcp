@@ -53,6 +53,7 @@ function guardClientVersion(clientVersion: string): void {
 export default function initializeRequestHandler({
   serverOptions,
   scope,
+  composeInstructions,
 }: McpHandlerOptions): McpHandler<InitializeRequest, InitializeResult> {
   const logger = scope.logger.child('initialize-handler');
 
@@ -189,9 +190,17 @@ export default function initializeRequestHandler({
       // Fall back to defaults if not configured
       const configuredInfo = scope.metadata?.info ?? { name: 'FrontMcpServer', version: '0.0.1' };
 
+      // Recompute instructions on every initialize so dynamic skill
+      // registrations (e.g. registerSkillContent after boot) are reflected
+      // without requiring a server restart. Falls back to the static
+      // serverOptions.instructions when no composer was provided (legacy
+      // callers, tests, or embedders that pre-compose the string).
+      const composed = composeInstructions?.();
+      const instructions = composed !== undefined ? composed : serverOptions.instructions;
+
       const result: InitializeResult = {
         capabilities: serverOptions.capabilities ?? {},
-        instructions: serverOptions.instructions,
+        instructions: instructions && instructions.length > 0 ? instructions : undefined,
         serverInfo: {
           name: configuredInfo.name,
           version: configuredInfo.version,

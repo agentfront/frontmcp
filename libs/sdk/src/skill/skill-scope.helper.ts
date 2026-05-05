@@ -10,14 +10,15 @@
  */
 
 import type { FrontMcpLogger } from '../common';
+import type { ResourceType } from '../common/interfaces';
 import type { SkillsConfigOptions } from '../common/types/options/skills-http';
 import type FlowRegistry from '../flows/flow.registry';
 import type ProviderRegistry from '../provider/provider.registry';
-import type { ResourceType } from '../common/interfaces';
 import type ResourceRegistry from '../resource/resource.registry';
-import type SkillRegistry from './skill.registry';
-import { SearchSkillsFlow, LoadSkillFlow, LlmTxtFlow, LlmFullTxtFlow, SkillsApiFlow } from './flows';
+import { LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } from './flows';
 import { getSkillResources } from './resources';
+import { registerSkillAuditWriter } from './skill-audit.helper';
+import type SkillRegistry from './skill.registry';
 
 /**
  * Options for registering skill capabilities.
@@ -84,6 +85,11 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
     await flowRegistry.registryFlows([LlmTxtFlow, LlmFullTxtFlow, SkillsApiFlow]);
     logger.verbose('Registered skills HTTP flows (llm.txt, llm_full.txt, /skills API)');
   }
+
+  // Register the skill audit writer when configured. Opt-in: a missing
+  // `audit` block, or `audit.enabled: false`, leaves DI untouched and the
+  // ExecuteActionTool's `tryGet(SkillAuditWriterToken)` returns undefined.
+  registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
 }
 
 /**

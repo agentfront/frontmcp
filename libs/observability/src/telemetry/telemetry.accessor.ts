@@ -33,17 +33,18 @@
  */
 
 import {
-  type Tracer,
-  type Span,
-  type Context as OTelContext,
   SpanKind,
   SpanStatusCode,
   trace,
+  type Context as OTelContext,
+  type Span,
+  type Tracer,
 } from '@opentelemetry/api';
 
-import { createOTelContextFromTrace, type TraceContextLike } from '../otel/trace-context-bridge';
-import { sessionTracingId, ACTIVE_SPAN_KEY, ACTIVE_OTEL_CTX_KEY } from '../plugin/observability.hooks';
 import { FrontMcpAttributes, McpAttributes } from '../otel/otel.types';
+import { createOTelContextFromTrace, type TraceContextLike } from '../otel/trace-context-bridge';
+import { ACTIVE_OTEL_CTX_KEY, ACTIVE_SPAN_KEY, sessionTracingId } from '../plugin/observability.hooks';
+import { createCounter, type TelemetryCounter } from './telemetry.counters';
 
 /**
  * Minimal context shape — avoids tight coupling to FrontMcpContext.
@@ -252,6 +253,21 @@ export class TelemetryAccessor {
     if (activeSpan) {
       activeSpan.setAttributes(attrs);
     }
+  }
+
+  /**
+   * Create (or retrieve cached) a named counter.
+   *
+   * Counter increments are exported through the global OTel MeterProvider
+   * when one is configured, and are always recorded in an in-memory snapshot
+   * store (`getMetricSnapshot()` from `@frontmcp/observability`) so tests can
+   * assert behavior without standing up a full OTel pipeline.
+   *
+   * @param name        - OTel-style snake_case name, e.g. `frontmcp_skills_bundle_pulls_total`
+   * @param description - human-readable description
+   */
+  createCounter(name: string, description?: string): TelemetryCounter {
+    return createCounter(name, description);
   }
 
   /**

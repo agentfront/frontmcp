@@ -210,7 +210,15 @@ export {
   loadSkillDirectory,
   scanSkillResources,
   skillDir,
+  // Initialize-instructions composition
+  buildSkillsCatalogSummary,
+  composeInitializeInstructions,
+  buildChannelInstructions,
+  // Skill audit log helper (Edge-runtime-safe factory injection)
+  setSkillAuditFactory,
+  hasSkillAuditFactory,
 } from './skill';
+export type { SkillAuditFactory, AuditModuleShape } from './skill';
 export type {
   SkillRegistryInterface,
   IndexedSkill,
@@ -227,6 +235,7 @@ export type {
   ToolValidationResult,
   SkillStorageFactoryOptions,
   SkillStorageFactoryResult,
+  InjectInstructionsPolicy,
 } from './skill';
 
 // Agent exports - only user-facing APIs
