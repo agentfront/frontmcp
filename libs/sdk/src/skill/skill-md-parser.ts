@@ -114,9 +114,14 @@ export function skillMdFrontmatterToMetadata(
     result.rating = rating;
   }
 
-  // skillPath: array of path segments (SEP-2640 §Resource Mapping)
+  // skillPath: array of path segments (SEP-2640 §Resource Mapping).
+  // Trim each segment first so whitespace-only entries (`'   '`) are
+  // dropped — they would otherwise produce malformed `skill://...` URIs.
   if (Array.isArray(frontmatter['skillPath'])) {
-    const segments = frontmatter['skillPath'].filter((s): s is string => typeof s === 'string' && s.length > 0);
+    const segments = frontmatter['skillPath']
+      .filter((s): s is string => typeof s === 'string')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     if (segments.length > 0) result.skillPath = segments;
   }
 

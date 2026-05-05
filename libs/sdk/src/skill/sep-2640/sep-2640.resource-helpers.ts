@@ -301,7 +301,10 @@ async function tryResolvedSubFile(
     if (!matches) continue;
 
     const inline = (entry as { content?: string }).content;
-    if (inline) {
+    // Distinguish "no inline payload" (undefined) from "explicitly empty
+    // inline body" (`''`). An empty body is legitimate (e.g. a stub
+    // example) and should not fall through to disk lookup.
+    if (inline !== undefined) {
       return parseSkillMdFrontmatter(inline).body;
     }
 
@@ -356,7 +359,14 @@ function resolveEntryPath(
     dir = configured ? pathResolve(baseDir, configured) : joinPath(baseDir, kind);
   }
   if (!dir) return undefined;
-  return pathResolve(dir, filename);
+  // Containment guard: a malicious or buggy resolved-entry `filename`
+  // (e.g. `../../etc/passwd`) must NOT escape the configured resource
+  // directory. The URI-segment guards in `readSkillFileByPath` only
+  // protect URI-supplied paths; `filename` is metadata, so it needs the
+  // same `isInside` check here.
+  const resolved = pathResolve(dir, filename);
+  if (!isInside(resolved, dir)) return undefined;
+  return resolved;
 }
 
 /**

@@ -547,6 +547,14 @@ Body.`;
       expect(result.specMetadata).toBeUndefined();
     });
 
+    it('should trim whitespace from skillPath segments and drop whitespace-only entries', () => {
+      const result = skillMdFrontmatterToMetadata(
+        { name: 'refunds', description: 'Test', skillPath: ['  acme  ', '   ', 'billing', 'refunds'] },
+        'Body',
+      );
+      expect(result.skillPath).toEqual(['acme', 'billing', 'refunds']);
+    });
+
     it('should drop non-string skillPath segments', () => {
       const result = skillMdFrontmatterToMetadata(
         { name: 'partial', description: 'Test', skillPath: ['acme', 42, '', 'partial'] },
