@@ -128,14 +128,15 @@ export class Rs256AuditSigner implements SkillAuditSigner {
       throw new Error('Rs256AuditSigner: privateJwk must be a JWK object');
     }
     // Validate JWK shape — RSA private keys MUST carry kty='RSA' plus the
-    // modulus `n` and private exponent `d`. Without these, sign() would
-    // throw a confusing node:crypto error at runtime; rejecting here keeps
-    // the failure mode at the configuration boundary.
+    // modulus `n`, public exponent `e`, and private exponent `d`. Without
+    // these, sign() (or the underlying crypto.createPrivateKey JWK import)
+    // would throw a confusing node:crypto error at runtime; rejecting here
+    // keeps the failure mode at the configuration boundary.
     if (privateJwk.kty !== 'RSA') {
       throw new Error(`Rs256AuditSigner: privateJwk.kty must be "RSA", got "${String(privateJwk.kty)}"`);
     }
-    if (!privateJwk.n || !privateJwk.d) {
-      throw new Error('Rs256AuditSigner: privateJwk must include both `n` and `d` (RSA private key)');
+    if (!privateJwk.n || !privateJwk.e || !privateJwk.d) {
+      throw new Error('Rs256AuditSigner: privateJwk must include `n`, `e`, and `d` (RSA private key)');
     }
     this.privateJwk = privateJwk;
     this.keyId = keyId;

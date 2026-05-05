@@ -5,10 +5,10 @@ level: advanced
 description: Implement a custom SkillAuditStore that streams records to S3 with one object per sequence.
 tags: [extensibility, audit, custom, s3, store]
 features:
-  - 'Implements the SkillAuditStore interface (append, tail, iterate)'
+  - 'Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)'
   - 'One S3 object per sequence keeps individual records immutable and verifiable'
-  - 'tail(limit) lists the last N keys in lexical order — sequences are zero-padded'
-  - 'iterate(after?) supports incremental verifyChain runs in CI'
+  - 'tail() returns the latest record so the writer can chain prevHash deterministically'
+  - 'read({ from, limit }) supports incremental verifyChain runs in CI'
 ---
 
 # Custom S3-Backed Audit Store
@@ -101,16 +101,30 @@ export class S3AuditStore implements SkillAuditStore {
   }
 
   private async list(startAfter?: string): Promise<SkillAuditRecord[]> {
-    const list = await this.s3.send(
-      new ListObjectsV2Command({ Bucket: this.bucket, Prefix: this.prefix, StartAfter: startAfter }),
-    );
     const records: SkillAuditRecord[] = [];
-    for (const obj of list.Contents ?? []) {
-      if (!obj.Key) continue;
-      const body = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: obj.Key }));
-      const text = (await body.Body?.transformToString()) ?? '';
-      records.push(JSON.parse(text) as SkillAuditRecord);
-    }
+    // ListObjectsV2 caps each response at 1000 objects. Page until the
+    // bucket returns an un-truncated response so verifyChain sees the full
+    // chain even in long-lived audit logs.
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: this.prefix,
+          // StartAfter is only meaningful on the first page; subsequent
+          // pages drive ordering via ContinuationToken.
+          StartAfter: continuationToken === undefined ? startAfter : undefined,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const obj of page.Contents ?? []) {
+        if (!obj.Key) continue;
+        const body = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: obj.Key }));
+        const text = (await body.Body?.transformToString()) ?? '';
+        records.push(JSON.parse(text) as SkillAuditRecord);
+      }
+      continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (continuationToken);
     return records;
   }
 }
@@ -163,10 +177,10 @@ export default class Server {}
 
 ## What This Demonstrates
 
-- Implements the SkillAuditStore interface (append, tail, iterate)
+- Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)
 - One S3 object per sequence keeps individual records immutable and verifiable
-- tail(limit) lists the last N keys in lexical order — sequences are zero-padded
-- iterate(after?) supports incremental verifyChain runs in CI
+- tail() returns the latest record so the writer can chain prevHash deterministically
+- read({ from, limit }) supports incremental verifyChain runs in CI
 
 ## Related
 

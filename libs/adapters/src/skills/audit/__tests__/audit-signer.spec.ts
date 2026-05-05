@@ -126,6 +126,26 @@ describe('Rs256AuditSigner', () => {
     expect(() => new Rs256AuditSigner(null as unknown as JsonWebKey, 'k')).toThrow(/JWK/);
   });
 
+  it('rejects non-RSA JWKs', () => {
+    const ec = { kty: 'EC', crv: 'P-256', x: 'x', y: 'y', d: 'd' } as JsonWebKey;
+    expect(() => new Rs256AuditSigner(ec, 'k')).toThrow(/kty must be "RSA"/);
+  });
+
+  it('rejects RSA JWKs missing required components (n, e, or d)', () => {
+    const { privJwk } = generateRsaTestKeys();
+    // Strip each required component in turn — the constructor must fail
+    // fast at config time rather than deferring to the first sign() call.
+    expect(() => new Rs256AuditSigner({ ...privJwk, n: undefined } as JsonWebKey, 'k')).toThrow(
+      /must include `n`, `e`, and `d`/,
+    );
+    expect(() => new Rs256AuditSigner({ ...privJwk, e: undefined } as JsonWebKey, 'k')).toThrow(
+      /must include `n`, `e`, and `d`/,
+    );
+    expect(() => new Rs256AuditSigner({ ...privJwk, d: undefined } as JsonWebKey, 'k')).toThrow(
+      /must include `n`, `e`, and `d`/,
+    );
+  });
+
   it('round-trips: sign + verify with PEM public key', () => {
     const { privJwk, pubPem } = generateRsaTestKeys();
 

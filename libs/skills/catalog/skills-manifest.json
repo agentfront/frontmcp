@@ -1726,10 +1726,10 @@
               "level": "advanced",
               "tags": ["extensibility", "audit", "custom", "s3", "store"],
               "features": [
-                "Implements the SkillAuditStore interface (append, tail, iterate)",
+                "Implements the SkillAuditStore interface (nextSequence, appendAtSequence, tail, read)",
                 "One S3 object per sequence keeps individual records immutable and verifiable",
-                "tail(limit) lists the last N keys in lexical order — sequences are zero-padded",
-                "iterate(after?) supports incremental verifyChain runs in CI"
+                "tail() returns the latest record so the writer can chain prevHash deterministically",
+                "read({ from, limit }) supports incremental verifyChain runs in CI"
               ]
             }
           ]

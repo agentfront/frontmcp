@@ -31,7 +31,12 @@ export {
 export { diffBundles, formatDiffSummary, type BundleDiff } from './bundle/bundle-diff';
 
 // Dependency resolution
-export { resolveSkillLoadOrder, SkillDependencyCycleError, SkillDependencyMissingError } from './dependency/skill-dag';
+export {
+  resolveSkillLoadOrder,
+  SkillDependencyCycleError,
+  SkillDependencyInvariantError,
+  SkillDependencyMissingError,
+} from './dependency/skill-dag';
 
 // Source configuration
 export {

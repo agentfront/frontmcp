@@ -98,10 +98,13 @@ class Server {}
 ```typescript
 import { Rs256AuditSigner } from '@frontmcp/adapters/skills';
 
-const signer = new Rs256AuditSigner({
-  keyId: 'bundle-signing-2026-01',
-  privateKeyPem: process.env.BUNDLE_SIGNING_PRIVATE_KEY!,
-});
+// Constructor signature: new Rs256AuditSigner(privateJwk, keyId)
+// The signer accepts a JWK directly so the same key registry that backs
+// bundle signing can be reused. If your key material lives as PEM, convert
+// it to a JWK first (e.g. via `crypto.createPrivateKey(pem).export({ format: 'jwk' })`
+// or `pemToPrivateJwk` from `@frontmcp/utils`).
+const privateJwk = JSON.parse(process.env.BUNDLE_SIGNING_PRIVATE_JWK!) as JsonWebKey;
+const signer = new Rs256AuditSigner(privateJwk, 'bundle-signing-2026-01');
 ```
 
 `Rs256AuditSigner` uses `rsaSignBase64Url` from `@frontmcp/utils` under the hood.
@@ -144,12 +147,18 @@ See [`custom-store`](../examples/skill-audit-log/custom-store.md) for an S3-back
 ## Verifying the Chain
 
 ```typescript
-import { defaultAuditSignatureVerifier, verifyChain } from '@frontmcp/adapters/skills';
+import { defaultAuditSignatureVerifier, verifyChain, type AuditTrustedKey } from '@frontmcp/adapters/skills';
 
-const records = await store.iterate();
-const trustedKeys = {
-  'bundle-signing-2026-01': PUBLIC_KEY_PEM,
-};
+// `read()` walks the chain in sequence order; pass `{ from, limit }` for
+// incremental verification in CI.
+const records = await store.read();
+
+// Trusted keys are passed as an array (per-record `signatureKeyId` selects
+// which entry to use). Supply `publicJwk` or `publicKeyPem` for RS256, or
+// `secret` for HS256.
+const trustedKeys: AuditTrustedKey[] = [
+  { keyId: 'bundle-signing-2026-01', alg: 'RS256', publicKeyPem: PUBLIC_KEY_PEM },
+];
 
 const result = verifyChain(records, trustedKeys, defaultAuditSignatureVerifier);
 

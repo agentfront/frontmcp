@@ -40,6 +40,19 @@ export class SkillDependencyMissingError extends Error {
 }
 
 /**
+ * Thrown when an internal invariant of the resolver is violated (e.g. the
+ * `ready` queue and `byId` map disagree). Surfaces as a typed error rather
+ * than a generic Error so callers can distinguish "bug in the resolver"
+ * from "bad input".
+ */
+export class SkillDependencyInvariantError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SkillDependencyInvariantError';
+  }
+}
+
+/**
  * Compute the dependency-respecting load order for a list of skills.
  *
  * Returns a fresh array — input is not mutated. Tie-break is alphabetical by
@@ -92,10 +105,16 @@ export function resolveSkillLoadOrder(skills: BundledSkill[]): BundledSkill[] {
 
   while (ready.length > 0) {
     const next = ready.shift();
-    if (next === undefined) break;
+    if (next === undefined) {
+      throw new SkillDependencyInvariantError(
+        'resolveSkillLoadOrder: invariant broken — ready queue drained mid-iteration',
+      );
+    }
     const nextSkill = byId.get(next);
     if (!nextSkill) {
-      throw new Error(`resolveSkillLoadOrder: invariant broken — id "${next}" missing from byId map`);
+      throw new SkillDependencyInvariantError(
+        `resolveSkillLoadOrder: invariant broken — id "${next}" missing from byId map`,
+      );
     }
     order.push(nextSkill);
     for (const dependent of requiredBy.get(next) ?? []) {
