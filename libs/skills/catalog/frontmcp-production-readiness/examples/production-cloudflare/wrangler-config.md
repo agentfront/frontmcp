@@ -2,13 +2,19 @@
 name: wrangler-config
 reference: production-cloudflare
 level: basic
-description: 'Production-readiness checklist for Cloudflare Worker wrangler.toml — verifies KV bindings, secret hygiene, and that the build adapter wrote the correct main path.'
-tags: [production, cloudflare, cache, session, wrangler, checklist]
+description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-cloudflare.md`**. This file is checklist-only: it verifies your already-generated `wrangler.toml` is production-ready.'
+tags:
+  - production
+  - cloudflare
+  - cache
+  - session
+  - wrangler
+  - checklist
 features:
-  - 'Verify `main = "dist/cloudflare/index.js"` (the build adapter writes this — never override)'
-  - 'Verify KV bindings for sessions and cache exist'
-  - 'Verify staging / production environment configs are separated'
-  - 'Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`'
+  - Verify `main = "dist/cloudflare/index.js"` (the build adapter writes this — never override)
+  - Verify KV bindings for sessions and cache exist
+  - Verify staging / production environment configs are separated
+  - Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`
 ---
 
 # Wrangler Configuration: Production-Readiness Checklist
@@ -47,6 +53,13 @@ features:
 - [ ] Deploy with `wrangler deploy --env production` (not the unscoped form)
 - [ ] `wrangler tail` works against the production worker for live debugging
 - [ ] Dashboard shows recent successful deploys
+
+## What This Demonstrates
+
+- Verify `main = "dist/cloudflare/index.js"` (the build adapter writes this — never override)
+- Verify KV bindings for sessions and cache exist
+- Verify staging / production environment configs are separated
+- Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`
 
 ## Related
 

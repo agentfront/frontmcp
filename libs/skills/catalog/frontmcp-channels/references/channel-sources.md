@@ -217,6 +217,6 @@ Buffered events are replayed when a new session connects, with `replayed: "true"
 | [`job-completion`](../examples/channel-sources/job-completion.md)       | Intermediate | Notify Claude Code when background jobs and workflows complete                                                                   |
 | [`service-connector`](../examples/channel-sources/service-connector.md) | Advanced     | Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API |
 | [`file-watcher`](../examples/channel-sources/file-watcher.md)           | Intermediate | Watch files for changes and notify Claude Code in real-time                                                                      |
-| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline                       |
+| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.                      |
 
 > See all examples in [`examples/channel-sources/`](../examples/channel-sources/)

@@ -351,7 +351,7 @@ export class ResearcherAgent extends AgentContext {}
 ```
 
 > The framework drives the LLM tool-use loop via the `agents:call-agent` flow — you don't override `execute()`. Configure iteration limits and other runtime knobs through the `@Agent({ execution: { maxIterations } })` block.
-
+>
 > **Full working code:** See `references/example-knowledge-base.md`
 
 ---

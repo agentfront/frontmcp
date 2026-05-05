@@ -211,7 +211,7 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 | Tool not discovered at runtime           | Tool class not added to the `tools` array in `@App`             | Register the tool in the `@App` decorator's `tools` array                                              |
 | Tests not found by Jest                  | Test file uses `.test.ts` instead of `.spec.ts`                 | Rename to `.spec.ts` to match the FrontMCP test file convention                                        |
 | `frontmcp test` fails to find E2E config | Custom `jest.e2e.config.ts` overrides the auto-generated config | Delete the standalone `jest.e2e.config.ts`; `frontmcp test` generates the correct config automatically |
-| Build target error                       | Invalid `--target` flag value                                   | Use `node`, `vercel`, `lambda`, or `cloudflare` as the target value                                    |
+| Build target error                       | Invalid `--target` flag value                                   | Use one of `cli`, `node`, `sdk`, `browser`, `cloudflare`, `vercel`, `lambda`, `distributed`, `mcpb`    |
 | Catalog skills not loaded                | Skills placed in `src/skills/` instead of top-level `skills/`   | Move catalog `SKILL.md` directories to the top-level `skills/` directory                               |
 
 ## Examples

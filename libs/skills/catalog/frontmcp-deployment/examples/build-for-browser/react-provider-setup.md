@@ -2,12 +2,17 @@
 name: react-provider-setup
 reference: build-for-browser
 level: basic
-description: 'Connect a React application to a FrontMCP server using `@frontmcp/react` with a real `DirectMcpServer` instance.'
-tags: [deployment, react, browser, provider, setup]
+description: Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop — there is no `serverUrl` option.
+tags:
+  - deployment
+  - react
+  - browser
+  - provider
+  - setup
 features:
-  - 'Wrapping your React app with `FrontMcpProvider` and passing a `DirectMcpServer` via `server={...}`'
-  - 'Using the `useListTools` and `useCallTool` hooks'
-  - 'Creating the server with `create()` from `@frontmcp/sdk`'
+  - Wrapping your React app with `FrontMcpProvider` and passing a real `DirectMcpServer` via `server={...}`
+  - Using `useListTools` to fetch the tools list and `useCallTool` to invoke one
+  - Creating the server with `create()` from `@frontmcp/sdk` (in-memory direct connection)
 ---
 
 # React Provider Setup

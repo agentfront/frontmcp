@@ -2,15 +2,21 @@
 name: agent-and-plugin
 reference: example-knowledge-base
 level: advanced
-description: 'Shows an autonomous research agent with inner tools (framework-driven loop) and a plugin that hooks into the tools:call-tool flow for audit logging.'
-tags: [guides, knowledge-base, knowledge, base, agent, plugin]
+description: Shows an autonomous research agent with inner tools and a real `ToolHook`-based plugin that hooks into the `tools:call-tool` flow for audit logging.
+tags:
+  - guides
+  - knowledge-base
+  - knowledge
+  - base
+  - agent
+  - plugin
 features:
-  - 'Agent with `@Agent` decorator, LLM config, inner tools, and system instructions'
+  - Agent with `@Agent` decorator, LLM config, inner tools, and system instructions
   - 'Configuring the inner-loop limit via `@Agent({ execution: { maxIterations } })` (framework drives iteration; no `this.run(...)`)'
   - 'Plugin built on real `ToolHook` decorators: `@ToolHook.Will/Did/Around("execute")`'
-  - 'Using `flowCtx.state.set/get()` for hook-local state'
-  - 'Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks'
-  - 'Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)'
+  - Using `flowCtx.state.set/get()` for hook-local state
+  - Using `flowCtx.state.required.toolContext` to read tool metadata and authInfo inside hooks
+  - Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)
 ---
 
 # Knowledge Base: Research Agent and Audit Log Plugin
@@ -113,8 +119,8 @@ export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions>
     this.logs.push(entry);
 
     if (this.options.endpoint) {
-      // Audit logging should never block tool execution.
-      await ctx
+      // Audit logging should never block tool execution — fire-and-forget.
+      void ctx
         .fetch(this.options.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

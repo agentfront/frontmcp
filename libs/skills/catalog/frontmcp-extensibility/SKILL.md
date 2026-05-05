@@ -55,7 +55,7 @@ The standard pattern for integrating any external library:
 
 1. **Create a provider** — wraps the library as a singleton or scoped service
 2. **Register the provider** — add to `@App({ providers: [...] })` or `@FrontMcp({ providers: [...] })`
-3. **Create tools** — expose the provider's capabilities as MCP tools via `this.get(TOKEN)`
+3. **Create tools** — expose the provider's capabilities as MCP tools via `this.get(ProviderClass)` (the class itself is the DI token)
 4. **Optionally create resources** — expose data as MCP resources with autocompletion
 
 ```typescript
@@ -94,8 +94,8 @@ More integrations can be added as references (e.g., enclave-vm, applescript, dat
 
 - [ ] External library is in `dependencies` (not `devDependencies`)
 - [ ] Provider wraps the library with proper initialization and cleanup
-- [ ] Provider is registered in `@App` or `@FrontMcp` with a typed DI token
-- [ ] Tools use `this.get(TOKEN)` to access the provider (not direct imports)
+- [ ] Provider class is listed in `@App` or `@FrontMcp` `providers: [...]` array (the class itself is the DI token)
+- [ ] Tools use `this.get(ProviderClass)` to access the provider (not direct imports)
 - [ ] Error handling wraps library-specific errors into MCP error classes
 
 ## Reference

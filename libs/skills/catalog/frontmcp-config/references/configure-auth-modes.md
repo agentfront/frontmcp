@@ -14,7 +14,7 @@ auth: {
   mode: 'public',
   sessionTtl: 3600,
   anonymousScopes: ['read', 'write'],
-  publicAccess: { tools: true, resources: true, prompts: true },
+  publicAccess: { tools: 'all', prompts: 'all' },
 }
 ```
 

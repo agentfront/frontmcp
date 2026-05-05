@@ -2,13 +2,17 @@
 name: oauth-flow-test
 reference: test-auth
 level: advanced
-description: 'Use `MockOAuthServer` to simulate an OAuth identity provider and verify JWKS / token issuance.'
-tags: [testing, oauth, auth, flow]
+description: Use `MockOAuthServer` to simulate an OAuth/OIDC identity provider. The server publishes a JWKS endpoint backed by your `TestTokenFactory`, so any token created by that factory is valid against the mock IDP.
+tags:
+  - testing
+  - oauth
+  - auth
+  - flow
 features:
-  - 'Constructing `MockOAuthServer` with a `TestTokenFactory` and starting it with `.start()`'
-  - 'Reading server info from `mockOAuth.info.baseUrl` / `mockOAuth.info.jwksUrl` after start'
-  - 'Issuing tokens via the same `TestTokenFactory` so the mock JWKS can verify them'
-  - 'Cleaning up with `mockOAuth.stop()` in `afterAll`'
+  - Constructing `MockOAuthServer` with a `TestTokenFactory` and starting it with `.start()`
+  - Reading server info from `mockOAuth.info.baseUrl` / `mockOAuth.info.jwksUrl` after start
+  - Issuing tokens via the same `TestTokenFactory` so the mock JWKS can verify them
+  - Cleaning up with `mockOAuth.stop()` in `afterAll`
 ---
 
 # Testing with the Mock OAuth Server

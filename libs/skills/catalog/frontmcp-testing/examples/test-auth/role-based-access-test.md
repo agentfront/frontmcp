@@ -59,9 +59,12 @@ describe('Role-Based Access', () => {
     });
 
     const client = await clientWithToken(adminToken);
-    const result = await client.tools.call('admin_only_tool', {});
-    expect(result).toBeSuccessful();
-    await client.disconnect();
+    try {
+      const result = await client.tools.call('admin_only_tool', {});
+      expect(result).toBeSuccessful();
+    } finally {
+      await client.disconnect();
+    }
   });
 
   it('denies user access to an admin-only tool', async () => {
@@ -71,9 +74,12 @@ describe('Role-Based Access', () => {
     });
 
     const client = await clientWithToken(userToken);
-    const result = await client.tools.call('admin_only_tool', {});
-    expect(result).toBeError();
-    await client.disconnect();
+    try {
+      const result = await client.tools.call('admin_only_tool', {});
+      expect(result).toBeError();
+    } finally {
+      await client.disconnect();
+    }
   });
 
   it('allows user access to a user-level tool', async () => {
@@ -83,9 +89,12 @@ describe('Role-Based Access', () => {
     });
 
     const client = await clientWithToken(userToken);
-    const result = await client.tools.call('user_tool', { data: 'hello' });
-    expect(result).toBeSuccessful();
-    await client.disconnect();
+    try {
+      const result = await client.tools.call('user_tool', { data: 'hello' });
+      expect(result).toBeSuccessful();
+    } finally {
+      await client.disconnect();
+    }
   });
 });
 ```

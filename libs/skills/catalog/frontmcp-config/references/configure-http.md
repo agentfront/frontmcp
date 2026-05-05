@@ -103,12 +103,16 @@ http: {
 
 ### Dynamic Origin
 
+The `origin` callback uses Node-style `(origin, callback)` signature so origin checks
+can be async (e.g., look up the allowlist from a database):
+
 ```typescript
 http: {
   cors: {
-    origin: (origin: string) => {
-      // Allow any *.myapp.com subdomain
-      return origin.endsWith('.myapp.com');
+    origin: (origin, callback) => {
+      // origin is `string | undefined` (undefined for same-origin / non-browser requests)
+      const allowed = !!origin && origin.endsWith('.myapp.com');
+      callback(null, allowed);
     },
     credentials: true,
   },

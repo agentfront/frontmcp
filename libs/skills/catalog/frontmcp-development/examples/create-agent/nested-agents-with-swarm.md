@@ -2,13 +2,18 @@
 name: nested-agents-with-swarm
 reference: create-agent
 level: advanced
-description: 'Composing specialized agents with swarm visibility so an orchestrator can call peers as use-agent:* tools.'
-tags: [development, agent, nested, agents, swarm]
+description: Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table.
+tags:
+  - development
+  - agent
+  - nested
+  - agents
+  - swarm
 features:
-  - 'Setting `swarm: { canSeeOtherAgents: true, visibleAgents: [...] }` on the orchestrator'
-  - 'Setting `swarm: { isVisible: true }` (the default) on specialist peers'
-  - 'Routing is driven by the orchestrator LLM choosing among `use-agent:<peer>` tools, not by declarative handoff rules'
-  - 'Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization'
+  - 'Setting `swarm: { canSeeOtherAgents: true, visibleAgents: [...] }` on the orchestrator so peers appear as `use-agent:*` tools'
+  - 'Setting `swarm: { isVisible: true }` (the default) on specialist peers so they can be called'
+  - Routing is driven by the orchestrator LLM choosing among `use-agent:<peer>` tools, not by a declarative handoff table
+  - Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization
 ---
 
 # Multi-Agent Swarm Visibility

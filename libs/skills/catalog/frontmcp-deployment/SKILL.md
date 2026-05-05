@@ -102,7 +102,7 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | SDK        | Programmatic                | Configurable          | None       | Yes      | Embedding in existing apps       |
 
 > **Note on storage:** Only `redis` and `vercel-kv` are SDK-native providers. DynamoDB, Cloudflare KV, D1, and Durable Objects are platform-side — wire them in your tools using the platform SDK / Workers bindings. The Cloudflare build adapter actively rejects `redis: { ... }` and `sqlite: { ... }` configs at build time because Workers has no Node TCP / fs.
-
+>
 > **Note on browser:** "In-process direct client" means an in-memory `DirectClient` created via `connect()`/`create()` from `@frontmcp/sdk`. There is no separate "in-memory transport" — the client and server share the same JS heap.
 
 ## Cross-Cutting Patterns

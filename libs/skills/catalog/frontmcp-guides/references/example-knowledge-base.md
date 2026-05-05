@@ -404,7 +404,7 @@ export interface AuditLogPluginOptions {
   name: 'audit-log',
   description: 'Logs all tool invocations for audit compliance',
 })
-export default class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
+export class AuditLogPlugin extends DynamicPlugin<AuditLogPluginOptions> {
   private readonly logs: Array<{
     timestamp: string;
     tool: string;
@@ -518,7 +518,7 @@ Test the hook methods directly with a minimal `FlowCtx` shape. The `state` objec
 // test/audit-log.plugin.spec.ts
 import type { FlowCtxOf } from '@frontmcp/sdk';
 
-import AuditLogPlugin from '../src/plugins/audit-log.plugin';
+import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
 
 type ToolFlowCtx = FlowCtxOf<'tools:call-tool'>;
 
@@ -574,10 +574,10 @@ describe('AuditLogPlugin', () => {
 
 ## Examples
 
-| Example                                                                                            | Level        | Description                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`agent-and-plugin`](../examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.    |
-| [`multi-app-composition`](../examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration. |
-| [`vector-search-and-resources`](../examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.           |
+| Example                                                                                            | Level        | Description                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-and-plugin`](../examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and a real `ToolHook`-based plugin that hooks into the `tools:call-tool` flow for audit logging. |
+| [`multi-app-composition`](../examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration.        |
+| [`vector-search-and-resources`](../examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.                  |
 
 > See all examples in [`examples/example-knowledge-base/`](../examples/example-knowledge-base/)

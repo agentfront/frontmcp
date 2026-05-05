@@ -2,12 +2,17 @@
 name: vercel-mcp-endpoint-test
 reference: deploy-to-vercel
 level: advanced
-description: 'Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.'
-tags: [deployment, json-rpc, vercel, mcp, endpoint]
+description: Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.
+tags:
+  - deployment
+  - json-rpc
+  - vercel
+  - mcp
+  - endpoint
 features:
-  - 'Testing the health endpoint and MCP JSON-RPC API of a deployed Vercel function'
-  - 'Using preview deployments to validate changes before promoting to production'
-  - 'Knowing your Vercel plan limits (Hobby: 10s, Pro: 60s, Enterprise: 900s)'
+  - Testing the health endpoint (`/healthz`) and MCP JSON-RPC API of a deployed Vercel function
+  - Using preview deployments to validate changes before promoting to production
+  - "Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) — configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`"
 ---
 
 # Testing a Vercel MCP Endpoint

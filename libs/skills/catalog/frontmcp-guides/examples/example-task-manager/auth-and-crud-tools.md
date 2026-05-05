@@ -2,13 +2,19 @@
 name: auth-and-crud-tools
 reference: example-task-manager
 level: basic
-description: 'Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` for user isolation and `this.get()` for dependency injection.'
-tags: [guides, auth, session, task-manager, task, manager]
+description: Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` (the FrontMcpAuthContext exposed on every execution context) for user isolation and `this.get()` for dependency injection.
+tags:
+  - guides
+  - auth
+  - session
+  - task-manager
+  - task
+  - manager
 features:
-  - 'Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation'
-  - 'Using `this.get(TaskStoreProvider)` for dependency injection (class-as-token)'
-  - 'Enforcing authentication with `this.fail()` when the user is anonymous'
-  - 'Optional input fields with `.optional()` for filtering'
+  - Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation
+  - Using `this.get(TaskStoreProvider)` for dependency injection of providers (class-as-token)
+  - Enforcing authentication with `this.fail()` when no authenticated user is present in `this.auth`
+  - Optional input fields with `.optional()` for filtering
   - '`outputSchema` with nested `z.array(z.object(...))` for structured responses'
 ---
 
@@ -127,7 +133,7 @@ export class ListTasksTool extends ToolContext {
 
 - Using `this.auth?.user.sub` (FrontMcpAuthContext) for per-user data isolation
 - Using `this.get(TaskStoreProvider)` for dependency injection of providers (class-as-token)
-- Enforcing authentication with `this.fail()` when no session exists
+- Enforcing authentication with `this.fail()` when no authenticated user is present in `this.auth`
 - Optional input fields with `.optional()` for filtering
 - `outputSchema` with nested `z.array(z.object(...))` for structured responses
 

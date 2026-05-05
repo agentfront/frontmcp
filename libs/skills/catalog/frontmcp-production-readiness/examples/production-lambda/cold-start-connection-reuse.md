@@ -2,13 +2,19 @@
 name: cold-start-connection-reuse
 reference: production-lambda
 level: intermediate
-description: 'Shows how to minimize Lambda cold starts with lazy initialization (on first call, not in a fictional `onInit`) and the module-scope connection-reuse pattern for external services.'
-tags: [production, lambda, performance, cold, start, connection]
+description: Shows how to minimize Lambda cold starts with lazy initialization on first call and the module-scope connection-reuse pattern for external services.
+tags:
+  - production
+  - lambda
+  - performance
+  - cold
+  - start
+  - connection
 features:
-  - 'Connection reuse pattern: caching connections in module scope across warm invocations'
-  - 'Lazy-loading heavy dependencies (`pg`) on first use, not at module scope'
-  - 'Not closing connections on shutdown for Lambda (they survive freeze/thaw)'
-  - 'Keeping module scope lightweight with no heavy initialization'
+  - 'Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw'
+  - Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load
+  - Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)
+  - Keeping module scope lightweight with no heavy initialization
 ---
 
 # Cold Start Optimization and Connection Reuse
@@ -33,7 +39,7 @@ export class DbConnectionProvider {
   // Lazy on first getConnection() — heavy SDK import does not run at module load.
   async getConnection(): Promise<unknown> {
     if (!cachedConnectionPromise) {
-      cachedConnectionPromise = (async () => {
+      const promise = (async () => {
         const { Client } = await import('pg');
         const client = new Client({
           host: process.env.DB_HOST,
@@ -42,6 +48,12 @@ export class DbConnectionProvider {
         await client.connect();
         return client;
       })();
+      // Reset on failure so the next warm invocation can retry instead of
+      // permanently caching a rejected promise.
+      promise.catch(() => {
+        if (cachedConnectionPromise === promise) cachedConnectionPromise = undefined;
+      });
+      cachedConnectionPromise = promise;
     }
     return cachedConnectionPromise;
   }

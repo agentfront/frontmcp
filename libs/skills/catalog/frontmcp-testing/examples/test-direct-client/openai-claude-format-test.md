@@ -20,8 +20,8 @@ Verify that tools are returned in the correct format for OpenAI and Claude clien
 ```typescript
 // src/__tests__/client-formats.spec.ts
 // Real API:
-//   libs/sdk/src/direct/connect.ts:159 — `connectOpenAI(config, options?)` (no `serve` field)
-//   libs/sdk/src/direct/connect.ts:200 — `connectClaude(config, options?)`
+//   libs/sdk/src/direct/connect.ts — `connectOpenAI(config, options?)` (no `serve` field)
+//   libs/sdk/src/direct/connect.ts — `connectClaude(config, options?)`
 //   libs/sdk/src/index.ts — exports `Tool`, `ToolContext`, `App`, `FrontMcp`, `z`
 import { App, connectClaude, connectOpenAI, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 

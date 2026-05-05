@@ -2,13 +2,19 @@
 name: multi-instance-cleanup
 reference: production-node-sdk
 level: advanced
-description: 'Shows how multiple SDK instances can coexist without conflicts, and how to dispose timers and listeners through `server.dispose()` (since providers have no `onDestroy` lifecycle hook).'
-tags: [production, sdk, node, multi, instance, cleanup]
+description: 'Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.'
+tags:
+  - production
+  - sdk
+  - node
+  - multi
+  - instance
+  - cleanup
 features:
-  - 'Exposing a `stop()` method on the provider that the host app calls before `server.dispose()`'
-  - 'Ensuring multiple instances coexist without sharing global state'
-  - 'Testing that dispose removes all event listeners (no leaks)'
-  - 'Verifying one instance still works after another is disposed'
+  - Explicit `stop()` method on providers (since `@Provider` classes have no `onDestroy` lifecycle hook)
+  - Ensuring multiple instances coexist without sharing global state
+  - Testing that dispose removes all event listeners (no leaks)
+  - Verifying one instance still works after another is disposed
 ---
 
 # Multi-Instance Coexistence and Cleanup
@@ -75,7 +81,11 @@ describe('Multi-instance coexistence', () => {
     expect(tools1.tools.length).toBeGreaterThan(0);
     expect(tools2.tools.length).toBeGreaterThan(0);
 
-    // Clean up both — no shared global state
+    // Clean up instance 1: stop providers (cancels timers / clears listeners),
+    // then dispose the server. The framework does NOT call provider.stop() for
+    // you — it's the host app's responsibility, which is why the provider
+    // exposes the explicit method.
+    server1.scope.providers.get(BackgroundJobProvider).stop();
     await client1.close();
     await server1.dispose();
 
@@ -83,6 +93,7 @@ describe('Multi-instance coexistence', () => {
     const result = await client2.callTool('my_tool', { input: 'still-alive' });
     expect(result).toBeDefined();
 
+    server2.scope.providers.get(BackgroundJobProvider).stop();
     await client2.close();
     await server2.dispose();
   });

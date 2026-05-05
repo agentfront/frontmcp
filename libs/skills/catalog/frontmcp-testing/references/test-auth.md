@@ -137,10 +137,10 @@ To run the full authorization-code-with-PKCE flow against the mock server, drive
 
 ## Examples
 
-| Example                                                                     | Level        | Description                                                                                               |
-| --------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
-| [`oauth-flow-test`](../examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth identity provider and verify JWKS / token issuance.            |
-| [`role-based-access-test`](../examples/test-auth/role-based-access-test.md) | Intermediate | Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints. |
-| [`token-factory-test`](../examples/test-auth/token-factory-test.md)         | Basic        | Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.            |
+| Example                                                                     | Level        | Description                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`oauth-flow-test`](../examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth/OIDC identity provider. The server publishes a JWKS endpoint backed by your `TestTokenFactory`, so any token created by that factory is valid against the mock IDP. |
+| [`role-based-access-test`](../examples/test-auth/role-based-access-test.md) | Intermediate | Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints.                                                                                                      |
+| [`token-factory-test`](../examples/test-auth/token-factory-test.md)         | Basic        | Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.                                                                                                                 |
 
 > See all examples in [`examples/test-auth/`](../examples/test-auth/)

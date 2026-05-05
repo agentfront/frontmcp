@@ -2,12 +2,18 @@
 name: vercel-with-kv
 reference: deploy-to-vercel
 level: basic
-description: 'Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence.'
-tags: [deployment, vercel-kv, vercel, session, performance, serverless]
+description: Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you — you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.
+tags:
+  - deployment
+  - vercel-kv
+  - vercel
+  - session
+  - performance
+  - serverless
 features:
   - "Configuring `{ provider: 'vercel-kv' }` for automatic Vercel KV session storage"
-  - 'Letting `frontmcp build --target vercel` produce the Build Output API v3 structure (no manual `api/` directory)'
-  - 'Deploying with `vercel --prod` after the build emits `.vercel/output/`'
+  - Letting the CLI produce the Build Output API v3 structure (no manual `api/` directory or `rewrites`)
+  - Deploying with `vercel --prod` after the build emits `.vercel/output/`
 ---
 
 # Deploy to Vercel with KV Storage

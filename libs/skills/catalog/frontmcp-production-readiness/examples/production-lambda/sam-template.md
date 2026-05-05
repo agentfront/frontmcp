@@ -2,14 +2,19 @@
 name: sam-template
 reference: production-lambda
 level: basic
-description: 'Production-readiness checklist for the SAM template — verifies the handler path matches what `frontmcp build --target lambda` actually emits, plus DynamoDB / IAM hardening.'
-tags: [production, lambda, session, sam, checklist]
+description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-lambda.md`**. This file is checklist-only: it verifies the SAM artifact pairs correctly with the bundle that `frontmcp build --target lambda` produces.'
+tags:
+  - production
+  - lambda
+  - session
+  - sam
+  - checklist
 features:
   - 'Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)'
-  - 'No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import'
-  - 'DynamoDB session table has TTL enabled for automatic cleanup'
-  - 'IAM policies are scoped (no `*` resources / actions)'
-  - 'API Gateway proxy route forwards to the function'
+  - No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import
+  - DynamoDB session table has TTL enabled for automatic cleanup
+  - IAM policies are scoped (no `*` resources / actions)
+  - API Gateway proxy route forwards to the function
 ---
 
 # SAM Template: Production-Readiness Checklist
@@ -55,6 +60,14 @@ features:
 - [ ] CloudWatch alarm on `Errors` metric
 - [ ] CloudWatch alarm on `Throttles` metric
 - [ ] Dead Letter Queue (SQS) configured for failed async invocations
+
+## What This Demonstrates
+
+- Verify `Handler: dist/handler.handler` (the build emits `dist/handler.cjs`)
+- No hand-written `src/lambda.ts` with a fictional `createLambdaHandler` import
+- DynamoDB session table has TTL enabled for automatic cleanup
+- IAM policies are scoped (no `*` resources / actions)
+- API Gateway proxy route forwards to the function
 
 ## Related
 

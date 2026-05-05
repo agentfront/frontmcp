@@ -2,13 +2,18 @@
 name: replay-buffer
 reference: channel-sources
 level: advanced
-description: Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline
-tags: [replay, buffer, persistence, offline, reconnect]
+description: Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.
+tags:
+  - replay
+  - buffer
+  - persistence
+  - offline
+  - reconnect
 features:
-  - Replay configuration with maxEvents cap
+  - Replay configuration with `maxEvents` cap
   - In-memory ring buffer for event storage
-  - Replay on session connect
-  - Persistent store pattern with onConnect
+  - Where `replayBufferedEvents` actually lives (on `ChannelInstance`, not on `ChannelContext`)
+  - Persistent store pattern with `onConnect` and a user-defined Redis provider
 ---
 
 # Replay Buffer Pattern

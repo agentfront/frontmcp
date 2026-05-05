@@ -2,12 +2,16 @@
 name: browser-build-with-custom-entry
 reference: build-for-browser
 level: intermediate
-description: 'Build a browser bundle using a dedicated client entry file that re-exports browser-safe `@frontmcp/react` symbols.'
-tags: [deployment, browser, custom, entry]
+description: Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) — `useTools`/`useResources` do not exist.
+tags:
+  - deployment
+  - browser
+  - custom
+  - entry
 features:
-  - 'Creating a separate browser entry point (`src/client.ts`) that avoids importing Node.js-only modules like `fs` or `node:crypto`'
-  - 'Re-exporting the real `@frontmcp/react` API: `FrontMcpProvider`, `useListTools`, `useListResources`, `useCallTool`'
-  - 'Using the `-e` and `-o` flags to customize the entry file and output directory'
+  - Creating a separate browser entry point (`src/client.ts`) that re-exports only browser-safe symbols
+  - Using the real `@frontmcp/react` hook names (`useListTools`, `useListResources`, etc.)
+  - Using the `-e` and `-o` flags to customize the entry file and output directory
 ---
 
 # Browser Build with Custom Entry

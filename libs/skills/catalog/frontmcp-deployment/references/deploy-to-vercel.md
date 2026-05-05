@@ -215,11 +215,11 @@ Serverless functions are stateless between invocations. All persistent state mus
 
 ## Examples
 
-| Example                                                                                | Level        | Description                                                                                     |
-| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
-| [`vercel-mcp-endpoint-test`](../examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.  |
-| [`vercel-with-kv`](../examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. |
-| [`vercel-with-skills-cache`](../examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.             |
+| Example                                                                                | Level        | Description                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`vercel-mcp-endpoint-test`](../examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`. |
+| [`vercel-with-kv`](../examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you — you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.                                                                       |
+| [`vercel-with-skills-cache`](../examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.                                                                                                             |
 
 > See all examples in [`examples/deploy-to-vercel/`](../examples/deploy-to-vercel/)
 

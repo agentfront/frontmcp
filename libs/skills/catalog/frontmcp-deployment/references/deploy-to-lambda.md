@@ -285,7 +285,7 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 | ------------------ | -------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Build command      | `frontmcp build --target lambda`                               | `tsc` or generic bundler                | The Lambda target produces a single optimized handler with tree-shaking for cold-start performance |
 | Architecture       | `arm64` (Graviton)                                             | `x86_64`                                | ARM64 functions initialize faster and cost less per ms of compute                                  |
-| Handler path       | `handler.handler` in SAM template                              | `index.handler` or `src/lambda.handler` | The FrontMCP build outputs to `dist/`; mismatched paths cause 502 errors                           |
+| Handler path       | `handler.handler` with `CodeUri: dist/lambda/` in SAM          | `index.handler` or `src/lambda.handler` | The FrontMCP Lambda build emits `dist/lambda/handler.cjs`; mismatched paths cause 502 errors       |
 | Secrets management | SSM Parameter Store or Secrets Manager (`{{resolve:ssm:...}}`) | Plaintext env vars in `template.yaml`   | SSM/Secrets Manager encrypts values at rest and supports rotation                                  |
 | Redis connectivity | Lambda in same VPC as ElastiCache with security groups         | Public Redis endpoint from Lambda       | VPC peering ensures low latency and keeps traffic off the public internet                          |
 
@@ -329,11 +329,11 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 
 ## Examples
 
-| Example                                                                                | Level        | Description                                                                                           |
-| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
-| [`cdk-deployment`](../examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management. |
-| [`lambda-handler-with-cors`](../examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | Create a custom Lambda handler with an explicit API Gateway definition for CORS support.              |
-| [`sam-template-basic`](../examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                         |
+| Example                                                                                | Level        | Description                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`cdk-deployment`](../examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management.                                                                                                                                                                                      |
+| [`lambda-handler-with-cors`](../examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway. |
+| [`sam-template-basic`](../examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                                                                                                                                                                                                              |
 
 > See all examples in [`examples/deploy-to-lambda/`](../examples/deploy-to-lambda/)
 

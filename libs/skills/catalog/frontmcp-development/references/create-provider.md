@@ -48,8 +48,9 @@ const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
 ## Step 2: Create the Provider
 
 ```typescript
-import { Provider } from '@frontmcp/sdk';
 import { createPool, Pool } from 'your-db-driver';
+
+import { Provider } from '@frontmcp/sdk';
 
 @Provider({ name: 'DatabaseProvider' })
 class DatabaseProvider implements DatabaseService {

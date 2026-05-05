@@ -62,7 +62,6 @@ describe('Direct Client Testing', () => {
   });
 
   it('returns Claude-formatted tools', async () => {
-    const { connectClaude } = await import('@frontmcp/sdk');
     const client = await connectClaude(TestServerConfig);
 
     const tools = await client.listTools();

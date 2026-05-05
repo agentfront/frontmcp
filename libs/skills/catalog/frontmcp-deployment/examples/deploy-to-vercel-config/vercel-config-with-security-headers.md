@@ -2,12 +2,17 @@
 name: vercel-config-with-security-headers
 reference: deploy-to-vercel-config
 level: intermediate
-description: 'Add regions and response headers on top of the build-generated `vercel.json`.'
-tags: [deployment, vercel, security, config, headers]
+description: "The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build — but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory)."
+tags:
+  - deployment
+  - vercel
+  - security
+  - config
+  - headers
 features:
-  - 'Adding `regions` to constrain function placement'
-  - 'Adding global security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) via `headers`'
-  - 'Per-route `Cache-Control` for the health and MCP endpoints'
+  - Adding `regions` to constrain function placement (e.g., `iad1` for US East)
+  - 'Per-route `Cache-Control: no-store` on `/healthz` and `/mcp` to prevent caching'
+  - 'Global security headers applied to all routes via the catch-all `source: "/(.*)"`'
 ---
 
 # vercel.json with Regions and Security Headers

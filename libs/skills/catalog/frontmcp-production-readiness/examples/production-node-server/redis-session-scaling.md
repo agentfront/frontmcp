@@ -67,9 +67,9 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const ENV_VALIDATOR = Symbol('EnvValidator');
 
-// Providers do NOT have onInit/onDestroy lifecycle hooks.
-// Validate env in the constructor — first instantiation throws synchronously
-// on missing config and prevents the server from starting (fail fast).
+// Validate env in the constructor rather than a lifecycle hook — first
+// instantiation throws synchronously on missing config and prevents the
+// server from starting (fail fast). Providers don't expose onInit/onDestroy.
 @Provider({ token: ENV_VALIDATOR, scope: ProviderScope.GLOBAL })
 export class EnvValidationProvider {
   constructor() {

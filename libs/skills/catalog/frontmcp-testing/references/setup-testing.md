@@ -353,7 +353,7 @@ describe('Advanced E2E', () => {
 ### Testing with Authentication
 
 ```typescript
-import { expect, test, TestTokenFactory } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.use({
   server: './src/main.ts',

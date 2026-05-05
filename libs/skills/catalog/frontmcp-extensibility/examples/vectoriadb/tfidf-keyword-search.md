@@ -2,14 +2,20 @@
 name: tfidf-keyword-search
 reference: vectoriadb
 level: basic
-description: 'Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, concatenating fields into one text and calling `reindex()`.'
-tags: [extensibility, vectoriadb, keyword-search, tfidf, keyword, search]
+description: Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider. `TFIDFVectoria` indexes a single text string per document, so multi-field documents are concatenated into one searchable blob; the original fields are kept in `metadata` for use on search results.
+tags:
+  - extensibility
+  - vectoriadb
+  - keyword-search
+  - tfidf
+  - keyword
+  - search
 features:
-  - 'Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)'
-  - 'Calling `addDocument(id, text, metadata)` with a single concatenated text string'
-  - 'Calling `reindex()` after adding documents (required for TFIDFVectoria)'
-  - 'Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`'
-  - 'Injecting the provider into tools via `this.get(FAQSearchProvider)`'
+  - Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)
+  - Calling `addDocument(id, text, metadata)` with a single concatenated text string
+  - Calling `reindex()` after adding documents (required for TFIDFVectoria)
+  - Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`
+  - Injecting the provider into tools via `this.get(FAQSearchProvider)`
 ---
 
 # TFIDFVectoria: Lightweight Keyword Search Provider

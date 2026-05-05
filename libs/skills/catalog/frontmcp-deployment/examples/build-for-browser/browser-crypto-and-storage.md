@@ -2,12 +2,16 @@
 name: browser-crypto-and-storage
 reference: build-for-browser
 level: advanced
-description: 'Use `@frontmcp/utils` crypto functions (WebCrypto API) and a `DirectMcpServer` in browser environments.'
-tags: [deployment, browser, crypto, react]
+description: Use `@frontmcp/utils` crypto in the browser, and create the FrontMCP server with `create()` from `@frontmcp/sdk` so the React provider can consume it via the `server` prop.
+tags:
+  - deployment
+  - browser
+  - crypto
+  - react
 features:
-  - 'Using `@frontmcp/utils` for PKCE and hashing in the browser (backed by WebCrypto, not `node:crypto`)'
-  - 'Creating a `DirectMcpServer` with `create()` and passing it to `FrontMcpProvider` via `server={...}`'
-  - 'Using `useListTools` for the tools list (the real hook name)'
+  - Using `@frontmcp/utils` for PKCE and hashing in the browser (backed by WebCrypto, not `node:crypto`)
+  - Creating a `DirectMcpServer` with `create()` and passing it to `FrontMcpProvider` via `server={...}` (no `config={{ serverUrl }}`)
+  - Using `useListTools` (real hook) instead of the non-existent `useTools`
 ---
 
 # Browser-Safe Crypto and Storage
@@ -43,6 +47,10 @@ export { startPkceFlow, hashToken };
 
 ```typescript
 // src/server.ts — in-memory DirectMcpServer for the React app.
+//
+// NOTE: this file uses top-level `await`, which requires ES2022 module support.
+// The browser build target (target: "es2022", module: "esnext") emits the bundle
+// as an ES module so top-level await is preserved end-to-end.
 import { create, tool, z } from '@frontmcp/sdk';
 
 export const server = await create({

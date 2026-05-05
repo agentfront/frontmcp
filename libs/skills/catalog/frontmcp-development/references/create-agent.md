@@ -87,7 +87,7 @@ class CodeReviewerAgent extends AgentContext {
 - `this.mark(stage)` -- set the active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
 - `this.notify(message, level?)` -- send a log-level notification to the client
-- `this.respondProgress(value, total?)` -- send a progress notification to the client
+- `this.progress(progress, total?, message?)` -- send a progress notification to the client
 
 **Properties:**
 
@@ -364,7 +364,7 @@ class CodeAuditorAgent extends AgentContext {}
 
 ## Swarm Configuration
 
-Swarm mode lets agents discover and call each other at runtime. The framework registers visible peers as callable tools (`use-agent:<name>`) on the orchestrator's LLM, so the LLM itself decides when to delegate -- there is no declarative routing table.
+Swarm mode lets agents discover and call each other at runtime. The framework registers visible peers as callable tools (`use-agent:<id>`) on the orchestrator's LLM, so the LLM itself decides when to delegate -- there is no declarative routing table.
 
 ### SwarmConfig Fields
 
@@ -372,7 +372,7 @@ Swarm mode lets agents discover and call each other at runtime. The framework re
 | ------------------- | ---------- | ------- | ------------------------------------------------------------------------------------ |
 | `canSeeOtherAgents` | `boolean`  | `false` | If `true`, this agent can discover and call other agents in the same scope           |
 | `visibleAgents`     | `string[]` | --      | Whitelist of agent IDs this agent is allowed to see (when `canSeeOtherAgents: true`) |
-| `isVisible`         | `boolean`  | `true`  | If `false`, this agent is hidden from peers (cannot be called as `use-agent:<name>`) |
+| `isVisible`         | `boolean`  | `true`  | If `false`, this agent is hidden from peers (cannot be called as `use-agent:<id>`)   |
 | `maxCallDepth`      | `number`   | `3`     | Maximum nested agent-to-agent call depth (1-10)                                      |
 
 There is no `role`, `handoff`, or `condition` field -- routing is driven by the orchestrator's LLM choosing among the visible `use-agent:*` tools.
@@ -411,7 +411,7 @@ class BillingAgent extends AgentContext {}
 
 ### How Routing Works
 
-- When the orchestrator agent runs its LLM loop, every visible peer is exposed as a tool named `use-agent:<peerName>`.
+- When the orchestrator agent runs its LLM loop, every visible peer is exposed as a tool named `use-agent:<id>`.
 - The orchestrator's `systemInstructions` should describe when to call each peer; the LLM decides at runtime.
 - Peers do not need any swarm config to be callable -- they only need `isVisible: true` (the default).
 - Set `canSeeOtherAgents: false` (the default) on agents that should never be able to delegate.
@@ -602,7 +602,7 @@ class DocsAgent extends AgentContext {}
 - [ ] LLM adapter connects successfully to the configured provider
 - [ ] Inner tools are invoked correctly during the agent loop
 - [ ] `this.completion()` and `this.streamCompletion()` return valid responses
-- [ ] Visible peers appear as `use-agent:<name>` tools to the orchestrator agent
+- [ ] Visible peers appear as `use-agent:<id>` tools to the orchestrator agent
 
 ## Troubleshooting
 
@@ -616,11 +616,11 @@ class DocsAgent extends AgentContext {}
 
 ## Examples
 
-| Example                                                                            | Level        | Description                                                                                       |
-| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                         |
-| [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`. |
-| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized peers in a swarm so an orchestrator can call them as `use-agent:*` tools.   |
+| Example                                                                            | Level        | Description                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                                                                                                                                         |
+| [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`.                                                                                                                 |
+| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized agents into a swarm where an orchestrator can discover and call peers at runtime as `use-agent:<name>` tools. Routing is driven by the orchestrator's LLM, not a declarative handoff table. |
 
 > See all examples in [`examples/create-agent/`](../examples/create-agent/)
 

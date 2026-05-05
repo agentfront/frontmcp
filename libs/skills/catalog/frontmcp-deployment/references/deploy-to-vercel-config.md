@@ -60,10 +60,10 @@ If you need to change memory or maxDuration, configure them via the Vercel dashb
 
 ## Examples
 
-| Example                                                                                                             | Level        | Description                                                             |
-| ------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
-| [`minimal-vercel-config`](../examples/deploy-to-vercel-config/minimal-vercel-config.md)                             | Basic        | The minimal `vercel.json` written by `frontmcp build --target vercel`.  |
-| [`vercel-config-with-security-headers`](../examples/deploy-to-vercel-config/vercel-config-with-security-headers.md) | Intermediate | Adding regions and headers on top of the build-generated `vercel.json`. |
+| Example                                                                                                             | Level        | Description                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`minimal-vercel-config`](../examples/deploy-to-vercel-config/minimal-vercel-config.md)                             | Basic        | `frontmcp build --target vercel` writes this minimal `vercel.json` for you. The package manager is detected from your lockfile.                                                                                                                                                                         |
+| [`vercel-config-with-security-headers`](../examples/deploy-to-vercel-config/vercel-config-with-security-headers.md) | Intermediate | The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build — but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory). |
 
 > See all examples in [`examples/deploy-to-vercel-config/`](../examples/deploy-to-vercel-config/)
 

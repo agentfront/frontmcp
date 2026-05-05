@@ -58,7 +58,14 @@ export class WhatsAppChannel extends ChannelContext {
       headers: Record<string, string | string[] | undefined>;
     };
 
-    // 1. Verify webhook signature before trusting anything in the payload
+    // 1. Verify webhook signature before trusting anything in the payload.
+    //
+    // NOTE: Meta's X-Hub-Signature-256 is computed over the EXACT raw HTTP body bytes.
+    // FrontMCP's `WebhookPayload.body` is the parsed JSON, so re-serializing here is
+    // approximate — re-stringification can mismatch when Meta's payload contains
+    // characters Meta encoded as `\uXXXX` escapes. For production, capture the raw
+    // body with a transport-level middleware (e.g. an Express `verify` hook on
+    // `express.json()`) and pass that string into `verifyWhatsAppSignature` instead.
     const sigHeader = headers['x-hub-signature-256'];
     const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
     const appSecret = process.env['WHATSAPP_APP_SECRET'];

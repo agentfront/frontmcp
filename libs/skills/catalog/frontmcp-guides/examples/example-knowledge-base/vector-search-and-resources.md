@@ -2,14 +2,20 @@
 name: vector-search-and-resources
 reference: example-knowledge-base
 level: intermediate
-description: 'Shows a semantic search tool that delegates embedding generation to VectoriaDB, plus a resource template for retrieving documents by ID using URI parameters.'
-tags: [guides, vectoriadb, semantic-search, knowledge-base, knowledge, base]
+description: Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.
+tags:
+  - guides
+  - vectoriadb
+  - semantic-search
+  - knowledge-base
+  - knowledge
+  - base
 features:
-  - 'Semantic search tool that delegates embedding generation to VectoriaDB via `store.search(query, topK)`'
-  - 'Using `this.mark()` for execution phase tracing'
+  - Semantic search tool that delegates embedding generation to VectoriaDB via `store.search(query, topK)`
+  - Using `this.mark()` for execution phase tracing
   - "Resource template with `uriTemplate: 'kb://documents/{documentId}'` for parameterized URIs"
   - 'Typed params via `ResourceContext<{ documentId: string }>` for type-safe URI parameters'
-  - 'Returning `ReadResourceResult` with proper MCP protocol structure'
+  - Returning `ReadResourceResult` with proper MCP protocol structure
 ---
 
 # Knowledge Base: Semantic Search Tool and Resource Template

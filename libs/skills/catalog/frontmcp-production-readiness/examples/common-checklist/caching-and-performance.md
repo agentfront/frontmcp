@@ -2,13 +2,20 @@
 name: caching-and-performance
 reference: common-checklist
 level: advanced
-description: 'Shows how to configure caching with the real CachePlugin API, optimize responses, and manage connection-pool resources.'
-tags: [production, redis, cache, session, performance, checklist]
+description: Shows how to configure caching with the real `CachePlugin.init(...)` API and how to size connection pools so the server does not exhaust downstream resources.
+tags:
+  - production
+  - redis
+  - cache
+  - session
+  - performance
+  - checklist
 features:
-  - 'Using the real `CachePlugin.init({ type, defaultTTL, toolPatterns })` shape'
-  - 'Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata'
-  - 'Using Redis-backed cache for multi-instance consistency'
-  - 'Configuring connection pool limits and timeouts to prevent resource exhaustion'
+  - 'Using the real `CachePlugin.init({ type, defaultTTL, toolPatterns })` shape (NOT `new CachePlugin({ ttl: { ... } })`)'
+  - 'Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds'
+  - Using Redis-backed cache for multi-instance consistency
+  - Configuring connection pool limits and timeouts to prevent resource exhaustion
+  - Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup
 ---
 
 # Caching and Performance Configuration

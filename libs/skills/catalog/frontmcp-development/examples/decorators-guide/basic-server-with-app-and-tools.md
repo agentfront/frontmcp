@@ -70,9 +70,11 @@ import { Prompt, PromptContext } from '@frontmcp/sdk';
 })
 class CodeReviewPrompt extends PromptContext {
   // Prompt arguments arrive as Record<string, string> — coerce to other types as needed.
+  // Required-arg validation is performed before `execute()` is called, so `args.code`
+  // is guaranteed present here. The `language` fallback handles the optional arg.
   async execute(args: Record<string, string>) {
-    const code = args.code ?? '';
-    const language = args.language ?? '';
+    const code = args.code;
+    const language = args.language ?? 'unknown';
     return {
       messages: [
         {

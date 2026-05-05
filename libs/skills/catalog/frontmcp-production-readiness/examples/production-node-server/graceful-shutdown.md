@@ -2,13 +2,19 @@
 name: graceful-shutdown
 reference: production-node-server
 level: intermediate
-description: 'Shows how the framework handles SIGTERM by default and how to add a load-balancer drain signal on top of it without conflicting with the framework lifecycle.'
-tags: [production, redis, database, node, graceful, shutdown]
+description: Shows how to expose load-balancer drain state without overriding the FrontMCP framework's built-in SIGTERM / SIGINT graceful shutdown.
+tags:
+  - production
+  - redis
+  - database
+  - node
+  - graceful
+  - shutdown
 features:
-  - 'Framework already wires SIGTERM/SIGINT → `scope.shutdown()` + `mcpServer.close()`'
-  - 'Track shutdown state via a `beforeExit` listener so `/healthz` flips unhealthy first'
-  - 'Use `server.dispose()` (real method) — `server.close()` does not exist on FrontMcpServerInstance'
-  - 'Do NOT install duplicate SIGTERM handlers that call `process.exit(0)` — they race the framework'
+  - The framework already handles SIGTERM/SIGINT — never call `server.close()` (no such method) or `process.exit()` on top of it
+  - Use `server.dispose()` if you need explicit cleanup in non-server (SDK) contexts
+  - Add a _drain probe_ on `/healthz` so load balancers stop sending traffic during the framework's drain window
+  - "Avoid handler conflicts: registering a second SIGTERM that calls `process.exit(0)` races the framework's own exit path"
 ---
 
 # Graceful Shutdown with SIGTERM Handling

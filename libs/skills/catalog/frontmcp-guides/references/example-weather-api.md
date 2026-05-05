@@ -137,7 +137,7 @@ const SUPPORTED_CITIES = ['London', 'Tokyo', 'New York', 'Paris', 'Sydney', 'Ber
   mimeType: 'application/json',
 })
 export class CitiesResource extends ResourceContext {
-  async execute(uri: string): Promise<ReadResourceResult> {
+  async execute(uri: string, _params: Record<string, string>): Promise<ReadResourceResult> {
     return {
       contents: [
         {

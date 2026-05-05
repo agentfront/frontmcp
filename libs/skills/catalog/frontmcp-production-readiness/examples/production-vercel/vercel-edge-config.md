@@ -2,13 +2,19 @@
 name: vercel-edge-config
 reference: production-vercel
 level: basic
-description: 'Production-readiness checklist for Vercel deployment — verifies the build adapter produced the correct Build Output API v3 layout and that Vercel KV is wired for shared state.'
-tags: [production, vercel-kv, vercel, session, serverless, checklist]
+description: '> Configuration authoring lives in **`frontmcp-deployment` → `references/deploy-to-vercel.md`**. This file is checklist-only: it verifies the artifact produced by `frontmcp build --target vercel` is production-ready.'
+tags:
+  - production
+  - vercel-kv
+  - vercel
+  - session
+  - serverless
+  - checklist
 features:
-  - 'Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`'
-  - 'No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3'
+  - Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`
+  - No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3
   - "Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state"
-  - 'Verify CORS origins include `VERCEL_URL` and any custom production domain'
+  - Verify CORS origins include `VERCEL_URL` and any custom production domain
 ---
 
 # Vercel Deployment: Production-Readiness Checklist
@@ -20,7 +26,7 @@ features:
 - [ ] `frontmcp build --target vercel` completed without warnings
 - [ ] `.vercel/output/config.json` exists (Build Output API v3 — `version: 3`)
 - [ ] `.vercel/output/functions/index.func/handler.cjs` exists — this is the actual function bundle
-- [ ] `.vercel/output/functions/index.func/.vc-config.json` declares `runtime: nodejs20.x` (or as required) and `handler: "handler.cjs"`
+- [ ] `.vercel/output/functions/index.func/.vc-config.json` declares `runtime: nodejs24.x` (the default written by the build adapter) and `handler: "handler.cjs"`
 - [ ] No hand-written `vercel.json` with the obsolete `{ "builds": [...], "routes": [...] }` shape — modern adapter emits `{ "version": 2, "buildCommand": ..., "installCommand": ... }` and routes through Build Output API
 - [ ] No hand-written `src/lambda.ts` / `api/mcp.ts` with a fictional `createVercelHandler(...)` import — the build adapter generates `index.js` that requires your decorated `@FrontMcp` class
 
@@ -48,6 +54,13 @@ features:
 - [ ] Preview deployment exercises the full MCP flow (init → `tools/list` → `tools/call`)
 - [ ] `vercel --prod` deploy succeeds and the function appears in the dashboard
 - [ ] Function logs show no warnings on cold start
+
+## What This Demonstrates
+
+- Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`
+- No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3
+- Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state
+- Verify CORS origins include `VERCEL_URL` and any custom production domain
 
 ## Related
 

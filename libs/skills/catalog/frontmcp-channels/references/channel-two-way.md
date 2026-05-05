@@ -124,6 +124,11 @@ function verifyWhatsAppSignature(rawBody: string, header: string | undefined, ap
 }
 
 // In onEvent:
+//
+// NOTE: WebhookPayload.body is the parsed JSON. For maximum signature fidelity
+// (Meta computes X-Hub-Signature-256 over the exact raw bytes), capture the raw
+// body in a transport-level middleware (e.g. express.json `verify` hook) and
+// pass that string to `verifyWhatsAppSignature` instead of `JSON.stringify(body)`.
 const { body, headers } = payload as { body: unknown; headers: Record<string, string | string[] | undefined> };
 const sig = headers['x-hub-signature-256'];
 if (

@@ -2,15 +2,21 @@
 name: multi-app-with-plugins-and-providers
 reference: decorators-guide
 level: intermediate
-description: 'Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency injection, and a `@Plugin` for cross-cutting concerns.'
-tags: [development, database, multi-app, decorators, multi, app]
+description: Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency injection, and a `@Plugin` for cross-cutting concerns.
+tags:
+  - development
+  - database
+  - multi-app
+  - decorators
+  - multi
+  - app
 features:
-  - 'Organizing a server into multiple `@App` modules (`analytics` and `admin`)'
-  - 'Decorating a service class with `@Provider` so it acts as its own DI token'
-  - 'Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources'
-  - 'Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources'
-  - 'Registering a `@Plugin` at the server level so it applies across all apps'
-  - 'Global plugins go in `@FrontMcp({ plugins })`, app-scoped providers go in `@App({ providers })`'
+  - Organizing a server into multiple `@App` modules (`analytics` and `admin`)
+  - Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` — use `AsyncProvider` for those)
+  - Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources
+  - Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources
+  - Registering a `@Plugin` at the server level so it applies across all apps
+  - Global plugins go in `@FrontMcp({ plugins })`, app-scoped providers go in `@App({ providers })`
 ---
 
 # Multi-App Server with Plugins and Providers

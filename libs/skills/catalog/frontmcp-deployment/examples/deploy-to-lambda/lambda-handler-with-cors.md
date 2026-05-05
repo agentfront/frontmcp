@@ -2,12 +2,16 @@
 name: lambda-handler-with-cors
 reference: deploy-to-lambda
 level: intermediate
-description: 'Use the auto-generated `dist/lambda/handler.cjs` with an explicit API Gateway HTTP API definition for CORS support.'
-tags: [deployment, lambda, handler, cors]
+description: CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.
+tags:
+  - deployment
+  - lambda
+  - handler
+  - cors
 features:
-  - 'Defining an explicit `AWS::Serverless::HttpApi` resource with a `CorsConfiguration` block'
+  - Configuring CORS at the API Gateway HTTP API layer (not the handler) via `CorsConfiguration`
   - 'Linking the function events to the explicit API via `ApiId: !Ref`'
-  - 'Pointing SAM `CodeUri` at `dist/lambda/` so the auto-generated `handler.cjs` is uploaded'
+  - Pointing SAM `CodeUri` at `dist/lambda/` so the auto-generated `handler.cjs` is uploaded
 ---
 
 # Lambda Handler with CORS and API Gateway

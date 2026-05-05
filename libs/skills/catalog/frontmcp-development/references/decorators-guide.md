@@ -744,7 +744,7 @@ class AuditHooks {
 
 - [ ] Tool classes extend `ToolContext` and implement `execute()`
 - [ ] Prompt classes extend `PromptContext` and implement `execute()`
-- [ ] Resource classes extend `ResourceContext` and implement `execute(uri, params)`
+- [ ] Resource classes extend `ResourceContext` and implement `execute(uri)` (static `@Resource`) or `execute(uri, params)` (template-style `@ResourceTemplate`)
 - [ ] Agent classes extend `AgentContext` and implement `execute()`
 - [ ] Job classes extend `JobContext` and implement `execute()`
 

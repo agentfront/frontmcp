@@ -380,7 +380,7 @@ class AdminProceduresSkill extends SkillContext {}
 Add skill classes (or function-style skills) to the `skills` array in `@FrontMcp` or `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'standards-app',
@@ -472,7 +472,7 @@ The class generator creates the skill file, spec file, and updates barrel export
 ## Complete Example: Project Onboarding Skill
 
 ```typescript
-import { Skill, SkillContext, FrontMcp, App, skill, skillDir } from '@frontmcp/sdk';
+import { App, FrontMcp, Skill, skill, SkillContext, skillDir } from '@frontmcp/sdk';
 
 // Class-based instruction-only skill
 @Skill({

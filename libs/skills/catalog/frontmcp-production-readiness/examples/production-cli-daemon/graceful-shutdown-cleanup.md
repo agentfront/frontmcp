@@ -2,14 +2,21 @@
 name: graceful-shutdown-cleanup
 reference: production-cli-daemon
 level: intermediate
-description: 'Shows daemon-specific shutdown cleanup (socket file, PID file) layered on top of the framework-managed SIGTERM/SIGINT handlers.'
-tags: [production, unix-socket, cli, database, daemon, graceful]
+description: Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.
+tags:
+  - production
+  - unix-socket
+  - cli
+  - database
+  - daemon
+  - graceful
 features:
-  - 'Framework already wires SIGTERM/SIGINT — do not duplicate'
-  - 'Use `server.dispose()` (NOT `server.close()` — that method does not exist)'
-  - 'Removing the Unix socket file to prevent stale `.sock` files on restart'
-  - 'Cleaning up the PID file on shutdown'
-  - 'Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations'
+  - The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`
+  - Using `server.dispose()` (the only real method) instead of fictional `server.close()`
+  - Removing the Unix socket file to prevent stale `.sock` files on restart
+  - Cleaning up the PID file on shutdown
+  - Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations
+  - Providers initialize in the constructor — there is no `onInit` / `onDestroy`
 ---
 
 # Daemon Graceful Shutdown with Socket Cleanup
@@ -58,32 +65,39 @@ export function setupDaemonSideEffectCleanup(): void {
 // src/providers/sqlite-store.provider.ts
 import { dirname } from 'path';
 
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 import { ensureDir } from '@frontmcp/utils';
 
 export const LOCAL_STORE = Symbol('LocalStore');
 
-// Providers do NOT have onInit/onDestroy lifecycle hooks.
-// Initialize in the constructor; resource cleanup happens via the
-// framework-managed scope.shutdown() path.
-@Provider({ token: LOCAL_STORE, scope: ProviderScope.GLOBAL })
+// Providers do NOT have onInit/onDestroy lifecycle hooks. Anything async
+// at construction time goes through `AsyncProvider({ useFactory })` so the
+// dir is guaranteed to exist before the database is opened.
 export class SqliteStoreProvider {
-  private readonly db: { close: () => void; exec: (sql: string) => void };
-
-  constructor() {
-    const dbPath = process.env.DB_PATH ?? `${process.env.HOME}/.config/my-daemon/data.db`;
-    // ensureDir is sync-safe to call here if you accept a top-level await
-    // in your bootstrap, otherwise inline-await in an async factory.
-    void ensureDir(dirname(dbPath));
-    this.db = this.openDatabase(dbPath);
-    this.db.exec('PRAGMA journal_mode=WAL');
-  }
-
-  private openDatabase(path: string) {
-    // Replace with your SQLite driver (e.g., better-sqlite3)
-    throw new Error('Implement with your SQLite driver');
-  }
+  constructor(private readonly db: { close: () => void; exec: (sql: string) => void }) {}
 }
+
+function openDatabase(path: string): { close: () => void; exec: (sql: string) => void } {
+  // Replace with your SQLite driver (e.g., better-sqlite3)
+  throw new Error('Implement with your SQLite driver');
+}
+
+// Async factory binding — `useFactory` runs once at boot and waits for
+// `ensureDir` before opening the database, eliminating the race that
+// `void ensureDir(...)` in a sync constructor would create.
+export const sqliteStoreProvider = AsyncProvider({
+  provide: LOCAL_STORE,
+  name: 'SqliteStoreProvider',
+  scope: ProviderScope.GLOBAL,
+  inject: () => [] as const,
+  useFactory: async () => {
+    const dbPath = process.env.DB_PATH ?? `${process.env.HOME}/.config/my-daemon/data.db`;
+    await ensureDir(dirname(dbPath));
+    const db = openDatabase(dbPath);
+    db.exec('PRAGMA journal_mode=WAL');
+    return new SqliteStoreProvider(db);
+  },
+});
 ```
 
 ## What This Demonstrates

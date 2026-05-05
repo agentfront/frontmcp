@@ -2,12 +2,17 @@
 name: vercel-with-skills-cache
 reference: deploy-to-vercel
 level: intermediate
-description: 'Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.'
-tags: [deployment, vercel-kv, vercel, cache, skills]
+description: Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.
+tags:
+  - deployment
+  - vercel-kv
+  - vercel
+  - cache
+  - skills
 features:
-  - 'Enabling skills cache backed by Vercel KV with a 60-second TTL'
-  - 'Setting environment variables via `vercel env add` instead of hardcoding in source'
-  - 'Letting `frontmcp build --target vercel` emit the Build Output API v3 structure'
+  - Enabling skills cache backed by Vercel KV with a 60-second TTL
+  - Setting environment variables via `vercel env add` instead of hardcoding in source
+  - Letting the CLI emit the Build Output API v3 structure rather than hand-authoring `api/frontmcp.ts`
 ---
 
 # Vercel Deployment with Skills Cache

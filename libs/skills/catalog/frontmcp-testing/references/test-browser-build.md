@@ -37,7 +37,7 @@ describe('Browser Build', () => {
 ## Testing with Playwright (.pw.spec.ts)
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test('browser MCP client loads tools', async ({ page }) => {
   await page.goto('http://localhost:3000');

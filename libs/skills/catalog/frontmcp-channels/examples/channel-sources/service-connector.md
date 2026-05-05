@@ -30,7 +30,7 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
   },
 })
 export class SendWhatsAppTool extends ToolContext {
-  async execute(input) {
+  async execute(input: { to: string; text: string }) {
     const token = process.env['WHATSAPP_TOKEN']!;
     const phoneId = process.env['WHATSAPP_PHONE_ID']!;
 

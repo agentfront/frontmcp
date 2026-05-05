@@ -521,10 +521,10 @@ describe('Task Manager E2E', () => {
 
 ## Examples
 
-| Example                                                                                  | Level        | Description                                                                                                                                   |
-| ---------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`auth-and-crud-tools`](../examples/example-task-manager/auth-and-crud-tools.md)         | Basic        | Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` for user isolation and `this.get()` for dependency injection. |
-| [`authenticated-e2e-tests`](../examples/example-task-manager/authenticated-e2e-tests.md) | Advanced     | Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.             |
-| [`redis-provider-with-di`](../examples/example-task-manager/redis-provider-with-di.md)   | Intermediate | Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.                 |
+| Example                                                                                  | Level        | Description                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`auth-and-crud-tools`](../examples/example-task-manager/auth-and-crud-tools.md)         | Basic        | Shows how to create CRUD tools with authentication, using `this.auth?.user.sub` (the FrontMcpAuthContext exposed on every execution context) for user isolation and `this.get()` for dependency injection. |
+| [`authenticated-e2e-tests`](../examples/example-task-manager/authenticated-e2e-tests.md) | Advanced     | Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.                                                                          |
+| [`redis-provider-with-di`](../examples/example-task-manager/redis-provider-with-di.md)   | Intermediate | Shows how to create a Redis-backed provider using the class-as-token DI pattern (`@Provider({ name, scope })`) plus an `AsyncProvider` factory that runs the async Redis setup before any tool is invoked. |
 
 > See all examples in [`examples/example-task-manager/`](../examples/example-task-manager/)

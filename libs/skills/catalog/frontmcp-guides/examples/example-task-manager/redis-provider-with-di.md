@@ -2,14 +2,20 @@
 name: redis-provider-with-di
 reference: example-task-manager
 level: intermediate
-description: 'Shows how to create a Redis-backed provider using class-as-token DI plus an `AsyncProvider` factory for async setup, with `onDestroy()` cleanup, and how tools inject it.'
-tags: [guides, redis, node, task-manager, task, manager]
+description: Shows how to create a Redis-backed provider using the class-as-token DI pattern (`@Provider({ name, scope })`) plus an `AsyncProvider` factory that runs the async Redis setup before any tool is invoked.
+tags:
+  - guides
+  - redis
+  - node
+  - task-manager
+  - task
+  - manager
 features:
   - 'Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`'
-  - 'Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup'
+  - Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup
   - 'Lifecycle: `onDestroy()` for graceful Redis cleanup on shutdown'
-  - 'Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`'
-  - 'Per-user data isolation using Redis hash keys (`tasks:${userId}`)'
+  - Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`
+  - Per-user data isolation using Redis hash keys (`tasks:${userId}`)
 ---
 
 # Task Manager: Redis Provider with Dependency Injection
