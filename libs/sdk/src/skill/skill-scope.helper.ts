@@ -68,7 +68,7 @@ export interface SkillScopeRegistrationOptions {
  * ```
  */
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
-  const { skillRegistry, flowRegistry, resourceRegistry, skillsConfig, logger } = options;
+  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
 
   // Early exit if no skills registered
   if (!skillRegistry.hasAny()) {

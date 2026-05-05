@@ -5,21 +5,34 @@
  */
 
 import type {
-  ServerCapabilities,
-  Implementation,
   ClientCapabilities,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListResourceTemplatesResult,
-  ListPromptsResult,
-  GetPromptResult,
   CompleteResult,
+  GetPromptResult,
+  Implementation,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
   LoggingLevel,
+  ReadResourceResult,
+  ServerCapabilities,
 } from '@frontmcp/protocol';
-import type { FormattedTools, FormattedToolResult } from './llm-platform';
+
+import type { FormattedToolResult, FormattedTools } from './llm-platform';
 
 // Re-export platform-specific types for convenience
 export type { FormattedTools, FormattedToolResult };
+
+/**
+ * SEP-2640 (`skill://index.json`) discovery entry. Mirrors
+ * `SkillIndexEntry` from `@frontmcp/sdk/skill/sep-2640` but copied here
+ * to keep the public client surface free of internal module imports.
+ */
+export interface Sep2640IndexEntry {
+  type: 'skill-md' | 'mcp-resource-template' | 'archive';
+  name?: string;
+  description: string;
+  url: string;
+}
 
 /**
  * Supported LLM platforms for tool/result formatting.
@@ -561,6 +574,37 @@ export interface DirectClient {
    * @returns Paginated list of skills
    */
   listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult>;
+
+  /**
+   * SEP-2640 convenience wrapper: read the well-known
+   * `skill://index.json` discovery document and return the parsed entries.
+   *
+   * Implementations of MCP SEP-2640 (Skills Extension) expose a discovery
+   * index at `skill://index.json` whose shape follows the
+   * [agentskills.io discovery RFC v0.2.0]
+   * (https://schemas.agentskills.io/discovery/0.2.0/schema.json). This
+   * helper performs the `resources/read` call, validates the schema URI,
+   * and returns the parsed `skills` array.
+   *
+   * Per SEP-2640 §Discovery, hosts MUST NOT treat an absent or empty
+   * index as proof a server has no skills — the index is optional.
+   * Returns an empty array (and warns via console) if the resource isn't
+   * present rather than throwing.
+   *
+   * @returns Parsed list of `SkillIndexEntry` objects
+   */
+  listSep2640Skills(): Promise<Sep2640IndexEntry[]>;
+
+  /**
+   * SEP-2640 convenience wrapper: read a `skill://` resource by URI and
+   * return its text content. Equivalent to calling `readResource(uri)`
+   * but typed for skill resources and validates the scheme.
+   *
+   * @param uri - A `skill://` URI (e.g. `skill://review-pr/SKILL.md`)
+   * @returns The raw text content (frontmatter + body for SKILL.md)
+   * @throws if the URI is not a `skill://` URI
+   */
+  readSkillUri(uri: string): Promise<string>;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Elicitation Operations
