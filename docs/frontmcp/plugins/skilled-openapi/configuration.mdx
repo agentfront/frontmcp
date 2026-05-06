@@ -3,6 +3,7 @@ title: Configuration
 sidebarTitle: Configuration
 description: Every plugin option, default value, and the env vars worth wiring through.
 icon: gear
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'configuration', 'typescript']
 ---
 
 The plugin's options are validated by Zod at construction time — invalid input throws synchronously rather than crashing later inside the bundle source. The full schema lives in [`src/skilled-openapi.types.ts`](https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-skilled-openapi/src/skilled-openapi.types.ts) and is exported as `skilledOpenApiPluginOptionsSchema` for downstream tooling.
@@ -84,7 +85,7 @@ import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
           publicKeyPem: process.env.FRONTMCP_BUNDLE_PUBKEY!,
         },
       ],
-      bundleCacheDir: '/var/cache/frontmcp/skilled-openapi',
+      bundleCacheDir: '/var/cache/skilled-openapi',
       // outbound defaults are production-safe; tune maxConcurrencyPerHost only if needed
     }),
   ],

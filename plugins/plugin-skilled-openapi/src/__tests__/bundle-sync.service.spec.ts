@@ -77,7 +77,7 @@ describe('BundleSyncService', () => {
       fakeReg as unknown as SkillRegistryInterface,
       hiddenOps,
       store,
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
 
@@ -100,7 +100,7 @@ describe('BundleSyncService', () => {
       fakeReg as unknown as SkillRegistryInterface,
       new HiddenOpRegistry(),
       new BundleStore(),
-      { requireSignature: true, trustedKeys: [] },
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
     const result = await sync.apply(buildBundle());
@@ -117,7 +117,7 @@ describe('BundleSyncService', () => {
       fakeReg as unknown as SkillRegistryInterface,
       hiddenOps,
       store,
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
 
@@ -140,7 +140,7 @@ describe('BundleSyncService', () => {
       fakeReg as unknown as SkillRegistryInterface,
       hiddenOps,
       store,
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
 
@@ -184,7 +184,7 @@ describe('BundleSyncService', () => {
       registry as SkillRegistryInterface,
       hiddenOps,
       store,
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
 
@@ -246,7 +246,7 @@ describe('BundleSyncService', () => {
       fakeReg as unknown as SkillRegistryInterface,
       hiddenOps,
       new BundleStore(),
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       fakeLogger,
     );
 
@@ -273,6 +273,7 @@ describe('BundleSyncService', () => {
           pathTemplate: '/v1/invoices/{id}/void',
           inputSchema: {},
           outputSchema: {},
+          mapper: [],
           authBindingRef: 'def',
         },
       },
@@ -286,13 +287,13 @@ describe('BundleSyncService', () => {
     it('short-circuits with applied:false when pinned to a different version', async () => {
       const fakeReg = new FakeRegistry();
       const store = new BundleStore();
-      store.commit(buildBundle({ version: '7' }));
+      store.swap(buildBundle({ version: '7' }));
       store.pin('7');
       const sync = new BundleSyncService(
         fakeReg as unknown as SkillRegistryInterface,
         new HiddenOpRegistry(),
         store,
-        { requireSignature: false, trustedKeys: [] },
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
         fakeLogger,
       );
       const result = await sync.apply(buildBundle({ version: '8' }));
@@ -304,13 +305,13 @@ describe('BundleSyncService', () => {
     it('short-circuits with applied:false when pinned to the same version (would otherwise throw)', async () => {
       const fakeReg = new FakeRegistry();
       const store = new BundleStore();
-      store.commit(buildBundle({ version: '7' }));
+      store.swap(buildBundle({ version: '7' }));
       store.pin('7');
       const sync = new BundleSyncService(
         fakeReg as unknown as SkillRegistryInterface,
         new HiddenOpRegistry(),
         store,
-        { requireSignature: false, trustedKeys: [] },
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
         fakeLogger,
       );
       const result = await sync.apply(buildBundle({ version: '7' }));
@@ -326,7 +327,7 @@ describe('BundleSyncService', () => {
         fakeReg as unknown as SkillRegistryInterface,
         new HiddenOpRegistry(),
         new BundleStore(),
-        { requireSignature: false, trustedKeys: [] },
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
         fakeLogger,
       );
       const bundle = buildBundle();
@@ -343,7 +344,7 @@ describe('BundleSyncService', () => {
         fakeReg as unknown as SkillRegistryInterface,
         new HiddenOpRegistry(),
         new BundleStore(),
-        { requireSignature: false, trustedKeys: [] },
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
         fakeLogger,
       );
       const bundle = buildBundle();
@@ -359,7 +360,7 @@ describe('BundleSyncService', () => {
         fakeReg as unknown as SkillRegistryInterface,
         new HiddenOpRegistry(),
         new BundleStore(),
-        { requireSignature: false, trustedKeys: [] },
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
         fakeLogger,
       );
       const bundle = buildBundle();
@@ -525,7 +526,7 @@ describe('BundleSyncService', () => {
       registry as SkillRegistryInterface,
       new HiddenOpRegistry(),
       new BundleStore(),
-      { requireSignature: false, trustedKeys: [] },
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
       localLogger,
     );
 
