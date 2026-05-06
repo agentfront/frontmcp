@@ -3,6 +3,7 @@ title: Bundle Format
 sidebarTitle: Bundle Format
 description: The wire format the plugin consumes — services, authBindings, skills, operations, signature envelope. OpenAPI Overlay-aligned.
 icon: file-code
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'bundle', 'format', 'typescript']
 ---
 
 A skill bundle is the contract between whatever produced it (your CI, a SaaS analyzer, a hand-crafted JSON file) and the FrontMCP server that consumes it. The plugin validates every bundle with a strict Zod schema and cross-references service IDs, authBinding refs, and operation IDs before any skill is registered.
