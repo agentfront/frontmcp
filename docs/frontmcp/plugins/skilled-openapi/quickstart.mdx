@@ -205,7 +205,7 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
 
 ## What you just did
 
-You ran the same flow the [e2e suite](https://github.com/agentfront/tree/main/apps/e2e/demo-e2e-skilled-openapi) tests on every commit:
+You ran the same flow the [e2e suite](https://github.com/agentfront/frontmcp/tree/main/apps/e2e/demo-e2e-skilled-openapi) tests on every commit:
 
 1. The plugin parsed your bundle, validated it against the strict Zod schema, and registered the `invoices` skill into `scope.skills` via `SkillRegistry.registerSkillContent()`.
 2. It populated a plugin-private `HiddenOpRegistry` with the three operation descriptors, keyed by `(skillId, actionId)`. These never touch `scope.tools`, so they can't leak into `tools/list`.
