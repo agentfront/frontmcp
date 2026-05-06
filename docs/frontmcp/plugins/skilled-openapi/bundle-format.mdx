@@ -3,6 +3,7 @@ title: Bundle Format
 sidebarTitle: Bundle Format
 description: The wire format the plugin consumes — services, authBindings, skills, operations, signature envelope. OpenAPI Overlay-aligned.
 icon: file-code
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'bundle', 'format', 'typescript']
 ---
 
 A skill bundle is the contract between whatever produced it (your CI, a SaaS analyzer, a hand-crafted JSON file) and the FrontMCP server that consumes it. The plugin validates every bundle with a strict Zod schema and cross-references service IDs, authBinding refs, and operation IDs before any skill is registered.
@@ -144,7 +145,7 @@ A bundle that fails any of these rejects with a structured error containing the 
 
 ## Worked example
 
-The full e2e fixture bundle lives at [`apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json`](https://github.com/agentfront/frontmcp/blob/main/apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json) — a single `invoices` skill bundling three operations against a `billing` service, plus a `guarded` skill demonstrating the ABAC denial path. Use it as a starting point and adapt to your API.
+The full e2e fixture bundle lives at [`apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json`](https://github.com/agentfront/blob/main/apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json) — a single `invoices` skill bundling three operations against a `billing` service, plus a `guarded` skill demonstrating the ABAC denial path. Use it as a starting point and adapt to your API.
 
 ## Multi-service bundles
 

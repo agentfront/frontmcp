@@ -11,6 +11,10 @@ When you need to implement something, **read the matching skill first** — it c
 
 <!-- frontmcp:skills-end -->
 
+# Documentation Site Layout
+
+The Mintlify docs in `docs/` are part of the **agentfront.dev aggregator site**, which serves multiple projects. **All FrontMCP pages live under `docs/frontmcp/`** and ship at `https://docs.agentfront.dev/frontmcp/...`. Never flatten `docs/frontmcp/*` into `docs/*`, never drop the `frontmcp/` prefix from `docs/docs.json` page references, and keep internal MDX links prefixed (e.g. `/frontmcp/servers/tools`, not `/servers/tools`). The canonical URL in `docs/docs.json` must point to `https://docs.agentfront.dev/frontmcp`.
+
 # FrontMCP Monorepo - Development Guide
 
 ## Repository Structure

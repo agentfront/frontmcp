@@ -3,6 +3,7 @@ title: Background Tasks
 slug: features/background-tasks
 icon: clock
 description: Durable, pollable state machines for long-running tool calls (MCP 2025-11-25 tasks spec)
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'features', 'framework', 'background tasks', 'jobs', 'typescript']
 ---
 
 FrontMCP implements the [MCP 2025-11-25 tasks spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) so clients can invoke long-running tools as **durable, requestor-polled tasks** instead of holding a request open for minutes. The client adds a `task` field to `tools/call`, gets back a `CreateTaskResult` containing a `taskId`, then polls `tasks/get` / blocks on `tasks/result` / can `tasks/cancel` at its leisure.

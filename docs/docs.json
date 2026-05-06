@@ -29,7 +29,7 @@
   "seo": {
     "indexing": "navigable",
     "metatags": {
-      "canonical": "https://agentfront.dev",
+      "canonical": "https://docs.agentfront.dev/frontmcp",
       "og:image": "/assets/logo/banner.dark.png",
       "charset": "UTF-8",
       "viewport": "width=device-width, initial-scale=1.0",
@@ -68,6 +68,7 @@
         "groups": [
           {
             "group": "Get Started",
+            "icon": "rocket",
             "pages": [
               "frontmcp/getting-started/welcome",
               "frontmcp/getting-started/installation",
@@ -77,12 +78,40 @@
             ]
           },
           {
-            "group": "FrontMCP",
+            "group": "Concepts",
+            "icon": "lightbulb",
             "pages": [
               "frontmcp/fundamentals/overview",
-              "frontmcp/fundamentals/schemas",
               {
-                "group": "Core Components",
+                "group": "Features",
+                "icon": "sparkles",
+                "pages": [
+                  "frontmcp/features/overview",
+                  "frontmcp/features/decorator-driven-development",
+                  "frontmcp/features/dependency-injection",
+                  "frontmcp/features/multi-app-composition",
+                  "frontmcp/features/authentication-and-authorization",
+                  "frontmcp/features/deployment-targets",
+                  "frontmcp/features/environment-awareness",
+                  "frontmcp/features/plugin-system",
+                  "frontmcp/features/observability",
+                  "frontmcp/features/testing-framework",
+                  "frontmcp/features/skill-based-workflows",
+                  "frontmcp/features/channels",
+                  "frontmcp/features/background-tasks",
+                  "frontmcp/features/esm-dynamic-loading"
+                ]
+              },
+              "frontmcp/fundamentals/schemas"
+            ]
+          },
+          {
+            "group": "Build",
+            "icon": "server",
+            "pages": [
+              {
+                "group": "Server",
+                "icon": "server",
                 "pages": [
                   "frontmcp/servers/server",
                   "frontmcp/servers/apps",
@@ -90,33 +119,20 @@
                   "frontmcp/servers/resources",
                   "frontmcp/servers/prompts",
                   "frontmcp/servers/agents",
-                  "frontmcp/servers/elicitation",
                   "frontmcp/servers/skills",
+                  "frontmcp/servers/elicitation",
                   "frontmcp/servers/discovery",
-                  "frontmcp/servers/esm-packages",
                   "frontmcp/servers/flows",
                   "frontmcp/servers/jobs",
                   "frontmcp/servers/workflows",
                   "frontmcp/servers/channels",
-                  "frontmcp/servers/guard"
-                ]
-              },
-              {
-                "group": "Context Classes",
-                "pages": [
-                  "frontmcp/sdk-reference/contexts/overview",
-                  "frontmcp/sdk-reference/contexts/execution-context-base",
-                  "frontmcp/sdk-reference/contexts/tool-context",
-                  "frontmcp/sdk-reference/contexts/resource-context",
-                  "frontmcp/sdk-reference/contexts/prompt-context",
-                  "frontmcp/sdk-reference/contexts/agent-context",
-                  "frontmcp/sdk-reference/contexts/skill-context",
-                  "frontmcp/sdk-reference/contexts/job-context",
-                  "frontmcp/sdk-reference/contexts/channel-context"
+                  "frontmcp/servers/guard",
+                  "frontmcp/servers/esm-packages"
                 ]
               },
               {
                 "group": "Authentication",
+                "icon": "shield-check",
                 "pages": [
                   "frontmcp/authentication/overview",
                   "frontmcp/authentication/modes",
@@ -131,115 +147,125 @@
                   "frontmcp/authentication/production",
                   "frontmcp/authentication/demo-servers"
                 ]
-              },
+              }
+            ]
+          },
+          {
+            "group": "Deploy",
+            "icon": "cloud-arrow-up",
+            "pages": [
               {
                 "group": "Deployment",
+                "icon": "cloud-arrow-up",
                 "pages": [
                   "frontmcp/deployment/local-dev-server",
                   "frontmcp/deployment/production-build",
                   "frontmcp/deployment/runtime-modes",
+                  "frontmcp/deployment/serverless",
+                  "frontmcp/deployment/mcp-clients",
+                  "frontmcp/deployment/mcpb",
                   "frontmcp/deployment/direct-client",
                   "frontmcp/deployment/unix-socket",
-                  "frontmcp/deployment/mcp-clients",
-                  "frontmcp/deployment/serverless",
-                  "frontmcp/deployment/mcpb",
                   "frontmcp/deployment/health-checks",
                   "frontmcp/deployment/high-availability",
                   "frontmcp/deployment/frontmcp-config",
                   "frontmcp/deployment/machine-id",
-                  "frontmcp/deployment/security-headers",
-                  "frontmcp/deployment/transport-security",
-                  "frontmcp/deployment/browser-compatibility",
-                  {
-                    "group": "Storage",
-                    "pages": [
-                      "frontmcp/deployment/redis-setup",
-                      "frontmcp/deployment/sqlite-setup",
-                      "frontmcp/deployment/vercel-kv"
-                    ]
-                  }
+                  "frontmcp/deployment/browser-compatibility"
+                ]
+              },
+              {
+                "group": "Security",
+                "icon": "shield-halved",
+                "pages": ["frontmcp/deployment/security-headers", "frontmcp/deployment/transport-security"]
+              },
+              {
+                "group": "Storage",
+                "icon": "database",
+                "pages": [
+                  "frontmcp/deployment/redis-setup",
+                  "frontmcp/deployment/sqlite-setup",
+                  "frontmcp/deployment/vercel-kv"
                 ]
               }
             ]
           },
           {
-            "group": "Features",
+            "group": "Plugins",
+            "icon": "puzzle-piece",
             "pages": [
-              "frontmcp/features/overview",
-              "frontmcp/features/decorator-driven-development",
-              "frontmcp/features/dependency-injection",
-              "frontmcp/features/multi-app-composition",
-              "frontmcp/features/authentication-and-authorization",
-              "frontmcp/features/deployment-targets",
-              "frontmcp/features/environment-awareness",
-              "frontmcp/features/plugin-system",
-              "frontmcp/features/observability",
-              "frontmcp/features/testing-framework",
-              "frontmcp/features/skill-based-workflows",
-              "frontmcp/features/channels",
-              "frontmcp/features/background-tasks",
-              "frontmcp/features/esm-dynamic-loading"
+              {
+                "group": "Build a Plugin",
+                "icon": "puzzle-piece",
+                "pages": [
+                  "frontmcp/plugins/overview",
+                  "frontmcp/plugins/creating-plugins",
+                  "frontmcp/extensibility/plugins"
+                ]
+              },
+              {
+                "group": "Official Plugins",
+                "icon": "shield-check",
+                "pages": [
+                  "frontmcp/plugins/cache-plugin",
+                  "frontmcp/plugins/remember-plugin",
+                  "frontmcp/plugins/feature-flags-plugin",
+                  "frontmcp/plugins/approval-plugin"
+                ]
+              },
+              {
+                "group": "CodeCall",
+                "icon": "code",
+                "pages": [
+                  "frontmcp/plugins/codecall/overview",
+                  "frontmcp/plugins/codecall/quickstart",
+                  "frontmcp/plugins/codecall/agentscript",
+                  "frontmcp/plugins/codecall/configuration",
+                  "frontmcp/plugins/codecall/security",
+                  "frontmcp/plugins/codecall/production",
+                  "frontmcp/plugins/codecall/api-reference",
+                  "frontmcp/plugins/codecall/examples"
+                ]
+              },
+              {
+                "group": "Skilled OpenAPI",
+                "icon": "file-code",
+                "pages": [
+                  "frontmcp/plugins/skilled-openapi/overview",
+                  "frontmcp/plugins/skilled-openapi/quickstart",
+                  "frontmcp/plugins/skilled-openapi/sources",
+                  "frontmcp/plugins/skilled-openapi/bundle-format",
+                  "frontmcp/plugins/skilled-openapi/configuration",
+                  "frontmcp/plugins/skilled-openapi/meta-tools",
+                  "frontmcp/plugins/skilled-openapi/security",
+                  "frontmcp/plugins/skilled-openapi/coexistence",
+                  "frontmcp/plugins/skilled-openapi/api-reference"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Adapters",
+            "icon": "plug",
+            "pages": [
+              "frontmcp/adapters/overview",
+              "frontmcp/adapters/openapi-adapter",
+              "frontmcp/adapters/openapi-polling"
             ]
           },
           {
             "group": "Extensibility",
+            "icon": "layer-group",
             "pages": [
               "frontmcp/extensibility/providers",
               "frontmcp/extensibility/request-context",
               "frontmcp/extensibility/logging",
               "frontmcp/extensibility/config-yaml",
-              "frontmcp/extensibility/skill-audit-log",
-              {
-                "group": "Plugins",
-                "pages": [
-                  "frontmcp/plugins/overview",
-                  "frontmcp/plugins/creating-plugins",
-                  "frontmcp/extensibility/plugins",
-                  "frontmcp/plugins/cache-plugin",
-                  "frontmcp/plugins/remember-plugin",
-                  "frontmcp/plugins/feature-flags-plugin",
-                  "frontmcp/plugins/approval-plugin",
-                  {
-                    "group": "CodeCall",
-                    "pages": [
-                      "frontmcp/plugins/codecall/overview",
-                      "frontmcp/plugins/codecall/quickstart",
-                      "frontmcp/plugins/codecall/agentscript",
-                      "frontmcp/plugins/codecall/api-reference",
-                      "frontmcp/plugins/codecall/configuration",
-                      "frontmcp/plugins/codecall/security",
-                      "frontmcp/plugins/codecall/production",
-                      "frontmcp/plugins/codecall/examples"
-                    ]
-                  },
-                  {
-                    "group": "Skilled OpenAPI",
-                    "pages": [
-                      "frontmcp/plugins/skilled-openapi/overview",
-                      "frontmcp/plugins/skilled-openapi/quickstart",
-                      "frontmcp/plugins/skilled-openapi/bundle-format",
-                      "frontmcp/plugins/skilled-openapi/sources",
-                      "frontmcp/plugins/skilled-openapi/meta-tools",
-                      "frontmcp/plugins/skilled-openapi/security",
-                      "frontmcp/plugins/skilled-openapi/configuration",
-                      "frontmcp/plugins/skilled-openapi/coexistence",
-                      "frontmcp/plugins/skilled-openapi/api-reference"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Adapters",
-                "pages": [
-                  "frontmcp/adapters/overview",
-                  "frontmcp/adapters/openapi-adapter",
-                  "frontmcp/adapters/openapi-polling"
-                ]
-              }
+              "frontmcp/extensibility/skill-audit-log"
             ]
           },
           {
             "group": "Testing",
+            "icon": "vial",
             "pages": [
               "frontmcp/testing/overview",
               "frontmcp/testing/fixtures",
@@ -252,6 +278,7 @@
           },
           {
             "group": "React SDK",
+            "icon": "react",
             "pages": [
               "frontmcp/react/overview",
               "frontmcp/react/getting-started",
@@ -269,17 +296,21 @@
           },
           {
             "group": "Guides",
+            "icon": "map",
             "pages": [
               {
-                "group": "Quick Start",
+                "group": "Tutorials",
+                "icon": "graduation-cap",
                 "pages": [
                   "frontmcp/guides/your-first-tool",
+                  "frontmcp/guides/your-first-channel",
                   "frontmcp/guides/add-openapi-adapter",
                   "frontmcp/guides/caching-and-cache-miss"
                 ]
               },
               {
-                "group": "Building Features",
+                "group": "Building",
+                "icon": "hammer",
                 "pages": [
                   "frontmcp/guides/create-plugin",
                   "frontmcp/guides/customize-flow-stages",
@@ -287,12 +318,12 @@
                   "frontmcp/guides/prompts-and-resources",
                   "frontmcp/guides/publishing-esm-packages",
                   "frontmcp/guides/rate-limiting-and-guards",
-                  "frontmcp/guides/observability",
-                  "frontmcp/guides/your-first-channel"
+                  "frontmcp/guides/observability"
                 ]
               },
               {
-                "group": "Advanced Patterns",
+                "group": "Advanced",
+                "icon": "wand-magic-sparkles",
                 "pages": [
                   "frontmcp/guides/role-based-authorization",
                   "frontmcp/guides/site-scoped-authorization",
@@ -302,18 +333,11 @@
               },
               {
                 "group": "Testing",
+                "icon": "vial",
                 "pages": [
                   "frontmcp/guides/testing-your-first-tool",
                   "frontmcp/guides/testing-openapi-adapter",
                   "frontmcp/guides/testing-plugins-and-hooks"
-                ]
-              },
-              {
-                "group": "Nx Plugin",
-                "pages": [
-                  "frontmcp/nx-plugin/overview",
-                  "frontmcp/nx-plugin/guides/monorepo-patterns",
-                  "frontmcp/nx-plugin/guides/migration-from-standalone"
                 ]
               }
             ]
@@ -326,6 +350,7 @@
         "groups": [
           {
             "group": "Decorators",
+            "icon": "at",
             "pages": [
               "frontmcp/sdk-reference/decorators/overview",
               "frontmcp/sdk-reference/decorators/frontmcp",
@@ -345,42 +370,63 @@
             ]
           },
           {
-            "group": "Core Classes",
+            "group": "API",
+            "icon": "cube",
             "pages": [
-              "frontmcp/sdk-reference/core/frontmcp-instance",
-              "frontmcp/sdk-reference/core/scope",
-              "frontmcp/sdk-reference/core/server",
-              "frontmcp/sdk-reference/core/direct-client"
+              {
+                "group": "Core Classes",
+                "icon": "cube",
+                "pages": [
+                  "frontmcp/sdk-reference/core/frontmcp-instance",
+                  "frontmcp/sdk-reference/core/scope",
+                  "frontmcp/sdk-reference/core/server",
+                  "frontmcp/sdk-reference/core/direct-client"
+                ]
+              },
+              {
+                "group": "Context Classes",
+                "icon": "circle-nodes",
+                "pages": [
+                  "frontmcp/sdk-reference/contexts/overview",
+                  "frontmcp/sdk-reference/contexts/execution-context-base",
+                  "frontmcp/sdk-reference/contexts/tool-context",
+                  "frontmcp/sdk-reference/contexts/resource-context",
+                  "frontmcp/sdk-reference/contexts/prompt-context",
+                  "frontmcp/sdk-reference/contexts/agent-context",
+                  "frontmcp/sdk-reference/contexts/skill-context",
+                  "frontmcp/sdk-reference/contexts/job-context",
+                  "frontmcp/sdk-reference/contexts/channel-context"
+                ]
+              },
+              {
+                "group": "Registries",
+                "icon": "list-tree",
+                "pages": [
+                  "frontmcp/sdk-reference/registries/overview",
+                  "frontmcp/sdk-reference/registries/tool-registry",
+                  "frontmcp/sdk-reference/registries/resource-registry",
+                  "frontmcp/sdk-reference/registries/prompt-registry",
+                  "frontmcp/sdk-reference/registries/agent-registry",
+                  "frontmcp/sdk-reference/registries/skill-registry",
+                  "frontmcp/sdk-reference/registries/plugin-registry",
+                  "frontmcp/sdk-reference/registries/hook-registry",
+                  "frontmcp/sdk-reference/registries/provider-registry",
+                  "frontmcp/sdk-reference/registries/auth-registry",
+                  "frontmcp/sdk-reference/registries/job-registry",
+                  "frontmcp/sdk-reference/registries/workflow-registry",
+                  "frontmcp/sdk-reference/registries/channel-registry"
+                ]
+              },
+              {
+                "group": "APIs",
+                "icon": "cog",
+                "pages": ["frontmcp/sdk-reference/guard", "frontmcp/sdk-reference/telemetry"]
+              }
             ]
-          },
-          {
-            "group": "Registries",
-            "pages": [
-              "frontmcp/sdk-reference/registries/overview",
-              "frontmcp/sdk-reference/registries/tool-registry",
-              "frontmcp/sdk-reference/registries/resource-registry",
-              "frontmcp/sdk-reference/registries/prompt-registry",
-              "frontmcp/sdk-reference/registries/agent-registry",
-              "frontmcp/sdk-reference/registries/skill-registry",
-              "frontmcp/sdk-reference/registries/plugin-registry",
-              "frontmcp/sdk-reference/registries/hook-registry",
-              "frontmcp/sdk-reference/registries/provider-registry",
-              "frontmcp/sdk-reference/registries/auth-registry",
-              "frontmcp/sdk-reference/registries/job-registry",
-              "frontmcp/sdk-reference/registries/workflow-registry",
-              "frontmcp/sdk-reference/registries/channel-registry"
-            ]
-          },
-          {
-            "group": "Guard",
-            "pages": ["frontmcp/sdk-reference/guard"]
-          },
-          {
-            "group": "Telemetry",
-            "pages": ["frontmcp/sdk-reference/telemetry"]
           },
           {
             "group": "Errors",
+            "icon": "triangle-exclamation",
             "pages": [
               "frontmcp/sdk-reference/errors/overview",
               "frontmcp/sdk-reference/errors/tool-errors",
@@ -402,49 +448,61 @@
               "frontmcp/sdk-reference/errors/task-errors",
               "frontmcp/sdk-reference/errors/workflow-errors"
             ]
+          }
+        ]
+      },
+      {
+        "dropdown": "Nx Plugin",
+        "icon": "hexagon",
+        "groups": [
+          {
+            "group": "Get Started",
+            "icon": "rocket",
+            "pages": [
+              "frontmcp/nx-plugin/overview",
+              "frontmcp/nx-plugin/guides/monorepo-patterns",
+              "frontmcp/nx-plugin/guides/migration-from-standalone"
+            ]
           },
           {
-            "group": "Nx Plugin",
+            "group": "Generators",
+            "icon": "wand-magic-sparkles",
             "pages": [
-              {
-                "group": "Generators",
-                "pages": [
-                  "frontmcp/nx-plugin/generators/overview",
-                  "frontmcp/nx-plugin/generators/workspace",
-                  "frontmcp/nx-plugin/generators/app",
-                  "frontmcp/nx-plugin/generators/lib",
-                  "frontmcp/nx-plugin/generators/server",
-                  "frontmcp/nx-plugin/generators/tool",
-                  "frontmcp/nx-plugin/generators/resource",
-                  "frontmcp/nx-plugin/generators/prompt",
-                  "frontmcp/nx-plugin/generators/skill",
-                  "frontmcp/nx-plugin/generators/skill-dir",
-                  "frontmcp/nx-plugin/generators/agent",
-                  "frontmcp/nx-plugin/generators/provider",
-                  "frontmcp/nx-plugin/generators/plugin",
-                  "frontmcp/nx-plugin/generators/adapter",
-                  "frontmcp/nx-plugin/generators/auth-provider",
-                  "frontmcp/nx-plugin/generators/flow",
-                  "frontmcp/nx-plugin/generators/job",
-                  "frontmcp/nx-plugin/generators/workflow",
-                  "frontmcp/nx-plugin/generators/ui-component",
-                  "frontmcp/nx-plugin/generators/ui-page",
-                  "frontmcp/nx-plugin/generators/ui-shell"
-                ]
-              },
-              {
-                "group": "Executors",
-                "pages": [
-                  "frontmcp/nx-plugin/executors/overview",
-                  "frontmcp/nx-plugin/executors/build",
-                  "frontmcp/nx-plugin/executors/build-exec",
-                  "frontmcp/nx-plugin/executors/dev",
-                  "frontmcp/nx-plugin/executors/serve",
-                  "frontmcp/nx-plugin/executors/test",
-                  "frontmcp/nx-plugin/executors/inspector",
-                  "frontmcp/nx-plugin/executors/deploy"
-                ]
-              }
+              "frontmcp/nx-plugin/generators/overview",
+              "frontmcp/nx-plugin/generators/workspace",
+              "frontmcp/nx-plugin/generators/app",
+              "frontmcp/nx-plugin/generators/lib",
+              "frontmcp/nx-plugin/generators/server",
+              "frontmcp/nx-plugin/generators/tool",
+              "frontmcp/nx-plugin/generators/resource",
+              "frontmcp/nx-plugin/generators/prompt",
+              "frontmcp/nx-plugin/generators/skill",
+              "frontmcp/nx-plugin/generators/skill-dir",
+              "frontmcp/nx-plugin/generators/agent",
+              "frontmcp/nx-plugin/generators/provider",
+              "frontmcp/nx-plugin/generators/plugin",
+              "frontmcp/nx-plugin/generators/adapter",
+              "frontmcp/nx-plugin/generators/auth-provider",
+              "frontmcp/nx-plugin/generators/flow",
+              "frontmcp/nx-plugin/generators/job",
+              "frontmcp/nx-plugin/generators/workflow",
+              "frontmcp/nx-plugin/generators/ui-component",
+              "frontmcp/nx-plugin/generators/ui-page",
+              "frontmcp/nx-plugin/generators/ui-shell"
+            ]
+          },
+          {
+            "group": "Executors",
+            "icon": "play",
+            "pages": [
+              "frontmcp/nx-plugin/executors/overview",
+              "frontmcp/nx-plugin/executors/build",
+              "frontmcp/nx-plugin/executors/build-exec",
+              "frontmcp/nx-plugin/executors/dev",
+              "frontmcp/nx-plugin/executors/serve",
+              "frontmcp/nx-plugin/executors/test",
+              "frontmcp/nx-plugin/executors/inspector",
+              "frontmcp/nx-plugin/executors/deploy"
             ]
           }
         ]
