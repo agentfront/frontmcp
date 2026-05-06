@@ -3,6 +3,7 @@ title: Skilled OpenAPI Plugin
 sidebarTitle: Overview
 description: Wrap a customer's REST API as a curated set of MCP skills — the per-operation tools stay hidden behind three meta-tools, signed bundles ship from CI, hot-swap at runtime.
 icon: layer-group
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'typescript']
 ---
 
 The **Skilled OpenAPI plugin** turns an existing REST API into a **skilled MCP server** without rewriting any controllers. A signed *skill bundle* (an OpenAPI spec plus an OpenAPI Overlay annotated with skill grouping) is consumed at runtime by the plugin, projected into the FrontMCP `SkillRegistry`, and exposed through three meta-tools — `search_skill`, `load_skill`, `execute_action`. The per-operation tools stay hidden from `tools/list` so the LLM never sees a 150-endpoint dump.

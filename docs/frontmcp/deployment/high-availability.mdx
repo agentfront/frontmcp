@@ -1,6 +1,9 @@
 ---
 title: High Availability & Distributed Sessions
+sidebarTitle: High Availability
 description: Deploy FrontMCP across multiple pods with heartbeat monitoring, atomic session takeover, and cross-pod notification relay
+icon: 'tower-broadcast'
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'deployment', 'production', 'hosting', 'high availability', 'ha', 'redis', 'session takeover', 'typescript']
 ---
 
 FrontMCP supports multi-pod deployments with automatic session failover. When a pod dies, surviving pods detect the failure via Redis heartbeat keys and atomically claim orphaned sessions using a Lua CAS (compare-and-swap) script.
