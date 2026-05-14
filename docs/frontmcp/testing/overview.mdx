@@ -39,11 +39,30 @@ npm install -D @frontmcp/testing
 
 ### 1. Configure Jest
 
-The `frontmcp test` command auto-generates the correct Jest/SWC config. No manual `jest.e2e.config.ts` needed.
+The `frontmcp test` command auto-generates the correct Jest/SWC config. No
+manual `jest.e2e.config.ts` needed.
+
+By default the injected config discovers:
+
+- Colocated unit specs: `src/**/*.spec.ts` and `src/**/*.spec.tsx`
+- `__tests__/**/*.spec.ts(x)`
+- E2E specs: `e2e/**/*.e2e.ts(x)` and `e2e/**/*.e2e.spec.ts(x)`
+
+Both `.ts` and `.tsx` files are transformed via SWC with the automatic JSX
+runtime, so React component tests work without extra setup.
+
+<Info>
+**Bring your own config.** If a `jest.config.{ts,js,mjs,cjs,json}` exists in
+your project root, `frontmcp test` delegates to it instead of injecting the
+default config. You can also drop a `jest.config.ts` to customise transforms,
+projects, setup files, or coverage paths while still running via `frontmcp
+test`.
+</Info>
 
 ### 2. Write Your First Test
 
-Use the `.e2e.spec.ts` extension for E2E tests (not `.e2e.ts`):
+Use the `.spec.ts(x)` extension for unit tests colocated with your source
+code, and `.e2e.spec.ts(x)` for E2E tests under an `e2e/` directory:
 
 ```ts title="server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
