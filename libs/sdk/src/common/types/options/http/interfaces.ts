@@ -77,6 +77,40 @@ export interface HttpOptionsInterface {
    * Set `strict: true` to enable all security features at once.
    */
   security?: SecurityOptions;
+
+  /**
+   * Maximum accepted body size for JSON-RPC POST requests parsed via
+   * `express.json()`. Accepts the same shape as body-parser:
+   *   - `number` of bytes (e.g. `1_048_576`)
+   *   - human-readable string (e.g. `'4mb'`, `'500kb'`, `'2gb'`)
+   *
+   * When omitted, FrontMCP applies a default of `'4mb'`, lifting body-parser's
+   * silent 100KB default that previously made base64-encoded blobs (PDFs,
+   * DOCXes, large HTML pages) fail with HTTP 413 before reaching tool
+   * handlers.
+   *
+   * Requests exceeding this limit receive a structured JSON-RPC 413 response:
+   * `{ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Payload Too Large', data: { limit, length } } }`.
+   *
+   * **Security note.** This default trades the implicit 100KB DoS guard for a
+   * better developer experience. Deployments exposed to untrusted networks
+   * should set an explicit lower bound here (`'500kb'`, `'1mb'`, …) sized for
+   * their actual payloads. Body-parser buffers the full body in memory before
+   * parsing, so raising this value scales request memory linearly with
+   * concurrency.
+   *
+   * @default '4mb'
+   */
+  bodyLimit?: number | string;
+
+  /**
+   * Maximum accepted body size for `application/x-www-form-urlencoded`
+   * requests parsed via `express.urlencoded()`. Same value shape as
+   * {@link bodyLimit}.
+   *
+   * When omitted, falls back to {@link bodyLimit}.
+   */
+  urlencodedLimit?: number | string;
 }
 
 /**

@@ -1,3 +1,7 @@
+import * as http from 'node:http';
+
+import { ExpressHostAdapter } from '../express.host.adapter';
+
 // server/adapters/__tests__/express.host.adapter.spec.ts
 
 // Mock base.host.adapter to break the import chain into ../../common (which pulls @frontmcp/auth)
@@ -27,9 +31,6 @@ jest.mock('cors', () => {
     return mockCorsMiddleware;
   });
 });
-
-import { ExpressHostAdapter } from '../express.host.adapter';
-import * as http from 'node:http';
 
 describe('ExpressHostAdapter', () => {
   beforeEach(() => {
@@ -218,6 +219,133 @@ describe('ExpressHostAdapter', () => {
       // Should not throw when called multiple times
       adapter.prepare();
       adapter.prepare();
+    });
+  });
+
+  describe('body-parser limit (issue #410)', () => {
+    type AddrInfo = { port: number; address: string; family: string };
+
+    const startServer = async (adapter: ExpressHostAdapter): Promise<{ url: string; close: () => Promise<void> }> => {
+      adapter.registerRoute('POST', '/echo', (req: any, res: any) =>
+        res.json({ size: JSON.stringify(req.body).length }),
+      );
+      const server = http.createServer(adapter.getHandler() as any);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      const addr = server.address() as AddrInfo;
+      return {
+        url: `http://127.0.0.1:${addr.port}/echo`,
+        close: () => new Promise((resolve) => server.close(() => resolve())),
+      };
+    };
+
+    const postJson = async (url: string, payload: string): Promise<{ status: number; body: unknown }> => {
+      const { hostname, port, pathname } = new URL(url);
+      return new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            method: 'POST',
+            hostname,
+            port,
+            path: pathname,
+            headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (c) => chunks.push(c as Buffer));
+            res.on('end', () => {
+              const raw = Buffer.concat(chunks).toString('utf-8');
+              let body: unknown = raw;
+              try {
+                body = JSON.parse(raw);
+              } catch {
+                /* leave raw */
+              }
+              resolve({ status: res.statusCode ?? 0, body });
+            });
+          },
+        );
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+      });
+    };
+
+    it('accepts a small body under the default limit', async () => {
+      const adapter = new ExpressHostAdapter();
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ msg: 'x'.repeat(1024) });
+        const { status, body } = await postJson(url, payload);
+        expect(status).toBe(200);
+        expect(body).toMatchObject({ size: expect.any(Number) });
+      } finally {
+        await close();
+      }
+    });
+
+    it('accepts a 1MB body under the default 4mb limit (locks in the new default — regression for issue #410)', async () => {
+      const adapter = new ExpressHostAdapter();
+      const { url, close } = await startServer(adapter);
+      try {
+        // 1MB of JSON payload — well above the old 100KB body-parser default,
+        // comfortably under the new 4MB default.
+        const payload = JSON.stringify({ blob: 'A'.repeat(1024 * 1024) });
+        const { status } = await postJson(url, payload);
+        expect(status).toBe(200);
+      } finally {
+        await close();
+      }
+    });
+
+    it('rejects a body over the configured limit with a structured JSON-RPC 413 envelope', async () => {
+      const adapter = new ExpressHostAdapter({ bodyLimit: '10kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(50 * 1024) });
+        const { status, body } = await postJson(url, payload);
+        expect(status).toBe(413);
+        expect(body).toMatchObject({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32600,
+            message: 'Payload Too Large',
+            data: { limit: expect.any(Number), length: expect.any(Number) },
+          },
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it('honors a custom raised bodyLimit', async () => {
+      // 200KB request body; default would have rejected anything past 100KB,
+      // and our new 4mb default accepts it — but here we explicitly set a
+      // tighter limit of 500kb to prove the option is honored.
+      const adapter = new ExpressHostAdapter({ bodyLimit: '500kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(200 * 1024) });
+        const { status } = await postJson(url, payload);
+        expect(status).toBe(200);
+      } finally {
+        await close();
+      }
+    });
+
+    it('uses urlencodedLimit independently from bodyLimit when both are set', async () => {
+      // Confirm urlencodedLimit is consumed: send a JSON payload large enough
+      // to exceed urlencodedLimit but small enough to satisfy bodyLimit — JSON
+      // requests use bodyLimit so this should succeed.
+      const adapter = new ExpressHostAdapter({ bodyLimit: '500kb', urlencodedLimit: '1kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(200 * 1024) });
+        const { status } = await postJson(url, payload);
+        expect(status).toBe(200);
+      } finally {
+        await close();
+      }
     });
   });
 });

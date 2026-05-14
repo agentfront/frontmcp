@@ -68,6 +68,16 @@ export const httpOptionsSchema = z.object({
         .optional(),
     })
     .optional(),
+  /**
+   * Maximum accepted body size for JSON-RPC POST requests. Number of bytes or
+   * a body-parser-compatible string ('4mb', '500kb', etc.). Defaults to '4mb'.
+   */
+  bodyLimit: z.union([z.number(), z.string()]).optional().default('4mb'),
+  /**
+   * Maximum accepted body size for application/x-www-form-urlencoded requests.
+   * Falls back to `bodyLimit` when omitted (handled at the adapter layer).
+   */
+  urlencodedLimit: z.union([z.number(), z.string()]).optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**
