@@ -10,6 +10,7 @@ import {
   isInlineInstructions,
   isUrlInstructions,
   normalizeToolRef,
+  skillCallerDir,
   SkillKind,
   type SkillContext,
   type SkillInstructionSource,
@@ -65,10 +66,12 @@ export function normalizeSkill(item: unknown): SkillRecord {
       const className = (item as object).constructor?.name ?? String(item);
       throw new InvalidSkillError(className, 'Class must be decorated with @Skill decorator and have a name property.');
     }
+    const callerDir = getMetadata(skillCallerDir, item as SkillType) as string | undefined;
     return {
       kind: SkillKind.CLASS_TOKEN,
       provide: item as Type<SkillContext>,
       metadata,
+      ...(callerDir ? { callerDir } : {}),
     };
   }
 

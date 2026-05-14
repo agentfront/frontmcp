@@ -106,6 +106,16 @@ These properties align with the [Anthropic Agent Skills specification](https://a
 })
 ```
 
+<Info>
+**File path resolution.** Relative paths in `instructions: { file: '…' }`,
+`resources.references`, and `resources.examples` resolve against the
+directory of the source file that declared the `@Skill` class — **not**
+`process.cwd()`. The directory is captured at decoration time by walking
+the call stack, and the same rule applies to the inline `skill()` helper.
+For bundled CLIs the framework additionally falls back to the build-time
+`_skills/manifest.json` so paths keep resolving after `frontmcp build`.
+</Info>
+
 ### URL Reference
 
 ```typescript

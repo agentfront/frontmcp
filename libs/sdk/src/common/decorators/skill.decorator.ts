@@ -10,7 +10,7 @@ import { SkillKind, type SkillValueRecord } from '../records';
 // ═══════════════════════════════════════════════════════════════════
 
 import { type SkillEsmTargetRecord, type SkillRemoteRecord } from '../records/skill.record';
-import { extendedSkillMetadata, FrontMcpSkillTokens } from '../tokens';
+import { extendedSkillMetadata, FrontMcpSkillTokens, skillCallerDir } from '../tokens';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
@@ -24,6 +24,18 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  * - `name`: kebab-case, max 64 chars, no consecutive hyphens
  * - `description`: max 1024 chars, no XML/HTML tags
  * - Supports `license`, `compatibility`, `specMetadata`, `allowedTools`, `resources`
+ *
+ * ## File path resolution
+ *
+ * When `instructions: { file: './…' }`, `resources.references: './…'`, or
+ * `resources.examples: './…'` are relative, they are resolved relative to
+ * the directory of the source file that declared the `@Skill` class —
+ * **not** the process `cwd`. The directory is captured at decoration time
+ * by walking the call stack. This matches the behaviour of the inline
+ * `skill()` helper, and works under both CJS and ESM. If the caller
+ * cannot be determined (e.g. an exotic loader strips stack frames), the
+ * framework falls back to the build-time `_skills/manifest.json` for
+ * bundled CLIs and otherwise to the legacy `cwd`-relative behaviour.
  *
  * @param providedMetadata - Skill metadata including name, description, and instructions
  * @returns Class decorator
@@ -69,6 +81,12 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  * ```
  */
 function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
+  // Capture the caller directory at decorator-evaluation time (i.e. when the
+  // user's source file is being loaded), before returning the inner function.
+  // This is the moment the user's file is on the stack; deferring until the
+  // class body executes would still work but is less robust under bundling.
+  const callerDir = resolveCallerDir();
+
   return (target: object) => {
     const metadata = skillMetadataSchema.parse(providedMetadata);
     Reflect.defineMetadata(FrontMcpSkillTokens.type, true, target);
@@ -83,6 +101,10 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
       }
     }
     Reflect.defineMetadata(extendedSkillMetadata, extended, target);
+
+    if (callerDir) {
+      Reflect.defineMetadata(skillCallerDir, callerDir, target);
+    }
   };
 }
 
@@ -94,6 +116,14 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
  *
  * Name must be kebab-case (max 64 chars, no consecutive hyphens).
  * Description max 1024 chars, no XML/HTML tags.
+ *
+ * ## File path resolution
+ *
+ * When `instructions: { file: './…' }`, `resources.references: './…'`, or
+ * `resources.examples: './…'` are relative, they are resolved relative to
+ * the directory of the source file that called `skill()` — **not** the
+ * process `cwd`. The directory is captured at call time by walking the
+ * stack. Works under both CJS and ESM.
  *
  * @param providedMetadata - Skill metadata including name, description, and instructions
  * @returns A skill value record that can be passed to app/plugin skills array
@@ -155,27 +185,73 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
 /**
  * Walk the call stack to find the first file outside this module.
  * Returns the directory of that file, or undefined if it cannot be determined.
+ *
+ * Supports both CJS frames (`at fn (/abs/path/foo.ts:1:1)`) and ESM frames
+ * (`at fn (file:///abs/path/foo.ts:1:1)`). For ESM frames, the `file://`
+ * scheme is converted via `node:url`'s `fileURLToPath` so the result is a
+ * usable filesystem path on both POSIX and Windows.
  */
 function resolveCallerDir(): string | undefined {
-  const err = new Error();
-  const stack = err.stack;
+  return parseCallerDir(new Error().stack);
+}
+
+/**
+ * Pure helper that parses a V8-format stack string and returns the directory
+ * of the first user-code frame. Exported for unit testing only — the
+ * production entry point is `resolveCallerDir()`.
+ *
+ * Filters out:
+ *   - Node internals (`node:internal/...`, `node:fs`, etc.)
+ *   - `node_modules` packages
+ *   - this decorator file itself (basename match — `skill.decorator.ts`/`.js`)
+ *
+ * @internal
+ */
+export function parseCallerDir(stack: string | undefined): string | undefined {
   if (!stack) return undefined;
 
   const lines = stack.split('\n');
-  // Start from index 1 (skip the "Error" header line).
-  // The existing filter for 'skill.decorator' handles skipping internal frames.
-  for (let i = 1; i < lines.length; i++) {
+  // Start from index 1 (skip the "Error" header line); cap at 30 frames.
+  for (let i = 1; i < lines.length && i < 30; i++) {
     const line = lines[i];
-    // Match both "at func (file:line:col)" and "at file:line:col" formats
-    const match = line.match(/\(([^)]+):\d+:\d+\)/) || line.match(/at\s+([^\s:]+):\d+:\d+/);
-    if (match) {
-      const file = match[1];
-      // Skip node_modules and this decorator file
-      if (file.includes('node_modules') || file.includes('skill.decorator')) {
-        continue;
+    // Match "at func (...:line:col)" and "at ...:line:col"; capture group
+    // tolerates `file:///` because it greedily includes the scheme.
+    const match = line.match(/\(([^)]+):\d+:\d+\)/) || line.match(/at\s+([^\s]+):\d+:\d+/);
+    if (!match) continue;
+
+    let file = match[1];
+
+    // ESM frames surface URLs; convert to a filesystem path before dirname().
+    if (file.startsWith('file://')) {
+      try {
+        // Lazy-require so browser/Edge builds that never import `node:url` stay clean.
+
+        const { fileURLToPath } = require('node:url');
+        file = fileURLToPath(file);
+      } catch {
+        // If node:url is unavailable (browser-ish runtimes), fall back to a
+        // best-effort strip. dirname() works on most POSIX cases this way.
+        file = file.replace(/^file:\/\//, '');
       }
-      return dirname(file);
     }
+
+    // Skip frames that don't represent user code:
+    //   - Node internals (`node:internal/...`, `node:fs`, etc.)
+    //   - third-party packages (`node_modules`)
+    //   - this decorator file itself (match by basename only — `skill.decorator.ts`
+    //     or `.js` — so we don't accidentally reject files like `skill.decorator.spec.ts`)
+    const basenameMatch = file.match(/[^/\\]+$/);
+    const basename = basenameMatch ? basenameMatch[0] : file;
+    if (
+      file.startsWith('node:') ||
+      file.includes('node_modules') ||
+      basename === 'skill.decorator.ts' ||
+      basename === 'skill.decorator.js'
+    ) {
+      continue;
+    }
+
+    return dirname(file);
   }
   return undefined;
 }
