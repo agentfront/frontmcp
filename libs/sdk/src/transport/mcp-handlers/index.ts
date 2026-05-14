@@ -22,22 +22,33 @@ import tasksResultRequestHandler from './tasks-result-request.handler';
 import unsubscribeRequestHandler from './unsubscribe-request.handler';
 
 export function createMcpHandlers(options: McpHandlerOptions) {
-  const toolsHandler = options.serverOptions?.capabilities?.tools
-    ? [listToolsRequestHandler(options), callToolRequestHandler(options)]
-    : [];
+  // List handlers are ALWAYS registered, independent of capability advertisement.
+  // The underlying flows (ToolsListFlow / ResourcesListFlow / PromptsListFlow,
+  // registered on the scope at boot regardless of metadata) return empty arrays
+  // when the registry is empty, matching the MCP spec contract for list methods.
+  //
+  // Issue #407: previously these handlers were gated on `serverOptions.capabilities.{tools|resources|prompts}`,
+  // which is itself gated on `registry.hasAny()`. Empty registries therefore
+  // produced no list handler and `mcp.tools.list()` / `resources.list()` /
+  // `prompts.list()` failed with JSON-RPC -32601 "Method not found".
+  //
+  // Capability advertisement (and gating of call/read/get/subscribe/unsubscribe)
+  // remains decoupled — clients that speculatively probe list endpoints get a
+  // clean empty result; clients that follow capability advertisement strictly
+  // are still informed about which entity types are actually available.
+  const listHandlers = [
+    listToolsRequestHandler(options),
+    listResourcesRequestHandler(options),
+    listResourceTemplatesRequestHandler(options),
+    listPromptsRequestHandler(options),
+  ];
+
+  const toolsHandler = options.serverOptions?.capabilities?.tools ? [callToolRequestHandler(options)] : [];
   const resourcesHandler = options.serverOptions?.capabilities?.resources
-    ? [
-        listResourcesRequestHandler(options),
-        listResourceTemplatesRequestHandler(options),
-        readResourceRequestHandler(options),
-        subscribeRequestHandler(options),
-        unsubscribeRequestHandler(options),
-      ]
+    ? [readResourceRequestHandler(options), subscribeRequestHandler(options), unsubscribeRequestHandler(options)]
     : [];
 
-  const promptsHandler = options.serverOptions?.capabilities?.prompts
-    ? [listPromptsRequestHandler(options), getPromptRequestHandler(options)]
-    : [];
+  const promptsHandler = options.serverOptions?.capabilities?.prompts ? [getPromptRequestHandler(options)] : [];
 
   // Completion handler is available when prompts or resources are enabled
   // Per MCP spec, completion/complete supports both ref/prompt and ref/resource
@@ -73,6 +84,7 @@ export function createMcpHandlers(options: McpHandlerOptions) {
     initializeRequestHandler(options),
     initializedNotificationHandler(options),
     rootsListChangedNotificationHandler(options),
+    ...listHandlers,
     ...toolsHandler,
     ...resourcesHandler,
     ...promptsHandler,
