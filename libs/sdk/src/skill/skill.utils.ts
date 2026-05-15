@@ -1,7 +1,7 @@
 // file: libs/sdk/src/skill/skill.utils.ts
 
 import { depsOfClass, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { fileExists, readdir, readFile, stat } from '@frontmcp/utils';
+import { fileExists, isAbsolute, pathJoin, readdir, readFile, stat } from '@frontmcp/utils';
 
 import {
   extendedSkillMetadata,
@@ -10,6 +10,7 @@ import {
   isInlineInstructions,
   isUrlInstructions,
   normalizeToolRef,
+  skillCallerDir,
   SkillKind,
   type SkillContext,
   type SkillInstructionSource,
@@ -65,10 +66,12 @@ export function normalizeSkill(item: unknown): SkillRecord {
       const className = (item as object).constructor?.name ?? String(item);
       throw new InvalidSkillError(className, 'Class must be decorated with @Skill decorator and have a name property.');
     }
+    const callerDir = getMetadata(skillCallerDir, item as SkillType) as string | undefined;
     return {
       kind: SkillKind.CLASS_TOKEN,
       provide: item as Type<SkillContext>,
       metadata,
+      ...(callerDir ? { callerDir } : {}),
     };
   }
 
@@ -141,8 +144,13 @@ export async function loadInstructions(source: SkillInstructionSource, basePath?
   }
 
   if (isFileInstructions(source)) {
-    // Resolve file path
-    const filePath = basePath ? `${basePath}/${source.file}` : source.file;
+    // Resolve file path. When `source.file` is already absolute (callers like
+    // `resolveFromSkillManifest` pass absolute paths), prepending `basePath`
+    // produces nonsense like `/abs/bundle/dir//abs/user/file`. Guard with
+    // `isAbsolute` so absolute paths flow through untouched (fix for the
+    // PR #419 CI regression — `demo-e2e-skills` SKILL.md failed with
+    // `libs/sdk/dist//home/runner/.../SKILL.md`).
+    const filePath = isAbsolute(source.file) ? source.file : basePath ? pathJoin(basePath, source.file) : source.file;
     const content = await readFile(filePath, 'utf-8');
     // Strip YAML frontmatter if present (e.g., SKILL.md files)
     return stripFrontmatter(content);

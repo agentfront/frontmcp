@@ -1,16 +1,14 @@
 import { Skill, SkillContext } from '@frontmcp/sdk';
 
+// The class body is intentionally empty. Under `@Skill`, the runtime loads
+// instructions (and resources) from the decorator metadata via `SkillInstance`,
+// so `loadInstructions()` and `build()` on this class are never invoked.
+// Override them only if you construct a SkillContext subclass manually outside
+// the @Skill pipeline.
 @Skill({
   name: '<%= name %>',
-  description: 'TODO: describe what this skill does',<% if (toolRefs.length > 0) { %>
+  description: 'TODO: describe what this skill does',
+  instructions: 'TODO: define skill instructions',<% if (toolRefs.length > 0) { %>
   tools: [<%- toolRefs.map(t => `'${t}'`).join(', ') %>],<% } %>
 })
-export default class <%= className %>Skill extends SkillContext {
-  async loadInstructions(): Promise<string> {
-    return 'TODO: define skill instructions';
-  }
-
-  async build(): Promise<void> {
-    // TODO: implement skill build logic
-  }
-}
+export default class <%= className %>Skill extends SkillContext {}

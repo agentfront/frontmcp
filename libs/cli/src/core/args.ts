@@ -94,6 +94,9 @@ export interface ParsedArgs {
   maxRestarts?: number;
   follow?: boolean;
   lines?: number;
+  // `frontmcp dev` flags (issue #398)
+  autoPort?: boolean;
+  showConflict?: boolean;
   // Install flags
   registry?: string;
   // Create --nx flag

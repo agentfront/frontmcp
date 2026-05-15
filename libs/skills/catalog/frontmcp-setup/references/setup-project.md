@@ -375,6 +375,35 @@ Then start the server normally:
 frontmcp dev
 ```
 
+### Port conflict handling
+
+`frontmcp dev` performs a pre-flight TCP probe before spawning `tsx --watch`.
+If the port is already in use, the command exits with a one-line message
+listing remediation options — never a raw `EADDRINUSE` stack trace
+(issue #398).
+
+| Flag              | Behaviour                                                                     |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `--port <n>`      | Bind the dev server to TCP port `<n>` (sets `PORT=<n>` in the child's env).   |
+| `--auto-port`     | If the requested port is busy, walk forward to the next free port.            |
+| `--show-conflict` | On EADDRINUSE, run `lsof` (POSIX) to print which process is holding the port. |
+
+```bash
+# Pick a different port for this run
+frontmcp dev --port 3100
+
+# Let the CLI pick the next free port automatically
+frontmcp dev --auto-port
+
+# Show what's holding the port
+frontmcp dev --show-conflict
+```
+
+> The `PORT` env var (or `--port`) only takes effect when your `@FrontMcp`
+> metadata reads it via `Number(process.env.PORT) || 3000`. Hard-coding
+> `http.port: 4000` in metadata makes the child bind to 4000 regardless of
+> `--port`/`PORT`, so the pre-flight probe becomes advisory only.
+
 Test with curl:
 
 ```bash
