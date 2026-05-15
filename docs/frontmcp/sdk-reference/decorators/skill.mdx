@@ -23,12 +23,31 @@ import { Skill, SkillContext } from '@frontmcp/sdk';
   `,
   tools: ['github_get_pr', 'github_post_comment'],
 })
+class CodeReviewSkill extends SkillContext {}
+```
+
+<Info>
+The class body is optional. When you use `@Skill`, the runtime loads
+`instructions` (and `resources`) from the decorator metadata via
+`SkillInstance`, so `loadInstructions()` and `build()` on your class are
+never invoked — you only need to override them if you construct a
+`SkillContext` subclass manually outside the decorator pipeline. See
+[Advanced: overriding loadInstructions / build](#advanced-overriding-loadinstructions--build).
+</Info>
+
+### Advanced: overriding loadInstructions / build
+
+You only need to override these methods when you bypass the `@Skill`
+decorator and want to drive loading yourself. Otherwise, leave the body
+empty — the runtime does the work for you.
+
+```typescript
 class CodeReviewSkill extends SkillContext {
-  async loadInstructions() {
+  override async loadInstructions() {
     return this.metadata.instructions as string;
   }
 
-  async build() {
+  override async build() {
     return {
       id: this.skillId,
       name: this.metadata.name,

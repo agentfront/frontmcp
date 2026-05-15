@@ -2,6 +2,7 @@
 
 import { type Type } from '@frontmcp/di';
 
+import { SkillContextNotImplementedError } from '../../errors/sdk.errors';
 import {
   normalizeToolRef,
   type SkillMetadata,
@@ -250,15 +251,32 @@ export abstract class SkillContext extends ExecutionContextBase<SkillContent> {
 
   /**
    * Load the skill's detailed instructions.
-   * Resolves from inline string, file path, or URL based on metadata.
+   *
+   * The framework provides a default implementation that throws — when a
+   * class is decorated with `@Skill`, the runtime uses `SkillInstance` to
+   * load instructions from the decorator metadata, so this method is never
+   * called on the user class.
+   *
+   * Override this only when you construct a `SkillContext` subclass manually
+   * (outside the `@Skill` decorator pipeline) and need bespoke loading logic.
    */
-  abstract loadInstructions(): Promise<string>;
+  async loadInstructions(): Promise<string> {
+    throw new SkillContextNotImplementedError(this.skillName, 'loadInstructions');
+  }
 
   /**
    * Build the full SkillContent for this skill.
-   * Resolves instructions and normalizes all metadata into a single object.
+   *
+   * The framework provides a default implementation that throws — when a
+   * class is decorated with `@Skill`, the runtime uses `SkillInstance.load()`
+   * to assemble the content, so this method is never called on the user class.
+   *
+   * Override this only when you construct a `SkillContext` subclass manually
+   * (outside the `@Skill` decorator pipeline) and need bespoke assembly logic.
    */
-  abstract build(): Promise<SkillContent>;
+  async build(): Promise<SkillContent> {
+    throw new SkillContextNotImplementedError(this.skillName, 'build');
+  }
 
   /**
    * Get normalized tool references from the skill metadata.
