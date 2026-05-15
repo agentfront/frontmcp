@@ -72,7 +72,7 @@ function Skill(providedMetadata: SkillMetadata): ClassDecorator
 | Property       | Type                                            | Constraints                     | Description             |
 | -------------- | ----------------------------------------------- | ------------------------------- | ----------------------- |
 | `name`         | `string`                                        | kebab-case, 1-64 chars, no `--` | Unique skill identifier |
-| `description`  | `string`                                        | 1-1024 chars, no XML tags       | Skill description       |
+| `description`  | `string`                                        | 1-1024 chars, non-empty         | Skill description       |
 | `instructions` | `string \| { file: string } \| { url: string }` |                                 | Skill instructions      |
 
 ### Optional Properties

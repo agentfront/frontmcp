@@ -22,7 +22,7 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  *
  * Aligned with the Anthropic Agent Skills specification:
  * - `name`: kebab-case, max 64 chars, no consecutive hyphens
- * - `description`: max 1024 chars, no XML/HTML tags
+ * - `description`: 1–1024 chars, non-empty
  * - Supports `license`, `compatibility`, `specMetadata`, `allowedTools`, `resources`
  *
  * ## File path resolution
@@ -112,7 +112,7 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
  * The skill is registered as a value record with a unique symbol token.
  *
  * Name must be kebab-case (max 64 chars, no consecutive hyphens).
- * Description max 1024 chars, no XML/HTML tags.
+ * Description: 1–1024 chars, non-empty.
  *
  * ## File path resolution
  *
