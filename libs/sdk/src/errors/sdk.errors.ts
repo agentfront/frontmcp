@@ -118,6 +118,27 @@ export class InvalidInstructionSourceError extends InternalMcpError {
 }
 
 /**
+ * Thrown when a user calls `SkillContext.loadInstructions()` or
+ * `SkillContext.build()` directly on a skill that does not override them.
+ *
+ * Under the normal `@Skill`-decorator flow these methods are never invoked on
+ * the user's class — the runtime drives loading via `SkillInstance` against
+ * the decorator metadata. This error fires only when user code constructs a
+ * `SkillContext` subclass manually (outside the decorator pipeline) and
+ * forgets to provide an implementation.
+ */
+export class SkillContextNotImplementedError extends InternalMcpError {
+  constructor(skillName: string, method: 'loadInstructions' | 'build') {
+    super(
+      `SkillContext.${method}() was called on skill "${skillName}" but no implementation ` +
+        `was provided. When using @Skill, the runtime loads instructions via SkillInstance; ` +
+        `this method only needs an implementation if you bypass the @Skill decorator pipeline.`,
+      'SKILL_CONTEXT_NOT_IMPLEMENTED',
+    );
+  }
+}
+
+/**
  * Thrown when a serverless handler is not initialized.
  */
 export class ServerlessHandlerNotInitializedError extends InternalMcpError {
