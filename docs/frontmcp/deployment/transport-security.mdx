@@ -127,12 +127,12 @@ FrontMCP's Express host applies a default request body limit of `'4mb'` to
 both `express.json()` and `express.urlencoded()` — lifting body-parser's
 silent 100KB default, which routinely rejected base64-encoded blobs (PDFs,
 DOCXes, large HTML inputs) before they reached MCP tool handlers (issue
-#410). Override the limits via `httpOptions`:
+#410). Override the limits via the `http` block on `@FrontMcp`:
 
 ```typescript
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },
-  httpOptions: {
+  http: {
     bodyLimit: '500kb',       // tighten for public-facing deployments
     urlencodedLimit: '100kb', // optional — falls back to bodyLimit when omitted
   },
@@ -196,7 +196,7 @@ These are warnings only — no defaults are changed. Use them to audit your conf
 - [ ] Configure TLS termination at the reverse proxy layer
 - [ ] Set `NODE_ENV=production` for security audit warnings
 - [ ] Review startup logs for `[Security]` warnings
-- [ ] Tune `httpOptions.bodyLimit` to your largest legitimate payload
+- [ ] Tune `http.bodyLimit` to your largest legitimate payload
 
 ## Example: Full Production Config
 

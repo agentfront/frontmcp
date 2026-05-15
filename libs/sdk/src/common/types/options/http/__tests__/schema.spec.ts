@@ -33,4 +33,37 @@ describe('httpOptionsSchema', () => {
       expect(parsed.urlencodedLimit).toBe('256kb');
     });
   });
+
+  describe('bodyLimit format validation (CodeRabbit PR #422)', () => {
+    it.each([
+      ['1024', 1024],
+      ['large bytes', 1_048_576],
+      ['kb', '500kb'],
+      ['mb (no decimal)', '4mb'],
+      ['mb (with decimal)', '1.5mb'],
+      ['gb', '2gb'],
+      ['tb', '1tb'],
+      ['pb (bytes library supports this)', '1pb'],
+      ['uppercase unit', '4MB'],
+      ['mixed case unit', '10Mb'],
+      ['internal whitespace', '8 mb'],
+      ['plain b unit', '512b'],
+    ])('accepts valid limit: %s', (_label, value) => {
+      const parsed = httpOptionsSchema.parse({ bodyLimit: value });
+      expect(parsed.bodyLimit).toBe(value);
+    });
+
+    it.each([
+      ['typo with extra letter', '4mbb'],
+      ['unknown unit', '10xyz'],
+      ['leading garbage', 'abc4mb'],
+      ['bare decimal string without unit', '1.5'],
+      ['negative integer', -1],
+      ['non-integer number', 1.5],
+      ['empty string', ''],
+      ['only unit', 'mb'],
+    ])('rejects invalid limit: %s', (_label, value) => {
+      expect(() => httpOptionsSchema.parse({ bodyLimit: value })).toThrow();
+    });
+  });
 });
