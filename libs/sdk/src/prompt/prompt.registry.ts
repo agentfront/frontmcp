@@ -611,16 +611,18 @@ export default class PromptRegistry extends RegistryAbstract<
   /**
    * Get the MCP capabilities for prompts.
    * These are reported to clients during initialization.
+   *
+   * Issue #407: we always advertise the `prompts` capability so the MCP SDK
+   * accepts the always-registered `prompts/list` handler (see
+   * `createMcpHandlers`). `listChanged` still reflects whether anything is
+   * actually registered.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    return this.hasAny()
-      ? {
-          prompts: {
-            // List change notifications are only supported when prompts are registered
-            listChanged: true,
-          },
-        }
-      : {};
+    return {
+      prompts: {
+        listChanged: this.hasAny(),
+      },
+    };
   }
 }
 

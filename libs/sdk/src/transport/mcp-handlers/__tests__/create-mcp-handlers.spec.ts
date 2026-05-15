@@ -135,11 +135,15 @@ describe('Empty-server list methods end-to-end (issue #407)', () => {
     const server = await create({
       info: { name: 'fix-407-empty-tools', version: '0.0.0' },
     });
-
-    const result = await server.listTools();
-    expect(result).toMatchObject({ tools: [] });
-
-    await server.dispose();
+    // try/finally so `dispose()` runs even when an expectation throws —
+    // leaving the in-memory server open creates flakiness in adjacent
+    // tests (CodeRabbit on PR #423).
+    try {
+      const result = await server.listTools();
+      expect(result).toMatchObject({ tools: [] });
+    } finally {
+      await server.dispose();
+    }
   });
 
   it('mcp.resources.list() on a server with zero resources returns { resources: [] }', async () => {
@@ -147,11 +151,12 @@ describe('Empty-server list methods end-to-end (issue #407)', () => {
     const server = await create({
       info: { name: 'fix-407-empty-resources', version: '0.0.0' },
     });
-
-    const result = await server.listResources();
-    expect(result).toMatchObject({ resources: [] });
-
-    await server.dispose();
+    try {
+      const result = await server.listResources();
+      expect(result).toMatchObject({ resources: [] });
+    } finally {
+      await server.dispose();
+    }
   });
 
   it('mcp.prompts.list() on a server with zero prompts returns { prompts: [] }', async () => {
@@ -159,10 +164,11 @@ describe('Empty-server list methods end-to-end (issue #407)', () => {
     const server = await create({
       info: { name: 'fix-407-empty-prompts', version: '0.0.0' },
     });
-
-    const result = await server.listPrompts();
-    expect(result).toMatchObject({ prompts: [] });
-
-    await server.dispose();
+    try {
+      const result = await server.listPrompts();
+      expect(result).toMatchObject({ prompts: [] });
+    } finally {
+      await server.dispose();
+    }
   });
 });

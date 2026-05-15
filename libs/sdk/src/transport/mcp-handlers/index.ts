@@ -50,12 +50,17 @@ export function createMcpHandlers(options: McpHandlerOptions) {
 
   const promptsHandler = options.serverOptions?.capabilities?.prompts ? [getPromptRequestHandler(options)] : [];
 
-  // Completion handler is available when prompts or resources are enabled
-  // Per MCP spec, completion/complete supports both ref/prompt and ref/resource
+  // Completion handler is available when there are actual prompts or
+  // resources to complete against, AND the `completions` capability is
+  // advertised. Per MCP spec, `completion/complete` supports both
+  // `ref/prompt` and `ref/resource`. Issue #407: since `getCapabilities()`
+  // for prompts/resources is now always-on (so the SDK accepts the
+  // always-registered list handlers), we can no longer use those flags as
+  // a proxy for "there is anything to complete". Gate on the actual scope
+  // registries' `hasAny()` instead.
+  const hasPromptsOrResources = options.scope?.prompts?.hasAny() || options.scope?.resources?.hasAny();
   const completionHandler =
-    options.serverOptions?.capabilities?.prompts || options.serverOptions?.capabilities?.resources
-      ? [completeRequestHandler(options)]
-      : [];
+    hasPromptsOrResources && options.serverOptions?.capabilities?.completions ? [completeRequestHandler(options)] : [];
 
   // Logging handler is available when logging capability is enabled
   // Per MCP 2025-11-25 spec, servers MAY provide logging capability
