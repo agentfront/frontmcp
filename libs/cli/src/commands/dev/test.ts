@@ -71,17 +71,18 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs): object {
     // `**/__tests__/**/*.spec.ts(x)`) AND e2e specs. The repo convention per
     // CLAUDE.md is `.spec.ts` (NOT `.test.ts`) for unit tests; `.e2e.spec.ts`
     // for e2e; `.pw.spec.ts` for Playwright; `.perf.spec.ts` for perf.
+    //
+    // CodeRabbit PR #425: removed `e2e/**/*.e2e.ts(x)` and `**/*.e2e.ts(x)`
+    // patterns — the convention is strictly `.e2e.spec.ts(x)`, so matching
+    // `.e2e.ts` would let stragglers that violate the convention slip
+    // through discovery.
     testMatch: [
       '<rootDir>/src/**/*.spec.ts',
       '<rootDir>/src/**/*.spec.tsx',
       '<rootDir>/**/__tests__/**/*.spec.ts',
       '<rootDir>/**/__tests__/**/*.spec.tsx',
-      '<rootDir>/e2e/**/*.e2e.ts',
-      '<rootDir>/e2e/**/*.e2e.tsx',
       '<rootDir>/e2e/**/*.e2e.spec.ts',
       '<rootDir>/e2e/**/*.e2e.spec.tsx',
-      '<rootDir>/**/*.e2e.ts',
-      '<rootDir>/**/*.e2e.tsx',
     ],
 
     // Transform TypeScript files using @swc/jest for speed. Accepts both

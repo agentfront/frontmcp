@@ -50,12 +50,20 @@ describe('generateJestConfig (issue #402)', () => {
       expect(cfg.testMatch).toEqual(expect.arrayContaining(['<rootDir>/**/__tests__/**/*.spec.tsx']));
     });
 
-    it('still includes the e2e patterns (.ts and .tsx)', () => {
+    it('includes the e2e .e2e.spec.ts(x) patterns (per CLAUDE.md convention)', () => {
       const cfg = generateJestConfig('/proj', makeOpts()) as JestConfig;
-      expect(cfg.testMatch).toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.ts']));
-      expect(cfg.testMatch).toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.tsx']));
       expect(cfg.testMatch).toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.spec.ts']));
       expect(cfg.testMatch).toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.spec.tsx']));
+    });
+
+    it('does NOT include non-spec `.e2e.ts(x)` patterns (CodeRabbit PR #425)', () => {
+      const cfg = generateJestConfig('/proj', makeOpts()) as JestConfig;
+      // The repo convention is strictly `.e2e.spec.ts(x)` — matching `.e2e.ts`
+      // would let stragglers that violate the convention slip through.
+      expect(cfg.testMatch).not.toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.ts']));
+      expect(cfg.testMatch).not.toEqual(expect.arrayContaining(['<rootDir>/e2e/**/*.e2e.tsx']));
+      expect(cfg.testMatch).not.toEqual(expect.arrayContaining(['<rootDir>/**/*.e2e.ts']));
+      expect(cfg.testMatch).not.toEqual(expect.arrayContaining(['<rootDir>/**/*.e2e.tsx']));
     });
   });
 
