@@ -40,7 +40,7 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  * @param providedMetadata - Skill metadata including name, description, and instructions
  * @returns Class decorator
  *
- * @example Basic skill
+ * @example Basic skill (empty body — runtime drives loading)
  * ```typescript
  * @Skill({
  *   name: 'review-pr',
@@ -48,10 +48,7 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  *   instructions: 'Step 1: Fetch PR details...',
  *   tools: ['github_get_pr', 'github_add_comment'],
  * })
- * class ReviewPRSkill extends SkillContext {
- *   async loadInstructions() { return this.metadata.instructions as string; }
- *   async build() { ... }
- * }
+ * class ReviewPRSkill extends SkillContext {}
  * ```
  *
  * @example Skill with Agent Skills spec fields
@@ -66,7 +63,7 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  *   compatibility: 'Requires Docker 24+ and kubectl',
  *   allowedTools: 'Read Edit Bash(docker build)',
  * })
- * class DeploySkill extends SkillContext { ... }
+ * class DeploySkill extends SkillContext {}
  * ```
  *
  * @example Skill with URL-based instructions
@@ -77,7 +74,7 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  *   instructions: { url: 'https://example.com/skills/security-audit.md' },
  *   tools: ['code_search', 'file_read'],
  * })
- * class SecurityAuditSkill extends SkillContext { ... }
+ * class SecurityAuditSkill extends SkillContext {}
  * ```
  */
 function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
