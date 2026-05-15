@@ -23,12 +23,31 @@ import { Skill, SkillContext } from '@frontmcp/sdk';
   `,
   tools: ['github_get_pr', 'github_post_comment'],
 })
+class CodeReviewSkill extends SkillContext {}
+```
+
+<Info>
+The class body is optional. When you use `@Skill`, the runtime loads
+`instructions` (and `resources`) from the decorator metadata via
+`SkillInstance`, so `loadInstructions()` and `build()` on your class are
+never invoked — you only need to override them if you construct a
+`SkillContext` subclass manually outside the decorator pipeline. See
+[Advanced: overriding loadInstructions / build](#advanced-overriding-loadinstructions--build).
+</Info>
+
+### Advanced: overriding loadInstructions / build
+
+You only need to override these methods when you bypass the `@Skill`
+decorator and want to drive loading yourself. Otherwise, leave the body
+empty — the runtime does the work for you.
+
+```typescript
 class CodeReviewSkill extends SkillContext {
-  async loadInstructions() {
+  override async loadInstructions() {
     return this.metadata.instructions as string;
   }
 
-  async build() {
+  override async build() {
     return {
       id: this.skillId,
       name: this.metadata.name,
@@ -53,7 +72,7 @@ function Skill(providedMetadata: SkillMetadata): ClassDecorator
 | Property       | Type                                            | Constraints                     | Description             |
 | -------------- | ----------------------------------------------- | ------------------------------- | ----------------------- |
 | `name`         | `string`                                        | kebab-case, 1-64 chars, no `--` | Unique skill identifier |
-| `description`  | `string`                                        | 1-1024 chars, no XML tags       | Skill description       |
+| `description`  | `string`                                        | 1-1024 chars, non-empty         | Skill description       |
 | `instructions` | `string \| { file: string } \| { url: string }` |                                 | Skill instructions      |
 
 ### Optional Properties
@@ -80,7 +99,7 @@ These properties align with the [Anthropic Agent Skills specification](https://a
 | `compatibility` | `string`                 | Environment requirements (max 500 chars)                          |
 | `specMetadata`  | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`)            |
 | `allowedTools`  | `string`                 | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
-| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `assets`)  |
+| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `examples`, `assets`)  |
 
 ## Instruction Sources
 
@@ -105,6 +124,16 @@ These properties align with the [Anthropic Agent Skills specification](https://a
   tools: [],
 })
 ```
+
+<Info>
+**File path resolution.** Relative paths in `instructions: { file: '…' }`,
+`resources.references`, and `resources.examples` resolve against the
+directory of the source file that declared the `@Skill` class — **not**
+`process.cwd()`. The directory is captured at decoration time by walking
+the call stack, and the same rule applies to the inline `skill()` helper.
+For bundled CLIs the framework additionally falls back to the build-time
+`_skills/manifest.json` so paths keep resolving after `frontmcp build`.
+</Info>
 
 ### URL Reference
 
@@ -239,6 +268,7 @@ interface SkillContent {
 interface SkillResources {
   scripts?: string;
   references?: string;
+  examples?: string;
   assets?: string;
 }
 ```

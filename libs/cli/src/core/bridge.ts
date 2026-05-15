@@ -64,5 +64,9 @@ export function toParsedArgs(
   // Package manager
   if (options['registry'] !== undefined) out.registry = options['registry'] as string;
 
+  // Dev (issue #398): port conflict handling
+  if (options['autoPort'] !== undefined) out.autoPort = options['autoPort'] as boolean;
+  if (options['showConflict'] !== undefined) out.showConflict = options['showConflict'] as boolean;
+
   return out;
 }

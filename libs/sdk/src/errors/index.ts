@@ -234,6 +234,7 @@ export {
   InvalidSkillError,
   SkillInstructionFetchError,
   InvalidInstructionSourceError,
+  SkillContextNotImplementedError,
   ServerlessHandlerNotInitializedError,
   MissingPromptArgumentError,
   DynamicAdapterNameError,

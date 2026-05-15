@@ -5,19 +5,24 @@
  */
 
 import 'reflect-metadata';
-import { SkillInstance, createSkillInstance } from '../skill.instance';
-import { SkillKind, SkillRecord, SkillMetadata, EntryOwnerRef } from '../../common';
-import ProviderRegistry from '../../provider/provider.registry';
-import { Scope } from '../../scope';
 
-// Mock the loadInstructions utility
+import { SkillKind, type EntryOwnerRef, type SkillMetadata, type SkillRecord } from '../../common';
+import type ProviderRegistry from '../../provider/provider.registry';
+import { type Scope } from '../../scope';
+import { createSkillInstance, SkillInstance } from '../skill.instance';
+import { loadInstructions, resolveExamples, resolveReferences } from '../skill.utils';
+
+// Mock the loadInstructions utility (and the resource resolvers used by load()).
 jest.mock('../skill.utils', () => ({
   ...jest.requireActual('../skill.utils'),
   loadInstructions: jest.fn(),
+  resolveReferences: jest.fn(),
+  resolveExamples: jest.fn(),
 }));
 
-import { loadInstructions } from '../skill.utils';
 const mockLoadInstructions = loadInstructions as jest.MockedFunction<typeof loadInstructions>;
+const mockResolveReferences = resolveReferences as jest.MockedFunction<typeof resolveReferences>;
+const mockResolveExamples = resolveExamples as jest.MockedFunction<typeof resolveExamples>;
 
 // Helper to create mock ProviderRegistry
 const createMockProviderRegistry = (): ProviderRegistry => {
@@ -64,6 +69,8 @@ describe('SkillInstance', () => {
     mockProviders = createMockProviderRegistry();
     mockOwner = createMockOwner();
     mockLoadInstructions.mockResolvedValue('Loaded instructions');
+    mockResolveReferences.mockResolvedValue([]);
+    mockResolveExamples.mockResolvedValue([]);
   });
 
   describe('constructor', () => {
@@ -195,6 +202,168 @@ describe('SkillInstance', () => {
       await instance.loadInstructions();
 
       expect(mockLoadInstructions).toHaveBeenCalledWith('Inline instructions', undefined);
+    });
+
+    it('should pass callerDir as base path for CLASS_TOKEN records (issue #413)', async () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-skill',
+        description: 'A class-decorated skill with captured callerDir',
+        instructions: { file: './SKILL.md' },
+      };
+      const record = {
+        kind: SkillKind.CLASS_TOKEN,
+        provide: class {} as never,
+        metadata,
+        callerDir: '/abs/path/to/skill-dir',
+      } as unknown as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      await instance.loadInstructions();
+
+      expect(mockLoadInstructions).toHaveBeenCalledWith({ file: './SKILL.md' }, '/abs/path/to/skill-dir');
+    });
+
+    it('should pass callerDir as base path for VALUE records', async () => {
+      const metadata: SkillMetadata = {
+        name: 'value-skill-with-caller',
+        description: 'A value skill that captured its caller dir',
+        instructions: { file: './SKILL.md' },
+      };
+      const record = {
+        kind: SkillKind.VALUE,
+        provide: Symbol('caller-value-skill'),
+        metadata,
+        callerDir: '/abs/path/to/value-dir',
+      } as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      await instance.loadInstructions();
+
+      expect(mockLoadInstructions).toHaveBeenCalledWith({ file: './SKILL.md' }, '/abs/path/to/value-dir');
+    });
+  });
+
+  describe('getBaseDir', () => {
+    it('should return callerDir for CLASS_TOKEN records (issue #413)', () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-base-dir',
+        description: 'A class-decorated skill with captured callerDir',
+        instructions: 'Inline',
+      };
+      const record = {
+        kind: SkillKind.CLASS_TOKEN,
+        provide: class {} as never,
+        metadata,
+        callerDir: '/abs/path/to/class-dir',
+      } as unknown as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+
+      expect(instance.getBaseDir()).toBe('/abs/path/to/class-dir');
+    });
+
+    it('should return callerDir for VALUE records', () => {
+      const metadata: SkillMetadata = {
+        name: 'value-base-dir',
+        description: 'A value skill with captured callerDir',
+        instructions: 'Inline',
+      };
+      const record = {
+        kind: SkillKind.VALUE,
+        provide: Symbol('base-dir-value'),
+        metadata,
+        callerDir: '/abs/path/to/value-dir',
+      } as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+
+      expect(instance.getBaseDir()).toBe('/abs/path/to/value-dir');
+    });
+
+    it('should return undefined when CLASS_TOKEN has no callerDir', () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-no-caller',
+        description: 'A class skill without callerDir',
+        instructions: 'Inline',
+      };
+      const record = createSkillRecord(metadata, SkillKind.CLASS_TOKEN);
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+
+      expect(instance.getBaseDir()).toBeUndefined();
+    });
+  });
+
+  describe('load() — callerDir propagation for resources (issue #413)', () => {
+    it('should resolve resources.references relative to callerDir for CLASS_TOKEN records', async () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-with-refs',
+        description: 'CLASS_TOKEN skill that declares relative references',
+        instructions: 'Inline',
+        resources: { references: './references' },
+      };
+      const record = {
+        kind: SkillKind.CLASS_TOKEN,
+        provide: class {} as never,
+        metadata,
+        callerDir: '/abs/skill-dir',
+      } as unknown as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      await instance.load();
+
+      // loadResourceWithManifestFallback resolves `./references` against callerDir
+      // before passing the absolute path to the loader.
+      expect(mockResolveReferences).toHaveBeenCalledTimes(1);
+      expect(mockResolveReferences.mock.calls[0][0]).toBe('/abs/skill-dir/references');
+    });
+
+    it('should resolve resources.examples relative to callerDir for CLASS_TOKEN records', async () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-with-examples',
+        description: 'CLASS_TOKEN skill that declares relative examples',
+        instructions: 'Inline',
+        resources: { examples: './examples' },
+      };
+      const record = {
+        kind: SkillKind.CLASS_TOKEN,
+        provide: class {} as never,
+        metadata,
+        callerDir: '/abs/skill-dir',
+      } as unknown as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      await instance.load();
+
+      expect(mockResolveExamples).toHaveBeenCalledTimes(1);
+      expect(mockResolveExamples.mock.calls[0][0]).toBe('/abs/skill-dir/examples');
+    });
+  });
+
+  describe('loadInstructions() — ENOENT fallback regression (issue #413)', () => {
+    it('should re-throw ENOENT when no skill manifest is available, even for CLASS_TOKEN records', async () => {
+      const metadata: SkillMetadata = {
+        name: 'class-token-enoent',
+        description: 'CLASS_TOKEN skill whose file does not exist on disk',
+        instructions: { file: './missing.md' },
+      };
+      const record = {
+        kind: SkillKind.CLASS_TOKEN,
+        provide: class {} as never,
+        metadata,
+        callerDir: '/abs/skill-dir',
+      } as unknown as SkillRecord;
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      const enoent = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+      mockLoadInstructions.mockRejectedValueOnce(enoent);
+
+      await expect(instance.loadInstructions()).rejects.toThrow(/ENOENT/);
+
+      // First call uses the captured callerDir as base path.
+      expect(mockLoadInstructions).toHaveBeenNthCalledWith(1, { file: './missing.md' }, '/abs/skill-dir');
     });
   });
 
