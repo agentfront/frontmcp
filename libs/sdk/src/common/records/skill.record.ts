@@ -41,6 +41,8 @@ export type SkillClassTokenRecord = {
   kind: SkillKind.CLASS_TOKEN;
   provide: Type<SkillContext>;
   metadata: SkillMetadata;
+  /** Directory of the file that declared the @Skill class. Used to resolve relative instruction file paths. */
+  callerDir?: string;
 };
 
 /**

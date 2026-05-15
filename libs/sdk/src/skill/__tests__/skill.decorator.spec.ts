@@ -5,15 +5,21 @@
  */
 
 import 'reflect-metadata';
+
+import { dirname } from '@frontmcp/utils';
+
+import { skillCallerDir, SkillContext, SkillKind, type SkillContent, type SkillMetadata } from '../../common';
 import {
   FrontMcpSkill,
-  Skill,
   frontMcpSkill,
-  skill,
-  isSkillDecorated,
   getSkillMetadata,
+  isSkillDecorated,
+  parseCallerDir,
+  Skill,
+  skill,
 } from '../../common/decorators/skill.decorator';
-import { SkillMetadata, SkillKind, SkillContext, SkillContent } from '../../common';
+
+const THIS_DIR = __dirname;
 
 // Mock SkillContext for testing
 class MockSkillContext extends SkillContext {
@@ -253,6 +259,141 @@ describe('skill.decorator', () => {
 
       const metadata = getSkillMetadata(PlainClass);
       expect(metadata).toBeUndefined();
+    });
+  });
+
+  describe('callerDir capture (issue #413)', () => {
+    it('should record the caller directory on a decorated class', () => {
+      @Skill({
+        name: 'caller-dir-skill',
+        description: 'A skill that should capture its caller directory',
+        instructions: 'Inline instructions',
+      })
+      class CallerDirSkill extends MockSkillContext {}
+
+      const dir = Reflect.getMetadata(skillCallerDir, CallerDirSkill) as string | undefined;
+      // The decorator captured the source file's directory, which is this test file's directory.
+      expect(dir).toBe(THIS_DIR);
+    });
+
+    it('should record the caller directory on a skill() helper record', () => {
+      const record = skill({
+        name: 'caller-dir-value',
+        description: 'A value skill that should capture its caller directory',
+        instructions: 'Inline instructions',
+      });
+
+      expect(record.callerDir).toBe(THIS_DIR);
+    });
+
+    describe('parseCallerDir (pure)', () => {
+      it('returns the dirname of the first user CJS frame', () => {
+        const stack = [
+          'Error',
+          '    at resolveCallerDir (/abs/path/sdk/src/common/decorators/skill.decorator.ts:175:15)',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at Object.<anonymous> (/abs/path/user/src/my-skill.ts:12:1)',
+          '    at Module._compile (node:internal/modules/cjs/loader:1356:14)',
+        ].join('\n');
+
+        expect(parseCallerDir(stack)).toBe('/abs/path/user/src');
+      });
+
+      it('returns the dirname of the first user ESM frame (file:// URL)', () => {
+        const stack = [
+          'Error',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at file:///abs/path/user/src/my-skill.ts:12:1',
+          '    at ModuleJob.run (node:internal/modules/esm/module_job:218:25)',
+        ].join('\n');
+
+        const result = parseCallerDir(stack);
+        // POSIX result; on Windows the value would be C:-style. Compare via dirname()
+        // so the assertion stays platform-tolerant.
+        expect(result).toBe(dirname('/abs/path/user/src/my-skill.ts'));
+      });
+
+      it('skips node_modules frames', () => {
+        const stack = [
+          'Error',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at someHelper (/abs/path/node_modules/some-lib/index.js:42:7)',
+          '    at Object.<anonymous> (/abs/path/user/src/my-skill.ts:12:1)',
+        ].join('\n');
+
+        expect(parseCallerDir(stack)).toBe('/abs/path/user/src');
+      });
+
+      it('skips node: internal frames', () => {
+        const stack = [
+          'Error',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at processTicksAndRejections (node:internal/process/task_queues:104:5)',
+          '    at Object.<anonymous> (/abs/path/user/src/my-skill.ts:12:1)',
+        ].join('\n');
+
+        expect(parseCallerDir(stack)).toBe('/abs/path/user/src');
+      });
+
+      it('skips the decorator file itself but accepts skill.decorator.spec.ts', () => {
+        const stack = [
+          'Error',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at Object.<anonymous> (/abs/path/sdk/src/skill/__tests__/skill.decorator.spec.ts:50:1)',
+        ].join('\n');
+
+        // Spec file must NOT be filtered even though it shares the `skill.decorator` substring.
+        expect(parseCallerDir(stack)).toBe('/abs/path/sdk/src/skill/__tests__');
+      });
+
+      it('returns undefined when the stack is undefined', () => {
+        expect(parseCallerDir(undefined)).toBeUndefined();
+      });
+
+      it('returns undefined when no user frames are present', () => {
+        const stack = [
+          'Error',
+          '    at FrontMcpSkill (/abs/path/sdk/src/common/decorators/skill.decorator.ts:76:21)',
+          '    at processTicksAndRejections (node:internal/process/task_queues:104:5)',
+        ].join('\n');
+
+        expect(parseCallerDir(stack)).toBeUndefined();
+      });
+
+      it('caps iteration at 30 frames', () => {
+        // Build a 50-frame stack where the only user frame is at frame 35 — past the cap.
+        const lines = ['Error'];
+        for (let i = 0; i < 50; i++) {
+          if (i === 34) {
+            lines.push('    at Object.<anonymous> (/abs/path/user/src/late.ts:1:1)');
+          } else {
+            lines.push('    at internal (/abs/path/node_modules/x/index.js:1:1)');
+          }
+        }
+        expect(parseCallerDir(lines.join('\n'))).toBeUndefined();
+      });
+    });
+
+    it('should never write a node: internal frame as the caller directory', () => {
+      // Regression: the helper used to match frames like
+      // `at evaluate (node:internal/process/...)` and return `node:internal/process`,
+      // which is not a usable filesystem path.
+      @Skill({
+        name: 'no-node-internal-skill',
+        description: 'Skill whose captured callerDir must not be a node: frame',
+        instructions: 'Inline',
+      })
+      class NoNodeInternalSkill extends MockSkillContext {}
+
+      const dir = Reflect.getMetadata(skillCallerDir, NoNodeInternalSkill) as string | undefined;
+      // Either we found a real user-code frame, or we found none. We must never
+      // return a node: internal path.
+      if (dir !== undefined) {
+        expect(dir.startsWith('node:')).toBe(false);
+        expect(dir.includes('node_modules')).toBe(false);
+      }
+      // Either way, decoration always succeeds.
+      expect(isSkillDecorated(NoNodeInternalSkill)).toBe(true);
     });
   });
 });
