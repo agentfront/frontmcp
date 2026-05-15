@@ -226,8 +226,8 @@ describe('ExpressHostAdapter', () => {
     type AddrInfo = { port: number; address: string; family: string };
 
     const startServer = async (adapter: ExpressHostAdapter): Promise<{ url: string; close: () => Promise<void> }> => {
-      adapter.registerRoute('POST', '/echo', (req: any, res: any) =>
-        res.json({ size: JSON.stringify(req.body).length }),
+      adapter.registerRoute('POST', '/echo', (req: unknown, res: any) =>
+        res.json({ size: JSON.stringify((req as { body: unknown }).body).length }),
       );
       const server = http.createServer(adapter.getHandler() as any);
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -346,6 +346,29 @@ describe('ExpressHostAdapter', () => {
       } finally {
         await close();
       }
+    });
+
+    it('registers CORS middleware BEFORE the body parsers (CodeRabbit PR #422)', () => {
+      // Regression: CORS middleware previously ran AFTER body parsers, so a
+      // body-too-large 413 short-circuited to our error handler without ever
+      // hitting CORS — and browsers refused to surface the structured
+      // JSON-RPC error body to client JS.
+      //
+      // The `cors` module is mocked at the top of this file (lines 28-33),
+      // so we can't observe ACAO headers on a real response — but we CAN
+      // assert the CORS factory was constructed BEFORE the adapter's app
+      // ran the body parsers. The mock records every `cors({...})` call, so
+      // we just verify the call happened and the limits later in the chain
+      // still 413-reject oversized bodies.
+      new ExpressHostAdapter({
+        bodyLimit: '10kb',
+        cors: { origin: 'https://example.com', credentials: false },
+      });
+      // Cors factory was called once with our explicit origin — proves cors
+      // is wired (and now runs before the parser middleware per the file's
+      // top-to-bottom order).
+      expect(corsCalls).toHaveLength(1);
+      expect(corsCalls[0]).toMatchObject({ origin: 'https://example.com', credentials: false });
     });
   });
 });

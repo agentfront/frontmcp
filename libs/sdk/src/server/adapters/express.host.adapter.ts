@@ -61,6 +61,26 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
+
+    // CORS must run BEFORE the body parsers so the 413-on-too-large response
+    // still carries `Access-Control-Allow-Origin` and friends. If CORS runs
+    // after the parsers, body-parser's `entity.too.large` short-circuits to
+    // our error handler before CORS ever sees the request — and browsers
+    // refuse to surface the structured 413 body to JS (CodeRabbit on PR #422).
+    // CORS middleware is only enabled when an explicit origin is provided —
+    // prevents accidental enabling with `{ credentials: true }` alone.
+    const corsOptions = options?.cors;
+    const corsEnabled = corsOptions?.origin !== undefined && corsOptions.origin !== false;
+    if (corsEnabled) {
+      this.app.use(
+        cors({
+          origin: corsOptions.origin,
+          credentials: corsOptions.credentials ?? false,
+          maxAge: corsOptions.maxAge ?? 300,
+        }),
+      );
+    }
+
     const jsonLimit = options?.bodyLimit ?? DEFAULT_EXPRESS_BODY_LIMIT;
     const formLimit = options?.urlencodedLimit ?? jsonLimit;
     this.app.use(express.json({ limit: jsonLimit }));
@@ -86,21 +106,6 @@ export class ExpressHostAdapter extends HostServerAdapter {
       }
       next(err);
     });
-
-    // Configure CORS with secure defaults
-    // CORS middleware is only enabled when an explicit origin is provided
-    // This prevents accidental enabling with { credentials: true } alone
-    const corsOptions = options?.cors;
-    const corsEnabled = corsOptions?.origin !== undefined && corsOptions.origin !== false;
-    if (corsEnabled) {
-      this.app.use(
-        cors({
-          origin: corsOptions.origin,
-          credentials: corsOptions.credentials ?? false,
-          maxAge: corsOptions.maxAge ?? 300,
-        }),
-      );
-    }
 
     // Host validation middleware (DNS rebinding protection)
     const securityOpts = options?.security;
