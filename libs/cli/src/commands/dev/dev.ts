@@ -1,9 +1,13 @@
+import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
-import { ParsedArgs } from '../../core/args';
+
+import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { resolveEntry } from '../../shared/fs';
 import { loadDevEnv } from '../../shared/env';
+import { resolveEntry } from '../../shared/fs';
+import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
+
+const DEFAULT_DEV_PORT = 3000;
 
 function killQuiet(proc?: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
   try {
@@ -15,6 +19,62 @@ function killQuiet(proc?: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
   }
 }
 
+/**
+ * Resolve the port the dev child should bind to and report any conflict
+ * clearly. Returns the chosen port — or never returns and exits the process
+ * with a clear error when the port is busy and `--auto-port` was not set.
+ *
+ * Issue #398: previously the child crashed with a raw `EADDRINUSE` stack
+ * trace; this helper turns that into a one-line message with a suggested
+ * remediation and (optionally) the owning process.
+ */
+export async function resolveDevPort(opts: {
+  port?: number;
+  autoPort?: boolean;
+  showConflict?: boolean;
+  envPort?: string | undefined;
+  exit?: (code: number) => never;
+  log?: (msg: string) => void;
+}): Promise<number> {
+  const exit = opts.exit ?? ((code: number) => process.exit(code) as never);
+  const log = opts.log ?? ((msg: string) => console.error(msg));
+  const explicit = opts.port ?? (opts.envPort !== undefined && opts.envPort !== '' ? Number(opts.envPort) : undefined);
+  const port =
+    explicit !== undefined && Number.isFinite(explicit) && (explicit as number) > 0
+      ? (explicit as number)
+      : DEFAULT_DEV_PORT;
+
+  if (await isPortFree(port)) return port;
+
+  if (opts.autoPort) {
+    const alt = await findNextFreePort(port + 1);
+    log(`${c('yellow', '[dev]')} port ${port} is in use; auto-picked ${alt}`);
+    return alt;
+  }
+
+  // Build a clear, actionable error message.
+  const lines = [
+    `${c('red', '[dev]')} Port ${port} is already in use — refusing to start.`,
+    `${c('gray', '      ')} Retry with one of:`,
+    `${c('gray', '        ')} • ${c('bold', `frontmcp dev --port <other-port>`)}`,
+    `${c('gray', '        ')} • ${c('bold', `frontmcp dev --auto-port`)}     ${c('gray', '(pick the next free port automatically)')}`,
+    `${c('gray', '        ')} • ${c('bold', `PORT=<other-port> frontmcp dev`)}`,
+  ];
+  if (opts.showConflict) {
+    const owner = await lookupPortOwner(port);
+    if (owner) {
+      lines.push(`${c('gray', '      ')} Holder of ${port}:`);
+      for (const row of owner.split('\n')) lines.push(`${c('gray', '        ')} ${row}`);
+    } else {
+      lines.push(`${c('gray', '      ')} (could not identify the holder of port ${port})`);
+    }
+  } else {
+    lines.push(`${c('gray', '      ')} (pass --show-conflict to print which process is holding the port)`);
+  }
+  for (const line of lines) log(line);
+  return exit(1);
+}
+
 export async function runDev(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
@@ -22,7 +82,30 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // Load .env and .env.local files before starting the server
   loadDevEnv(cwd);
 
+  // Resolve the port BEFORE spawning tsx so EADDRINUSE produces a clean
+  // one-line error instead of a raw node:net stack trace (issue #398).
+  //
+  // Two caveats worth knowing about this pre-flight check:
+  //   1. TOCTOU — between this probe returning and the child actually binding,
+  //      another process can grab the port. We accept that race: this is a
+  //      dev-time tool, the worst case reverts to the prior behaviour (the
+  //      child surfaces a raw EADDRINUSE), and the common case (port already
+  //      busy at startup) is the one we wanted to fix.
+  //   2. The resolved port is exported as `PORT` to the child. It only takes
+  //      effect when the user's `@FrontMcp({ http: { port } })` reads
+  //      `process.env.PORT` (the SDK's `httpOptionsSchema` default does).
+  //      If the user's metadata HARD-CODES `http.port`, the child binds to
+  //      that hard-coded value and ignores PORT — the probe is then advisory
+  //      only. Documented in docs/frontmcp/deployment/local-dev-server.mdx.
+  const port = await resolveDevPort({
+    port: typeof opts.port === 'number' ? opts.port : opts.port ? Number(opts.port) : undefined,
+    autoPort: !!opts.autoPort,
+    showConflict: !!opts.showConflict,
+    envPort: process.env['PORT'],
+  });
+
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
+  console.log(`${c('cyan', '[dev]')} listening on port: ${port}`);
   console.log(
     `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(
       'bold',
@@ -36,13 +119,16 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // Only use shell on Windows where npx.cmd requires it; on Unix, direct spawn
   // allows proper SIGINT propagation without intermediate shell processes
   const useShell = process.platform === 'win32';
+  const childEnv = { ...process.env, PORT: String(port) };
   const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
     shell: useShell,
+    env: childEnv,
   });
   const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
     stdio: 'inherit',
     shell: useShell,
+    env: childEnv,
   });
 
   const cleanup = (clearTimer = true) => {
@@ -107,8 +193,13 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     process.exit(0);
   });
 
+  let appExitCode: number | null = 0;
   await new Promise<void>((resolve, reject) => {
-    app.on('close', () => {
+    app.on('close', (code) => {
+      // Capture the child's exit code so it can propagate to the parent
+      // shell. SIGINT/SIGTERM yield code=null with a signalCode — treat
+      // those as 0 so Ctrl+C doesn't appear as a failure.
+      appExitCode = typeof code === 'number' ? code : 0;
       markClosed('app');
       cleanup(false);
       resolve();
@@ -127,4 +218,10 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
       reject(err);
     });
   });
+
+  // Propagate the child's exit code so CI / shells see real failures
+  // instead of always-success.
+  if (appExitCode && appExitCode !== 0) {
+    process.exit(appExitCode);
+  }
 }

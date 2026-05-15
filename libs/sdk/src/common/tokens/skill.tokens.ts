@@ -29,3 +29,12 @@ export const FrontMcpSkillTokens = {
 } as const satisfies RawMetadataShape<SkillMetadata, ExtendFrontMcpSkillMetadata>;
 
 export const extendedSkillMetadata = tokenFactory.meta('extendedSkillMetadata');
+
+/**
+ * Internal metadata token used to stash the directory of the source file
+ * that contains the `@Skill`-decorated class. Consumed by `normalizeSkill`
+ * so `SkillInstance` can resolve `instructions: { file: './…' }` and
+ * `resources.{references,examples}` relative to the skill source file
+ * instead of `process.cwd()`. Not part of `SkillMetadata`.
+ */
+export const skillCallerDir = tokenFactory.meta('skill:__callerDir');

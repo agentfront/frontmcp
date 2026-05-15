@@ -484,13 +484,7 @@ export const skillMetadataSchema = z
       .refine((n) => !n.includes('--'), {
         message: 'Skill name must not contain consecutive hyphens.',
       }),
-    description: z
-      .string()
-      .min(1)
-      .max(1024)
-      .refine((d) => !/<[a-zA-Z][^>]*>/.test(d), {
-        message: 'Skill description must not contain XML/HTML tags (per Agent Skills spec).',
-      }),
+    description: z.string().min(1).max(1024),
     instructions: skillInstructionSourceSchema,
     tools: z.array(skillToolInputSchema).optional(),
     tags: z.array(z.string().min(1)).optional(),

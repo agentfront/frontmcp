@@ -101,6 +101,27 @@ describe('toParsedArgs', () => {
     expect(result.port).toBe(3010);
   });
 
+  it('should map dev command port-conflict flags (issue #398)', () => {
+    const result = toParsedArgs('dev', [], {
+      port: 3100,
+      autoPort: true,
+      showConflict: true,
+    });
+
+    expect(result._).toEqual(['dev']);
+    expect(result.port).toBe(3100);
+    expect(result.autoPort).toBe(true);
+    expect(result.showConflict).toBe(true);
+  });
+
+  it('should leave dev port-conflict flags undefined when omitted', () => {
+    const result = toParsedArgs('dev', [], {});
+
+    expect(result.port).toBeUndefined();
+    expect(result.autoPort).toBeUndefined();
+    expect(result.showConflict).toBeUndefined();
+  });
+
   it('should handle empty options (just positional args)', () => {
     const result = toParsedArgs('list', [], {});
 

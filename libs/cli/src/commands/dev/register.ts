@@ -1,4 +1,5 @@
-import { Command } from 'commander';
+import { type Command } from 'commander';
+
 import { toParsedArgs } from '../../core/bridge';
 
 export function registerDevCommands(program: Command): void {
@@ -6,6 +7,9 @@ export function registerDevCommands(program: Command): void {
     .command('dev')
     .description('Start in development mode (tsx --watch + async type-check)')
     .option('-e, --entry <path>', 'Entry file path')
+    .option('-p, --port <port>', 'TCP port to listen on (sets PORT env for the child)', (v) => parseInt(v, 10))
+    .option('--auto-port', 'If the chosen port is busy, auto-pick the next free port')
+    .option('--show-conflict', 'On EADDRINUSE, print the process holding the port (uses lsof on POSIX)')
     .action(async (options) => {
       const { runDev } = await import('./dev.js');
       await runDev(toParsedArgs('dev', [], options));
