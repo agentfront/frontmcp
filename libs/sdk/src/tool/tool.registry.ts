@@ -715,16 +715,19 @@ export default class ToolRegistry extends RegistryAbstract<
   /**
    * Get the MCP capabilities for tools.
    * These are reported to clients during initialization.
+   *
+   * Issue #407: we always advertise the `tools` capability so the MCP SDK
+   * accepts the always-registered `tools/list` handler (see
+   * `createMcpHandlers` — registering a handler without the matching
+   * capability throws `Server does not support tools (required for tools/list)`).
+   * `listChanged` still reflects whether anything is actually registered.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    return this.hasAny()
-      ? {
-          tools: {
-            // List change notifications are supported if we have any tools registered
-            listChanged: true,
-          },
-        }
-      : {};
+    return {
+      tools: {
+        listChanged: this.hasAny(),
+      },
+    };
   }
 }
 
