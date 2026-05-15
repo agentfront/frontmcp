@@ -640,18 +640,21 @@ export default class ResourceRegistry extends RegistryAbstract<
   /**
    * Get the MCP capabilities for resources.
    * These are reported to clients during initialization.
+   *
+   * Issue #407: we always advertise the `resources` capability so the MCP SDK
+   * accepts the always-registered `resources/list` and `resources/templates/list`
+   * handlers (see `createMcpHandlers`). `subscribe` and `listChanged` reflect
+   * whether anything is actually registered.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    return this.hasAny()
-      ? {
-          resources: {
-            // Subscription support per MCP 2025-11-25 spec
-            subscribe: true,
-            // List change notifications are only supported when resources are registered
-            listChanged: true,
-          },
-        }
-      : {};
+    return {
+      resources: {
+        // Subscription support per MCP 2025-11-25 spec — only meaningful when
+        // there are registered resources.
+        subscribe: this.hasAny(),
+        listChanged: this.hasAny(),
+      },
+    };
   }
 
   /**
