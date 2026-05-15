@@ -178,6 +178,34 @@ export default class Greet extends ToolContext {
 
 Your server will start (default `http://localhost:3000`). The console will print the MCP endpoint.
 
+### Port conflict handling
+
+`frontmcp dev` performs a pre-flight TCP probe before spawning `tsx --watch`. If
+the port is already in use the command exits with a one-line message instead of
+a raw `EADDRINUSE` stack trace:
+
+```text
+[dev] Port 3000 is already in use — refusing to start.
+      Retry with one of:
+        • frontmcp dev --port <other-port>
+        • frontmcp dev --auto-port     (pick the next free port automatically)
+        • PORT=<other-port> frontmcp dev
+```
+
+| Flag                | Behaviour                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| `--port <n>`        | Bind the dev server to TCP port `<n>` (sets `PORT=<n>` in the child's env).                      |
+| `--auto-port`       | If the requested port is busy, walk forward to the next free port.                               |
+| `--show-conflict`   | On EADDRINUSE, run `lsof` (POSIX) to print which process is holding the port.                    |
+
+<Warning>
+The `PORT` env var only takes effect when your `@FrontMcp` metadata reads it —
+the canonical `http: { port: Number(process.env.PORT) || 3000 }` pattern shown
+above. If you **hard-code** `http.port: 4000` in metadata, your server will
+bind to 4000 regardless of `--port` or `PORT`, and the pre-flight probe is
+advisory only.
+</Warning>
+
 ---
 
 ## Inspect locally (zero setup)
