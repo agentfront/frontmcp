@@ -1,11 +1,11 @@
 ---
 name: configure-http
-description: Configure HTTP server port, CORS policy, unix sockets, and entry path prefix
+description: Configure HTTP server port, CORS policy, unix sockets, entry path prefix, and request body limits
 ---
 
 # Configuring HTTP Options
 
-Configure the HTTP server — port, CORS policy, unix sockets, and entry path prefix.
+Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix, and request body limits.
 
 ## When to Use This Skill
 
@@ -14,12 +14,16 @@ Configure the HTTP server — port, CORS policy, unix sockets, and entry path pr
 - Changing the default HTTP port or binding to a specific network interface
 - Enabling or restricting CORS for a frontend application that calls the MCP server
 - Binding to a unix socket for local daemon or process-manager integrations
+- Raising or tightening the request body limit (default `'4mb'`) for tools that
+  accept base64-encoded blobs (PDFs, DOCXes, large HTML payloads)
 
 ### Recommended
 
 - Mounting the MCP server under a URL prefix behind a reverse proxy
 - Setting a dynamic port from an environment variable for container deployments
 - Fine-tuning CORS preflight caching for performance-sensitive frontends
+- Tightening `bodyLimit` on public-facing deployments to bound per-request
+  memory
 
 ### Skip When
 
@@ -45,6 +49,8 @@ Configure the HTTP server — port, CORS policy, unix sockets, and entry path pr
       credentials: true,
       maxAge: 86400,
     },
+    bodyLimit: '4mb', // default: '4mb' — body-parser-compatible string or bytes (number)
+    urlencodedLimit: undefined, // default: falls back to bodyLimit
   },
 })
 class Server {}
@@ -127,6 +133,54 @@ http: {
 | `credentials` | `boolean`                                   | `false`      | Allow cookies/auth headers         |
 | `maxAge`      | `number`                                    | —            | Preflight cache duration (seconds) |
 
+## Request Body Limits
+
+FrontMCP's Express host applies a default body limit of `'4mb'` to both
+`express.json()` and `express.urlencoded()`. This lifts body-parser's silent
+100KB default, which previously rejected base64-encoded blobs (PDFs, DOCXes,
+large HTML inputs) with HTTP 413 before they reached MCP tool handlers
+(issue #410).
+
+```typescript
+http: {
+  bodyLimit: '500kb',       // tighten for public-facing deployments
+  urlencodedLimit: '100kb', // optional — falls back to bodyLimit when omitted
+}
+```
+
+| Option            | Type               | Default                   | Notes                                                                  |
+| ----------------- | ------------------ | ------------------------- | ---------------------------------------------------------------------- |
+| `bodyLimit`       | `number \| string` | `'4mb'`                   | Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, `'2gb'`, …). |
+| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.   |
+
+Requests exceeding the configured limit receive a structured JSON-RPC 413
+response — never an Express HTML error page:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": null,
+  "error": {
+    "code": -32600,
+    "message": "Payload Too Large",
+    "data": { "limit": 102400, "length": 204800 }
+  }
+}
+```
+
+> **Security trade-off.** Body-parser buffers the full request body in memory
+> before parsing, so raising `bodyLimit` scales per-request memory with
+> concurrency. Deployments exposed to untrusted networks should set an
+> explicit lower bound sized for the largest legitimate payload. The
+> 100KB → 4MB default change is a liberalization (every request that
+> succeeded before still succeeds), but the implicit DoS guard is gone
+> unless you set the option yourself.
+
+Custom `hostFactory` users build their own Express app and are **not
+affected** by `bodyLimit`/`urlencodedLimit` — those options are consumed only
+by the built-in `ExpressHostAdapter`. Custom-host deployments must configure
+their own body limits.
+
 ## Entry Path Prefix
 
 Mount the MCP server under a URL prefix:
@@ -207,6 +261,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | Unix socket file not created                     | Missing write permissions on the target directory or stale socket file from a previous run | Check directory permissions and remove the stale `.sock` file before restarting                         |
 | Routes return 404 after setting `entryPath`      | Client is still requesting the root path without the prefix                                | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                |
 | Server binds but external clients cannot connect | Server bound to `localhost` or `127.0.0.1` inside a container                              | Set `host: '0.0.0.0'` or use Docker port mapping to expose the container port                           |
+| `413 Payload Too Large` with JSON-RPC envelope   | Request body exceeded `bodyLimit` (default `'4mb'`)                                        | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint            |
 
 ## Examples
 

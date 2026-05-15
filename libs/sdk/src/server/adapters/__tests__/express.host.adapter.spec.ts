@@ -1,3 +1,7 @@
+import * as http from 'node:http';
+
+import { ExpressHostAdapter } from '../express.host.adapter';
+
 // server/adapters/__tests__/express.host.adapter.spec.ts
 
 // Mock base.host.adapter to break the import chain into ../../common (which pulls @frontmcp/auth)
@@ -27,9 +31,6 @@ jest.mock('cors', () => {
     return mockCorsMiddleware;
   });
 });
-
-import { ExpressHostAdapter } from '../express.host.adapter';
-import * as http from 'node:http';
 
 describe('ExpressHostAdapter', () => {
   beforeEach(() => {
@@ -218,6 +219,184 @@ describe('ExpressHostAdapter', () => {
       // Should not throw when called multiple times
       adapter.prepare();
       adapter.prepare();
+    });
+  });
+
+  describe('body-parser limit (issue #410)', () => {
+    type AddrInfo = { port: number; address: string; family: string };
+
+    type TestResponse = { json: (payload: { size: number }) => void };
+    const startServer = async (adapter: ExpressHostAdapter): Promise<{ url: string; close: () => Promise<void> }> => {
+      adapter.registerRoute('POST', '/echo', (req: unknown, res: unknown) => {
+        const body = (req as { body: unknown }).body;
+        (res as TestResponse).json({ size: JSON.stringify(body).length });
+      });
+      const server = http.createServer(adapter.getHandler() as http.RequestListener);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      const addr = server.address() as AddrInfo;
+      return {
+        url: `http://127.0.0.1:${addr.port}/echo`,
+        close: () => new Promise((resolve) => server.close(() => resolve())),
+      };
+    };
+
+    const post = async (
+      url: string,
+      payload: string,
+      contentType: string,
+    ): Promise<{ status: number; body: unknown }> => {
+      const { hostname, port, pathname } = new URL(url);
+      return new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            method: 'POST',
+            hostname,
+            port,
+            path: pathname,
+            headers: { 'content-type': contentType, 'content-length': Buffer.byteLength(payload) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (c) => chunks.push(c as Buffer));
+            res.on('end', () => {
+              const raw = Buffer.concat(chunks).toString('utf-8');
+              let body: unknown = raw;
+              try {
+                body = JSON.parse(raw);
+              } catch {
+                /* leave raw */
+              }
+              resolve({ status: res.statusCode ?? 0, body });
+            });
+          },
+        );
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+      });
+    };
+
+    const postJson = (url: string, payload: string) => post(url, payload, 'application/json');
+    const postForm = (url: string, payload: string) => post(url, payload, 'application/x-www-form-urlencoded');
+
+    it('accepts a small body under the default limit', async () => {
+      const adapter = new ExpressHostAdapter();
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ msg: 'x'.repeat(1024) });
+        const { status, body } = await postJson(url, payload);
+        expect(status).toBe(200);
+        expect(body).toMatchObject({ size: expect.any(Number) });
+      } finally {
+        await close();
+      }
+    });
+
+    it('accepts a 1MB body under the default 4mb limit (locks in the new default — regression for issue #410)', async () => {
+      const adapter = new ExpressHostAdapter();
+      const { url, close } = await startServer(adapter);
+      try {
+        // 1MB of JSON payload — well above the old 100KB body-parser default,
+        // comfortably under the new 4MB default.
+        const payload = JSON.stringify({ blob: 'A'.repeat(1024 * 1024) });
+        const { status } = await postJson(url, payload);
+        expect(status).toBe(200);
+      } finally {
+        await close();
+      }
+    });
+
+    it('rejects a body over the configured limit with a structured JSON-RPC 413 envelope', async () => {
+      const adapter = new ExpressHostAdapter({ bodyLimit: '10kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(50 * 1024) });
+        const { status, body } = await postJson(url, payload);
+        expect(status).toBe(413);
+        expect(body).toMatchObject({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32600,
+            message: 'Payload Too Large',
+            data: { limit: expect.any(Number), length: expect.any(Number) },
+          },
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it('honors a custom raised bodyLimit', async () => {
+      // 200KB request body; default would have rejected anything past 100KB,
+      // and our new 4mb default accepts it — but here we explicitly set a
+      // tighter limit of 500kb to prove the option is honored.
+      const adapter = new ExpressHostAdapter({ bodyLimit: '500kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(200 * 1024) });
+        const { status } = await postJson(url, payload);
+        expect(status).toBe(200);
+      } finally {
+        await close();
+      }
+    });
+
+    it('uses urlencodedLimit independently from bodyLimit when both are set', async () => {
+      // Confirm urlencodedLimit is actually consumed by exercising the
+      // urlencoded parser (Content-Type: application/x-www-form-urlencoded).
+      // The form payload sits between urlencodedLimit (1kb) and bodyLimit
+      // (500kb) — the urlencoded parser must 413 it. If urlencodedLimit
+      // wiring regresses (falls back to bodyLimit's 500kb), this test fails.
+      const adapter = new ExpressHostAdapter({ bodyLimit: '500kb', urlencodedLimit: '1kb' });
+      const { url, close } = await startServer(adapter);
+      try {
+        // ~5kb form payload — well over urlencodedLimit, well under bodyLimit.
+        const payload = `blob=${'A'.repeat(5 * 1024)}`;
+        const { status, body } = await postForm(url, payload);
+        expect(status).toBe(413);
+        expect(body).toMatchObject({
+          jsonrpc: '2.0',
+          error: { code: -32600, message: 'Payload Too Large' },
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it('runs CORS middleware before body parsers for oversized payloads (CodeRabbit PR #422)', async () => {
+      // Regression: CORS middleware previously ran AFTER body parsers, so a
+      // body-too-large 413 short-circuited to our error handler without ever
+      // hitting CORS — and browsers refused to surface the structured
+      // JSON-RPC error body to client JS.
+      //
+      // The `cors` module is mocked above so `mockCorsMiddleware` is the
+      // actual middleware installed in the Express stack. If CORS is ordered
+      // BEFORE the body parsers, an oversized request still hits the cors
+      // middleware (which calls next()) before the parser throws
+      // entity.too.large. If CORS regresses back to after the parsers, the
+      // parser rejects first and the cors middleware is NEVER invoked.
+      const adapter = new ExpressHostAdapter({
+        bodyLimit: '10kb',
+        cors: { origin: 'https://example.com', credentials: false },
+      });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(50 * 1024) });
+        const { status } = await postJson(url, payload);
+        // Parser still rejects oversized body with 413.
+        expect(status).toBe(413);
+        // CORS factory was wired exactly once with our explicit origin…
+        expect(corsCalls).toHaveLength(1);
+        expect(corsCalls[0]).toMatchObject({ origin: 'https://example.com', credentials: false });
+        // …and crucially, the CORS middleware actually ran on the oversized
+        // request before the body parser rejected it. If the order regresses,
+        // this expectation fails because the parser short-circuits to the
+        // 413 error handler without invoking subsequent middleware.
+        expect(mockCorsMiddleware).toHaveBeenCalled();
+      } finally {
+        await close();
+      }
     });
   });
 });

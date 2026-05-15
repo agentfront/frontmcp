@@ -15,7 +15,11 @@ const frontMcpConfig = {
   }),
 };
 
-const DEFAULT_HTTP_OPTIONS = { port: Number(process.env['PORT']) || 3000, entryPath: '/mcp' };
+// bodyLimit must be included to satisfy the resolved `HttpOptions` shape —
+// the schema's `.default('4mb')` makes it non-optional in the output type.
+// Adapter falls back to the same value when undefined, so the runtime
+// behaviour is unchanged either way (fix for CI build break on PR #422).
+const DEFAULT_HTTP_OPTIONS = { port: Number(process.env['PORT']) || 3000, entryPath: '/mcp', bodyLimit: '4mb' };
 
 const frontMcpServer = AsyncProvider({
   name: 'frontmcp:server',

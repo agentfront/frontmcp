@@ -1,1 +1,5 @@
-export { ExpressHostAdapter, type ExpressHostAdapterOptions } from '../express.host.adapter';
+export {
+  DEFAULT_EXPRESS_BODY_LIMIT,
+  ExpressHostAdapter,
+  type ExpressHostAdapterOptions,
+} from '../express.host.adapter';

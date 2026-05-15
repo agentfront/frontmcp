@@ -336,6 +336,36 @@ export class InvalidMethodError extends PublicMcpError {
 }
 
 /**
+ * Request body exceeded the configured size limit.
+ * Mapped to HTTP 413 by transport adapters and to JSON-RPC -32600
+ * (Invalid Request) by `toJsonRpcError()` — JSON-RPC has no dedicated
+ * "payload too large" code.
+ */
+export class PayloadTooLargeError extends PublicMcpError {
+  readonly limit?: number;
+  readonly length?: number;
+  readonly mcpErrorCode = MCP_ERROR_CODES.INVALID_REQUEST;
+
+  constructor(limit?: number, length?: number) {
+    super('Payload Too Large', 'PAYLOAD_TOO_LARGE', 413);
+    this.limit = limit;
+    this.length = length;
+  }
+
+  toJsonRpcError(): {
+    code: number;
+    message: string;
+    data: { limit?: number; length?: number };
+  } {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { limit: this.limit, length: this.length },
+    };
+  }
+}
+
+/**
  * Tool execution error (internal)
  */
 export class ToolExecutionError extends InternalMcpError {

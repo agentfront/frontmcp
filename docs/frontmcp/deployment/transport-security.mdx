@@ -121,6 +121,60 @@ security: {
   DNS rebinding attacks use a malicious domain that resolves to `127.0.0.1`, tricking a browser into making requests to your local server. Host validation blocks these requests.
 </Note>
 
+## Request Body Limits
+
+FrontMCP's Express host applies a default request body limit of `'4mb'` to
+both `express.json()` and `express.urlencoded()` — lifting body-parser's
+silent 100KB default, which routinely rejected base64-encoded blobs (PDFs,
+DOCXes, large HTML inputs) before they reached MCP tool handlers (issue
+#410). Override the limits via the `http` block on `@FrontMcp`:
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  http: {
+    bodyLimit: '500kb',       // tighten for public-facing deployments
+    urlencodedLimit: '100kb', // optional — falls back to bodyLimit when omitted
+  },
+})
+class Server {}
+```
+
+| Option            | Type               | Default              | Notes                                                                             |
+| ----------------- | ------------------ | -------------------- | --------------------------------------------------------------------------------- |
+| `bodyLimit`       | `number \| string` | `'4mb'`              | Accepts bytes (number) or body-parser strings (`'4mb'`, `'500kb'`, `'2gb'`, …).   |
+| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.       |
+
+When a request exceeds the configured limit, the adapter returns HTTP 413
+with a structured JSON-RPC envelope:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": null,
+  "error": {
+    "code": -32600,
+    "message": "Payload Too Large",
+    "data": { "limit": 102400, "length": 204800 }
+  }
+}
+```
+
+<Warning>
+**Security trade-off.** Body-parser buffers the full request body in
+memory before parsing, so raising `bodyLimit` scales per-request memory
+with concurrency. Deployments exposed to untrusted networks should set an
+explicit lower bound (e.g. `'500kb'` or `'1mb'`) sized for the largest
+legitimate payload. The 100KB → 4MB default change in this release is a
+liberalization — every request that succeeded before still succeeds, but
+the implicit DoS guard is gone unless you set the option yourself.
+</Warning>
+
+Custom `hostFactory` users build their own Express app and are
+**not affected** by `bodyLimit`/`urlencodedLimit` — those options are
+consumed only by the built-in `ExpressHostAdapter`. Custom-host
+deployments must configure their own body limits.
+
 ## Security Audit Warnings
 
 In production (`NODE_ENV=production`) or distributed mode, FrontMCP logs security warnings at startup:
@@ -142,6 +196,7 @@ These are warnings only — no defaults are changed. Use them to audit your conf
 - [ ] Configure TLS termination at the reverse proxy layer
 - [ ] Set `NODE_ENV=production` for security audit warnings
 - [ ] Review startup logs for `[Security]` warnings
+- [ ] Tune `http.bodyLimit` to your largest legitimate payload
 
 ## Example: Full Production Config
 

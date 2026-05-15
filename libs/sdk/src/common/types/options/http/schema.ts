@@ -10,6 +10,28 @@ import type { CorsOptions, HttpOptionsInterface } from './interfaces';
 type CorsOriginCallback = Extract<CorsOptions['origin'], Function>;
 
 /**
+ * Body-parser-compatible size limit. Accepts:
+ *   - a non-negative integer number of bytes, or
+ *   - a unit-suffixed string matching what the `bytes` library (used by
+ *     body-parser) parses: `b`, `kb`, `mb`, `gb`, `tb`, `pb` (case-insensitive),
+ *     with optional whitespace between the number and the unit and an optional
+ *     decimal portion (e.g. `'500kb'`, `'1.5gb'`, `'10 MB'`).
+ *
+ * Tightened on PR #422 — the prior `z.union([z.number(), z.string()])` accepted
+ * typos like `'4mbb'` or `'10xyz'` that body-parser then silently treated as
+ * unbounded. Validating up-front turns those into clear configuration errors.
+ */
+const bodyParserLimitSchema = z.union([
+  z.number().int().nonnegative(),
+  z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d+)?\s*(b|kb|mb|gb|tb|pb)$/i, {
+      message: 'Body limit must be a byte count or unit-suffixed string (e.g. "4mb", "500kb", 1048576).',
+    }),
+]);
+
+/**
  * CORS options Zod schema.
  * Origin accepts boolean, string, string array, or a callback function.
  */
@@ -68,6 +90,16 @@ export const httpOptionsSchema = z.object({
         .optional(),
     })
     .optional(),
+  /**
+   * Maximum accepted body size for JSON-RPC POST requests. Number of bytes or
+   * a body-parser-compatible string ('4mb', '500kb', etc.). Defaults to '4mb'.
+   */
+  bodyLimit: bodyParserLimitSchema.default('4mb'),
+  /**
+   * Maximum accepted body size for application/x-www-form-urlencoded requests.
+   * Falls back to `bodyLimit` when omitted (handled at the adapter layer).
+   */
+  urlencodedLimit: bodyParserLimitSchema.optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

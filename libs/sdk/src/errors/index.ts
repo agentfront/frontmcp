@@ -17,6 +17,7 @@ export {
   InvalidInputError,
   InvalidOutputError,
   InvalidMethodError,
+  PayloadTooLargeError,
   // Rate limiting errors
   RateLimitError,
   QuotaExceededError,

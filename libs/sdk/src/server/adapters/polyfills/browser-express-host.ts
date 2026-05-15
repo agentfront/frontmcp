@@ -2,6 +2,9 @@
 
 export interface ExpressHostAdapterOptions {
   cors?: unknown;
+  security?: unknown;
+  bodyLimit?: number | string;
+  urlencodedLimit?: number | string;
 }
 
 export class ExpressHostAdapter {

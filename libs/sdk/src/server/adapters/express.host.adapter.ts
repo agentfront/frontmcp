@@ -14,8 +14,16 @@ import {
   type ServerResponse,
 } from '../../common';
 import type { SecurityOptions } from '../../common/types/options/http/interfaces';
+import { PayloadTooLargeError } from '../../errors/mcp.error';
 import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
 import { HostServerAdapter } from './base.host.adapter';
+
+/**
+ * Default request body size for the Express host. Lifts body-parser's silent
+ * 100KB default, which routinely rejected base64-encoded PDFs, DOCXes, and
+ * large HTML inputs before they reached MCP tool handlers (issue #410).
+ */
+export const DEFAULT_EXPRESS_BODY_LIMIT = '4mb';
 
 /**
  * Options for ExpressHostAdapter.
@@ -33,6 +41,18 @@ export interface ExpressHostAdapterOptions {
    * Includes bind address and DNS rebinding protection.
    */
   security?: SecurityOptions;
+
+  /**
+   * Maximum body size for `express.json()`. Accepts a number of bytes or a
+   * body-parser-compatible string ('4mb', '500kb', etc.). Defaults to '4mb'.
+   */
+  bodyLimit?: number | string;
+
+  /**
+   * Maximum body size for `express.urlencoded()`. Falls back to `bodyLimit`
+   * when omitted.
+   */
+  urlencodedLimit?: number | string;
 }
 
 export class ExpressHostAdapter extends HostServerAdapter {
@@ -42,12 +62,14 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
 
-    // Configure CORS with secure defaults
-    // CORS middleware is only enabled when an explicit origin is provided
-    // This prevents accidental enabling with { credentials: true } alone
+    // CORS must run BEFORE the body parsers so the 413-on-too-large response
+    // still carries `Access-Control-Allow-Origin` and friends. If CORS runs
+    // after the parsers, body-parser's `entity.too.large` short-circuits to
+    // our error handler before CORS ever sees the request — and browsers
+    // refuse to surface the structured 413 body to JS (CodeRabbit on PR #422).
+    // CORS middleware is only enabled when an explicit origin is provided —
+    // prevents accidental enabling with `{ credentials: true }` alone.
     const corsOptions = options?.cors;
     const corsEnabled = corsOptions?.origin !== undefined && corsOptions.origin !== false;
     if (corsEnabled) {
@@ -59,6 +81,30 @@ export class ExpressHostAdapter extends HostServerAdapter {
         }),
       );
     }
+
+    const jsonLimit = options?.bodyLimit ?? DEFAULT_EXPRESS_BODY_LIMIT;
+    const formLimit = options?.urlencodedLimit ?? jsonLimit;
+    this.app.use(express.json({ limit: jsonLimit }));
+    this.app.use(express.urlencoded({ extended: true, limit: formLimit }));
+
+    // Translate body-parser's `entity.too.large` (raised when a request body
+    // exceeds the configured `limit`) into a structured JSON-RPC 413 response
+    // so MCP clients receive a parseable error envelope instead of Express's
+    // default HTML error page. The envelope shape is owned by `PayloadTooLargeError`
+    // so protocol error shape stays centralized in the SDK error layer.
+    this.app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const e = err as { type?: string; limit?: number; length?: number } | undefined;
+      if (e?.type === 'entity.too.large') {
+        const payloadError = new PayloadTooLargeError(e.limit, e.length);
+        res.status(payloadError.statusCode).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: payloadError.toJsonRpcError(),
+        });
+        return;
+      }
+      next(err);
+    });
 
     // Host validation middleware (DNS rebinding protection)
     const securityOpts = options?.security;
