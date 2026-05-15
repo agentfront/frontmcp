@@ -172,7 +172,18 @@ export class Scope extends ScopeEntry {
     // Pass distributed config to ProviderRegistry for serverless/multi-instance support
     const distributedMode = rec.metadata.transport?.distributedMode;
     const providerCaching = rec.metadata.transport?.providerCaching;
-    this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders, {
+    // Register `@FrontMcp({ providers })` into the scope's provider list so the
+    // existing parent-chain lookup in ProviderRegistry makes them visible to
+    // every `@App` tool/resource/prompt/skill (issue #403).
+    //
+    // Ordering matters: ProviderRegistry#buildMap uses `Map.set(provide, rec)`,
+    // which is last-write-wins. User providers MUST come BEFORE the framework
+    // defaults so that the defaults (Scope, ScopeEntry, FrontMcpLogger,
+    // FrontMcpContextStorage, FrontMcpContextProvider) write last and cannot
+    // be accidentally shadowed by a user provider that happens to declare the
+    // same token.
+    const userProviders = rec.metadata.providers ?? [];
+    this.scopeProviders = new ProviderRegistry([...userProviders, ...this.defaultScopeProviders], globalProviders, {
       distributedMode,
       providerCaching,
     });
