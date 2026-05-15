@@ -192,7 +192,7 @@ class MyApp {}
 ```ts
 @Skill({
   name: string,              // Required: kebab-case, max 64 chars
-  description: string,       // Required: max 1024 chars, no XML tags
+  description: string,       // Required: 1–1024 chars, non-empty
   instructions: InstructionSource, // Required: detailed guidance (see below)
   tools?: ToolRef[],         // Optional: tool references with purpose
   tags?: string[],           // Optional: categorization tags
@@ -215,7 +215,7 @@ class MyApp {}
 | Field               | Description                                                                  |
 | ------------------- | ---------------------------------------------------------------------------- |
 | `name`              | Unique identifier, must be kebab-case (max 64 chars, no consecutive hyphens) |
-| `description`       | Short text for discovery (max 1024 chars, no XML/HTML tags)                  |
+| `description`       | Short text for discovery (1–1024 chars, non-empty)                           |
 | `instructions`      | Detailed step-by-step guidance (inline, file, or URL)                        |
 | `tools`             | Tools this skill uses, with optional purpose descriptions                    |
 | `tags`              | Categorization for filtering and organization                                |
@@ -256,8 +256,8 @@ Skill names follow strict kebab-case rules per the [Anthropic Agent Skills speci
 
 ### Description Validation
 
+- Non-empty
 - Maximum 1024 characters
-- Must not contain XML/HTML tags (per Agent Skills spec)
 
 ---
 

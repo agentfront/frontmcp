@@ -1,4 +1,11 @@
+import { createRequire } from 'module';
+
 import type { Config } from '@jest/types';
+
+const require = createRequire(import.meta.url);
+// Annotate the require() result so we don't leak an implicit `any` into the
+// merged config below (CodeRabbit on PR #420; per CLAUDE.md, avoid `any`).
+const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js') as Partial<Config.InitialOptions>;
 
 const config: Config.InitialOptions = {
   displayName: 'demo-e2e-skilled-openapi',
@@ -36,6 +43,7 @@ const config: Config.InitialOptions = {
     '^@frontmcp/plugin-skilled-openapi$': '<rootDir>/../../../plugins/plugin-skilled-openapi/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-skilled-openapi',
+  ...e2eCoveragePreset,
 };
 
 export default config;

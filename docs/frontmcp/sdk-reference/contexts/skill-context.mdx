@@ -19,17 +19,33 @@ export abstract class SkillContext extends ExecutionContextBase<SkillContent>
 | `skillName` | `string`        | Skill name     |
 | `skillId`   | `string`        | Skill ID       |
 
-## Abstract Methods
+## Overridable Methods
+
+<Info>
+Both methods below have **default implementations** that throw
+`SkillContextNotImplementedError`. Under the normal `@Skill` pipeline the
+runtime drives loading via `SkillInstance` against the decorator metadata,
+so these methods are **never invoked on your class** — overriding them is
+optional. This is what makes `class MySkill extends SkillContext {}` (no
+body) compile under strict TypeScript.
+
+Override these methods only when you construct a `SkillContext` subclass
+manually outside the `@Skill` decorator pipeline and need bespoke
+loading/assembly logic. The detailed examples below show that advanced
+pattern.
+</Info>
 
 ### loadInstructions()
 
 Load skill instructions from the configured source.
 
 ```typescript
-abstract loadInstructions(): Promise<string>
+loadInstructions(): Promise<string>
 ```
 
-Instructions can come from:
+Default behaviour: throws `SkillContextNotImplementedError`. The runtime
+calls `SkillInstance.loadInstructions()` (not this method) under the
+`@Skill` pipeline, resolving:
 
 - Inline string
 - File reference (`{ file: './path.md' }`)
@@ -40,8 +56,28 @@ Instructions can come from:
 Build the complete skill content.
 
 ```typescript
-abstract build(): Promise<SkillContent>
+build(): Promise<SkillContent>
 ```
+
+Default behaviour: throws `SkillContextNotImplementedError`. The runtime
+calls `SkillInstance.load()` (not this method) under the `@Skill` pipeline.
+
+## Minimal Example
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'data-analysis',
+  description: 'Analyze datasets and generate insights',
+  instructions: 'Load the dataset, analyze patterns, generate insights.',
+  tools: ['query_database', 'create_chart'],
+})
+class DataAnalysisSkill extends SkillContext {}
+```
+
+That's enough. The runtime resolves `instructions`, `resources`, and tool
+references from the decorator metadata for you.
 
 ## SkillContent Interface
 

@@ -5,14 +5,14 @@
  */
 
 import {
-  skillMetadataSchema,
-  normalizeToolRef,
   extractToolNames,
-  isInlineInstructions,
   isFileInstructions,
+  isInlineInstructions,
   isUrlInstructions,
-  SkillMetadata,
-  SkillToolRef,
+  normalizeToolRef,
+  skillMetadataSchema,
+  type SkillMetadata,
+  type SkillToolRef,
 } from '../../common/metadata/skill.metadata';
 
 describe('skill.metadata', () => {
@@ -201,22 +201,22 @@ describe('skill.metadata', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should reject description with XML tags', () => {
+    it('should accept description with XML/JSX tags', () => {
       const result = skillMetadataSchema.safeParse({
         name: 'test-skill',
         description: 'A skill with <b>bold</b> text',
         instructions: 'Do something',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
-    it('should reject description with XML self-closing tags', () => {
+    it('should accept description with XML self-closing tags', () => {
       const result = skillMetadataSchema.safeParse({
         name: 'test-skill',
         description: 'A skill with <br/> break',
         instructions: 'Do something',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('should accept description with angle brackets that are not tags', () => {
@@ -226,6 +226,84 @@ describe('skill.metadata', () => {
         instructions: 'Do something',
       });
       expect(result.success).toBe(true);
+    });
+
+    it('should accept description referencing a JSX/React component', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'Use when registering a custom <BrandHeader> component.',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description with an inline <svg> reference', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'Skill that emits <svg> snippets for icons.',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description containing nested HTML-like tags', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'Wraps <App> in <ErrorBoundary>',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description containing form tag references', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'Generate <form> fields with <input/> and <button>Submit</button>',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description with markdown-style autolink', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'See <https://agentskills.io/specification>',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description containing ASCII art angle brackets', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'Status: |--<>--|',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept description exactly 1 character', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'x',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('error messages for description must not cite the Agent Skills spec', () => {
+      // Force a failing description (length-based) and assert no message attributes the rule to the spec.
+      const tooLong = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'a'.repeat(1025),
+        instructions: 'Do something',
+      });
+      expect(tooLong.success).toBe(false);
+      if (!tooLong.success) {
+        for (const issue of tooLong.error.issues) {
+          expect(issue.message).not.toContain('Agent Skills spec');
+        }
+      }
     });
 
     it('should validate new spec fields (license, compatibility, specMetadata, allowedTools, resources)', () => {
