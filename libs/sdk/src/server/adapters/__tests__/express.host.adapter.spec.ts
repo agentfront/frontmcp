@@ -225,11 +225,13 @@ describe('ExpressHostAdapter', () => {
   describe('body-parser limit (issue #410)', () => {
     type AddrInfo = { port: number; address: string; family: string };
 
+    type TestResponse = { json: (payload: { size: number }) => void };
     const startServer = async (adapter: ExpressHostAdapter): Promise<{ url: string; close: () => Promise<void> }> => {
-      adapter.registerRoute('POST', '/echo', (req: unknown, res: any) =>
-        res.json({ size: JSON.stringify((req as { body: unknown }).body).length }),
-      );
-      const server = http.createServer(adapter.getHandler() as any);
+      adapter.registerRoute('POST', '/echo', (req: unknown, res: unknown) => {
+        const body = (req as { body: unknown }).body;
+        (res as TestResponse).json({ size: JSON.stringify(body).length });
+      });
+      const server = http.createServer(adapter.getHandler() as http.RequestListener);
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
       const addr = server.address() as AddrInfo;
       return {
@@ -238,7 +240,11 @@ describe('ExpressHostAdapter', () => {
       };
     };
 
-    const postJson = async (url: string, payload: string): Promise<{ status: number; body: unknown }> => {
+    const post = async (
+      url: string,
+      payload: string,
+      contentType: string,
+    ): Promise<{ status: number; body: unknown }> => {
       const { hostname, port, pathname } = new URL(url);
       return new Promise((resolve, reject) => {
         const req = http.request(
@@ -247,7 +253,7 @@ describe('ExpressHostAdapter', () => {
             hostname,
             port,
             path: pathname,
-            headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+            headers: { 'content-type': contentType, 'content-length': Buffer.byteLength(payload) },
           },
           (res) => {
             const chunks: Buffer[] = [];
@@ -269,6 +275,9 @@ describe('ExpressHostAdapter', () => {
         req.end();
       });
     };
+
+    const postJson = (url: string, payload: string) => post(url, payload, 'application/json');
+    const postForm = (url: string, payload: string) => post(url, payload, 'application/x-www-form-urlencoded');
 
     it('accepts a small body under the default limit', async () => {
       const adapter = new ExpressHostAdapter();
@@ -334,15 +343,22 @@ describe('ExpressHostAdapter', () => {
     });
 
     it('uses urlencodedLimit independently from bodyLimit when both are set', async () => {
-      // Confirm urlencodedLimit is consumed: send a JSON payload large enough
-      // to exceed urlencodedLimit but small enough to satisfy bodyLimit — JSON
-      // requests use bodyLimit so this should succeed.
+      // Confirm urlencodedLimit is actually consumed by exercising the
+      // urlencoded parser (Content-Type: application/x-www-form-urlencoded).
+      // The form payload sits between urlencodedLimit (1kb) and bodyLimit
+      // (500kb) — the urlencoded parser must 413 it. If urlencodedLimit
+      // wiring regresses (falls back to bodyLimit's 500kb), this test fails.
       const adapter = new ExpressHostAdapter({ bodyLimit: '500kb', urlencodedLimit: '1kb' });
       const { url, close } = await startServer(adapter);
       try {
-        const payload = JSON.stringify({ blob: 'A'.repeat(200 * 1024) });
-        const { status } = await postJson(url, payload);
-        expect(status).toBe(200);
+        // ~5kb form payload — well over urlencodedLimit, well under bodyLimit.
+        const payload = `blob=${'A'.repeat(5 * 1024)}`;
+        const { status, body } = await postForm(url, payload);
+        expect(status).toBe(413);
+        expect(body).toMatchObject({
+          jsonrpc: '2.0',
+          error: { code: -32600, message: 'Payload Too Large' },
+        });
       } finally {
         await close();
       }
