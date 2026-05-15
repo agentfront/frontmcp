@@ -80,7 +80,7 @@ These properties align with the [Anthropic Agent Skills specification](https://a
 | `compatibility` | `string`                 | Environment requirements (max 500 chars)                          |
 | `specMetadata`  | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`)            |
 | `allowedTools`  | `string`                 | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
-| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `assets`)  |
+| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `examples`, `assets`)  |
 
 ## Instruction Sources
 
@@ -249,6 +249,7 @@ interface SkillContent {
 interface SkillResources {
   scripts?: string;
   references?: string;
+  examples?: string;
   assets?: string;
 }
 ```

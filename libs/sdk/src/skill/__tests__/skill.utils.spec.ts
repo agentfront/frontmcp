@@ -62,9 +62,11 @@ describe('skill.utils', () => {
 
       expect(result.kind).toBe(SkillKind.CLASS_TOKEN);
       if (result.kind === SkillKind.CLASS_TOKEN) {
-        expect(typeof result.callerDir).toBe('string');
-        // Decorator was evaluated inside this test file, so the captured dir is this directory.
-        expect(result.callerDir).toContain('/__tests__');
+        // Decorator was evaluated inside this test file, so callerDir should
+        // equal this directory. Comparing against `__dirname` is
+        // cross-platform — the prior substring check assumed POSIX
+        // separators and would fail on Windows runners (CodeRabbit PR #419).
+        expect(result.callerDir).toBe(__dirname);
       }
     });
 
