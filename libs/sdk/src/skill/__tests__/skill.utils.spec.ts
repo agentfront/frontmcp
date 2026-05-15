@@ -5,15 +5,16 @@
  */
 
 import 'reflect-metadata';
+
+import { SkillContext, SkillKind, type SkillContent, type SkillMetadata } from '../../common';
+import { Skill, skill } from '../../common/decorators/skill.decorator';
 import {
-  normalizeSkill,
-  isSkillRecord,
-  skillDiscoveryDeps,
   buildSkillContent,
   formatSkillForLLM,
+  isSkillRecord,
+  normalizeSkill,
+  skillDiscoveryDeps,
 } from '../skill.utils';
-import { SkillKind, SkillMetadata, SkillContext, SkillContent } from '../../common';
-import { Skill, skill } from '../../common/decorators/skill.decorator';
 
 // Mock SkillContext for testing
 class MockSkillContext extends SkillContext {
@@ -47,6 +48,26 @@ describe('skill.utils', () => {
       expect(result.kind).toBe(SkillKind.CLASS_TOKEN);
       expect(result.provide).toBe(ClassSkill);
       expect(result.metadata.name).toBe('class-skill');
+    });
+
+    it('should copy callerDir from class metadata onto the record (issue #413)', () => {
+      @Skill({
+        name: 'class-skill-with-caller',
+        description: 'A class-based skill that captures its source dir',
+        instructions: { file: './SKILL.md' },
+      })
+      class ClassSkillWithCaller extends MockSkillContext {}
+
+      const result = normalizeSkill(ClassSkillWithCaller);
+
+      expect(result.kind).toBe(SkillKind.CLASS_TOKEN);
+      if (result.kind === SkillKind.CLASS_TOKEN) {
+        // Decorator was evaluated inside this test file, so callerDir should
+        // equal this directory. Comparing against `__dirname` is
+        // cross-platform — the prior substring check assumed POSIX
+        // separators and would fail on Windows runners (CodeRabbit PR #419).
+        expect(result.callerDir).toBe(__dirname);
+      }
     });
 
     it('should passthrough SkillValueRecord from skill() helper', () => {
