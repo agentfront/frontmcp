@@ -348,27 +348,39 @@ describe('ExpressHostAdapter', () => {
       }
     });
 
-    it('registers CORS middleware BEFORE the body parsers (CodeRabbit PR #422)', () => {
+    it('runs CORS middleware before body parsers for oversized payloads (CodeRabbit PR #422)', async () => {
       // Regression: CORS middleware previously ran AFTER body parsers, so a
       // body-too-large 413 short-circuited to our error handler without ever
       // hitting CORS — and browsers refused to surface the structured
       // JSON-RPC error body to client JS.
       //
-      // The `cors` module is mocked at the top of this file (lines 28-33),
-      // so we can't observe ACAO headers on a real response — but we CAN
-      // assert the CORS factory was constructed BEFORE the adapter's app
-      // ran the body parsers. The mock records every `cors({...})` call, so
-      // we just verify the call happened and the limits later in the chain
-      // still 413-reject oversized bodies.
-      new ExpressHostAdapter({
+      // The `cors` module is mocked above so `mockCorsMiddleware` is the
+      // actual middleware installed in the Express stack. If CORS is ordered
+      // BEFORE the body parsers, an oversized request still hits the cors
+      // middleware (which calls next()) before the parser throws
+      // entity.too.large. If CORS regresses back to after the parsers, the
+      // parser rejects first and the cors middleware is NEVER invoked.
+      const adapter = new ExpressHostAdapter({
         bodyLimit: '10kb',
         cors: { origin: 'https://example.com', credentials: false },
       });
-      // Cors factory was called once with our explicit origin — proves cors
-      // is wired (and now runs before the parser middleware per the file's
-      // top-to-bottom order).
-      expect(corsCalls).toHaveLength(1);
-      expect(corsCalls[0]).toMatchObject({ origin: 'https://example.com', credentials: false });
+      const { url, close } = await startServer(adapter);
+      try {
+        const payload = JSON.stringify({ blob: 'A'.repeat(50 * 1024) });
+        const { status } = await postJson(url, payload);
+        // Parser still rejects oversized body with 413.
+        expect(status).toBe(413);
+        // CORS factory was wired exactly once with our explicit origin…
+        expect(corsCalls).toHaveLength(1);
+        expect(corsCalls[0]).toMatchObject({ origin: 'https://example.com', credentials: false });
+        // …and crucially, the CORS middleware actually ran on the oversized
+        // request before the body parser rejected it. If the order regresses,
+        // this expectation fails because the parser short-circuits to the
+        // 413 error handler without invoking subsequent middleware.
+        expect(mockCorsMiddleware).toHaveBeenCalled();
+      } finally {
+        await close();
+      }
     });
   });
 });

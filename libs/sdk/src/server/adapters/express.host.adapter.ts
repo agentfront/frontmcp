@@ -14,6 +14,7 @@ import {
   type ServerResponse,
 } from '../../common';
 import type { SecurityOptions } from '../../common/types/options/http/interfaces';
+import { PayloadTooLargeError } from '../../errors/mcp.error';
 import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
 import { HostServerAdapter } from './base.host.adapter';
 
@@ -89,18 +90,16 @@ export class ExpressHostAdapter extends HostServerAdapter {
     // Translate body-parser's `entity.too.large` (raised when a request body
     // exceeds the configured `limit`) into a structured JSON-RPC 413 response
     // so MCP clients receive a parseable error envelope instead of Express's
-    // default HTML error page.
+    // default HTML error page. The envelope shape is owned by `PayloadTooLargeError`
+    // so protocol error shape stays centralized in the SDK error layer.
     this.app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
       const e = err as { type?: string; limit?: number; length?: number } | undefined;
       if (e?.type === 'entity.too.large') {
-        res.status(413).json({
+        const payloadError = new PayloadTooLargeError(e.limit, e.length);
+        res.status(payloadError.statusCode).json({
           jsonrpc: '2.0',
           id: null,
-          error: {
-            code: -32600,
-            message: 'Payload Too Large',
-            data: { limit: e.limit, length: e.length },
-          },
+          error: payloadError.toJsonRpcError(),
         });
         return;
       }
