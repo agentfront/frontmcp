@@ -17,10 +17,11 @@
 // kill timeout because the child then proceeds to start `tsx --watch`.
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
 import * as net from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+
+import { mkdtemp, writeFile } from '@frontmcp/utils';
 
 import { runFrontmcpCli } from './helpers/exec-cli';
 
@@ -124,6 +125,7 @@ describe('frontmcp dev — port conflict end-to-end (issue #398)', () => {
               },
             );
             let buf = '';
+            let matched = false;
             const timer = setTimeout(() => {
               child.kill('SIGKILL');
               reject(new Error(`auto-port message not seen in stdout+stderr; buffered:\n${buf}`));
@@ -134,6 +136,7 @@ describe('frontmcp dev — port conflict end-to-end (issue #398)', () => {
               const cleaned = stripAnsi(buf);
               const m = cleaned.match(/auto-picked (\d+)/);
               if (m) {
+                matched = true;
                 clearTimeout(timer);
                 child.kill('SIGINT');
                 // Drain remaining output so the close handler fires cleanly.
@@ -145,6 +148,20 @@ describe('frontmcp dev — port conflict end-to-end (issue #398)', () => {
             child.once('error', (err) => {
               clearTimeout(timer);
               reject(err);
+            });
+            // Fail fast if the child exits before emitting "auto-picked"
+            // — without this, the test sat blocked until TEST_TIMEOUT
+            // (CodeRabbit on PR #421). The matched-branch's own
+            // child.once('close', ...) still fires for the happy path.
+            child.once('close', (code, signal) => {
+              if (!matched) {
+                clearTimeout(timer);
+                reject(
+                  new Error(
+                    `child exited before auto-port message (code=${String(code)}, signal=${String(signal)}); buffered:\n${stripAnsi(buf)}`,
+                  ),
+                );
+              }
             });
           },
         );
