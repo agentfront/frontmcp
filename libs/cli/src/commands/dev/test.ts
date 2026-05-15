@@ -181,18 +181,25 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
   // and exited 1 otherwise — locking out projects that only have colocated
   // unit specs (the CLAUDE.md convention). The new testMatch covers both;
   // we only refuse to run when there's literally nowhere to look.
+  //
+  // CodeRabbit on PR #425: also accept `__tests__/`-only projects, since
+  // `generateJestConfig` discovers `**/__tests__/**/*.spec.ts(x)` too. The
+  // help text below matches the actual default discovery rules.
   const e2eDir = path.join(cwd, 'e2e');
   const srcDir = path.join(cwd, 'src');
+  const testsDir = path.join(cwd, '__tests__');
   const hasE2EDir = await fileExists(e2eDir);
   const hasSrcDir = await fileExists(srcDir);
+  const hasTestsDir = await fileExists(testsDir);
 
-  if (!userConfig && !hasE2EDir && !hasSrcDir) {
+  if (!userConfig && !hasE2EDir && !hasSrcDir && !hasTestsDir) {
     console.error(c('red', 'No test sources found.'));
     console.error('');
     console.error('Expected one of:');
     console.error('  • a jest.config.{ts,js,mjs,cjs,json} in the current directory');
     console.error('  • a ./src/ directory with colocated *.spec.ts(x) files');
-    console.error('  • a ./e2e/ directory with *.e2e.ts(x) / *.e2e.spec.ts(x) files');
+    console.error('  • a ./__tests__/ directory with *.spec.ts(x) files');
+    console.error('  • a ./e2e/ directory with *.e2e.spec.ts(x) files');
     console.error('');
     console.error('Create one of those, then run:');
     console.error('  frontmcp test');
