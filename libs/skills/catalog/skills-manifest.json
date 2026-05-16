@@ -3097,6 +3097,23 @@
           ]
         },
         {
+          "name": "metrics-endpoint",
+          "description": "Configure the off-by-default /metrics endpoint that exposes process metrics and framework counters in Prometheus text format",
+          "examples": [
+            {
+              "name": "enable-metrics-endpoint",
+              "description": "Turn on the /metrics endpoint with defaults and scrape it with curl.",
+              "level": "basic",
+              "tags": ["observability", "metrics", "prometheus"],
+              "features": [
+                "Setting `metrics: { enabled: true }` on `@FrontMcp` to register `GET /metrics`",
+                "Verifying the Prometheus text-exposition response with `curl`",
+                "Reading process metrics + framework counters from a single scrape"
+              ]
+            }
+          ]
+        },
+        {
           "name": "vendor-integrations",
           "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
           "examples": [

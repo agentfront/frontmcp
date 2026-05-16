@@ -17,6 +17,7 @@ import {
   healthOptionsSchema,
   httpOptionsSchema,
   loggingOptionsSchema,
+  metricsOptionsSchema,
   observabilityOptionsSchema,
   paginationOptionsSchema,
   pubsubOptionsSchema,
@@ -32,6 +33,7 @@ import {
   type HealthOptionsInput,
   type HttpOptionsInput,
   type LoggingOptionsInput,
+  type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
   type PaginationOptions,
   type PubsubOptionsInput,
@@ -346,6 +348,35 @@ export interface FrontMcpBaseMetadata {
   health?: HealthOptionsInput;
 
   /**
+   * `/metrics` endpoint configuration (issue #397).
+   *
+   * OFF by default. When `enabled: true`, registers a `GET /metrics`
+   * endpoint on the same HTTP listener as `/healthz` that emits Prometheus
+   * text exposition (or JSON, via `format: 'json'`) covering:
+   *   - process metrics — CPU, RSS, heap, event-loop lag, fd count
+   *   - every `@frontmcp/observability` counter (`frontmcp_*_total`)
+   *
+   * Re-uses the in-memory counter snapshot store from
+   * `@frontmcp/observability`, so counters emitted via `createCounter()`
+   * are scraped without needing an OTel push pipeline.
+   *
+   * @example Enable with defaults
+   * ```typescript
+   * metrics: { enabled: true }
+   * ```
+   *
+   * @example Token-gated for internet-exposed deployments
+   * ```typescript
+   * metrics: {
+   *   enabled: true,
+   *   auth: 'token',
+   *   tokenEnv: 'FRONTMCP_METRICS_TOKEN',
+   * }
+   * ```
+   */
+  metrics?: MetricsOptionsInput;
+
+  /**
    * Observability configuration — OpenTelemetry tracing, structured logging,
    * and per-request log collection.
    *
@@ -536,6 +567,7 @@ export const frontMcpBaseSchema = z.object({
   throttle: guardConfigSchema.optional(),
   observability: observabilityOptionsSchema,
   health: healthOptionsSchema.optional(),
+  metrics: metricsOptionsSchema.optional(),
   channels: channelsConfigSchema.optional(),
   authorities: z
     .object({
@@ -733,6 +765,7 @@ const frontMcpLiteSchema = z.object({
   jobs: z.any().optional(),
   throttle: z.any().optional(),
   health: z.any().optional(),
+  metrics: z.any().optional(),
   // Required by Scope.validateAuthoritiesConfig — when entries declare
   // `authorities` metadata the engine still needs the top-level config
   // to instantiate. Pass-through (`z.any()`) so CLI/MCPB builds work
