@@ -164,6 +164,72 @@ if (!db) {
 }
 ```
 
+## File Layout
+
+Once a provider grows past a single class, a flat `src/providers/<slug>.provider.ts` becomes ambiguous: helpers, internal types, schema fragments, and the spec file all need somewhere to go. The recommended convention is **one folder per provider**, co-locating the class, the spec, an optional barrel, and any helpers:
+
+```text
+src/providers/<provider-slug>/
+├── index.ts                            # barrel: re-exports class, factory, public types
+├── <provider-slug>.provider.ts         # @Provider class and/or AsyncProvider factory
+├── <provider-slug>.provider.spec.ts    # unit tests
+├── types.ts                            # (optional) internal types / token interfaces
+└── <helper>.ts (+ .spec.ts)            # (optional) per-provider helpers
+```
+
+Plus a top-level `src/providers/index.ts` barrel re-exporting each subfolder:
+
+```typescript
+// src/providers/index.ts
+export * from './task-store';
+export * from './config';
+export * from './redis';
+```
+
+### Naming rules
+
+- **Folder slug**: `kebab-case`, matches the provider's primary purpose (`task-store`, `redis`, `api-client`).
+- **Class file**: `<slug>.provider.ts` — matches the in-tree demo-app convention (`apps/demo/src/apps/expenses/providers/redis.provider.ts`) and what the Nx generator emits.
+- **Spec file**: `<slug>.provider.spec.ts` — co-located with source per the repo's `.spec.ts` convention (CLAUDE.md).
+- **Barrel**: `index.ts`, re-exporting the class, the `AsyncProvider` factory (if any), and any public types/tokens.
+
+### Single-file vs folder — when to fold
+
+A trivial provider (e.g. a `Map`-based cache, a pure DTO with no helpers) does NOT need its own folder; promote to a folder as soon as the provider grows. Use this rubric:
+
+| Provider shape                                         | Layout                                                  | Why                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Pure DTO (e.g. `extends Map`, no methods, no helpers)  | Single file `<slug>.provider.ts` under `src/providers/` | A folder for a 5-line class is over-architected                                |
+| Provider with a spec file                              | Folder                                                  | Keeps source and spec adjacent; matches CLAUDE.md `.spec.ts` rule              |
+| Provider with helpers, types, or schema fragments      | Folder                                                  | Helpers/types are private to the provider; folder boundary makes that explicit |
+| `AsyncProvider({ useFactory })` with non-trivial setup | Folder                                                  | Factory + class + setup helpers cluster naturally                              |
+| Multiple related providers sharing helpers             | Folder per provider + sibling `_shared/` folder         | Avoids leaking helpers into the top-level `providers/` namespace               |
+
+### Cross-provider imports
+
+Cross-provider imports go through the **subfolder barrel**, not into another provider's internals:
+
+```typescript
+// ✅ Good — imports through the subfolder barrel
+
+// ❌ Bad — top-level barrel for sibling imports causes circular-init churn
+import { TaskStoreProvider } from '..';
+import { TaskStoreProvider } from '../task-store';
+// ❌ Bad — reaches into another provider's implementation file
+import { TaskStoreProvider } from '../task-store/task-store.provider';
+```
+
+Tool → provider imports follow the same rule:
+
+```typescript
+// ✅ Good — tool imports the provider's public surface from its barrel
+import { TaskStoreProvider } from '../../providers/task-store';
+```
+
+### Same convention for tools and resources
+
+The folder layout applies to `create-tool` and `create-resource` too. Once a tool grows a `<slug>.schema.ts` or a resource grows a content helper, promote it to `src/tools/<slug>/` or `src/resources/<slug>/` with the same barrel + spec layout. (Tracked separately in issue #405 for `create-tool`.)
+
 ## Common Provider Patterns
 
 ### Configuration Provider
@@ -258,6 +324,8 @@ class CacheProvider extends Map<string, unknown> {
 nx generate @frontmcp/nx:provider my-provider --project=my-app
 ```
 
+The generator currently writes a single `<slug>.provider.ts` directly into `src/providers/`. Promote it to the folder layout above as soon as you add a spec file or helpers — see [File Layout](#file-layout).
+
 ## Verification
 
 ```bash
@@ -270,13 +338,15 @@ frontmcp dev
 
 ## Common Patterns
 
-| Pattern            | Correct                                                                | Incorrect                                        | Why                                                                                         |
-| ------------------ | ---------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Token definition   | `const DB: Token<DbService> = Symbol('DbService')` (typed Symbol)      | `const DB = 'database'` (string literal)         | Typed `Token<T>` enables compile-time type checking on `this.get()`                         |
-| DI resolution      | `this.get(TOKEN)` with error handling                                  | `this.tryGet(TOKEN)!` with non-null assertion    | `get` throws a clear `DependencyNotFoundError`; non-null assertions hide failures           |
-| Lifecycle          | `AsyncProvider({ useFactory })` for async setup; constructor for sync  | Using `onInit()` / `onDestroy()` lifecycle hooks | `@Provider` has no lifecycle hooks; `AsyncProvider` factories are awaited before resolution |
-| Registration scope | Register at `@App` level for app-scoped, `@FrontMcp` for server-scoped | Registering same provider in multiple apps       | Server-scoped providers are shared; duplicating causes multiple instances                   |
-| Config provider    | `readonly` properties from `process.env`                               | Mutable properties that change at runtime        | Providers are singletons; mutable state can cause race conditions                           |
+| Pattern               | Correct                                                                                           | Incorrect                                                               | Why                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Token definition      | `const DB: Token<DbService> = Symbol('DbService')` (typed Symbol)                                 | `const DB = 'database'` (string literal)                                | Typed `Token<T>` enables compile-time type checking on `this.get()`                          |
+| DI resolution         | `this.get(TOKEN)` with error handling                                                             | `this.tryGet(TOKEN)!` with non-null assertion                           | `get` throws a clear `DependencyNotFoundError`; non-null assertions hide failures            |
+| Lifecycle             | `AsyncProvider({ useFactory })` for async setup; constructor for sync                             | Using `onInit()` / `onDestroy()` lifecycle hooks                        | `@Provider` has no lifecycle hooks; `AsyncProvider` factories are awaited before resolution  |
+| Registration scope    | Register at `@App` level for app-scoped, `@FrontMcp` for server-scoped                            | Registering same provider in multiple apps                              | Server-scoped providers are shared; duplicating causes multiple instances                    |
+| Config provider       | `readonly` properties from `process.env`                                                          | Mutable properties that change at runtime                               | Providers are singletons; mutable state can cause race conditions                            |
+| File layout           | `src/providers/<slug>/` folder with `index.ts` + `<slug>.provider.ts` + `<slug>.provider.spec.ts` | Flat `src/providers/<slug>.provider.ts` once helpers or a spec exist    | Co-locates source, tests, helpers; barrel hides internals — see [File Layout](#file-layout)  |
+| Cross-provider import | `import { TaskStoreProvider } from '../task-store'` (subfolder barrel)                            | `import { TaskStoreProvider } from '../task-store/task-store.provider'` | Subfolder barrel hides internals; reaching past it couples consumers to implementation files |
 
 ## Verification Checklist
 
@@ -287,6 +357,7 @@ frontmcp dev
 - [ ] Provider (class or `AsyncProvider` factory) is registered in `providers` array of `@App` or `@FrontMcp`
 - [ ] Sync setup happens in the constructor (throws fast on missing config)
 - [ ] Async setup uses `AsyncProvider({ useFactory })`; the framework awaits it before resolution
+- [ ] Each provider lives in its own `src/providers/<slug>/` folder once it has a spec, helpers, or internal types (single-file is fine for trivial providers — see the [File Layout](#file-layout) rubric)
 
 ### Runtime
 
@@ -312,7 +383,7 @@ frontmcp dev
 | Example                                                                               | Level        | Description                                                                                                                                   |
 | ------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`basic-database-provider`](../examples/create-provider/basic-database-provider.md)   | Basic        | A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs. |
-| [`config-and-api-providers`](../examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider with readonly environment settings and an HTTP API client provider.                                                  |
+| [`config-and-api-providers`](../examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.             |
 
 > See all examples in [`examples/create-provider/`](../examples/create-provider/)
 
