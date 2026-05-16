@@ -123,7 +123,7 @@ FrontMCP boots your server in a **schema-extraction** mode at build time
 skills without starting the HTTP transport. The manifest emits:
 
 - `tools[]` — every user-defined tool with its `name` and `description`
-  (system tools like `execute-job` / `register-workflow` are filtered out)
+  (system tools like `execute_job` / `register_workflow` are filtered out)
 - `tools_generated: false` — consumers can trust the static list
 - `prompts[]` — prompt names + descriptions
 - `prompts_generated: true` — FrontMCP prompts resolve via `execute()`; MCPB's
