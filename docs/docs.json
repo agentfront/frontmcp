@@ -167,6 +167,7 @@
                   "frontmcp/deployment/direct-client",
                   "frontmcp/deployment/unix-socket",
                   "frontmcp/deployment/health-checks",
+                  "frontmcp/deployment/metrics",
                   "frontmcp/deployment/high-availability",
                   "frontmcp/deployment/frontmcp-config",
                   "frontmcp/deployment/machine-id",
