@@ -61,6 +61,47 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 
 ---
 
+## Plugin Commands (issue #411)
+
+Emit the current FrontMCP server as a plugin for an AI tool. Today supports
+Claude Code (`.claude/plugins/<name>/`) and Codex (`~/.codex/config.toml`).
+
+| Command                                            | Description                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `plugin install --claude` / `--codex`              | Emit a Claude Code plugin folder and/or Codex `mcp_servers` entry        |
+| `plugin uninstall --claude` / `--codex`            | Remove what `plugin install` wrote, preserving any user files            |
+| `plugin status --claude` / `--codex`               | Report install state per provider (installed v X / outdated / missing)   |
+
+Flags shared across the three subcommands:
+
+| Flag                | Description                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `--scope <s>`       | `project` (default → `./.claude/plugins/`) or `user` (→ `~/.claude/plugins/`) |
+| `--dir <path>`      | Override the plugin destination root (testing or non-standard installs)      |
+| `--no-skills`       | Skip the `skills/` subtree                                                   |
+| `--no-commands`     | Skip the `commands/` subtree                                                 |
+| `--only-mcp`        | Skip the plugin folder; just write the `mcpServers` entry                    |
+| `--command <cmd>`   | Override the MCP server invocation in the plugin manifest                    |
+| `--env <NAME>`      | Surface an env-var placeholder in the plugin (repeatable)                    |
+| `--dry-run`         | Print the plan; do not write                                                 |
+
+**End-user path (built bin):** every CLI built with `frontmcp build --target cli`
+inherits `install -p claude|codex`. Pass `-p` (repeatable) plus the same scope
+flags above to get the same plugin emit from the installed binary.
+
+```bash
+# Dev-time: from a FrontMCP project root
+frontmcp plugin install --claude
+frontmcp plugin install --codex --dry-run
+frontmcp plugin status --claude
+
+# End-user: from the installed bin
+my-bin install -p claude -p codex
+my-bin install --status
+```
+
+---
+
 ## Options Reference
 
 ### General Options
