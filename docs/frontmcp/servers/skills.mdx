@@ -825,6 +825,27 @@ Tools in `allowedTools` don't require additional user confirmation during skill 
 
 ---
 
+## CLI commands
+
+The `frontmcp skills` command tree ships **six** subcommands:
+
+| Subcommand | Purpose                                                           |
+| ---------- | ----------------------------------------------------------------- |
+| `search`   | Semantic search over the catalog (description / tags / name)      |
+| `list`     | List all skills, filterable by `--category`, `--tag`, `--bundle`  |
+| `read`     | Print a skill's `SKILL.md`, a reference, or list `--refs/--examples` |
+| `install`  | Copy a skill (or many, via `--all/--tag/--category`) into a provider dir |
+| `export`   | Convert a skill into a Cursor / Windsurf / Copilot rule file      |
+| `publish`  | Publish a skill to the Smithery or Glama marketplace              |
+
+For the full flag tables, bulk-install patterns, and IDE-target output
+mapping, see the canonical reference shipped with the
+[`frontmcp-setup`](https://github.com/frontegg/frontmcp/blob/main/libs/skills/catalog/frontmcp-setup/references/frontmcp-skills-usage.md)
+router skill. Run `frontmcp skills <command> --help` for the
+authoritative live surface.
+
+---
+
 ## Best Practices
 
 **Do:**
