@@ -583,12 +583,17 @@ class DeployServiceTool extends ToolContext {
 }
 ```
 
-Available constraint fields (AND across fields, OR within arrays):
+Available constraint fields (AND across fields, OR within arrays). Issue #417 added `os` / `provider` / `target` / `surface`:
 
-- `platform` — OS: `'darwin'`, `'linux'`, `'win32'`
+- `os` — OS (renamed from `platform`): `'darwin'`, `'linux'`, `'win32'`. `platform` is kept as a deprecated alias.
 - `runtime` — JS runtime: `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`
-- `deployment` — Mode: `'serverless'`, `'standalone'`
+- `deployment` — Coarse mode: `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`
+- `provider` — Deploy provider (issue #417): `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'`. Override with `FRONTMCP_PROVIDER=<name>`.
+- `target` — Build target produced by `frontmcp build --target <x>` (issue #417): `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`. `'unknown'` in dev.
+- `surface` — Per-call axis (issue #417): `'mcp'` (MCP `tools/call`), `'cli'` (CLI subcommand), `'agent'` (in-process dispatch), `'job'` (job runner), `'http-trigger'` (channel HTTP triggers). Use `surface: ['agent']` to block external invocation but allow agent use.
 - `env` — NODE_ENV: `'production'`, `'development'`, `'test'`
+
+When an `availableWhen` constraint fails at call time, FrontMCP throws `EntryUnavailableError`. The error's `data` now carries `missingAxes: string[]` (issue #417) so clients can surface "this tool isn't reachable because provider=vercel / surface=mcp / …" without parsing prose.
 
 You can also check the platform imperatively inside `execute()`:
 
