@@ -292,6 +292,26 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return entry.fullName === name || entry.name === name;
     });
 
+    // Hyphen ↔ underscore name fallback (issue #408).
+    //
+    // Job-management tools renamed from `execute-job` to `execute_job` etc.
+    // to align with the MCP/OpenAI snake_case convention. Agents (and any
+    // user who memorized the hyphen form before the rename) get a permissive
+    // lookup so they don't see TOOL_NOT_FOUND. Only kicks in when the exact
+    // name missed, so it never masks a real typo. Log a one-time deprecation
+    // hint per scope when the legacy form is used.
+    if (!tool && /[-_]/.test(name)) {
+      const alt = name.includes('_') ? name.replace(/_/g, '-') : name.replace(/-/g, '_');
+      const altMatch = activeTools.find((entry) => entry.fullName === alt || entry.name === alt);
+      if (altMatch) {
+        this.logger.warn(
+          `findTool: tool "${name}" resolved via legacy name alias to "${alt}". ` +
+            `Update callers to use "${alt}" — the alias will be removed in a future release.`,
+        );
+        tool = altMatch;
+      }
+    }
+
     // Fallback: search directly in remote app registries
     // This handles timing issues where subscription callbacks haven't propagated tools yet
     if (!tool) {
