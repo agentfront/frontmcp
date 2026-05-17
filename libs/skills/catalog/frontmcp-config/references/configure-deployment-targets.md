@@ -157,6 +157,57 @@ frontmcp build --target vercel
 | `takeoverGracePeriodMs` | number | 5000      | Grace period before takeover |
 | `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix             |
 
+### Project-Defined CLI Commands (`cli.commands`)
+
+Register project-specific verbs that ship alongside the built-in
+`frontmcp` commands. Each verb spawns a runner module (TS or JS) as a
+child process — the project's own code never runs in the CLI process.
+
+```typescript
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+  cli: {
+    commands: {
+      deploy: {
+        entry: './scripts/deploy.ts',
+        description: 'Push the current build to staging',
+        arguments: [{ name: 'env', required: true }],
+        options: [{ flags: '-n, --dry-run' }, { flags: '-c, --concurrency <num>', default: 4 }],
+      },
+      'db-migrate': { entry: './scripts/migrate.ts' },
+    },
+  },
+});
+```
+
+| Field         | Type                       | Description                                         |
+| ------------- | -------------------------- | --------------------------------------------------- |
+| `entry`       | string                     | Path to runner (TS/JS), relative to project root    |
+| `description` | string                     | One-line description (shown in `--help`)            |
+| `arguments`   | `ProjectCommandArgument[]` | Positional args (`{ name, required?, variadic? }`)  |
+| `options`     | `ProjectCommandOption[]`   | Named options (`{ flags, description?, default? }`) |
+| `hidden`      | boolean                    | Hide from `--help` (verb still invokable)           |
+
+Verb names must match `/^[a-zA-Z][a-zA-Z0-9:_-]*$/` and may not collide
+with a built-in (`dev`, `build`, `test`, `start`, `skills`, etc.). Use a
+namespaced prefix to avoid collisions: `project:init`, `db-migrate`.
+
+Runner selection:
+
+- `.ts` / `.tsx` / `.mts` / `.cts` → `node --import tsx <entry>`
+- `.js` / `.mjs` / `.cjs` → `node <entry>`
+
+The runner gets the parsed positionals as argv plus a
+`FRONTMCP_PROJECT_COMMAND` env var holding a JSON payload of
+`{ verb, positionals, options, cwd }`.
+
+List every registered verb (built-in + project) with:
+
+```bash
+frontmcp --list-commands
+```
+
 ## File Resolution Order
 
 1. `frontmcp.config.ts`

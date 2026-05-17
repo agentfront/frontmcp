@@ -323,6 +323,122 @@ export const deploymentTargetSchema = z.discriminatedUnion('target', [
 ]);
 
 // ============================================
+// CLI extension (issue #409)
+// ============================================
+//
+// `cli.commands` lets projects register custom `frontmcp <verb>` entries
+// that show up in `frontmcp --help` alongside the built-ins and run with
+// the project's full module graph (spawned via `tsx`).
+
+/**
+ * Built-in CLI verbs that a project verb may NOT shadow. The reserved set
+ * also includes Commander's global flag tokens so a verb literally named
+ * `--help` can't be defined.
+ */
+export const RESERVED_VERBS: ReadonlySet<string> = new Set([
+  'dev',
+  'build',
+  'test',
+  'init',
+  'doctor',
+  'inspector',
+  'create',
+  'start',
+  'stop',
+  'restart',
+  'status',
+  'list',
+  'logs',
+  'socket',
+  'service',
+  'install',
+  'uninstall',
+  'configure',
+  'skills',
+  'mcpb',
+  'pm',
+  'help',
+  'version',
+  '--help',
+  '-h',
+  '--version',
+  '-V',
+  '--list-commands',
+]);
+
+const projectCommandArgumentSchema = z
+  .object({
+    name: z.string().min(1),
+    required: z.boolean().optional(),
+    description: z.string().optional(),
+    variadic: z.boolean().optional(),
+  })
+  .strict();
+
+const projectCommandOptionSchema = z
+  .object({
+    flags: z.string().min(1),
+    description: z.string().optional(),
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  })
+  .strict();
+
+export const projectCommandEntrySchema = z
+  .object({
+    entry: z.string().min(1),
+    description: z.string().optional(),
+    arguments: z
+      .array(projectCommandArgumentSchema)
+      .optional()
+      .superRefine((args, ctx) => {
+        if (!args) return;
+        // Commander allows variadic only on the final positional. Catch it
+        // here instead of letting it surface as a cryptic runtime error.
+        for (let i = 0; i < args.length - 1; i++) {
+          if (args[i].variadic) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [i, 'variadic'],
+              message: `Argument "${args[i].name}" is variadic but is not the last argument. Variadic positionals must be last.`,
+            });
+          }
+        }
+      }),
+    options: z.array(projectCommandOptionSchema).optional(),
+    hidden: z.boolean().optional(),
+  })
+  .strict();
+
+export const cliExtensionConfigSchema = z
+  .object({
+    commands: z
+      .record(z.string(), projectCommandEntrySchema)
+      .optional()
+      .superRefine((map, ctx) => {
+        if (!map) return;
+        for (const name of Object.keys(map)) {
+          if (RESERVED_VERBS.has(name)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [name],
+              message:
+                `Command "${name}" collides with a built-in frontmcp verb. ` +
+                `Choose a project-specific name (e.g. "project:${name}").`,
+            });
+          }
+          if (!/^[a-zA-Z][a-zA-Z0-9:_-]*$/.test(name)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [name],
+              message: `"${name}" is not a valid verb name. Use letters, digits, ":", "_", "-".`,
+            });
+          }
+        }
+      }),
+  })
+  .strict();
+
+// ============================================
 // Top-Level Config
 // ============================================
 
@@ -338,6 +454,9 @@ export const frontmcpConfigSchema = z
     nodeVersion: z.string().optional(),
     deployments: z.array(deploymentTargetSchema).min(1, 'At least one deployment target required'),
     build: buildOptionsSchema.optional(),
+
+    // Issue #409 — project-defined CLI verbs
+    cli: cliExtensionConfigSchema.optional(),
   })
   .strict();
 
