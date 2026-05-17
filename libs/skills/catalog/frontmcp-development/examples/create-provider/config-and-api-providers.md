@@ -2,18 +2,40 @@
 name: config-and-api-providers
 reference: create-provider
 level: intermediate
-description: 'A configuration provider with readonly environment settings and an HTTP API client provider.'
+description: 'A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.'
 tags: [development, provider, config, api, providers]
 features:
   - 'A configuration provider using `readonly` properties from environment variables (sync construction)'
   - 'An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)'
+  - 'Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`'
+  - 'Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder'
   - 'Registering providers at `@FrontMcp` level for server-wide sharing across all apps'
   - 'Separating token definitions from provider implementations for clean dependency boundaries'
 ---
 
 # Configuration and API Client Providers
 
-A configuration provider with readonly environment settings and an HTTP API client provider.
+A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.
+
+## File layout
+
+```text
+src/apps/main/
+├── tokens.ts                                # shared token + interface definitions
+├── index.ts                                 # @App / @FrontMcp registration
+└── providers/
+    ├── index.ts                             # top-level barrel
+    ├── config/
+    │   ├── index.ts                         # barrel: ConfigProvider
+    │   ├── config.provider.ts               # @Provider class
+    │   └── config.provider.spec.ts          # tests
+    └── api-client/
+        ├── index.ts                         # barrel: ApiClientProvider
+        ├── api-client.provider.ts           # @Provider class
+        └── api-client.provider.spec.ts      # tests
+```
+
+Each provider lives in its own subfolder with a barrel — cross-provider imports go through the barrel (`from '../config'`), never reaching into another provider's implementation file.
 
 ## Code
 
@@ -38,13 +60,13 @@ export const API_TOKEN: Token<ApiClient> = Symbol('ApiClient');
 ```
 
 ```typescript
-// src/apps/main/providers/config.provider.ts
+// src/apps/main/providers/config/config.provider.ts
 import { Provider } from '@frontmcp/sdk';
 
-import type { AppConfig } from '../tokens';
+import type { AppConfig } from '../../tokens';
 
 @Provider({ name: 'ConfigProvider' })
-class ConfigProvider implements AppConfig {
+export class ConfigProvider implements AppConfig {
   readonly apiBaseUrl = process.env.API_BASE_URL ?? 'https://api.example.com';
   readonly maxRetries = Number(process.env.MAX_RETRIES ?? 3);
   readonly debug = process.env.DEBUG === 'true';
@@ -52,13 +74,31 @@ class ConfigProvider implements AppConfig {
 ```
 
 ```typescript
-// src/apps/main/providers/api-client.provider.ts
+// src/apps/main/providers/config/index.ts
+export { ConfigProvider } from './config.provider';
+```
+
+```typescript
+// src/apps/main/providers/config/config.provider.spec.ts
+import { ConfigProvider } from './config.provider';
+
+describe('ConfigProvider', () => {
+  it('reads apiBaseUrl from env with a default fallback', () => {
+    const provider = new ConfigProvider();
+    expect(provider.apiBaseUrl).toBeDefined();
+    expect(typeof provider.apiBaseUrl).toBe('string');
+  });
+});
+```
+
+```typescript
+// src/apps/main/providers/api-client/api-client.provider.ts
 import { Provider } from '@frontmcp/sdk';
 
-import type { ApiClient } from '../tokens';
+import type { ApiClient } from '../../tokens';
 
 @Provider({ name: 'ApiClientProvider' })
-class ApiClientProvider implements ApiClient {
+export class ApiClientProvider implements ApiClient {
   // `@Provider` has no `onInit` lifecycle hook — read env in the constructor.
   // First instantiation throws synchronously on missing config (fail fast).
   private readonly baseUrl: string;
@@ -93,8 +133,42 @@ class ApiClientProvider implements ApiClient {
 ```
 
 ```typescript
+// src/apps/main/providers/api-client/index.ts
+export { ApiClientProvider } from './api-client.provider';
+```
+
+```typescript
+// src/apps/main/providers/api-client/api-client.provider.spec.ts
+import { ApiClientProvider } from './api-client.provider';
+
+describe('ApiClientProvider', () => {
+  const origEnv = { ...process.env };
+  afterEach(() => {
+    process.env = { ...origEnv };
+  });
+
+  it('throws fast when API_URL or API_KEY is missing', () => {
+    delete process.env.API_URL;
+    delete process.env.API_KEY;
+    expect(() => new ApiClientProvider()).toThrow(/API_URL and API_KEY/);
+  });
+});
+```
+
+```typescript
+// src/apps/main/providers/index.ts
+// Top-level barrel — re-exports each provider folder so importers can do
+// `import { ConfigProvider, ApiClientProvider } from './providers'`.
+export * from './config';
+export * from './api-client';
+```
+
+```typescript
 // src/index.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
+import { MainApp } from './apps/main';
+import { ApiClientProvider, ConfigProvider } from './apps/main/providers';
 
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },
@@ -108,9 +182,11 @@ class MyServer {}
 
 - A configuration provider using `readonly` properties from environment variables (sync construction)
 - An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)
+- Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`
+- Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder
 - Registering providers at `@FrontMcp` level for server-wide sharing across all apps
 - Separating token definitions from provider implementations for clean dependency boundaries
 
 ## Related
 
-- See `create-provider` for cache providers, lifecycle details, and the `tryGet()` safe access pattern
+- See `create-provider` for the [File Layout](../../references/create-provider.md#file-layout) section, cache providers, lifecycle details, and the `tryGet()` safe access pattern
