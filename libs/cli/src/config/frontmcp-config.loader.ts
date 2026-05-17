@@ -38,6 +38,49 @@ export async function loadFrontMcpConfig(cwd: string): Promise<FrontMcpConfigPar
 }
 
 /**
+ * Load a specific config file by absolute or cwd-relative path. Used by the
+ * `--config <path>` flag and the `FRONTMCP_CONFIG` env var (issue #400).
+ *
+ * Unlike `loadFrontMcpConfig`, this doesn't search `CONFIG_FILENAMES` — the
+ * caller already named the file, so a missing-file error is a hard failure
+ * (no silent fallback to `deriveFromPackageJson`).
+ */
+export async function loadFrontMcpConfigFromFile(configPath: string): Promise<FrontMcpConfigParsed> {
+  const absolutePath = path.isAbsolute(configPath) ? configPath : path.resolve(process.cwd(), configPath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Config file not found: ${configPath}`);
+  }
+  const filename = path.basename(absolutePath);
+  const raw = await loadRawFileAtPath(absolutePath, filename);
+  return validateConfig(raw);
+}
+
+/**
+ * Locate the nearest `frontmcp.config.*` file by walking upward from `cwd`.
+ *
+ * Issue #400 — monorepo nested apps no longer require `cd <repo-root>`
+ * before invoking the CLI. The walk caps at 10 levels to avoid pathological
+ * symlink loops.
+ *
+ * Returns the directory containing the config (so callers can pass it to
+ * `loadFrontMcpConfig(dir)`), or `undefined` if nothing was found.
+ */
+export function findConfigDir(startDir: string, maxLevels = 10): string | undefined {
+  let current = path.resolve(startDir);
+  for (let i = 0; i <= maxLevels; i++) {
+    for (const filename of CONFIG_FILENAMES) {
+      if (fs.existsSync(path.join(current, filename))) {
+        return current;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+  return undefined;
+}
+
+/**
  * Variant that load-errors propagate (parse failures in `frontmcp.config.ts`,
  * missing dependencies, etc.) but schema-validation errors return `undefined`.
  *
@@ -95,78 +138,87 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
   for (const filename of CONFIG_FILENAMES) {
     const configPath = path.join(cwd, filename);
     if (!fs.existsSync(configPath)) continue;
+    return loadRawFileAtPath(configPath, filename);
+  }
 
-    if (filename.endsWith('.json')) {
-      const content = fs.readFileSync(configPath, 'utf-8');
-      return JSON.parse(content);
-    }
+  // Fallback: derive from package.json
+  return deriveFromPackageJson(cwd);
+}
 
-    if (filename.endsWith('.ts')) {
-      // #365 — Loading `.ts` under `"type": "commonjs"` (the default) is a
-      // minefield across Node versions:
-      //   - Node 20: `require()` throws on TS syntax, `await import()` errors
-      //     with "Make sure to set type: module".
-      //   - Node 22+: `require(esm)` may succeed but return partial data, OR
-      //     emit a warning on `await import()` even when the load succeeds.
-      //   - Node 24: type-stripping may swallow `import { x } from ...`
-      //     statements, returning `{}` instead of the user's exports — the
-      //     1.1.2-beta.1 silent-defaults regression.
-      // Round 3: under CJS, ALWAYS transpile via esbuild. It's the only path
-      // that produces a deterministic, fully-typed result. ESM projects can
-      // still use Node's runtime loaders since they're well-behaved there.
-      const isCjsProject = await isCommonJsProject(cwd);
-      if (isCjsProject) {
-        try {
-          return await loadTsConfigViaEsbuild(configPath);
-        } catch (esbuildErr) {
-          throw new Error(
-            `Failed to load ${filename} via esbuild.\n` +
-              `  ${(esbuildErr as Error).message}\n` +
-              `Hint: ensure the file exports a default config (e.g., ` +
-              `\`export default defineConfig({...})\`) and that all imports resolve.`,
-          );
-        }
-      }
-      // ESM project ("type": "module"): try Node's loaders first (faster,
-      // no transpile cost), fall back to esbuild on failure.
-      let requireErr: Error | undefined;
-      try {
-        const mod = require(configPath);
-        return mod.default ?? mod;
-      } catch (e) {
-        requireErr = e as Error;
-      }
-      try {
-        const mod = await import(configPath);
-        return mod.default ?? mod;
-      } catch {
-        // Fall through to esbuild.
-      }
+/**
+ * Load a single config file by absolute path (no search). Shared by
+ * `loadRawConfig` (search-then-load) and `loadFrontMcpConfigFromFile`
+ * (explicit-path).
+ */
+async function loadRawFileAtPath(configPath: string, filename: string): Promise<unknown> {
+  if (filename.endsWith('.json')) {
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(content);
+  }
+
+  if (filename.endsWith('.ts')) {
+    const cwd = path.dirname(configPath);
+    // #365 — Loading `.ts` under `"type": "commonjs"` (the default) is a
+    // minefield across Node versions:
+    //   - Node 20: `require()` throws on TS syntax, `await import()` errors
+    //     with "Make sure to set type: module".
+    //   - Node 22+: `require(esm)` may succeed but return partial data, OR
+    //     emit a warning on `await import()` even when the load succeeds.
+    //   - Node 24: type-stripping may swallow `import { x } from ...`
+    //     statements, returning `{}` instead of the user's exports — the
+    //     1.1.2-beta.1 silent-defaults regression.
+    // Round 3: under CJS, ALWAYS transpile via esbuild. It's the only path
+    // that produces a deterministic, fully-typed result. ESM projects can
+    // still use Node's runtime loaders since they're well-behaved there.
+    const isCjsProject = await isCommonJsProject(cwd);
+    if (isCjsProject) {
       try {
         return await loadTsConfigViaEsbuild(configPath);
       } catch (esbuildErr) {
         throw new Error(
-          `Failed to load ${filename}.\n` +
-            `  require() error: ${requireErr?.message ?? '(skipped)'}\n` +
-            `  esbuild error:   ${(esbuildErr as Error).message}\n` +
+          `Failed to load ${filename} via esbuild.\n` +
+            `  ${(esbuildErr as Error).message}\n` +
             `Hint: ensure the file exports a default config (e.g., ` +
             `\`export default defineConfig({...})\`) and that all imports resolve.`,
         );
       }
     }
-
-    // JS/MJS/CJS
-    if (filename.endsWith('.mjs')) {
+    // ESM project ("type": "module"): try Node's loaders first (faster,
+    // no transpile cost), fall back to esbuild on failure.
+    let requireErr: Error | undefined;
+    try {
+      const mod = require(configPath);
+      return mod.default ?? mod;
+    } catch (e) {
+      requireErr = e as Error;
+    }
+    try {
       const mod = await import(configPath);
       return mod.default ?? mod;
+    } catch {
+      // Fall through to esbuild.
     }
+    try {
+      return await loadTsConfigViaEsbuild(configPath);
+    } catch (esbuildErr) {
+      throw new Error(
+        `Failed to load ${filename}.\n` +
+          `  require() error: ${requireErr?.message ?? '(skipped)'}\n` +
+          `  esbuild error:   ${(esbuildErr as Error).message}\n` +
+          `Hint: ensure the file exports a default config (e.g., ` +
+          `\`export default defineConfig({...})\`) and that all imports resolve.`,
+      );
+    }
+  }
 
-    const mod = require(configPath);
+  // JS/MJS/CJS
+  if (filename.endsWith('.mjs')) {
+    const mod = await import(configPath);
     return mod.default ?? mod;
   }
 
-  // Fallback: derive from package.json
-  return deriveFromPackageJson(cwd);
+  const mod = require(configPath);
+  return mod.default ?? mod;
 }
 
 /**
