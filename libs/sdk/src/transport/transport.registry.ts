@@ -2,7 +2,7 @@
 import type { SessionStore, StoredSession } from '@frontmcp/auth';
 import { getMachineId, sha256Hex } from '@frontmcp/utils';
 
-import { createSessionStore } from '../auth/session/session-store.factory';
+import { createSessionStore, type SessionStoreFactoryOptions } from '../auth/session/session-store.factory';
 import type { ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
 import { InvalidTransportSessionError, SessionClaimConflictError } from '../errors/transport.errors';
@@ -56,9 +56,13 @@ export class TransportService {
   private persistenceConfig?: false | TransportPersistenceConfigInput;
 
   /**
-   * Pending store configuration for async initialization
+   * Pending store configuration for async initialization. Either a Redis/Vercel KV
+   * shape or a `{ sqlite: ... }` shape — discriminated in `createSessionStore`.
    */
-  private pendingStoreConfig?: RedisOptions;
+  private pendingStoreConfig?: SessionStoreFactoryOptions;
+
+  /** Set when the configured backend is SQLite. Used for telemetry-only branching. */
+  private backendKind: 'redis' | 'vercel-kv' | 'sqlite' | undefined;
 
   /**
    * Stable key prefix for transport session keys, persisted from config at construction time.
@@ -68,10 +72,10 @@ export class TransportService {
 
   /**
    * Whether a session store backend was configured (regardless of current connection state).
-   * Set once during constructor when persistence config has redis.
+   * Set once during constructor when persistence config has redis or sqlite.
    * Used by pingSessionStore() to distinguish "not configured" from "configured but unavailable".
    */
-  private readonly sessionStoreConfigured: boolean = false;
+  private sessionStoreConfigured = false;
 
   /**
    * Mutex map for preventing concurrent transport creation for the same key.
@@ -93,14 +97,32 @@ export class TransportService {
     this.distributed = !!bus;
     this.bus = bus;
 
-    // Initialize session store if persistence is enabled (Redis or Vercel KV)
-    // Simplified format: false = disabled, object with redis = enabled, undefined = not configured
-    if (persistenceConfig !== false && persistenceConfig?.redis) {
+    // Initialize session store if persistence is enabled. Simplified format:
+    //   false       = explicitly disabled
+    //   { redis }   = Redis/Vercel KV backend
+    //   { sqlite }  = SQLite backend (issue #401)
+    //   undefined   = not configured
+    if (persistenceConfig !== false && persistenceConfig?.sqlite) {
+      this.sessionStoreConfigured = true;
+      this.backendKind = 'sqlite';
+      const sqliteConfig = persistenceConfig.sqlite;
+      // SQLite keys are managed by SqliteKvStore via keyPrefix; reuse the
+      // same transport-namespace convention Redis uses.
+      this.transportKeyPrefix = 'mcp:transport:';
+      this.pendingStoreConfig = {
+        sqlite: sqliteConfig,
+        keyPrefix: this.transportKeyPrefix,
+        defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000,
+      };
+
+      this.scope.logger.info('[TransportService] sqlite session store will be initialized for transport persistence');
+    } else if (persistenceConfig !== false && persistenceConfig?.redis) {
       this.sessionStoreConfigured = true;
 
       // Use factory to create appropriate session store based on provider
       const redisConfig = persistenceConfig.redis;
       const providerType = 'provider' in redisConfig ? redisConfig.provider : 'redis';
+      this.backendKind = providerType === 'vercel-kv' ? 'vercel-kv' : 'redis';
 
       // Override keyPrefix for transport persistence (separate from auth sessions)
       // Cast to RedisOptions since we're modifying the config
@@ -140,10 +162,7 @@ export class TransportService {
     if (this.sessionStore) {
       const isConnected = this.sessionStore.ping ? await this.sessionStore.ping() : true;
       if (!isConnected) {
-        // Determine provider type for error message
-        // Note: persistenceConfig is already narrowed to object since sessionStore exists
-        const persistConfig = this.persistenceConfig as { redis?: { provider?: string } } | undefined;
-        const providerType = persistConfig?.redis?.provider ?? 'redis';
+        const providerType = this.backendKind ?? 'redis';
         this.scope.logger.error(
           `[TransportService] Failed to connect to ${providerType} - session persistence disabled`,
         );
@@ -190,6 +209,21 @@ export class TransportService {
       return this.sessionStore.ping();
     }
     return true;
+  }
+
+  /** True when a backend (Redis / Vercel KV / SQLite) was wired at construction.
+   *  Note: this reflects construction-time intent, not live connection state.
+   *  A `false` here means no backend was configured at all; a `true` does NOT
+   *  guarantee the store is currently reachable — use `pingSessionStore()` for
+   *  that signal. */
+  isSessionStoreConfigured(): boolean {
+    return this.sessionStoreConfigured;
+  }
+
+  /** The backend kind selected at construction (`undefined` if none). Used by
+   *  the orphan-sqlite WARN guard in scope.instance.ts and by error telemetry. */
+  getBackendKind(): 'redis' | 'vercel-kv' | 'sqlite' | undefined {
+    return this.backendKind;
   }
 
   async getTransporter(type: TransportType, token: string, sessionId: string): Promise<Transporter | undefined> {

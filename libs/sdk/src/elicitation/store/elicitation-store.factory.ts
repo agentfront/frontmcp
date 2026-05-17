@@ -10,14 +10,14 @@
  * @module elicitation/store/elicitation-store.factory
  */
 
-import type { StorageConfig, RootStorage } from '@frontmcp/utils';
-import { createStorage, createMemoryStorage, getEnv } from '@frontmcp/utils';
-import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
-import type { ElicitationStore } from './elicitation.store';
-import { StorageElicitationStore } from './storage-elicitation.store';
-import { EncryptedElicitationStore } from './encrypted-elicitation.store';
-import { isElicitationEncryptionAvailable } from './elicitation-encryption';
+import { createMemoryStorage, createStorage, getEnv, type RootStorage, type StorageConfig } from '@frontmcp/utils';
+
+import { type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
+import { isElicitationEncryptionAvailable } from './elicitation-encryption';
+import { type ElicitationStore } from './elicitation.store';
+import { EncryptedElicitationStore } from './encrypted-elicitation.store';
+import { StorageElicitationStore } from './storage-elicitation.store';
 
 /**
  * Options for creating an elicitation store.
@@ -56,6 +56,14 @@ export interface ElicitationStoreOptions {
    * For new code, prefer using the `storage` option directly.
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * SQLite configuration for single-node persistent elicitation.
+   * When set, `createSqliteElicitationStore` is used and the `storage`
+   * / `redis` options are ignored. SQLite supports pub/sub via the
+   * SqliteElicitationStore (in-process listeners).
+   */
+  sqlite?: SqliteOptionsInput;
 
   /**
    * Key prefix for all elicitation keys.
@@ -127,7 +135,7 @@ export interface ElicitationStoreResult {
   /**
    * The type of storage backend used.
    */
-  type: 'memory' | 'redis' | 'upstash' | 'auto';
+  type: 'memory' | 'redis' | 'upstash' | 'sqlite' | 'auto';
 
   /**
    * The underlying storage instance.
@@ -198,12 +206,55 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   const {
     storage: storageConfig,
     redis,
+    sqlite,
     keyPrefix = 'mcp:elicit:',
     logger,
     isEdgeRuntime = false,
     requiresPubSub = true,
     encryption,
   } = options;
+
+  // SQLite branch (issue #401) — when a sqlite config is provided we bypass
+  // the storage/redis path entirely. SqliteElicitationStore implements its
+  // own in-process pub/sub so it satisfies `requiresPubSub` for single-node
+  // deployments. Edge runtimes don't support better-sqlite3 → fail loud.
+  if (sqlite) {
+    if (isEdgeRuntime) {
+      throw new ElicitationNotSupportedError(
+        'SQLite elicitation store is not supported on Edge runtime (better-sqlite3 is a native module). ' +
+          'Use Redis or Upstash instead.',
+      );
+    }
+    let sqliteStore = createSqliteElicitationStore(sqlite, { keyPrefix, logger });
+    let encrypted = false;
+    const encryptionEnabled = encryption?.enabled ?? 'auto';
+    const encryptionSecret = encryption?.secret;
+    const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
+    if (encryptionEnabled === true) {
+      if (!hasSecret) {
+        throw new ElicitationNotSupportedError(
+          'Elicitation encryption is enabled but no secret is available. ' +
+            'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
+            'or provide a secret in the encryption configuration.',
+        );
+      }
+      sqliteStore = new EncryptedElicitationStore(sqliteStore, { secret: encryptionSecret, logger });
+      encrypted = true;
+    } else if (encryptionEnabled === 'auto' && hasSecret) {
+      sqliteStore = new EncryptedElicitationStore(sqliteStore, { secret: encryptionSecret, logger });
+      encrypted = true;
+    }
+    logger?.info('[ElicitationStoreFactory] Created elicitation store', {
+      type: 'sqlite',
+      keyPrefix,
+      supportsPubSub: true,
+      encrypted,
+    });
+    // No StorageAdapter is built for the SQLite path; we return memory-style
+    // marker storage so existing consumers reading `.storage` keep compiling.
+    const placeholder = createMemoryStorage({ prefix: keyPrefix });
+    return { store: sqliteStore, type: 'sqlite', storage: placeholder, encrypted };
+  }
 
   // Build final storage config, merging redis option if provided
   let finalStorageConfig: StorageConfig | undefined = storageConfig;

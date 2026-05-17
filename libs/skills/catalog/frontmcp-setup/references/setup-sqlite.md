@@ -57,8 +57,14 @@ The `sqlite` field in the `@FrontMcp` decorator accepts a `SqliteOptionsInput` o
 
 ```typescript
 interface SqliteOptionsInput {
-  /** Path to the .sqlite database file (required) */
-  path: string;
+  /**
+   * Path to the .sqlite database file. **Optional** — when omitted the SDK
+   * picks a sensible default at startup:
+   *   - dev + node + non-CLI → `<projectRoot>/dist/sessions.sqlite`
+   *   - prod OR CLI mode    → `~/.{info.name}/sessions.sqlite`
+   * Set this to override either default (e.g. `./.data/sessions.sqlite`).
+   */
+  path?: string;
 
   /** Enable WAL mode for better read concurrency (default: true) */
   walMode?: boolean;
@@ -72,6 +78,29 @@ interface SqliteOptionsInput {
   /** Interval in ms for purging expired keys (default: 60000) */
   ttlCleanupIntervalMs?: number;
 }
+```
+
+### Default-path policy (issue #401)
+
+If you set `sqlite: {}` without a `path`, the SDK resolves it as follows:
+
+| Environment                                              | Resolved path                        |
+| -------------------------------------------------------- | ------------------------------------ |
+| `frontmcp dev` (NODE_ENV=development, node, no CLI mode) | `<projectRoot>/dist/sessions.sqlite` |
+| Built CLI binary (`cliMode`)                             | `~/.{info.name}/sessions.sqlite`     |
+| Production node server (`NODE_ENV=production`)           | `~/.{info.name}/sessions.sqlite`     |
+
+The home-directory namespace is **derived from your `info.name`**, so two
+frontmcp apps from different projects never share the same database
+(e.g. `my-server` → `~/.my-server/sessions.sqlite`,
+`other-app` → `~/.other-app/sessions.sqlite`). If `info.name` is unset or
+sanitization strips it to empty, the fallback is `~/.frontmcp/`.
+
+The SDK also `mkdir -p`'s the parent directory at startup, so you don't
+need to pre-create it. The resolved path is logged at INFO level:
+
+```text
+[FrontMcp] No `sqlite.path` set — using default { path: '/Users/you/.my-server/sessions.sqlite' }
 ```
 
 ### Basic SQLite setup
@@ -198,7 +227,32 @@ You do not call any factory yourself. The SDK constructs the SQLite session stor
 - TTL cleanup interval setup for automatic key expiration
 - Creating the database file and parent directories if they do not exist
 
-In other words, the only public API you interact with is the `sqlite: { ... }` block in the decorator config from Step 2. There is no `createSqliteSessionStore` helper exported from `@frontmcp/sdk` -- session store wiring is an internal concern of the framework.
+### How the wiring works (issue #401)
+
+Top-level `sqlite` is treated by the SDK as the **default SQLite backend** for
+three subsystems:
+
+| Subsystem                     | Default source     | Override                       |
+| ----------------------------- | ------------------ | ------------------------------ |
+| Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite` |
+| Background task store         | top-level `sqlite` | `tasks.sqlite`                 |
+| Elicitation store             | top-level `sqlite` | `elicitation.sqlite` (planned) |
+
+If you want different files per subsystem, set the subsystem's own `sqlite`
+block — it takes precedence over the top-level one. To disable a single
+subsystem, set its `enabled: false` (or set `transport.persistence: false` for
+transports).
+
+If you set the top-level `sqlite` block but disable every consuming subsystem,
+the SDK emits a WARN at startup so the no-op doesn't go silent:
+
+```text
+[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ...
+```
+
+`createSqliteSessionStore` is also exported from `@frontmcp/sdk` if you want
+to construct a session store directly (rare; the decorator path is the
+recommended surface).
 
 If you need to share the same SQLite config in another part of your code, declare it once and reuse it:
 

@@ -9,9 +9,9 @@
 // The typecheck.ts file will fail to compile if they get out of sync.
 
 import type { RedisOptionsInput } from '../redis';
-
 // Import session types from session folder (these are the canonical definitions)
-import type { SessionMode, PlatformMappingEntry, PlatformDetectionConfig } from '../session';
+import type { PlatformDetectionConfig, PlatformMappingEntry, SessionMode } from '../session';
+import type { SqliteOptionsInput } from '../sqlite';
 
 // Re-export for convenience
 export type { SessionMode, PlatformMappingEntry, PlatformDetectionConfig };
@@ -131,9 +131,13 @@ export interface ProtocolConfig {
  * Enables session persistence to Redis/Vercel KV for transport recreation
  * after server restart. This is essential for serverless deployments.
  *
- * **Auto-enable behavior**: When top-level `redis` is configured at the
- * `@FrontMcp` level, transport persistence is automatically enabled.
- * Set `persistence: false` to explicitly disable.
+ * **Auto-enable behavior** (issue #401): When `transport.persistence` is
+ * omitted, transport persistence is auto-enabled from the top-level
+ * `sqlite` block on `@FrontMcp` if one is present (top-level `redis` is
+ * NOT auto-threaded here — opt in explicitly via `persistence.redis` for
+ * Redis-backed transport sessions). Set `persistence: false` to disable.
+ * Schema-level refine rejects setting both `redis` and `sqlite` in the
+ * same persistence block.
  *
  * @example Use global redis (auto-configured)
  * ```typescript
@@ -164,8 +168,17 @@ export interface PersistenceConfig {
    * Redis/Vercel KV configuration for session storage.
    *
    * If omitted, uses the top-level `redis` configuration from `@FrontMcp`.
+   * Mutually exclusive with `sqlite`.
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * SQLite configuration for session storage.
+   *
+   * If omitted, uses the top-level `sqlite` configuration from `@FrontMcp`.
+   * Mutually exclusive with `redis`.
+   */
+  sqlite?: SqliteOptionsInput;
 
   /**
    * Default TTL for stored session metadata (milliseconds).

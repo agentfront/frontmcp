@@ -34,6 +34,7 @@ import { type ChannelType } from '../common/interfaces/channel.interface';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
+import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/types/options/sqlite';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { createElicitationStore, type ElicitationStore } from '../elicitation';
@@ -112,9 +113,13 @@ export class Scope extends ScopeEntry {
 
   /** Lazy-initialized elicitation store for distributed elicitation support */
   private _elicitationStore?: ElicitationStore;
+  /** Backend type for the elicitation store (used by the orphan-sqlite WARN guard). */
+  private elicitationBackendType?: 'memory' | 'redis' | 'upstash' | 'sqlite' | 'auto';
 
   /** Task store for MCP 2025-11-25 background tasks (optional). */
   private _taskStore?: TaskStore;
+  /** Backend type for the task store (used by the orphan-sqlite WARN guard). */
+  private taskBackendType?: 'memory' | 'redis' | 'upstash' | 'sqlite' | 'auto';
 
   /** Per-process task registry (AbortControllers + capability projection). */
   private _taskRegistry?: TaskRegistry;
@@ -237,8 +242,24 @@ export class Scope extends ScopeEntry {
       this.logger.info('[HA] Transport bus created for distributed session routing');
     }
 
-    // TransportService — pass the bus for distributed mode
-    this.transportService = new TransportService(this, transportConfig?.persistence, transportBus);
+    // Resolve top-level sqlite once (issue #401 — review-driven path policy):
+    // if the user set `sqlite: {}` without a path, the resolver fills in
+    //   dev+node+non-CLI → <projectRoot>/dist/sessions.sqlite
+    //   prod or CLI      → ~/.{info.name}/sessions.sqlite
+    // The resolved config flows into transport persistence + tasks +
+    // elicitation so every consumer sees the same path.
+    const resolvedTopLevelSqlite = await this.resolveTopLevelSqlite();
+
+    // TransportService — pass the bus for distributed mode.
+    // Auto-thread top-level `sqlite` into transport persistence when the user
+    // hasn't explicitly configured `transport.persistence` (issue #401).
+    // Top-level `redis` is left alone here so existing Redis-only users keep
+    // the same behavior — they opt into transport persistence explicitly.
+    let effectivePersistence = transportConfig?.persistence;
+    if (effectivePersistence === undefined && resolvedTopLevelSqlite) {
+      effectivePersistence = { sqlite: resolvedTopLevelSqlite };
+    }
+    this.transportService = new TransportService(this, effectivePersistence, transportBus);
 
     // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
     if (this.haManager && isDistributed) {
@@ -290,13 +311,17 @@ export class Scope extends ScopeEntry {
     const elicitationPromise = elicitationEnabled
       ? (async () => {
           const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
-          const { store: elicitStore } = await createElicitationStore({
+          // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
+          const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const { store: elicitStore, type: elicitType } = await createElicitationStore({
             redis: elicitationRedis,
+            sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
             isEdgeRuntime: isEdgeRuntime(),
           });
           this._elicitationStore = elicitStore;
+          this.elicitationBackendType = elicitType;
         })()
       : undefined;
 
@@ -313,13 +338,20 @@ export class Scope extends ScopeEntry {
     const tasksConfig = this.metadata.tasks;
     const tasksExplicitlyDisabled = tasksConfig?.enabled === false;
     const isTaskWorker = !!(this.metadata as unknown as Record<string, unknown>)['__taskWorkerMode'];
-    const hasPersistentBackend = Boolean(tasksConfig?.sqlite || tasksConfig?.redis || this.metadata.redis);
+    const hasPersistentBackend = Boolean(
+      tasksConfig?.sqlite || tasksConfig?.redis || this.metadata.redis || this.metadata.sqlite,
+    );
     const tasksEnabledForCli = this.cliMode && hasPersistentBackend;
     const shouldInitTasks = !tasksExplicitlyDisabled && (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
     const tasksPromise = shouldInitTasks
       ? (async () => {
           const tasksRedis = tasksConfig?.redis ?? this.metadata.redis;
+          // Mirror the elicitation precedence: an explicit `tasks.sqlite` is
+          // always honored, but the top-level `metadata.sqlite` fallback only
+          // applies when there's no redis source — never pass both backends to
+          // createTaskStore (issue #401 review).
+          const tasksSqlite = tasksConfig?.sqlite ?? (tasksRedis ? undefined : resolvedTopLevelSqlite);
           const onEdge = isEdgeRuntime();
           if (onEdge) {
             const msg =
@@ -331,14 +363,15 @@ export class Scope extends ScopeEntry {
             }
             this.logger.warn(msg);
           }
-          const { store: taskStore } = await createTaskStore({
+          const { store: taskStore, type: taskType } = await createTaskStore({
             redis: tasksRedis,
-            sqlite: tasksConfig?.sqlite,
+            sqlite: tasksSqlite,
             keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
             logger: this.logger,
             isEdgeRuntime: onEdge,
           });
           this._taskStore = taskStore;
+          this.taskBackendType = taskType;
           this._taskRegistry = new TaskRegistry(
             {
               enabled: tasksConfig?.enabled,
@@ -422,6 +455,26 @@ export class Scope extends ScopeEntry {
     this.logger.verbose('TransportService initialized');
     this.logger.verbose('AuthRegistry initialized');
     mark('batch1:parallel (hooks+flows+auth+apps)');
+
+    // Issue #401 — guard against silent no-op when top-level `sqlite` is set
+    // but no subsystem actually consumed it. We use the backend `type` each
+    // factory returned (not mere truthiness of the store handle), so a user
+    // who sets both top-level `redis` and `sqlite` still gets the warning:
+    // redis wins everywhere, the stores exist, but sqlite is effectively
+    // unused.
+    if (this.metadata.sqlite) {
+      const transportUsedSqlite =
+        this.transportService.isSessionStoreConfigured() && this.transportService.getBackendKind() === 'sqlite';
+      const tasksUsedSqlite = this.taskBackendType === 'sqlite';
+      const elicitationUsedSqlite = this.elicitationBackendType === 'sqlite';
+      if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
+        this.logger.warn(
+          '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
+            '(transport persistence, tasks, and elicitation were all disabled or pre-configured with a different backend). ' +
+            'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
+        );
+      }
+    }
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -816,6 +869,38 @@ export class Scope extends ScopeEntry {
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
+  }
+
+  /**
+   * Resolve the top-level `sqlite` config, filling in a default `path`
+   * when the user provided the block without one (issue #401). Also
+   * ensures the parent directory exists so better-sqlite3 doesn't fail
+   * to open. Returns `undefined` if the user didn't set the block at
+   * all. The returned object is a SHALLOW COPY — never mutate the
+   * caller's metadata.
+   */
+  private async resolveTopLevelSqlite(): Promise<(SqliteOptionsInput & { path: string }) | undefined> {
+    const raw = this.metadata.sqlite;
+    if (!raw) return undefined;
+    let finalPath = raw.path;
+    if (!finalPath || finalPath.length === 0) {
+      finalPath = resolveDefaultSqlitePath({
+        appName: this.metadata.info?.name,
+        cliMode: this.cliMode,
+      });
+      this.logger.info('[FrontMcp] No `sqlite.path` set — using default', { path: finalPath });
+    }
+    try {
+      const { dirname } = require('path') as typeof import('path');
+      const { mkdir } = await import('@frontmcp/utils');
+      await mkdir(dirname(finalPath), { recursive: true });
+    } catch (err) {
+      this.logger.warn('[FrontMcp] Could not ensure sqlite parent directory exists', {
+        path: finalPath,
+        error: (err as Error).message,
+      });
+    }
+    return { ...raw, path: finalPath } as SqliteOptionsInput & { path: string };
   }
 
   /**

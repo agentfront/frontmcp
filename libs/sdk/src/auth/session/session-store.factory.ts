@@ -6,24 +6,44 @@
  * Uses @frontmcp/utils storage adapters internally.
  */
 
-import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 import type { SessionStore } from '@frontmcp/auth';
-import { VercelKvAsyncInitRequiredError } from '../../errors/sdk.errors';
+import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
+
 import {
-  type FrontMcpLogger,
-  type RedisOptions,
-  type RedisProviderOptions,
-  type VercelKvProviderOptions,
-  type PubsubOptions,
-  type SqliteOptionsInput,
   isRedisProvider,
   isVercelKvProvider,
+  type FrontMcpLogger,
+  type PubsubOptions,
+  type RedisOptions,
+  type RedisProviderOptions,
+  type SqliteOptionsInput,
+  type VercelKvProviderOptions,
 } from '../../common';
+import { VercelKvAsyncInitRequiredError } from '../../errors/sdk.errors';
+
+/**
+ * Discriminated input for `createSessionStore`. A SQLite-backed session
+ * store is requested with `{ sqlite: SqliteOptionsInput, ... }`; any
+ * other shape is treated as a Redis/Vercel KV configuration.
+ */
+export type SessionStoreFactoryOptions =
+  | RedisOptions
+  | {
+      sqlite: SqliteOptionsInput;
+      keyPrefix?: string;
+      defaultTtlMs?: number;
+    };
+
+function isSqliteSessionStoreOptions(
+  options: SessionStoreFactoryOptions,
+): options is { sqlite: SqliteOptionsInput; keyPrefix?: string; defaultTtlMs?: number } {
+  return typeof options === 'object' && options !== null && 'sqlite' in options && !!options.sqlite;
+}
 
 /**
  * Create a session store based on configuration
  *
- * @param options - Storage configuration (Redis or Vercel KV)
+ * @param options - Storage configuration (Redis, Vercel KV, or SQLite)
  * @param logger - Optional logger instance
  * @returns A session store instance
  *
@@ -42,8 +62,25 @@ import {
  *   provider: 'vercel-kv',
  * });
  * ```
+ *
+ * @example SQLite
+ * ```typescript
+ * const store = await createSessionStore({
+ *   sqlite: { path: '~/.frontmcp/data/sessions.sqlite' },
+ * });
+ * ```
  */
-export async function createSessionStore(options: RedisOptions, logger?: FrontMcpLogger): Promise<SessionStore> {
+export async function createSessionStore(
+  options: SessionStoreFactoryOptions,
+  logger?: FrontMcpLogger,
+): Promise<SessionStore> {
+  if (isSqliteSessionStoreOptions(options)) {
+    return createSqliteSessionStore(
+      { ...options.sqlite, keyPrefix: options.keyPrefix, defaultTtlMs: options.defaultTtlMs },
+      logger,
+    );
+  }
+
   if (isVercelKvProvider(options)) {
     return createVercelKvSessionStore(options, logger);
   }
@@ -167,7 +204,10 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
  * });
  * ```
  */
-export function createSqliteSessionStore(options: SqliteOptionsInput, logger?: FrontMcpLogger): SessionStore {
+export function createSqliteSessionStore(
+  options: SqliteOptionsInput & { keyPrefix?: string; defaultTtlMs?: number },
+  logger?: FrontMcpLogger,
+): SessionStore {
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
 
   const { SqliteSessionStore } = require('@frontmcp/storage-sqlite');

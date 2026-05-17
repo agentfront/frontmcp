@@ -10,6 +10,7 @@ import { type RawZodShape } from '../../common.types';
 import { redisOptionsSchema } from '../redis';
 // Import session types for internal use (already exported from session folder)
 import { platformDetectionConfigSchema, type PlatformDetectionConfig, type SessionMode } from '../session';
+import { sqliteOptionsSchema } from '../sqlite';
 // Import types from interfaces file
 // Note: SessionMode, PlatformMappingEntry, PlatformDetectionConfig
 // are already exported from session.options.ts - we only import them here for internal use
@@ -205,10 +206,16 @@ const protocolSchema = z.union([protocolPresetSchema, protocolConfigSchema]);
  * - `object`: Enable with custom config
  * - `undefined`: Auto-enable when global redis exists
  */
-export const persistenceConfigSchema = z.object({
-  redis: redisOptionsSchema.optional(),
-  defaultTtlMs: z.number().int().positive().default(3600000),
-});
+export const persistenceConfigSchema = z
+  .object({
+    redis: redisOptionsSchema.optional(),
+    sqlite: sqliteOptionsSchema.optional(),
+    defaultTtlMs: z.number().int().positive().default(3600000),
+  })
+  .refine((cfg) => !(cfg.redis && cfg.sqlite), {
+    message: 'Invalid persistence config: choose either redis or sqlite, not both',
+    path: ['sqlite'],
+  });
 
 // ============================================
 // EVENT STORE CONFIG SCHEMA
