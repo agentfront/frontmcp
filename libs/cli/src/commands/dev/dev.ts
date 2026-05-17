@@ -76,6 +76,16 @@ export async function resolveDevPort(opts: {
 }
 
 export async function runDev(opts: ParsedArgs): Promise<void> {
+  // Issue #399 — `--stdio` runs the first-party watch-aware stdio bridge
+  // instead of the legacy `tsx --watch + tsc --noEmit --watch` pair. The
+  // bridge owns process stdin/stdout (JSON-RPC frames only), holds the
+  // upstream MCP session across child restarts, and replaces the
+  // third-party `mcp-remote` recipe for the dev loop.
+  if (opts.stdio) {
+    const { runDevBridge } = await import('./bridge/index.js');
+    return runDevBridge(opts);
+  }
+
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
 

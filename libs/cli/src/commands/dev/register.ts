@@ -10,6 +10,15 @@ export function registerDevCommands(program: Command): void {
     .option('-p, --port <port>', 'TCP port to listen on (sets PORT env for the child)', (v) => parseInt(v, 10))
     .option('--auto-port', 'If the chosen port is busy, auto-pick the next free port')
     .option('--show-conflict', 'On EADDRINUSE, print the process holding the port (uses lsof on POSIX)')
+    // Issue #399 — first-party watch-aware stdio bridge. Replaces the
+    // `npx mcp-remote` recipe for the dev loop; the bridge holds the
+    // stdio connection across user-code restarts so MCP clients (Claude
+    // Code, etc.) don't sit on `Calling…` after every save.
+    .option('--stdio', 'Run frontmcp dev as a stdio bridge for an MCP client')
+    .option('--serve', 'Use stdio-over-pipe to the child (default: HTTP/SSE loopback)')
+    .option('--log-file <path>', 'Bridge log file path', './.frontmcp/dev.log')
+    .option('--buffer-size <n>', 'Max RPCs buffered during reload', (v) => parseInt(v, 10))
+    .option('--reload-deadline-ms <ms>', 'Time to wait for a reload to complete', (v) => parseInt(v, 10))
     .action(async (options) => {
       const { runDev } = await import('./dev.js');
       await runDev(toParsedArgs('dev', [], options));

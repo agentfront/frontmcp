@@ -68,6 +68,37 @@ When building a FrontMCP server with a coding agent (Claude Code, Cursor, Windsu
 - **Debugging:** Logs visible in terminal, Inspector UI available via `npm run inspect`
 - **Persistence:** Server stays running across edits, no new process per connection
 
+### `frontmcp dev --stdio` bridge (issue #399)
+
+If the client must speak stdio (MCPB-installed bundles, certain Claude Code configurations) and you still want the dev hot-reload loop, run the first-party watch-aware stdio bridge — replaces the third-party `mcp-remote` recipe:
+
+```bash
+frontmcp dev --stdio                  # HTTP loopback under the hood
+frontmcp dev --stdio --serve          # stdio-over-pipe (no HTTP listener)
+```
+
+Wire the client at the bridge:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["frontmcp", "dev", "--stdio"]
+    }
+  }
+}
+```
+
+Bridge guarantees:
+
+- Stdout is 100% JSON-RPC frames; diagnostics go to `./.frontmcp/dev.log` (override with `--log-file`).
+- Session id survives reload (pinned via `FRONTMCP_DEV_FORCE_SESSION_ID`).
+- Buffered RPCs during reload drain in FIFO once the child reports ready.
+- Reload deadline + buffer overflow surface structured errors (`dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` — codes -32099 / -32098 / -32097) so the client spinner clears instead of hanging.
+
+Flags: `--stdio`, `--serve`, `--log-file <path>`, `--buffer-size <n>` (default 8), `--reload-deadline-ms <ms>` (default 30000), `-p <port>` (HTTP-mode loopback, default 3000).
+
 ## Stdio Transport
 
 The most common transport. The MCP client spawns your server as a child process and communicates via stdin/stdout JSON-RPC.

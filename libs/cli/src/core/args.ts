@@ -101,6 +101,12 @@ export interface ParsedArgs {
   registry?: string;
   // Create --nx flag
   nx?: boolean;
+  // Issue #399 — `frontmcp dev` watch-aware stdio bridge
+  stdio?: boolean;
+  serve?: boolean;
+  logFile?: string;
+  bufferSize?: number;
+  reloadDeadlineMs?: number;
 }
 
 /**
