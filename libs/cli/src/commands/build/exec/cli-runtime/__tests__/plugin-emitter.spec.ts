@@ -181,6 +181,26 @@ describe('plugin-emitter (issue #411)', () => {
     });
   });
 
+  describe('command-name validation (issue #411 security pass 3)', () => {
+    it('rejects emitClaudePlugin when a command name contains injection-prone chars', async () => {
+      const destRoot = path.join(tmp, 'plugins');
+      await expect(
+        emitClaudePlugin({
+          destRoot,
+          name: 'safe-bin',
+          version: '1.0.0',
+          description: 'd',
+          mcpCommand: 'safe-bin',
+          mcpArgs: ['serve', '--stdio'],
+          envHints: [],
+          skills: [],
+          commands: [{ name: 'evil\ninjected: true' }],
+          cliVersion: '0.5.0',
+        }),
+      ).rejects.toThrow(/emitClaudePlugin\.command/);
+    });
+  });
+
   describe('assertValidPluginName (issue #411 security)', () => {
     it('accepts well-formed names', () => {
       for (const name of ['my-bin', 'my_bin', 'my.bin', 'a1', 'Plugin99', 'Long-Name.with.dots-and-underscores']) {

@@ -158,6 +158,25 @@ async function runClaudeInstall(args: {
   if (result.filesRemoved.length > 0) {
     process.stdout.write(`  Cleaned up ${result.filesRemoved.length} stale file(s) from previous install.\n`);
   }
+  // Surface the dev-tool limitation explicitly: today this command only
+  // emits the MCP server entry; per-project @Skill / @Prompt enumeration
+  // is wired through the per-bin path (`<bin> install -p claude`). Don't
+  // let users assume zero counts mean "your project has no skills".
+  if (
+    args.skills.length === 0 &&
+    args.commands.length === 0 &&
+    args.opts.skills !== false &&
+    args.opts.commands !== false &&
+    !args.opts.onlyMcp
+  ) {
+    process.stdout.write(
+      c(
+        'yellow',
+        '  Note: the dev-tool path does not yet enumerate @Skill or @Prompt from project source.\n' +
+          '  Build with `frontmcp build --target cli` and run `<bin> install -p claude` for full plugin coverage.\n',
+      ),
+    );
+  }
   process.stdout.write(c('dim', '  Restart Claude Code (or run `/plugins reload`) to pick up the plugin.\n'));
 }
 

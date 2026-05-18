@@ -142,6 +142,16 @@ export interface EmitCodexResult {
  * still produce surprising directory layouts. Callers that need scoped
  * names should sanitise first.
  */
+/**
+ * Validate a slash-command name (frontmatter / body content). Same rules
+ * as `assertValidPluginName` so a malicious command name cannot inject
+ * YAML directives or new markdown sections via interpolated body text
+ * in `renderCommandFile`.
+ */
+export function assertValidCommandName(name: string, where: string): void {
+  assertValidPluginName(name, where);
+}
+
 export function assertValidPluginName(name: string, where: string): void {
   if (typeof name !== 'string' || name.length === 0) {
     throw new Error(`Invalid plugin name passed to ${where}: must be a non-empty string`);
@@ -233,8 +243,10 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     }
   }
 
-  // Commands subtree
+  // Commands subtree. Validate each command name before it lands in the
+  // markdown body or the filesystem path — same rules as the plugin name.
   for (const cmd of [...opts.commands].sort((a, b) => a.name.localeCompare(b.name))) {
+    assertValidCommandName(cmd.name, 'emitClaudePlugin.command');
     const cmdPath = path.join(pluginDir, 'commands', `${cmd.name}.md`);
     plannedFiles.push({
       absPath: cmdPath,
