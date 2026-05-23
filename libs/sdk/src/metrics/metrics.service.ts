@@ -3,10 +3,30 @@
  * @description Core service backing the `/metrics` endpoint (issue #397).
  */
 
-import type { CounterSnapshotEntry, GaugeSnapshotEntry, ProcessStatsCollector } from '@frontmcp/observability';
-
 import type { MetricsCategory, MetricsOptionsInterface } from '../common';
 import { MetricsPathConflictError, MetricsTokenNotConfiguredError } from './metrics.errors';
+
+// Local mirrors of @frontmcp/observability public types. The SDK cannot
+// import these from @frontmcp/observability because observability depends
+// on @frontmcp/sdk, and libs/sdk/project.json explicitly excludes
+// observability from sdk's build deps (`implicitDependencies: ["!observability"]`).
+// Keep these structurally identical to the upstream exports.
+interface CounterSnapshotEntry {
+  name: string;
+  count: number;
+  attributes: Record<string, string>;
+}
+
+interface GaugeSnapshotEntry {
+  name: string;
+  value: number;
+  attributes?: Record<string, string>;
+  help?: string;
+}
+
+interface ProcessStatsCollector {
+  collect(): GaugeSnapshotEntry[];
+}
 
 // Canonical Prometheus 0.0.4 content type. Pinned here to avoid a runtime
 // import of @frontmcp/observability at module-init time (sdk → observability
