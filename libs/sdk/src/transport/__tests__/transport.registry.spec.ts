@@ -211,6 +211,21 @@ describe('TransportService', () => {
         await service.ready;
         expect(service.isSessionStoreConfigured()).toBe(false);
       });
+
+      // Locks the contract from the destroy() docblock: SQLite stores
+      // own a `better-sqlite3` Database handle and MUST be closed (not
+      // disconnected) so the underlying FD is released. The teardown
+      // helper probes `disconnect ?? close` and SQLite stores only
+      // implement `close`.
+      it('calls store.close() on destroy() so the sqlite file handle is released', async () => {
+        fakeSqliteStore.close.mockClear();
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+        });
+        await service.ready;
+        await service.destroy();
+        expect(fakeSqliteStore.close).toHaveBeenCalledTimes(1);
+      });
     });
   });
 

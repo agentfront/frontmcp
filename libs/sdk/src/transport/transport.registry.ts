@@ -178,12 +178,11 @@ export class TransportService {
         this.scope.logger.error(
           `[TransportService] Failed to connect to ${providerType} - session persistence disabled`,
         );
-        // Nullify sessionStore to prevent silent failures on all subsequent operations
-        // This ensures clean graceful degradation - sessions will only persist in memory
-        if (this.sessionStore.disconnect) {
-          await this.sessionStore.disconnect().catch(() => void 0);
-        }
-        this.sessionStore = undefined;
+        // Use the same teardown path as `destroy()` so SQLite stores
+        // close their file handles instead of leaking them — the
+        // ping-failure path previously only called `disconnect()`,
+        // which SQLite stores don't implement.
+        await this.teardownSessionStore().catch(() => void 0);
       } else {
         this.scope.logger.info('[TransportService] Session store connection validated successfully');
       }
@@ -193,15 +192,24 @@ export class TransportService {
   }
 
   async destroy() {
-    // Close session store connection if it was created. SQLite stores
-    // (backendKind === 'sqlite') own a `better-sqlite3` Database handle
-    // and MUST be closed via `close()` to release the file descriptor —
-    // they don't implement `disconnect()`. Redis / VercelKV stores
-    // expose `disconnect()`. Probe in that order so both paths drain
-    // even if a custom backend implements both methods.
+    await this.teardownSessionStore();
+  }
+
+  /**
+   * Drain the configured session store and clear the reference. Probes
+   * for `disconnect` (Redis / VercelKV) first, then `close` (SQLite,
+   * which owns a `better-sqlite3` Database handle and MUST be closed
+   * to release the file descriptor). Both the normal `destroy()` and
+   * the startup ping-failure path route through here so SQLite stores
+   * never leak FDs.
+   */
+  private async teardownSessionStore(): Promise<void> {
     if (!this.sessionStore) return;
     const teardown = this.sessionStore.disconnect ?? this.sessionStore.close;
-    if (!teardown) return;
+    if (!teardown) {
+      this.sessionStore = undefined;
+      return;
+    }
     try {
       await Promise.resolve(teardown.call(this.sessionStore));
       this.scope.logger.info('[TransportService] Session store disconnected', {
@@ -212,6 +220,11 @@ export class TransportService {
         error: (error as Error).message,
         backendKind: this.backendKind ?? 'unknown',
       });
+    } finally {
+      // Drop the reference whether teardown succeeded or failed — both
+      // `destroy()` and the ping-failure path want the store gone so
+      // subsequent operations don't act on a half-dead handle.
+      this.sessionStore = undefined;
     }
   }
 

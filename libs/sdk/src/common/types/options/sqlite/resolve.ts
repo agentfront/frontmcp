@@ -70,7 +70,15 @@ function findProjectRoot(start: string): string | undefined {
     try {
       readFileSync(path.join(dir, 'package.json'));
       return dir;
-    } catch {
+    } catch (error: unknown) {
+      // Only swallow the legitimate "not here" codes; rethrow anything
+      // else (EACCES, EPERM, EIO, …) so permission/I/O failures don't
+      // silently degrade the resolver to a wrong fallback root.
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: string }).code : undefined;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw error;
+      }
       // package.json absent at this level — fall through to parent.
     }
     const parent = path.dirname(dir);
