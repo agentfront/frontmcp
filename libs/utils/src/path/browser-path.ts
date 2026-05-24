@@ -39,3 +39,7 @@ export function isAbsolute(p: string): boolean {
   if (/^[A-Za-z]:[\\/]/.test(p)) return true;
   return false;
 }
+
+export function pathToFileURL(_p: string): URL {
+  return notAvailable('pathToFileURL');
+}

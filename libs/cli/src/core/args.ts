@@ -101,6 +101,15 @@ export interface ParsedArgs {
   registry?: string;
   // Create --nx flag
   nx?: boolean;
+  // Issue #400 — top-level config flag (forwarded from program.opts().config)
+  config?: string;
+  // Issue #400 — eject-mcp-config flags
+  out?: string;
+  dryRun?: boolean;
+  // Issue #400 — skills install / export defaults via config
+  provider?: 'claude' | 'codex';
+  bundle?: 'recommended' | 'minimal' | 'full' | 'none';
+  exportTarget?: 'cursor' | 'windsurf' | 'copilot';
 }
 
 /**
