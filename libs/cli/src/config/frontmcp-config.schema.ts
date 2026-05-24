@@ -323,6 +323,119 @@ export const deploymentTargetSchema = z.discriminatedUnion('target', [
 ]);
 
 // ============================================
+// Transport defaults (issue #400)
+// ============================================
+//
+// Per-protocol defaults consumed by `dev` / `inspector` / `pm start` / `pm
+// socket` so server-startup flags don't have to be re-typed on every CLI
+// invocation. Per-deployment `server.http.port` still wins where set.
+
+export const transportHttpSchema = z
+  .object({
+    port: z.number().int().min(0).max(65535).optional(),
+    path: z.string().optional(),
+    host: z.string().optional(),
+  })
+  .strict();
+
+export const transportStdioSchema = z
+  .object({
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+  })
+  .strict();
+
+export const transportConfigSchema = z
+  .object({
+    default: z.enum(['http', 'sse', 'stdio']).optional(),
+    http: transportHttpSchema.optional(),
+    stdio: transportStdioSchema.optional(),
+  })
+  .strict();
+
+// ============================================
+// Env overlays (issue #400)
+// ============================================
+//
+// `shared` applies to every mode; mode-specific overlays (`dev`, `test`,
+// `ship`) are merged on top. Effective env = `shared` ⊕ `<mode>` (later
+// wins). Loaded by `dev`/`test`/`pm` in addition to `.env`/`.env.local`
+// — file-based env still wins for parity with existing behavior.
+
+export const envOverlaysSchema = z
+  .object({
+    shared: z.record(z.string(), z.string()).optional(),
+    dev: z.record(z.string(), z.string()).optional(),
+    test: z.record(z.string(), z.string()).optional(),
+    ship: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
+
+// ============================================
+// MCP client connection snippets (issue #400)
+// ============================================
+//
+// Per-client connection descriptors consumed by `frontmcp eject-mcp-config
+// <client>` to emit ready-to-paste `.mcp.json` / `claude_desktop_config.json`
+// / Cursor / Windsurf / VS Code snippets.
+
+export const clientConnectionSchema = z
+  .object({
+    name: z.string().optional(),
+    transport: z.enum(['http', 'sse', 'stdio']),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    url: z.string().url().optional(),
+  })
+  .strict();
+
+// `z.record(z.enum([...]), …)` in Zod 4 treats every enum value as a
+// REQUIRED key — so a `clients: { 'claude-code': {…} }` config (which is
+// the shape the scaffold emits) fails validation with "expected object,
+// received undefined" for the other four clients. The Verdaccio E2E
+// surfaced this against the generated template. `partialRecord` is Zod 4's
+// canonical fix: same enum-keyed schema but every key is optional, which
+// matches the user-facing contract (clients are opt-in, not all-or-nothing).
+export const clientsConfigSchema = z.partialRecord(
+  z.enum(['claude-code', 'claude-desktop', 'cursor', 'windsurf', 'vscode']),
+  clientConnectionSchema,
+);
+
+// ============================================
+// Test runner defaults (issue #400)
+// ============================================
+//
+// `frontmcp test` defaults — overridden by CLI flags (`--timeout`,
+// `--runInBand`, `--coverage`, `<patterns>`).
+
+export const testConfigSchema = z
+  .object({
+    timeoutMs: z.number().int().positive().optional(),
+    runInBand: z.boolean().optional(),
+    testMatch: z.array(z.string()).optional(),
+    coverage: z.boolean().optional(),
+  })
+  .strict();
+
+// ============================================
+// Skills install / export defaults (issue #400)
+// ============================================
+//
+// `frontmcp skills install` / `export` defaults — `install` is the list of
+// catalog skill names a project depends on so `frontmcp skills install`
+// with no arguments installs the curated set.
+
+export const skillsCliConfigSchema = z
+  .object({
+    provider: z.enum(['claude', 'codex']).optional(),
+    bundle: z.enum(['recommended', 'minimal', 'full', 'none']).optional(),
+    install: z.array(z.string()).optional(),
+    exportTarget: z.enum(['cursor', 'windsurf', 'copilot']).optional(),
+  })
+  .strict();
+
+// ============================================
 // Top-Level Config
 // ============================================
 
@@ -338,6 +451,13 @@ export const frontmcpConfigSchema = z
     nodeVersion: z.string().optional(),
     deployments: z.array(deploymentTargetSchema).min(1, 'At least one deployment target required'),
     build: buildOptionsSchema.optional(),
+
+    // Issue #400 — config drives every command, not just `build`
+    transport: transportConfigSchema.optional(),
+    env: envOverlaysSchema.optional(),
+    clients: clientsConfigSchema.optional(),
+    test: testConfigSchema.optional(),
+    skills: skillsCliConfigSchema.optional(),
   })
   .strict();
 

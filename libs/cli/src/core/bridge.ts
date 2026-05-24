@@ -68,5 +68,19 @@ export function toParsedArgs(
   if (options['autoPort'] !== undefined) out.autoPort = options['autoPort'] as boolean;
   if (options['showConflict'] !== undefined) out.showConflict = options['showConflict'] as boolean;
 
+  // Issue #400 — top-level --config flag forwarded from program.opts()
+  if (options['config'] !== undefined) out.config = options['config'] as string;
+  // Issue #400 — eject-mcp-config
+  if (options['out'] !== undefined) out.out = options['out'] as string;
+  if (options['dryRun'] !== undefined) out.dryRun = options['dryRun'] as boolean;
+  // Issue #400 — skills install/export defaults via config (still allow CLI override)
+  if (options['provider'] !== undefined) out.provider = options['provider'] as 'claude' | 'codex';
+  if (options['bundle'] !== undefined) {
+    out.bundle = options['bundle'] as 'recommended' | 'minimal' | 'full' | 'none';
+  }
+  if (options['exportTarget'] !== undefined) {
+    out.exportTarget = options['exportTarget'] as 'cursor' | 'windsurf' | 'copilot';
+  }
+
   return out;
 }

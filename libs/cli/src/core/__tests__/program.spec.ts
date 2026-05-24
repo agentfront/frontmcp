@@ -20,6 +20,8 @@ describe('createProgram', () => {
       'create',
       'dev',
       'doctor',
+      // Issue #400 — `eject-mcp-config <client>` emits MCP-client snippets
+      'eject-mcp-config',
       'init',
       'inspector',
       'install',

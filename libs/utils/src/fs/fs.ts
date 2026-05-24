@@ -438,7 +438,11 @@ export async function access(p: string, mode?: number): Promise<void> {
  * @example
  * await runCmd('npm', ['install'], { cwd: '/project' });
  */
-export function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
+export function runCmd(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<void> {
   const spawn = getSpawn();
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: 'inherit', shell: false, ...opts });

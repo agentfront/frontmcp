@@ -8,4 +8,22 @@ export {
 } from './frontmcp-config.loader';
 export { frontmcpConfigSchema } from './frontmcp-config.schema';
 export type { FrontMcpConfigParsed } from './frontmcp-config.schema';
-export type { FrontMcpConfig, ServerDefaults, DeploymentTarget, DeploymentTargetType } from './frontmcp-config.types';
+export type {
+  ClientConnection,
+  ClientsConfig,
+  EnvOverlays,
+  DeploymentTarget,
+  DeploymentTargetType,
+  FrontMcpConfig,
+  McpClientName,
+  ServerDefaults,
+  SkillsCliConfig,
+  TestConfig,
+  TransportConfig,
+} from './frontmcp-config.types';
+export {
+  resolveConfig,
+  type ResolvedFrontMcpConfig,
+  type ResolveConfigOptions,
+  type ResolveMode,
+} from './frontmcp-config.resolve';
