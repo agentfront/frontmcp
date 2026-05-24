@@ -230,6 +230,60 @@ The workflow is now fully live:
 4. **Agent tests** the change by calling the tool directly
 5. **Repeat** — no manual restart needed
 
+### Stdio bridge: `frontmcp dev --stdio` (issue #399)
+
+When a client must speak stdio (Claude Code's stdio mode, MCPB-installed bundles, etc.) and you still want the dev hot-reload loop, run the bridge:
+
+```bash
+frontmcp dev --stdio
+# or, with bridge-spawns-child-in-stdio (no HTTP loopback at all):
+frontmcp dev --stdio --serve
+```
+
+Wire your client at the bridge — no `mcp-remote` needed:
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "frontmcp", "dev", "--stdio"]
+    }
+  }
+}
+```
+
+```json Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "frontmcp", "dev", "--stdio"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+What the bridge guarantees:
+
+- **Stdout is 100% JSON-RPC frames.** Every diagnostic goes to `./.frontmcp/dev.log` (override with `--log-file <path>`).
+- **The session id survives reload.** The bridge pins a uuid via `FRONTMCP_DEV_FORCE_SESSION_ID`; the child re-uses it on every restart so in-flight session state (auth, subscriptions) carries over.
+- **Buffered RPCs during reload drain in FIFO order** when the new child reports ready (sentinel `__FRONTMCP_BOOTSTRAP_COMPLETE__` on stderr, or TCP probe in HTTP mode).
+- **Structured errors instead of hangs.** When the reload exceeds `--reload-deadline-ms` (default 30 000) or the buffer exceeds `--buffer-size` (default 8), the bridge synthesises `dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` (codes -32099 / -32098 / -32097) so the client spinner clears immediately.
+
+Flags:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--stdio` | off | Enable bridge mode. |
+| `--serve` | off | Use stdio-over-pipe to the child (skips HTTP loopback). |
+| `--log-file <path>` | `./.frontmcp/dev.log` | Bridge log destination. |
+| `--buffer-size <n>` | 8 | Max RPCs buffered during reload. |
+| `--reload-deadline-ms <ms>` | 30000 | Bound on how long the bridge waits for the child. |
+| `-p, --port <port>` | 3000 | HTTP-mode loopback port. Ignored with `--serve`. |
+
 ### Why HTTP (Not Stdio) for Development
 
 | Aspect | HTTP + `frontmcp dev` | Stdio |

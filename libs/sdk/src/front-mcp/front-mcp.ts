@@ -75,6 +75,15 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const scope of this.getScopes()) {
       await scope.emitServerStarted();
     }
+
+    // Issue #399 — dev bridge bootstrap sentinel. When `frontmcp dev
+    // --stdio` spawns this process, it sets FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1
+    // and watches stderr for this exact line to decide "the child is
+    // ready, drain the buffered RPCs." Written to stderr because stdout
+    // is reserved for JSON-RPC frames in stdio mode.
+    if (process.env['FRONTMCP_DEV_BOOTSTRAP_SENTINEL'] === '1') {
+      process.stderr.write('__FRONTMCP_BOOTSTRAP_COMPLETE__\n');
+    }
   }
 
   /**
