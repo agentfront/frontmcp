@@ -68,6 +68,37 @@ When building a FrontMCP server with a coding agent (Claude Code, Cursor, Windsu
 - **Debugging:** Logs visible in terminal, Inspector UI available via `npm run inspect`
 - **Persistence:** Server stays running across edits, no new process per connection
 
+### `frontmcp dev --stdio` bridge (issue #399)
+
+If the client must speak stdio (MCPB-installed bundles, certain Claude Code configurations) and you still want the dev hot-reload loop, run the first-party watch-aware stdio bridge — replaces the third-party `mcp-remote` recipe:
+
+```bash
+frontmcp dev --stdio                  # HTTP loopback under the hood
+frontmcp dev --stdio --serve          # stdio-over-pipe (no HTTP listener)
+```
+
+Wire the client at the bridge:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "frontmcp", "dev", "--stdio"]
+    }
+  }
+}
+```
+
+Bridge guarantees:
+
+- Stdout is 100% JSON-RPC frames; diagnostics go to `./.frontmcp/dev.log` (override with `--log-file`).
+- Session id survives reload (pinned via `FRONTMCP_DEV_FORCE_SESSION_ID`).
+- Buffered RPCs during reload drain in FIFO once the child reports ready.
+- Reload deadline + buffer overflow surface structured errors (`dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` — codes -32099 / -32098 / -32097) so the client spinner clears instead of hanging.
+
+Flags: `--stdio`, `--serve`, `--log-file <path>`, `--buffer-size <n>` (default 8), `--reload-deadline-ms <ms>` (default 30000), `-p <port>` (HTTP-mode loopback, default 3000).
+
 ## Stdio Transport
 
 The most common transport. The MCP client spawns your server as a child process and communicates via stdin/stdout JSON-RPC.
@@ -189,6 +220,60 @@ The `url` hostname is ignored for Unix sockets; only the path (`/mcp`) is used f
 | Cursor         | `.cursor/mcp.json`           | Project root                                    |
 | VS Code        | `.vscode/mcp.json`           | Project root                                    |
 | Windsurf       | `mcp_config.json`            | `~/.codeium/windsurf/`                          |
+
+## Claude Code plugin install (issue #411)
+
+For Claude Code specifically, you can ship the whole server — MCP entry +
+prompts (as slash commands) + `@Skill`s — as a single Claude Code plugin
+folder, registered in one command. This is the recommended path when you
+want users to enable/disable the server from `/plugins` rather than
+hand-edit `.mcp.json`.
+
+### From a project source (dev tool)
+
+```bash
+# At a FrontMCP project root — emits .claude/plugins/<name>/ in cwd
+frontmcp plugin install --claude
+
+# Inspect the plan without writing
+frontmcp plugin install --claude --dry-run
+
+# Also drop a Codex mcp_servers entry into ~/.codex/config.toml
+frontmcp plugin install --claude --codex
+
+# Report install state
+frontmcp plugin status --claude
+
+# Remove what install wrote (preserves user-added files)
+frontmcp plugin uninstall --claude
+```
+
+### From a built bin (end-user)
+
+Every CLI built with `frontmcp build --target cli` inherits the same
+behavior under its `install` verb (no new top-level verb):
+
+```bash
+my-bin install -p claude              # write .claude/plugins/my-bin/
+my-bin install -p claude --scope user # ~/.claude/plugins/my-bin/
+my-bin install -p claude -p codex     # both providers in one call
+my-bin install --status               # report state per provider
+my-bin uninstall -p claude            # remove only managed files
+```
+
+### What gets written
+
+```text
+.claude/plugins/<bin>/
+├── .claude-plugin/plugin.json   # name, version, mcpServers, skills, _meta.frontmcp.managedFiles
+├── commands/<prompt>.md         # one per @Prompt the server advertises
+└── skills/<name>/SKILL.md       # one per @Skill, with references/examples/scripts/assets subdirs
+```
+
+Re-runs are idempotent: any file not listed in `_meta.frontmcp.managedFiles`
+(including unknown top-level keys the user added to `plugin.json`, like
+`hooks` or extra `mcpServers`) is preserved. Use `--dry-run` to inspect
+the planned tree before writing.
 
 ## Common Patterns
 

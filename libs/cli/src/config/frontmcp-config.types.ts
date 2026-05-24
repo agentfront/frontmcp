@@ -344,6 +344,116 @@ export type DeploymentTarget =
 // Top-Level Config
 // ============================================
 
+// ============================================
+// Transport defaults (issue #400)
+// ============================================
+
+/**
+ * Per-protocol defaults consumed by `dev` / `inspector` / `pm start` /
+ * `pm socket` so server-startup flags don't have to be re-typed on every
+ * CLI invocation.
+ */
+export interface TransportConfig {
+  /** Default protocol when no flag is set. */
+  default?: 'http' | 'sse' | 'stdio';
+  /** HTTP transport defaults — overridden by `--port` / per-deployment `server.http.port`. */
+  http?: {
+    /** Default HTTP port. */
+    port?: number;
+    /** Mount path (e.g., '/mcp'). */
+    path?: string;
+    /** Bind address. */
+    host?: string;
+  };
+  /** Stdio transport defaults — used by `inspector` to spawn the server. */
+  stdio?: {
+    command?: string;
+    args?: string[];
+  };
+}
+
+// ============================================
+// Env overlays (issue #400)
+// ============================================
+
+/**
+ * Top-level env overlays. `shared` applies everywhere; mode-specific
+ * overlays (`dev`, `test`, `ship`) are merged on top of `shared`.
+ *
+ * Effective env = `shared` ⊕ `<mode>` (later wins). `.env` / `.env.local`
+ * files still load and take precedence over config overlays (parity with
+ * existing `dev` behavior).
+ */
+export interface EnvOverlays {
+  shared?: Record<string, string>;
+  dev?: Record<string, string>;
+  test?: Record<string, string>;
+  ship?: Record<string, string>;
+}
+
+// ============================================
+// MCP client connection snippets (issue #400)
+// ============================================
+
+export type McpClientName = 'claude-code' | 'claude-desktop' | 'cursor' | 'windsurf' | 'vscode';
+
+export interface ClientConnection {
+  /** Display name. Defaults to the top-level `name` field. */
+  name?: string;
+  /** Transport protocol. */
+  transport: 'http' | 'sse' | 'stdio';
+  /** Spawn command (for `stdio` transport). */
+  command?: string;
+  /** Spawn args (for `stdio` transport). */
+  args?: string[];
+  /** Env vars to set on the spawned client. */
+  env?: Record<string, string>;
+  /** Server URL (for `http` / `sse` transport). */
+  url?: string;
+}
+
+/**
+ * Per-client connection descriptors consumed by `frontmcp eject-mcp-config
+ * <client>` to emit ready-to-paste `.mcp.json` /
+ * `claude_desktop_config.json` / Cursor / Windsurf / VS Code snippets.
+ */
+export type ClientsConfig = Partial<Record<McpClientName, ClientConnection>>;
+
+// ============================================
+// Test runner defaults (issue #400)
+// ============================================
+
+/**
+ * `frontmcp test` defaults. CLI flags (`--timeout`, `--runInBand`,
+ * `--coverage`, positional test patterns) override these.
+ */
+export interface TestConfig {
+  timeoutMs?: number;
+  runInBand?: boolean;
+  testMatch?: string[];
+  coverage?: boolean;
+}
+
+// ============================================
+// Skills install / export defaults (issue #400)
+// ============================================
+
+/**
+ * `frontmcp skills install` / `export` defaults. `install` is the list of
+ * catalog skill names a project depends on so `frontmcp skills install`
+ * with no arguments installs the curated set.
+ */
+export interface SkillsCliConfig {
+  provider?: 'claude' | 'codex';
+  bundle?: 'recommended' | 'minimal' | 'full' | 'none';
+  install?: string[];
+  exportTarget?: 'cursor' | 'windsurf' | 'copilot';
+}
+
+// ============================================
+// Top-level config
+// ============================================
+
 export interface FrontMcpConfig {
   /** JSON Schema pointer for IDE autocomplete. */
   $schema?: string;
@@ -359,4 +469,16 @@ export interface FrontMcpConfig {
   deployments: DeploymentTarget[];
   /** Build/bundler options. */
   build?: BuildOptions;
+
+  // Issue #400 — config drives every command, not just `build`
+  /** Transport defaults consumed by `dev` / `inspector` / `pm start` / `pm socket`. */
+  transport?: TransportConfig;
+  /** Env overlays merged in addition to `.env` / `.env.local`. */
+  env?: EnvOverlays;
+  /** Per-client snippets emitted by `frontmcp eject-mcp-config <client>`. */
+  clients?: ClientsConfig;
+  /** `frontmcp test` defaults overridden by CLI flags. */
+  test?: TestConfig;
+  /** `frontmcp skills install` / `export` defaults. */
+  skills?: SkillsCliConfig;
 }

@@ -24,14 +24,30 @@ The `defineConfig()` helper is a pass-through that enables IDE type hints and au
 
 ## File Resolution Order
 
-FrontMCP searches for configuration files in this order:
+FrontMCP locates the config file in this precedence order (issue #400):
+
+1. Explicit `--config <path>` flag on any command.
+2. `FRONTMCP_CONFIG` env var.
+3. Upward walk from `cwd` to the nearest ancestor containing a `frontmcp.config.*` file (caps at 10 levels — monorepo nested apps no longer require `cd <repo-root>`).
+4. Fallback: derives minimal config from `package.json` (name, default node target).
+
+Within a directory, the matching extensions are tried in this order:
 
 1. `frontmcp.config.ts`
 2. `frontmcp.config.js`
 3. `frontmcp.config.json`
 4. `frontmcp.config.mjs`
 5. `frontmcp.config.cjs`
-6. Fallback: derives minimal config from `package.json` (name, default node target)
+
+## Override precedence
+
+For every CLI option that's also expressible in the config, the effective value is computed as:
+
+```
+explicit CLI flag  >  FRONTMCP_<NAME> env var  >  frontmcp.config field  >  built-in default
+```
+
+Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.port` in the config. With no flag, the resolver reads `transport.http.port`, then falls back to the framework default (3000).
 
 <Note>
   When using JSON format, add `"$schema"` for autocomplete in VS Code and WebStorm:
@@ -50,10 +66,72 @@ FrontMCP searches for configuration files in this order:
 | --- | --- | --- | --- |
 | `name` | string | Yes | Server name (kebab-case, no spaces) |
 | `version` | string | No | Server version |
-| `entry` | string | No | Custom entry file path |
+| `entry` | string | No | Custom entry file path (consumed by `dev`, `inspector`, `pm start/socket`) |
 | `nodeVersion` | string | No | Target Node.js version |
 | `deployments` | DeploymentTarget[] | Yes | One or more deployment targets |
 | `build` | object | No | Build-specific options (esbuild config, dependencies) |
+| `transport` | TransportConfig | No | Per-protocol defaults consumed by `dev` / `inspector` / `pm` (issue #400) |
+| `env` | EnvOverlays | No | `shared` ⊕ `dev` / `test` / `ship` overlays merged into the spawned child env (issue #400) |
+| `clients` | ClientsConfig | No | Per-client connection snippets emitted by `frontmcp eject-mcp-config <client>` (issue #400) |
+| `test` | TestConfig | No | `frontmcp test` defaults overridden by CLI flags (issue #400) |
+| `skills` | SkillsCliConfig | No | `frontmcp skills install` / `export` defaults (issue #400) |
+
+### Per-command consumption (issue #400)
+
+| Command | Config fields consumed |
+| --- | --- |
+| `build` | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion` |
+| `dev` | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev` |
+| `test` | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `env.shared` ⊕ `env.test` |
+| `inspector` | `transport.default`, `transport.http.port`, `transport.stdio.command/args` |
+| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship` |
+| `skills install` / `export` | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget` |
+| `eject-mcp-config <client>` | `clients.<client>`, `name`, `transport`, `env.ship` |
+
+## Transport defaults
+
+```ts
+transport: {
+  default: 'http',                     // 'http' | 'sse' | 'stdio'
+  http: { port: 3000, path: '/mcp', host: '127.0.0.1' },
+  stdio: { command: 'node', args: ['dist/main.js'] },
+}
+```
+
+## Env overlays
+
+`shared` applies everywhere; mode overlays (`dev`, `test`, `ship`) layer on top:
+
+```ts
+env: {
+  shared: { LOG_LEVEL: 'info' },
+  dev:    { NODE_ENV: 'development' },
+  test:   { NODE_ENV: 'test', JEST_WORKER_ID: '1' },
+  ship:   { NODE_ENV: 'production' },
+}
+```
+
+Note: `.env` and `.env.local` (loaded by `dev`) still win over config overlays — file-based env is the deployment escape hatch.
+
+## Client snippets
+
+```ts
+clients: {
+  'claude-code':    { name: 'my-server', transport: 'http', url: 'http://127.0.0.1:3000/mcp' },
+  'claude-desktop': { transport: 'stdio', command: 'npx', args: ['-y', 'my-server'] },
+  cursor:           { transport: 'http', url: 'http://127.0.0.1:3000/mcp' },
+  windsurf:         { transport: 'stdio', command: 'npx', args: ['-y', 'my-server'] },
+  vscode:           { transport: 'stdio', command: 'npx', args: ['-y', 'my-server'] },
+}
+```
+
+Emit a ready-to-paste snippet:
+
+```bash
+frontmcp eject-mcp-config claude-code              # prints to stdout
+frontmcp eject-mcp-config claude-code --out ~/.config/claude/mcp.json
+frontmcp eject-mcp-config claude-code --out ~/.config/claude/mcp.json --dry-run
+```
 
 ## Deployment Targets
 

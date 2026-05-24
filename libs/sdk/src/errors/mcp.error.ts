@@ -161,12 +161,29 @@ export class ToolNotFoundError extends PublicMcpError {
 /**
  * Entry unavailable in the current environment.
  * Thrown when a tool/resource/prompt/skill/agent exists but is restricted
- * by its `availableWhen` constraint (platform, runtime, deployment, or env).
+ * by its `availableWhen` constraint (os, runtime, deployment, provider,
+ * target, surface, or env).
+ *
+ * Issue #417 — the error data now carries `missingAxes` so clients can
+ * surface "this tool isn't reachable because surface=mcp / provider=vercel
+ * / target=cli / …" without parsing the prose message.
  */
 export class EntryUnavailableError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+  readonly entryType: string;
+  readonly entryName: string;
+  readonly availability?: unknown;
+  readonly runtimeContext?: unknown;
+  /** Issue #417 — axes that failed to match (e.g. ['surface', 'provider']). */
+  readonly missingAxes: string[];
 
-  constructor(entryType: string, entryName: string, availability?: unknown, runtimeContext?: unknown) {
+  constructor(
+    entryType: string,
+    entryName: string,
+    availability?: unknown,
+    runtimeContext?: unknown,
+    missingAxes: string[] = [],
+  ) {
     const safeStringify = (v: unknown): string => {
       try {
         return JSON.stringify(v);
@@ -176,20 +193,46 @@ export class EntryUnavailableError extends PublicMcpError {
     };
     const constraint = availability ? ` (requires: ${safeStringify(availability)})` : '';
     const current = runtimeContext ? ` (current: ${safeStringify(runtimeContext)})` : '';
+    const axesNote = missingAxes.length > 0 ? ` (missing axes: ${missingAxes.join(', ')})` : '';
     super(
-      `${entryType} "${entryName}" is not available in the current environment${constraint}${current}`,
+      `${entryType} "${entryName}" is not available in the current environment${constraint}${current}${axesNote}`,
       'ENTRY_UNAVAILABLE',
       403,
     );
+    this.entryType = entryType;
+    this.entryName = entryName;
+    this.availability = availability;
+    this.runtimeContext = runtimeContext;
+    this.missingAxes = missingAxes;
   }
 
   /**
    * Convert to JSON-RPC error format per MCP specification.
+   *
+   * Issue #417 — `data` now exposes `{tool, missingAxes, constraint, context}`
+   * so MCP clients can react structurally without parsing prose.
    */
-  toJsonRpcError(): { code: number; message: string } {
+  toJsonRpcError(): {
+    code: number;
+    message: string;
+    data: {
+      entryType: string;
+      entry: string;
+      missingAxes: string[];
+      constraint?: unknown;
+      context?: unknown;
+    };
+  } {
     return {
       code: this.mcpErrorCode,
       message: this.getPublicMessage(),
+      data: {
+        entryType: this.entryType,
+        entry: this.entryName,
+        missingAxes: this.missingAxes,
+        ...(this.availability ? { constraint: this.availability } : {}),
+        ...(this.runtimeContext ? { context: this.runtimeContext } : {}),
+      },
     };
   }
 }

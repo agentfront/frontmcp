@@ -68,5 +68,34 @@ export function toParsedArgs(
   if (options['autoPort'] !== undefined) out.autoPort = options['autoPort'] as boolean;
   if (options['showConflict'] !== undefined) out.showConflict = options['showConflict'] as boolean;
 
+  // Dev (issue #399): watch-aware stdio bridge
+  if (options['stdio'] !== undefined) out.stdio = options['stdio'] as boolean;
+  if (options['serve'] !== undefined) out.serve = options['serve'] as boolean;
+  if (options['logFile'] !== undefined) out.logFile = options['logFile'] as string;
+  if (options['bufferSize'] !== undefined) {
+    out.bufferSize =
+      typeof options['bufferSize'] === 'number' ? options['bufferSize'] : parseInt(String(options['bufferSize']), 10);
+  }
+  if (options['reloadDeadlineMs'] !== undefined) {
+    out.reloadDeadlineMs =
+      typeof options['reloadDeadlineMs'] === 'number'
+        ? options['reloadDeadlineMs']
+        : parseInt(String(options['reloadDeadlineMs']), 10);
+  }
+
+  // Issue #400 — top-level --config flag forwarded from program.opts()
+  if (options['config'] !== undefined) out.config = options['config'] as string;
+  // Issue #400 — eject-mcp-config
+  if (options['out'] !== undefined) out.out = options['out'] as string;
+  if (options['dryRun'] !== undefined) out.dryRun = options['dryRun'] as boolean;
+  // Issue #400 — skills install/export defaults via config (still allow CLI override)
+  if (options['provider'] !== undefined) out.provider = options['provider'] as 'claude' | 'codex';
+  if (options['bundle'] !== undefined) {
+    out.bundle = options['bundle'] as 'recommended' | 'minimal' | 'full' | 'none';
+  }
+  if (options['exportTarget'] !== undefined) {
+    out.exportTarget = options['exportTarget'] as 'cursor' | 'windsurf' | 'copilot';
+  }
+
   return out;
 }

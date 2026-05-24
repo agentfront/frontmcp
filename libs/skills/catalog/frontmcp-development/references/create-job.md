@@ -418,7 +418,9 @@ class DataApp {}
 
 ### Enabling the Jobs System
 
-Jobs require a persistent store for state management. Enable the jobs system in `@FrontMcp` configuration.
+**Auto-enable (issue #408):** declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) is enough — the jobs subsystem comes up with in-memory stores by default and the management tools (`execute_job`, `list_jobs`, `get_job_status`, `register_job`, `remove_job`) are registered automatically so agents can invoke them. No `@FrontMcp({ jobs: { enabled: true } })` is required for the happy path.
+
+**When to configure `@FrontMcp({ jobs })` explicitly:** override the in-memory default with persistent storage (Redis recommended for multi-replica HA) so job state, progress, logs, and outputs survive retries and server restarts.
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
@@ -426,8 +428,9 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },
   apps: [DataApp],
+  // `enabled: true` is implied by `@App({ jobs })`. Set explicitly only to
+  // configure store, or set to `false` to opt out and suppress the tools.
   jobs: {
-    enabled: true,
     store: {
       redis: {
         provider: 'redis',
@@ -441,7 +444,36 @@ import { FrontMcp } from '@frontmcp/sdk';
 class MyServer {}
 ```
 
-The store persists job state, progress, logs, and outputs across retries and server restarts. Redis is recommended for production. Without `jobs.enabled: true`, registered jobs will not be activated.
+Setting `jobs: { enabled: false }` is an explicit opt-out — declared jobs will NOT be activated and the framework logs a warning so the configuration mismatch is loud.
+
+### Calling Jobs from an Agent
+
+Once jobs are registered, the SDK exposes five MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
+
+| Tool             | Purpose                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters   |
+| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)       |
+| `get_job_status` | Get the run state for a `runId` returned by `execute_job`                |
+| `register_job`   | Register a dynamic job at runtime (sandboxed; `hideFromDiscovery: true`) |
+| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)                 |
+
+Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `remove_workflow`.
+
+For finer-grained control (e.g. omit `register_job` / `remove_job` in production), opt out of auto-registration by importing the tool classes manually:
+
+```typescript
+import { App, ExecuteJobTool, GetJobStatusTool, ListJobsTool } from '@frontmcp/sdk';
+
+@App({
+  name: 'data-app',
+  jobs: [GenerateReportJob],
+  tools: [ExecuteJobTool, ListJobsTool, GetJobStatusTool], // omit register/remove
+})
+class DataApp {}
+```
+
+The same classes are also reachable via the subpath `@frontmcp/sdk/job/tools` and `@frontmcp/sdk/workflow/tools` for bundlers that prefer narrower imports.
 
 ## Nx Generator
 
@@ -603,7 +635,9 @@ class DataServer {}
 
 ### Runtime
 
-- [ ] `jobs.enabled: true` is set in `@FrontMcp` configuration with a store
+- [ ] Jobs subsystem is active — either implicitly via `@App({ jobs: [...] })`
+      (auto-enable, issue #408) or explicitly via `@FrontMcp({ jobs: { store: { ... } } })`
+      when overriding the in-memory default
 - [ ] Job executes and returns output matching `outputSchema`
 - [ ] Progress is reported and queryable during execution
 - [ ] Retry fires with correct backoff delays on transient failures
@@ -611,13 +645,13 @@ class DataServer {}
 
 ## Troubleshooting
 
-| Problem                    | Cause                                           | Solution                                                                     |
-| -------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| Job not activated          | `jobs.enabled` not set to `true` in `@FrontMcp` | Add `jobs: { enabled: true, store: { ... } }` to `@FrontMcp` config          |
-| Job fails without retrying | No `retry` policy configured                    | Add `retry: { maxAttempts: 3, backoffMs: 2000 }` to `@Job` options           |
-| Progress not visible       | Not calling `this.progress()` during execution  | Add `this.progress(pct, total, message)` calls at each stage                 |
-| Job times out unexpectedly | Default 5-minute timeout too short              | Set `timeout` in `@Job` to a higher value (e.g., `600000` for 10 minutes)    |
-| Permission denied error    | User lacks required roles or scopes             | Verify user has one of the `roles` and all `scopes` defined in `permissions` |
+| Problem                    | Cause                                                                                       | Solution                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Job not activated          | `@App` doesn't declare `jobs: [...]` AND `@FrontMcp({ jobs: { enabled: true } })` isn't set | Add the job class to `@App({ jobs: [...] })` (auto-enables) OR set `@FrontMcp({ jobs: { enabled: true, store: { ... } } })` |
+| Job fails without retrying | No `retry` policy configured                                                                | Add `retry: { maxAttempts: 3, backoffMs: 2000 }` to `@Job` options                                                          |
+| Progress not visible       | Not calling `this.progress()` during execution                                              | Add `this.progress(pct, total, message)` calls at each stage                                                                |
+| Job times out unexpectedly | Default 5-minute timeout too short                                                          | Set `timeout` in `@Job` to a higher value (e.g., `600000` for 10 minutes)                                                   |
+| Permission denied error    | User lacks required roles or scopes                                                         | Verify user has one of the `roles` and all `scopes` defined in `permissions`                                                |
 
 ## Examples
 

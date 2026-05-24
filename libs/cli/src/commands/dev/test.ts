@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { fileExists, unlink, writeFile } from '@frontmcp/utils';
 
+import { resolveConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 
@@ -57,8 +58,13 @@ export function buildJestArgs(configPath: string, opts: ParsedArgs, positionalPa
  *     runtime so React components are usable in tests,
  *   - exposes the helper for unit testing.
  */
-export function generateJestConfig(cwd: string, opts: ParsedArgs): object {
-  const testTimeout = opts.timeout ?? 60000;
+export function generateJestConfig(
+  cwd: string,
+  opts: ParsedArgs,
+  testDefaults?: { timeoutMs?: number; testMatch?: string[]; coverage?: boolean },
+): object {
+  // Issue #400 — config defaults apply when CLI flags are absent.
+  const testTimeout = opts.timeout ?? testDefaults?.timeoutMs ?? 60000;
 
   return {
     // Use Node.js environment for E2E tests
@@ -76,7 +82,7 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs): object {
     // patterns — the convention is strictly `.e2e.spec.ts(x)`, so matching
     // `.e2e.ts` would let stragglers that violate the convention slip
     // through discovery.
-    testMatch: [
+    testMatch: testDefaults?.testMatch ?? [
       '<rootDir>/src/**/*.spec.ts',
       '<rootDir>/src/**/*.spec.tsx',
       '<rootDir>/**/__tests__/**/*.spec.ts',
@@ -136,11 +142,11 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs): object {
     // Ignore patterns
     testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 
-    // Coverage settings
-    collectCoverage: opts.coverage ?? false,
+    // Coverage settings (issue #400: CLI > config > false)
+    collectCoverage: opts.coverage ?? testDefaults?.coverage ?? false,
 
     // Coverage configuration when enabled
-    ...(opts.coverage
+    ...((opts.coverage ?? testDefaults?.coverage)
       ? {
           coverageDirectory: '<rootDir>/coverage',
           coverageReporters: ['text', 'lcov', 'json'],
@@ -170,6 +176,22 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs): object {
  */
 export async function runTest(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
+
+  // Issue #400 — resolve frontmcp.config so `test.timeoutMs` /
+  // `test.runInBand` / `test.coverage` / `test.testMatch` apply when the
+  // user didn't pass the equivalent CLI flag.
+  const resolved = await resolveConfig({
+    cwd,
+    mode: 'test',
+    configPath: typeof opts.config === 'string' ? opts.config : undefined,
+  });
+  const testDefaults = resolved.config?.test;
+  const mergedOpts = {
+    ...opts,
+    runInBand: opts.runInBand ?? testDefaults?.runInBand,
+    coverage: opts.coverage ?? testDefaults?.coverage,
+    timeout: opts.timeout ?? testDefaults?.timeoutMs,
+  } as ParsedArgs;
 
   // Issue #402: honor an existing `jest.config.{ts,js,mjs,cjs,json}` in cwd
   // by delegating to it instead of injecting our own config. Users who need
@@ -210,7 +232,7 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
   // write our generated config to a temp file and point Jest at it.
   let configPath: string | undefined;
   if (!userConfig) {
-    const config = generateJestConfig(cwd, opts);
+    const config = generateJestConfig(cwd, mergedOpts, testDefaults);
     const tempDir = os.tmpdir();
     configPath = path.join(tempDir, `frontmcp-jest-config-${Date.now()}.json`);
     await writeFile(configPath, JSON.stringify(config, null, 2));
@@ -228,24 +250,27 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
   }
   // Positional test patterns: everything after the `test` command itself.
   const testPatterns = opts._.slice(1);
-  const jestArgs = buildJestArgs(selectedConfig, opts, testPatterns);
+  const jestArgs = buildJestArgs(selectedConfig, mergedOpts, testPatterns);
 
   console.log(`${c('cyan', '[test]')} running tests in ${path.relative(process.cwd(), cwd) || '.'}`);
+  if (resolved.configPath || resolved.configDir) {
+    console.log(`${c('gray', '[test]')} config: ${resolved.configPath ?? resolved.configDir}`);
+  }
   if (userConfig) {
     console.log(`${c('gray', '[test]')} using user Jest config: ${path.relative(cwd, userConfig)}`);
   } else {
     console.log(`${c('gray', '[test]')} using auto-injected Jest configuration`);
   }
 
-  if (opts.runInBand) {
+  if (mergedOpts.runInBand) {
     console.log(`${c('gray', '[test]')} running tests sequentially (--runInBand)`);
   }
 
-  if (opts.watch) {
+  if (mergedOpts.watch) {
     console.log(`${c('gray', '[test]')} watch mode enabled`);
   }
 
-  if (opts.coverage) {
+  if (mergedOpts.coverage) {
     console.log(`${c('gray', '[test]')} coverage collection enabled`);
   }
 

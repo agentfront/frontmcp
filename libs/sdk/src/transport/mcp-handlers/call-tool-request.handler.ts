@@ -28,9 +28,13 @@ export default function callToolRequestHandler({
       const start = Date.now();
 
       try {
-        // All tool calls go through the standard tool flow
-        // Agents are registered as regular tools with custom execute functions
-        const result = await scope.runFlowForOutput('tools:call-tool', { request, ctx });
+        // Issue #417 — tag the call ctx with `surface: 'mcp'` so per-call
+        // surface filtering in the tool flow knows which transport this
+        // request came from. Tools that opt into `availableWhen: {
+        // surface: ['cli'] }` (or any surface other than mcp) are then
+        // blocked at the call boundary with a structured error.
+        const taggedCtx = { ...(ctx as Record<string, unknown>), surface: 'mcp' };
+        const result = await scope.runFlowForOutput('tools:call-tool', { request, ctx: taggedCtx });
         logger.verbose('tools/call completed', { tool: toolName, durationMs: Date.now() - start });
         return result;
       } catch (e) {

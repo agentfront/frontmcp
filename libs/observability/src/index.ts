@@ -113,6 +113,13 @@ export {
 } from './telemetry';
 export type { TelemetryCounter, CounterSnapshotEntry, KnownBundleSource, KnownErrorReason } from './telemetry';
 
+// ──── Prometheus serializer (issue #397) ────
+export { PROMETHEUS_CONTENT_TYPE, renderJsonExposition, renderPrometheusExposition } from './prometheus';
+export type { GaugeSnapshotEntry, RenderOptions } from './prometheus';
+
+// ──── Process-stats collector (issue #397) ────
+export { ProcessStatsCollector } from './process-stats';
+
 // ──── Testing Utilities ────
 export {
   createTestTracer,
