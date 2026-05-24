@@ -106,14 +106,24 @@ async function loadProjectMeta(): Promise<ProjectMeta | undefined> {
  * spawning two extractor passes would double the SDK boot cost on every
  * dev-tool install.
  */
-let cachedExtraction: Promise<{ skills: PluginEmitterSkillInput[]; commands: PluginEmitterCommandInput[] }> | undefined;
+// Keyed by absolute `cwd` so two installs invoked back-to-back from
+// different project roots (e.g. an integration test, or a script that
+// `cd`s between projects) don't reuse the first project's skill/prompt
+// extraction. Each project gets its own cached promise — and within a
+// single project both `collectSkillsFromProject` and
+// `collectPromptsFromProject` share the one bundle+extract pass.
+const cachedExtractionByCwd = new Map<
+  string,
+  Promise<{ skills: PluginEmitterSkillInput[]; commands: PluginEmitterCommandInput[] }>
+>();
 
 async function getProjectExtraction(cwd: string): Promise<{
   skills: PluginEmitterSkillInput[];
   commands: PluginEmitterCommandInput[];
 }> {
-  if (cachedExtraction) return cachedExtraction;
-  cachedExtraction = (async () => {
+  const cached = cachedExtractionByCwd.get(cwd);
+  if (cached) return cached;
+  const extractionPromise = (async () => {
     try {
       const { resolveEntry } = await import('../../shared/fs.js');
       const { mkdtemp, rm } = await import('@frontmcp/utils');
@@ -164,7 +174,8 @@ async function getProjectExtraction(cwd: string): Promise<{
       return { skills: [], commands: [] };
     }
   })();
-  return cachedExtraction;
+  cachedExtractionByCwd.set(cwd, extractionPromise);
+  return extractionPromise;
 }
 
 async function collectSkillsFromProject(): Promise<PluginEmitterSkillInput[]> {

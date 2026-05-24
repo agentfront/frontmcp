@@ -32,6 +32,10 @@ describe('runInstallCurrentProject — option normalization (issue #411)', () =>
   });
 
   it('rejects a bogus --scope value before any side-effects run', async () => {
+    // Assert both the error class AND the message — message-only checks pass
+    // even when the runner rejects with a plain string or a non-Error object,
+    // which loses stack traces in production logs.
+    await expect(runInstallCurrentProject({ scope: 'usr', claudePlugin: true })).rejects.toBeInstanceOf(Error);
     await expect(runInstallCurrentProject({ scope: 'usr', claudePlugin: true })).rejects.toThrow(
       /Invalid --scope value: usr\. Expected "project" or "user"\./,
     );
