@@ -209,12 +209,13 @@ A trivial provider (e.g. a `Map`-based cache, a pure DTO with no helpers) does N
 
 Cross-provider imports go through the **subfolder barrel**, not into another provider's internals:
 
+<!-- prettier-ignore -->
 ```typescript
 // ✅ Good — imports through the subfolder barrel
+import { TaskStoreProvider } from '../task-store';
 
 // ❌ Bad — top-level barrel for sibling imports causes circular-init churn
 import { TaskStoreProvider } from '..';
-import { TaskStoreProvider } from '../task-store';
 // ❌ Bad — reaches into another provider's implementation file
 import { TaskStoreProvider } from '../task-store/task-store.provider';
 ```
