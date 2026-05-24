@@ -15,17 +15,17 @@
 
 import { type Command } from 'commander';
 
-export function registerInstallCommands(program: Command): void {
-  const plugin = program
-    .command('plugin')
-    .description('Install the current FrontMCP server as a plugin for an AI tool');
-
-  plugin
-    .command('install')
-    .description('Emit a Claude Code plugin folder and/or Codex mcp_servers entry from the current project')
-    .option('--claude', 'Emit a Claude Code plugin into <scope>/.claude/plugins/<name>/')
-    .option('--codex', 'Emit a Codex mcp_servers entry into ~/.codex/config.toml')
-    .option('--scope <scope>', 'project | user (default: project)', 'project')
+/**
+ * Attach the shared plugin-flag surface to a subcommand. `install`,
+ * `uninstall`, and `status` all accept the same flag set so docs +
+ * tests can rely on a uniform invocation contract (issue #411). The
+ * dry-run / skip-tree / mcp-override flags are no-ops on `status` but
+ * keeping the surface uniform avoids `Unknown option` errors when the
+ * caller scripts the three subcommands together.
+ */
+function withSharedPluginFlags(cmd: Command, scopeDescription: string): Command {
+  return cmd
+    .option('--scope <scope>', scopeDescription, 'project')
     .option('--no-skills', 'Skip the skills/ subtree')
     .option('--no-commands', 'Skip the commands/ subtree')
     .option('--only-mcp', 'Skip the plugin folder; just register the MCP server')
@@ -37,37 +37,51 @@ export function registerInstallCommands(program: Command): void {
       [] as string[],
     )
     .option('--dir <dir>', 'Override the plugin destination root')
-    .option('--dry-run', 'Print the planned tree and exit without writing')
-    .action(async (opts: Record<string, unknown>) => {
-      // Map flag name to the legacy internal option name expected by the runner.
-      const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true };
-      const { runInstallCurrentProject } = await import('./install-claude-plugin.js');
-      await runInstallCurrentProject(mappedOpts);
-    });
+    .option('--dry-run', 'Print the planned tree and exit without writing');
+}
 
-  plugin
-    .command('uninstall')
-    .description('Remove what `frontmcp plugin install` previously wrote')
-    .option('--claude', 'Remove the Claude Code plugin folder')
-    .option('--codex', 'Remove the Codex mcp_servers entry')
-    .option('--scope <scope>', 'project | user (default: project)', 'project')
-    .option('--dir <dir>', 'Override the plugin destination root')
-    .action(async (opts: Record<string, unknown>) => {
-      const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true };
-      const { runUninstallCurrentProject } = await import('./install-claude-plugin.js');
-      await runUninstallCurrentProject(mappedOpts);
-    });
+export function registerInstallCommands(program: Command): void {
+  const plugin = program
+    .command('plugin')
+    .description('Install the current FrontMCP server as a plugin for an AI tool');
 
-  plugin
-    .command('status')
-    .description('Report install state per provider')
-    .option('--claude', 'Check Claude Code plugin state')
-    .option('--codex', 'Check Codex mcp_servers entry')
-    .option('--scope <scope>', 'project | user (default: project)', 'project')
-    .option('--dir <dir>', 'Override the plugin destination root')
-    .action(async (opts: Record<string, unknown>) => {
-      const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true, status: true };
-      const { runInstallCurrentProject } = await import('./install-claude-plugin.js');
-      await runInstallCurrentProject(mappedOpts);
-    });
+  withSharedPluginFlags(
+    plugin
+      .command('install')
+      .description('Emit a Claude Code plugin folder and/or Codex mcp_servers entry from the current project')
+      .option('--claude', 'Emit a Claude Code plugin into <scope>/.claude/plugins/<name>/')
+      .option('--codex', 'Emit a Codex mcp_servers entry into ~/.codex/config.toml'),
+    'project | user (default: project)',
+  ).action(async (opts: Record<string, unknown>) => {
+    // Map flag name to the legacy internal option name expected by the runner.
+    const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true };
+    const { runInstallCurrentProject } = await import('./install-claude-plugin.js');
+    await runInstallCurrentProject(mappedOpts);
+  });
+
+  withSharedPluginFlags(
+    plugin
+      .command('uninstall')
+      .description('Remove what `frontmcp plugin install` previously wrote')
+      .option('--claude', 'Remove the Claude Code plugin folder')
+      .option('--codex', 'Remove the Codex mcp_servers entry'),
+    'project | user (default: project)',
+  ).action(async (opts: Record<string, unknown>) => {
+    const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true };
+    const { runUninstallCurrentProject } = await import('./install-claude-plugin.js');
+    await runUninstallCurrentProject(mappedOpts);
+  });
+
+  withSharedPluginFlags(
+    plugin
+      .command('status')
+      .description('Report install state per provider')
+      .option('--claude', 'Check Claude Code plugin state')
+      .option('--codex', 'Check Codex mcp_servers entry'),
+    'project | user (default: project)',
+  ).action(async (opts: Record<string, unknown>) => {
+    const mappedOpts = { ...opts, claudePlugin: opts['claude'] === true, status: true };
+    const { runInstallCurrentProject } = await import('./install-claude-plugin.js');
+    await runInstallCurrentProject(mappedOpts);
+  });
 }

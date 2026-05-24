@@ -46,15 +46,28 @@ describe('registerInstallCommands — `frontmcp plugin` surface lock (issue #411
     );
   });
 
-  it('uninstall exposes --claude / --codex / --scope / --dir', () => {
-    const uninstall = getSubcommand('uninstall');
-    const longs = uninstall.options.map((o) => o.long).filter(Boolean) as string[];
-    expect(longs).toEqual(expect.arrayContaining(['--claude', '--codex', '--scope', '--dir']));
-  });
+  // Uniform-flag contract (issue #411 / cli-reference.mdx): install, uninstall,
+  // and status all accept the same shared plugin-flag surface so docs + scripts
+  // can rely on a single invocation contract. `uninstall` and `status` ignore
+  // the `--dry-run` / `--only-mcp` / `--command` / `--env` / `--no-*` flags,
+  // but accepting them keeps `Unknown option` from being thrown when callers
+  // script the three subcommands together.
+  const SHARED_PLUGIN_FLAGS = [
+    '--claude',
+    '--codex',
+    '--scope',
+    '--no-skills',
+    '--no-commands',
+    '--only-mcp',
+    '--command',
+    '--env',
+    '--dir',
+    '--dry-run',
+  ];
 
-  it('status exposes --claude / --codex / --scope / --dir', () => {
-    const status = getSubcommand('status');
-    const longs = status.options.map((o) => o.long).filter(Boolean) as string[];
-    expect(longs).toEqual(expect.arrayContaining(['--claude', '--codex', '--scope', '--dir']));
+  it.each(['install', 'uninstall', 'status'])('%s exposes the full shared-plugin flag set', (name) => {
+    const sub = getSubcommand(name);
+    const longs = sub.options.map((o) => o.long).filter(Boolean) as string[];
+    expect(longs).toEqual(expect.arrayContaining(SHARED_PLUGIN_FLAGS));
   });
 });

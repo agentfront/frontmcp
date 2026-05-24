@@ -95,15 +95,84 @@ async function loadProjectMeta(): Promise<ProjectMeta | undefined> {
   };
 }
 
+/**
+ * Best-effort: bundle the project's entry to a temp file, hand the bundle
+ * to the schema-extractor (the same routine the per-bin path uses at build
+ * time), and return the enumerated skills / prompts. Failures are logged
+ * and the empty-array fallback is returned so a partial setup never blocks
+ * an install — the per-bin path remains the authoritative source.
+ *
+ * Wrapped in a single bundle+extract pass so both collectors share work:
+ * spawning two extractor passes would double the SDK boot cost on every
+ * dev-tool install.
+ */
+let cachedExtraction: Promise<{ skills: PluginEmitterSkillInput[]; commands: PluginEmitterCommandInput[] }> | undefined;
+
+async function getProjectExtraction(cwd: string): Promise<{
+  skills: PluginEmitterSkillInput[];
+  commands: PluginEmitterCommandInput[];
+}> {
+  if (cachedExtraction) return cachedExtraction;
+  cachedExtraction = (async () => {
+    try {
+      const { resolveEntry } = await import('../../shared/fs.js');
+      const { mkdtemp, rm } = await import('@frontmcp/utils');
+      const entry = await resolveEntry(cwd);
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-install-'));
+      const bundlePath = path.join(tempDir, 'entry.cjs');
+      try {
+        const esbuild = require('esbuild') as typeof import('esbuild');
+        await esbuild.build({
+          entryPoints: [entry],
+          bundle: true,
+          write: true,
+          outfile: bundlePath,
+          platform: 'node',
+          format: 'cjs',
+          target: 'es2022',
+          packages: 'external',
+          sourcemap: false,
+          logLevel: 'silent',
+          absWorkingDir: cwd,
+        });
+        const { extractSchemas } = await import('../build/exec/cli-runtime/schema-extractor.js');
+        const schema = await extractSchemas(bundlePath);
+        const skills: PluginEmitterSkillInput[] = (schema.skillAssets ?? []).map((entry) => ({
+          name: entry.skillName,
+          description: `${entry.skillName} skill`,
+          instructionFile: entry.instructionFile,
+          resourceDirs: entry.resourceDirs,
+        }));
+        const commands: PluginEmitterCommandInput[] = (schema.prompts ?? []).map((p) => ({
+          name: p.name,
+          description: p.description,
+          arguments: p.arguments,
+        }));
+        return { skills, commands };
+      } finally {
+        await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    } catch (err) {
+      process.stderr.write(
+        c(
+          'yellow',
+          `[install] could not enumerate skills/prompts from project (${(err as Error).message}); ` +
+            `emitting plugin without them. Use the per-bin install (\`<bin> install -p claude\`) ` +
+            `after \`frontmcp build:exec\` if you need the full set.\n`,
+        ),
+      );
+      return { skills: [], commands: [] };
+    }
+  })();
+  return cachedExtraction;
+}
+
 async function collectSkillsFromProject(): Promise<PluginEmitterSkillInput[]> {
-  // Best-effort: try to import the project's entry and enumerate @Skill registrations.
-  // When this isn't feasible (no built artifact, transitive import errors), return [].
-  // The per-bin path will always have full coverage; the dev-tool path is a convenience.
-  return [];
+  return (await getProjectExtraction(process.cwd())).skills;
 }
 
 async function collectPromptsFromProject(): Promise<PluginEmitterCommandInput[]> {
-  return [];
+  return (await getProjectExtraction(process.cwd())).commands;
 }
 
 async function getCliVersion(): Promise<string> {
@@ -281,10 +350,18 @@ function resolveDestRoot(opts: InstallOptions): string {
 }
 
 function normalizeOptions(raw: Record<string, unknown>): InstallOptions {
+  // Fail fast on bogus `--scope` values rather than silently coercing them to
+  // 'project' — `--scope usr` would otherwise write files to the wrong root
+  // (cwd's `.claude/plugins/` instead of `~/.claude/plugins/`) with no signal.
+  const rawScope = raw['scope'];
+  if (rawScope !== undefined && rawScope !== 'project' && rawScope !== 'user') {
+    throw new Error(`Invalid --scope value: ${String(rawScope)}. Expected "project" or "user".`);
+  }
+  const scope: InstallOptions['scope'] = rawScope === 'user' ? 'user' : 'project';
   return {
     claudePlugin: raw['claudePlugin'] === true,
     codex: raw['codex'] === true,
-    scope: (raw['scope'] === 'user' ? 'user' : 'project') as InstallOptions['scope'],
+    scope,
     skills: raw['skills'] !== false,
     commands: raw['commands'] !== false,
     onlyMcp: raw['onlyMcp'] === true,
