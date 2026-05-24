@@ -6,8 +6,8 @@
  * and parse the JSON result from text content.
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
-import type { DirectClient } from '@frontmcp/sdk';
+import { FrontMcpInstance, type DirectClient, type DirectMcpServer } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 describe('Jobs DirectClient E2E', () => {
@@ -111,11 +111,16 @@ describe('Jobs DirectClient E2E', () => {
   });
 
   describe('Jobs appear in tool listing', () => {
+    // Issue #408 — job/workflow management tools were renamed to snake_case
+    // (`execute_job`, `get_job_status`, …) to align with the MCP/OpenAI
+    // convention. The hyphen forms remain callable through the alias
+    // fallback in `call-tool.flow.ts`, but the listing emits the canonical
+    // snake_case names.
     it('should include job management tools in listTools', async () => {
       const tools = await client.listTools();
       const toolNames = (tools as Array<{ name: string }>).map((t) => t.name);
-      expect(toolNames).toContain('execute-job');
-      expect(toolNames).toContain('get-job-status');
+      expect(toolNames).toContain('execute_job');
+      expect(toolNames).toContain('get_job_status');
     });
   });
 });

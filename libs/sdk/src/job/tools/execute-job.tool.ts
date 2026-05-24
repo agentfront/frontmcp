@@ -5,7 +5,7 @@ import type { JobExecutionManager } from '../execution/job-execution.manager';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
-  name: 'execute-job',
+  name: 'execute_job',
   description: 'Execute a registered job by name. Supports inline (synchronous) and background execution.',
   inputSchema: {
     name: z.string().describe('Job name to execute'),

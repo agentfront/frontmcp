@@ -163,7 +163,7 @@ export default class MyServer {}
 ```
 
 <Tip>
-When `jobs.enabled` is `true`, the SDK automatically registers MCP tools for job management: `list-jobs`, `execute-job`, `get-job-status`, `register-job`, and `remove-job`.
+**Auto-enabled by `@App({ jobs })`** (issue #408). Declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) brings the jobs subsystem up with in-memory stores by default — no `@FrontMcp({ jobs: { enabled: true } })` required. The SDK registers five MCP tools for job management: `list_jobs`, `execute_job`, `get_job_status`, `register_job`, and `remove_job` (plus parallel `*_workflow` tools). Hyphen aliases (`list-jobs`, `execute-job`, …) keep working with a deprecation log line for one release. Set `@FrontMcp({ jobs })` explicitly to configure persistent storage or to opt out via `jobs: { enabled: false }`.
 </Tip>
 
 ---
@@ -207,7 +207,7 @@ Jobs require both input and output schemas using Zod:
 | `retry`             | `JobRetryConfig`         | —        | Retry configuration (see below)                |
 | `tags`              | `string[]`               | —        | Categorization tags                            |
 | `labels`            | `Record<string, string>` | —        | Fine-grained key-value labels                  |
-| `hideFromDiscovery` | `boolean`                | `false`  | Hide from `list-jobs`                          |
+| `hideFromDiscovery` | `boolean`                | `false`  | Hide from `list_jobs`                          |
 | `permissions`       | `JobPermission[]`        | —        | RBAC permission rules                          |
 
 ---
@@ -281,8 +281,8 @@ When no permissions are defined, the job is accessible to all authenticated user
 Jobs can run in background mode, returning a `runId` for status polling:
 
 ```ts
-// Via the execute-job MCP tool
-const result = await client.callTool('execute-job', {
+// Via the execute_job MCP tool
+const result = await client.callTool('execute_job', {
   name: 'analyze-text',
   input: { text: 'Hello world', language: 'en' },
   background: true,
@@ -290,7 +290,7 @@ const result = await client.callTool('execute-job', {
 // result: { runId: 'run-abc-123', state: 'running' }
 
 // Poll for status
-const status = await client.callTool('get-job-status', {
+const status = await client.callTool('get_job_status', {
   runId: 'run-abc-123',
 });
 // status: { runId: 'run-abc-123', state: 'completed', result: { ... }, logs: [...] }
@@ -366,7 +366,7 @@ Tracks execution state (`JobRunRecord`): run ID, state, input, result, error, lo
 
 ### Definition Store
 
-Persists dynamic job definitions registered at runtime via the `register-job` tool.
+Persists dynamic job definitions registered at runtime via the `register_job` tool.
 
 ### Memory (Default)
 
@@ -394,13 +394,15 @@ For production, configure Redis storage:
 
 When jobs are enabled, the following MCP tools are automatically registered:
 
-| Tool             | Description                                            |
-| ---------------- | ------------------------------------------------------ |
-| `list-jobs`      | List registered jobs with optional tag/label filtering |
-| `execute-job`    | Execute a job (inline or background)                   |
-| `get-job-status` | Get execution status by `runId`                        |
-| `register-job`   | Register a dynamic job at runtime                      |
-| `remove-job`     | Remove a dynamic job                                   |
+| Tool             | Description                                                                       |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `list_jobs`      | List registered jobs with optional tag/label filtering                            |
+| `execute_job`    | Execute a job (inline or background)                                              |
+| `get_job_status` | Get execution status by `runId`                                                   |
+| `register_job`   | Register a dynamic job at runtime (`hideFromDiscovery: true`)                     |
+| `remove_job`     | Remove a dynamic job (`hideFromDiscovery: true`)                                  |
+
+Hyphen aliases (`list-jobs`, `execute-job`, …) still resolve with a deprecation log line for one release — agents and code that hardcoded the old form keep working.
 
 ---
 

@@ -75,8 +75,25 @@ export interface ExtractedSchema {
   httpPort?: number;
 }
 
-/** Known system tool names injected by SDK features (jobs, workflows). */
+/**
+ * Known system tool names injected by SDK features (jobs, workflows).
+ *
+ * Canonical names are snake_case per issue #408; hyphenated aliases are
+ * kept transitionally so older built bundles continue to be recognized by
+ * the schema extractor.
+ */
 export const SYSTEM_TOOL_NAMES = new Set([
+  'list_jobs',
+  'execute_job',
+  'get_job_status',
+  'register_job',
+  'remove_job',
+  'list_workflows',
+  'execute_workflow',
+  'get_workflow_status',
+  'register_workflow',
+  'remove_workflow',
+  // Legacy hyphen names — accepted for back-compat with previously built bundles.
   'list-jobs',
   'execute-job',
   'get-job-status',
@@ -189,8 +206,16 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     );
     const capabilities: ExtractedCapabilities = {
       skills: hasSkillsResources,
-      jobs: toolNameSet.has('execute-job') || toolNameSet.has('get-job-status'),
-      workflows: toolNameSet.has('execute-workflow') || toolNameSet.has('get-workflow-status'),
+      jobs:
+        toolNameSet.has('execute_job') ||
+        toolNameSet.has('get_job_status') ||
+        toolNameSet.has('execute-job') ||
+        toolNameSet.has('get-job-status'),
+      workflows:
+        toolNameSet.has('execute_workflow') ||
+        toolNameSet.has('get_workflow_status') ||
+        toolNameSet.has('execute-workflow') ||
+        toolNameSet.has('get-workflow-status'),
     };
 
     // Extract job schemas if jobs capability is available
