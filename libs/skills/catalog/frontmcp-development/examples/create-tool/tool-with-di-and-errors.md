@@ -19,7 +19,7 @@ A tool that resolves a database service via DI and uses `this.fail()` for busine
 
 ## File layout
 
-```
+```text
 src/apps/main/
 ├── tokens.ts                              # shared DI tokens
 └── tools/

@@ -103,7 +103,7 @@ Two layouts are endorsed. Pick based on tool count and whether the tool has loca
 
 **Flat sibling files** — works well for projects with ≤3 tools per app, or when each tool is small enough to fit in one screen:
 
-```
+```text
 src/apps/<app>/tools/
 ├── get-weather.tool.ts        # @Tool class, execute()
 ├── get-weather.schema.ts      # input/output schemas + derived types
@@ -112,7 +112,7 @@ src/apps/<app>/tools/
 
 **Folder-per-tool** — recommended for >3 tools per app, or any tool with local helpers, fixtures, or error types:
 
-```
+```text
 src/apps/<app>/tools/
 └── get-weather/
     ├── get-weather.tool.ts        # @Tool class, execute()
