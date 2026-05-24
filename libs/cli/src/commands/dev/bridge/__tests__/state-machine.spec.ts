@@ -210,31 +210,20 @@ describe('bridge state machine (issue #399)', () => {
   // on `onChildReady`, the request must still get a synthesized error
   // response — silently dropping it would leave the client hanging.
   it('synthesises dev_server_unreachable when forward() throws during drain', async () => {
-    const { fsm, rec } = makeFsm();
+    const { fsm, rec } = makeFsm({ forwardError: new Error('drained-into-failure') });
     fsm.onBootStart();
     // Buffer a request while not-Ready.
     await fsm.enqueue({ jsonrpc: '2.0', id: 99, method: 'queued' });
     expect(fsm.bufferDepth()).toBe(1);
 
-    // Now make forward throw, then signal child-ready. The drain loop
-    // should hit the catch and synthesise an error response for id=99.
-    ((fsm as unknown as { __setForwardError(e: Error): void }).__setForwardError ?? (() => undefined))(
-      new Error('drained-into-failure'),
-    );
-    // The helper doesn't exist on the public FSM — use the supervisor
-    // wiring directly via the makeFsm builder when this test was written.
-    // We rely on the buffer being non-empty + the drain catch path.
     fsm.onChildReady();
+    // The async drain runs after onChildReady returns — give it one tick
+    // to flush so the synthesised error response lands in `rec`.
     await new Promise((r) => setImmediate(r));
 
-    // The buffered request was forwarded successfully here (no throw set);
-    // verify the drain happened in order with no leaked inflight.
     expect(fsm.bufferDepth()).toBe(0);
-    // ✓ no assertion on rec.responses for this test — the no-throw path
-    // doesn't synthesise an error. The throw path is covered by the
-    // existing `synthesises dev_server_unreachable when forward() throws`
-    // test above, which exercises the same code path via the live-enqueue
-    // path; the drain branch mirrors that handler verbatim.
-    void rec;
+    const failResp = rec.responses.find((r) => r.id === 99 && r.error?.code === -32099);
+    expect(failResp).toBeDefined();
+    expect(failResp?.error?.data).toMatchObject({ reason: 'forward_failed' });
   });
 });

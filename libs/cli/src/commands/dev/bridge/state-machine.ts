@@ -66,6 +66,13 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
   const buffer: JsonRpcFrame[] = [];
   const inflight = new Map<string | number, InflightRequest>();
   let reloadTimer: NodeJS.Timeout | undefined;
+  // Monotonic token bumped every time the FSM leaves Ready. The async
+  // drain loop started in onChildReady() captures the token at start
+  // and bails out as soon as it changes — without this guard a watcher
+  // event mid-drain would let buffered frames forward into the old
+  // child (now being killed), producing stranded inflight entries and
+  // potentially duplicate responses.
+  let readyGen = 0;
 
   function transition(next: BridgeState, info?: Record<string, unknown>): void {
     if (state === next) return;
@@ -118,8 +125,14 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       // Drain buffered requests in FIFO; preserve order on the wire.
       const drain = [...buffer];
       buffer.length = 0;
+      const drainGen = readyGen;
       void (async () => {
         for (const f of drain) {
+          // Bail out if the FSM left Ready (watcher event, child exit,
+          // or stop()) — otherwise this drain would forward into a
+          // child that's already being killed and duplicate responses
+          // already sent by `failInflightAsResponses`.
+          if (readyGen !== drainGen) return;
           const requestId = typeof f.id === 'string' || typeof f.id === 'number' ? f.id : null;
           // Re-mark as inflight when forwarding; relayUpstream will clear it.
           if (requestId !== null) {
@@ -133,7 +146,9 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
             // reached the child must still resolve on the wire, otherwise
             // the MCP client sits on `Calling…` forever. Notifications
             // (`requestId === null`) have no caller waiting on a response.
-            if (requestId !== null) {
+            // Only respond if we still own this generation — otherwise
+            // failInflightAsResponses() already sent the error.
+            if (requestId !== null && readyGen === drainGen) {
               inflight.delete(requestId);
               await respond(makeDevError(requestId, DEV_SERVER_UNREACHABLE, { reason: 'forward_failed' }));
             }
@@ -147,6 +162,8 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       if (state === 'Stopping') return; // expected
       // Treat as a reload trigger if we were Ready; otherwise stay where we are.
       if (state === 'Ready' || state === 'Booting') {
+        // Invalidate any in-progress drain that captured the prior readyGen.
+        readyGen++;
         transition('Reloading', { trigger: 'child-exit', reason });
         // Inflight requests will never get a real response — synthesise one.
         void failInflightAsResponses('child_exit', { reason });
@@ -159,6 +176,9 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
     onWatcherEvent(trigger) {
       if (state === 'Stopping' || state === 'Degraded') return;
       log.reloadEvent('start', { trigger });
+      // Invalidate any in-progress drain so it stops forwarding into
+      // the child that's about to be killed.
+      readyGen++;
       transition('Reloading', { trigger });
       // Inflight requests will likely be killed when supervisor kills the
       // child. Respond now so the client spinner clears immediately.
@@ -194,14 +214,27 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
         return;
       }
 
-      if (state === 'Degraded') {
+      if (state === 'Degraded' || state === 'Stopping') {
+        // Both states are terminal for new traffic — Degraded is post-
+        // deadline (user code is broken), Stopping means SIGINT/SIGTERM
+        // already fired. Buffering here is wrong because nothing will
+        // drain it. Reject so the client spinner clears immediately.
         if (isRequest) {
-          await respond(makeDevError(frame.id ?? null, DEV_SERVER_UNREACHABLE, { reason: 'degraded' }));
+          await respond(
+            makeDevError(frame.id ?? null, DEV_SERVER_UNREACHABLE, {
+              reason: state === 'Stopping' ? 'stopping' : 'degraded',
+            }),
+          );
+        } else {
+          log.warn('drop-notification', {
+            method: frame.method,
+            reason: state === 'Stopping' ? 'stopping' : 'degraded',
+          });
         }
         return;
       }
 
-      // Idle / Booting / Reloading / Stopping → buffer
+      // Idle / Booting / Reloading → buffer (will drain on onChildReady)
       if (buffer.length >= bufferSize) {
         if (isRequest) {
           await respond(makeDevError(frame.id ?? null, DEV_BUFFER_FULL, { capacity: bufferSize }));
@@ -222,6 +255,10 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
     },
 
     async stop() {
+      // Invalidate any in-progress drain — same reason as the watcher /
+      // child-exit paths: avoid forwarding into a child we're tearing
+      // down.
+      readyGen++;
       transition('Stopping');
       clearReloadTimer();
       // Inflight + buffered: respond once so the client's pending RPCs don't

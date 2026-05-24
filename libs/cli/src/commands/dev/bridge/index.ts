@@ -131,8 +131,16 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     sessionId,
     port: runtime.mode === 'http' ? runtime.port : undefined,
     onReady: async (child) => {
-      // Close any previous upstream (reload path).
-      await upstream?.close();
+      // Close any previous upstream (reload path). A rejection here MUST
+      // NOT block re-binding — the child is up and ready, and leaving the
+      // bridge without an upstream would strand every subsequent RPC.
+      try {
+        await upstream?.close();
+      } catch (err) {
+        log.error('upstream-stop-error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       upstream = buildUpstreamForChild(child);
       fsm.onChildReady();
     },

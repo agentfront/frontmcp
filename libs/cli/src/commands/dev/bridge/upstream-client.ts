@@ -42,15 +42,14 @@ export interface HttpUpstreamOptions extends UpstreamClientOptions {
 
 export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient {
   const { log, url, onFrame, sessionId } = options;
-  // One controller per in-flight request — `close()` aborts whatever's
-  // currently outstanding (an in-progress fetch or a long-running SSE
-  // body read) so the bridge's reload path doesn't hang on a child that
-  // already died. Cleared in `finally` so the next send() gets a fresh
-  // controller and the close from a previous request isn't sticky.
-  let abortController: AbortController | undefined;
+  // Track every in-flight request — `close()` must abort all of them,
+  // not just whichever happened to be assigned last. A shared scalar
+  // would let concurrent sends clobber each other's controller.
+  const abortControllers = new Set<AbortController>();
 
   async function send(frame: JsonRpcFrame): Promise<void> {
-    abortController = new AbortController();
+    const abortController = new AbortController();
+    abortControllers.add(abortController);
     const signal = abortController.signal;
     try {
       const headers: Record<string, string> = {
@@ -67,8 +66,11 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
       });
 
       if (!res.ok) {
+        // Reject so the FSM can clear inflight bookkeeping and synthesise
+        // a JSON-RPC error response back to the client. Silently swallowing
+        // a non-OK status here leaves callers hanging.
         log.warn('http-upstream-non-ok', { status: res.status, method: frame.method });
-        return;
+        throw new Error(`upstream returned ${res.status} for ${frame.method ?? 'request'}`);
       }
 
       const contentType = res.headers.get('content-type') ?? '';
@@ -104,22 +106,25 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
       }
     } catch (err) {
       // AbortError surfaces when close() interrupts an in-flight request
-      // during reload; that's expected, so log it at info-not-error.
+      // during reload; that's expected, so log it at info-not-error. We
+      // still rethrow so the FSM can clear inflight bookkeeping and
+      // synthesise an error response on its end.
       if ((err as { name?: string }).name === 'AbortError') {
         log.info('http-upstream-aborted', { method: frame.method });
       } else {
         log.error('http-upstream-error', { error: (err as Error).message, method: frame.method });
       }
+      throw err;
     } finally {
-      abortController = undefined;
+      abortControllers.delete(abortController);
     }
   }
 
   return {
     send,
     close: async () => {
-      abortController?.abort();
-      abortController = undefined;
+      for (const ac of abortControllers) ac.abort();
+      abortControllers.clear();
     },
   };
 }
@@ -156,7 +161,7 @@ export function createPipeUpstream(options: PipeUpstreamOptions): UpstreamClient
   async function send(frame: JsonRpcFrame): Promise<void> {
     if (!child.connected) {
       log.warn('pipe-upstream-disconnected', { method: frame.method });
-      return;
+      throw new Error(`pipe upstream disconnected for ${frame.method ?? 'request'}`);
     }
     await new Promise<void>((resolve, reject) => {
       child.send(frame, (err) => {
@@ -164,7 +169,10 @@ export function createPipeUpstream(options: PipeUpstreamOptions): UpstreamClient
         else resolve();
       });
     }).catch((err: Error) => {
+      // Reject so the FSM can produce a JSON-RPC error response back to
+      // the client rather than leaving the request stuck inflight.
       log.warn('pipe-upstream-send-error', { error: err.message, method: frame.method });
+      throw err;
     });
   }
 

@@ -61,10 +61,13 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
   let killSignaled = false;
 
   function buildEnv(): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      FRONTMCP_DEV_BOOTSTRAP_SENTINEL: '1',
-    };
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    // The stderr-bootstrap sentinel is an HTTP-mode signal only: in pipe
+    // mode readiness MUST be the first IPC message from the child so we
+    // know the FD-3 channel is wired up. Enabling the sentinel in pipe
+    // mode lets probeReady() resolve before any IPC arrives and races
+    // the first forwarded request.
+    if (mode === 'http') env['FRONTMCP_DEV_BOOTSTRAP_SENTINEL'] = '1';
     if (sessionId) env['FRONTMCP_DEV_FORCE_SESSION_ID'] = sessionId;
     if (mode === 'http' && port) env['FRONTMCP_DEV_PORT'] = String(port);
     if (mode === 'pipe') env['FRONTMCP_DEV_STDIO_FD'] = '3';
@@ -108,6 +111,11 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
       }, readyTimeoutMs).unref();
 
       const onStderr = (chunk: Buffer | string): void => {
+        // Sentinel-on-stderr is only meaningful in HTTP mode (buildEnv
+        // sets `FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1` only there). In pipe
+        // mode readiness comes from the first IPC message — ignore any
+        // stderr signal so we don't race the IPC handshake.
+        if (mode !== 'http') return;
         const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
         if (text.includes(READY_SENTINEL)) {
           if (resolved) return;
@@ -202,9 +210,19 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
       const child = spawnChild();
       current = child;
       wireExitHandler(child);
-      await probeReady(child);
-      log.info('child-ready', { mode, pid: child.pid ?? null });
-      await onReady(child);
+      // Clean up the spawned subprocess on any startup failure
+      // (probeReady timeout, onReady throw). Without this, a failed
+      // start would leave the child running and occupying the dev port
+      // or the IPC channel, breaking the next restart.
+      try {
+        await probeReady(child);
+        log.info('child-ready', { mode, pid: child.pid ?? null });
+        await onReady(child);
+      } catch (err) {
+        await killCurrent();
+        current = undefined;
+        throw err;
+      }
     },
     async restart() {
       log.info('child-restart-start');
@@ -213,9 +231,15 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
       const child = spawnChild();
       current = child;
       wireExitHandler(child);
-      await probeReady(child);
-      log.info('child-restart-ready', { pid: child.pid ?? null });
-      await onReady(child);
+      try {
+        await probeReady(child);
+        log.info('child-restart-ready', { pid: child.pid ?? null });
+        await onReady(child);
+      } catch (err) {
+        await killCurrent();
+        current = undefined;
+        throw err;
+      }
     },
     async stop() {
       await killCurrent();

@@ -84,7 +84,7 @@ Wire the client at the bridge:
   "mcpServers": {
     "my-server": {
       "command": "npx",
-      "args": ["frontmcp", "dev", "--stdio"]
+      "args": ["-y", "frontmcp", "dev", "--stdio"]
     }
   }
 }

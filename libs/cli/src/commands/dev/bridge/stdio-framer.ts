@@ -83,7 +83,15 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
         void write(makeDevError(null, -32700, { reason: 'not_object' }));
         continue;
       }
-      void onFrame(parsed as JsonRpcFrame);
+      // Don't drop the onFrame promise. `onFrame` is user-supplied (the
+      // state machine in the production wiring) and can reject — if we
+      // void the rejection, Node bubbles it as an unhandledRejection and
+      // crashes the bridge. Funnel it through the logger instead.
+      void Promise.resolve(onFrame(parsed as JsonRpcFrame)).catch((err: unknown) => {
+        log.error('on-frame-error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     }
   }
 
@@ -128,6 +136,17 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
     stop: () => {
       input.off('data', onData);
       output.off('drain', onDrain);
+      // Settle any queued write() promises so callers blocked on
+      // backpressure don't hang past shutdown. Resume the input stream
+      // symmetrically (we may have paused it on backpressure) so the
+      // caller doesn't inherit a paused stdin.
+      if (paused) {
+        paused = false;
+        input.resume?.();
+      }
+      const resolvers = drainResolvers;
+      drainResolvers = [];
+      for (const r of resolvers) r();
     },
   };
 }
