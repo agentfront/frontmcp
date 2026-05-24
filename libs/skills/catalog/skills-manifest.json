@@ -1393,31 +1393,35 @@
           "examples": [
             {
               "name": "basic-class-tool",
-              "description": "A minimal tool using the class-based pattern with Zod input validation and output schema.",
+              "description": "A minimal tool using the class-based pattern with Zod input validation, output schema, and types derived from the schemas.",
               "level": "basic",
               "tags": ["development", "tool", "class"],
               "features": [
                 "Extending `ToolContext` and implementing the `execute()` method",
                 "Using a Zod raw shape for `inputSchema` (not wrapped in `z.object()`)",
                 "Defining `outputSchema` to validate and restrict output fields",
+                "Deriving `execute()` input/output types from the schemas via `ToolInputOf<>` / `ToolOutputOf<>` (no duplicated annotation)",
+                "Co-locating schema and tool in sibling files (`<name>.schema.ts` / `<name>.tool.ts`)",
                 "Registering the tool in an `@App` via the `tools` array"
               ]
             },
             {
               "name": "tool-with-di-and-errors",
-              "description": "A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.",
+              "description": "A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors, with `execute()` types derived from the schemas.",
               "level": "intermediate",
               "tags": ["development", "database", "tool", "di", "errors"],
               "features": [
                 "Defining a typed DI token with `Token<T>` and resolving it via `this.get()`",
                 "Using `this.fail()` with `ResourceNotFoundError` for MCP-compliant error responses",
                 "Letting infrastructure errors (database failures) propagate naturally to the framework",
+                "Deriving `execute()` types from `inputSchema` / `outputSchema` via `ToolInputOf<>` / `ToolOutputOf<>`",
+                "Folder-per-tool layout (`tools/delete-record/{schema,tool,index}.ts`) for tools with local helpers or error types",
                 "Registering both the provider and tool in the same `@App`"
               ]
             },
             {
               "name": "tool-with-rate-limiting-and-progress",
-              "description": "A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations.",
+              "description": "A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations, with `execute()` types derived from the schemas.",
               "level": "advanced",
               "tags": ["development", "throttle", "tool", "rate", "limiting", "progress"],
               "features": [
@@ -1425,7 +1429,8 @@
                 "Sending progress updates to the client with `this.progress(progress, total, message?)`",
                 "Using `this.mark(stage)` for execution stage tracking and debugging",
                 "Sending log-level notifications with `this.notify(message, level)`",
-                "Setting tool `annotations` to communicate behavioral hints to clients"
+                "Setting tool `annotations` to communicate behavioral hints to clients",
+                "Deriving `execute()` types from the schemas via `ToolInputOf<>` / `ToolOutputOf<>`"
               ]
             }
           ]
