@@ -5,10 +5,10 @@ import type { JobExecutionManager } from '../../job/execution/job-execution.mana
 import type { WorkflowRunRecord } from '../../job/store/job-state.interface';
 
 @Tool({
-  name: 'get-workflow-status',
+  name: 'get_workflow_status',
   description: 'Get the execution status of a workflow run with per-step results.',
   inputSchema: {
-    runId: z.string().describe('Run ID returned from execute-workflow'),
+    runId: z.string().describe('Run ID returned from execute_workflow'),
   },
   outputSchema: {
     runId: z.string(),

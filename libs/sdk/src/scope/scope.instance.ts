@@ -692,22 +692,53 @@ export class Scope extends ScopeEntry {
       logger: this.logger,
     });
 
-    // Initialize jobs and workflows if enabled
+    // Initialize jobs and workflows (issue #408).
+    //
+    // Auto-enable rule: if any `@App({ jobs: [...] })` (or `workflows: [...]`)
+    // is declared, the jobs subsystem comes up implicitly with in-memory
+    // stores so the management tools (`execute_job`, `list_jobs`, …) are
+    // reachable from agents without requiring the user to flip a separate
+    // `@FrontMcp({ jobs: { enabled: true } })` flag they were never told
+    // about. Explicit `jobs.enabled === false` still wins (opt-out).
     const jobsConfig = this.metadata.jobs as JobsConfig | undefined;
-    if (jobsConfig?.enabled) {
-      const metaRecord = this.metadata as unknown as Record<string, unknown>;
-      const jobsList = (metaRecord['jobTypes'] as JobType[] | undefined) ?? [];
-      const workflowsList = (metaRecord['workflowTypes'] as WorkflowType[] | undefined) ?? [];
+    const metaRecord = this.metadata as unknown as Record<string, unknown>;
+    const jobsList = (metaRecord['jobTypes'] as JobType[] | undefined) ?? [];
+    const workflowsList = (metaRecord['workflowTypes'] as WorkflowType[] | undefined) ?? [];
 
-      // Collect jobs/workflows from apps
-      const appJobs: JobType[] = [];
-      const appWorkflows: WorkflowType[] = [];
-      for (const app of this.scopeApps.getApps()) {
-        const appMeta = app.metadata as unknown as Record<string, unknown>;
-        if (Array.isArray(appMeta['jobs'])) appJobs.push(...(appMeta['jobs'] as JobType[]));
-        if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
+    // Collect jobs/workflows from apps regardless of gate so we can detect
+    // implicit enablement (and so the disabled-but-declared warning fires).
+    const appJobs: JobType[] = [];
+    const appWorkflows: WorkflowType[] = [];
+    for (const app of this.scopeApps.getApps()) {
+      const appMeta = app.metadata as unknown as Record<string, unknown>;
+      if (Array.isArray(appMeta['jobs'])) appJobs.push(...(appMeta['jobs'] as JobType[]));
+      if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
+    }
+
+    const allJobs = [...jobsList, ...appJobs];
+    const allWorkflows = [...workflowsList, ...appWorkflows];
+    const hasJobDeclarations = allJobs.length > 0 || allWorkflows.length > 0;
+    const explicitlyDisabled = jobsConfig?.enabled === false;
+    const explicitlyEnabled = jobsConfig?.enabled === true;
+    const autoEnabled = !explicitlyEnabled && !explicitlyDisabled && hasJobDeclarations;
+    const effectivelyEnabled = explicitlyEnabled || autoEnabled;
+
+    if (explicitlyDisabled && hasJobDeclarations) {
+      this.logger.warn(
+        `Jobs are explicitly disabled but ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) were declared on @App. ` +
+          `Agents will NOT be able to invoke them — remove jobs.enabled: false or drop the @App({ jobs }) declarations.`,
+      );
+    }
+
+    if (effectivelyEnabled) {
+      if (autoEnabled) {
+        this.logger.info(
+          `Jobs auto-enabled: detected ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) in @App declarations. ` +
+            `Defaulting to in-memory stores — configure storage via @FrontMcp({ jobs: { store: ... } }) for multi-replica HA.`,
+        );
       }
 
+      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true };
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
           this.logger.debug('Job notification', data);
@@ -717,9 +748,9 @@ export class Scope extends ScopeEntry {
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         owner: scopeRef,
-        jobsList: [...jobsList, ...appJobs],
-        workflowsList: [...workflowsList, ...appWorkflows],
-        jobsConfig,
+        jobsList: allJobs,
+        workflowsList: allWorkflows,
+        jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
       });
