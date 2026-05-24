@@ -1,5 +1,20 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
+
 import { c } from './colors';
+import { isCommandHidden, isProjectCommand } from './project-commands';
+
+interface CommanderArgument {
+  name(): string;
+  required: boolean;
+}
+
+// commander v13 exposes registered arguments on the private `_args` property.
+// Newer (v14+) versions expose `registeredArguments`; prefer that when present.
+function getArgs(cmd: Command): CommanderArgument[] {
+  const fromNewApi = (cmd as unknown as { registeredArguments?: CommanderArgument[] }).registeredArguments;
+  if (fromNewApi) return fromNewApi;
+  return ((cmd as unknown as { _args?: CommanderArgument[] })._args ?? []) as CommanderArgument[];
+}
 
 /**
  * Command groups in display order, mapped to the command names they contain.
@@ -23,12 +38,13 @@ const EXAMPLES: string[] = [
 
 /** Format a top-level command line with cyan name and dim arg placeholders. */
 function formatCommandLine(sub: Command, padWidth: number): string {
+  const argsList = getArgs(sub);
   const rawName = sub.name();
-  const rawArgs = sub.registeredArguments.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
+  const rawArgs = argsList.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
   const rawTerm = rawArgs ? `${rawName} ${rawArgs}` : rawName;
 
   const name = c('cyan', rawName);
-  const args = sub.registeredArguments.map((a) => c('dim', a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
+  const args = argsList.map((a) => c('dim', a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
   const term = args ? `${name} ${args}` : name;
 
   const padding = ' '.repeat(Math.max(2, padWidth - rawTerm.length + 2));
@@ -37,12 +53,13 @@ function formatCommandLine(sub: Command, padWidth: number): string {
 
 /** Format a skills subcommand as "skills <subname> <args>". */
 function formatSkillsLine(sub: Command, padWidth: number): string {
+  const argsList = getArgs(sub);
   const rawPrefix = `skills ${sub.name()}`;
-  const rawArgs = sub.registeredArguments.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
+  const rawArgs = argsList.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
   const rawTerm = rawArgs ? `${rawPrefix} ${rawArgs}` : rawPrefix;
 
   const prefix = c('cyan', rawPrefix);
-  const args = sub.registeredArguments.map((a) => c('dim', a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
+  const args = argsList.map((a) => c('dim', a.required ? `<${a.name()}>` : `[${a.name()}]`)).join(' ');
   const term = args ? `${prefix} ${args}` : prefix;
 
   const padding = ' '.repeat(Math.max(2, padWidth - rawTerm.length + 2));
@@ -66,7 +83,7 @@ export function customizeHelp(program: Command): void {
       const skillsSubs = skillsCmd ? helper.visibleCommands(skillsCmd) : [];
       if (skillsCmd) {
         for (const sub of skillsSubs) {
-          const rawArgs = sub.registeredArguments
+          const rawArgs = getArgs(sub)
             .map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`))
             .join(' ');
           const rawTerm = rawArgs ? `skills ${sub.name()} ${rawArgs}` : `skills ${sub.name()}`;
@@ -103,9 +120,20 @@ export function customizeHelp(program: Command): void {
         lines.push('');
       }
 
+      // Project commands (registered via cli.commands in frontmcp.config).
+      // Hide commands marked with `hidden: true`.
+      const projectCommands = allCommands.filter((sc) => isProjectCommand(sc) && !isCommandHidden(sc));
+      if (projectCommands.length > 0) {
+        lines.push(c('bold', 'Project Commands'));
+        for (const sub of projectCommands) {
+          lines.push(formatCommandLine(sub, termWidth));
+        }
+        lines.push('');
+      }
+
       // Other commands not in any group
       const renderedNames = new Set([...GROUPS.flatMap(([, names]) => names), 'skills']);
-      const other = allCommands.filter((sc) => !renderedNames.has(sc.name()));
+      const other = allCommands.filter((sc) => !renderedNames.has(sc.name()) && !isProjectCommand(sc));
       if (other.length > 0) {
         lines.push(c('bold', 'Other'));
         for (const sub of other) {

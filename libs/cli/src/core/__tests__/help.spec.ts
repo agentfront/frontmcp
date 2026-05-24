@@ -1,8 +1,8 @@
 import { createProgram } from '../program';
 
 describe('customizeHelp', () => {
-  function getHelpOutput(): string {
-    const program = createProgram();
+  async function getHelpOutput(): Promise<string> {
+    const program = await createProgram();
     // Capture help text without exiting
     let output = '';
     program.configureOutput({ writeOut: (str) => (output += str) });
@@ -10,33 +10,33 @@ describe('customizeHelp', () => {
     return output;
   }
 
-  it('should contain "Getting Started" section header', () => {
-    const help = getHelpOutput();
+  it('should contain "Getting Started" section header', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Getting Started');
   });
 
-  it('should contain "Development" section header', () => {
-    const help = getHelpOutput();
+  it('should contain "Development" section header', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Development');
   });
 
-  it('should contain "Process Manager" section header', () => {
-    const help = getHelpOutput();
+  it('should contain "Process Manager" section header', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Process Manager');
   });
 
-  it('should contain "Package Manager" section header', () => {
-    const help = getHelpOutput();
+  it('should contain "Package Manager" section header', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Package Manager');
   });
 
-  it('should contain "Skills" section header', () => {
-    const help = getHelpOutput();
+  it('should contain "Skills" section header', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Skills');
   });
 
-  it('should place "socket" after Process Manager header', () => {
-    const help = getHelpOutput();
+  it('should place "socket" after Process Manager header', async () => {
+    const help = await getHelpOutput();
     const pmIdx = help.indexOf('Process Manager');
     const socketIdx = help.indexOf('socket');
     expect(pmIdx).toBeGreaterThan(-1);
@@ -44,18 +44,19 @@ describe('customizeHelp', () => {
     expect(socketIdx).toBeGreaterThan(pmIdx);
   });
 
-  it('should show skills subcommands inline', () => {
-    const help = getHelpOutput();
+  it('should show skills subcommands inline', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('skills search');
     expect(help).toContain('skills list');
     expect(help).toContain('skills install');
     expect(help).toContain('skills read');
   });
 
-  it('should list all commands in help output', () => {
-    const help = getHelpOutput();
+  it('should list all commands in help output', async () => {
+    const help = await getHelpOutput();
     // Strip ANSI escape codes before line matching
 
+    // eslint-disable-next-line no-control-regex -- ANSI escape sequences start with ESC (0x1b) by definition
     const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
     const helpLines = help.split(/\r?\n/).map((l) => stripAnsi(l).trim());
 
@@ -93,25 +94,25 @@ describe('customizeHelp', () => {
     }
   });
 
-  it('should contain Examples section', () => {
-    const help = getHelpOutput();
+  it('should contain Examples section', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Examples');
     expect(help).toContain('frontmcp dev');
     expect(help).toContain('frontmcp build --target node');
   });
 
-  it('should contain discoverability footer', () => {
-    const help = getHelpOutput();
+  it('should contain discoverability footer', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('frontmcp <command> --help');
   });
 
-  it('should show the improved description', () => {
-    const help = getHelpOutput();
+  it('should show the improved description', async () => {
+    const help = await getHelpOutput();
     expect(help).toContain('Build, test, and deploy MCP servers with FrontMCP');
   });
 
-  it('should show subcommand help for build', () => {
-    const program = createProgram();
+  it('should show subcommand help for build', async () => {
+    const program = await createProgram();
     const buildCmd = program.commands.find((c) => c.name() === 'build');
     if (!buildCmd) throw new Error('Expected build command to exist');
     let output = '';

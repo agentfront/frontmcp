@@ -20,6 +20,10 @@ export type {
   SkillsCliConfig,
   TestConfig,
   TransportConfig,
+  CliExtensionConfig,
+  ProjectCommandEntry,
+  ProjectCommandArgument,
+  ProjectCommandOption,
 } from './frontmcp-config.types';
 export {
   resolveConfig,

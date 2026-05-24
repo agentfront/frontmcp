@@ -303,6 +303,87 @@ frontmcp build --target distributed
 frontmcp build --target vercel
 ```
 
+## Project-Defined CLI Commands
+
+The optional `cli.commands` block registers project-specific verbs that
+ship alongside the built-in `frontmcp` commands. Each verb spawns a
+runner module from the project (TS or JS) as a child process, so the
+project's own code stays out of the CLI's process.
+
+Verb names must match `/^[a-zA-Z][a-zA-Z0-9:_-]*$/` — start with a letter,
+then letters, digits, `:`, `_`, or `-`. Examples: `deploy`, `db-migrate`,
+`project:init`. Names that match a built-in verb (see [Reserved Verbs](#reserved-verbs)
+below) are rejected at config load.
+
+Each command entry accepts:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | string | yes | Path to the runner module (TS or JS). |
+| `description` | string | no | Shown in `frontmcp --help` and `--list-commands`. |
+| `arguments` | array | no | Positional argument definitions (variadic must be last). |
+| `options` | array | no | Long/short flag definitions with optional defaults. |
+| `hidden` | boolean | no | When `true`, the verb still runs but is omitted from help output and `--list-commands`. Useful for internal scripts you don't want surfaced to end users. |
+
+```typescript
+// frontmcp.config.ts
+import { defineConfig } from 'frontmcp';
+
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+  cli: {
+    commands: {
+      deploy: {
+        entry: './scripts/deploy.ts',
+        description: 'Push the current build to staging',
+        arguments: [{ name: 'env', required: true, description: 'Target env' }],
+        options: [
+          { flags: '-n, --dry-run', description: 'Skip writes' },
+          { flags: '-c, --concurrency <num>', default: 4 },
+        ],
+      },
+      'db-migrate': {
+        entry: './scripts/migrate.ts',
+        description: 'Run pending database migrations',
+      },
+      'internal:reindex': {
+        entry: './scripts/reindex.ts',
+        description: 'Rebuild local search index',
+        hidden: true, // omitted from --help and --list-commands
+      },
+    },
+  },
+});
+```
+
+After saving the config, the new verbs show up under **Project Commands**
+in `frontmcp --help`:
+
+```bash
+frontmcp deploy prod --concurrency 8
+frontmcp db-migrate
+frontmcp --list-commands   # Lists every verb with [built-in]/[project] tag
+```
+
+### Reserved Verbs
+
+Verb names that collide with a built-in command (`dev`, `build`, `test`,
+`start`, `skills`, etc.) are rejected at config-load time with a helpful
+message. Use a project-namespaced prefix (e.g. `project:init`,
+`db-migrate`) to avoid the collision.
+
+### Runner Selection
+
+| Entry extension | Runner |
+| --------------- | ------ |
+| `.ts`, `.tsx`, `.mts`, `.cts` | `node --import tsx <entry>` |
+| `.js`, `.mjs`, `.cjs`         | `node <entry>` |
+
+The runner receives the parsed positionals as argv plus a
+`FRONTMCP_PROJECT_COMMAND` env var containing a JSON payload with
+`verb`, `positionals`, `options`, and `cwd` for richer scripting.
+
 ## Helper Functions
 
 ```typescript
