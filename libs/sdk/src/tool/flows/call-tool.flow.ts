@@ -9,7 +9,14 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+import {
+  checkEntryAvailability,
+  findNonFiniteNumber,
+  getRuntimeContext,
+  isDebug,
+  isDevelopment,
+  randomUUID,
+} from '@frontmcp/utils';
 
 import {
   Flow,
@@ -350,12 +357,25 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const unavailable = allUnfiltered.find((t) => t.fullName === name || t.name === name);
       if (unavailable) {
         const ctx = getRuntimeContext();
+        // Issue #417 — read the per-call surface tag so the structured
+        // error explains which axis (process-global vs surface) blocked
+        // the call. Defaults to 'mcp' for the call-tool handler path.
+        const callCtxObj = this.input.ctx as { surface?: 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent' } | undefined;
+        const surface = callCtxObj?.surface ?? 'mcp';
+        const check = checkEntryAvailability(unavailable.metadata.availableWhen, ctx, { surface });
         this.logger.warn(
           `findTool: tool "${name}" exists but is unavailable — ` +
             `constraint=${JSON.stringify(unavailable.metadata.availableWhen)}, ` +
-            `current=[platform=${ctx.platform}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, env=${ctx.env}]`,
+            `missingAxes=${JSON.stringify(check.missingAxes)}, ` +
+            `current=[os=${ctx.os}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, provider=${ctx.provider}, target=${ctx.target}, surface=${surface}, env=${ctx.env}]`,
         );
-        throw new EntryUnavailableError('Tool', name, unavailable.metadata.availableWhen, ctx);
+        throw new EntryUnavailableError(
+          'Tool',
+          name,
+          unavailable.metadata.availableWhen,
+          { ...ctx, surface },
+          check.missingAxes,
+        );
       }
       this.logger.warn(`findTool: tool "${name}" not found`);
       throw new ToolNotFoundError(name);
