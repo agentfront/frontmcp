@@ -199,7 +199,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   // ─────────────────────────────────────────────────────────────────
 
   async listJobs(options?: DirectCallOptions): Promise<CallToolResult> {
-    return this.callTool('list-jobs', {}, options);
+    return this.callTool('list_jobs', {}, options);
   }
 
   async executeJob(
@@ -208,14 +208,14 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     options?: DirectCallOptions & { background?: boolean },
   ): Promise<CallToolResult> {
     return this.callTool(
-      'execute-job',
+      'execute_job',
       { name, input: input ?? {}, background: options?.background ?? false },
       options,
     );
   }
 
   async getJobStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult> {
-    return this.callTool('get-job-status', { runId }, options);
+    return this.callTool('get_job_status', { runId }, options);
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   // ─────────────────────────────────────────────────────────────────
 
   async listWorkflows(options?: DirectCallOptions): Promise<CallToolResult> {
-    return this.callTool('list-workflows', {}, options);
+    return this.callTool('list_workflows', {}, options);
   }
 
   async executeWorkflow(
@@ -232,14 +232,14 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     options?: DirectCallOptions & { background?: boolean },
   ): Promise<CallToolResult> {
     return this.callTool(
-      'execute-workflow',
+      'execute_workflow',
       { name, input: input ?? {}, background: options?.background ?? false },
       options,
     );
   }
 
   async getWorkflowStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult> {
-    return this.callTool('get-workflow-status', { runId }, options);
+    return this.callTool('get_workflow_status', { runId }, options);
   }
 
   // ─────────────────────────────────────────────────────────────────

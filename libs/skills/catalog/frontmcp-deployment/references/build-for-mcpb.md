@@ -93,7 +93,7 @@ dist/mcpb/
 | `author`                                        | deployment.author → parsed `package.json.author` string (`"Name <email> (url)"`)    |
 | `license`, `homepage`, `repository`, `keywords` | deployment override → package.json fallback                                         |
 | `icon`                                          | deployment.icon → package.json.icon → `icon.png` / `assets/icon.png` in cwd         |
-| `tools`                                         | Schema extraction (system tools like `execute-job` filtered out)                    |
+| `tools`                                         | Schema extraction (system tools like `execute_job` filtered out)                    |
 | `prompts`                                       | Schema extraction; emitted with `prompts_generated: true`                           |
 | `user_config`                                   | Translated from `setup.steps` + deployment.userConfig overrides                     |
 | `compatibility.runtimes.node`                   | deployment.compatibility.runtimes.node → frontmcp.config.nodeVersion → `">=22.0.0"` |
