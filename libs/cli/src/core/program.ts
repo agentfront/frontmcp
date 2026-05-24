@@ -19,7 +19,7 @@ export function createProgram(): Command {
     .description('Build, test, and deploy MCP servers with FrontMCP')
     .version(getSelfVersion(), '-V, --version')
     // Issue #400 — top-level `--config <path>` option. Commands that
-    // consume the unified config (dev, test, inspector, pm, skills) read
+    // consume the unified config (dev, test, inspector, eject, pm, skills) read
     // `program.opts().config` (or `FRONTMCP_CONFIG` env) to locate the
     // file. Override precedence:
     //   explicit --config > FRONTMCP_CONFIG > upward walk from cwd

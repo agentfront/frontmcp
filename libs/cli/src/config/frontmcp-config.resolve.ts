@@ -25,6 +25,8 @@
  *     `config: undefined` so `loadExecConfig` can pick the file up.
  */
 
+import { dirname, isAbsolute, pathResolve } from '@frontmcp/utils';
+
 import { findConfigDir, loadFrontMcpConfig, loadFrontMcpConfigFromFile } from './frontmcp-config.loader';
 import { type FrontMcpConfigParsed } from './frontmcp-config.schema';
 
@@ -98,9 +100,17 @@ function modeToEnvKey(mode: ResolveMode): 'dev' | 'test' | 'ship' | undefined {
  */
 export async function resolveConfig(options: ResolveConfigOptions): Promise<ResolvedFrontMcpConfig> {
   const env = options.env ?? process.env;
-  const cliEnv =
-    typeof options.cliOptions?.['env'] === 'object' && options.cliOptions['env'] !== null
-      ? (options.cliOptions['env'] as Record<string, string>)
+  // Only string values flow into the spawned child's env — non-strings
+  // here mean a misconfigured `cliOptions.env`, so we silently drop them
+  // rather than corrupting the merged record with `Object`/`number`/etc.
+  const cliEnvRaw = options.cliOptions?.['env'];
+  const cliEnv: Record<string, string> =
+    typeof cliEnvRaw === 'object' && cliEnvRaw !== null
+      ? Object.fromEntries(
+          Object.entries(cliEnvRaw as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
       : {};
 
   // ── Locate the config file ──
@@ -110,14 +120,18 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
   let configDir: string | undefined;
 
   if (explicitPath) {
+    // Normalize to an absolute path so callers always see canonical metadata
+    // regardless of how the caller-supplied path was spelt (relative, absolute,
+    // or env-var-derived). `configDir` mirrors the auto-discovery branch.
+    configPath = isAbsolute(explicitPath) ? explicitPath : pathResolve(options.cwd, explicitPath);
+    configDir = dirname(configPath);
     try {
-      config = await loadFrontMcpConfigFromFile(explicitPath);
-      configPath = explicitPath;
+      config = await loadFrontMcpConfigFromFile(configPath);
     } catch (err) {
       throw new Error(`Failed to load config from "${explicitPath}": ${(err as Error).message}`);
     }
   } else {
-    configDir = findConfigDir(options.cwd);
+    configDir = await findConfigDir(options.cwd);
     if (configDir) {
       try {
         config = await loadFrontMcpConfig(configDir);

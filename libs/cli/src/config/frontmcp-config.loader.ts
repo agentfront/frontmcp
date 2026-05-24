@@ -5,10 +5,16 @@
  * Falls back to deriving minimal config from package.json.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-
-import { readFile } from '@frontmcp/utils';
+import {
+  basename,
+  dirname,
+  fileExists,
+  isAbsolute,
+  pathJoin,
+  pathResolve,
+  pathToFileURL,
+  readFile,
+} from '@frontmcp/utils';
 
 import { frontmcpConfigSchema, type FrontMcpConfigParsed } from './frontmcp-config.schema';
 import type { DeploymentTarget, FrontMcpConfig } from './frontmcp-config.types';
@@ -46,11 +52,11 @@ export async function loadFrontMcpConfig(cwd: string): Promise<FrontMcpConfigPar
  * (no silent fallback to `deriveFromPackageJson`).
  */
 export async function loadFrontMcpConfigFromFile(configPath: string): Promise<FrontMcpConfigParsed> {
-  const absolutePath = path.isAbsolute(configPath) ? configPath : path.resolve(process.cwd(), configPath);
-  if (!fs.existsSync(absolutePath)) {
+  const absolutePath = isAbsolute(configPath) ? configPath : pathResolve(process.cwd(), configPath);
+  if (!(await fileExists(absolutePath))) {
     throw new Error(`Config file not found: ${configPath}`);
   }
-  const filename = path.basename(absolutePath);
+  const filename = basename(absolutePath);
   const raw = await loadRawFileAtPath(absolutePath, filename);
   return validateConfig(raw);
 }
@@ -65,15 +71,15 @@ export async function loadFrontMcpConfigFromFile(configPath: string): Promise<Fr
  * Returns the directory containing the config (so callers can pass it to
  * `loadFrontMcpConfig(dir)`), or `undefined` if nothing was found.
  */
-export function findConfigDir(startDir: string, maxLevels = 10): string | undefined {
-  let current = path.resolve(startDir);
+export async function findConfigDir(startDir: string, maxLevels = 10): Promise<string | undefined> {
+  let current = pathResolve(startDir);
   for (let i = 0; i <= maxLevels; i++) {
     for (const filename of CONFIG_FILENAMES) {
-      if (fs.existsSync(path.join(current, filename))) {
+      if (await fileExists(pathJoin(current, filename))) {
         return current;
       }
     }
-    const parent = path.dirname(current);
+    const parent = dirname(current);
     if (parent === current) return undefined;
     current = parent;
   }
@@ -136,8 +142,8 @@ export async function tryLoadFrontMcpConfig(cwd: string): Promise<FrontMcpConfig
  */
 async function loadRawConfig(cwd: string): Promise<unknown> {
   for (const filename of CONFIG_FILENAMES) {
-    const configPath = path.join(cwd, filename);
-    if (!fs.existsSync(configPath)) continue;
+    const configPath = pathJoin(cwd, filename);
+    if (!(await fileExists(configPath))) continue;
     return loadRawFileAtPath(configPath, filename);
   }
 
@@ -152,12 +158,12 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
  */
 async function loadRawFileAtPath(configPath: string, filename: string): Promise<unknown> {
   if (filename.endsWith('.json')) {
-    const content = fs.readFileSync(configPath, 'utf-8');
+    const content = await readFile(configPath);
     return JSON.parse(content);
   }
 
   if (filename.endsWith('.ts')) {
-    const cwd = path.dirname(configPath);
+    const cwd = dirname(configPath);
     // #365 — Loading `.ts` under `"type": "commonjs"` (the default) is a
     // minefield across Node versions:
     //   - Node 20: `require()` throws on TS syntax, `await import()` errors
@@ -193,7 +199,9 @@ async function loadRawFileAtPath(configPath: string, filename: string): Promise<
       requireErr = e as Error;
     }
     try {
-      const mod = await import(configPath);
+      // pathToFileURL — Windows absolute paths (e.g. `C:\…\frontmcp.config.ts`)
+      // are not valid ESM specifiers; Node requires a `file://` URL.
+      const mod = await import(pathToFileURL(configPath).href);
       return mod.default ?? mod;
     } catch {
       // Fall through to esbuild.
@@ -213,7 +221,7 @@ async function loadRawFileAtPath(configPath: string, filename: string): Promise<
 
   // JS/MJS/CJS
   if (filename.endsWith('.mjs')) {
-    const mod = await import(configPath);
+    const mod = await import(pathToFileURL(configPath).href);
     return mod.default ?? mod;
   }
 
@@ -235,7 +243,7 @@ async function loadRawFileAtPath(configPath: string, filename: string): Promise<
  */
 async function isCommonJsProject(cwd: string): Promise<boolean> {
   try {
-    const pkgPath = path.join(cwd, 'package.json');
+    const pkgPath = pathJoin(cwd, 'package.json');
     const contents = await readFile(pkgPath);
     const pkg = JSON.parse(contents) as { type?: string };
     return pkg.type !== 'module';
@@ -283,7 +291,7 @@ async function loadTsConfigViaEsbuild(configPath: string): Promise<unknown> {
   // Make the loaded module's `require` resolve relative to the config dir
   // so user `import { defineConfig } from 'frontmcp'` keeps working.
   m.filename = configPath;
-  m.paths = (Module as unknown as { _nodeModulePaths(p: string): string[] })._nodeModulePaths(path.dirname(configPath));
+  m.paths = (Module as unknown as { _nodeModulePaths(p: string): string[] })._nodeModulePaths(dirname(configPath));
 
   (m as any)._compile(code, configPath);
 
@@ -294,17 +302,17 @@ async function loadTsConfigViaEsbuild(configPath: string): Promise<unknown> {
 /**
  * Derive minimal config from package.json.
  */
-function deriveFromPackageJson(cwd: string): FrontMcpConfig {
-  const pkgPath = path.join(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) {
+async function deriveFromPackageJson(cwd: string): Promise<FrontMcpConfig> {
+  const pkgPath = pathJoin(cwd, 'package.json');
+  if (!(await fileExists(pkgPath))) {
     throw new Error(
       'No frontmcp.config found and no package.json. Create a frontmcp.config.ts to configure build targets.',
     );
   }
 
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  const pkg = JSON.parse(await readFile(pkgPath));
   return {
-    name: pkg.name?.replace(/^@[^/]+\//, '') || path.basename(cwd),
+    name: pkg.name?.replace(/^@[^/]+\//, '') || basename(cwd),
     version: pkg.version || '1.0.0',
     entry: pkg.main,
     deployments: [{ target: 'node' }],

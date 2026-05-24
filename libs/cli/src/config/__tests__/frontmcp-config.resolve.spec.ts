@@ -10,17 +10,18 @@
  *   - no-config-found graceful fallback
  */
 
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { mkdir, mkdtemp, writeFile } from '@frontmcp/utils';
+
 import { resolveConfig } from '../frontmcp-config.resolve';
 
-function makeTempProject(filename: string, contents: string, subdir = ''): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-resolve-'));
+async function makeTempProject(filename: string, contents: string, subdir = ''): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-resolve-'));
   const target = subdir ? path.join(root, subdir) : root;
-  if (subdir) fs.mkdirSync(target, { recursive: true });
-  fs.writeFileSync(path.join(target, filename), contents, 'utf-8');
+  if (subdir) await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, filename), contents);
   return root;
 }
 
@@ -39,7 +40,7 @@ const MINIMAL_CONFIG_JSON = JSON.stringify({
 describe('resolveConfig (issue #400)', () => {
   describe('file resolution', () => {
     it('returns no config when none is present and no path is given', async () => {
-      const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-resolve-empty-'));
+      const empty = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-resolve-empty-'));
       const result = await resolveConfig({ cwd: empty, mode: 'dev' });
       expect(result.config).toBeUndefined();
       expect(result.configDir).toBeUndefined();
@@ -47,7 +48,7 @@ describe('resolveConfig (issue #400)', () => {
     });
 
     it('loads explicit --config path', async () => {
-      const root = makeTempProject('custom.config.json', MINIMAL_CONFIG_JSON);
+      const root = await makeTempProject('custom.config.json', MINIMAL_CONFIG_JSON);
       const result = await resolveConfig({
         cwd: '/tmp', // intentionally different from root
         mode: 'dev',
@@ -64,7 +65,7 @@ describe('resolveConfig (issue #400)', () => {
     });
 
     it('reads FRONTMCP_CONFIG env var when no explicit path', async () => {
-      const root = makeTempProject('env.config.json', MINIMAL_CONFIG_JSON);
+      const root = await makeTempProject('env.config.json', MINIMAL_CONFIG_JSON);
       const result = await resolveConfig({
         cwd: '/tmp',
         mode: 'dev',
@@ -74,11 +75,11 @@ describe('resolveConfig (issue #400)', () => {
     });
 
     it('explicit --config beats FRONTMCP_CONFIG env', async () => {
-      const explicitRoot = makeTempProject(
+      const explicitRoot = await makeTempProject(
         'explicit.config.json',
         JSON.stringify({ name: 'explicit', deployments: [{ target: 'node' }] }),
       );
-      const envRoot = makeTempProject(
+      const envRoot = await makeTempProject(
         'env.config.json',
         JSON.stringify({ name: 'from-env', deployments: [{ target: 'node' }] }),
       );
@@ -93,9 +94,9 @@ describe('resolveConfig (issue #400)', () => {
 
     it('walks upward from a nested cwd to find the parent config', async () => {
       // Place config at root, run from apps/a/b/c — upward walk should hit it.
-      const root = makeTempProject('frontmcp.config.json', MINIMAL_CONFIG_JSON);
+      const root = await makeTempProject('frontmcp.config.json', MINIMAL_CONFIG_JSON);
       const nestedCwd = path.join(root, 'apps', 'a', 'b', 'c');
-      fs.mkdirSync(nestedCwd, { recursive: true });
+      await mkdir(nestedCwd, { recursive: true });
       const result = await resolveConfig({ cwd: nestedCwd, mode: 'dev' });
       expect(result.config?.name).toBe('demo');
       expect(result.configDir).toBe(root);
@@ -103,7 +104,10 @@ describe('resolveConfig (issue #400)', () => {
   });
 
   describe('env overlay composition', () => {
-    const root = makeTempProject('frontmcp.config.json', MINIMAL_CONFIG_JSON);
+    let root: string;
+    beforeAll(async () => {
+      root = await makeTempProject('frontmcp.config.json', MINIMAL_CONFIG_JSON);
+    });
 
     it("applies shared ⊕ dev for mode='dev'", async () => {
       const result = await resolveConfig({ cwd: root, mode: 'dev', env: {} });

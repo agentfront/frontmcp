@@ -176,6 +176,10 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
  */
 function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: DeploymentTarget): string {
   const safeName = sanitizeForFolder(projectName);
+  // Stdio invocations use the published package name (which preserves
+  // `@scope/` for scoped packages) — `sanitizeForFolder` strips the scope
+  // and would point `npx -y` at a non-existent local package.
+  const npmName = sanitizeForNpm(projectName);
   const isHttpTarget =
     deploymentTarget === 'node' ||
     deploymentTarget === 'vercel' ||
@@ -195,7 +199,7 @@ function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: Dep
       name: '${safeName}',
       transport: 'stdio',
       command: 'npx',
-      args: ['-y', '${safeName}'],
+      args: ['-y', '${npmName}'],
     },
   },`;
   const transportBlock = isHttpTarget

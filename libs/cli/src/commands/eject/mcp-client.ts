@@ -47,13 +47,24 @@ function buildServerEntry(client: McpClientName, config: FrontMcpConfigParsed): 
   }
 
   // HTTP / SSE: emit `url` + `transport`. URL falls back to the configured
-  // HTTP port when none is provided.
-  const httpPort = config.transport?.http?.port ?? config.deployments.find((d) => 'server' in d)?.server?.http?.port;
+  // HTTP port when none is provided. We collect every deployment port and
+  // only derive a fallback when exactly one is available — picking the
+  // first of several would point the user's client at an arbitrary server.
+  const deploymentPorts = config.deployments
+    .map((d) => ('server' in d ? d.server?.http?.port : undefined))
+    .filter((p): p is number => typeof p === 'number');
+  const derivedDeploymentPort = deploymentPorts.length === 1 ? deploymentPorts[0] : undefined;
+  const httpPort = config.transport?.http?.port ?? derivedDeploymentPort;
   const httpHost = config.transport?.http?.host ?? '127.0.0.1';
   const httpPath = config.transport?.http?.path ?? '/mcp';
   const fallbackUrl = httpPort ? `http://${httpHost}:${httpPort}${httpPath}` : undefined;
   const url = connection.url ?? fallbackUrl;
   if (!url) {
+    if (!connection.url && deploymentPorts.length > 1) {
+      throw new Error(
+        `frontmcp.config \`clients.${client}.url\` is required when multiple deployment HTTP ports are configured.`,
+      );
+    }
     throw new Error(
       `frontmcp.config \`clients.${client}\` needs a \`url\`, or a \`transport.http.port\` / deployment HTTP port to derive one.`,
     );

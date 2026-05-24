@@ -262,15 +262,15 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     console.log(`${c('gray', '[test]')} using auto-injected Jest configuration`);
   }
 
-  if (opts.runInBand) {
+  if (mergedOpts.runInBand) {
     console.log(`${c('gray', '[test]')} running tests sequentially (--runInBand)`);
   }
 
-  if (opts.watch) {
+  if (mergedOpts.watch) {
     console.log(`${c('gray', '[test]')} watch mode enabled`);
   }
 
-  if (opts.coverage) {
+  if (mergedOpts.coverage) {
     console.log(`${c('gray', '[test]')} coverage collection enabled`);
   }
 

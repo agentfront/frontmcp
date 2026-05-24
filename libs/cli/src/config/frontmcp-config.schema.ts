@@ -386,7 +386,7 @@ export const clientConnectionSchema = z
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
     env: z.record(z.string(), z.string()).optional(),
-    url: z.string().optional(),
+    url: z.string().url().optional(),
   })
   .strict();
 
