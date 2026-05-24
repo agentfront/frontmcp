@@ -177,13 +177,15 @@ hasAny(): boolean
 
 When the jobs system is enabled, the registry's capabilities are exposed through these MCP tools:
 
-| Tool             | Description                                      |
-| ---------------- | ------------------------------------------------ |
-| `list-jobs`      | List all registered jobs with optional filtering |
-| `execute-job`    | Execute a job by name (inline or background)     |
-| `get-job-status` | Get execution status by `runId`                  |
-| `register-job`   | Register a dynamic job with JavaScript source    |
-| `remove-job`     | Remove a dynamic job                             |
+| Tool             | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `list_jobs`      | List all registered jobs with optional filtering                                             |
+| `execute_job`    | Execute a job by name (inline or background)                                                 |
+| `get_job_status` | Get execution status by `runId`                                                              |
+| `register_job`   | Register a dynamic job with JavaScript source (`hideFromDiscovery: true`)                    |
+| `remove_job`     | Remove a dynamic job (`hideFromDiscovery: true`)                                             |
+
+Hyphen aliases (`list-jobs`, `execute-job`, …) still resolve with a deprecation log line for one release — agents and code that hardcoded the old form keep working.
 
 ## Change Events
 

@@ -6,7 +6,7 @@ import type { JobRegistryInterface } from '../../job/job.registry';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
-  name: 'execute-workflow',
+  name: 'execute_workflow',
   description: 'Execute a registered workflow by name. Supports inline and background execution.',
   inputSchema: {
     name: z.string().describe('Workflow name to execute'),
