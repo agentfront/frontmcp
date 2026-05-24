@@ -31,24 +31,36 @@ Tools are the primary way to expose executable actions to AI clients in the MCP 
 
 ## Class-Based Pattern
 
-Create a class extending `ToolContext` and implement the `execute(input)` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`. Do **not** parameterize `ToolContext` with explicit generics — the input/output types are inferred automatically from the `@Tool` decorator.
+Create a class extending `ToolContext` and implement the `execute(input)` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`. Do **not** parameterize `ToolContext` with explicit generics — the input/output types are inferred automatically from the `@Tool` decorator. Hoist the **schemas only** to module scope and derive the `execute()` parameter and return types with `ToolInputOf<>` / `ToolOutputOf<>`, so the schema stays the single source of truth (issue #405). Keep `name`, `description`, `annotations`, `rateLimit`, etc. inside the decorator where they belong.
 
 ```typescript
-import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
+
+const inputSchema = {
+  name: z.string().describe('The name of the user to greet'),
+};
+
+const outputSchema = {
+  greeting: z.string(),
+};
+
+type GreetUserInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+type GreetUserOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>;
 
 @Tool({
   name: 'greet_user',
   description: 'Greet a user by name',
-  inputSchema: {
-    name: z.string().describe('The name of the user to greet'),
-  },
+  inputSchema,
+  outputSchema,
 })
 class GreetUserTool extends ToolContext {
-  async execute(input: { name: string }) {
-    return `Hello, ${input.name}!`;
+  async execute(input: GreetUserInput): Promise<GreetUserOutput> {
+    return { greeting: `Hello, ${input.name}!` };
   }
 }
 ```
+
+> **Why derive the types?** Hand-typing `execute(input: { name: string })` next to the schema is a second declaration of the same shape. Change the schema without touching the annotation and TypeScript happily compiles — validation moves to runtime and the IDE never warns. Derived types make the schema the single source of truth: change a Zod field and the `execute()` signature follows automatically. Only the **schemas** are hoisted so they can be re-imported by specs, sibling tools, and generated clients; everything else (`name`, `description`, `annotations`, `rateLimit`, `authProviders`, …) stays inside `@Tool({…})` where the decorator config naturally lives. See [File layout](#file-layout) for sibling-file and folder-per-tool variants.
 
 ### Available Context Methods and Properties
 
@@ -85,6 +97,43 @@ class GreetUserTool extends ToolContext {
 | `timestamp`    | `number`            | Request timestamp                   |
 | `metadata`     | `RequestMetadata`   | Request headers, client IP, etc.    |
 
+## File layout
+
+Two layouts are endorsed. Pick based on tool count and whether the tool has local helpers, fixtures, or error types.
+
+**Flat sibling files** — works well for projects with ≤3 tools per app, or when each tool is small enough to fit in one screen:
+
+```text
+src/apps/<app>/tools/
+├── get-weather.tool.ts        # @Tool class, execute()
+├── get-weather.schema.ts      # input/output schemas + derived types
+└── get-weather.tool.spec.ts   # unit tests
+```
+
+**Folder-per-tool** — recommended for >3 tools per app, or any tool with local helpers, fixtures, or error types:
+
+```text
+src/apps/<app>/tools/
+└── get-weather/
+    ├── get-weather.tool.ts        # @Tool class, execute()
+    ├── get-weather.schema.ts      # input/output schemas + derived types
+    ├── get-weather.tool.spec.ts   # unit tests
+    ├── index.ts                   # barrel re-export
+    └── …                          # tool-local helpers, fixtures, error types
+```
+
+Either way the schemas live in their own file so they can be imported from the tool class, the spec, sibling tools, or generated clients without dragging the `@Tool`-decorated class along. Sample `index.ts` for the folder layout:
+
+```typescript
+export { GetWeatherTool } from './get-weather.tool';
+export {
+  inputSchema as getWeatherInputSchema,
+  outputSchema as getWeatherOutputSchema,
+  type GetWeatherInput,
+  type GetWeatherOutput,
+} from './get-weather.schema';
+```
+
 ## Input Schema: Zod Raw Shapes
 
 The `inputSchema` accepts a **Zod raw shape** -- a plain object mapping field names to Zod types. Do NOT wrap it in `z.object()`. The framework wraps it internally.
@@ -119,25 +168,28 @@ The `execute()` parameter type must match the inferred output of `z.object(input
 3. **Type safety** -- `ToolContext` infers the output type from `outputSchema` automatically (no explicit generics needed), giving you compile-time guarantees that `execute()` returns the correct shape.
 
 ```typescript
+const inputSchema = {
+  city: z.string().describe('City name'),
+};
+
+// Always define outputSchema to validate output and prevent data leaks
+const outputSchema = {
+  temperature: z.number(),
+  unit: z.enum(['celsius', 'fahrenheit']),
+  description: z.string(),
+};
+
+type GetWeatherInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+type GetWeatherOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>;
+
 @Tool({
   name: 'get_weather',
   description: 'Get current weather for a location',
-  inputSchema: {
-    city: z.string().describe('City name'),
-  },
-  // Always define outputSchema to validate output and prevent data leaks
-  outputSchema: {
-    temperature: z.number(),
-    unit: z.enum(['celsius', 'fahrenheit']),
-    description: z.string(),
-  },
+  inputSchema,
+  outputSchema,
 })
 class GetWeatherTool extends ToolContext {
-  async execute(input: { city: string }): Promise<{
-    temperature: number;
-    unit: 'celsius' | 'fahrenheit';
-    description: string;
-  }> {
+  async execute(input: GetWeatherInput): Promise<GetWeatherOutput> {
     const response = await this.fetch(`https://api.weather.example.com/v1/current?city=${input.city}`);
     const weather = await response.json();
     // Only temperature, unit, and description are returned.
@@ -157,13 +209,15 @@ class GetWeatherTool extends ToolContext {
 - CodeCall cannot infer return types for chaining tool calls in VM scripts
 - No compile-time type checking on the return value
 
-### Typed Output Patterns
+### Derive `execute()` types from the schemas (recommended)
 
-`ToolContext` infers both input and output types from the `@Tool` decorator's `inputSchema` / `outputSchema`. Do not pass explicit generics — the inference is automatic and gives you full type safety with no `as any` casts:
+`ToolContext` already infers the input/output types from the `@Tool` decorator at the **class** level (no generics needed). To make the same types reachable from your `execute()` signature — and from sibling files like specs, helpers, or generated clients — hoist the **schemas only** to module scope and derive types from them with `ToolInputOf<>` / `ToolOutputOf<>` exported from `@frontmcp/sdk`. The decorator config (`name`, `description`, `annotations`, `rateLimit`, …) stays inline:
 
 ```typescript
+import { Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
+
 const inputSchema = {
-  city: z.string(),
+  city: z.string().describe('City name'),
 };
 
 const outputSchema = {
@@ -171,20 +225,35 @@ const outputSchema = {
   unit: z.enum(['celsius', 'fahrenheit']),
 };
 
+type GetWeatherInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+type GetWeatherOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>;
+
 @Tool({
   name: 'get_weather',
+  description: 'Get current weather for a location',
   inputSchema,
   outputSchema,
 })
-// No generics needed — ToolContext infers types from the @Tool decorator
 class GetWeatherTool extends ToolContext {
-  async execute(input: { city: string }) {
-    // Return type is inferred as { temperature: number; unit: 'celsius' | 'fahrenheit' }
-    // TypeScript will error if you return the wrong shape
-    return { temperature: 22, unit: 'celsius' as const };
+  async execute(input: GetWeatherInput): Promise<GetWeatherOutput> {
+    return { temperature: 22, unit: 'celsius' };
   }
 }
 ```
+
+**Two equivalent forms** — pick whichever fits the surrounding code; they produce identical types:
+
+```typescript
+// Form 1 — SDK helpers (preferred — works with the type returned by ToolContext)
+type GetWeatherInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+type GetWeatherOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>;
+
+// Form 2 — raw zod (terser if you don't mind a direct z dependency)
+type GetWeatherInput = z.infer<z.ZodObject<typeof inputSchema>>;
+type GetWeatherOutput = z.infer<z.ZodObject<typeof outputSchema>>;
+```
+
+> **Never duplicate the shape inline on `execute()` — derive it.** If the schema changes, the type changes automatically. If it doesn't, the compiler tells you exactly which call sites broke. And only hoist the **schemas** — leaving `name`/`description`/`annotations`/throttling inside `@Tool({…})` keeps the decorator declaration self-contained and easy to scan.
 
 **`return` vs `this.respond()`** — Both work and both are validated against `outputSchema` in the finalize stage:
 
@@ -561,7 +630,9 @@ Restrict a tool to specific platforms, runtimes, or environments using `availabl
   name: 'apple_notes_search',
   description: 'Search Apple Notes',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  // `os` is the canonical axis since issue #417; `platform` remains as
+  // a deprecated alias for backward compatibility.
+  availableWhen: { os: ['darwin'] },
 })
 class AppleNotesSearchTool extends ToolContext {
   async execute(input: { query: string }) {
@@ -583,12 +654,17 @@ class DeployServiceTool extends ToolContext {
 }
 ```
 
-Available constraint fields (AND across fields, OR within arrays):
+Available constraint fields (AND across fields, OR within arrays). Issue #417 added `os` / `provider` / `target` / `surface`:
 
-- `platform` — OS: `'darwin'`, `'linux'`, `'win32'`
+- `os` — OS (renamed from `platform`): `'darwin'`, `'linux'`, `'win32'`. `platform` is kept as a deprecated alias.
 - `runtime` — JS runtime: `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`
-- `deployment` — Mode: `'serverless'`, `'standalone'`
+- `deployment` — Coarse mode: `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`
+- `provider` — Deploy provider (issue #417): `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'`. Override with `FRONTMCP_PROVIDER=<name>`.
+- `target` — Build target produced by `frontmcp build --target <x>` (issue #417): `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`. `'unknown'` in dev.
+- `surface` — Per-call axis (issue #417): `'mcp'` (MCP `tools/call`), `'cli'` (CLI subcommand), `'agent'` (in-process dispatch), `'job'` (job runner), `'http-trigger'` (channel HTTP triggers). Use `surface: ['agent']` to block external invocation but allow agent use.
 - `env` — NODE_ENV: `'production'`, `'development'`, `'test'`
+
+When an `availableWhen` constraint fails at call time, FrontMCP throws `EntryUnavailableError`. The error's `data` now carries `missingAxes: string[]` (issue #417) so clients can surface "this tool isn't reachable because provider=vercel / surface=mcp / …" without parsing prose.
 
 You can also check the platform imperatively inside `execute()`:
 
@@ -675,14 +751,16 @@ class ConvertCurrencyTool extends ToolContext {
 
 ## Common Patterns
 
-| Pattern              | Correct                                         | Incorrect                                              | Why                                                                              |
-| -------------------- | ----------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Input schema         | `inputSchema: { name: z.string() }` (raw shape) | `inputSchema: z.object({ name: z.string() })`          | Framework wraps in `z.object()` internally                                       |
-| Output schema        | Always define `outputSchema`                    | Omit `outputSchema`                                    | Prevents data leaks and enables CodeCall chaining                                |
-| DI resolution        | `this.get(TOKEN)` with proper error handling    | `this.tryGet(TOKEN)!` with non-null assertion          | `get` throws a clear error; non-null assertions mask failures                    |
-| Error handling       | `this.fail(new ResourceNotFoundError(...))`     | `throw new Error(...)`                                 | `this.fail` triggers the error flow with MCP error codes                         |
-| Tool naming          | `snake_case` names: `get_weather`               | `camelCase` or `PascalCase`: `getWeather`              | MCP protocol convention for tool names                                           |
-| ToolContext generics | `class MyTool extends ToolContext`              | `class MyTool extends ToolContext<typeof inputSchema>` | Types are auto-inferred from `@Tool` decorator — explicit generics are redundant |
+| Pattern              | Correct                                                                                                               | Incorrect                                                        | Why                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Input schema         | `inputSchema: { name: z.string() }` (raw shape)                                                                       | `inputSchema: z.object({ name: z.string() })`                    | Framework wraps in `z.object()` internally                                                         |
+| Output schema        | Always define `outputSchema`                                                                                          | Omit `outputSchema`                                              | Prevents data leaks and enables CodeCall chaining                                                  |
+| `execute()` types    | Derive via `ToolInputOf<{ inputSchema: typeof inputSchema }>` / `ToolOutputOf<{ outputSchema: typeof outputSchema }>` | Inline `execute(input: { city: string })` annotation             | Schema is the single source of truth — derive once, use everywhere; no silent drift                |
+| File layout          | Schema in `<name>.schema.ts`, class in `<name>.tool.ts` (sibling files or folder-per-tool)                            | One large `<name>.tool.ts` that bundles schema + class + helpers | Schema can be imported by specs, sibling tools, generated clients without dragging the class along |
+| DI resolution        | `this.get(TOKEN)` with proper error handling                                                                          | `this.tryGet(TOKEN)!` with non-null assertion                    | `get` throws a clear error; non-null assertions mask failures                                      |
+| Error handling       | `this.fail(new ResourceNotFoundError(...))`                                                                           | `throw new Error(...)`                                           | `this.fail` triggers the error flow with MCP error codes                                           |
+| Tool naming          | `snake_case` names: `get_weather`                                                                                     | `camelCase` or `PascalCase`: `getWeather`                        | MCP protocol convention for tool names                                                             |
+| ToolContext generics | `class MyTool extends ToolContext`                                                                                    | `class MyTool extends ToolContext<typeof inputSchema>`           | Types are auto-inferred from `@Tool` decorator — explicit generics are redundant                   |
 
 ## Verification Checklist
 
@@ -714,11 +792,11 @@ class ConvertCurrencyTool extends ToolContext {
 
 ## Examples
 
-| Example                                                                                                   | Level        | Description                                                                                                    |
-| --------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`basic-class-tool`](../examples/create-tool/basic-class-tool.md)                                         | Basic        | A minimal tool using the class-based pattern with Zod input validation and output schema.                      |
-| [`tool-with-di-and-errors`](../examples/create-tool/tool-with-di-and-errors.md)                           | Intermediate | A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.               |
-| [`tool-with-rate-limiting-and-progress`](../examples/create-tool/tool-with-rate-limiting-and-progress.md) | Advanced     | A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations. |
+| Example                                                                                                   | Level        | Description                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-class-tool`](../examples/create-tool/basic-class-tool.md)                                         | Basic        | A minimal tool using the class-based pattern with Zod input validation, output schema, and types derived from the schemas.                                      |
+| [`tool-with-di-and-errors`](../examples/create-tool/tool-with-di-and-errors.md)                           | Intermediate | A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors, with `execute()` types derived from the schemas.               |
+| [`tool-with-rate-limiting-and-progress`](../examples/create-tool/tool-with-rate-limiting-and-progress.md) | Advanced     | A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations, with `execute()` types derived from the schemas. |
 
 > See all examples in [`examples/create-tool/`](../examples/create-tool/)
 

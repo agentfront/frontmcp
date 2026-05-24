@@ -4,7 +4,7 @@ import { Tool, ToolContext } from '../../common';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
-  name: 'remove-job',
+  name: 'remove_job',
   description: 'Remove a dynamic job by name.',
   inputSchema: {
     name: z.string().describe('Job name to remove'),

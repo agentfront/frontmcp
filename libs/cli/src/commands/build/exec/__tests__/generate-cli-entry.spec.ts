@@ -1273,3 +1273,54 @@ describe('RESERVED_COMMANDS', () => {
     expect(RESERVED_COMMANDS.has('query')).toBe(false);
   });
 });
+
+describe('generateCliEntry — install -p claude|codex (issue #411)', () => {
+  it('extends the generated install command with the new -p flags', () => {
+    const source = generateCliEntry(makeOptions());
+    // The new flags on the install command.
+    expect(source).toMatch(/-p, --provider <provider>/);
+    expect(source).toMatch(/--scope <scope>/);
+    expect(source).toMatch(/--no-skills/);
+    expect(source).toMatch(/--no-commands/);
+    expect(source).toMatch(/--only-mcp/);
+    expect(source).toMatch(/--command <cmd>/);
+    expect(source).toMatch(/--env <name>/);
+    expect(source).toMatch(/--dir <dir>/);
+    expect(source).toMatch(/--dry-run/);
+    expect(source).toMatch(/--status/);
+  });
+
+  it('requires the plugin-emitter and bin-meta.json at install time', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain("require('./plugin-emitter')");
+    expect(source).toContain("'bin-meta.json'");
+  });
+
+  it('dispatches to emitClaudePlugin / emitCodexEntry per provider', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('emitClaudePlugin');
+    expect(source).toContain('emitCodexEntry');
+    // Branch labels for unknown providers
+    expect(source).toMatch(/Unknown provider/);
+  });
+
+  it('emits a runtime placeholder like ${NAME} for --env entries', () => {
+    const source = generateCliEntry(makeOptions());
+    // The GENERATION-time concat produces a runtime string literal `${NAME}`.
+    expect(source).toContain("'${' + envList[ei] + '}'");
+  });
+
+  it('emits --status output that branches on installed/outdated/not installed', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain("'installed'");
+    expect(source).toContain("'outdated'");
+    expect(source).toContain('not installed');
+  });
+
+  it('preserves the legacy ~/.frontmcp install body when -p is absent', () => {
+    const source = generateCliEntry(makeOptions());
+    // Sanity: the original "Installing <name>..." path is still present.
+    expect(source).toContain("'Installing ");
+    expect(source).toContain("'apps'");
+  });
+});

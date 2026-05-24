@@ -9,7 +9,14 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+import {
+  checkEntryAvailability,
+  findNonFiniteNumber,
+  getRuntimeContext,
+  isDebug,
+  isDevelopment,
+  randomUUID,
+} from '@frontmcp/utils';
 
 import {
   Flow,
@@ -286,11 +293,28 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
 
     const { name } = this.state.required.input;
+    // Hyphen ↔ underscore name fallback (issue #408).
+    //
+    // Job-management tools renamed from `execute-job` to `execute_job` etc.
+    // to align with the MCP/OpenAI snake_case convention. Agents (and any
+    // user who memorized the hyphen form before the rename) get a permissive
+    // lookup so they don't see TOOL_NOT_FOUND. Only kicks in when the exact
+    // name missed, so it never masks a real typo. The alias is shared between
+    // the local scope lookup AND the remote-registry fallback below — if it
+    // only applied to the first lookup, legacy callers could still miss a
+    // tool living in a remote app.
+    const alias = /[-_]/.test(name)
+      ? name.includes('_')
+        ? name.replace(/_/g, '-')
+        : name.replace(/-/g, '_')
+      : undefined;
+    const candidateNames = alias ? [name, alias] : [name];
+    const matchesCandidate = (entry: { fullName: string; name: string }) =>
+      candidateNames.includes(entry.fullName) || candidateNames.includes(entry.name);
+
     // Agent invocations (use-agent:*) are routed to agents:call-agent flow
     // by the call-tool-request handler, so they won't reach here
-    let tool = activeTools.find((entry) => {
-      return entry.fullName === name || entry.name === name;
-    });
+    let tool = activeTools.find(matchesCandidate);
 
     // Fallback: search directly in remote app registries
     // This handles timing issues where subscription callbacks haven't propagated tools yet
@@ -303,9 +327,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         for (const app of apps) {
           if (app.isRemote) {
             const remoteTools = app.tools.getTools(true);
-            const remoteTool = remoteTools.find((entry) => {
-              return entry.fullName === name || entry.name === name;
-            });
+            const remoteTool = remoteTools.find(matchesCandidate);
             if (remoteTool) {
               this.logger.verbose(`findTool: found tool "${name}" in remote app "${app.id}"`);
               tool = remoteTool;
@@ -317,6 +339,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
     }
 
+    // When the resolution came through the alias rather than the original
+    // request name, log a one-time deprecation hint so callers can migrate
+    // off the legacy spelling. `alias` is undefined when the request name
+    // had no `-`/`_`, so this branch is skipped for clean snake_case calls.
+    if (tool && alias && tool.fullName !== name && tool.name !== name) {
+      this.logger.warn(
+        `findTool: tool "${name}" resolved via legacy name alias to "${alias}". ` +
+          `Update callers to use "${alias}" — the alias will be removed in a future release.`,
+      );
+    }
+
     if (!tool) {
       // Check if tool exists but is unavailable in current environment.
       // This is a REGISTRY-LEVEL constraint (availableWhen), not HTTP/flow-level auth.
@@ -324,12 +357,25 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const unavailable = allUnfiltered.find((t) => t.fullName === name || t.name === name);
       if (unavailable) {
         const ctx = getRuntimeContext();
+        // Issue #417 — read the per-call surface tag so the structured
+        // error explains which axis (process-global vs surface) blocked
+        // the call. Defaults to 'mcp' for the call-tool handler path.
+        const callCtxObj = this.input.ctx as { surface?: 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent' } | undefined;
+        const surface = callCtxObj?.surface ?? 'mcp';
+        const check = checkEntryAvailability(unavailable.metadata.availableWhen, ctx, { surface });
         this.logger.warn(
           `findTool: tool "${name}" exists but is unavailable — ` +
             `constraint=${JSON.stringify(unavailable.metadata.availableWhen)}, ` +
-            `current=[platform=${ctx.platform}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, env=${ctx.env}]`,
+            `missingAxes=${JSON.stringify(check.missingAxes)}, ` +
+            `current=[os=${ctx.os}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, provider=${ctx.provider}, target=${ctx.target}, surface=${surface}, env=${ctx.env}]`,
         );
-        throw new EntryUnavailableError('Tool', name, unavailable.metadata.availableWhen, ctx);
+        throw new EntryUnavailableError(
+          'Tool',
+          name,
+          unavailable.metadata.availableWhen,
+          { ...ctx, surface },
+          check.missingAxes,
+        );
       }
       this.logger.warn(`findTool: tool "${name}" not found`);
       throw new ToolNotFoundError(name);
