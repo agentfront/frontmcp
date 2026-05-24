@@ -2363,11 +2363,13 @@
               "name": "install-and-search-skills",
               "description": "Install skills statically for Claude Code and use dynamic CLI search for on-demand discovery.",
               "level": "basic",
-              "tags": ["setup", "cli", "anthropic", "skills", "usage", "install"],
+              "tags": ["setup", "cli", "anthropic", "skills", "usage", "install", "bulk", "export"],
               "features": [
                 "`frontmcp skills list` and `search` for discovering available skills",
                 "`frontmcp skills read` for viewing skill content and references on demand",
                 "`frontmcp skills install --provider claude` for static installation to `.claude/skills/`",
+                "`frontmcp skills install --all` / `--category` / `--tag` for bulk install in one command",
+                "`frontmcp skills export` to ship a skill to Cursor / Windsurf / Copilot rule files",
                 "Installed skills are auto-loaded by Claude Code in its system prompt context"
               ]
             }
