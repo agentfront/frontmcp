@@ -103,6 +103,10 @@ export {
 // src/apps/main/index.ts
 import { App } from '@frontmcp/sdk';
 
+// `DatabaseProvider` is the singleton that backs `DATABASE` — see the
+// `create-provider` skill for an `AsyncProvider({ useFactory })` reference
+// implementation that opens a connection pool at startup.
+import { DatabaseProvider } from './providers/database';
 import { DeleteRecordTool } from './tools/delete-record';
 
 @App({
