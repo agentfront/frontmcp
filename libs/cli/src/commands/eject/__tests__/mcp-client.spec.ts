@@ -27,9 +27,11 @@ function baseConfig(overrides: Partial<FrontMcpConfigParsed> = {}): FrontMcpConf
 
 describe('emitClientSnippet (issue #400)', () => {
   describe('missing client entry', () => {
-    it('throws with a helpful message when the requested client is absent', () => {
+    it('throws an Error with a helpful message when the requested client is absent', () => {
       const config = baseConfig();
-      expect(() => emitClientSnippet('claude-code', config)).toThrow(/no `clients\.claude-code` entry/);
+      const act = () => emitClientSnippet('claude-code', config);
+      expect(act).toThrow(Error);
+      expect(act).toThrow(/no `clients\.claude-code` entry/);
     });
   });
 
@@ -116,14 +118,16 @@ describe('emitClientSnippet (issue #400)', () => {
       expect(snippet.mcpServers.demo.url).toBe('http://0.0.0.0:4321/api/mcp');
     });
 
-    it('throws when no URL can be derived and there are no deployment ports', () => {
+    it('throws an Error when no URL can be derived and there are no deployment ports', () => {
       const config = baseConfig({
         clients: { 'claude-code': { transport: 'http' } },
       } as Partial<FrontMcpConfigParsed>);
-      expect(() => emitClientSnippet('claude-code', config)).toThrow(/needs a `url`/);
+      const act = () => emitClientSnippet('claude-code', config);
+      expect(act).toThrow(Error);
+      expect(act).toThrow(/needs a `url`/);
     });
 
-    it('throws an unambiguous error when multiple deployment ports exist and url is absent', () => {
+    it('throws an Error with an unambiguous message when multiple deployment ports exist and url is absent', () => {
       const config = baseConfig({
         clients: { 'claude-code': { transport: 'http' } },
         deployments: [
@@ -131,9 +135,9 @@ describe('emitClientSnippet (issue #400)', () => {
           { target: 'vercel', server: { http: { port: 9001 } } },
         ],
       } as Partial<FrontMcpConfigParsed>);
-      expect(() => emitClientSnippet('claude-code', config)).toThrow(
-        /required when multiple deployment HTTP ports are configured/,
-      );
+      const act = () => emitClientSnippet('claude-code', config);
+      expect(act).toThrow(Error);
+      expect(act).toThrow(/required when multiple deployment HTTP ports are configured/);
     });
 
     it('propagates connection.env to the emitted entry when non-empty', () => {

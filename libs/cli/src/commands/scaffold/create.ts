@@ -176,35 +176,20 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
  */
 function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: DeploymentTarget): string {
   const safeName = sanitizeForFolder(projectName);
-  // Stdio invocations use the published package name (which preserves
-  // `@scope/` for scoped packages) — `sanitizeForFolder` strips the scope
-  // and would point `npx -y` at a non-existent local package.
-  const npmName = sanitizeForNpm(projectName);
-  const isHttpTarget =
-    deploymentTarget === 'node' ||
-    deploymentTarget === 'vercel' ||
-    deploymentTarget === 'lambda' ||
-    deploymentTarget === 'cloudflare';
+  // Every value of `DeploymentTarget` ('node' | 'vercel' | 'lambda' |
+  // 'cloudflare') ships HTTP, so the scaffold only ever emits the HTTP
+  // client + transport blocks. The stdio variant lived here briefly but
+  // was unreachable — reintroduce it (and add a 'desktop'/'cli' target to
+  // `DeploymentTarget`) if scaffold should support stdio in the future.
   const port = 3000;
-  const clientBlock = isHttpTarget
-    ? `  clients: {
+  const clientBlock = `  clients: {
     'claude-code': {
       name: '${safeName}',
       transport: 'http',
       url: 'http://127.0.0.1:${port}/mcp',
     },
-  },`
-    : `  clients: {
-    'claude-code': {
-      name: '${safeName}',
-      transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '${npmName}'],
-    },
   },`;
-  const transportBlock = isHttpTarget
-    ? `  transport: { default: 'http', http: { port: ${port}, path: '/mcp' } },`
-    : `  transport: { default: 'stdio' },`;
+  const transportBlock = `  transport: { default: 'http', http: { port: ${port}, path: '/mcp' } },`;
   return `import { defineConfig } from 'frontmcp';
 
 // Single source of truth for every \`frontmcp\` CLI command (dev / test /

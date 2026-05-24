@@ -135,23 +135,25 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   );
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
 
-  // Use --conditions node to ensure proper Node.js module resolution
-  // This helps with dynamic require() calls in packages like ioredis
-  // Only use shell on Windows where npx.cmd requires it; on Unix, direct spawn
-  // allows proper SIGINT propagation without intermediate shell processes
-  const useShell = process.platform === 'win32';
+  // Use --conditions node to ensure proper Node.js module resolution.
+  // This helps with dynamic require() calls in packages like ioredis.
+  // On Windows resolve npx.cmd directly — previously we passed shell:true
+  // for the .cmd suffix, but that triggers Node DEP0190 (#381) every run.
+  // spawn() resolves .cmd via CreateProcessW since Node 16, so no shell is
+  // needed; on Unix spawn() works on 'npx' directly. SIGINT still
+  // propagates cleanly because no intermediate shell sits between us and
+  // the child process.
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
   // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
   // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
   // into `process.env` above, so they win (they're closer to deployment).
   const childEnv = { ...resolved.effectiveEnv, ...process.env, PORT: String(port) };
-  const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+  const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
-    shell: useShell,
     env: childEnv,
   });
-  const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
+  const checker = spawn(npxCmd, ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
     stdio: 'inherit',
-    shell: useShell,
     env: childEnv,
   });
 

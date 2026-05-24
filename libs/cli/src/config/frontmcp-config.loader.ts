@@ -117,6 +117,34 @@ export async function tryLoadFrontMcpConfig(cwd: string): Promise<FrontMcpConfig
     }
     throw err;
   }
+  return parseRawOrLegacy(raw);
+}
+
+/**
+ * Explicit-path counterpart of {@link tryLoadFrontMcpConfig}. Used by
+ * `resolveConfig` for the `--config <path>` / `FRONTMCP_CONFIG` branch so a
+ * legacy exec-only config passed via explicit path resolves the same way
+ * an auto-discovered one does: `config: undefined`, no throw, callers fall
+ * back to `loadExecConfig`. Real parse failures still propagate.
+ */
+export async function tryLoadFrontMcpConfigFromFile(configPath: string): Promise<FrontMcpConfigParsed | undefined> {
+  const absolutePath = isAbsolute(configPath) ? configPath : pathResolve(process.cwd(), configPath);
+  if (!(await fileExists(absolutePath))) {
+    throw new Error(`Config file not found: ${configPath}`);
+  }
+  const filename = basename(absolutePath);
+  const raw = await loadRawFileAtPath(absolutePath, filename);
+  return parseRawOrLegacy(raw);
+}
+
+/**
+ * Schema-validate a raw config payload, returning `undefined` when it
+ * matches the legacy exec-only shape (top-level `cli` / `sea` / `esbuild`,
+ * no `deployments`) and throwing on every other parse failure. Shared
+ * between the cwd-search and explicit-path soft loaders so they agree on
+ * what "legacy" means.
+ */
+function parseRawOrLegacy(raw: unknown): FrontMcpConfigParsed | undefined {
   const result = frontmcpConfigSchema.safeParse(raw);
   if (!result.success) {
     // Distinguish two failure shapes:

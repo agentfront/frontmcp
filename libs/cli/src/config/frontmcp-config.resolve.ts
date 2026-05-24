@@ -27,7 +27,7 @@
 
 import { dirname, isAbsolute, pathResolve } from '@frontmcp/utils';
 
-import { findConfigDir, loadFrontMcpConfig, loadFrontMcpConfigFromFile } from './frontmcp-config.loader';
+import { findConfigDir, tryLoadFrontMcpConfig, tryLoadFrontMcpConfigFromFile } from './frontmcp-config.loader';
 import { type FrontMcpConfigParsed } from './frontmcp-config.schema';
 
 /** Modes per command — used to choose which env overlay to apply. */
@@ -126,7 +126,12 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
     configPath = isAbsolute(explicitPath) ? explicitPath : pathResolve(options.cwd, explicitPath);
     configDir = dirname(configPath);
     try {
-      config = await loadFrontMcpConfigFromFile(configPath);
+      // Soft variant: legacy exec-only configs (top-level `cli` / `sea` /
+      // `esbuild`, no `deployments`) resolve to `config: undefined` so
+      // `loadExecConfig` can still pick them up — same behaviour as the
+      // auto-discovery branch below, per the file-header contract. Real
+      // parse/schema failures still propagate as a hard error.
+      config = await tryLoadFrontMcpConfigFromFile(configPath);
     } catch (err) {
       throw new Error(`Failed to load config from "${explicitPath}": ${(err as Error).message}`);
     }
@@ -134,11 +139,13 @@ export async function resolveConfig(options: ResolveConfigOptions): Promise<Reso
     configDir = await findConfigDir(options.cwd);
     if (configDir) {
       try {
-        config = await loadFrontMcpConfig(configDir);
+        config = await tryLoadFrontMcpConfig(configDir);
       } catch (err) {
         // Surface schema/load errors — silent fallback was the corruption
-        // mode #365 worked to eliminate. The legacy-shape branch in
-        // `tryLoadFrontMcpConfig` handles old configs separately.
+        // mode #365 worked to eliminate. The legacy-shape branch inside
+        // `tryLoadFrontMcpConfig` already returns `undefined` for old
+        // exec-only configs, so anything reaching this catch is a real
+        // parse failure that the caller needs to see.
         throw new Error(`Failed to load frontmcp.config in ${configDir}: ${(err as Error).message}`);
       }
     }

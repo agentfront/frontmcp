@@ -53,7 +53,7 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 | `maxConcurrency`    | `number`                           | `5`        | Max parallel step concurrency           |
 | `tags`              | `string[]`                         | —          | Categorization tags                     |
 | `labels`            | `Record<string, string>`           | —          | Key-value labels                        |
-| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list-workflows`              |
+| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list_workflows`              |
 | `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                   |
 | `inputSchema`       | `ToolInputType` (Zod raw shape)    | —          | Workflow-level input schema             |
 | `outputSchema`      | `ToolOutputType`                   | —          | Workflow-level output schema            |

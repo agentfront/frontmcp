@@ -28,6 +28,7 @@ describe('createProgram', () => {
       'list',
       'logs',
       'mcpb',
+      'plugin',
       'restart',
       'service',
       'skills',
