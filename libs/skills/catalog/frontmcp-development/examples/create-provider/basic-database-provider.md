@@ -118,6 +118,20 @@ class MainApp {}
 - Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety
 - Registering the factory in the `providers` array so tools can resolve it
 
+## When to promote this to a folder
+
+The flat `src/apps/main/providers/database.provider.ts` layout above is fine while the provider is a single class. The moment you add a `database.provider.spec.ts`, a `connection.ts` helper, or a config-loading module, promote it to its own folder:
+
+```text
+src/apps/main/providers/database/
+├── index.ts                       # barrel: re-exports the factory + DatabasePool class
+├── database.provider.ts           # AsyncProvider factory + DatabasePool class
+├── database.provider.spec.ts      # tests
+└── connection.ts                  # (optional) connection-setup helper
+```
+
+See [`create-provider` → File Layout](../../references/create-provider.md#file-layout) for the full convention.
+
 ## Related
 
 - See `create-provider` for configuration providers, HTTP API clients, and cache providers

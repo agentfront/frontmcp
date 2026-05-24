@@ -1170,12 +1170,14 @@
             },
             {
               "name": "config-and-api-providers",
-              "description": "A configuration provider with readonly environment settings and an HTTP API client provider.",
+              "description": "A configuration provider and an HTTP API client provider, organized as one folder per provider with co-located specs and barrels.",
               "level": "intermediate",
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
                 "A configuration provider using `readonly` properties from environment variables (sync construction)",
                 "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
+                "Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`",
+                "Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
                 "Separating token definitions from provider implementations for clean dependency boundaries"
               ]
