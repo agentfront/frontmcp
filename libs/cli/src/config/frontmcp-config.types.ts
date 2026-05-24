@@ -341,6 +341,56 @@ export type DeploymentTarget =
   | McpbDeployment;
 
 // ============================================
+// CLI extension (issue #409)
+// ============================================
+
+/** Positional argument for a project-defined command. */
+export interface ProjectCommandArgument {
+  /** Argument name (kebab-case). Shown in --help. */
+  name: string;
+  /** Required (`<name>`) vs optional (`[name]`). @default false */
+  required?: boolean;
+  /** One-line description. */
+  description?: string;
+  /** Variadic (`<name...>`/`[name...]`). @default false */
+  variadic?: boolean;
+}
+
+/** Named option for a project-defined command. */
+export interface ProjectCommandOption {
+  /** Commander flag spec, e.g. `-f, --force` or `-p, --port <num>`. */
+  flags: string;
+  /** One-line description. */
+  description?: string;
+  /** Default value forwarded to Commander. */
+  default?: string | number | boolean;
+}
+
+/** A single project-defined CLI command. */
+export interface ProjectCommandEntry {
+  /** Path to the runner module (TS or JS), relative to project root. */
+  entry: string;
+  /** One-line description shown under "Project commands" in --help. */
+  description?: string;
+  /** Positional arguments. */
+  arguments?: ProjectCommandArgument[];
+  /** Named options. */
+  options?: ProjectCommandOption[];
+  /** Hide from --help. Verb is still invokable. @default false */
+  hidden?: boolean;
+}
+
+/** CLI extension block — see `cli.commands` in frontmcp.config. */
+export interface CliExtensionConfig {
+  /**
+   * Map of verb name → command definition. Verb names may include `:`,
+   * `_`, and `-` (e.g. `project:init`, `db-migrate`). Reserved verbs (the
+   * built-in ones) are rejected at config-load time.
+   */
+  commands?: Record<string, ProjectCommandEntry>;
+}
+
+// ============================================
 // Top-Level Config
 // ============================================
 
@@ -469,6 +519,8 @@ export interface FrontMcpConfig {
   deployments: DeploymentTarget[];
   /** Build/bundler options. */
   build?: BuildOptions;
+  /** Project-defined CLI extensions (issue #409). */
+  cli?: CliExtensionConfig;
 
   // Issue #400 — config drives every command, not just `build`
   /** Transport defaults consumed by `dev` / `inspector` / `pm start` / `pm socket`. */

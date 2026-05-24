@@ -1,18 +1,18 @@
 import { createProgram } from '../program';
 
 describe('createProgram', () => {
-  it('should create a program named "frontmcp"', () => {
-    const program = createProgram();
+  it('should create a program named "frontmcp"', async () => {
+    const program = await createProgram();
     expect(program.name()).toBe('frontmcp');
   });
 
-  it('should have a version set from package.json', () => {
-    const program = createProgram();
+  it('should have a version set from package.json', async () => {
+    const program = await createProgram();
     expect(program.version()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('should register all top-level commands', () => {
-    const program = createProgram();
+  it('should register all top-level commands', async () => {
+    const program = await createProgram();
     const names = program.commands.map((c) => c.name()).sort();
     expect(names).toEqual([
       'build',
@@ -42,7 +42,7 @@ describe('createProgram', () => {
   });
 
   it('should parse build --target option', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     // Prevent the action from running (we only test parsing)
     const buildCmd = program.commands.find((c) => c.name() === 'build');
@@ -58,7 +58,7 @@ describe('createProgram', () => {
   });
 
   it('should parse start with name and --port option', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     const startCmd = program.commands.find((c) => c.name() === 'start');
     if (!startCmd) throw new Error('Expected start command to exist');
@@ -74,7 +74,7 @@ describe('createProgram', () => {
   });
 
   it('should parse test with --runInBand and --timeout', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     const testCmd = program.commands.find((c) => c.name() === 'test');
     if (!testCmd) throw new Error('Expected test command to exist');
@@ -90,7 +90,7 @@ describe('createProgram', () => {
   });
 
   it('should parse logs with name and --follow --lines', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     const logsCmd = program.commands.find((c) => c.name() === 'logs');
     if (!logsCmd) throw new Error('Expected logs command to exist');
@@ -108,7 +108,7 @@ describe('createProgram', () => {
   });
 
   it('should exit with error for unknown commands', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     program.configureOutput({ writeErr: () => {} });
 
@@ -116,7 +116,7 @@ describe('createProgram', () => {
   });
 
   it('should exit via throw on --help (commander exitOverride)', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     program.configureOutput({ writeOut: () => {} });
 
@@ -124,7 +124,7 @@ describe('createProgram', () => {
   });
 
   it('should exit via throw on --version (commander exitOverride)', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     program.configureOutput({ writeOut: () => {} });
 
@@ -132,7 +132,7 @@ describe('createProgram', () => {
   });
 
   it('should parse build with --out-dir', async () => {
-    const program = createProgram();
+    const program = await createProgram();
     program.exitOverride();
     const buildCmd = program.commands.find((c) => c.name() === 'build');
     if (!buildCmd) throw new Error('Expected build command to exist');
