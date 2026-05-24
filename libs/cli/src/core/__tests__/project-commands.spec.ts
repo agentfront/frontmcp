@@ -76,9 +76,12 @@ describe('registerProjectCommands', () => {
     });
     await program.parseAsync(['node', 'frontmcp', 'deploy', 'prod', '--dry-run']);
     expect(captured).not.toBeNull();
-    expect(captured!.args[0]).toBe('prod');
-    expect(captured!.opts.dryRun).toBe(true);
-    expect(captured!.opts.concurrency).toBe(4);
+    // Narrow via type guard so the field reads don't need `!`.
+    if (!captured) throw new Error('captured was null after parseAsync');
+    const { args: capturedArgs, opts: capturedOpts } = captured;
+    expect(capturedArgs[0]).toBe('prod');
+    expect(capturedOpts.dryRun).toBe(true);
+    expect(capturedOpts.concurrency).toBe(4);
   });
 
   it('registers multiple commands with kebab/colon names', async () => {
@@ -278,6 +281,32 @@ describe('registerProjectCommands', () => {
     });
     await program.parseAsync(['node', 'frontmcp', 'inspect', 'a.txt', 'b.txt', 'c.txt']);
     expect(captured).not.toBeNull();
-    expect(captured![0]).toEqual(['a.txt', 'b.txt', 'c.txt']);
+    if (!captured) throw new Error('captured was null after parseAsync');
+    expect(captured[0]).toEqual(['a.txt', 'b.txt', 'c.txt']);
+  });
+
+  it('ProjectCommandFailedError carries verb, exitCode, signal, and a formatted message', () => {
+    // Direct constructor coverage so the error class can be inspected by
+    // callers (e.g. a global error reporter) without going through the
+    // spawn path. Mirrors the two real-world failure shapes the dispatch
+    // path emits: a numeric exit code and a signal termination.
+    const exitErr = new ProjectCommandFailedError('fail', 7, null);
+    expect(exitErr).toBeInstanceOf(Error);
+    expect(exitErr.name).toBe('ProjectCommandFailedError');
+    expect(exitErr.verb).toBe('fail');
+    expect(exitErr.exitCode).toBe(7);
+    expect(exitErr.signal).toBeNull();
+    expect(exitErr.message).toMatch(/fail/);
+    expect(exitErr.message).toMatch(/7/);
+
+    // Signal-terminated processes still carry a placeholder exitCode
+    // (dispatch uses `1`) because the ctor types exitCode as `number`.
+    const signalErr = new ProjectCommandFailedError('kill', 1, 'SIGTERM');
+    expect(signalErr).toBeInstanceOf(Error);
+    expect(signalErr.name).toBe('ProjectCommandFailedError');
+    expect(signalErr.verb).toBe('kill');
+    expect(signalErr.signal).toBe('SIGTERM');
+    expect(signalErr.message).toMatch(/kill/);
+    expect(signalErr.message).toMatch(/SIGTERM/);
   });
 });

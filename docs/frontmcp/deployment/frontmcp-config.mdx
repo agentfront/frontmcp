@@ -310,6 +310,21 @@ ship alongside the built-in `frontmcp` commands. Each verb spawns a
 runner module from the project (TS or JS) as a child process, so the
 project's own code stays out of the CLI's process.
 
+Verb names must match `/^[a-zA-Z][a-zA-Z0-9:_-]*$/` — start with a letter,
+then letters, digits, `:`, `_`, or `-`. Examples: `deploy`, `db-migrate`,
+`project:init`. Names that match a built-in verb (see [Reserved Verbs](#reserved-verbs)
+below) are rejected at config load.
+
+Each command entry accepts:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | string | yes | Path to the runner module (TS or JS). |
+| `description` | string | no | Shown in `frontmcp --help` and `--list-commands`. |
+| `arguments` | array | no | Positional argument definitions (variadic must be last). |
+| `options` | array | no | Long/short flag definitions with optional defaults. |
+| `hidden` | boolean | no | When `true`, the verb still runs but is omitted from help output and `--list-commands`. Useful for internal scripts you don't want surfaced to end users. |
+
 ```typescript
 // frontmcp.config.ts
 import { defineConfig } from 'frontmcp';
@@ -331,6 +346,11 @@ export default defineConfig({
       'db-migrate': {
         entry: './scripts/migrate.ts',
         description: 'Run pending database migrations',
+      },
+      'internal:reindex': {
+        entry: './scripts/reindex.ts',
+        description: 'Rebuild local search index',
+        hidden: true, // omitted from --help and --list-commands
       },
     },
   },

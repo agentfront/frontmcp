@@ -14,21 +14,28 @@ import { registerProjectCommands } from './project-commands';
 import { getSelfVersion } from './version';
 
 /**
- * Skip project-command registration for metadata-only invocations
- * (`frontmcp`, `frontmcp --version`, `frontmcp -h`, `frontmcp --help` with
- * no verb) so users don't pay the config-load cost on the help/version
- * hot paths. `--list-commands` DOES need the load — that's the whole
- * point of the flag.
+ * Skip project-command registration for invocations that only print the
+ * package version (`frontmcp --version` / `-V`) — those don't need the
+ * config-load cost.
+ *
+ * Bare `frontmcp` and `frontmcp --help` / `-h` DO need the load: both
+ * render the help banner, which must include project verbs registered
+ * via `cli.commands` (issue #409). `--list-commands` also needs the
+ * load — that's the whole point of the flag.
  */
 function shouldSkipProjectCommandLoad(argv: string[]): boolean {
   const args = argv.slice(2);
-  if (args.length === 0) return true;
+  // Bare `frontmcp` shows the help banner → must include project verbs.
+  if (args.length === 0) return false;
   const firstVerbIdx = args.findIndex((a) => !a.startsWith('-'));
   if (firstVerbIdx !== -1) return false;
-  // No verb token — pure flag invocation. Skip unless one of those flags
-  // is --list-commands (which needs the project commands to enumerate).
+  // No verb token — pure flag invocation. `--list-commands` and the
+  // help flags all render output that must include project verbs.
   if (args.includes('--list-commands')) return false;
-  const metadataFlags = new Set(['--version', '-V', '--help', '-h']);
+  if (args.includes('--help') || args.includes('-h')) return false;
+  // What's left is --version / -V (or any pure metadata flag that
+  // doesn't render the verb listing). Skip the project-command load.
+  const metadataFlags = new Set(['--version', '-V']);
   return args.every((a) => metadataFlags.has(a));
 }
 

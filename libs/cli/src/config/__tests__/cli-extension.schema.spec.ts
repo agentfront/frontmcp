@@ -70,8 +70,11 @@ describe('cliExtensionConfigSchema', () => {
       if (!result.success) {
         const collisionIssue = result.error.issues.find((i) => /collides with a built-in/.test(i.message));
         expect(collisionIssue).toBeDefined();
-        expect(collisionIssue!.message).toMatch(/dev/);
-        expect(collisionIssue!.message).toMatch(/project:/);
+        // Narrow via if-guard so we don't need `!` to access `.message`.
+        if (collisionIssue) {
+          expect(collisionIssue.message).toMatch(/dev/);
+          expect(collisionIssue.message).toMatch(/project:/);
+        }
       }
     });
   });
