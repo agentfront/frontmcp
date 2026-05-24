@@ -2,6 +2,7 @@ import { Command } from 'commander';
 
 import { registerBuildCommands } from '../commands/build/register';
 import { registerDevCommands } from '../commands/dev/register';
+import { registerInstallCommands } from '../commands/install/register';
 import { registerMcpbCommands } from '../commands/mcpb/register';
 import { registerPackageCommands } from '../commands/package/register';
 import { registerPmCommands } from '../commands/pm/register';
@@ -25,6 +26,7 @@ export function createProgram(): Command {
   registerPackageCommands(program);
   registerSkillsCommands(program);
   registerMcpbCommands(program);
+  registerInstallCommands(program);
   customizeHelp(program);
 
   return program;

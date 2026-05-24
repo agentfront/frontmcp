@@ -208,6 +208,14 @@ export async function buildExec(
       console.log(`${c('green', '[build:exec]')} copied ${copiedCount} skill content file(s) to _skills/`);
     }
 
+    // bin-meta.json (issue #411) — sidecar carrying everything the per-bin
+    // `<bin> install -p claude|codex` needs without re-running schema
+    // extraction at install time. The bin-runtime install command reads
+    // this file + the staged _skills/ directory and hands the result to the
+    // shared plugin-emitter.
+    const { writeBinMeta } = await import('./bin-meta.js');
+    await writeBinMeta(outDir, config, schema);
+
     // Log tool name conflicts
     const cliConfig = config.cli || { enabled: true };
     const excludeTools = cliConfig.excludeTools || [];
@@ -252,6 +260,15 @@ export async function buildExec(
       path.join(tempDir, 'daemon-client.js'),
       generateDaemonClientSource(),
     );
+
+    // Issue #411 — copy the compiled plugin-emitter so the per-bin
+    // `<bin> install -p claude|codex` can `require('./plugin-emitter')`.
+    // esbuild then bundles it (and its `@frontmcp/utils` deps) into the
+    // final CLI bundle. Tolerate absence in test/source-only contexts.
+    const pluginEmitterSrc = path.join(__dirname, 'cli-runtime', 'plugin-emitter.js');
+    if (fs.existsSync(pluginEmitterSrc)) {
+      fs.copyFileSync(pluginEmitterSrc, path.join(tempDir, 'plugin-emitter.js'));
+    }
 
     // Generate CLI entry
     const cliEntrySource = generateCliEntry({

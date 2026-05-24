@@ -54,6 +54,7 @@ Router for adding observability to FrontMCP servers. Covers distributed tracing 
 | Create custom spans in tools/plugins               | `references/telemetry-api.md`         |
 | Connect Coralogix, Datadog, Logz.io, Grafana       | `references/vendor-integrations.md`   |
 | Test that spans and logs are correct               | `references/testing-observability.md` |
+| Expose Prometheus `/metrics` endpoint              | `references/metrics-endpoint.md`      |
 
 ## Step 2: Enable Observability
 
@@ -83,13 +84,14 @@ Follow the scenario routing table above to find the right reference for your use
 
 ## Scenario Routing Table
 
-| Scenario                             | Reference                             | Description                                                                 |
-| ------------------------------------ | ------------------------------------- | --------------------------------------------------------------------------- |
-| Enable OpenTelemetry tracing         | `references/tracing-setup.md`         | Zero-config auto-instrumentation, setupOTel(), span hierarchy               |
-| Add JSON logs with trace correlation | `references/structured-logging.md`    | Sinks (stdout, console, OTLP, winston, pino), redaction, log format         |
-| Custom spans in tools/plugins        | `references/telemetry-api.md`         | `this.telemetry.startSpan()`, `withSpan()`, `addEvent()`, `setAttributes()` |
-| Connect to monitoring platforms      | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                      |
-| Test spans and log entries           | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns       |
+| Scenario                              | Reference                             | Description                                                                 |
+| ------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| Enable OpenTelemetry tracing          | `references/tracing-setup.md`         | Zero-config auto-instrumentation, setupOTel(), span hierarchy               |
+| Add JSON logs with trace correlation  | `references/structured-logging.md`    | Sinks (stdout, console, OTLP, winston, pino), redaction, log format         |
+| Custom spans in tools/plugins         | `references/telemetry-api.md`         | `this.telemetry.startSpan()`, `withSpan()`, `addEvent()`, `setAttributes()` |
+| Connect to monitoring platforms       | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                      |
+| Test spans and log entries            | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns       |
+| Expose Prometheus `/metrics` endpoint | `references/metrics-endpoint.md`      | Off-by-default Prometheus scrape endpoint with process + framework counters |
 
 ## Common Patterns
 
@@ -186,6 +188,12 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
 | [`test-custom-spans`](./examples/testing-observability/test-custom-spans.md)       | Basic        | Verify that your tool creates the expected child spans with correct attributes.             |
 | [`test-log-correlation`](./examples/testing-observability/test-log-correlation.md) | Intermediate | Verify that structured log entries include trace context fields for correlation with spans. |
+
+### `metrics-endpoint`
+
+| Example                                                                             | Level | Description                                                          |
+| ----------------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------- |
+| [`enable-metrics-endpoint`](./examples/metrics-endpoint/enable-metrics-endpoint.md) | Basic | Turn on the /metrics endpoint with defaults and scrape it with curl. |
 
 ## Accessing This Skill
 

@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { toolGenerator } from './tool';
 
 describe('tool generator', () => {
@@ -26,6 +27,25 @@ describe('tool generator', () => {
     const content = tree.read('apps/my-app/src/tools/calculate.tool.ts', 'utf-8');
     expect(content).toContain('class CalculateTool extends ToolContext');
     expect(content).toContain("name: 'calculate'");
+  });
+
+  it('should derive execute() types from schemas (issue #405)', async () => {
+    await toolGenerator(tree, { name: 'calculate', project: 'my-app', skipFormat: true });
+
+    const content = tree.read('apps/my-app/src/tools/calculate.tool.ts', 'utf-8');
+    // The template MUST emit derived types via ToolInputOf / ToolOutputOf
+    // so the schema stays the single source of truth (issue #405).
+    expect(content).toContain('ToolInputOf');
+    expect(content).toContain('ToolOutputOf');
+    expect(content).toContain('type CalculateInput = ToolInputOf<{ inputSchema: typeof inputSchema }>');
+    expect(content).toContain('type CalculateOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>');
+    expect(content).toContain('execute(input: CalculateInput): Promise<CalculateOutput>');
+    // The decorator config (name, description) MUST stay inline so the @Tool
+    // block remains self-contained — only the schemas are hoisted.
+    expect(content).toContain("name: 'calculate'");
+    // And MUST NOT emit the legacy inline-shape annotation that hand-typed
+    // the input next to the schema — the pattern #405 specifically removes.
+    expect(content).not.toContain('async execute(input: { value: string }');
   });
 
   it('should generate in subdirectory when specified', async () => {

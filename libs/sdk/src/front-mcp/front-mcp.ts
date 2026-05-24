@@ -16,6 +16,7 @@ import { InternalMcpError, ServerNotFoundError } from '../errors';
 import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
+import { createProcessStatsCollectorIfEnabled, MetricsService } from '../metrics';
 import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
@@ -64,6 +65,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     // Wire health service from the first scope (if available)
     this.wireHealthService(server);
+
+    // Wire metrics service when configured (issue #397). Off by default.
+    this.wireMetricsService(server);
 
     await server.start();
 
@@ -134,6 +138,34 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
   }
 
+  /**
+   * Wire the `/metrics` service into the server instance (issue #397).
+   *
+   * Off by default — `metrics.enabled` must be set to `true` explicitly.
+   * The `MetricsService` is instantiated here (not in scope construction)
+   * because the endpoint is server-wide, not per-app — counters and process
+   * stats are process-global.
+   */
+  private wireMetricsService(server: FrontMcpServer): void {
+    const serverInstance = server as FrontMcpServerInstance;
+    if (typeof serverInstance.setMetricsService !== 'function') return;
+
+    const metricsConfig = this.config.metrics;
+    if (!metricsConfig || metricsConfig.enabled !== true) {
+      serverInstance.setMetricsConfig(metricsConfig ?? {});
+      return;
+    }
+
+    try {
+      const processCollector = createProcessStatsCollectorIfEnabled(metricsConfig);
+      const service = new MetricsService(metricsConfig, processCollector);
+      serverInstance.setMetricsService(service, metricsConfig);
+    } catch (err) {
+      this.log?.error?.('Failed to wire /metrics endpoint', err as Error);
+      throw err;
+    }
+  }
+
   public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
     const parsedConfig = frontMcpMetadataSchema.parse(options);
 
@@ -174,6 +206,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     // Wire health service for serverless mode
     frontMcp.wireHealthService(server);
+
+    // Wire metrics service for serverless mode (issue #397)
+    frontMcp.wireMetricsService(server);
 
     server.prepare();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');

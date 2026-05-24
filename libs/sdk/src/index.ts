@@ -156,6 +156,11 @@ export type {
 } from './job';
 export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
 
+// Job-management tool classes (issue #408 — opt-in manual registration via
+// @App({ tools: [...] }) when finer-grained control than auto-registration
+// is needed, e.g. to omit register_job / remove_job in production).
+export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './job/tools';
+
 // Workflow exports - managed multi-step job pipelines
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
 export type {
@@ -165,6 +170,15 @@ export type {
   WorkflowChangeKind,
   WorkflowChangeScope,
 } from './workflow';
+
+// Workflow-management tool classes (issue #408)
+export {
+  ExecuteWorkflowTool,
+  GetWorkflowStatusTool,
+  ListWorkflowsTool,
+  RegisterWorkflowTool,
+  RemoveWorkflowTool,
+} from './workflow/tools';
 
 // Channel exports - push-based notification channels for Claude Code
 export {

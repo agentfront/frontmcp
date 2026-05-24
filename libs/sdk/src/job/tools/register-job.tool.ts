@@ -6,7 +6,7 @@ import { JobKind } from '../../common/records/job.record';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
-  name: 'register-job',
+  name: 'register_job',
   description: 'Register a dynamic job that runs in a sandboxed environment.',
   inputSchema: {
     name: z.string().describe('Job name'),
