@@ -163,6 +163,13 @@ async function getProjectExtraction(cwd: string): Promise<{
         await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
       }
     } catch (err) {
+      // Drop the cache entry so the NEXT install from this cwd retries
+      // extraction — without this, a transient esbuild/SDK-boot failure
+      // would freeze the project at `{ skills: [], commands: [] }` for
+      // the rest of the process even after the user fixes the entry.
+      // The current caller still gets the empty fallback so the install
+      // itself doesn't crash.
+      cachedExtractionByCwd.delete(cwd);
       process.stderr.write(
         c(
           'yellow',
@@ -174,6 +181,9 @@ async function getProjectExtraction(cwd: string): Promise<{
       return { skills: [], commands: [] };
     }
   })();
+  // Set BEFORE awaiting so concurrent callers within the same install
+  // (collectSkillsFromProject + collectPromptsFromProject) share the
+  // single bundle+extract pass. The catch above un-sets on failure.
   cachedExtractionByCwd.set(cwd, extractionPromise);
   return extractionPromise;
 }
