@@ -5,7 +5,7 @@ import { WorkflowKind } from '../../common/records/workflow.record';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
-  name: 'register-workflow',
+  name: 'register_workflow',
   description: 'Register a dynamic workflow with step definitions.',
   inputSchema: {
     name: z.string().describe('Workflow name'),
