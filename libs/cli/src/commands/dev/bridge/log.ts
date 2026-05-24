@@ -8,9 +8,8 @@
  */
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 
-import { ensureDir } from '@frontmcp/utils';
+import { dirname, ensureDir, pathResolve } from '@frontmcp/utils';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -47,10 +46,21 @@ export async function createBridgeLogger(options: CreateLoggerOptions = {}): Pro
 
   if (filePath) {
     try {
-      const dir = path.dirname(path.resolve(filePath));
+      const absolutePath = pathResolve(filePath);
+      const dir = dirname(absolutePath);
       await ensureDir(dir);
       stream = fs.createWriteStream(filePath, { flags: 'a' });
-      resolvedPath = path.resolve(filePath);
+      // Async write failures (disk full, FD revoked) surface here, not
+      // from the synchronous `stream.write(...)` call. Without this
+      // handler Node turns the event into an unhandled 'error' that
+      // crashes the bridge. Drop the stream and fall back to stderr
+      // for the remainder of the session.
+      stream.on('error', (err) => {
+        process.stderr.write(formatLine('error', 'logger-stream-error', { error: err.message }));
+        stream = undefined;
+        resolvedPath = undefined;
+      });
+      resolvedPath = absolutePath;
     } catch {
       // Stream creation failed (read-only FS, permission denied, …).
       // Fall back to stderr-only logging; stdout stays clean.

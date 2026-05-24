@@ -68,7 +68,13 @@ export function createDevWatcher(options: DevWatcherOptions): DevWatcher {
       try {
         watcher = fs.watch(options.rootDir, { recursive: true }, (_event, filename) => {
           if (!filename) return;
-          const rel = typeof filename === 'string' ? filename : filename.toString('utf-8');
+          // Node's `fs.watch` types `filename` as `string | null` here
+          // (no `encoding: 'buffer'` option set), so a `typeof filename ===
+          // 'string'` narrow leaves the else-branch as `never` and trips
+          // TS2339. `String(filename)` is defensive for any future widening
+          // (e.g., a `Buffer` arriving via a polyfill) without confusing
+          // the type checker.
+          const rel = String(filename);
           if (shouldIgnore(rel)) return;
           fire(rel);
         });

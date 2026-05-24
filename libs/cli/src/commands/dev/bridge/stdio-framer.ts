@@ -50,6 +50,9 @@ export interface StdioFramer {
 export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
   const { input, output, log, onFrame } = options;
   let buffer = '';
+  // True while `output.write` is signalling backpressure. Read by `onData`
+  // to pause the inbound stream so we don't keep buffering frames when the
+  // outbound side can't keep up.
   let paused = false;
   let drainResolvers: Array<() => void> = [];
 
@@ -64,11 +67,20 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
         parsed = JSON.parse(raw);
       } catch (err) {
         log.warn('parse-error', { raw: raw.slice(0, 200), error: (err as Error).message });
-        void write(makeDevError(null, -32700, { reason: 'parse_error' }) as JsonRpcFrame);
+        // `makeDevError` returns a strict JSON-RPC error shape that
+        // structurally satisfies `JsonRpcFrame`; the dev bridge owns both
+        // sides of this constructor, so write() trusts the payload.
+        void write(makeDevError(null, -32700, { reason: 'parse_error' }));
         continue;
       }
       if (!parsed || typeof parsed !== 'object') {
+        // Per JSON-RPC 2.0, every frame must be an object. A bare `42` or
+        // `"string"` line is just as invalid as garbage JSON — emit the
+        // same -32700 envelope so the client doesn't get inconsistent
+        // behaviour depending on whether the parser stage or the shape
+        // check rejected the input.
         log.warn('parse-error', { raw: raw.slice(0, 200), reason: 'not_object' });
+        void write(makeDevError(null, -32700, { reason: 'not_object' }));
         continue;
       }
       void onFrame(parsed as JsonRpcFrame);
@@ -85,14 +97,22 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
       const line = JSON.stringify(frame) + '\n';
       const ok = output.write(line);
       if (ok) return resolve();
-      // Backpressure: pause inbound parsing until drain.
-      paused = true;
+      // Backpressure: pause inbound parsing AND the input stream so we
+      // stop accumulating frames in `buffer` until drain. `input.pause()`
+      // is a no-op on streams that don't support flow-mode pausing.
+      if (!paused) {
+        paused = true;
+        input.pause?.();
+      }
       drainResolvers.push(resolve);
     });
   }
 
   function onDrain(): void {
-    paused = false;
+    if (paused) {
+      paused = false;
+      input.resume?.();
+    }
     const resolvers = drainResolvers;
     drainResolvers = [];
     for (const r of resolvers) r();

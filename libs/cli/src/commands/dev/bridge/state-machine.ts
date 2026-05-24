@@ -80,7 +80,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
     }
   }
 
-  async function flushBufferAsResponses(reason: string, data?: Record<string, unknown>): Promise<void> {
+  async function flushBufferAsResponses(code: number, reason: string, data?: Record<string, unknown>): Promise<void> {
     while (buffer.length > 0) {
       const f = buffer.shift();
       if (!f) break;
@@ -90,7 +90,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
         log.warn('drop-notification', { method: f.method, reason });
         continue;
       }
-      await respond(makeDevError(id, DEV_SERVER_UNREACHABLE, { reason, ...data }));
+      await respond(makeDevError(id, code, { reason, ...data }));
     }
   }
 
@@ -120,14 +120,23 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       buffer.length = 0;
       void (async () => {
         for (const f of drain) {
+          const requestId = typeof f.id === 'string' || typeof f.id === 'number' ? f.id : null;
           // Re-mark as inflight when forwarding; relayUpstream will clear it.
-          if (typeof f.id === 'string' || typeof f.id === 'number') {
-            inflight.set(f.id, { frame: f, forwardedAt: Date.now() });
+          if (requestId !== null) {
+            inflight.set(requestId, { frame: f, forwardedAt: Date.now() });
           }
           try {
             await forward(f);
           } catch (err) {
             log.error('forward-failed', { error: (err as Error).message });
+            // Mirror the live-enqueue failure path: a request that never
+            // reached the child must still resolve on the wire, otherwise
+            // the MCP client sits on `Calling…` forever. Notifications
+            // (`requestId === null`) have no caller waiting on a response.
+            if (requestId !== null) {
+              inflight.delete(requestId);
+              await respond(makeDevError(requestId, DEV_SERVER_UNREACHABLE, { reason: 'forward_failed' }));
+            }
           }
         }
       })();
@@ -160,7 +169,10 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
     onReloadDeadline() {
       log.error('reload-deadline-elapsed', { bufferDepth: buffer.length });
       transition('Degraded', { reason: 'reload_deadline' });
-      void flushBufferAsResponses('deadline');
+      // Deadline path → DEV_RELOAD_DEADLINE (not DEV_SERVER_UNREACHABLE).
+      // The two map to distinct public error codes so clients can
+      // distinguish "watcher reload took too long" from "child crashed".
+      void flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', { deadlineMs: reloadDeadlineMs });
     },
 
     async enqueue(frame: JsonRpcFrame) {
@@ -215,7 +227,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       // Inflight + buffered: respond once so the client's pending RPCs don't
       // dangle past the bridge exit.
       await failInflightAsResponses('stopping');
-      await flushBufferAsResponses('stopping');
+      await flushBufferAsResponses(DEV_SERVER_UNREACHABLE, 'stopping');
     },
   };
 

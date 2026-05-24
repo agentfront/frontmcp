@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 
+import { resolveConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
@@ -87,9 +88,24 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   }
 
   const cwd = process.cwd();
-  const entry = await resolveEntry(cwd, opts.entry);
 
-  // Load .env and .env.local files before starting the server
+  // Issue #400 — resolve frontmcp.config so `entry`, `transport.http.port`,
+  // and `env.shared`/`env.dev` overlays apply. Precedence:
+  //   CLI flag > FRONTMCP_<NAME> env > frontmcp.config field > built-in default.
+  const resolved = await resolveConfig({
+    cwd,
+    mode: 'dev',
+    configPath: typeof opts.config === 'string' ? opts.config : undefined,
+  });
+  const cfg = resolved.config;
+
+  const cliEntry = typeof opts.entry === 'string' ? opts.entry : undefined;
+  const configEntry = typeof cfg?.entry === 'string' ? cfg.entry : undefined;
+  const entry = await resolveEntry(cwd, cliEntry ?? configEntry);
+
+  // Load .env and .env.local files (these win over config env overlays for
+  // parity with existing behavior — file-based env is the deployment escape
+  // hatch and shouldn't be silently overridden by committed config).
   loadDevEnv(cwd);
 
   // Resolve the port BEFORE spawning tsx so EADDRINUSE produces a clean
@@ -107,14 +123,19 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   //      If the user's metadata HARD-CODES `http.port`, the child binds to
   //      that hard-coded value and ignores PORT — the probe is then advisory
   //      only. Documented in docs/frontmcp/deployment/local-dev-server.mdx.
+  const cliPort = typeof opts.port === 'number' ? opts.port : opts.port ? Number(opts.port) : undefined;
+  const configPort = cfg?.transport?.http?.port;
   const port = await resolveDevPort({
-    port: typeof opts.port === 'number' ? opts.port : opts.port ? Number(opts.port) : undefined,
+    port: cliPort ?? configPort,
     autoPort: !!opts.autoPort,
     showConflict: !!opts.showConflict,
     envPort: process.env['PORT'],
   });
 
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
+  if (resolved.configPath || resolved.configDir) {
+    console.log(`${c('gray', '[dev]')} config: ${resolved.configPath ?? resolved.configDir}`);
+  }
   console.log(`${c('cyan', '[dev]')} listening on port: ${port}`);
   console.log(
     `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(
@@ -133,7 +154,10 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // propagates cleanly because no intermediate shell sits between us and
   // the child process.
   const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const childEnv = { ...process.env, PORT: String(port) };
+  // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
+  // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
+  // into `process.env` above, so they win (they're closer to deployment).
+  const childEnv = { ...resolved.effectiveEnv, ...process.env, PORT: String(port) };
   const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
     env: childEnv,

@@ -22,8 +22,9 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
+
+import { randomUUID } from '@frontmcp/utils';
 
 import type { ParsedArgs } from '../../../core/args';
 import { resolveEntry } from '../../../shared/fs';
@@ -32,7 +33,7 @@ import { createBridgeLogger, type BridgeLogger } from './log';
 import { createBridgeStateMachine, type BridgeStateMachine } from './state-machine';
 import { createStdioFramer, type JsonRpcFrame, type StdioFramer } from './stdio-framer';
 import { createHttpUpstream, createPipeUpstream, type UpstreamClient } from './upstream-client';
-import { createDevWatcher, type DevWatcher } from './watcher';
+import { createDevWatcher } from './watcher';
 
 interface RuntimeBridgeOptions {
   entry: string;
@@ -136,8 +137,18 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       fsm.onChildReady();
     },
     onExit: (reason) => {
-      void upstream?.close();
+      // Don't drop the close() promise — an in-flight HTTP request or SSE
+      // body read can reject (e.g. AbortError when we abort it ourselves),
+      // and an unhandled rejection here would crash the bridge on the
+      // next tick. Hand the rejection to the logger; the child is dead
+      // either way so we always proceed to onChildExit.
+      const closingUpstream = upstream;
       upstream = undefined;
+      void closingUpstream?.close().catch((err: unknown) => {
+        log.error('upstream-stop-error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
       fsm.onChildExit(reason);
     },
   });
@@ -153,15 +164,26 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   }
 
   // ─── watcher → restart on file change ───
-  const watchRoot = path.dirname(path.resolve(runtime.entry));
+  // Watch the project root (cwd), not just the entry's directory: shared
+  // helpers, `frontmcp.config.ts`, and `tsconfig.json` all live above
+  // `src/main.ts` and must trigger a reload too. The recursive watcher
+  // already debounces and filters via `shouldIgnore` so the wider scope
+  // doesn't generate spurious reloads.
   const watcher = createDevWatcher({
-    rootDir: watchRoot,
+    rootDir: cwd,
     log,
     onChange: (trigger) => {
       fsm.onWatcherEvent(trigger);
       void (async () => {
+        // Defensive — `supervisor` is captured in this closure after the
+        // initial assignment above, but a runtime check keeps the
+        // non-null assertion off the call site.
+        if (!supervisor) {
+          log.error('restart-failed', { error: 'supervisor not initialised', trigger });
+          return;
+        }
         try {
-          await supervisor!.restart();
+          await supervisor.restart();
         } catch (err) {
           log.error('restart-failed', { error: (err as Error).message });
         }

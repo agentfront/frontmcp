@@ -19,8 +19,12 @@ export function registerDevCommands(program: Command): void {
     .option('--log-file <path>', 'Bridge log file path', './.frontmcp/dev.log')
     .option('--buffer-size <n>', 'Max RPCs buffered during reload', (v) => parseInt(v, 10))
     .option('--reload-deadline-ms <ms>', 'Time to wait for a reload to complete', (v) => parseInt(v, 10))
-    .action(async (options) => {
+    .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runDev } = await import('./dev.js');
+      // Issue #400 — forward the top-level --config flag into the command's
+      // ParsedArgs so `runDev`'s resolveConfig() call picks it up.
+      const topOpts = cmd.parent?.opts?.() ?? {};
+      if (typeof topOpts['config'] === 'string') options.config = topOpts['config'];
       await runDev(toParsedArgs('dev', [], options));
     });
 
@@ -33,8 +37,10 @@ export function registerDevCommands(program: Command): void {
     .option('-v, --verbose', 'Show verbose test output')
     .option('-t, --timeout <ms>', 'Set test timeout (default: 60000ms)', parseInt)
     .option('-c, --coverage', 'Collect test coverage')
-    .action(async (patterns: string[], options) => {
+    .action(async (patterns: string[], options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runTest } = await import('./test.js');
+      const topOpts = cmd.parent?.opts?.() ?? {};
+      if (typeof topOpts['config'] === 'string') options.config = topOpts['config'];
       await runTest(toParsedArgs('test', patterns, options));
     });
 
@@ -57,8 +63,12 @@ export function registerDevCommands(program: Command): void {
   program
     .command('inspector')
     .description('Launch MCP Inspector (npx @modelcontextprotocol/inspector)')
-    .action(async () => {
+    .action(async (_args, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runInspector } = await import('./inspector.js');
-      await runInspector();
+      const opts = cmd.parent?.opts?.() ?? {};
+      await runInspector({
+        _: [],
+        config: typeof opts['config'] === 'string' ? (opts['config'] as string) : undefined,
+      } as never);
     });
 }

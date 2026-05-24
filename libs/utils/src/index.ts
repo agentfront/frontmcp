@@ -24,7 +24,17 @@ export {
 export type { ParsedUriTemplate } from './uri';
 
 // Path utilities
-export { trimSlashes, joinPath, pathResolve, pathJoin, basename, dirname, extname, isAbsolute } from './path';
+export {
+  trimSlashes,
+  joinPath,
+  pathResolve,
+  pathJoin,
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  pathToFileURL,
+} from './path';
 
 // Content utilities
 export { sanitizeToJson, inferMimeType, findNonFiniteNumber } from './content';
@@ -193,6 +203,7 @@ export {
   resetRuntimeContext,
   detectRuntimeContext,
   isEntryAvailable,
+  checkEntryAvailability,
   entryAvailabilitySchema,
 } from './env';
 export type { RuntimeContext, EntryAvailability } from './env';

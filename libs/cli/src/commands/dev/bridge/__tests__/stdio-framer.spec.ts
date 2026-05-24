@@ -108,4 +108,75 @@ describe('stdio-framer (issue #399)', () => {
 
     expect(frames).toHaveLength(1);
   });
+
+  it('normalizes CRLF line endings (\\r\\n) just like LF', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const { logger } = makeLog();
+    const frames: JsonRpcFrame[] = [];
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    framer.start();
+
+    // Windows/CRLF-shipped JSON-RPC frames must parse the same as LF.
+    input.write('{"jsonrpc":"2.0","id":1,"method":"crlf"}\r\n');
+    await new Promise((r) => setImmediate(r));
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ id: 1, method: 'crlf' });
+  });
+
+  it('emits a -32700 parse error for non-object JSON (`42`, "string") and never invokes onFrame', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const written: string[] = [];
+    output.on('data', (chunk: Buffer) => written.push(chunk.toString('utf-8')));
+    const { logger, lines } = makeLog();
+    const frames: JsonRpcFrame[] = [];
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: (f) => frames.push(f) });
+    framer.start();
+
+    input.write('42\n');
+    input.write('"string"\n');
+    await new Promise((r) => setImmediate(r));
+
+    // Neither bare value reached onFrame — they're valid JSON but the
+    // JSON-RPC envelope MUST be an object, so the framer rejects them
+    // upstream of onFrame.
+    expect(frames).toHaveLength(0);
+    // Two `not_object` parse-error log entries (one per malformed line).
+    const notObjectWarnings = lines.filter((l) => l.message === 'parse-error' && l.data?.['reason'] === 'not_object');
+    expect(notObjectWarnings).toHaveLength(2);
+    // The framer should also write two -32700 error responses on the wire.
+    const parseErrorResponses = written.filter((l) => l.includes('-32700'));
+    expect(parseErrorResponses).toHaveLength(2);
+  });
+
+  it('write() defers resolution until the output stream drains under backpressure', async () => {
+    const input = new PassThrough();
+    // Tiny highWaterMark forces `write()` to return false immediately.
+    const output = new PassThrough({ highWaterMark: 1 });
+    const { logger } = makeLog();
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: () => undefined });
+    framer.start();
+
+    let resolved = false;
+    const writePromise = framer.write({ jsonrpc: '2.0', id: 1, result: { payload: 'x'.repeat(1024) } });
+    void writePromise.then(() => {
+      resolved = true;
+    });
+
+    // Give the event loop a tick — the write should still be queued
+    // waiting for the consumer to drain the buffer.
+    await new Promise((r) => setImmediate(r));
+    expect(resolved).toBe(false);
+
+    // Drain the buffer; the framer's 'drain' handler resolves the queued
+    // write promise.
+    while (output.read() !== null) {
+      // consume everything
+    }
+    await new Promise((r) => setImmediate(r));
+    await writePromise;
+    expect(resolved).toBe(true);
+  });
 });

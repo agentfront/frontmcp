@@ -42,9 +42,16 @@ export interface HttpUpstreamOptions extends UpstreamClientOptions {
 
 export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient {
   const { log, url, onFrame, sessionId } = options;
+  // One controller per in-flight request — `close()` aborts whatever's
+  // currently outstanding (an in-progress fetch or a long-running SSE
+  // body read) so the bridge's reload path doesn't hang on a child that
+  // already died. Cleared in `finally` so the next send() gets a fresh
+  // controller and the close from a previous request isn't sticky.
   let abortController: AbortController | undefined;
 
   async function send(frame: JsonRpcFrame): Promise<void> {
+    abortController = new AbortController();
+    const signal = abortController.signal;
     try {
       const headers: Record<string, string> = {
         'content-type': 'application/json',
@@ -56,6 +63,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
         method: 'POST',
         headers,
         body: JSON.stringify(frame),
+        signal,
       });
 
       if (!res.ok) {
@@ -95,7 +103,15 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
         await onFrame(body);
       }
     } catch (err) {
-      log.error('http-upstream-error', { error: (err as Error).message, method: frame.method });
+      // AbortError surfaces when close() interrupts an in-flight request
+      // during reload; that's expected, so log it at info-not-error.
+      if ((err as { name?: string }).name === 'AbortError') {
+        log.info('http-upstream-aborted', { method: frame.method });
+      } else {
+        log.error('http-upstream-error', { error: (err as Error).message, method: frame.method });
+      }
+    } finally {
+      abortController = undefined;
     }
   }
 
@@ -103,6 +119,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
     send,
     close: async () => {
       abortController?.abort();
+      abortController = undefined;
     },
   };
 }
