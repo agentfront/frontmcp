@@ -61,13 +61,33 @@ frontmcp skills install frontmcp-development --provider claude
 
 # Install a skill for Codex
 frontmcp skills install frontmcp-setup --provider codex
+
+# Bulk install — every skill in a category, all at once
+frontmcp skills install --category development --provider claude
+
+# Export a skill as a Cursor rule file (for skills-unaware IDEs)
+frontmcp skills export --name frontmcp-development --target cursor
+
+# Publish a skill to the Smithery marketplace
+frontmcp skills publish frontmcp-development --target smithery --dry-run
 ```
 
 ## CLI Commands
 
+The `frontmcp skills` command tree currently has six subcommands:
+`search`, `list`, `install`, `read`, `export`, `publish`.
+
+<!-- AUTOGEN:skills-cli:start -->
+
 ### `frontmcp skills search <query>`
 
-Semantic search through the catalog using weighted text matching (description 3x, tags 2x, name 1x):
+Semantic search through the catalog using weighted text matching (description 3x, tags 2x, name 1x).
+
+| Flag                  | Description               | Default |
+| --------------------- | ------------------------- | ------- |
+| `-n, --limit <count>` | Maximum results to return | `10`    |
+| `-t, --tag <tag>`     | Filter by tag             | —       |
+| `-c, --category <c>`  | Filter by category        | —       |
 
 ```bash
 frontmcp skills search "authentication oauth"
@@ -77,7 +97,13 @@ frontmcp skills search "plugin hooks" --tag middleware --limit 5
 
 ### `frontmcp skills list`
 
-List all skills, optionally filtered:
+List all skills, optionally filtered.
+
+| Flag                  | Description                                                | Default |
+| --------------------- | ---------------------------------------------------------- | ------- |
+| `-c, --category <c>`  | Filter by category                                         | —       |
+| `-t, --tag <tag>`     | Filter by tag                                              | —       |
+| `-b, --bundle <name>` | Filter by bundle preset (`recommended`, `minimal`, `full`) | —       |
 
 ```bash
 frontmcp skills list                          # All skills
@@ -86,9 +112,14 @@ frontmcp skills list --tag redis              # Skills tagged with redis
 frontmcp skills list --bundle recommended     # Recommended bundle
 ```
 
-### `frontmcp skills read <name> [reference]`
+### `frontmcp skills read <nameOrPath> [reference]`
 
-Read a skill's main SKILL.md, a specific reference, or list available references:
+Read a skill's main SKILL.md, a specific reference, or list available references.
+
+| Flag                     | Description                                                        | Default |
+| ------------------------ | ------------------------------------------------------------------ | ------- |
+| `--refs`                 | List all available references for the skill                        | `false` |
+| `--examples [reference]` | List examples for the skill, optionally filtered by reference name | —       |
 
 ```bash
 # Read main skill content
@@ -96,6 +127,10 @@ frontmcp skills read frontmcp-development
 
 # List all references for a skill
 frontmcp skills read frontmcp-development --refs
+
+# List every example bundled with the skill (or filter by reference)
+frontmcp skills read frontmcp-development --examples
+frontmcp skills read frontmcp-development --examples create-tool
 
 # Read a specific reference by name
 frontmcp skills read frontmcp-development create-tool
@@ -105,19 +140,164 @@ frontmcp skills read frontmcp-development:references/create-tool.md
 frontmcp skills read frontmcp-development:scripts/setup.sh
 ```
 
-### `frontmcp skills install <name>`
+### `frontmcp skills install [name]`
 
-Copy a skill to a provider-specific directory:
+Install one or many skills to a provider-specific directory. `[name]` is
+optional when one of `--all`, `--tag`, or `--category` is supplied —
+those flags select skills in bulk.
+
+| Flag                        | Description                                           | Default  |
+| --------------------------- | ----------------------------------------------------- | -------- |
+| `-p, --provider <provider>` | Target provider: `claude` or `codex`                  | `claude` |
+| `-d, --dir <directory>`     | Custom install directory (overrides provider default) | —        |
+| `-a, --all`                 | Install **every** skill in the catalog                | `false`  |
+| `-t, --tag <tag>`           | Install every skill matching a tag                    | —        |
+| `-c, --category <c>`        | Install every skill in a category                     | —        |
 
 ```bash
-# Claude Code — installs to .claude/skills/<name>/SKILL.md
-frontmcp skills install frontmcp-development --provider claude
+# Single-skill install (positional name)
+frontmcp skills install frontmcp-development --provider claude   # → .claude/skills/<name>/SKILL.md
+frontmcp skills install frontmcp-setup --provider codex          # → .codex/skills/<name>/SKILL.md
+frontmcp skills install frontmcp-guides --dir ./my-skills        # custom destination
 
-# Codex — installs to .codex/skills/<name>/SKILL.md
-frontmcp skills install frontmcp-setup --provider codex
+# Bulk install — see "Bulk install patterns" below for the full decision matrix
+frontmcp skills install --all --provider claude
+frontmcp skills install --category development --provider claude
+frontmcp skills install --tag middleware --provider codex
+```
 
-# Custom directory
-frontmcp skills install frontmcp-guides --dir ./my-skills
+### `frontmcp skills export`
+
+Convert one or many catalog skills into a rule file for IDEs that
+**don't** speak the skills protocol (Cursor, Windsurf, Copilot). The
+emitted file lives in the current directory by default.
+
+| Flag                    | Description                                           | Default  |
+| ----------------------- | ----------------------------------------------------- | -------- |
+| `-t, --target <target>` | Target IDE: `cursor`, `windsurf`, or `copilot`        | `cursor` |
+| `-n, --name <name>`     | Skill name to export (required unless `--all` is set) | —        |
+| `-a, --all`             | Export **every** skill in the catalog                 | `false`  |
+| `-d, --out <directory>` | Output directory                                      | `cwd`    |
+
+```bash
+frontmcp skills export --name frontmcp-development --target cursor
+frontmcp skills export --name frontmcp-setup --target windsurf
+frontmcp skills export --all --target copilot --out ./.github
+```
+
+See **Other AI clients (Cursor / Windsurf / Copilot)** below for the
+output-filename mapping per target.
+
+### `frontmcp skills publish <name>`
+
+Publish a skill to a public marketplace (Smithery or Glama).
+
+| Flag                    | Description                                                      | Default    |
+| ----------------------- | ---------------------------------------------------------------- | ---------- |
+| `-t, --target <target>` | Marketplace: `smithery` or `glama`                               | `smithery` |
+| `--token <token>`       | API token (defaults to `SMITHERY_TOKEN` / `GLAMA_TOKEN` env var) | env        |
+| `--repository <url>`    | Repository URL to advertise on the marketplace                   | —          |
+| `--dry-run`             | Print the payload + endpoint without submitting                  | `false`    |
+
+```bash
+# Dry run against Smithery (no submission)
+frontmcp skills publish frontmcp-development --dry-run
+
+# Real publish to Glama with a custom repo URL + env-var token
+GLAMA_TOKEN=xxx frontmcp skills publish frontmcp-development \
+  --target glama --repository https://github.com/me/my-frontmcp-server
+```
+
+<!-- AUTOGEN:skills-cli:end -->
+
+## Bulk install patterns
+
+`frontmcp skills install` accepts a single `[name]` OR one of the bulk
+selectors. They are mutually exclusive — pass exactly one. The decision
+matrix:
+
+| Goal                                                  | Command                                            |
+| ----------------------------------------------------- | -------------------------------------------------- |
+| Install one specific skill                            | `frontmcp skills install <name> -p claude`         |
+| Install every skill in the catalog                    | `frontmcp skills install --all -p claude`          |
+| Install all skills in a category (e.g. `development`) | `frontmcp skills install -c development -p claude` |
+| Install all skills with a tag (e.g. `middleware`)     | `frontmcp skills install -t middleware -p codex`   |
+| Install all skills to a non-default directory         | `frontmcp skills install --all -d ./custom-skills` |
+
+Examples:
+
+```bash
+# Onboard a new repo: install everything for Claude Code
+frontmcp skills install --all -p claude
+
+# Scaffold a tools-focused project: only the development category
+frontmcp skills install -c development -p claude
+
+# Cross-IDE setup: install middleware skills into a Codex project
+frontmcp skills install -t middleware -p codex
+
+# Mono-repo with a shared skills folder
+frontmcp skills install --all -d ./shared/.claude/skills
+```
+
+> **Heads up:** `--all` / `--tag` / `--category` make `[name]` optional. Pass
+> exactly one bulk selector OR a `[name]`; combining a positional name with a
+> bulk flag is rejected.
+
+## Other AI clients (Cursor / Windsurf / Copilot)
+
+For IDEs that don't natively load `SKILL.md` files, `frontmcp skills
+export` converts a skill into the target IDE's native rule format and
+writes it into the current directory (or `--out <dir>`).
+
+| Target     | Output path (per skill, relative to `--out` / cwd) | Loaded by      |
+| ---------- | -------------------------------------------------- | -------------- |
+| `cursor`   | `.cursor/rules/<skill>.mdc`                        | Cursor         |
+| `windsurf` | `.windsurfrules` (single file)                     | Windsurf       |
+| `copilot`  | `.github/instructions/<skill>.md`                  | GitHub Copilot |
+
+```bash
+# Cursor: export one skill → .cursor/rules/frontmcp-development.mdc
+frontmcp skills export --name frontmcp-development --target cursor
+
+# Windsurf: export every skill into a single .windsurfrules in the cwd
+frontmcp skills export --all --target windsurf
+
+# Copilot: export every skill, one file per skill, under .github/instructions/
+frontmcp skills export --all --target copilot
+```
+
+> Today `--provider` on `install` accepts `claude` and `codex` only.
+> Cursor / Windsurf / Copilot integration goes through `export` instead
+> because those clients consume rule files, not skill packages.
+
+## Publishing to marketplaces
+
+`frontmcp skills publish <name>` ships a skill to a public catalog so
+other developers can discover and install it.
+
+| Target     | Marketplace           | Token env var    |
+| ---------- | --------------------- | ---------------- |
+| `smithery` | <https://smithery.ai> | `SMITHERY_TOKEN` |
+| `glama`    | <https://glama.ai>    | `GLAMA_TOKEN`    |
+
+The CLI reads the token from the matching env var by default; override
+with `--token <value>`. Use `--dry-run` to inspect the request payload
+before submitting.
+
+```bash
+# Inspect the request without sending it
+frontmcp skills publish frontmcp-development --target smithery --dry-run
+
+# Publish to Smithery with a repo link (token from SMITHERY_TOKEN env)
+SMITHERY_TOKEN=sk_xxx frontmcp skills publish frontmcp-development \
+  --target smithery \
+  --repository https://github.com/me/my-frontmcp-server
+
+# Publish to Glama with an explicit token
+frontmcp skills publish frontmcp-development \
+  --target glama \
+  --token "$GLAMA_TOKEN"
 ```
 
 ## Two Approaches: Static vs Dynamic
@@ -240,13 +420,17 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 
 ## Common Patterns
 
-| Pattern                     | Correct                                                                   | Incorrect                                       | Why                                                                                                    |
-| --------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Installing a skill          | `frontmcp skills install frontmcp-development --provider claude`          | `cp node_modules/.../SKILL.md .claude/skills/`  | The CLI handles directory creation, naming, and reference files automatically                          |
-| Searching skills            | `frontmcp skills search "oauth authentication"`                           | `frontmcp skills list \| grep oauth`            | Search uses weighted text matching (description 3x, tags 2x) for better relevance                      |
-| Choosing delivery mode      | Install 2-4 core skills statically; search the rest on demand             | Install every skill statically into the project | Static skills consume tokens on every agent invocation; keep the set small                             |
-| Updating an installed skill | `frontmcp skills install frontmcp-development --provider claude` (re-run) | Manually editing the installed SKILL.md file    | Re-installing overwrites with the catalog bundled in the installed CLI version and preserves structure |
-| Filtering by category       | `frontmcp skills list --category deployment`                              | `frontmcp skills search "deployment"`           | `--category` uses the manifest taxonomy; search is for free-text queries                               |
+| Pattern                       | Correct                                                                    | Incorrect                                                  | Why                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Installing a skill            | `frontmcp skills install frontmcp-development --provider claude`           | `cp node_modules/.../SKILL.md .claude/skills/`             | The CLI handles directory creation, naming, and reference files automatically                          |
+| Bulk install (entire catalog) | `frontmcp skills install --all --provider claude`                          | Loop over `frontmcp skills install <name>` per skill name  | `--all` resolves the manifest in a single pass and writes consistently into the provider directory     |
+| Bulk install (subset)         | `frontmcp skills install --category development --provider claude`         | `frontmcp skills install --all` followed by manual cleanup | `--category`/`--tag` filter at install time so you only ship the skills you need                       |
+| Searching skills              | `frontmcp skills search "oauth authentication"`                            | `frontmcp skills list \| grep oauth`                       | Search uses weighted text matching (description 3x, tags 2x) for better relevance                      |
+| Choosing delivery mode        | Install 2-4 core skills statically; search the rest on demand              | Install every skill statically into the project            | Static skills consume tokens on every agent invocation; keep the set small                             |
+| Updating an installed skill   | `frontmcp skills install frontmcp-development --provider claude` (re-run)  | Manually editing the installed SKILL.md file               | Re-installing overwrites with the catalog bundled in the installed CLI version and preserves structure |
+| Filtering by category         | `frontmcp skills list --category deployment`                               | `frontmcp skills search "deployment"`                      | `--category` uses the manifest taxonomy; search is for free-text queries                               |
+| Skills-unaware IDE (Cursor)   | `frontmcp skills export --name <skill> --target cursor`                    | `frontmcp skills install <skill> --provider cursor`        | Cursor / Windsurf / Copilot consume rule files; `install` only writes `SKILL.md` packages              |
+| Publishing                    | `frontmcp skills publish <name> --dry-run` first, then without `--dry-run` | Submitting directly without inspecting the payload         | `--dry-run` prints the exact endpoint + body so you can audit before submitting credentials            |
 
 ## Verification Checklist
 
