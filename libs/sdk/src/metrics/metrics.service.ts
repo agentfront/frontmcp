@@ -40,6 +40,14 @@ const PROMETHEUS_CONTENT_TYPE = 'text/plain; version=0.0.4; charset=utf-8';
 // at import time, sdk's init would re-enter observability while observability
 // was still resolving HttpHook, producing `HttpHook is undefined` at decorator
 // application time. require() at first call resolves the cycle naturally.
+interface ProcessStatsCollectorCtorOptions {
+  options?: {
+    eventLoopLag?: boolean;
+    fdCount?: boolean;
+    activeHandles?: boolean;
+  };
+}
+
 type ObservabilityRuntime = {
   getMetricSnapshot: () => CounterSnapshotEntry[];
   renderPrometheusExposition: (counters: CounterSnapshotEntry[], gauges?: GaugeSnapshotEntry[]) => string;
@@ -47,6 +55,7 @@ type ObservabilityRuntime = {
     counters: CounterSnapshotEntry[],
     gauges?: GaugeSnapshotEntry[],
   ) => { counters: CounterSnapshotEntry[]; gauges: GaugeSnapshotEntry[] };
+  ProcessStatsCollector: new (init?: ProcessStatsCollectorCtorOptions) => ProcessStatsCollector;
 };
 
 let observabilityRuntime: ObservabilityRuntime | undefined;
@@ -55,6 +64,27 @@ function loadObservability(): ObservabilityRuntime {
     observabilityRuntime = require('@frontmcp/observability') as ObservabilityRuntime;
   }
   return observabilityRuntime;
+}
+
+/**
+ * Lazily build a `ProcessStatsCollector` when the metrics config selects the
+ * `process` category (or omits `include` entirely, which means "every
+ * category"). Returns `undefined` when process metrics are filtered out so
+ * the per-scrape `process.cpuUsage()` / `monitorEventLoopDelay()` calls don't
+ * run for nothing.
+ *
+ * Uses the same lazy `require('@frontmcp/observability')` as the snapshot
+ * source so the SDK ↔ observability import cycle stays broken at module
+ * init.
+ */
+export function createProcessStatsCollectorIfEnabled(
+  config: MetricsOptionsInterface,
+): ProcessStatsCollector | undefined {
+  const include = config.include;
+  const processEnabled = !include || include.length === 0 || include.includes('process');
+  if (!processEnabled) return undefined;
+  const obs = loadObservability();
+  return new obs.ProcessStatsCollector({ options: config.process });
 }
 
 const MCP_RESERVED_PATH_PREFIXES = ['/mcp', '/sse', '/messages'];

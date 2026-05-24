@@ -96,7 +96,7 @@ cacheHits.inc(1, { tier: 'l1' });
 
 The next scrape will include:
 
-```
+```text
 # TYPE my_cache_hits_total counter
 my_cache_hits_total{tier="l1"} 1
 ```
@@ -151,7 +151,7 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 
 ## Accessing This Skill
 
-This skill is available over MCP under the `skill://metrics-endpoint/SKILL.md` URI per SEP-2640, and as a reference page in the `frontmcp-observability` router.
+This skill is available over MCP under `skill://frontmcp-observability/SKILL.md` per SEP-2640. This reference page is served at `skill://frontmcp-observability/references/metrics-endpoint.md`.
 
 ## Reference
 

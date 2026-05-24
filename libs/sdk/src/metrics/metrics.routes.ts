@@ -71,7 +71,18 @@ export function registerMetricsRoutes(
     res.setHeader?.('Content-Type', result.contentType);
 
     if ((config.format ?? 'prometheus') === 'json') {
-      res.status(200).json(JSON.parse(result.body));
+      try {
+        res.status(200).json(JSON.parse(result.body));
+      } catch {
+        // `getMetrics()` builds the JSON via `JSON.stringify`, so this
+        // branch should be unreachable — but if a downstream override
+        // produces malformed JSON we surface a 500 rather than letting
+        // the parse exception escape the route handler.
+        res.status(500).json({
+          error: 'internal_error',
+          message: 'Failed to serialise metrics JSON',
+        });
+      }
       return;
     }
     if (typeof res.send === 'function') {
@@ -79,6 +90,12 @@ export function registerMetricsRoutes(
       res.send(result.body);
       return;
     }
-    res.status(200).json({ body: result.body });
+    // Prometheus scrape format is `text/plain` — wrapping it in JSON
+    // would silently break every scraper. Surface a 500 instead so the
+    // adapter mismatch is visible.
+    res.status(500).json({
+      error: 'internal_error',
+      message: 'Server adapter does not support Prometheus text format. Use `format: "json"` or upgrade the adapter.',
+    });
   });
 }

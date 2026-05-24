@@ -16,7 +16,7 @@ import { InternalMcpError, ServerNotFoundError } from '../errors';
 import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
-import { MetricsService } from '../metrics';
+import { createProcessStatsCollectorIfEnabled, MetricsService } from '../metrics';
 import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
@@ -148,7 +148,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     try {
-      const service = new MetricsService(metricsConfig);
+      const processCollector = createProcessStatsCollectorIfEnabled(metricsConfig);
+      const service = new MetricsService(metricsConfig, processCollector);
       serverInstance.setMetricsService(service, metricsConfig);
     } catch (err) {
       this.log?.error?.('Failed to wire /metrics endpoint', err as Error);

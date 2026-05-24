@@ -130,4 +130,43 @@ describe('registerMetricsRoutes (issue #397)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ counters: [{ name: 'foo_total', count: 1 }] });
   });
+
+  it('returns 500 (not silent text-wrapped JSON) when the adapter lacks res.send for Prometheus output', async () => {
+    const { server, routes } = makeServer();
+    const service = new MetricsService({ enabled: true }, undefined, {
+      snapshotSource: () => [{ name: 'foo_total', count: 1, attributes: {} }],
+    });
+    registerMetricsRoutes(server, service, { enabled: true });
+
+    // Strip `send` to simulate an adapter that only exposes `json`. We MUST
+    // NOT wrap Prometheus plaintext in a JSON envelope — scrapers would
+    // silently start parsing JSON-as-text and report no metrics. The route
+    // surfaces the adapter mismatch as a 500 instead.
+    const res = new FakeResponse();
+    (res as unknown as { send?: undefined }).send = undefined;
+    await routes[0].handler({ headers: {} }, res);
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({ error: 'internal_error' });
+  });
+
+  it('returns 500 instead of throwing when the JSON body is unparseable', async () => {
+    const { server, routes } = makeServer();
+    const service = new MetricsService({ enabled: true, format: 'json' }, undefined, {
+      snapshotSource: () => [{ name: 'foo_total', count: 1, attributes: {} }],
+    });
+    // Stub getMetrics so the body returned is malformed JSON — defends
+    // the route handler against a future downstream override producing
+    // bad output (the production `getMetrics` always emits valid JSON
+    // via `JSON.stringify`).
+    jest.spyOn(service, 'getMetrics').mockReturnValue({
+      contentType: 'application/json',
+      body: '{not-valid-json',
+    });
+    registerMetricsRoutes(server, service, { enabled: true, format: 'json' });
+
+    const res = new FakeResponse();
+    await routes[0].handler({ headers: {} }, res);
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({ error: 'internal_error' });
+  });
 });

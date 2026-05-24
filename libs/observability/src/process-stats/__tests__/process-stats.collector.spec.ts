@@ -143,6 +143,127 @@ describe('ProcessStatsCollector (issue #397)', () => {
     expect(entries.find((e) => e.name === 'frontmcp_nodejs_open_fds')?.value).toBe(42);
   });
 
+  describe('default probes (no injected overrides)', () => {
+    it('runs end-to-end against real Node APIs and emits CPU + memory + uptime gauges', () => {
+      const collector = new ProcessStatsCollector();
+      const entries = collector.collect();
+      const names = new Set(entries.map((e) => e.name));
+      // CPU is always emitted (process.cpuUsage is everywhere).
+      expect(names.has('frontmcp_process_cpu_seconds_total')).toBe(true);
+      // Memory + uptime come from process.* and never fail.
+      expect(names.has('frontmcp_process_resident_memory_bytes')).toBe(true);
+      expect(names.has('frontmcp_process_heap_bytes')).toBe(true);
+      expect(names.has('frontmcp_process_heap_used_bytes')).toBe(true);
+      expect(names.has('frontmcp_process_external_bytes')).toBe(true);
+      expect(names.has('frontmcp_process_uptime_seconds')).toBe(true);
+      // Every emitted value is a finite non-negative number.
+      for (const entry of entries) {
+        expect(Number.isFinite(entry.value)).toBe(true);
+        expect(entry.value).toBeGreaterThanOrEqual(0);
+      }
+      collector.close();
+    });
+
+    it('honors options.eventLoopLag === false with real defaults', () => {
+      const collector = new ProcessStatsCollector({ options: { eventLoopLag: false } });
+      const entries = collector.collect();
+      expect(entries.find((e) => e.name === 'frontmcp_nodejs_eventloop_lag_seconds')).toBeUndefined();
+      collector.close();
+    });
+
+    it('reads the fd count on Linux and skips it elsewhere via the default probe', () => {
+      const collector = new ProcessStatsCollector();
+      const entries = collector.collect();
+      const fd = entries.find((e) => e.name === 'frontmcp_nodejs_open_fds');
+      if (process.platform === 'linux') {
+        expect(fd?.value).toBeGreaterThan(0);
+      } else {
+        expect(fd).toBeUndefined();
+      }
+      collector.close();
+    });
+
+    it('returns undefined from the default active-handles probe when _getActiveHandles is missing', () => {
+      const original = (process as unknown as { _getActiveHandles?: unknown })._getActiveHandles;
+      try {
+        // Strip the undocumented probe so `defaultGetActiveHandles` hits the
+        // feature-detection bail-out branch.
+        (process as unknown as { _getActiveHandles?: unknown })._getActiveHandles = undefined;
+        const collector = new ProcessStatsCollector();
+        const entries = collector.collect();
+        expect(entries.find((e) => e.name === 'frontmcp_nodejs_active_handles')).toBeUndefined();
+        collector.close();
+      } finally {
+        (process as unknown as { _getActiveHandles?: unknown })._getActiveHandles = original;
+      }
+    });
+
+    it('returns undefined from the default active-requests probe when _getActiveRequests is missing', () => {
+      const original = (process as unknown as { _getActiveRequests?: unknown })._getActiveRequests;
+      try {
+        (process as unknown as { _getActiveRequests?: unknown })._getActiveRequests = undefined;
+        const collector = new ProcessStatsCollector();
+        const entries = collector.collect();
+        expect(entries.find((e) => e.name === 'frontmcp_nodejs_active_requests')).toBeUndefined();
+        collector.close();
+      } finally {
+        (process as unknown as { _getActiveRequests?: unknown })._getActiveRequests = original;
+      }
+    });
+
+    it('returns undefined from the default active-handles probe when the API throws', () => {
+      const original = (process as unknown as { _getActiveHandles?: unknown })._getActiveHandles;
+      try {
+        (process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles = () => {
+          throw new Error('boom');
+        };
+        const collector = new ProcessStatsCollector();
+        const entries = collector.collect();
+        expect(entries.find((e) => e.name === 'frontmcp_nodejs_active_handles')).toBeUndefined();
+        collector.close();
+      } finally {
+        (process as unknown as { _getActiveHandles?: unknown })._getActiveHandles = original;
+      }
+    });
+
+    it('returns undefined from the default active-requests probe when the API throws', () => {
+      const original = (process as unknown as { _getActiveRequests?: unknown })._getActiveRequests;
+      try {
+        (process as unknown as { _getActiveRequests?: () => unknown[] })._getActiveRequests = () => {
+          throw new Error('boom');
+        };
+        const collector = new ProcessStatsCollector();
+        const entries = collector.collect();
+        expect(entries.find((e) => e.name === 'frontmcp_nodejs_active_requests')).toBeUndefined();
+        collector.close();
+      } finally {
+        (process as unknown as { _getActiveRequests?: unknown })._getActiveRequests = original;
+      }
+    });
+  });
+
+  it('drops non-finite event-loop lag samples (NaN/Infinity) so Prometheus never sees them', () => {
+    const histogram = {
+      mean: NaN,
+      percentile: () => Infinity,
+      reset: jest.fn(),
+      disable: jest.fn(),
+    };
+    const collector = new ProcessStatsCollector({
+      cpuUsage: () => ({ user: 0, system: 0 }),
+      memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
+      uptime: () => 0,
+      monitorEventLoopDelay: () => histogram,
+      getActiveHandles: () => undefined,
+      getActiveRequests: () => undefined,
+      readFdCount: () => undefined,
+    });
+    const entries = collector.collect();
+    expect(entries.filter((e) => e.name === 'frontmcp_nodejs_eventloop_lag_seconds')).toEqual([]);
+    // Histogram is still reset so the next scrape sees a fresh window.
+    expect(histogram.reset).toHaveBeenCalledTimes(1);
+  });
+
   it('close() disables the event-loop lag histogram', () => {
     const histogram = makeHistogram({ mean: 0, p99: 0 });
     const collector = new ProcessStatsCollector({

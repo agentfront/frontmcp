@@ -1,5 +1,5 @@
 import { MetricsPathConflictError, MetricsTokenNotConfiguredError } from '../metrics.errors';
-import { MetricsService } from '../metrics.service';
+import { createProcessStatsCollectorIfEnabled, MetricsService } from '../metrics.service';
 
 describe('MetricsService (issue #397)', () => {
   describe('path-conflict guard', () => {
@@ -136,6 +136,30 @@ describe('MetricsService (issue #397)', () => {
       );
       const body = service.getMetrics().body;
       expect(body).toContain('frontmcp_process_uptime_seconds 99');
+    });
+  });
+
+  describe('createProcessStatsCollectorIfEnabled', () => {
+    it("returns a collector when 'include' is omitted (= every category)", () => {
+      const collector = createProcessStatsCollectorIfEnabled({ enabled: true });
+      expect(collector).toBeDefined();
+      // Sanity: the returned object is callable as a collector.
+      expect(typeof collector?.collect).toBe('function');
+    });
+
+    it("returns a collector when 'include' explicitly contains 'process'", () => {
+      const collector = createProcessStatsCollectorIfEnabled({ enabled: true, include: ['process', 'tools'] });
+      expect(collector).toBeDefined();
+    });
+
+    it("returns undefined when 'include' is set but excludes 'process'", () => {
+      const collector = createProcessStatsCollectorIfEnabled({ enabled: true, include: ['tools', 'http'] });
+      expect(collector).toBeUndefined();
+    });
+
+    it("returns a collector when 'include' is an empty array (= every category)", () => {
+      const collector = createProcessStatsCollectorIfEnabled({ enabled: true, include: [] });
+      expect(collector).toBeDefined();
     });
   });
 });

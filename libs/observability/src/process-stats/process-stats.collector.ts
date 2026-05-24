@@ -19,6 +19,8 @@
  *   - All probes are individually toggleable via `MetricsProcessOptions`.
  */
 
+import { readdirSync } from '@frontmcp/utils';
+
 import type { GaugeSnapshotEntry } from '../prometheus/render';
 
 interface MetricsProcessOptions {
@@ -86,8 +88,7 @@ function defaultGetActiveRequests(): unknown[] | undefined {
 function defaultReadFdCount(): number | undefined {
   if (process.platform !== 'linux') return undefined;
   try {
-    const fs = require('node:fs') as typeof import('node:fs');
-    return fs.readdirSync('/proc/self/fd').length;
+    return readdirSync('/proc/self/fd').length;
   } catch {
     return undefined;
   }
