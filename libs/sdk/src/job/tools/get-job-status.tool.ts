@@ -5,10 +5,10 @@ import { GenericServerError, InvalidInputError } from '../../errors';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
 
 @Tool({
-  name: 'get-job-status',
+  name: 'get_job_status',
   description: 'Get the execution status of a job run by runId.',
   inputSchema: {
-    runId: z.string().describe('Run ID returned from execute-job or execute-workflow'),
+    runId: z.string().describe('Run ID returned from execute_job or execute_workflow'),
   },
   outputSchema: {
     runId: z.string(),

@@ -5,7 +5,7 @@ import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
-  name: 'list-workflows',
+  name: 'list_workflows',
   description: 'List registered workflows with optional filtering by tags or labels.',
   inputSchema: {
     tags: z.array(z.string()).optional().describe('Filter by tags'),
