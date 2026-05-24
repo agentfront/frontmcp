@@ -56,6 +56,7 @@ export {
   copyFile,
   cp,
   readdir,
+  readdirSync,
   realpath,
   rm,
   mkdtemp,

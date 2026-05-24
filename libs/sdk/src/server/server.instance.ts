@@ -10,7 +10,9 @@ import {
   type ServerRequestHandler,
 } from '../common';
 import { type HealthOptionsInterface } from '../common/types/options/health';
+import { type MetricsOptionsInterface } from '../common/types/options/metrics';
 import { registerHealthRoutes, type HealthService } from '../health';
+import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
 import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
@@ -22,6 +24,9 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   private healthRouteRegistered = false;
   private _healthService?: HealthService;
   private _healthConfig?: HealthOptionsInterface;
+  private metricsRouteRegistered = false;
+  private _metricsService?: MetricsService;
+  private _metricsConfig?: MetricsOptionsInterface;
 
   constructor(httpConfig: HttpOptions) {
     super();
@@ -75,6 +80,24 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     this._healthConfig = healthConfig;
   }
 
+  /**
+   * Set the metrics service and config for route registration (issue #397).
+   * Must be called before prepare() to enable the `/metrics` endpoint.
+   */
+  setMetricsService(metricsService: MetricsService, metricsConfig: MetricsOptionsInterface): void {
+    this._metricsService = metricsService;
+    this._metricsConfig = metricsConfig;
+  }
+
+  /**
+   * Set metrics config without a service (e.g., when metrics is explicitly disabled
+   * or running on a transport without a listener). Allows prepare() to skip route
+   * registration without ambiguity.
+   */
+  setMetricsConfig(metricsConfig: MetricsOptionsInterface): void {
+    this._metricsConfig = metricsConfig;
+  }
+
   prepare() {
     if (!this.healthRouteRegistered) {
       this.healthRouteRegistered = true;
@@ -89,6 +112,14 @@ export class FrontMcpServerInstance extends FrontMcpServer {
           res.status(200).json({ status: 'ok' });
         });
       }
+    }
+    if (!this.metricsRouteRegistered) {
+      this.metricsRouteRegistered = true;
+      if (this._metricsService && this._metricsConfig?.enabled === true) {
+        registerMetricsRoutes(this, this._metricsService, this._metricsConfig);
+      }
+      // Any other state (no service, disabled, or no config) → no route. The
+      // endpoint is OFF by default per issue #397.
     }
     this.host.prepare();
   }
