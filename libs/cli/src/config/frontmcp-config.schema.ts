@@ -390,7 +390,14 @@ export const clientConnectionSchema = z
   })
   .strict();
 
-export const clientsConfigSchema = z.record(
+// `z.record(z.enum([...]), …)` in Zod 4 treats every enum value as a
+// REQUIRED key — so a `clients: { 'claude-code': {…} }` config (which is
+// the shape the scaffold emits) fails validation with "expected object,
+// received undefined" for the other four clients. The Verdaccio E2E
+// surfaced this against the generated template. `partialRecord` is Zod 4's
+// canonical fix: same enum-keyed schema but every key is optional, which
+// matches the user-facing contract (clients are opt-in, not all-or-nothing).
+export const clientsConfigSchema = z.partialRecord(
   z.enum(['claude-code', 'claude-desktop', 'cursor', 'windsurf', 'vscode']),
   clientConnectionSchema,
 );

@@ -315,4 +315,50 @@ describe('frontmcpConfigSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('clients (issue #400 — Verdaccio E2E regression)', () => {
+    // The scaffold emits `clients: { 'claude-code': {…} }` and nothing
+    // else. A `z.record(z.enum([...]), …)` (the pre-fix shape) requires
+    // every enum value, so the scaffold-generated config failed parsing
+    // inside the Verdaccio docker E2E with "expected object, received
+    // undefined" for claude-desktop / cursor / windsurf / vscode.
+    // `partialRecord` keeps the enum-keyed type signature but lets users
+    // opt into clients individually.
+    it('accepts a config with only one client entry (the scaffold default)', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'test-npm-docker',
+        deployments: [{ target: 'node' }],
+        clients: {
+          'claude-code': {
+            name: 'test-npm-docker',
+            transport: 'http',
+            url: 'http://127.0.0.1:3000/mcp',
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a config with several but not all client entries', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'demo',
+        deployments: [{ target: 'node' }],
+        clients: {
+          'claude-code': { transport: 'stdio' },
+          cursor: { transport: 'stdio' },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('still rejects an unknown client key (enum constraint preserved)', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'demo',
+        deployments: [{ target: 'node' }],
+        // biome-ignore lint/suspicious/noExplicitAny: intentional invalid key
+        clients: { 'not-a-real-client': { transport: 'stdio' } } as any,
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
