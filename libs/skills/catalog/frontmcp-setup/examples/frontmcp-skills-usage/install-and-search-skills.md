@@ -3,11 +3,13 @@ name: install-and-search-skills
 reference: frontmcp-skills-usage
 level: basic
 description: 'Install skills statically for Claude Code and use dynamic CLI search for on-demand discovery.'
-tags: [setup, cli, anthropic, skills, usage, install]
+tags: [setup, cli, anthropic, skills, usage, install, bulk, export]
 features:
   - '`frontmcp skills list` and `search` for discovering available skills'
   - '`frontmcp skills read` for viewing skill content and references on demand'
   - '`frontmcp skills install --provider claude` for static installation to `.claude/skills/`'
+  - '`frontmcp skills install --all` / `--category` / `--tag` for bulk install in one command'
+  - '`frontmcp skills export` to ship a skill to Cursor / Windsurf / Copilot rule files'
   - 'Installed skills are auto-loaded by Claude Code in its system prompt context'
 ---
 
@@ -52,6 +54,20 @@ frontmcp skills install frontmcp-development --provider codex
 
 # Install to a custom directory
 frontmcp skills install frontmcp-guides --dir ./my-skills
+
+# Bulk install — every skill in a category in one command
+frontmcp skills install --category development --provider claude
+
+# Bulk install — every skill in the catalog
+frontmcp skills install --all --provider claude
+
+# Bulk install by tag
+frontmcp skills install --tag middleware --provider codex
+
+# Export a skill as a Cursor / Windsurf / Copilot rule file (for skills-unaware IDEs)
+frontmcp skills export --name frontmcp-development --target cursor
+frontmcp skills export --all --target windsurf
+frontmcp skills export --all --target copilot --out ./.github
 ```
 
 After installation, the directory structure:
@@ -76,6 +92,8 @@ my-project/
 - `frontmcp skills list` and `search` for discovering available skills
 - `frontmcp skills read` for viewing skill content and references on demand
 - `frontmcp skills install --provider claude` for static installation to `.claude/skills/`
+- `frontmcp skills install --all` / `--category` / `--tag` for bulk install in one command
+- `frontmcp skills export` to ship a skill to Cursor / Windsurf / Copilot rule files
 - Installed skills are auto-loaded by Claude Code in its system prompt context
 
 ## Related
