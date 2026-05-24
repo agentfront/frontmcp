@@ -190,6 +190,60 @@ The `url` hostname is ignored for Unix sockets; only the path (`/mcp`) is used f
 | VS Code        | `.vscode/mcp.json`           | Project root                                    |
 | Windsurf       | `mcp_config.json`            | `~/.codeium/windsurf/`                          |
 
+## Claude Code plugin install (issue #411)
+
+For Claude Code specifically, you can ship the whole server — MCP entry +
+prompts (as slash commands) + `@Skill`s — as a single Claude Code plugin
+folder, registered in one command. This is the recommended path when you
+want users to enable/disable the server from `/plugins` rather than
+hand-edit `.mcp.json`.
+
+### From a project source (dev tool)
+
+```bash
+# At a FrontMCP project root — emits .claude/plugins/<name>/ in cwd
+frontmcp plugin install --claude
+
+# Inspect the plan without writing
+frontmcp plugin install --claude --dry-run
+
+# Also drop a Codex mcp_servers entry into ~/.codex/config.toml
+frontmcp plugin install --claude --codex
+
+# Report install state
+frontmcp plugin status --claude
+
+# Remove what install wrote (preserves user-added files)
+frontmcp plugin uninstall --claude
+```
+
+### From a built bin (end-user)
+
+Every CLI built with `frontmcp build --target cli` inherits the same
+behavior under its `install` verb (no new top-level verb):
+
+```bash
+my-bin install -p claude              # write .claude/plugins/my-bin/
+my-bin install -p claude --scope user # ~/.claude/plugins/my-bin/
+my-bin install -p claude -p codex     # both providers in one call
+my-bin install --status               # report state per provider
+my-bin uninstall -p claude            # remove only managed files
+```
+
+### What gets written
+
+```text
+.claude/plugins/<bin>/
+├── .claude-plugin/plugin.json   # name, version, mcpServers, skills, _meta.frontmcp.managedFiles
+├── commands/<prompt>.md         # one per @Prompt the server advertises
+└── skills/<name>/SKILL.md       # one per @Skill, with references/examples/scripts/assets subdirs
+```
+
+Re-runs are idempotent: any file not listed in `_meta.frontmcp.managedFiles`
+(including unknown top-level keys the user added to `plugin.json`, like
+`hooks` or extra `mcpServers`) is preserved. Use `--dry-run` to inspect
+the planned tree before writing.
+
 ## Common Patterns
 
 | Pattern     | Correct                       | Incorrect              | Why                                                 |

@@ -14,6 +14,7 @@ jest.mock('@frontmcp/utils', () => ({
   ensureDir: jest.fn().mockResolvedValue(undefined),
   fileExists: jest.fn().mockResolvedValue(false),
   runCmd: jest.fn().mockResolvedValue(undefined),
+  writeJSON: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../../../core/colors', () => ({
