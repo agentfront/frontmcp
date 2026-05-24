@@ -2,13 +2,13 @@
  * DirectClientImpl Tests
  */
 
-import { DirectClientImpl } from '../direct-client';
 import type { Scope } from '../../scope/scope.instance';
 import {
-  SkillsSearchResultSchema,
-  SkillsLoadResultSchema,
   SkillsListResultSchema,
+  SkillsLoadResultSchema,
+  SkillsSearchResultSchema,
 } from '../../transport/mcp-handlers/skills-mcp.types';
+import { DirectClientImpl } from '../direct-client';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -915,7 +915,7 @@ describe('DirectClientImpl', () => {
       mockMcpClient.callTool.mockClear();
     });
 
-    it('listJobs should call list-jobs tool', async () => {
+    it('listJobs should call list_jobs tool', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"jobs":[]}' }],
       });
@@ -923,7 +923,7 @@ describe('DirectClientImpl', () => {
       const result = await client.listJobs();
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'list-jobs',
+        name: 'list_jobs',
         arguments: {},
       });
       expect(result).toEqual({ jobs: [] });
@@ -937,12 +937,12 @@ describe('DirectClientImpl', () => {
       await client.listJobs({ tags: ['batch'] });
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'list-jobs',
+        name: 'list_jobs',
         arguments: { tags: ['batch'] },
       });
     });
 
-    it('executeJob should call execute-job tool with name and input', async () => {
+    it('executeJob should call execute_job tool with name and input', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"runId":"run-1","status":"completed"}' }],
       });
@@ -950,7 +950,7 @@ describe('DirectClientImpl', () => {
       const result = await client.executeJob('process-data', { payload: 'test' });
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'execute-job',
+        name: 'execute_job',
         arguments: { name: 'process-data', input: { payload: 'test' }, background: false },
       });
       expect(result).toEqual({ runId: 'run-1', status: 'completed' });
@@ -964,7 +964,7 @@ describe('DirectClientImpl', () => {
       await client.executeJob('process-data', {}, { background: true });
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'execute-job',
+        name: 'execute_job',
         arguments: { name: 'process-data', input: {}, background: true },
       });
     });
@@ -977,12 +977,12 @@ describe('DirectClientImpl', () => {
       await client.executeJob('process-data');
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'execute-job',
+        name: 'execute_job',
         arguments: { name: 'process-data', input: {}, background: false },
       });
     });
 
-    it('getJobStatus should call get-job-status tool', async () => {
+    it('getJobStatus should call get_job_status tool', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"runId":"run-1","status":"completed","result":{"data":1}}' }],
       });
@@ -990,7 +990,7 @@ describe('DirectClientImpl', () => {
       const result = await client.getJobStatus('run-1');
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'get-job-status',
+        name: 'get_job_status',
         arguments: { runId: 'run-1' },
       });
       expect(result).toEqual({ runId: 'run-1', status: 'completed', result: { data: 1 } });
@@ -1001,7 +1001,7 @@ describe('DirectClientImpl', () => {
         content: [{ type: 'image', data: 'abc' }],
       });
 
-      await expect(client.listJobs()).rejects.toThrow('No text content from list-jobs');
+      await expect(client.listJobs()).rejects.toThrow('No text content from list_jobs');
     });
 
     it('should throw when tool returns empty content', async () => {
@@ -1009,7 +1009,7 @@ describe('DirectClientImpl', () => {
         content: [],
       });
 
-      await expect(client.executeJob('test')).rejects.toThrow('No text content from execute-job');
+      await expect(client.executeJob('test')).rejects.toThrow('No text content from execute_job');
     });
   });
 
@@ -1022,7 +1022,7 @@ describe('DirectClientImpl', () => {
       mockMcpClient.callTool.mockClear();
     });
 
-    it('listWorkflows should call list-workflows tool', async () => {
+    it('listWorkflows should call list_workflows tool', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"workflows":[]}' }],
       });
@@ -1030,13 +1030,13 @@ describe('DirectClientImpl', () => {
       const result = await client.listWorkflows();
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'list-workflows',
+        name: 'list_workflows',
         arguments: {},
       });
       expect(result).toEqual({ workflows: [] });
     });
 
-    it('executeWorkflow should call execute-workflow tool', async () => {
+    it('executeWorkflow should call execute_workflow tool', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"runId":"wf-1","status":"running"}' }],
       });
@@ -1044,7 +1044,7 @@ describe('DirectClientImpl', () => {
       const result = await client.executeWorkflow('my-workflow', { step: 'start' }, { background: true });
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'execute-workflow',
+        name: 'execute_workflow',
         arguments: { name: 'my-workflow', input: { step: 'start' }, background: true },
       });
       expect(result).toEqual({ runId: 'wf-1', status: 'running' });
@@ -1058,12 +1058,12 @@ describe('DirectClientImpl', () => {
       await client.executeWorkflow('my-workflow');
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'execute-workflow',
+        name: 'execute_workflow',
         arguments: { name: 'my-workflow', input: {}, background: false },
       });
     });
 
-    it('getWorkflowStatus should call get-workflow-status tool', async () => {
+    it('getWorkflowStatus should call get_workflow_status tool', async () => {
       mockMcpClient.callTool.mockResolvedValueOnce({
         content: [{ type: 'text', text: '{"runId":"wf-1","status":"completed"}' }],
       });
@@ -1071,7 +1071,7 @@ describe('DirectClientImpl', () => {
       const result = await client.getWorkflowStatus('wf-1');
 
       expect(mockMcpClient.callTool).toHaveBeenCalledWith({
-        name: 'get-workflow-status',
+        name: 'get_workflow_status',
         arguments: { runId: 'wf-1' },
       });
       expect(result).toEqual({ runId: 'wf-1', status: 'completed' });

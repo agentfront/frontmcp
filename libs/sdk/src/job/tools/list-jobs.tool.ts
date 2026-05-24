@@ -5,7 +5,7 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
-  name: 'list-jobs',
+  name: 'list_jobs',
   description: 'List registered jobs with optional filtering by tags or labels.',
   inputSchema: {
     tags: z.array(z.string()).optional().describe('Filter by tags'),

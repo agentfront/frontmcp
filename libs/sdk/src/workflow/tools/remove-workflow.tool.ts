@@ -4,7 +4,7 @@ import { Tool, ToolContext } from '../../common';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
-  name: 'remove-workflow',
+  name: 'remove_workflow',
   description: 'Remove a dynamic workflow by name.',
   inputSchema: {
     name: z.string().describe('Workflow name to remove'),
