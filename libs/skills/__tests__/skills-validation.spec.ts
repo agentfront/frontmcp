@@ -460,7 +460,16 @@ describe('skills catalog validation', () => {
 
     it('should not use auth string shorthand in decorator context', () => {
       const violations: string[] = [];
+      // The /metrics endpoint (issue #397) has its OWN `auth` option whose
+      // legal values include 'public' and 'token'. The decorator-level auth
+      // shorthand deprecation does NOT apply to it, so the metrics skill
+      // surface is exempted from this guard.
+      const METRICS_AUTH_FILES = new Set([
+        'frontmcp-observability/metrics-endpoint.md',
+        'frontmcp-observability/examples/metrics-endpoint/enable-metrics-endpoint.md',
+      ]);
       for (const { skill, file, fullPath } of documentationFiles) {
+        if (METRICS_AUTH_FILES.has(`${skill}/${file}`)) continue;
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Match auth: 'remote', auth: 'public', auth: 'transparent' as standalone config values
         const authShorthand = content.match(/auth:\s*['"](?:remote|public|transparent)['"]/g);

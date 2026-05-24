@@ -71,6 +71,40 @@ export default class BillingApp {}
   composing other providers.
 </Tip>
 
+## File Layout (folder per provider)
+
+Once a provider grows past a single class — adds a spec, a helper, internal types, or config-loading logic — promote it from `src/providers/<slug>.provider.ts` to a folder per provider:
+
+```text
+src/providers/<provider-slug>/
+├── index.ts                            # barrel: re-exports class, factory, public types
+├── <provider-slug>.provider.ts         # @Provider class and/or AsyncProvider factory
+├── <provider-slug>.provider.spec.ts    # unit tests
+├── types.ts                            # (optional) internal types / token interfaces
+└── <helper>.ts (+ .spec.ts)            # (optional) per-provider helpers
+```
+
+Plus a top-level `src/providers/index.ts` barrel:
+
+```ts
+// src/providers/index.ts
+export * from './task-store';
+export * from './config';
+export * from './redis';
+```
+
+**Cross-provider imports go through the subfolder barrel** — never reach into another provider's implementation file:
+
+```ts
+// ✅ Good — through the subfolder barrel
+import { TaskStoreProvider } from '../task-store';
+
+// ❌ Bad — reaches into the implementation file
+import { TaskStoreProvider } from '../task-store/task-store.provider';
+```
+
+Trivial providers (a `Map`-based cache, a pure DTO with no helpers) can stay flat. As soon as the provider has a spec, a helper, or internal types, fold it into its own directory.
+
 ## Using providers from tools/plugins
 
 FrontMCP resolves providers for your executors and hooks. Keep your tool logic pure; read side-effects (DB, queues, secrets) via providers.

@@ -590,7 +590,7 @@ export class DirectClientImpl implements DirectClient {
   }
 
   async listJobs(options?: ListJobsOptions): Promise<ListJobsResult> {
-    return this.callToolAndParseJson('list-jobs', { ...options });
+    return this.callToolAndParseJson('list_jobs', { ...options });
   }
 
   async executeJob(
@@ -598,7 +598,7 @@ export class DirectClientImpl implements DirectClient {
     input?: Record<string, unknown>,
     options?: ExecuteJobOptions,
   ): Promise<JobExecutionResult> {
-    return this.callToolAndParseJson('execute-job', {
+    return this.callToolAndParseJson('execute_job', {
       name,
       input: input ?? {},
       background: options?.background ?? false,
@@ -606,7 +606,7 @@ export class DirectClientImpl implements DirectClient {
   }
 
   async getJobStatus(runId: string): Promise<JobStatusResult> {
-    return this.callToolAndParseJson('get-job-status', { runId });
+    return this.callToolAndParseJson('get_job_status', { runId });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -614,7 +614,7 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async listWorkflows(options?: ListWorkflowsOptions): Promise<ListWorkflowsResult> {
-    return this.callToolAndParseJson('list-workflows', { ...options });
+    return this.callToolAndParseJson('list_workflows', { ...options });
   }
 
   async executeWorkflow(
@@ -622,7 +622,7 @@ export class DirectClientImpl implements DirectClient {
     input?: Record<string, unknown>,
     options?: ExecuteWorkflowOptions,
   ): Promise<WorkflowExecutionResult> {
-    return this.callToolAndParseJson('execute-workflow', {
+    return this.callToolAndParseJson('execute_workflow', {
       name,
       input: input ?? {},
       background: options?.background ?? false,
@@ -630,7 +630,7 @@ export class DirectClientImpl implements DirectClient {
   }
 
   async getWorkflowStatus(runId: string): Promise<WorkflowStatusResult> {
-    return this.callToolAndParseJson('get-workflow-status', { runId });
+    return this.callToolAndParseJson('get_workflow_status', { runId });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

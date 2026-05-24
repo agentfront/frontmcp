@@ -210,12 +210,44 @@ frontmcp --list-commands
 
 ## File Resolution Order
 
+Per-invocation precedence (issue #400):
+
+1. Explicit `--config <path>` flag.
+2. `FRONTMCP_CONFIG` env var.
+3. Upward walk from `cwd` to the nearest ancestor containing a `frontmcp.config.*` (caps at 10 levels — monorepo nested apps work without `cd <repo-root>`).
+4. Fallback: `package.json` (derives name, default node target).
+
+Within a directory:
+
 1. `frontmcp.config.ts`
 2. `frontmcp.config.js`
 3. `frontmcp.config.json`
 4. `frontmcp.config.mjs`
 5. `frontmcp.config.cjs`
-6. Fallback: `package.json` (derives name, default node target)
+
+## Override precedence (issue #400)
+
+For every CLI option that's also expressible in the config:
+
+```
+explicit CLI flag  >  FRONTMCP_<NAME> env var  >  frontmcp.config field  >  built-in default
+```
+
+## Per-command consumption (issue #400)
+
+The config is consumed by every `frontmcp` command, not just `build`:
+
+| Command                           | Config fields consumed                                                                              |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                   |
+| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                            |
+| `test`                            | `test.timeoutMs` / `test.runInBand` / `test.coverage` / `test.testMatch`, `env.shared` ⊕ `env.test` |
+| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio`                                       |
+| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`      |
+| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                         |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                                 |
+
+See `transport`, `env`, `clients`, `test`, `skills` field reference in [docs/frontmcp/deployment/frontmcp-config](https://docs.agentfront.dev/frontmcp/deployment/frontmcp-config).
 
 ## JSON Schema for IDE Support
 

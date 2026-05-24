@@ -23,7 +23,7 @@ Add `availableWhen` to any entry's metadata to constrain its availability:
   name: 'apple_notes_search',
   description: 'Search Apple Notes',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  availableWhen: { os: ['darwin'] },
 })
 class AppleNotesSearchTool extends ToolContext {
   async execute({ query }: { query: string }) {
@@ -52,9 +52,9 @@ availableWhen: {
 
 ## Available Fields
 
-### `platform`
+### `os` (replaces `platform`)
 
-Operating system, matching [`process.platform`](https://nodejs.org/api/process.html#processplatform) values:
+Operating system, matching [`process.platform`](https://nodejs.org/api/process.html#processplatform) values. Renamed from `platform` in issue #417 — the old name still works as a deprecated alias.
 
 | Value       | OS              |
 | ----------- | --------------- |
@@ -77,12 +77,75 @@ JavaScript runtime:
 
 ### `deployment`
 
-Deployment mode:
+Coarse deployment mode:
 
 | Value           | Description                  |
 | --------------- | ---------------------------- |
 | `'standalone'`  | Standard server              |
 | `'serverless'`  | Serverless (Lambda, Vercel)  |
+| `'distributed'` | Multi-pod HA mode            |
+| `'browser'`     | Browser bundle               |
+
+### `provider` (issue #417)
+
+Discriminated deploy provider. Lets `@Tool({ availableWhen: { provider: ['vercel'] } })` express provider-specific rules where `deployment: ['serverless']` is too coarse.
+
+| Value           | Detected via env var                 |
+| --------------- | ------------------------------------ |
+| `'bare'`        | No discriminating env var (default)  |
+| `'docker'`      | `/.dockerenv` exists                 |
+| `'vercel'`      | `VERCEL`                             |
+| `'lambda'`      | `AWS_LAMBDA_FUNCTION_NAME`           |
+| `'cloudflare'`  | `CF_PAGES`                           |
+| `'netlify'`     | `NETLIFY`                            |
+| `'azure'`       | `AZURE_FUNCTIONS_ENVIRONMENT`        |
+| `'gcp'`         | `K_SERVICE`                          |
+| `'fly'`         | `FLY_APP_NAME`                       |
+| `'render'`      | `RENDER`                             |
+| `'railway'`     | `RAILWAY_ENVIRONMENT`                |
+
+Override the detection with `FRONTMCP_PROVIDER=<name>` (useful for tests, Docker images without a discriminating env var, etc.).
+
+### `target` (issue #417)
+
+Build target produced by `frontmcp build --target <x>`. Always `'unknown'` in dev (`frontmcp dev`).
+
+| Value           | Source                                                |
+| --------------- | ----------------------------------------------------- |
+| `'unknown'`     | Dev mode (no build) or unrecognized value             |
+| `'node'`        | `frontmcp build --target node`                        |
+| `'distributed'` | `frontmcp build --target distributed`                 |
+| `'cli'`         | `frontmcp build --target cli`                         |
+| `'vercel'`      | `frontmcp build --target vercel`                      |
+| `'lambda'`      | `frontmcp build --target lambda`                      |
+| `'cloudflare'`  | `frontmcp build --target cloudflare`                  |
+| `'browser'`     | `frontmcp build --target browser`                     |
+| `'sdk'`         | `frontmcp build --target sdk`                         |
+| `'mcpb'`        | `frontmcp build --target mcpb`                        |
+
+Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` (inlined by the adapter) → `process.env.FRONTMCP_BUILD_TARGET` → `'unknown'`.
+
+### `surface` (issue #417)
+
+Per-call axis — set by the transport adapter / dispatcher on the request `ctx` to discriminate "who is calling this tool." Unlike the other axes (which are constant for the process lifetime), `surface` varies per request.
+
+| Value            | Source                                         |
+| ---------------- | ---------------------------------------------- |
+| `'mcp'`          | MCP `tools/call` (set by the MCP handler)      |
+| `'cli'`          | A `frontmcp <verb>` subcommand router (issue #409) |
+| `'agent'`        | Agent-to-tool dispatch (`ExecutionContextBase.callTool`) |
+| `'job'`          | Job runner                                     |
+| `'http-trigger'` | `@Channel` HTTP triggers                       |
+
+Example — block external MCP calls but allow agent dispatch:
+
+```typescript
+@Tool({
+  name: 'internal_helper',
+  availableWhen: { surface: ['agent'] },
+  ...
+})
+```
 
 ### `env`
 
@@ -93,6 +156,28 @@ Deployment mode:
 | `'production'`   | Production                   |
 | `'development'`  | Development                  |
 | `'test'`         | Testing                      |
+
+### Structured errors
+
+When a tool exists but its `availableWhen` constraint fails at call time, FrontMCP throws `EntryUnavailableError` with a `missingAxes` array in `data` (issue #417). Clients can surface "this tool isn't reachable because provider=vercel / surface=mcp / …" without parsing prose.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "error": {
+    "code": -32003,
+    "message": "Tool \"deploy_to_lambda\" is not available in the current environment ...",
+    "data": {
+      "entryType": "Tool",
+      "entry": "deploy_to_lambda",
+      "missingAxes": ["provider"],
+      "constraint": { "provider": ["lambda"] },
+      "context": { "provider": "vercel", "os": "linux", "runtime": "node", "surface": "mcp", ... }
+    }
+  }
+}
+```
 
 ---
 
@@ -106,7 +191,7 @@ Deployment mode:
     @Tool({
       name: 'apple_notes_search',
       inputSchema: { query: z.string() },
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class AppleNotesSearchTool extends ToolContext { ... }
     ```
@@ -116,7 +201,7 @@ Deployment mode:
     @Resource({
       name: 'system-info',
       uri: 'system://info',
-      availableWhen: { platform: ['darwin', 'linux'] },
+      availableWhen: { os: ['darwin', 'linux'] },
     })
     class SystemInfoResource extends ResourceContext { ... }
     ```
@@ -126,7 +211,7 @@ Deployment mode:
     @Prompt({
       name: 'xcode-review',
       arguments: [{ name: 'project', required: true }],
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class XcodeReviewPrompt extends PromptContext { ... }
     ```
@@ -137,7 +222,7 @@ Deployment mode:
       name: 'ios-deploy',
       description: 'Deploy to iOS devices',
       instructions: { file: './skills/ios-deploy.md' },
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class IosDeploySkill extends SkillContext { ... }
     ```
@@ -179,13 +264,16 @@ class SystemCommandTool extends ToolContext {
 
 ### Available Methods
 
-| Method                        | Returns   | Description                                |
-| ----------------------------- | --------- | ------------------------------------------ |
-| `this.isPlatform('darwin')`   | `boolean` | Check OS platform                          |
-| `this.isRuntime('node')`      | `boolean` | Check JavaScript runtime                   |
-| `this.isDeployment('serverless')` | `boolean` | Check deployment mode                  |
-| `this.isEnv('production')`    | `boolean` | Check NODE_ENV                             |
-| `this.runtimeContext`         | `RuntimeContext` | Full context object                   |
+`RuntimeContext` exposes the operating system via the `os` property; `platform` remains as a deprecated alias for backward compatibility (issue #417) and resolves to the same value. New code should read `this.runtimeContext.os` directly.
+
+| Method                            | Returns          | Description                                                                                              |
+| --------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `this.runtimeContext.os`          | `string`         | Modern OS axis access — same values as `process.platform` (`'darwin'`, `'linux'`, `'win32'`, …)         |
+| `this.isPlatform('darwin')`       | `boolean`        | **Deprecated alias** — checks the legacy `.platform` field. Prefer `this.runtimeContext.os === 'darwin'`. |
+| `this.isRuntime('node')`          | `boolean`        | Check JavaScript runtime                                                                                  |
+| `this.isDeployment('serverless')` | `boolean`        | Check deployment mode                                                                                     |
+| `this.isEnv('production')`        | `boolean`        | Check NODE_ENV                                                                                            |
+| `this.runtimeContext`             | `RuntimeContext` | Full context object (`os`, `platform`, `runtime`, `deployment`, `env`)                                    |
 
 These methods are available on `ToolContext`, `ResourceContext`, `PromptContext`, and `AgentContext`.
 
@@ -210,7 +298,7 @@ tools/
   name: 'notes_search',
   description: 'Search notes on this system',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  availableWhen: { os: ['darwin'] },
 })
 export class AppleNotesSearchTool extends ToolContext {
   async execute({ query }) { /* Apple Notes API */ }
@@ -244,16 +332,28 @@ The multi-platform file pattern (`name.platform.tool.ts`) is recommended when yo
 
 ## Error Handling
 
-When a client tries to call a tool that exists but is unavailable in the current environment, the SDK returns an `EntryUnavailableError` (HTTP 403) with both the constraint and the current context:
+When a client tries to call a tool that exists but is unavailable in the current environment, the SDK returns an `EntryUnavailableError` (HTTP 403) with both the constraint and the current context. The `data` payload includes a `missingAxes` array so clients can show a precise reason for the failure without parsing the message string:
 
 ```json
 {
   "code": -32003,
-  "message": "Tool \"apple_notes_search\" is not available in the current environment (requires: {\"platform\":[\"darwin\"]}) (current: {\"platform\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})"
+  "message": "Tool \"apple_notes_search\" is not available in the current environment (missing axes: os) (requires: {\"os\":[\"darwin\"]}) (current: {\"os\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})",
+  "data": {
+    "entryType": "tool",
+    "entry": "apple_notes_search",
+    "missingAxes": ["os"],
+    "constraint": { "os": ["darwin"] },
+    "context": {
+      "os": "linux",
+      "runtime": "node",
+      "deployment": "standalone",
+      "env": "production"
+    }
+  }
 }
 ```
 
-This is distinct from a `ToolNotFoundError` (404), helping clients understand why a tool is inaccessible.
+This is distinct from a `ToolNotFoundError` (404), helping clients understand why a tool is inaccessible. See the [Structured errors](#structured-errors) reference (if present) for the full schema.
 
 ---
 

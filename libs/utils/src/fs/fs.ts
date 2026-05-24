@@ -335,6 +335,25 @@ export async function readdir(p: string): Promise<string[]> {
 }
 
 /**
+ * List directory contents synchronously.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * Use this only when async operations are not possible (e.g., per-scrape
+ * synchronous metrics collectors). Prefer the async `readdir` in most cases.
+ *
+ * @param p - Path to directory
+ * @returns Array of file/directory names
+ *
+ * @example
+ * const files = readdirSync('/proc/self/fd');
+ */
+export function readdirSync(p: string): string[] {
+  const fs = getFs();
+  return fs.readdirSync(p);
+}
+
+/**
  * Remove a file or directory recursively.
  *
  * **Node.js only** - throws an error if called in browser.
@@ -419,7 +438,11 @@ export async function access(p: string, mode?: number): Promise<void> {
  * @example
  * await runCmd('npm', ['install'], { cwd: '/project' });
  */
-export function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
+export function runCmd(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<void> {
   const spawn = getSpawn();
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: 'inherit', shell: false, ...opts });

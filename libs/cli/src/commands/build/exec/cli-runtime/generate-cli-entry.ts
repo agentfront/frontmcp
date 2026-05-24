@@ -1453,16 +1453,156 @@ function generateInstallCommand(
     }
   }
 
-  return `program
+  return `function _frontmcpCollectArg(value, acc) { return Array.isArray(acc) ? acc.concat(value) : [value]; }
+
+program
   .command('install')
-  .description('Install to ~/.frontmcp/ and set up dependencies')
+  .description('Install to ~/.frontmcp/ and set up dependencies, OR emit an IDE plugin (use -p)')
   .option('--prefix <path>', 'Installation prefix directory')
   .option('--bin-dir <path>', 'Directory for symlink (default: ~/.local/bin or /usr/local/bin)')
+  .option('-p, --provider <provider>', 'Emit plugin for provider: claude | codex (repeatable)', _frontmcpCollectArg, [])
+  .option('--scope <scope>', 'Plugin scope when -p is set: project | user', 'project')
+  .option('--no-skills', 'Skip the skills/ subtree (when -p claude)')
+  .option('--no-commands', 'Skip the commands/ subtree (when -p claude)')
+  .option('--only-mcp', 'Skip plugin folder; just register the MCP server')
+  .option('--command <cmd>', 'Override MCP server invocation in the plugin manifest')
+  .option('--env <name>', 'Add env-var placeholder to plugin manifest (repeatable)', _frontmcpCollectArg, [])
+  .option('--dir <dir>', 'Override plugin destination root')
+  .option('--dry-run', 'Print plan; do not write')
+  .option('--status', 'Print install status per provider; exit 0')
   .action(async function(opts) {
     var fs = require('fs');
     var pathMod = require('path');
     var os = require('os');
     var exec = require('child_process').execSync;
+
+    // Issue #411 — when -p is set OR --status is set, run the plugin-install
+    // path instead of the legacy bundle-copy + symlink behavior.
+    var providers = Array.isArray(opts.provider) ? opts.provider : [];
+    if (opts.status || providers.length > 0) {
+      var emitter = require('./plugin-emitter');
+      var binMetaPath = pathMod.join(SCRIPT_DIR, 'bin-meta.json');
+      var meta;
+      try { meta = JSON.parse(fs.readFileSync(binMetaPath, 'utf8')); }
+      catch (e) {
+        console.error('Could not read bin-meta.json at ' + binMetaPath + '. Was the bin built with a recent frontmcp?');
+        process.exit(1);
+      }
+      var pkgJsonPath = pathMod.join(__dirname, '..', '..', 'package.json');
+      var cliVersion = '0.0.0';
+      try { cliVersion = (require(pkgJsonPath) || {}).version || '0.0.0'; } catch (e) { /* ok */ }
+
+      function resolveDestRoot() {
+        if (opts.dir) return pathMod.resolve(opts.dir);
+        if (opts.scope === 'user') return pathMod.join(os.homedir(), '.claude', 'plugins');
+        return pathMod.join(process.cwd(), '.claude', 'plugins');
+      }
+
+      if (opts.status) {
+        console.log(meta.name + ' install --status');
+        var destRootSt = resolveDestRoot();
+        var pluginDirSt = pathMod.join(destRootSt, meta.name);
+        var installed = await emitter.readInstalledPluginVersion(pluginDirSt);
+        if (installed) {
+          var tag = installed === meta.version ? 'installed' : 'outdated';
+          console.log('  claude:    ' + tag + ' v' + installed + (tag === 'outdated' ? ' (bin at v' + meta.version + ')' : '') + ' at ' + pluginDirSt);
+        } else {
+          console.log('  claude:    not installed at ' + pluginDirSt);
+        }
+        var codexConfigSt = pathMod.join(os.homedir(), '.codex', 'config.toml');
+        if (fs.existsSync(codexConfigSt) && fs.readFileSync(codexConfigSt, 'utf8').indexOf('# frontmcp:codex-start:' + meta.name) !== -1) {
+          console.log('  codex:     installed entry for ' + meta.name + ' in ' + codexConfigSt);
+        } else {
+          console.log('  codex:     not installed in ' + codexConfigSt);
+        }
+        return;
+      }
+
+      function buildSkills() {
+        if (opts.skills === false || opts.onlyMcp) return [];
+        var out = [];
+        for (var i = 0; i < (meta.skills || []).length; i++) {
+          var s = meta.skills[i];
+          var resourceDirs = {};
+          if (s.resourceDirs) {
+            for (var k in s.resourceDirs) {
+              if (Object.prototype.hasOwnProperty.call(s.resourceDirs, k)) {
+                resourceDirs[k] = pathMod.join(SCRIPT_DIR, s.resourceDirs[k]);
+              }
+            }
+          }
+          out.push({
+            name: s.name,
+            description: s.description || (s.name + ' skill from ' + meta.name),
+            instructionFile: s.instructionFile ? pathMod.join(SCRIPT_DIR, s.instructionFile) : undefined,
+            resourceDirs: Object.keys(resourceDirs).length > 0 ? resourceDirs : undefined,
+          });
+        }
+        return out;
+      }
+
+      function buildCommands() {
+        if (opts.commands === false || opts.onlyMcp) return [];
+        return (meta.prompts || []).map(function(p) {
+          return { name: p.name, description: p.description, arguments: p.arguments };
+        });
+      }
+
+      for (var pi = 0; pi < providers.length; pi++) {
+        var provider = providers[pi];
+        if (provider === 'claude') {
+          var destRoot = resolveDestRoot();
+          var result = await emitter.emitClaudePlugin({
+            destRoot: destRoot,
+            name: meta.name,
+            version: meta.version,
+            description: meta.description,
+            mcpCommand: opts.command || meta.mcpDefault.command,
+            mcpArgs: meta.mcpDefault.args,
+            envHints: Array.isArray(opts.env) ? opts.env : [],
+            skills: buildSkills(),
+            commands: buildCommands(),
+            cliVersion: cliVersion,
+            dryRun: opts.dryRun,
+          });
+          if (opts.dryRun) {
+            console.log('[install:claude] dry-run plan');
+            console.log('  pluginDir: ' + result.pluginDir);
+            console.log('  filesWritten (planned):');
+            for (var fwi = 0; fwi < result.filesWritten.length; fwi++) console.log('    + ' + result.filesWritten[fwi]);
+          } else {
+            console.log('✓ Wrote ' + result.pluginDir + '/ (' + (result.manifest.skills || []).length + ' skills, ' + ((result.manifest.commands || []).length) + ' commands, 1 MCP server)');
+            console.log('  Restart Claude Code (or run /plugins reload) to pick up the plugin.');
+          }
+        } else if (provider === 'codex') {
+          var codexConfig = pathMod.join(os.homedir(), '.codex', 'config.toml');
+          var env = {};
+          var envList = Array.isArray(opts.env) ? opts.env : [];
+          for (var ei = 0; ei < envList.length; ei++) env[envList[ei]] = '${'$'}{' + envList[ei] + '}';
+          var codexResult = await emitter.emitCodexEntry({
+            configPath: codexConfig,
+            name: meta.name,
+            command: opts.command || meta.mcpDefault.command,
+            args: meta.mcpDefault.args,
+            env: env,
+            dryRun: opts.dryRun,
+          });
+          if (opts.dryRun) {
+            console.log('[install:codex] dry-run plan');
+            console.log('  configPath: ' + codexConfig);
+            console.log(codexResult.configContent);
+          } else {
+            console.log('✓ Updated ' + codexConfig + ' with [[mcp_servers]] entry for ' + meta.name);
+          }
+        } else {
+          console.error('Unknown provider: ' + provider);
+          process.exitCode = 1;
+          return;
+        }
+      }
+      return;
+    }
+
     var installBase = opts.prefix || FRONTMCP_HOME;
     var appDir = pathMod.join(installBase, 'apps', ${JSON.stringify(appName)});
     var dirs = ['', '/data', '/sessions', '/credentials'].map(function(s) { return appDir + s; });
