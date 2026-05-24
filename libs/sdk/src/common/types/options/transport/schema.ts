@@ -201,10 +201,13 @@ const protocolSchema = z.union([protocolPresetSchema, protocolConfigSchema]);
 // ============================================
 
 /**
- * Simplified persistence config - no explicit 'enabled' flag.
- * - `false`: Explicitly disable persistence
- * - `object`: Enable with custom config
- * - `undefined`: Auto-enable when global redis exists
+ * Simplified persistence config — no explicit 'enabled' flag (issue #401).
+ * - `false`: Explicitly disable persistence (wins over auto-enable).
+ * - `object`: Enable with this config. `redis` and `sqlite` are mutually
+ *   exclusive within a single persistence block (see the refine below).
+ * - `undefined`: Auto-enable using the top-level `sqlite` block on
+ *   `@FrontMcp` when one is configured. Top-level `redis` is NOT
+ *   auto-threaded — opt in by setting `persistence.redis` explicitly.
  */
 export const persistenceConfigSchema = z
   .object({

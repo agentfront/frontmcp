@@ -140,8 +140,15 @@ export interface ElicitationStoreResult {
   /**
    * The underlying storage instance.
    * Available for advanced use cases.
+   *
+   * **Undefined for SQLite-backed stores** — `better-sqlite3` doesn't
+   * expose a key-value `StorageAdapter`, so this field is intentionally
+   * absent on the SQLite path. Callers reading `.storage` must guard
+   * for `undefined`. For Redis / Vercel KV / Upstash / memory backends
+   * the adapter is still returned (these all implement the unified
+   * `StorageAdapter` contract).
    */
-  storage: RootStorage;
+  storage?: RootStorage;
 
   /**
    * Whether encryption is enabled for the store.
@@ -250,10 +257,12 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
       supportsPubSub: true,
       encrypted,
     });
-    // No StorageAdapter is built for the SQLite path; we return memory-style
-    // marker storage so existing consumers reading `.storage` keep compiling.
-    const placeholder = createMemoryStorage({ prefix: keyPrefix });
-    return { store: sqliteStore, type: 'sqlite', storage: placeholder, encrypted };
+    // `better-sqlite3` doesn't fit the `StorageAdapter` shape, and a
+    // memory placeholder here would lie about the backend (an .storage
+    // read on the result would silently act on an empty in-memory map).
+    // Leave `storage` undefined — the type is now optional and callers
+    // must guard.
+    return { store: sqliteStore, type: 'sqlite', encrypted };
   }
 
   // Build final storage config, merging redis option if provided

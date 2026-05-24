@@ -11,7 +11,9 @@
 import { homedir } from 'os';
 import * as path from 'path';
 
-import { resolveDefaultSqlitePath } from '../resolve';
+// All test paths intentionally use dynamic `require('../resolve')` after
+// `jest.resetModules()` so each case rebuilds the cached runtime context
+// — no static import is needed.
 
 describe('resolveDefaultSqlitePath', () => {
   const ORIGINAL_NODE_ENV = process.env['NODE_ENV'];
@@ -87,5 +89,30 @@ describe('resolveDefaultSqlitePath', () => {
     const { resolveDefaultSqlitePath: resolve } = require('../resolve') as typeof import('../resolve');
     const resolved = resolve({ appName: 'bun-app', cliMode: false });
     expect(resolved).toBe(path.join(homedir(), '.bun-app', 'sessions.sqlite'));
+  });
+
+  it('routes the non-node runtime branch even in dev + non-CLI', () => {
+    // The previous test only exercises the prod gate. Force the resolver's
+    // dedicated non-node guard by stubbing `getRuntimeContext` so it
+    // returns `runtime: 'bun'` while NODE_ENV stays at a non-production
+    // value — both `ctx.cliMode || env === 'production'` are false, so
+    // execution falls through to the `runtime !== 'node'` branch.
+    process.env['NODE_ENV'] = 'development';
+    jest.resetModules();
+    jest.doMock('@frontmcp/utils', () => {
+      const actual = jest.requireActual('@frontmcp/utils') as Record<string, unknown>;
+      return {
+        ...actual,
+        getRuntimeContext: () => ({ runtime: 'bun', env: 'development' }),
+      };
+    });
+    try {
+      const { resolveDefaultSqlitePath: resolve } = require('../resolve') as typeof import('../resolve');
+      const resolved = resolve({ appName: 'bun-dev', cliMode: false });
+      expect(resolved).toBe(path.join(homedir(), '.bun-dev', 'sessions.sqlite'));
+    } finally {
+      jest.dontMock('@frontmcp/utils');
+      jest.resetModules();
+    }
   });
 });

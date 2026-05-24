@@ -45,7 +45,12 @@ export class TransportService {
    * Session store for transport persistence (Redis or Vercel KV)
    * Used to persist session metadata across server restarts
    */
-  private sessionStore?: SessionStore & { ping?: () => Promise<boolean>; disconnect?: () => Promise<void> };
+  private sessionStore?: SessionStore & {
+    ping?: () => Promise<boolean>;
+    disconnect?: () => Promise<void>;
+    /** SQLite stores expose synchronous (or void-returning async) close — releases the underlying file handle. */
+    close?: () => void | Promise<void>;
+  };
 
   /**
    * Transport persistence configuration
@@ -146,8 +151,15 @@ export class TransportService {
     if (this.pendingStoreConfig) {
       try {
         const store = await createSessionStore(this.pendingStoreConfig, this.scope.logger.child('SessionStore'));
-        // Cast to our extended type (both RedisSessionStore and VercelKvSessionStore have ping/disconnect)
-        this.sessionStore = store as SessionStore & { ping?: () => Promise<boolean>; disconnect?: () => Promise<void> };
+        // Cast to our extended type. Redis / VercelKV stores expose
+        // `ping` + `disconnect`; the SQLite store exposes `close`. The
+        // `destroy()` path below selects the right teardown method by
+        // probing for both.
+        this.sessionStore = store as SessionStore & {
+          ping?: () => Promise<boolean>;
+          disconnect?: () => Promise<void>;
+          close?: () => void | Promise<void>;
+        };
         this.pendingStoreConfig = undefined;
       } catch (error) {
         const err = error as Error & { cause?: Error };
@@ -181,16 +193,25 @@ export class TransportService {
   }
 
   async destroy() {
-    // Close session store connection if it was created
-    if (this.sessionStore && this.sessionStore.disconnect) {
-      try {
-        await this.sessionStore.disconnect();
-        this.scope.logger.info('[TransportService] Session store disconnected');
-      } catch (error) {
-        this.scope.logger.warn('[TransportService] Error disconnecting session store', {
-          error: (error as Error).message,
-        });
-      }
+    // Close session store connection if it was created. SQLite stores
+    // (backendKind === 'sqlite') own a `better-sqlite3` Database handle
+    // and MUST be closed via `close()` to release the file descriptor —
+    // they don't implement `disconnect()`. Redis / VercelKV stores
+    // expose `disconnect()`. Probe in that order so both paths drain
+    // even if a custom backend implements both methods.
+    if (!this.sessionStore) return;
+    const teardown = this.sessionStore.disconnect ?? this.sessionStore.close;
+    if (!teardown) return;
+    try {
+      await Promise.resolve(teardown.call(this.sessionStore));
+      this.scope.logger.info('[TransportService] Session store disconnected', {
+        backendKind: this.backendKind ?? 'unknown',
+      });
+    } catch (error) {
+      this.scope.logger.warn('[TransportService] Error disconnecting session store', {
+        error: (error as Error).message,
+        backendKind: this.backendKind ?? 'unknown',
+      });
     }
   }
 

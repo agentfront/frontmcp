@@ -194,7 +194,7 @@ describe('TransportService', () => {
         expect(service.isSessionStoreConfigured()).toBe(true);
       });
 
-      it('does NOT take the sqlite branch when redis is also set (schema would reject this earlier)', async () => {
+      it('prefers the sqlite branch when redis is also set (schema would reject this earlier)', async () => {
         // Defensive: if a caller bypasses the schema and passes both, prefer sqlite.
         service = new TransportService(mockScope as never, {
           sqlite: { path: '/tmp/test-sessions.sqlite' },

@@ -3,6 +3,7 @@
  * Mocks @frontmcp/storage-sqlite so we don't pull in better-sqlite3.
  */
 
+import { ElicitationNotSupportedError } from '../../../errors/elicitation.error';
 import { createElicitationStore } from '../elicitation-store.factory';
 
 const fakeStore = { kind: 'sqlite-elicit-mock' };
@@ -41,7 +42,16 @@ describe('createElicitationStore — SQLite branch (issue #401)', () => {
     });
   });
 
-  it('throws on Edge runtime with SQLite (better-sqlite3 is native)', async () => {
+  it('throws ElicitationNotSupportedError on Edge runtime with SQLite (better-sqlite3 is native)', async () => {
+    // Assert both the error class AND the message — checking only the
+    // regex would pass even if the factory threw a plain Error or a
+    // different subclass, which would break `instanceof` consumers
+    // (the elicit helper does `err instanceof ElicitationNotSupportedError`).
+    const promise = createElicitationStore({
+      sqlite: { path: '/tmp/x.sqlite' },
+      isEdgeRuntime: true,
+    });
+    await expect(promise).rejects.toBeInstanceOf(ElicitationNotSupportedError);
     await expect(
       createElicitationStore({
         sqlite: { path: '/tmp/x.sqlite' },

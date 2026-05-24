@@ -399,14 +399,25 @@ export class Scope extends ScopeEntry {
           // ALWAYS in-process regardless of config (it's the worker itself).
           const explicit = tasksConfig?.runner;
           const useCliRunner = !isTaskWorker && explicit === 'cli';
-          if (useCliRunner && !tasksConfig?.sqlite && !tasksConfig?.redis && !this.metadata.redis) {
+          if (
+            useCliRunner &&
+            !tasksConfig?.sqlite &&
+            !tasksConfig?.redis &&
+            !this.metadata.redis &&
+            !this.metadata.sqlite
+          ) {
             // The CLI runner spawns a detached worker that HAS to read task state
             // from a shared backend. Memory-backed storage can't be shared across
             // processes, so accepting this config silently would guarantee broken
             // tasks at runtime. Refuse at startup.
+            //
+            // Top-level `metadata.sqlite` is also acceptable here — the task
+            // store auto-wires it (see `tasksSqlite` resolution above), so
+            // the CLI runner gets the same shared backend.
             throw new Error(
-              '[tasks] runner: "cli" requires a persistent backend (`tasks.sqlite` or ' +
-                '`tasks.redis`) — the detached worker cannot share an in-memory store with this host.',
+              '[tasks] runner: "cli" requires a persistent backend (`tasks.sqlite`, ' +
+                '`tasks.redis`, or a top-level `sqlite`) — the detached worker cannot share ' +
+                'an in-memory store with this host.',
             );
           }
           const runner = useCliRunner

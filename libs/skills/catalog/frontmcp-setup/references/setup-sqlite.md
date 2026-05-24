@@ -127,12 +127,12 @@ export default class Server {}
 
 Configuration reference:
 
-| Option                 | Type                 | Default     | Description                                         |
-| ---------------------- | -------------------- | ----------- | --------------------------------------------------- |
-| `path`                 | `string`             | (required)  | Absolute or `~`-prefixed path to the `.sqlite` file |
-| `walMode`              | `boolean`            | `true`      | Enable WAL mode for better read concurrency         |
-| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption for values at rest           |
-| `ttlCleanupIntervalMs` | `number`             | `60000`     | Interval for purging expired keys (milliseconds)    |
+| Option                 | Type                 | Default     | Description                                                                                                          |
+| ---------------------- | -------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| `path`                 | `string`             | (optional)  | Absolute or `~`-prefixed path to the `.sqlite` file. Auto-resolved when omitted — see the default-path policy below. |
+| `walMode`              | `boolean`            | `true`      | Enable WAL mode for better read concurrency                                                                          |
+| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption for values at rest                                                                            |
+| `ttlCleanupIntervalMs` | `number`             | `60000`     | Interval for purging expired keys (milliseconds)                                                                     |
 
 ### With at-rest encryption
 
@@ -236,7 +236,7 @@ three subsystems:
 | ----------------------------- | ------------------ | ------------------------------ |
 | Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite` |
 | Background task store         | top-level `sqlite` | `tasks.sqlite`                 |
-| Elicitation store             | top-level `sqlite` | `elicitation.sqlite` (planned) |
+| Elicitation store             | top-level `sqlite` | `elicitation.sqlite`           |
 
 If you want different files per subsystem, set the subsystem's own `sqlite`
 block — it takes precedence over the top-level one. To disable a single
@@ -250,9 +250,14 @@ the SDK emits a WARN at startup so the no-op doesn't go silent:
 [FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ...
 ```
 
-`createSqliteSessionStore` is also exported from `@frontmcp/sdk` if you want
-to construct a session store directly (rare; the decorator path is the
-recommended surface).
+`createSqliteSessionStore` lives in
+`libs/sdk/src/auth/session/index.ts` for the framework's own wiring, but
+it is **not** re-exported from `@frontmcp/sdk`'s public entrypoint and
+there is no `@frontmcp/sdk/auth/session` subpath export. End-user code
+should rely on the decorator path (top-level `sqlite: {...}` on
+`@FrontMcp`) — same guidance as
+[`configure-session`](../../frontmcp-config/references/configure-session.md):
+the SDK constructs the session store; user code does not.
 
 If you need to share the same SQLite config in another part of your code, declare it once and reuse it:
 

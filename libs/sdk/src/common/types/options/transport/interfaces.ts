@@ -131,19 +131,22 @@ export interface ProtocolConfig {
  * Enables session persistence to Redis/Vercel KV for transport recreation
  * after server restart. This is essential for serverless deployments.
  *
- * **Auto-enable behavior** (issue #401): When `transport.persistence` is
- * omitted, transport persistence is auto-enabled from the top-level
- * `sqlite` block on `@FrontMcp` if one is present (top-level `redis` is
- * NOT auto-threaded here — opt in explicitly via `persistence.redis` for
- * Redis-backed transport sessions). Set `persistence: false` to disable.
- * Schema-level refine rejects setting both `redis` and `sqlite` in the
- * same persistence block.
+ * **Auto-enable contract** (issue #401):
+ * 1. `persistence: false` always wins — disables transport persistence.
+ * 2. Otherwise, if `persistence` is omitted and a top-level `sqlite`
+ *    block is configured on `@FrontMcp`, transport persistence
+ *    auto-enables using SQLite.
+ * 3. Top-level `redis` is NOT auto-threaded into transport persistence
+ *    — opt in explicitly via `persistence.redis` if you want a
+ *    Redis-backed transport session store.
+ * 4. Schema-level refine rejects setting both `redis` and `sqlite` on
+ *    the same `persistence` block.
  *
- * @example Use global redis (auto-configured)
+ * @example Use global sqlite (auto-configured)
  * ```typescript
  * // At @FrontMcp level:
- * redis: { host: 'localhost' },
- * // persistence auto-enabled using global redis
+ * sqlite: { path: '~/.app/sessions.sqlite' },
+ * // transport persistence auto-enabled using SQLite
  * ```
  *
  * @example Override with custom config

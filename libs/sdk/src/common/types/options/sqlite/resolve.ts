@@ -18,11 +18,10 @@
  * resolved so this module stays unit-testable without a real disk.
  */
 
-import { existsSync } from 'fs';
 import { homedir } from 'os';
 import * as path from 'path';
 
-import { getRuntimeContext } from '@frontmcp/utils';
+import { getRuntimeContext, readFileSync } from '@frontmcp/utils';
 
 export interface SqlitePathResolverContext {
   /** Server name from `@FrontMcp({ info: { name } })`. */
@@ -63,8 +62,17 @@ function sanitizeForFs(name: string | undefined): string {
 function findProjectRoot(start: string): string | undefined {
   let dir = start;
   // Cap the walk at 32 levels to bound worst-case (sandbox / symlink loops).
+  // `@frontmcp/utils.readFileSync` is the sync FS escape hatch per the
+  // SDK-boundary rule (no direct `fs.existsSync`). A read attempt is a
+  // strictly stronger probe than `existsSync` — a missing file throws
+  // ENOENT, which we treat as "not here, keep walking".
   for (let i = 0; i < 32; i++) {
-    if (existsSync(path.join(dir, 'package.json'))) return dir;
+    try {
+      readFileSync(path.join(dir, 'package.json'));
+      return dir;
+    } catch {
+      // package.json absent at this level — fall through to parent.
+    }
     const parent = path.dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;

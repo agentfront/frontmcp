@@ -11,7 +11,7 @@ This skill covers setting up session storage in FrontMCP. Sessions track authent
 
 ### Must Use
 
-- Deploying to production where sessions must survive process restarts (Redis or Vercel KV required)
+- Deploying to production where sessions must survive process restarts (Redis, Vercel KV, or SQLite required)
 - Running multiple server instances behind a load balancer that need shared session state
 - Using Streamable HTTP transport where sessions must persist across reconnects
 
