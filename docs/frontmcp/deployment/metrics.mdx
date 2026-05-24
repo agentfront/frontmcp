@@ -1,0 +1,179 @@
+---
+title: Prometheus /metrics Endpoint
+sidebarTitle: Metrics
+description: Configure the /metrics endpoint that exposes process metrics and framework counters in Prometheus text format
+icon: 'chart-line'
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'metrics', 'prometheus', 'observability', 'monitoring', 'grafana', 'typescript']
+---
+
+FrontMCP can expose process metrics (CPU, RSS, heap, event-loop lag) and every framework counter (`frontmcp_skills_*_total`, plus any counter emitted via `createCounter()`) as a Prometheus scrape endpoint on the same HTTP listener as `/healthz`. The endpoint is **off by default** — turn it on with `metrics: { enabled: true }`.
+
+## Quick Start
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  metrics: { enabled: true },
+})
+class Server {}
+```
+
+Then scrape it:
+
+```bash
+curl http://localhost:3001/metrics
+```
+
+```
+# HELP frontmcp_process_resident_memory_bytes Resident memory size in bytes
+# TYPE frontmcp_process_resident_memory_bytes gauge
+frontmcp_process_resident_memory_bytes 50331648
+# HELP frontmcp_process_uptime_seconds Time since process start in seconds
+# TYPE frontmcp_process_uptime_seconds gauge
+frontmcp_process_uptime_seconds 42
+# TYPE frontmcp_skills_bundle_pulls_total counter
+frontmcp_skills_bundle_pulls_total{source="npm"} 3
+...
+```
+
+The Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
+
+## What the endpoint exposes
+
+When enabled, every scrape returns:
+
+| Category | Examples | Source |
+| --- | --- | --- |
+| Process gauges | `frontmcp_process_resident_memory_bytes`, `frontmcp_process_heap_bytes`, `frontmcp_process_uptime_seconds`, `frontmcp_process_cpu_seconds_total{mode="user"\|"system"}` | Built-in `ProcessStatsCollector` |
+| Node.js gauges | `frontmcp_nodejs_eventloop_lag_seconds{quantile="mean"\|"p99"}`, `frontmcp_nodejs_active_handles`, `frontmcp_nodejs_active_requests`, `frontmcp_nodejs_open_fds` (Linux only) | `perf_hooks` + `process._getActiveHandles()` |
+| Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total` | `@frontmcp/observability`'s in-memory counter snapshot store |
+| Custom counters | Anything emitted via `createCounter('my_counter_total').inc()` | Same snapshot store |
+
+`createCounter()` from `@frontmcp/observability` writes into the same store the scrape reads from — no extra wiring needed.
+
+## Configuration
+
+```typescript
+@FrontMcp({
+  metrics: {
+    enabled: true,                       // default: false
+    path: '/metrics',                    // default: '/metrics'
+    format: 'prometheus',                // 'prometheus' | 'json', default: 'prometheus'
+    auth: 'public',                      // 'public' | 'token' | { token: string }, default: 'public'
+    tokenEnv: 'FRONTMCP_METRICS_TOKEN',  // env var to read the bearer from when auth: 'token'
+    include: ['process', 'skills'],      // optional category filter
+    process: {
+      eventLoopLag: true,                // include event-loop lag gauge
+      fdCount: true,                     // include /proc/self/fd count (Linux only)
+      activeHandles: true,               // include active-handles / active-requests counts
+    },
+  },
+})
+```
+
+### `format: 'json'`
+
+Returns a `{ counters, gauges }` envelope at Content-Type `application/json` — useful for tooling that prefers JSON over text parsing:
+
+```json
+{
+  "counters": [
+    { "name": "frontmcp_skills_bundle_pulls_total", "count": 3, "attributes": { "source": "npm" } }
+  ],
+  "gauges": [
+    { "name": "frontmcp_process_uptime_seconds", "value": 42 }
+  ]
+}
+```
+
+### `auth: 'token'`
+
+Sets `Authorization: Bearer <token>` as the gate. The token is read from `process.env[tokenEnv]` (default env var: `FRONTMCP_METRICS_TOKEN`) at startup. If the env var is unset, the service constructor throws `MetricsTokenNotConfiguredError` — failing fast so a token-gated endpoint never silently downgrades to public:
+
+```typescript
+metrics: {
+  enabled: true,
+  auth: 'token',
+  tokenEnv: 'FRONTMCP_METRICS_TOKEN',
+}
+```
+
+Behaviour:
+- Missing `Authorization` header → **401**
+- `Authorization: Bearer <wrong>` → **403**
+- `Authorization: Bearer <correct>` → **200**
+
+For local / non-secret testing, an inline `{ token: '...' }` literal also works but is discouraged in production:
+
+```typescript
+metrics: {
+  enabled: true,
+  auth: { token: 'dev-only' },
+}
+```
+
+### `include[]` filter
+
+Each category maps to a counter-name prefix:
+
+| Category | Prefix matched |
+| --- | --- |
+| `process` | `frontmcp_process_`, `frontmcp_nodejs_` |
+| `skills` | `frontmcp_skills_` |
+| `tools` | `frontmcp_tool_` |
+| `resources` | `frontmcp_resource_` |
+| `http` | `frontmcp_http_` |
+| `storage` | `frontmcp_storage_` |
+| `auth` | `frontmcp_auth_` |
+| `sessions` | `frontmcp_session_` |
+
+Omit `include` to emit every category.
+
+### Path conflicts
+
+`metrics.path` MUST NOT collide with MCP transport paths (`/mcp`, `/sse`, `/messages`). The service constructor throws `MetricsPathConflictError` at startup if it detects an overlap:
+
+```typescript
+metrics: { enabled: true, path: '/mcp' }
+// → throws MetricsPathConflictError at boot
+```
+
+## Off-by-default rationale
+
+The endpoint is opt-in because process metrics, framework counter names, and tool vocabularies can hint at deployment scale and feature usage (e.g. `frontmcp_skills_signature_failures_total` reveals a signing infra exists, `frontmcp_auth_checks_total{result="denied"}` correlates to attack attempts). Recommendations:
+
+- **Internet-exposed deployments**: use `auth: 'token'` or terminate the endpoint at a sidecar/ingress with a network ACL.
+- **Cluster-local deployments**: `auth: 'public'` matches the Prometheus / Kubernetes convention; ensure the Prometheus pod can reach the port and external traffic cannot.
+
+## How it interacts with OpenTelemetry
+
+`createCounter()` from `@frontmcp/observability` writes to two places: the in-memory snapshot store (which this endpoint reads) AND any globally configured OTel `MeterProvider` (which forwards to OTLP / Prometheus exporter / Grafana Cloud). If you've already wired an OTel `MeterProvider` via `metrics.setGlobalMeterProvider()`, the values in the scrape match the values pushed via OTel — both paths share the same counter handles.
+
+## Adding custom counters
+
+Use `createCounter()` from `@frontmcp/observability`. The counter is automatically included in the scrape:
+
+```typescript
+import { createCounter } from '@frontmcp/observability';
+
+const cacheHits = createCounter('my_cache_hits_total', 'Cache hits by tier');
+
+// Later, in a tool / resource / provider:
+cacheHits.inc(1, { tier: 'l1' });
+
+// Next scrape returns:
+// # TYPE my_cache_hits_total counter
+// my_cache_hits_total{tier="l1"} 1
+```
+
+Label values should be bounded (status codes, enum members, tool names) — unbounded values (user IDs, URLs, JWTs) blow up the timeseries count.
+
+## Reference
+
+- `@frontmcp/sdk` exports: `MetricsService`, `registerMetricsRoutes`, `MetricsPathConflictError`, `MetricsTokenNotConfiguredError`
+- `@frontmcp/observability` exports: `renderPrometheusExposition`, `renderJsonExposition`, `ProcessStatsCollector`, `PROMETHEUS_CONTENT_TYPE`, `createCounter`, `getMetricSnapshot`
+- Type definitions: `MetricsOptionsInterface`, `MetricsAuth`, `MetricsCategory`, `MetricsFormat`, `MetricsProcessOptionsInterface`
+- Tracked under [issue #397](https://github.com/agentfront/frontmcp/issues/397)
