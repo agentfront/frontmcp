@@ -203,6 +203,7 @@ export {
   resetRuntimeContext,
   detectRuntimeContext,
   isEntryAvailable,
+  checkEntryAvailability,
   entryAvailabilitySchema,
 } from './env';
 export type { RuntimeContext, EntryAvailability } from './env';

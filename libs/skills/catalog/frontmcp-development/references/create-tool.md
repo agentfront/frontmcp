@@ -630,7 +630,9 @@ Restrict a tool to specific platforms, runtimes, or environments using `availabl
   name: 'apple_notes_search',
   description: 'Search Apple Notes',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  // `os` is the canonical axis since issue #417; `platform` remains as
+  // a deprecated alias for backward compatibility.
+  availableWhen: { os: ['darwin'] },
 })
 class AppleNotesSearchTool extends ToolContext {
   async execute(input: { query: string }) {

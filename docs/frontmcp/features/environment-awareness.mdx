@@ -23,7 +23,7 @@ Add `availableWhen` to any entry's metadata to constrain its availability:
   name: 'apple_notes_search',
   description: 'Search Apple Notes',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  availableWhen: { os: ['darwin'] },
 })
 class AppleNotesSearchTool extends ToolContext {
   async execute({ query }: { query: string }) {
@@ -191,7 +191,7 @@ When a tool exists but its `availableWhen` constraint fails at call time, FrontM
     @Tool({
       name: 'apple_notes_search',
       inputSchema: { query: z.string() },
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class AppleNotesSearchTool extends ToolContext { ... }
     ```
@@ -201,7 +201,7 @@ When a tool exists but its `availableWhen` constraint fails at call time, FrontM
     @Resource({
       name: 'system-info',
       uri: 'system://info',
-      availableWhen: { platform: ['darwin', 'linux'] },
+      availableWhen: { os: ['darwin', 'linux'] },
     })
     class SystemInfoResource extends ResourceContext { ... }
     ```
@@ -211,7 +211,7 @@ When a tool exists but its `availableWhen` constraint fails at call time, FrontM
     @Prompt({
       name: 'xcode-review',
       arguments: [{ name: 'project', required: true }],
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class XcodeReviewPrompt extends PromptContext { ... }
     ```
@@ -222,7 +222,7 @@ When a tool exists but its `availableWhen` constraint fails at call time, FrontM
       name: 'ios-deploy',
       description: 'Deploy to iOS devices',
       instructions: { file: './skills/ios-deploy.md' },
-      availableWhen: { platform: ['darwin'] },
+      availableWhen: { os: ['darwin'] },
     })
     class IosDeploySkill extends SkillContext { ... }
     ```
@@ -264,13 +264,16 @@ class SystemCommandTool extends ToolContext {
 
 ### Available Methods
 
-| Method                        | Returns   | Description                                |
-| ----------------------------- | --------- | ------------------------------------------ |
-| `this.isPlatform('darwin')`   | `boolean` | Check OS platform                          |
-| `this.isRuntime('node')`      | `boolean` | Check JavaScript runtime                   |
-| `this.isDeployment('serverless')` | `boolean` | Check deployment mode                  |
-| `this.isEnv('production')`    | `boolean` | Check NODE_ENV                             |
-| `this.runtimeContext`         | `RuntimeContext` | Full context object                   |
+`RuntimeContext` exposes the operating system via the `os` property; `platform` remains as a deprecated alias for backward compatibility (issue #417) and resolves to the same value. New code should read `this.runtimeContext.os` directly.
+
+| Method                            | Returns          | Description                                                                                              |
+| --------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `this.runtimeContext.os`          | `string`         | Modern OS axis access — same values as `process.platform` (`'darwin'`, `'linux'`, `'win32'`, …)         |
+| `this.isPlatform('darwin')`       | `boolean`        | **Deprecated alias** — checks the legacy `.platform` field. Prefer `this.runtimeContext.os === 'darwin'`. |
+| `this.isRuntime('node')`          | `boolean`        | Check JavaScript runtime                                                                                  |
+| `this.isDeployment('serverless')` | `boolean`        | Check deployment mode                                                                                     |
+| `this.isEnv('production')`        | `boolean`        | Check NODE_ENV                                                                                            |
+| `this.runtimeContext`             | `RuntimeContext` | Full context object (`os`, `platform`, `runtime`, `deployment`, `env`)                                    |
 
 These methods are available on `ToolContext`, `ResourceContext`, `PromptContext`, and `AgentContext`.
 
@@ -295,7 +298,7 @@ tools/
   name: 'notes_search',
   description: 'Search notes on this system',
   inputSchema: { query: z.string() },
-  availableWhen: { platform: ['darwin'] },
+  availableWhen: { os: ['darwin'] },
 })
 export class AppleNotesSearchTool extends ToolContext {
   async execute({ query }) { /* Apple Notes API */ }
@@ -329,16 +332,28 @@ The multi-platform file pattern (`name.platform.tool.ts`) is recommended when yo
 
 ## Error Handling
 
-When a client tries to call a tool that exists but is unavailable in the current environment, the SDK returns an `EntryUnavailableError` (HTTP 403) with both the constraint and the current context:
+When a client tries to call a tool that exists but is unavailable in the current environment, the SDK returns an `EntryUnavailableError` (HTTP 403) with both the constraint and the current context. The `data` payload includes a `missingAxes` array so clients can show a precise reason for the failure without parsing the message string:
 
 ```json
 {
   "code": -32003,
-  "message": "Tool \"apple_notes_search\" is not available in the current environment (requires: {\"platform\":[\"darwin\"]}) (current: {\"platform\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})"
+  "message": "Tool \"apple_notes_search\" is not available in the current environment (missing axes: os) (requires: {\"os\":[\"darwin\"]}) (current: {\"os\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})",
+  "data": {
+    "entryType": "tool",
+    "entry": "apple_notes_search",
+    "missingAxes": ["os"],
+    "constraint": { "os": ["darwin"] },
+    "context": {
+      "os": "linux",
+      "runtime": "node",
+      "deployment": "standalone",
+      "env": "production"
+    }
+  }
 }
 ```
 
-This is distinct from a `ToolNotFoundError` (404), helping clients understand why a tool is inaccessible.
+This is distinct from a `ToolNotFoundError` (404), helping clients understand why a tool is inaccessible. See the [Structured errors](#structured-errors) reference (if present) for the full schema.
 
 ---
 
