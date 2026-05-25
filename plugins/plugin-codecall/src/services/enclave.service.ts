@@ -1,10 +1,12 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
+import { Enclave, type ExecutionResult, type ReferenceSidecarOptions, type ToolHandler } from '@enclave-vm/core';
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from '@enclave-vm/core';
-import type CodeCallConfig from '../providers/code-call.config';
+
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
+import type CodeCallConfig from '../providers/code-call.config';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -148,6 +150,11 @@ export default class EnclaveService {
               },
             }
           : {}),
+        // Tool namespaces (e.g. `acme.getUser`) flow through here. Each
+        // namespace becomes a top-level global; methods delegate to callTool
+        // with the original full tool name, so security/quota/audit checks
+        // run uniformly with the non-namespaced path.
+        ...(environment.namespaces ?? {}),
         // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
         // and output size limits. Passing console in globals causes "Cannot redefine property"
         // errors due to Double VM architecture. Console output from user scripts goes to stdout

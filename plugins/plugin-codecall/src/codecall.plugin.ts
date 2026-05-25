@@ -1,37 +1,35 @@
 // file: plugins/plugin-codecall/src/codecall.plugin.ts
 
+import CachePlugin from '@frontmcp/plugin-cache';
 import {
   DynamicPlugin,
-  FlowCtxOf,
   FrontMcpLogger,
   ListToolsHook,
   Plugin,
-  ProviderType,
   ScopeEntry,
-  ToolEntry,
+  type FlowCtxOf,
+  type ProviderType,
+  type ToolEntry,
 } from '@frontmcp/sdk';
 
 import {
-  CodeCallMode,
-  CodeCallPluginOptions,
-  CodeCallPluginOptionsInput,
-  CodeCallToolMetadata,
   codeCallPluginOptionsSchema,
+  type CodeCallMode,
+  type CodeCallPluginOptions,
+  type CodeCallPluginOptionsInput,
+  type CodeCallToolMetadata,
 } from './codecall.types';
-import { ToolSearchService } from './services';
-
-import { SearchTool, DescribeTool, ExecuteTool, InvokeTool } from './tools';
-
 import CodeCallConfig from './providers/code-call.config';
+import { ToolSearchService } from './services';
 import EnclaveService from './services/enclave.service';
-import CachePlugin from '@frontmcp/plugin-cache';
+import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkillsTool, SearchTool } from './tools';
 
 @Plugin({
   name: 'codecall',
   description: 'CodeCall plugin: AgentScript-based meta-tools for orchestrating MCP tools',
   providers: [],
   plugins: [CachePlugin],
-  tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
+  tools: [SearchTool, SearchSkillsTool, SearchKnowledgeTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions, CodeCallPluginOptionsInput> {
   options: CodeCallPluginOptions;
@@ -138,7 +136,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    * @param mode - The current CodeCall mode
    * @returns true if tool should be visible
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ToolEntry generics vary across call sites
+
   private shouldShowInListTools(tool: ToolEntry<any, any, any, any>, mode: CodeCallMode): boolean {
     // CodeCall meta-tools are ALWAYS visible
     if (this.isCodeCallTool(tool)) {
@@ -187,7 +185,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    * Check if a tool is a CodeCall meta-tool.
    * CodeCall meta-tools always remain visible.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private isCodeCallTool(tool: ToolEntry<any, any, any, any>): boolean {
     const name = tool.name || tool.fullName;
     return name.startsWith('codecall:');
@@ -196,7 +194,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
   /**
    * Extract CodeCall-specific metadata from a tool.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private getCodeCallMetadata(tool: ToolEntry<any, any, any, any>): CodeCallToolMetadata | undefined {
     return (tool.metadata as unknown as Record<string, unknown>)?.['codecall'] as CodeCallToolMetadata | undefined;
   }

@@ -88,6 +88,25 @@ export interface SkillToolRefWithClass {
 }
 
 /**
+ * A reference to an OpenAPI operation that a skill is allowed to call from
+ * its agentscript. Populated by the deploy pipeline's markdown harvester
+ * (see `@frontmcp/adapters/skills` → `extractOpReferences`), which scans
+ * `op://` and `[[op:...]]` mentions across SKILL.md / references/ / examples/
+ * and produces the deduplicated set per skill.
+ *
+ * A skill is "executable" if it has any `referencedOperations` OR any
+ * decorator-declared `tools`. A skill with neither is "knowledge-only" — it
+ * appears in `searchKnowledge` results but its `execute()` calls have no
+ * tool bindings (pure computation only).
+ */
+export interface SkillReferencedOperation {
+  /** The OpenAPI spec id (matches the deploy manifest's specs[].id). */
+  spec: string;
+  /** The OpenAPI operationId — must be a valid JavaScript identifier. */
+  operationId: string;
+}
+
+/**
  * Parameter definition for a skill.
  * Parameters are inputs that customize skill behavior.
  */
@@ -235,6 +254,14 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
   tags?: string[];
 
   /**
+   * OpenAPI operations the skill is allowed to call from its agentscript.
+   * Populated by the deploy pipeline's markdown harvester. Read-only at
+   * runtime — to change the allowed set, edit the skill's markdown and
+   * redeploy.
+   */
+  referencedOperations?: SkillReferencedOperation[];
+
+  /**
    * Input parameters that customize skill behavior.
    */
   parameters?: SkillParameter[];
@@ -258,6 +285,21 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * Default: false
    */
   hideFromDiscovery?: boolean;
+
+  /**
+   * If true, this skill is treated as always loaded — its bindings (operations
+   * and namespaces derived from referenced openapi operations) are merged into
+   * every `codecall:execute` invocation regardless of the skills list the
+   * agent passes. Use sparingly for "standard library" capabilities (logging
+   * helpers, auth helpers, organization-wide utilities) that every agentscript
+   * is expected to reach for.
+   *
+   * Always-loaded skills still appear in discovery; clients can suppress them
+   * from search results via the `excludeAlwaysLoaded` option.
+   *
+   * Default: false
+   */
+  alwaysLoad?: boolean;
 
   /**
    * Validation mode for tool references.
@@ -423,6 +465,25 @@ const skillToolInputSchema = z.union([
   skillToolRefWithClassSchema, // { tool, purpose?, required? }
 ]);
 
+const skillReferencedOperationSchema = z
+  .object({
+    spec: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/, {
+        message: 'spec must be a URI-safe identifier',
+      }),
+    operationId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, {
+        message: 'operationId must be a valid JavaScript identifier',
+      }),
+  })
+  .strict();
+
 const skillParameterSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -488,10 +549,12 @@ export const skillMetadataSchema = z
     instructions: skillInstructionSourceSchema,
     tools: z.array(skillToolInputSchema).optional(),
     tags: z.array(z.string().min(1)).optional(),
+    referencedOperations: z.array(skillReferencedOperationSchema).max(256).optional(),
     parameters: z.array(skillParameterSchema).optional(),
     examples: z.array(skillExampleSchema).optional(),
     priority: z.number().optional().default(0),
     hideFromDiscovery: z.boolean().optional().default(false),
+    alwaysLoad: z.boolean().optional().default(false),
     toolValidation: z.enum(['strict', 'warn', 'ignore']).optional().default('warn'),
     visibility: z.enum(['mcp', 'http', 'both']).optional().default('both'),
     license: z.string().optional(),

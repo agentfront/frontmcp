@@ -1,25 +1,26 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import {
-  CodeCallExecuteResult,
-  executeToolOutputSchema,
-  executeToolDescription,
-  executeToolInputSchema,
-  ExecuteToolInput,
-} from './execute.schema';
+
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
-import EnclaveService from '../services/enclave.service';
-import CodeCallConfig from '../providers/code-call.config';
-import { assertNotSelfReference } from '../security';
 import {
   createToolCallError,
   TOOL_CALL_ERROR_CODES,
-  ToolCallResult,
-  CallToolOptions,
-  ToolCallErrorCode,
+  type CallToolOptions,
+  type ToolCallErrorCode,
+  type ToolCallResult,
 } from '../errors';
-import { extractResultFromCallToolResult } from '../utils';
+import CodeCallConfig from '../providers/code-call.config';
+import { assertNotSelfReference } from '../security';
+import EnclaveService from '../services/enclave.service';
+import { buildToolNamespaces, extractResultFromCallToolResult } from '../utils';
+import {
+  executeToolDescription,
+  executeToolInputSchema,
+  executeToolOutputSchema,
+  type CodeCallExecuteResult,
+  type ExecuteToolInput,
+} from './execute.schema';
 
 /**
  * Determine the error code from an error object.
@@ -182,6 +183,30 @@ export default class ExecuteTool extends ToolContext {
         this.logger?.debug('Notification sent', { event, payload });
       },
     };
+
+    // Build namespaced bindings for AgentScript ergonomics. Tools named
+    // `${ns}.${method}` become `await ns.method(args)` instead of
+    // `await callTool('ns.method', args)`. Each binding delegates to the
+    // same `callTool` closure above so all security checks (self-reference,
+    // whitelist, sanitization, flow execution) apply uniformly.
+    try {
+      const registeredTools = this.scope.tools.getTools(true) as Array<{ name: string }>;
+      const { namespaces, skipped } = buildToolNamespaces(registeredTools, environment.callTool);
+      environment.namespaces = namespaces;
+      if (skipped.length > 0) {
+        this.logger?.debug?.('codecall: tools skipped during namespace generation', {
+          count: skipped.length,
+          // Cap the debug payload so a huge skip list doesn't bloat logs.
+          sample: skipped.slice(0, 25),
+        });
+      }
+    } catch (error: unknown) {
+      // Namespace building is best-effort — failures must not break execution.
+      // Backward compat is preserved because callTool() always works.
+      this.logger?.warn?.('codecall: failed to build tool namespaces', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     // Get the enclave service and config
     const enclaveService = this.get(EnclaveService);

@@ -534,6 +534,45 @@ export default class SkillRegistry
   }
 
   /**
+   * Get skills marked `alwaysLoad: true` in their metadata. The codecall
+   * runtime merges these into every execute() invocation regardless of which
+   * skills the agent passed, providing a per-server "standard library."
+   *
+   * Honours the same visibility and environment-availability gating as
+   * {@link getSkills}; hidden skills CAN be always-loaded (a server may want
+   * common helpers loaded without surfacing them in search).
+   */
+  getAlwaysLoadedSkills(): SkillEntry[] {
+    let skills = this.listAllIndexed().map((r) => r.instance);
+    skills = skills.filter((s) => s.isAlwaysLoaded());
+
+    const ctx = getRuntimeContext();
+    skills = skills.filter((s) => isEntryAvailable(s.metadata.availableWhen, ctx));
+
+    return skills;
+  }
+
+  /**
+   * Get the "executable" subset — skills that declare at least one tool OR
+   * at least one referenced openapi operation. These are the skills
+   * `codecall:searchSkills` ranks. Honours hidden-filtering + availability
+   * gating like {@link getSkills}.
+   */
+  getExecutableSkills(opts?: GetSkillsOptions): SkillEntry[] {
+    return this.getSkills(opts).filter((s) => s.isExecutable());
+  }
+
+  /**
+   * Get the "knowledge-only" subset — skills with no tools and no
+   * referenced openapi operations. These are the skills
+   * `codecall:searchKnowledge` ranks. Honours hidden-filtering + availability
+   * gating like {@link getSkills}.
+   */
+  getKnowledgeOnlySkills(opts?: GetSkillsOptions): SkillEntry[] {
+    return this.getSkills(opts).filter((s) => s.isKnowledgeOnly());
+  }
+
+  /**
    * Find a skill by name.
    */
   findByName(name: string): SkillEntry | undefined {

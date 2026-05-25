@@ -5,10 +5,11 @@
  */
 
 import 'reflect-metadata';
-import SkillRegistry from '../skill.registry';
-import { Skill, SkillContext, SkillContent } from '../../common';
+
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { Skill, SkillContext, type SkillContent } from '../../common';
 import { skill } from '../../common/decorators/skill.decorator';
+import SkillRegistry from '../skill.registry';
 
 // Mock SkillContext for class-based skills
 class MockSkillContext extends SkillContext {
@@ -582,6 +583,221 @@ describe('SkillRegistry', () => {
 
       const foundSkill = registry.findByName('priority-skill');
       expect(foundSkill?.getPriority()).toBe(10);
+    });
+  });
+
+  describe('Always-loaded skills', () => {
+    it('defaults to alwaysLoad=false when not set', async () => {
+      @Skill({
+        name: 'plain-skill',
+        description: 'A plain skill',
+        instructions: 'Do something',
+      })
+      class PlainSkill extends MockSkillContext {}
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [PlainSkill], owner);
+      await registry.ready;
+
+      const found = registry.findByName('plain-skill');
+      expect(found?.isAlwaysLoaded()).toBe(false);
+
+      expect(registry.getAlwaysLoadedSkills()).toEqual([]);
+    });
+
+    it('isAlwaysLoaded() returns true when metadata.alwaysLoad is true', async () => {
+      @Skill({
+        name: 'std-lib',
+        description: 'Standard helpers',
+        instructions: 'Helpers for every script',
+        alwaysLoad: true,
+      })
+      class StdLibSkill extends MockSkillContext {}
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [StdLibSkill], owner);
+      await registry.ready;
+
+      const found = registry.findByName('std-lib');
+      expect(found?.isAlwaysLoaded()).toBe(true);
+    });
+
+    it('getAlwaysLoadedSkills() returns only the always-loaded subset', async () => {
+      @Skill({
+        name: 'normal',
+        description: 'Normal skill',
+        instructions: 'Use when requested',
+      })
+      class NormalSkill extends MockSkillContext {}
+
+      @Skill({
+        name: 'auth-helpers',
+        description: 'Auth helpers',
+        instructions: 'Always available',
+        alwaysLoad: true,
+      })
+      class AuthHelpersSkill extends MockSkillContext {}
+
+      @Skill({
+        name: 'logging-helpers',
+        description: 'Logging helpers',
+        instructions: 'Always available',
+        alwaysLoad: true,
+      })
+      class LoggingHelpersSkill extends MockSkillContext {}
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [NormalSkill, AuthHelpersSkill, LoggingHelpersSkill], owner);
+      await registry.ready;
+
+      const always = registry.getAlwaysLoadedSkills();
+      const names = always.map((s) => s.name).sort();
+      expect(names).toEqual(['auth-helpers', 'logging-helpers']);
+    });
+
+    it('returns always-loaded skills even when they are hidden from discovery', async () => {
+      // Servers may want a "standard library" skill that's loaded into every
+      // execute() but not shown in search — alwaysLoad must not be filtered by
+      // hideFromDiscovery.
+      @Skill({
+        name: 'internal-helpers',
+        description: 'Internal-only helpers',
+        instructions: 'Always available, never shown',
+        alwaysLoad: true,
+        hideFromDiscovery: true,
+      })
+      class InternalHelpersSkill extends MockSkillContext {}
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [InternalHelpersSkill], owner);
+      await registry.ready;
+
+      const always = registry.getAlwaysLoadedSkills();
+      expect(always).toHaveLength(1);
+      expect(always[0].name).toBe('internal-helpers');
+
+      // ...but discovery still hides them.
+      const visible = registry.getSkills(false);
+      expect(visible).toEqual([]);
+    });
+  });
+
+  describe('Executable vs knowledge-only skills', () => {
+    it('classifies a skill with no tools and no referencedOperations as knowledge-only', async () => {
+      const knowledgeRecord = skill({
+        name: 'refund-policy',
+        description: 'Refund eligibility reference',
+        instructions: 'Use this for context on refund rules.',
+      });
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [knowledgeRecord], owner);
+      await registry.ready;
+
+      const found = registry.findByName('refund-policy');
+      expect(found?.isKnowledgeOnly()).toBe(true);
+      expect(found?.isExecutable()).toBe(false);
+      expect(registry.getKnowledgeOnlySkills().map((s) => s.name)).toEqual(['refund-policy']);
+      expect(registry.getExecutableSkills()).toEqual([]);
+    });
+
+    it('classifies a skill with referencedOperations as executable', async () => {
+      const executableRecord = skill({
+        name: 'issue-refund',
+        description: 'Issue a refund for an order',
+        instructions: 'Use this to refund an order via the acme API.',
+        referencedOperations: [
+          { spec: 'acme', operationId: 'getOrder' },
+          { spec: 'acme', operationId: 'issueRefund' },
+        ],
+      });
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [executableRecord], owner);
+      await registry.ready;
+
+      const found = registry.findByName('issue-refund');
+      expect(found?.isExecutable()).toBe(true);
+      expect(found?.isKnowledgeOnly()).toBe(false);
+      expect(found?.getReferencedOperations()).toEqual([
+        { spec: 'acme', operationId: 'getOrder' },
+        { spec: 'acme', operationId: 'issueRefund' },
+      ]);
+      expect(registry.getExecutableSkills().map((s) => s.name)).toEqual(['issue-refund']);
+      expect(registry.getKnowledgeOnlySkills()).toEqual([]);
+    });
+
+    it('treats a skill with tools[] but no referencedOperations as executable', async () => {
+      const executableRecord = skill({
+        name: 'with-tools',
+        description: 'Uses a decorator-declared tool',
+        instructions: 'Use the github tool.',
+        tools: ['github_create_pr'],
+      });
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(providers, [executableRecord], owner);
+      await registry.ready;
+
+      const found = registry.findByName('with-tools');
+      expect(found?.isExecutable()).toBe(true);
+      expect(found?.getReferencedOperations()).toEqual([]);
+    });
+
+    it('partitions a mixed registry into executable and knowledge-only buckets', async () => {
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new SkillRegistry(
+        providers,
+        [
+          skill({
+            name: 'knowledge',
+            description: 'Pure knowledge skill',
+            instructions: 'Just docs.',
+          }),
+          skill({
+            name: 'with-ops',
+            description: 'Has op refs',
+            instructions: 'Use ops.',
+            referencedOperations: [{ spec: 'acme', operationId: 'ping' }],
+          }),
+          skill({
+            name: 'with-tools',
+            description: 'Has tool refs',
+            instructions: 'Use a tool.',
+            tools: ['some_tool'],
+          }),
+        ],
+        owner,
+      );
+      await registry.ready;
+
+      const executable = registry
+        .getExecutableSkills()
+        .map((s) => s.name)
+        .sort();
+      const knowledge = registry
+        .getKnowledgeOnlySkills()
+        .map((s) => s.name)
+        .sort();
+
+      expect(executable).toEqual(['with-ops', 'with-tools']);
+      expect(knowledge).toEqual(['knowledge']);
     });
   });
 });
