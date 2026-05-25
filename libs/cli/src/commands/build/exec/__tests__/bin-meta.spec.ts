@@ -100,4 +100,47 @@ describe('writeBinMeta (issue #411)', () => {
     expect(meta.skills).toEqual([]);
     expect(meta.prompts).toEqual([]);
   });
+
+  it('forwards skill description, tags, and license from ExtractedSkillAsset (issue #411 follow-up + #415)', async () => {
+    const schema = makeSchema({
+      skillAssets: [
+        {
+          skillName: 'rich-meta',
+          baseDir: '/abs/skill-src',
+          instructionFile: '/abs/skill-src/SKILL.md',
+          description: 'A skill with rich decorator metadata',
+          tags: ['alpha', 'beta'],
+          license: 'MIT',
+        },
+      ],
+    });
+    await writeBinMeta(tmp, makeConfig(), schema);
+
+    const meta = (await readJSON(path.join(tmp, 'bin-meta.json'))) as { skills: Record<string, unknown>[] };
+    expect(meta.skills[0]).toMatchObject({
+      name: 'rich-meta',
+      description: 'A skill with rich decorator metadata',
+      tags: ['alpha', 'beta'],
+      license: 'MIT',
+    });
+  });
+
+  it('omits empty tags arrays so the JSON payload stays terse', async () => {
+    const schema = makeSchema({
+      skillAssets: [
+        {
+          skillName: 'empty-tags',
+          baseDir: '/abs',
+          instructionFile: '/abs/SKILL.md',
+          description: 'has empty tags array',
+          tags: [],
+        },
+      ],
+    });
+    await writeBinMeta(tmp, makeConfig(), schema);
+
+    const meta = (await readJSON(path.join(tmp, 'bin-meta.json'))) as { skills: Record<string, unknown>[] };
+    expect(meta.skills[0]).not.toHaveProperty('tags');
+    expect(meta.skills[0].description).toBe('has empty tags array');
+  });
 });

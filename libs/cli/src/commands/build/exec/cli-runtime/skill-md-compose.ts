@@ -40,8 +40,12 @@ export function composeSkillMd(meta: SkillFrontmatter, body: string): string {
   }
   lines.push(FRONTMATTER_DELIMITER);
   lines.push('');
-  const trimmedBody = body.replace(/^\s+/, '');
-  return lines.join('\n') + (trimmedBody.length > 0 ? trimmedBody : `# ${meta.name}\n`);
+  // Drop AT MOST a single optional leading newline — that's the separator
+  // between the (now-prepended) frontmatter and the body itself. Stripping
+  // all leading whitespace would eat intentional blank lines or indentation
+  // the author put at the top of the body, which is content, not noise.
+  const normalizedBody = body.replace(/^\r?\n/, '');
+  return lines.join('\n') + (normalizedBody.length > 0 ? normalizedBody : `# ${meta.name}\n`);
 }
 
 export function hasFrontmatter(body: string): boolean {

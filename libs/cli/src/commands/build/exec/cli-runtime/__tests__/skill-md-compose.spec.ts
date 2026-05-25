@@ -63,4 +63,26 @@ describe('composeSkillMd', () => {
     const result = composeSkillMd({ name: 'empty-body' }, '');
     expect(result).toContain('# empty-body');
   });
+
+  it('drops only the single leading newline separator, not intentional blank lines', () => {
+    // Bodies authored with leading blank lines for visual spacing must
+    // survive the frontmatter prepend — only the single newline that
+    // separates them from the prepended block is collapsed.
+    const result = composeSkillMd(
+      { name: 'spaced', description: 'spaced body' },
+      '\n\n  preserve indented preamble\n',
+    );
+    expect(result).toContain('---\n\n');
+    expect(result).toContain('\n  preserve indented preamble');
+  });
+
+  it('preserves a body that starts with content (no leading newline)', () => {
+    const result = composeSkillMd(
+      { name: 'no-leader', description: 'd' },
+      '# Heading\n\nBody.',
+    );
+    // The body must land directly after the frontmatter separator without
+    // an extra blank line being injected (or a leading char being stripped).
+    expect(result).toContain('---\n# Heading\n\nBody.');
+  });
 });

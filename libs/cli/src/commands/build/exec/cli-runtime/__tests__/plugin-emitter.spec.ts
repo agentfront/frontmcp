@@ -161,6 +161,83 @@ describe('plugin-emitter (issue #411)', () => {
       expect(after.mcpServers['preserves'].command).toBe('preserves');
     });
 
+    it('synthesizes SKILL.md frontmatter when the source body has none (issue #411 + #415)', async () => {
+      const skillSrc = path.join(tmp, 'src-no-fm');
+      await mkdir(skillSrc, { recursive: true });
+      // Source markdown body without YAML frontmatter — typical for projects
+      // that author skills via `@Skill({ instructions: { file: './body.md' } })`.
+      await writeFile(path.join(skillSrc, 'body.md'), '# Heading\n\nBody content.');
+
+      const destRoot = path.join(tmp, 'plugins-fm');
+      await emitClaudePlugin({
+        destRoot,
+        name: 'fm-bin',
+        version: '1.0.0',
+        description: 'd',
+        mcpCommand: 'fm-bin',
+        mcpArgs: ['serve', '--stdio'],
+        envHints: [],
+        skills: [
+          {
+            name: 'tagged-skill',
+            description: 'Skill with tags + license',
+            tags: ['alpha', 'beta'],
+            license: 'MIT',
+            instructionFile: path.join(skillSrc, 'body.md'),
+          },
+        ],
+        commands: [],
+        cliVersion: '0.5.0',
+      });
+
+      const written = await readFile(path.join(destRoot, 'fm-bin', 'skills', 'tagged-skill', 'SKILL.md'));
+      expect(written.startsWith('---\n')).toBe(true);
+      expect(written).toContain('name: tagged-skill');
+      expect(written).toContain('description: Skill with tags + license');
+      expect(written).toContain('tags: [alpha, beta]');
+      expect(written).toContain('license: MIT');
+      expect(written).toContain('# Heading');
+      expect(written).toContain('Body content.');
+    });
+
+    it('preserves a pre-existing frontmatter block in the source file verbatim', async () => {
+      const skillSrc = path.join(tmp, 'src-has-fm');
+      await mkdir(skillSrc, { recursive: true });
+      const source = [
+        '---',
+        'name: source-defined',
+        'description: from-source-file',
+        '---',
+        '',
+        '# Body',
+      ].join('\n');
+      await writeFile(path.join(skillSrc, 'SKILL.md'), source);
+
+      const destRoot = path.join(tmp, 'plugins-preserve');
+      await emitClaudePlugin({
+        destRoot,
+        name: 'preserve-bin',
+        version: '1.0.0',
+        description: 'd',
+        mcpCommand: 'preserve-bin',
+        mcpArgs: ['serve', '--stdio'],
+        envHints: [],
+        skills: [
+          {
+            name: 'source-defined',
+            description: 'should-not-overwrite-source-frontmatter',
+            instructionFile: path.join(skillSrc, 'SKILL.md'),
+          },
+        ],
+        commands: [],
+        cliVersion: '0.5.0',
+      });
+
+      const written = await readFile(path.join(destRoot, 'preserve-bin', 'skills', 'source-defined', 'SKILL.md'));
+      expect(written).toBe(source);
+      expect(written).not.toContain('should-not-overwrite-source-frontmatter');
+    });
+
     it('dryRun does not touch the filesystem', async () => {
       const destRoot = path.join(tmp, 'plugins');
       const result = await emitClaudePlugin({
@@ -198,6 +275,27 @@ describe('plugin-emitter (issue #411)', () => {
           cliVersion: '0.5.0',
         }),
       ).rejects.toThrow(/emitClaudePlugin\.command/);
+    });
+
+    it('rejects emitClaudePlugin when a skill name escapes the plugin tree', async () => {
+      // Without skill-name validation, `path.join(pluginDir, 'skills', '../../etc')`
+      // would write SKILL.md outside the plugin directory. Mirrors the
+      // command-name guard above (issue #411 follow-up + review-diff finding).
+      const destRoot = path.join(tmp, 'plugins');
+      await expect(
+        emitClaudePlugin({
+          destRoot,
+          name: 'safe-bin',
+          version: '1.0.0',
+          description: 'd',
+          mcpCommand: 'safe-bin',
+          mcpArgs: ['serve', '--stdio'],
+          envHints: [],
+          skills: [{ name: '../../escape', description: 'tries to escape' }],
+          commands: [],
+          cliVersion: '0.5.0',
+        }),
+      ).rejects.toThrow(/emitClaudePlugin\.skill/);
     });
   });
 

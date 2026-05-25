@@ -264,10 +264,17 @@ export async function buildExec(
     // Issue #411 — copy the compiled plugin-emitter so the per-bin
     // `<bin> install -p claude|codex` can `require('./plugin-emitter')`.
     // esbuild then bundles it (and its `@frontmcp/utils` deps) into the
-    // final CLI bundle. Tolerate absence in test/source-only contexts.
+    // final CLI bundle. The emitter imports `./skill-md-compose`, so the
+    // sibling file has to land in __cli_temp/ too — otherwise the esbuild
+    // step that produces the bin's CLI bundle fails with a missing-module
+    // error. Tolerate absence in test/source-only contexts.
     const pluginEmitterSrc = path.join(__dirname, 'cli-runtime', 'plugin-emitter.js');
     if (fs.existsSync(pluginEmitterSrc)) {
       fs.copyFileSync(pluginEmitterSrc, path.join(tempDir, 'plugin-emitter.js'));
+    }
+    const skillMdComposeSrc = path.join(__dirname, 'cli-runtime', 'skill-md-compose.js');
+    if (fs.existsSync(skillMdComposeSrc)) {
+      fs.copyFileSync(skillMdComposeSrc, path.join(tempDir, 'skill-md-compose.js'));
     }
 
     // Generate CLI entry
@@ -392,6 +399,10 @@ export async function buildExec(
     `${config.name}-bin`,
     `${config.name}-cli-bin`,
     '_skills',
+    // bin-meta.json (issue #411) — the bin's runtime install command
+    // reads this sidecar at execution time, so the cleanup pass MUST NOT
+    // delete it. Whitelisted alongside the other emitted artifacts.
+    'bin-meta.json',
   ]);
 
   const allFiles = fs.readdirSync(outDir);

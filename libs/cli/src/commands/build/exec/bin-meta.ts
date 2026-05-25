@@ -34,6 +34,8 @@ export interface BinMeta {
   skills: Array<{
     name: string;
     description?: string;
+    tags?: string[];
+    license?: string;
     instructionFile?: string;
     resourceDirs?: { references?: string; examples?: string; scripts?: string; assets?: string };
   }>;
@@ -68,10 +70,9 @@ export async function writeBinMeta(
       }
       return {
         name: asset.skillName,
-        // `description` is not yet plumbed through ExtractedSkillAsset; the
-        // emitter falls back to a generic phrase. Wiring `getDescription()`
-        // through `collectSkillAssets()` is a separate follow-up.
-        description: undefined,
+        description: asset.description,
+        tags: asset.tags && asset.tags.length > 0 ? asset.tags : undefined,
+        license: asset.license,
         instructionFile,
         resourceDirs: Object.keys(resourceDirs).length > 0 ? resourceDirs : undefined,
       };

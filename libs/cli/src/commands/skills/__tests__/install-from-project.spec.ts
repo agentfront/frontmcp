@@ -196,6 +196,22 @@ describe('installSkill --from-entry / --from-package', () => {
     );
   });
 
+  it('rejects malicious skill names (path traversal) and skips them without writing anything', async () => {
+    mockFiles['/proj/body.md'] = 'body';
+    mockExtract.mockResolvedValue([
+      { skillName: '../../escape', description: 'tries to escape', instructionFile: '/proj/body.md' },
+      { skillName: 'safe', description: 'fine', instructionFile: '/proj/body.md' },
+    ]);
+
+    await installSkill(undefined, { provider: 'claude', fromEntry: 'src/main.ts', all: true });
+
+    // The malicious entry must NOT have been written anywhere — the loop
+    // calls `assertValidPluginName` and skips it. The safe entry still installs.
+    const writtenPaths = Object.keys(writtenFiles);
+    expect(writtenPaths.some((p) => p.includes('escape'))).toBe(false);
+    expect(writtenFiles['/test/project/.claude/skills/safe/SKILL.md']).toBeDefined();
+  });
+
   it('routes --from-package through resolvePackageEntry instead of the local resolveEntry', async () => {
     mockFiles['/mock/skill.md'] = 'body';
     mockExtract.mockResolvedValue([

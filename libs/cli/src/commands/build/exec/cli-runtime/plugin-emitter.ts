@@ -22,10 +22,13 @@ import {
   cp,
   ensureDir,
   fileExists,
+  readdir,
   readFile,
   rm,
   writeFile,
 } from '@frontmcp/utils';
+
+import { composeSkillMd } from './skill-md-compose';
 
 // ============================================================================
 // Public types
@@ -34,6 +37,13 @@ import {
 export interface PluginEmitterSkillInput {
   name: string;
   description: string;
+  /**
+   * Tags from `@Skill({ tags })`. Forwarded into the synthesized SKILL.md
+   * frontmatter so Claude Code's filesystem loader can index by tag.
+   */
+  tags?: string[];
+  /** License from `@Skill({ license })`. Forwarded into the synthesized frontmatter. */
+  license?: string;
   /** Absolute path to SKILL.md. When missing, only frontmatter is emitted. */
   instructionFile?: string;
   /** Absolute paths to the skill's resource subdirectories. */
@@ -207,8 +217,12 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
   // Build the new file plan in deterministic order.
   const plannedFiles: Array<{ absPath: string; relPath: string; action: () => Promise<void> }> = [];
 
-  // Skills subtree
+  // Skills subtree. Validate the name before it lands in a filesystem
+  // path or in synthesized SKILL.md frontmatter — same rules as command
+  // names (issue #411 security pass), so a malicious `@Skill({ name: '../x' })`
+  // can't escape the plugin tree.
   for (const skill of [...opts.skills].sort((a, b) => a.name.localeCompare(b.name))) {
+    assertValidPluginName(skill.name, 'emitClaudePlugin.skill');
     const skillDir = path.join(pluginDir, 'skills', skill.name);
     const skillMd = path.join(skillDir, 'SKILL.md');
     plannedFiles.push({
@@ -216,14 +230,21 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
       relPath: path.relative(pluginDir, skillMd),
       action: async () => {
         await ensureDir(skillDir);
-        if (skill.instructionFile && (await fileExists(skill.instructionFile))) {
-          const body = await readFile(skill.instructionFile);
-          await writeFile(skillMd, body);
-        } else {
-          // No file on disk — emit a minimal SKILL.md from frontmatter so the
-          // plugin folder is still loadable.
-          await writeFile(skillMd, renderSkillStub(skill));
-        }
+        const body = skill.instructionFile && (await fileExists(skill.instructionFile))
+          ? await readFile(skill.instructionFile)
+          : '';
+        // The instruction file is typically a raw markdown body authored by
+        // the user; Claude Code's filesystem loader needs YAML frontmatter
+        // with at least `name` + `description`. composeSkillMd preserves a
+        // pre-existing frontmatter block verbatim and otherwise synthesizes
+        // one from the decorator metadata we plumbed through bin-meta.json.
+        await writeFile(
+          skillMd,
+          composeSkillMd(
+            { name: skill.name, description: skill.description, tags: skill.tags, license: skill.license },
+            body,
+          ),
+        );
       },
     });
     for (const kind of ['references', 'examples', 'scripts', 'assets'] as const) {
@@ -493,10 +514,6 @@ function sortObjectKeys<T>(value: T): T {
   return value;
 }
 
-function renderSkillStub(skill: PluginEmitterSkillInput): string {
-  return `---\nname: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.description}\n`;
-}
-
 function renderCommandFile(cmd: PluginEmitterCommandInput, binName: string): string {
   const args = cmd.arguments ?? [];
   const argHint = args
@@ -530,24 +547,28 @@ function renderCommandFile(cmd: PluginEmitterCommandInput, binName: string): str
  */
 async function cleanupEmptyDirs(root: string, _preserved: string[]): Promise<void> {
   if (!(await fileExists(root))) return;
-  const { readdir, rm: rmFn } = await import('@frontmcp/utils');
+  // `readdir` and `rm` are imported statically at the top of this module so
+  // the file bundles cleanly into the per-bin CLI (esbuild can't resolve
+  // `await import('@frontmcp/utils')` inside a CJS bundle, which manifests
+  // as a runtime "Dynamic require of fs is not supported" error when the
+  // bin's own `uninstall -p claude` walks the plugin tree).
 
   // Pass 1: each per-skill folder under skills/ (one level deep).
   const skillsDir = path.join(root, 'skills');
   if (await fileExists(skillsDir)) {
     for (const entry of await safeReaddir(readdir, skillsDir)) {
       const sub = path.join(skillsDir, entry);
-      await removeIfEmpty(sub, rmFn, readdir);
+      await removeIfEmpty(sub, rm, readdir);
     }
   }
 
   // Pass 2: framework-managed dirs directly under the plugin root.
   for (const sub of ['commands', 'skills', '.claude-plugin']) {
-    await removeIfEmpty(path.join(root, sub), rmFn, readdir);
+    await removeIfEmpty(path.join(root, sub), rm, readdir);
   }
 
   // Pass 3: the plugin root itself (only if user added nothing).
-  await removeIfEmpty(root, rmFn, readdir);
+  await removeIfEmpty(root, rm, readdir);
 }
 
 async function removeIfEmpty(

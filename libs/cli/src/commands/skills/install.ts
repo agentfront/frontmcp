@@ -5,10 +5,11 @@ import { cp, ensureDir, fileExists, readdir, readFile, writeFile } from '@frontm
 import { c } from '../../core/colors';
 import { getSelfVersion } from '../../core/version';
 import { resolveEntry } from '../../shared/fs';
+import { assertValidPluginName } from '../build/exec/cli-runtime/plugin-emitter';
 import type { ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
+import { composeSkillMd, hasFrontmatter } from '../build/exec/cli-runtime/skill-md-compose';
 import { getCatalogDir, loadCatalog } from './catalog';
 import { extractProjectSkills, resolvePackageEntry } from './from-entry';
-import { composeSkillMd, hasFrontmatter } from './skill-md-compose';
 
 const PROVIDER_DIRS: Record<string, string> = {
   claude: '.claude/skills',
@@ -306,6 +307,16 @@ async function installFromProject(args: InstallFromProjectArgs): Promise<void> {
 
   let installed = 0;
   for (const asset of selected) {
+    // Validate the skill name BEFORE it lands in a filesystem path or
+    // the synthesized SKILL.md frontmatter. Same rules as plugin names
+    // (issue #411 security pass) — a malicious `@Skill({ name: '../x' })`
+    // would otherwise escape `targetBase` via `path.join`.
+    try {
+      assertValidPluginName(asset.skillName, 'skills install --from-entry');
+    } catch (err) {
+      console.error(c('yellow', `  Skipped: ${(err as Error).message}`));
+      continue;
+    }
     const targetDir = path.join(targetBase, asset.skillName);
     try {
       await materializeProjectSkill(asset, targetDir);

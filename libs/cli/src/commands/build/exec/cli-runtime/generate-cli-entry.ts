@@ -1534,6 +1534,8 @@ program
           out.push({
             name: s.name,
             description: s.description || (s.name + ' skill from ' + meta.name),
+            tags: Array.isArray(s.tags) && s.tags.length > 0 ? s.tags : undefined,
+            license: s.license || undefined,
             instructionFile: s.instructionFile ? pathMod.join(SCRIPT_DIR, s.instructionFile) : undefined,
             resourceDirs: Object.keys(resourceDirs).length > 0 ? resourceDirs : undefined,
           });
@@ -1663,13 +1665,63 @@ ${depEntries.join(',\n')}
 
 program
   .command('uninstall')
-  .description('Remove from ~/.frontmcp/ and clean up')
+  .description('Remove from ~/.frontmcp/, OR remove an IDE plugin (use -p)')
   .option('--prefix <path>', 'Installation prefix directory')
   .option('--bin-dir <path>', 'Directory where symlink was created')
+  .option('-p, --provider <provider>', 'Remove plugin for provider: claude | codex (repeatable)', _frontmcpCollectArg, [])
+  .option('--scope <scope>', 'Plugin scope when -p is set: project | user', 'project')
+  .option('--dir <dir>', 'Override plugin destination root')
   .action(async function(opts) {
     var fs = require('fs');
     var pathMod = require('path');
     var os = require('os');
+
+    // Issue #411 — when -p is set, route through the shared plugin-emitter
+    // to remove the IDE plugin instead of the legacy ~/.frontmcp uninstall.
+    var providers = Array.isArray(opts.provider) ? opts.provider : [];
+    if (providers.length > 0) {
+      var emitter = require('./plugin-emitter');
+      var binMetaPath = pathMod.join(SCRIPT_DIR, 'bin-meta.json');
+      var meta;
+      try { meta = JSON.parse(fs.readFileSync(binMetaPath, 'utf8')); }
+      catch (e) {
+        console.error('Could not read bin-meta.json at ' + binMetaPath + '. Was the bin built with a recent frontmcp?');
+        process.exit(1);
+      }
+
+      function resolveDestRoot() {
+        if (opts.dir) return pathMod.resolve(opts.dir);
+        if (opts.scope === 'user') return pathMod.join(os.homedir(), '.claude', 'plugins');
+        return pathMod.join(process.cwd(), '.claude', 'plugins');
+      }
+
+      for (var pi = 0; pi < providers.length; pi++) {
+        var provider = providers[pi];
+        if (provider === 'claude') {
+          var destRoot = resolveDestRoot();
+          var result = await emitter.removeClaudePlugin({ destRoot: destRoot, name: meta.name });
+          if (result.removed.length === 0) {
+            console.log('  claude: nothing to remove at ' + result.pluginDir);
+          } else {
+            console.log('✓ Removed ' + result.removed.length + ' file(s) from ' + result.pluginDir);
+          }
+        } else if (provider === 'codex') {
+          var codexConfig = pathMod.join(os.homedir(), '.codex', 'config.toml');
+          var codexResult = await emitter.removeCodexEntry({ configPath: codexConfig, name: meta.name });
+          if (codexResult.removed) {
+            console.log('✓ Removed [[mcp_servers]] entry for ' + meta.name + ' from ' + codexConfig);
+          } else {
+            console.log('  codex: no entry for ' + meta.name + ' in ' + codexConfig);
+          }
+        } else {
+          console.error('Unknown provider: ' + provider);
+          process.exitCode = 1;
+          return;
+        }
+      }
+      return;
+    }
+
     var uninstallBase = opts.prefix || FRONTMCP_HOME;
     var appDir = pathMod.join(uninstallBase, 'apps', ${JSON.stringify(appName)});
 

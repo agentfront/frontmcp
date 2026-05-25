@@ -1324,3 +1324,44 @@ describe('generateCliEntry — install -p claude|codex (issue #411)', () => {
     expect(source).toContain("'apps'");
   });
 });
+
+describe('generateCliEntry — uninstall -p claude|codex (issue #411 follow-up)', () => {
+  it('extends the generated uninstall command with the same plugin flag set as install', () => {
+    const source = generateCliEntry(makeOptions());
+    // Locate the uninstall command block (everything from its `program.command('uninstall')`
+    // up to the next top-level `program` statement) so we don't conflate flags
+    // with the install command above.
+    const uninstallIdx = source.indexOf("program\n  .command('uninstall')");
+    expect(uninstallIdx).toBeGreaterThan(-1);
+    const restAfter = source.slice(uninstallIdx);
+    const nextProgramIdx = restAfter.indexOf('\nprogram', 1);
+    const uninstallSection = nextProgramIdx === -1 ? restAfter : restAfter.slice(0, nextProgramIdx);
+
+    expect(uninstallSection).toMatch(/-p, --provider <provider>/);
+    expect(uninstallSection).toMatch(/--scope <scope>/);
+    expect(uninstallSection).toMatch(/--dir <dir>/);
+  });
+
+  it('dispatches to removeClaudePlugin / removeCodexEntry per provider', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('removeClaudePlugin');
+    expect(source).toContain('removeCodexEntry');
+  });
+
+  it('reads bin-meta.json and rejects unknown providers at runtime', () => {
+    const source = generateCliEntry(makeOptions());
+    // Both branches must read the sidecar metadata file.
+    const uninstallIdx = source.indexOf("program\n  .command('uninstall')");
+    const uninstallSection = source.slice(uninstallIdx);
+    expect(uninstallSection).toContain("'bin-meta.json'");
+    expect(uninstallSection).toMatch(/Could not read bin-meta\.json/);
+    expect(uninstallSection).toMatch(/Unknown provider/);
+  });
+
+  it('preserves the legacy ~/.frontmcp uninstall body when -p is absent', () => {
+    const source = generateCliEntry(makeOptions());
+    // Sanity: the legacy uninstall still removes the app dir + symlink.
+    expect(source).toContain("'Uninstalled ");
+    expect(source).toContain("FRONTMCP_HOME");
+  });
+});

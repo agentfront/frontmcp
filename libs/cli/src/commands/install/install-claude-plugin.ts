@@ -149,7 +149,9 @@ async function getProjectExtraction(cwd: string): Promise<{
         const schema = await extractSchemas(bundlePath);
         const skills: PluginEmitterSkillInput[] = (schema.skillAssets ?? []).map((entry) => ({
           name: entry.skillName,
-          description: `${entry.skillName} skill`,
+          description: entry.description ?? `${entry.skillName} skill`,
+          tags: entry.tags,
+          license: entry.license,
           instructionFile: entry.instructionFile,
           resourceDirs: entry.resourceDirs,
         }));
