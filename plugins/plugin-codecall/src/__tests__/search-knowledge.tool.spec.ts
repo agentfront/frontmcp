@@ -151,4 +151,25 @@ describe('SearchKnowledgeTool', () => {
     const result = await tool.execute({ queries: ['refund'], excludeSkillNames: ['refund-policy'] });
     expect(result.knowledge).toEqual([]);
   });
+
+  it('dispatches every query concurrently (Promise.all, not sequential await)', async () => {
+    // Regression mirror of the search-skills tool — verify all queries are
+    // in flight before any of them resolve.
+    const inflight: Array<() => void> = [];
+    mockRegistry.getKnowledgeOnlySkills.mockReturnValue([entry('refund-policy', true)]);
+    mockRegistry.search.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          inflight.push(() => resolve([]));
+        }),
+    );
+
+    const promise = tool.execute({ queries: ['a', 'b', 'c'] });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(inflight).toHaveLength(3);
+
+    inflight.forEach((resolve) => resolve());
+    await promise;
+  });
 });

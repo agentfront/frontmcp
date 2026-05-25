@@ -234,4 +234,59 @@ describe('SearchSkillsTool', () => {
       expect(result.skills).toEqual([]);
     });
   });
+
+  describe('parallelism', () => {
+    it('dispatches every query concurrently (Promise.all, not sequential await)', async () => {
+      // Regression: this previously awaited each query in a for-loop, multiplying
+      // search latency by `queries.length`. If the impl regresses to serial
+      // awaits, the elapsed time would exceed the sum-of-individual-delays;
+      // here we instead verify that all calls have been issued BEFORE any of
+      // their responses are resolved.
+      const inflight: Array<() => void> = [];
+      mockRegistry.getExecutableSkills.mockReturnValue([entry('refund', true)]);
+      mockRegistry.search.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            inflight.push(() => resolve([]));
+          }),
+      );
+
+      const promise = tool.execute({ queries: ['a', 'b', 'c'] });
+
+      // Yield a few microtask turns so the synchronous Promise.all kicks off.
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      // All three search() calls must have been issued already; this only
+      // holds if the impl ran them in parallel.
+      expect(inflight).toHaveLength(3);
+
+      // Resolve them and let execute() finish.
+      inflight.forEach((resolve) => resolve());
+      await promise;
+    });
+  });
+
+  describe('hidden executable skills', () => {
+    it('hidden skills are silently excluded — getExecutableSkills filters hideFromDiscovery=true', async () => {
+      // The tool consults getExecutableSkills() WITHOUT includeHidden, so
+      // any skill that's executable AND hidden is dropped from the search
+      // results even if the underlying registry.search() returns it. The
+      // executableSet double-check at the result-loop is what enforces this.
+      mockRegistry.getExecutableSkills.mockReturnValue([entry('refund', true)]); // 'hidden' NOT in this list
+      mockRegistry.search.mockResolvedValueOnce([
+        {
+          metadata: { name: 'hidden', description: 'an executable hidden skill', tags: [] },
+          score: 0.99,
+          availableTools: [],
+          missingTools: [],
+          source: 'local',
+        },
+        { metadata: describeExecutable(), score: 0.6, availableTools: [], missingTools: [], source: 'local' },
+      ]);
+
+      const result = await tool.execute({ queries: ['anything'] });
+
+      expect(result.skills.map((s) => s.name)).toEqual(['refund']);
+    });
+  });
 });

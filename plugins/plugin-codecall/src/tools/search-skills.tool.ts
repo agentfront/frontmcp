@@ -51,6 +51,12 @@ export default class SearchSkillsTool extends ToolContext {
     // same access path the existing skill flow uses.
     const skillRegistry = this.scope.skills;
 
+    // `getExecutableSkills()` defaults to `includeHidden: false`, so any
+    // skill that's executable AND `hideFromDiscovery: true` is intentionally
+    // excluded from this discovery surface. The result loop below double-
+    // checks against `executableSet`, which also drops hidden-executable
+    // skills that the underlying `registry.search()` might still surface.
+    // To search hidden skills, callers should use the SDK directly.
     const executableSkills = skillRegistry.getExecutableSkills();
     const executableSet = new Set(executableSkills.map((s) => s.name));
     const totalExecutableSkills = executableSkills.length;
@@ -73,15 +79,19 @@ export default class SearchSkillsTool extends ToolContext {
     let lowRelevanceCount = 0;
     const excludedSet = new Set(excludeSkillNames);
 
-    for (const query of queries) {
-      // Storage-provider search; pass topK + tags through. The registry
-      // already merges dynamic-skill overlays on top.
-      const results = await skillRegistry.search(query, {
-        topK,
-        tags,
-        minScore: minRelevanceScore,
-      });
+    // Dispatch every query concurrently. The storage provider may be remote
+    // (HTTP, Redis-backed semantic search) so serial awaits would multiply
+    // the search latency by `queries.length`. Each result row is small and
+    // de-duplication happens once after all queries return.
+    const perQueryResults = await Promise.all(
+      queries.map((query) =>
+        skillRegistry
+          .search(query, { topK, tags, minScore: minRelevanceScore })
+          .then((results) => ({ query, results })),
+      ),
+    );
 
+    for (const { query, results } of perQueryResults) {
       for (const result of results) {
         const name = result.metadata.name;
 

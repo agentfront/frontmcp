@@ -50,6 +50,21 @@ describe('renderResourceUri', () => {
     expect(renderResourceUri('mcp+op://x/{a}', { a: { nested: 1 } })).toEqual({ ok: false, missing: ['a'] });
   });
 
+  it('treats NaN and ±Infinity as missing (no "NaN" / "Infinity" leaking into URIs)', () => {
+    // Regression: previously `String(NaN)` produced the literal string "NaN"
+    // and was URL-encoded into the rendered URI, surfacing a meaningless
+    // resource that downstream subscribers would resolve to a 404.
+    expect(renderResourceUri('mcp+op://x/{a}', { a: Number.NaN })).toEqual({ ok: false, missing: ['a'] });
+    expect(renderResourceUri('mcp+op://x/{a}', { a: Number.POSITIVE_INFINITY })).toEqual({
+      ok: false,
+      missing: ['a'],
+    });
+    expect(renderResourceUri('mcp+op://x/{a}', { a: Number.NEGATIVE_INFINITY })).toEqual({
+      ok: false,
+      missing: ['a'],
+    });
+  });
+
   it('returns ok with the template verbatim when there are no placeholders', () => {
     expect(renderResourceUri('mcp+op://acme/users', { id: 'ignored' })).toEqual({
       ok: true,

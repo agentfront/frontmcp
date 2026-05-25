@@ -55,7 +55,15 @@ export function renderResourceUri(template: string, args: unknown): RenderResult
       missing.push(name);
       return '';
     }
-    // Booleans, numbers, strings - coerce + encode.
+    // Reject non-finite numbers — `String(NaN)` is the literal "NaN" and
+    // `String(Infinity)` is "Infinity"; substituting either silently produces
+    // a meaningless URI that downstream subscribers would resolve to a 404.
+    // Surface as missing so the caller can log + skip the notification.
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      missing.push(name);
+      return '';
+    }
+    // Booleans, finite numbers, strings — coerce + encode.
     return encodeURIComponent(String(value));
   });
 

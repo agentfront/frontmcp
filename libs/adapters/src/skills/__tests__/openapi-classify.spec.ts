@@ -300,6 +300,51 @@ describe('applyClassificationOverrides', () => {
     expect(findOp(after, 'updateUser').emit).toBeUndefined();
   });
 
+  it('emits:self on a DELETE override defaults kind to listChanged, not updated', () => {
+    // Regression: previously the override defaulted `kind` to 'updated' which
+    // would silently fire `notifications/resources/updated` on the
+    // just-deleted URI. DELETE must default to `listChanged` since the
+    // mutation rearranges the collection, not the (now-gone) resource.
+    const ops = classifyOperations(SPEC, [{ operationId: 'deleteOrphan', method: 'DELETE', path: '/orphan' }]);
+    expect(ops[0].emit).toBeUndefined(); // no parent + no matching GET => no original emit
+
+    const after = applyClassificationOverrides(ops, [{ match: 'DELETE /orphan', emits: 'self' }]);
+
+    expect(after[0].emit).toEqual({
+      kind: 'listChanged',
+      pathTemplate: '/orphan',
+      resourceUriTemplate: uri('/orphan'),
+    });
+  });
+
+  it('emits:parent on a DELETE override also defaults to listChanged', () => {
+    // Same regression as above but for the parent branch — a DELETE override
+    // pointing at a parent path should fire listChanged on the parent.
+    const ops = classifyOperations(SPEC, [{ operationId: 'deleteSomething', method: 'DELETE', path: '/widgets/{id}' }]);
+    // No matching GET on /widgets, so the classifier left no original emit.
+    expect(ops[0].emit).toBeUndefined();
+
+    const after = applyClassificationOverrides(ops, [{ match: 'DELETE /widgets/{id}', emits: 'parent' }]);
+
+    expect(after[0].emit).toEqual({
+      kind: 'listChanged',
+      pathTemplate: '/widgets',
+      resourceUriTemplate: uri('/widgets'),
+    });
+  });
+
+  it('emits override preserves the classifier-derived kind when present', () => {
+    // When the classifier already set kind (e.g. PUT -> updated), an
+    // `emits: 'self'` override must NOT clobber that to the method default.
+    const ops = classifyOperations(SPEC, [
+      { operationId: 'getUserById', method: 'GET', path: '/users/{id}' },
+      { operationId: 'updateUser', method: 'PUT', path: '/users/{id}' },
+    ]);
+    const after = applyClassificationOverrides(ops, [{ match: 'PUT /users/{id}', emits: 'self' }]);
+
+    expect(findOp(after, 'updateUser').emit?.kind).toBe('updated');
+  });
+
   it('ignores malformed rule strings', () => {
     const ops = buildOps();
     expect(() =>

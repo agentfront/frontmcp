@@ -313,6 +313,20 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${expanded}$`);
 }
 
+/**
+ * Pick the `MutationEmit.kind` for an override when the op had no original
+ * emit to inherit from.
+ *
+ * Semantically: a mutation override emits `listChanged` when the op
+ * "rearranges a collection" (DELETE invalidates the list; collection POST
+ * adds to it) and `updated` when it mutates a single resource. We default
+ * by method so an override against a DELETE doesn't silently fire
+ * `notifications/resources/updated` on the just-deleted URI.
+ */
+function defaultEmitKindForMethod(method: string): 'updated' | 'listChanged' {
+  return method === 'DELETE' ? 'listChanged' : 'updated';
+}
+
 function applyOne(op: ClassifiedOperation, rule: ClassificationOverrideRule): ClassifiedOperation {
   let next: ClassifiedOperation = { ...op };
 
@@ -329,7 +343,10 @@ function applyOne(op: ClassifiedOperation, rule: ClassificationOverrideRule): Cl
       next = {
         ...next,
         emit: {
-          kind: next.emit?.kind ?? 'updated',
+          // Preserve the classifier's original kind if it set one; otherwise
+          // derive from the HTTP method so a DELETE override doesn't end up
+          // emitting `updated` on its own (now-gone) URI.
+          kind: next.emit?.kind ?? defaultEmitKindForMethod(op.method),
           pathTemplate: op.path,
           resourceUriTemplate: target,
         },
@@ -340,7 +357,7 @@ function applyOne(op: ClassifiedOperation, rule: ClassificationOverrideRule): Cl
         next = {
           ...next,
           emit: {
-            kind: next.emit?.kind ?? 'updated',
+            kind: next.emit?.kind ?? defaultEmitKindForMethod(op.method),
             pathTemplate: parent,
             resourceUriTemplate: pathToResourceUri(op.specId, parent),
           },

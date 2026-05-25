@@ -62,13 +62,17 @@ export default class SearchKnowledgeTool extends ToolContext {
     let lowRelevanceCount = 0;
     const excludedSet = new Set(excludeSkillNames);
 
-    for (const query of queries) {
-      const results = await skillRegistry.search(query, {
-        topK,
-        tags,
-        minScore: minRelevanceScore,
-      });
+    // Dispatch every query concurrently — see the comment in
+    // search-skills.tool.ts for the rationale.
+    const perQueryResults = await Promise.all(
+      queries.map((query) =>
+        skillRegistry
+          .search(query, { topK, tags, minScore: minRelevanceScore })
+          .then((results) => ({ query, results })),
+      ),
+    );
 
+    for (const { query, results } of perQueryResults) {
       for (const result of results) {
         const name = result.metadata.name;
         if (!knowledgeSet.has(name)) continue; // skip executable skills
