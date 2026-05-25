@@ -1,0 +1,284 @@
+---
+title: Skills-Only Deployment
+slug: features/skills-only-deployment
+icon: rocket-launch
+description: The skills-only model — OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, GitHub Action → Cloudflare Worker hot-reload
+keywords:
+  [
+    'frontmcp',
+    'mcp',
+    'model context protocol',
+    'skills',
+    'agentscript',
+    'openapi',
+    'cloudflare worker',
+    'codecall',
+    'deployment',
+    'agent skills',
+    'typescript',
+  ]
+---
+
+FrontMCP v1.3 introduces a **skills-only deployment model** where the MCP surface is just three (or four) meta-tools, and every capability is reached through a skill. The agent loop becomes "discover the skill, describe its operations, execute AgentScript." OpenAPI specs become a *capability inventory* rather than a flat tool catalog.
+
+This page is the conceptual overview. For the concrete pieces:
+
+<CardGroup cols={2}>
+  <Card title="Cloudflare Worker target" icon="cloudflare" href="/frontmcp/deployment/cloudflare-worker">
+    Host the whole runtime on a Worker; hot-reload on every git push.
+  </Card>
+  <Card title="frontmcp.deploy.yaml" icon="file-code" href="/frontmcp/deployment/deploy-manifest">
+    The declarative manifest the GitHub Action ingests.
+  </Card>
+  <Card title="Skill-Based Workflows" icon="graduation-cap" href="/frontmcp/features/skill-based-workflows">
+    The underlying skill primitive this model builds on.
+  </Card>
+  <Card title="MCP Tasks Spec" icon="link" href="https://modelcontextprotocol.io/specification">
+    Upstream MCP `tools/call`, `resources/updated`, and `searchSkills` semantics.
+  </Card>
+</CardGroup>
+
+## Why this model
+
+The flat "every operation becomes a tool" approach hits two walls fast: catalog explosion (a 200-operation OpenAPI dumps 200 tools and agents drown) and curation drift (the description of how to *use* the API lives outside the tool surface). Skills-only deployment collapses six surfaces (openapi, skills, tools, prompts, resources, data) into one — the **skill** — with one execution path (CodeCall/AgentScript). OpenAPI stays the source of truth for what operations exist, what they take, what they return — but it's reachable only through a skill that's been granted access.
+
+| Concern | Flat tools | Skills-only |
+| --- | --- | --- |
+| Catalog size at the MCP surface | 200+ tools | 3–4 meta-tools |
+| Agent loop | `tools/list` → `tools/call` | `search` → `describe` → `execute` |
+| OpenAPI role | Source of every tool | Capability inventory; never exposed directly |
+| Curation point | Tool name + description per op | Skill markdown (prose + op mentions) |
+| Authority boundary | Per-tool | Per-skill (allowlist derived from markdown) |
+| Hot-reload unit | Per-tool registration | Skill bundle envelope |
+
+## The MCP surface — four meta-tools
+
+| Tool | Purpose |
+| --- | --- |
+| `codecall:searchSkills` | Find **executable** skills (skills that mention OpenAPI operations or declare tools). Returns name, description, tags, and the operation IDs inline so the agent can author AgentScript from one search response. |
+| `codecall:searchKnowledge` | Find **knowledge-only** skills (pure references / examples / prose). Use to load domain context before deciding what to do. |
+| `codecall:describe` | Full skill content: instructions + references + every operation's request/response schema. Use when search wasn't enough. |
+| `codecall:execute` | Run agent-authored AgentScript in a capability-bound sandbox. The active skills' OpenAPI operations are pre-bound as namespaces. |
+
+A fifth tool — `codecall:invoke` — stays for the rare case where the agent wants to call a tool by name without the AgentScript path.
+
+```jsonc
+// codecall:searchSkills returns
+{
+  "skills": [
+    {
+      "name": "refund",
+      "description": "Issue a refund for an order. Use when a customer has confirmed cancellation.",
+      "tags": ["billing"],
+      "operations": [
+        { "spec": "acme", "operationId": "getOrder" },
+        { "spec": "acme", "operationId": "issueRefund" }
+      ],
+      "tools": [],
+      "relevanceScore": 0.86,
+      "matchedQueries": ["refund order"],
+      "source": "local"
+    }
+  ],
+  "warnings": [],
+  "totalExecutableSkills": 18
+}
+```
+
+## AgentScript — namespaced bindings from OpenAPI
+
+The agent authors TypeScript/JavaScript at runtime; the runtime AST-validates and executes it in a capability-bound sandbox. Each OpenAPI spec the active skill references becomes a **typed namespace** on the script's scope object:
+
+```ts
+// codecall:execute payload
+const order = await acme.getOrder({ id: orderId });
+if (!order.refundable) return { ok: false };
+const refund = await acme.issueRefund({ orderId, amount: order.total });
+return { ok: true, refundId: refund.id };
+```
+
+The `acme.*` namespace is generated at boot from the OpenAPI operation IDs (`acme.getOrder`, `acme.issueRefund`). Operations not in the active skill's allowlist are not present on the namespace object at all — there's no `acme.deleteUser` to call accidentally because the binding layer never exposed it.
+
+For backward compatibility the older shape still works:
+
+```ts
+const order = await callTool('acme.getOrder', { id: orderId });
+```
+
+### How the namespace is built
+
+`OperationToolFactory` in `plugin-skilled-openapi` already names tools `${specId}.${operationId}`. The runtime parses the dot, partitions by prefix, and hands the script a frozen object of `{ acme: { getOrder, issueRefund }, billing: { ... } }`. Each method is a thin wrapper that delegates to the same `callTool` closure used for the non-namespaced path, so all security checks (self-reference, whitelist, flow execution, audit, quota) run uniformly. Tools whose namespace prefix isn't a valid JavaScript identifier (e.g. `acme-api.getUser`) stay reachable via `callTool` but are skipped from namespace surfacing — the lint output explains why.
+
+<Note>
+  Reserved prefixes — `console`, `Math`, `JSON`, `Object`, `Promise`, `Map`, `Set`, `globalThis`, `callTool`, `getTool`, `mcpLog`, `mcpNotify`, etc. — never become namespaces, even if a spec is named after them. The tools remain callable via `callTool`.
+</Note>
+
+## OpenAPI as capability inventory
+
+OpenAPI specs ship to the project but are *never* directly exposed to MCP clients. They serve three purposes:
+
+1. **The capability inventory.** What operations exist, what they take, what they return.
+2. **The classification source.** HTTP semantics decide whether each operation surfaces as an MCP resource, a tool, or both — and what `notifications/resources/*` event should fire on a successful call.
+3. **The type provider.** Every operation's input schema and output schema flow into the skill's `describe` response so the agent gets full IntelliSense in AgentScript.
+
+The classifier follows HTTP semantics with no per-spec assumptions:
+
+| OpenAPI shape | MCP surface | Notify on success |
+| --- | --- | --- |
+| `GET /users/{id}` | Resource template + tool | — |
+| `GET /users` | Resource (collection) | — |
+| `POST /users` (matching GET) | Tool | `resources/list_changed` on `/users` |
+| `POST /users/{id}` (matching GET) | Tool | `resources/updated` on `/users/{id}` |
+| `POST /users/{id}/reset-password` (no matching GET) | Tool | `resources/updated` on parent `/users/{id}` |
+| `PUT /users/{id}` / `PATCH /users/{id}` | Tool | `resources/updated` on `/users/{id}` |
+| `DELETE /users/{id}` | Tool | `resources/list_changed` on parent `/users` |
+
+When the script in `codecall:execute` calls `acme.issueRefund({ orderId: '42' })` and that maps to `POST /orders/{orderId}/refund` (a "no matching GET" action endpoint), the runtime auto-emits `notifications/resources/updated` for `mcp+op://acme/orders/42` once on success — no extra code, no manual wiring.
+
+<Note>
+  The notification fires **once per call regardless of which skill's binding made the call**. The notification is a property of the underlying operation + args, not the skill. Two skills calling the same `PUT /users/{id}` → still one notification.
+</Note>
+
+## Skills as the only unit
+
+A skill is a directory:
+
+```text
+skills/
+  refund/
+    SKILL.md           ← frontmatter + agent-facing instructions
+    references/        ← markdown the agent pulls into context
+      refund-policy.md
+    examples/          ← prose narratives that reference operations
+      partial-refund.md
+    data/              ← static lookup data (eligibility matrices, etc.)
+      refund-codes.json
+```
+
+Inside any of those markdown files, OpenAPI operations are referenced in one of two equivalent forms — both detected by the deploy pipeline's harvester and turned into the skill's allowed-operations set:
+
+```markdown
+1. URI form (renders as a link in any markdown viewer):
+   [Fetch the order](op://acme/getOrder)
+
+2. Wikilink form (familiar from Obsidian / Foam):
+   When the order has shipped, look up the customer via [[op:acme/getCustomer]].
+```
+
+The skill's `SKILL.md` shrinks to almost-empty:
+
+```yaml
+---
+name: refund
+description: Issue a refund for an order.
+tags: [billing]
+---
+
+When a customer requests a refund, first fetch the order via
+[[op:acme/getOrder]] and check eligibility against
+[[ref:refund-policy.md]]. For full refunds, call
+[[op:acme/issueRefund]] with `amount` omitted...
+```
+
+The build pipeline harvests `op://` and `[[op:...]]` mentions across all the skill's files and synthesizes:
+
+- The skill's `actions[]` (one per unique operationId).
+- Each action's `input_schema` and `output_schema` (from the OpenAPI definition).
+- The skill's `allowed-operations` set (the harvested union; used as the runtime sandbox).
+- The MCP classification per operation (resource / tool / both, with notify semantics).
+
+A skill that never mentions an operation is fine — it's a **knowledge skill**: it shows up in `searchKnowledge`, contributes its references/examples to context when the agent calls `describe`, and has no callable actions.
+
+## Always-loaded skills
+
+Some skills are a per-server "standard library" — authentication helpers, observability shims, common utilities. Mark them with `alwaysLoad: true` in the SKILL.md frontmatter and the runtime merges their bindings into every `codecall:execute` invocation regardless of which skills the agent listed:
+
+```yaml
+---
+name: auth-helpers
+description: Helpers every agent needs to reach our auth boundary.
+alwaysLoad: true
+hideFromDiscovery: true   # optional — load without showing in search
+---
+```
+
+You can also set the always-load list at the server level via the deploy manifest's `skills.alwaysLoad: [...]` (see the [deploy manifest reference](/frontmcp/deployment/deploy-manifest)).
+
+## The full deploy cycle
+
+```text
+GitHub repo (specs/ + skills/ + frontmcp.deploy.yaml)
+         │
+         │  on push: frontmcp/deploy-action@v1
+         ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ 1. Parse + cross-validate the deploy manifest          │
+   │ 2. Apply environments.<env> overlay                    │
+   │ 3. Walk skills/; run the op-reference harvester        │
+   │ 4. Run the OpenAPI → MCP classifier                    │
+   │ 5. Inline & content-address all artifacts              │
+   │ 6. Sign the envelope with the project key (Ed25519)    │
+   │ 7. POST to the Cloudflare Worker's /_frontmcp/resync   │
+   └────────────────────────────────────────────────────────┘
+         │
+         ▼
+   Cloudflare Worker
+         │  - Verifies the signature against TRUSTED_KEYS
+         │  - Replay-guards via KV nonce dedupe
+         │  - Atomically swaps the in-memory skill registry
+         │  - Emits notifications/{skills,tools,resources,prompts}/list_changed
+         ▼
+   MCP clients see the new catalog without reconnecting.
+```
+
+Concrete deploy details live on the [Cloudflare Worker page](/frontmcp/deployment/cloudflare-worker) and the [deploy manifest reference](/frontmcp/deployment/deploy-manifest).
+
+## What the runtime guarantees
+
+- **Signature-verified bundles.** The Worker rejects any envelope whose JWS signature doesn't match a `kid` in `signing.trustRoots`. Local dev mode can bypass this with a loud warning.
+- **Replay protection.** Every bundle carries a timestamp + nonce. The Worker tracks nonces in KV (`bindings.kvNamespaces[]` configured for the purpose) and rejects re-submissions inside `signing.replay.windowSeconds`.
+- **AST-validated AgentScript.** Every `codecall:execute` script runs through `@enclave-vm/ast` *at execute time* (yes, every call) before it touches a binding. Disallowed identifiers (`eval`, `Function`, `process`, dynamic `import`, raw `fetch`, etc.) are rejected with a structured `IllegalBuiltinAccess` error.
+- **Capability-bound scope.** The script's globals are a frozen object containing only the active skills' generated namespaces plus `callTool` / `getTool` / `mcpLog` / `mcpNotify`. There is no way to reach an operation the skill didn't allow.
+- **Resource-change notifications.** Auto-derived from OpenAPI semantics; one emit per call regardless of which skill made it.
+
+## Mental model summary
+
+```text
+                ┌─────────────────────┐
+                │   MCP client / LLM  │
+                └──────────┬──────────┘
+                           │ tools/call
+              ┌────────────┼────────────┐
+              │            │            │
+         searchSkills   describe     execute
+        searchKnowledge                │
+                                       │ agentscript
+                                       ▼
+                          ┌─────────────────────────┐
+                          │  AST-validated sandbox  │
+                          │  (Worker isolate)       │
+                          └────────────┬────────────┘
+                                       │
+                          ┌─────────────────────────┐
+                          │  Capability bindings:   │
+                          │   acme.getOrder(...)    │  ← generated from OpenAPI
+                          │   billing.postLedger... │     for the active skill's
+                          │                         │     allowed-operations set
+                          └────────────┬────────────┘
+                                       │ HTTPS
+                                       ▼
+                              ┌────────────────┐
+                              │ Upstream APIs  │
+                              └────────────────┘
+```
+
+The agent never sees an OpenAPI operation directly. The agent never authors a raw HTTP call. The skill's prose teaches the agent **when** to call each operation; the runtime enforces **whether** it's allowed to.
+
+<CardGroup cols={2}>
+  <Card title="Deploy manifest reference" icon="file-code" href="/frontmcp/deployment/deploy-manifest">
+    The full `frontmcp.deploy.yaml` schema with examples.
+  </Card>
+  <Card title="Cloudflare Worker target" icon="cloudflare" href="/frontmcp/deployment/cloudflare-worker">
+    How the Worker boots and hot-reloads.
+  </Card>
+</CardGroup>

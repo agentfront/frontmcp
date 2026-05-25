@@ -97,6 +97,7 @@
                   "frontmcp/features/observability",
                   "frontmcp/features/testing-framework",
                   "frontmcp/features/skill-based-workflows",
+                  "frontmcp/features/skills-only-deployment",
                   "frontmcp/features/channels",
                   "frontmcp/features/background-tasks",
                   "frontmcp/features/esm-dynamic-loading"
@@ -162,6 +163,8 @@
                   "frontmcp/deployment/production-build",
                   "frontmcp/deployment/runtime-modes",
                   "frontmcp/deployment/serverless",
+                  "frontmcp/deployment/cloudflare-worker",
+                  "frontmcp/deployment/deploy-manifest",
                   "frontmcp/deployment/mcp-clients",
                   "frontmcp/deployment/mcpb",
                   "frontmcp/deployment/direct-client",

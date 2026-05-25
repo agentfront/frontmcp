@@ -53,18 +53,20 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 
 ## Scenario Routing Table
 
-| Scenario                                          | Reference                   | Description                                                             |
-| ------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
-| Long-running server on VPS, Docker, or bare metal | `deploy-to-node`            | Node.js with stdio or HTTP transport, PM2/Docker for process management |
-| Serverless with zero config and Vercel KV         | `deploy-to-vercel`          | Vercel Functions with Streamable HTTP, Vercel KV for storage            |
-| AWS serverless with API Gateway                   | `deploy-to-lambda`          | Lambda + API Gateway with Streamable HTTP, DynamoDB or ElastiCache      |
-| Edge computing with global distribution           | `deploy-to-cloudflare`      | Cloudflare Workers with KV or Durable Objects for storage               |
-| Standalone executable binary for distribution     | `build-for-cli`             | Single-binary CLI with stdio transport, embedded storage                |
-| Run MCP in a web browser                          | `build-for-browser`         | Browser-compatible bundle with in-memory transport                      |
-| Embed MCP into an existing Node.js application    | `build-for-sdk`             | Library build for programmatic usage without standalone server          |
-| Write a Dockerfile for Node.js deployment         | `deploy-to-node-dockerfile` | Dockerfile configuration for Node.js deployment                         |
-| Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`   | Vercel-specific configuration (vercel.json)                             |
-| Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`    | Configure .mcp.json for stdio, HTTP, or Unix socket transport           |
+| Scenario                                          | Reference                          | Description                                                                                                                                      |
+| ------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Long-running server on VPS, Docker, or bare metal | `deploy-to-node`                   | Node.js with stdio or HTTP transport, PM2/Docker for process management                                                                          |
+| Serverless with zero config and Vercel KV         | `deploy-to-vercel`                 | Vercel Functions with Streamable HTTP, Vercel KV for storage                                                                                     |
+| AWS serverless with API Gateway                   | `deploy-to-lambda`                 | Lambda + API Gateway with Streamable HTTP, DynamoDB or ElastiCache                                                                               |
+| Edge computing with global distribution           | `deploy-to-cloudflare`             | Cloudflare Workers with KV or Durable Objects for storage                                                                                        |
+| Hosted FrontMCP (v1.3 skills-only model)          | `deploy-to-cloudflare-skills-only` | Cloudflare Worker as the MCP control plane; OpenAPI is capability inventory; agent uses 4 meta-tools + AgentScript; hot-reload via GitHub Action |
+| Author `frontmcp.deploy.yaml`                     | `deploy-manifest-yaml`             | v1 schema reference: runtime, server, specs, skills, tags, classification, bindings, signing, auth, secrets, environments                        |
+| Standalone executable binary for distribution     | `build-for-cli`                    | Single-binary CLI with stdio transport, embedded storage                                                                                         |
+| Run MCP in a web browser                          | `build-for-browser`                | Browser-compatible bundle with in-memory transport                                                                                               |
+| Embed MCP into an existing Node.js application    | `build-for-sdk`                    | Library build for programmatic usage without standalone server                                                                                   |
+| Write a Dockerfile for Node.js deployment         | `deploy-to-node-dockerfile`        | Dockerfile configuration for Node.js deployment                                                                                                  |
+| Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`          | Vercel-specific configuration (vercel.json)                                                                                                      |
+| Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`           | Configure .mcp.json for stdio, HTTP, or Unix socket transport                                                                                    |
 
 ### CLI Commands for Deployment and Operations
 

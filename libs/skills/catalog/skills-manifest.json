@@ -614,6 +614,14 @@
           ]
         },
         {
+          "name": "deploy-to-cloudflare-skills-only",
+          "description": "Deploy a FrontMCP server to Cloudflare Workers using the v1.3 skills-only model — OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, hot-reload via GitHub Action and a signed-bundle webhook."
+        },
+        {
+          "name": "deploy-manifest-yaml",
+          "description": "The frontmcp.deploy.yaml v1 schema — declarative manifest the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker."
+        },
+        {
           "name": "deploy-to-cloudflare",
           "description": "Deploy a FrontMCP server to Cloudflare Workers with KV, D1, and Durable Objects",
           "examples": [
