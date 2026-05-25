@@ -36,7 +36,7 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 - You need to configure server settings, not deploy (see `frontmcp-config`)
 - You need to build components, not ship them (see `frontmcp-development`)
 
-> **Decision:** Use this skill when you need to figure out WHERE to deploy. Use the specific skill when you already know.
+> **Decision:** Use this skill when you need to figure out WHERE to deploy. Open the matching reference under `references/` directly when you already know.
 
 ## Prerequisites
 
@@ -48,12 +48,12 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 
 1. Review the Scenario Routing Table and Target Comparison below to choose a deployment target
 2. Run `frontmcp build --target <target>` to produce the build output
-3. Follow the specific deployment skill (e.g., `deploy-to-node`, `deploy-to-vercel`) for platform instructions
+3. Follow the specific deployment reference (e.g., `references/deploy-to-node.md`, `references/deploy-to-vercel.md`) for platform instructions
 4. Verify with the Post-Deployment checklist at the end of this skill
 
 ## Scenario Routing Table
 
-| Scenario                                          | Skill                       | Description                                                             |
+| Scenario                                          | Reference                   | Description                                                             |
 | ------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
 | Long-running server on VPS, Docker, or bare metal | `deploy-to-node`            | Node.js with stdio or HTTP transport, PM2/Docker for process management |
 | Serverless with zero config and Vercel KV         | `deploy-to-vercel`          | Vercel Functions with Streamable HTTP, Vercel KV for storage            |
