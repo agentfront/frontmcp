@@ -8,6 +8,7 @@
  */
 
 import type { EventStore } from '@frontmcp/protocol';
+
 import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import { PublicMcpError } from '../../errors';
 
@@ -120,7 +121,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
   const ttlMs = config.ttlMs ?? 300000;
 
   if (provider === 'sqlite') {
-    if (!config.sqlite) {
+    if (!config.sqlite || !config.sqlite.path) {
       throw new PublicMcpError(
         'EventStore SQLite configuration required when provider is "sqlite". ' +
           'Provide sqlite config: { provider: "sqlite", sqlite: { path: "..." } }',
@@ -139,7 +140,12 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
 
     return {
       eventStore: new SqliteEventStore({
-        ...config.sqlite,
+        ...(config.sqlite as {
+          path: string;
+          encryption?: { secret: string };
+          walMode?: boolean;
+          ttlCleanupIntervalMs?: number;
+        }),
         maxEvents,
         ttlMs,
       }),

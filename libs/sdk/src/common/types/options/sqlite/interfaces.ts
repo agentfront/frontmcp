@@ -5,8 +5,13 @@
  * SQLite storage configuration options.
  */
 export interface SqliteOptionsInterface {
-  /** Path to the .sqlite database file */
-  path: string;
+  /**
+   * Path to the .sqlite database file. Optional — when omitted the SDK
+   * resolves a default at startup (see `resolveDefaultSqlitePath`):
+   *   - dev + node + non-CLI → `<projectRoot>/dist/sessions.sqlite`
+   *   - prod OR CLI mode    → `~/.{info.name}/sessions.sqlite`
+   */
+  path?: string;
 
   /**
    * Encryption configuration for at-rest encryption of values.

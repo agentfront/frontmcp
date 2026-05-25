@@ -9,9 +9,9 @@
 // The typecheck.ts file will fail to compile if they get out of sync.
 
 import type { RedisOptionsInput } from '../redis';
-
 // Import session types from session folder (these are the canonical definitions)
-import type { SessionMode, PlatformMappingEntry, PlatformDetectionConfig } from '../session';
+import type { PlatformDetectionConfig, PlatformMappingEntry, SessionMode } from '../session';
+import type { SqliteOptionsInput } from '../sqlite';
 
 // Re-export for convenience
 export type { SessionMode, PlatformMappingEntry, PlatformDetectionConfig };
@@ -131,15 +131,22 @@ export interface ProtocolConfig {
  * Enables session persistence to Redis/Vercel KV for transport recreation
  * after server restart. This is essential for serverless deployments.
  *
- * **Auto-enable behavior**: When top-level `redis` is configured at the
- * `@FrontMcp` level, transport persistence is automatically enabled.
- * Set `persistence: false` to explicitly disable.
+ * **Auto-enable contract** (issue #401):
+ * 1. `persistence: false` always wins — disables transport persistence.
+ * 2. Otherwise, if `persistence` is omitted and a top-level `sqlite`
+ *    block is configured on `@FrontMcp`, transport persistence
+ *    auto-enables using SQLite.
+ * 3. Top-level `redis` is NOT auto-threaded into transport persistence
+ *    — opt in explicitly via `persistence.redis` if you want a
+ *    Redis-backed transport session store.
+ * 4. Schema-level refine rejects setting both `redis` and `sqlite` on
+ *    the same `persistence` block.
  *
- * @example Use global redis (auto-configured)
+ * @example Use global sqlite (auto-configured)
  * ```typescript
  * // At @FrontMcp level:
- * redis: { host: 'localhost' },
- * // persistence auto-enabled using global redis
+ * sqlite: { path: '~/.app/sessions.sqlite' },
+ * // transport persistence auto-enabled using SQLite
  * ```
  *
  * @example Override with custom config
@@ -164,8 +171,17 @@ export interface PersistenceConfig {
    * Redis/Vercel KV configuration for session storage.
    *
    * If omitted, uses the top-level `redis` configuration from `@FrontMcp`.
+   * Mutually exclusive with `sqlite`.
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * SQLite configuration for session storage.
+   *
+   * If omitted, uses the top-level `sqlite` configuration from `@FrontMcp`.
+   * Mutually exclusive with `redis`.
+   */
+  sqlite?: SqliteOptionsInput;
 
   /**
    * Default TTL for stored session metadata (milliseconds).

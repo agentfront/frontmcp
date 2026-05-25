@@ -1,6 +1,6 @@
 ---
 name: configure-session
-description: Set up session storage with Redis or Vercel KV for persistent user state across requests
+description: Set up session storage with Redis, Vercel KV, or SQLite for persistent user state across requests
 ---
 
 # Configure Session Management
@@ -11,7 +11,7 @@ This skill covers setting up session storage in FrontMCP. Sessions track authent
 
 ### Must Use
 
-- Deploying to production where sessions must survive process restarts (Redis or Vercel KV required)
+- Deploying to production where sessions must survive process restarts (Redis, Vercel KV, or SQLite required)
 - Running multiple server instances behind a load balancer that need shared session state
 - Using Streamable HTTP transport where sessions must persist across reconnects
 
@@ -31,13 +31,20 @@ This skill covers setting up session storage in FrontMCP. Sessions track authent
 
 ## Storage Providers
 
-| Provider    | Use Case            | Persistence | Package Required |
-| ----------- | ------------------- | ----------- | ---------------- |
-| `memory`    | Development/testing | None        | None (default)   |
-| `redis`     | Node.js production  | Yes         | `ioredis`        |
-| `vercel-kv` | Vercel deployments  | Yes         | `@vercel/kv`     |
+| Provider    | Use Case                                   | Persistence | Package Required                              |
+| ----------- | ------------------------------------------ | ----------- | --------------------------------------------- |
+| `memory`    | Development/testing                        | None        | None (default)                                |
+| `redis`     | Node.js production                         | Yes         | `ioredis`                                     |
+| `vercel-kv` | Vercel deployments                         | Yes         | `@vercel/kv`                                  |
+| `sqlite`    | Single-node persistent (CLI / Docker / VM) | Yes         | `@frontmcp/storage-sqlite` + `better-sqlite3` |
 
 Never use the memory store in production. Sessions are lost on process restart, which breaks authentication for all connected clients.
+
+SQLite is set via the top-level `sqlite` block (not via `redis: { provider: ... }`).
+See the [`setup-sqlite`](../../frontmcp-setup/references/setup-sqlite.md) skill
+for the full walkthrough. The same top-level `sqlite` block is auto-threaded
+into the task store and elicitation store unless they are individually
+configured to use a different backend (issue #401).
 
 ## Redis (Production)
 

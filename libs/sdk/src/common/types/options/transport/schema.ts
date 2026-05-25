@@ -10,6 +10,7 @@ import { type RawZodShape } from '../../common.types';
 import { redisOptionsSchema } from '../redis';
 // Import session types for internal use (already exported from session folder)
 import { platformDetectionConfigSchema, type PlatformDetectionConfig, type SessionMode } from '../session';
+import { sqliteOptionsSchema } from '../sqlite';
 // Import types from interfaces file
 // Note: SessionMode, PlatformMappingEntry, PlatformDetectionConfig
 // are already exported from session.options.ts - we only import them here for internal use
@@ -200,15 +201,24 @@ const protocolSchema = z.union([protocolPresetSchema, protocolConfigSchema]);
 // ============================================
 
 /**
- * Simplified persistence config - no explicit 'enabled' flag.
- * - `false`: Explicitly disable persistence
- * - `object`: Enable with custom config
- * - `undefined`: Auto-enable when global redis exists
+ * Simplified persistence config — no explicit 'enabled' flag (issue #401).
+ * - `false`: Explicitly disable persistence (wins over auto-enable).
+ * - `object`: Enable with this config. `redis` and `sqlite` are mutually
+ *   exclusive within a single persistence block (see the refine below).
+ * - `undefined`: Auto-enable using the top-level `sqlite` block on
+ *   `@FrontMcp` when one is configured. Top-level `redis` is NOT
+ *   auto-threaded — opt in by setting `persistence.redis` explicitly.
  */
-export const persistenceConfigSchema = z.object({
-  redis: redisOptionsSchema.optional(),
-  defaultTtlMs: z.number().int().positive().default(3600000),
-});
+export const persistenceConfigSchema = z
+  .object({
+    redis: redisOptionsSchema.optional(),
+    sqlite: sqliteOptionsSchema.optional(),
+    defaultTtlMs: z.number().int().positive().default(3600000),
+  })
+  .refine((cfg) => !(cfg.redis && cfg.sqlite), {
+    message: 'Invalid persistence config: choose either redis or sqlite, not both',
+    path: ['sqlite'],
+  });
 
 // ============================================
 // EVENT STORE CONFIG SCHEMA

@@ -13,8 +13,15 @@ import type { SqliteOptionsInterface } from './interfaces';
  * SQLite storage configuration schema.
  */
 export const sqliteOptionsSchema = z.object({
-  /** Path to the .sqlite database file */
-  path: z.string().min(1),
+  /**
+   * Path to the .sqlite database file. **Optional** — when omitted the SDK
+   * resolves a default at startup (see `resolveDefaultSqlitePath` in
+   * `./resolve.ts`):
+   *   - dev + node + non-CLI → `<projectRoot>/dist/sessions.sqlite`
+   *   - prod OR CLI mode    → `~/.{info.name}/sessions.sqlite`
+   * Set this explicitly to override either default.
+   */
+  path: z.string().min(1).optional(),
 
   /**
    * Encryption configuration for at-rest encryption of values.

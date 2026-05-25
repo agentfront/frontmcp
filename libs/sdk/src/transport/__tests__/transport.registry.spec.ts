@@ -147,6 +147,86 @@ describe('TransportService', () => {
       await service.ready;
       expect(service).toBeDefined();
     });
+
+    // Issue #401 — SQLite branch
+    describe('SQLite persistence (issue #401)', () => {
+      const fakeSqliteStore = {
+        get: jest.fn(),
+        set: jest.fn(),
+        delete: jest.fn(),
+        exists: jest.fn(),
+        allocId: jest.fn(),
+        close: jest.fn(),
+      };
+      let originalRequire: NodeJS.Require['cache'];
+
+      beforeEach(() => {
+        jest.doMock(
+          '@frontmcp/storage-sqlite',
+          () => ({
+            SqliteSessionStore: jest.fn().mockImplementation(() => fakeSqliteStore),
+          }),
+          { virtual: true },
+        );
+        originalRequire = require.cache;
+      });
+
+      afterEach(() => {
+        jest.dontMock('@frontmcp/storage-sqlite');
+        require.cache = originalRequire;
+      });
+
+      it('logs the sqlite-specific initialization message', async () => {
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+        });
+        await service.ready;
+        expect(mockScope.logger.info).toHaveBeenCalledWith(
+          '[TransportService] sqlite session store will be initialized for transport persistence',
+        );
+      });
+
+      it('marks session store as configured', async () => {
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+        });
+        await service.ready;
+        expect(service.isSessionStoreConfigured()).toBe(true);
+      });
+
+      it('prefers the sqlite branch when redis is also set (schema would reject this earlier)', async () => {
+        // Defensive: if a caller bypasses the schema and passes both, prefer sqlite.
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+          redis: { host: 'localhost', port: 6379 },
+        });
+        await service.ready;
+        expect(mockScope.logger.info).toHaveBeenCalledWith(
+          '[TransportService] sqlite session store will be initialized for transport persistence',
+        );
+      });
+
+      it('reports unconfigured when persistence is false', async () => {
+        service = new TransportService(mockScope as never, false);
+        await service.ready;
+        expect(service.isSessionStoreConfigured()).toBe(false);
+      });
+
+      // Locks the contract from the destroy() docblock: SQLite stores
+      // own a `better-sqlite3` Database handle and MUST be closed (not
+      // disconnected) so the underlying FD is released. The teardown
+      // helper probes `disconnect ?? close` and SQLite stores only
+      // implement `close`.
+      it('calls store.close() on destroy() so the sqlite file handle is released', async () => {
+        fakeSqliteStore.close.mockClear();
+        service = new TransportService(mockScope as never, {
+          sqlite: { path: '/tmp/test-sessions.sqlite' },
+        });
+        await service.ready;
+        await service.destroy();
+        expect(fakeSqliteStore.close).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   // ============================================
