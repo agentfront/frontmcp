@@ -829,14 +829,27 @@ Tools in `allowedTools` don't require additional user confirmation during skill 
 
 The `frontmcp skills` command tree ships **six** subcommands:
 
-| Subcommand | Purpose                                                           |
-| ---------- | ----------------------------------------------------------------- |
-| `search`   | Semantic search over the catalog (description / tags / name)      |
-| `list`     | List all skills, filterable by `--category`, `--tag`, `--bundle`  |
-| `read`     | Print a skill's `SKILL.md`, a reference, or list `--refs/--examples` |
-| `install`  | Copy a skill (or many, via `--all/--tag/--category`) into a provider dir |
-| `export`   | Convert a skill into a Cursor / Windsurf / Copilot rule file      |
-| `publish`  | Publish a skill to the Smithery or Glama marketplace              |
+| Subcommand | Purpose                                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `search`   | Semantic search over the catalog (description / tags / name)                                                           |
+| `list`     | List all skills, filterable by `--category`, `--tag`, `--bundle`                                                       |
+| `read`     | Print a skill's `SKILL.md`, a reference, or list `--refs/--examples`                                                   |
+| `install`  | Copy a catalog skill (or many, via `--all/--tag/--category`) into a provider dir; also installs **project `@Skill` entries** via `--from-entry`/`--from-package` |
+| `export`   | Convert a skill into a Cursor / Windsurf / Copilot rule file                                                           |
+| `publish`  | Publish a skill to the Smithery or Glama marketplace                                                                   |
+
+`install` works on two sources:
+
+- **Framework catalog** (default) — copies one of the catalog router
+  skills (`frontmcp-development`, `frontmcp-deployment`, …) into
+  `.claude/skills/` or `.codex/skills/`.
+- **Project-defined `@Skill` entries** — pass `--from-entry <path>` to
+  enumerate skills registered in a local entry file, or
+  `--from-package <pkg>` to do the same against an installed package's
+  main entry. The CLI bundles the entry, boots the SDK in-memory, and
+  writes a Claude-Code-loadable `SKILL.md` per skill (synthesizing
+  frontmatter from the `@Skill` decorator metadata when the source
+  markdown has none).
 
 For the full flag tables, bulk-install patterns, and IDE-target output
 mapping, see the canonical reference shipped with the

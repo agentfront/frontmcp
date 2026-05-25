@@ -56,6 +56,12 @@ export interface ExtractedSkillAsset {
     scripts?: string;
     assets?: string;
   };
+  /** Mirrors `SkillAssetEntry.description` so consumers can compose frontmatter. */
+  description?: string;
+  /** Mirrors `SkillAssetEntry.tags`. */
+  tags?: string[];
+  /** Mirrors `SkillAssetEntry.license`. */
+  license?: string;
 }
 
 export interface ExtractedSchema {
@@ -149,7 +155,17 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;
     listPrompts(): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: unknown[] }> }>;
     listJobs?(): Promise<{ jobs: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown>; tags?: string[] }>; count: number }>;
-    collectSkillAssets?(): Promise<{ entries: Array<{ skillName: string; baseDir?: string; instructionFile?: string; resources?: Record<string, string | undefined> }> }>;
+    collectSkillAssets?(): Promise<{
+      entries: Array<{
+        skillName: string;
+        baseDir?: string;
+        instructionFile?: string;
+        resources?: Record<string, string | undefined>;
+        description?: string;
+        tags?: string[];
+        license?: string;
+      }>;
+    }>;
     close(): Promise<void>;
   };
 
@@ -244,6 +260,9 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
           baseDir: e.baseDir,
           instructionFile: e.instructionFile,
           resourceDirs: e.resources as ExtractedSkillAsset['resourceDirs'],
+          description: e.description,
+          tags: e.tags,
+          license: e.license,
         }));
       } catch {
         // Skill asset collection not available

@@ -651,6 +651,9 @@ export class DirectClientImpl implements DirectClient {
       const entry: SkillAssetEntry = {
         skillName: meta.name,
         baseDir,
+        description: meta.description,
+        tags: meta.tags,
+        license: meta.license,
       };
 
       // Collect instruction file path if file-based

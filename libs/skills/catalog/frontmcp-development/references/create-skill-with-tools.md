@@ -462,6 +462,37 @@ nx generate @frontmcp/nx:skill-dir
 
 The class generator creates the skill file, spec file, and updates barrel exports. The directory generator creates the full directory structure ready for `skillDir()`.
 
+## Installing on a User's Machine
+
+Tool-enabled skills install the same way as instruction-only skills —
+the tools they reference are exposed through the same MCP server, so
+copying the `SKILL.md` (with the decorator metadata in its frontmatter)
+under `.claude/skills/<name>/` is all Claude Code needs to load it.
+
+```bash
+# Install one named skill from a local project entry
+frontmcp skills install deploy-service --from-entry src/main.ts -p claude
+
+# Install every @Skill the project exposes
+frontmcp skills install --from-entry src/main.ts --all -p claude
+
+# Install from a published package (resolves the package main entry)
+frontmcp skills install --from-package my-devops-server --all -p claude
+```
+
+The CLI bundles the entry, enumerates `@Skill` entries via the SDK's
+in-memory client, and copies each skill's `SKILL.md` and resource
+directories. When a skill declares `allowedTools` in its decorator, that
+list ends up in the synthesized SKILL.md frontmatter so Claude Code
+pre-approves those tools during the skill session. See
+`frontmcp-skills-usage` for the full selector matrix, and `create-skill`
+for the analogous note on instruction-only skills.
+
+> Shipping slash commands alongside the skills? Use the full per-bin
+> install instead: `my-devops-server install -p claude` writes the
+> plugin manifest, `commands/` directory, and `skills/` directory in a
+> single pass.
+
 ## HTTP Endpoints for Skill Discovery
 
 When skills have `visibility` set to `'http'` or `'both'`, they are discoverable via HTTP endpoints:

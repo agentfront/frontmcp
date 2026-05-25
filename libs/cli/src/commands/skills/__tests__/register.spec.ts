@@ -40,6 +40,12 @@ describe('registerSkillsCommands — CLI surface lock (issue #414)', () => {
     expect(flagLongs).toEqual(expect.arrayContaining(['--provider', '--dir', '--all', '--tag', '--category']));
   });
 
+  it('install exposes --from-entry / --from-package for project-defined @Skill enumeration (issue #415)', () => {
+    const install = getSubcommand('install');
+    const flagLongs = install.options.map((o) => o.long).filter(Boolean) as string[];
+    expect(flagLongs).toEqual(expect.arrayContaining(['--from-entry', '--from-package']));
+  });
+
   it('publish exposes the --token / --repository / --dry-run flags documented in the reference', () => {
     const publish = getSubcommand('publish');
     const flagLongs = publish.options.map((o) => o.long).filter(Boolean) as string[];

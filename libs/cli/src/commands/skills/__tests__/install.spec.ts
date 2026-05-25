@@ -21,25 +21,40 @@ jest.mock('../catalog', () => ({
 }));
 
 let mockFiles: Record<string, string> = {};
+let mockDirs: Set<string> = new Set();
 
 jest.mock('@frontmcp/utils', () => ({
-  fileExists: jest.fn(async (p: string) => p in mockFiles),
+  fileExists: jest.fn(async (p: string) => p in mockFiles || mockDirs.has(p)),
   readFile: jest.fn(async (p: string) => mockFiles[p] ?? ''),
   writeFile: jest.fn(async (p: string, content: string) => {
     mockFiles[p] = content;
   }),
   ensureDir: jest.fn(),
   cp: jest.fn(),
+  readdir: jest.fn(async (dir: string) => {
+    const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+    const children = new Set<string>();
+    for (const file of Object.keys(mockFiles)) {
+      if (file.startsWith(prefix)) {
+        const rest = file.slice(prefix.length);
+        const firstSegment = rest.split('/')[0];
+        if (firstSegment) children.add(firstSegment);
+      }
+    }
+    return Array.from(children).sort();
+  }),
 }));
 
 /** Helper: mark both catalog skills as installed under cwd */
 function mockInstalledSkills(cwd: string) {
+  mockDirs.add(`${cwd}/.claude/skills`);
   mockFiles[`${cwd}/.claude/skills/skill-alpha/SKILL.md`] = '# skill-alpha';
   mockFiles[`${cwd}/.claude/skills/skill-beta/SKILL.md`] = '# skill-beta';
 }
 
 beforeEach(() => {
   mockFiles = {};
+  mockDirs = new Set();
   jest.clearAllMocks();
 });
 
@@ -108,6 +123,7 @@ describe('ensureClaudeMdSkillsInstructions', () => {
 
   it('should only list installed skills, not full catalog', async () => {
     // Only install skill-alpha, not skill-beta
+    mockDirs.add('/test/project/.claude/skills');
     mockFiles['/test/project/.claude/skills/skill-alpha/SKILL.md'] = '# skill-alpha';
 
     await ensureClaudeMdSkillsInstructions('/test/project');
@@ -217,5 +233,27 @@ describe('ensureClaudeMdSkillsInstructions', () => {
     expect(content).toContain('<!-- frontmcp:skills-start');
     expect(content).not.toContain('**skill-alpha**');
     expect(content).not.toContain('**skill-beta**');
+  });
+
+  it('should include project-defined (non-catalog) skills by reading their frontmatter', async () => {
+    mockDirs.add('/test/project/.claude/skills');
+    mockFiles['/test/project/.claude/skills/skill-alpha/SKILL.md'] = '# skill-alpha';
+    // A project-installed skill whose name is NOT in the catalog: its
+    // description must come from the SKILL.md frontmatter, not the catalog.
+    mockFiles['/test/project/.claude/skills/example-project/SKILL.md'] = [
+      '---',
+      'name: example-project',
+      'description: "Conventions for editing files in the example project"',
+      '---',
+      '',
+      '# Example Project',
+    ].join('\n');
+
+    await ensureClaudeMdSkillsInstructions('/test/project');
+
+    const content = mockFiles['/test/project/CLAUDE.md'];
+    expect(content).toContain('**skill-alpha**');
+    expect(content).toContain('**example-project**');
+    expect(content).toContain('Conventions for editing files in the example project');
   });
 });

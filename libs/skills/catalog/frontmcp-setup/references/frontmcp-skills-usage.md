@@ -146,13 +146,15 @@ Install one or many skills to a provider-specific directory. `[name]` is
 optional when one of `--all`, `--tag`, or `--category` is supplied —
 those flags select skills in bulk.
 
-| Flag                        | Description                                           | Default  |
-| --------------------------- | ----------------------------------------------------- | -------- |
-| `-p, --provider <provider>` | Target provider: `claude` or `codex`                  | `claude` |
-| `-d, --dir <directory>`     | Custom install directory (overrides provider default) | —        |
-| `-a, --all`                 | Install **every** skill in the catalog                | `false`  |
-| `-t, --tag <tag>`           | Install every skill matching a tag                    | —        |
-| `-c, --category <c>`        | Install every skill in a category                     | —        |
+| Flag                        | Description                                                                                            | Default  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
+| `-p, --provider <provider>` | Target provider: `claude` or `codex`                                                                   | `claude` |
+| `-d, --dir <directory>`     | Custom install directory (overrides provider default)                                                  | —        |
+| `-a, --all`                 | Install **every** skill in the catalog (or every `@Skill` entry when `--from-*` is set)                | `false`  |
+| `-t, --tag <tag>`           | Install every skill matching a tag (catalog only)                                                      | —        |
+| `-c, --category <c>`        | Install every skill in a category (catalog only)                                                       | —        |
+| `--from-entry <path>`       | Install `@Skill` entries discovered in a **local project entry file** instead of the framework catalog | —        |
+| `--from-package <pkg>`      | Install `@Skill` entries discovered in a **published package's** main entry                            | —        |
 
 ```bash
 # Single-skill install (positional name)
@@ -164,6 +166,10 @@ frontmcp skills install frontmcp-guides --dir ./my-skills        # custom destin
 frontmcp skills install --all --provider claude
 frontmcp skills install --category development --provider claude
 frontmcp skills install --tag middleware --provider codex
+
+# Install a project's own @Skill-decorated entries (see "Installing project-defined skills")
+frontmcp skills install --from-entry src/main.ts --all -p claude
+frontmcp skills install --from-package my-frontmcp-server my-skill -p claude
 ```
 
 ### `frontmcp skills export`
@@ -243,6 +249,57 @@ frontmcp skills install --all -d ./shared/.claude/skills
 > **Heads up:** `--all` / `--tag` / `--category` make `[name]` optional. Pass
 > exactly one bulk selector OR a `[name]`; combining a positional name with a
 > bulk flag is rejected.
+
+## Installing project-defined skills (`@Skill`)
+
+The same `frontmcp skills install` command can install **your project's
+own** `@Skill`-decorated entries — not just the framework catalog. Use
+this when you ship a FrontMCP server that registers skills (via the
+`@Skill` decorator or the `skill()` helper — see `create-skill`) and
+want end users to drop those skills onto Claude Code's filesystem.
+
+| Flag                   | When to use it                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `--from-entry <path>`  | Resolve `@Skill` entries from a local entry file (`src/main.ts`, etc.) in the current project |
+| `--from-package <pkg>` | Resolve `@Skill` entries from an installed package's main entry (works with `npx` workflows)  |
+
+The command bundles the entry once via esbuild, boots the SDK with the
+same in-memory client that `frontmcp build` uses, and enumerates every
+`@Skill` entry. Each entry's instructions file (and any `references/` /
+`examples/` / `scripts/` / `assets/` resource directories) is copied
+under `.claude/skills/<skill-name>/`. If the source instructions file
+has no YAML frontmatter, the CLI prepends one synthesized from the
+`@Skill` decorator metadata (`name`, `description`, `tags`, `license`)
+so Claude Code's filesystem loader picks the skill up.
+
+```bash
+# From a project checkout: install one named skill
+frontmcp skills install example-project --from-entry src/main.ts -p claude
+
+# Install every @Skill the project exposes
+frontmcp skills install --from-entry src/main.ts --all -p claude
+
+# From a published package the user has installed:
+frontmcp skills install --from-package my-frontmcp-server --all -p claude
+npx my-frontmcp-server # ... once installed, skills resolve through `my-frontmcp-server`'s main entry
+frontmcp skills install --from-package my-frontmcp-server example-project -p claude
+```
+
+Selectors and constraints:
+
+- Pass **either** `<name>` **or** `--all`. `--tag` / `--category` are
+  catalog-only and are rejected when `--from-entry` / `--from-package` is
+  set — the project's `@Skill` list is the authoritative source.
+- `--from-entry` and `--from-package` are mutually exclusive.
+- The CLAUDE.md auto-generated `<!-- frontmcp:skills -->` block lists
+  every installed skill in `.claude/skills/`, catalog **and**
+  project-defined together. Re-running install keeps the block coherent.
+
+> **Tip:** This is the lightest path for shipping a project's own skills.
+> If you also want to ship slash commands, environment hints, and a
+> `.claude-plugin/plugin.json` manifest in one shot, use the per-bin
+> `<bin> install -p claude` (see `frontmcp-deployment`) — it wraps the
+> same enumeration plus the rest of the plugin surface.
 
 ## Other AI clients (Cursor / Windsurf / Copilot)
 

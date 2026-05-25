@@ -1,8 +1,14 @@
 import * as path from 'path';
+
+import { cp, ensureDir, fileExists, readdir, readFile, writeFile } from '@frontmcp/utils';
+
 import { c } from '../../core/colors';
 import { getSelfVersion } from '../../core/version';
-import { ensureDir, fileExists, cp, readFile, writeFile } from '@frontmcp/utils';
-import { loadCatalog, getCatalogDir } from './catalog';
+import { resolveEntry } from '../../shared/fs';
+import type { ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
+import { getCatalogDir, loadCatalog } from './catalog';
+import { extractProjectSkills, resolvePackageEntry } from './from-entry';
+import { composeSkillMd, hasFrontmatter } from './skill-md-compose';
 
 const PROVIDER_DIRS: Record<string, string> = {
   claude: '.claude/skills',
@@ -70,6 +76,18 @@ export interface InstallOptions {
   all?: boolean;
   tag?: string;
   category?: string;
+  /**
+   * Install skills from a project's `@Skill`-decorated entries instead of
+   * the bundled framework catalog. Bundles the entry via esbuild and
+   * enumerates skills through the same path the per-bin install uses.
+   */
+  fromEntry?: string;
+  /**
+   * Install skills from a published package's `@Skill`-decorated entries.
+   * The package must be installed under the project's `node_modules/` so
+   * Node's module resolution can locate it.
+   */
+  fromPackage?: string;
 }
 
 /**
@@ -81,17 +99,12 @@ export interface InstallOptions {
  * - If file doesn't exist: creates it with the block.
  */
 export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<void> {
-  const manifest = loadCatalog();
   const version = getSelfVersion();
-  // Only include skills that are actually installed (not the full catalog)
-  const installedSkills = (
-    await Promise.all(
-      manifest.skills.map(async (skill) => {
-        const skillMdPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
-        return (await fileExists(skillMdPath)) ? { name: skill.name, description: skill.description } : undefined;
-      }),
-    )
-  ).filter((s): s is { name: string; description: string } => s !== undefined);
+  // Scan the actual `.claude/skills/<name>/SKILL.md` tree rather than
+  // filtering against the framework catalog — project-defined skills
+  // (installed via `--from-entry` / `--from-package`) live in the same
+  // directory and must also be listed in the CLAUDE.md block.
+  const installedSkills = await scanInstalledSkills(path.join(cwd, '.claude', 'skills'));
   const section = buildSkillsSection(version, installedSkills);
   const claudeMdPath = path.join(cwd, 'CLAUDE.md');
 
@@ -135,9 +148,20 @@ export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<voi
 }
 
 export async function installSkill(name: string | undefined, options: InstallOptions): Promise<void> {
-  const manifest = loadCatalog();
   const provider = options.provider ?? 'claude';
   const targetBase = options.dir ?? path.resolve(process.cwd(), PROVIDER_DIRS[provider] ?? PROVIDER_DIRS['claude']);
+
+  if (options.fromEntry && options.fromPackage) {
+    console.error(c('red', 'Options --from-entry and --from-package are mutually exclusive.'));
+    process.exit(1);
+  }
+
+  if (options.fromEntry || options.fromPackage) {
+    await installFromProject({ name, options, provider, targetBase });
+    return;
+  }
+
+  const manifest = loadCatalog();
   const catalogDir = getCatalogDir();
 
   // Validate that exactly one selector is supplied
@@ -215,4 +239,173 @@ export async function installSkill(name: string | undefined, options: InstallOpt
   if (provider === 'claude') {
     await ensureClaudeMdSkillsInstructions(process.cwd());
   }
+}
+
+interface InstallFromProjectArgs {
+  name: string | undefined;
+  options: InstallOptions;
+  provider: 'claude' | 'codex';
+  targetBase: string;
+}
+
+async function installFromProject(args: InstallFromProjectArgs): Promise<void> {
+  const { name, options, provider, targetBase } = args;
+
+  const selectorCount = [options.all, name].filter(Boolean).length;
+  if (selectorCount > 1) {
+    console.error(c('red', 'Options --all and <name> are mutually exclusive.'));
+    process.exit(1);
+  }
+  if (selectorCount === 0) {
+    console.error(c('red', 'Specify a skill name or --all when using --from-entry/--from-package.'));
+    process.exit(1);
+  }
+  if (options.tag || options.category) {
+    console.error(c('red', '--tag and --category are not supported with --from-entry/--from-package yet.'));
+    process.exit(1);
+  }
+
+  const cwd = process.cwd();
+  let entry: string;
+  if (options.fromPackage) {
+    try {
+      entry = resolvePackageEntry(options.fromPackage, cwd);
+    } catch (err) {
+      console.error(
+        c('red', `Could not resolve package "${options.fromPackage}" from ${cwd}: ${(err as Error).message}`),
+      );
+      process.exit(1);
+    }
+  } else {
+    entry = await resolveEntry(cwd, options.fromEntry);
+  }
+
+  let assets: ExtractedSkillAsset[];
+  try {
+    assets = await extractProjectSkills({ entry, cwd });
+  } catch (err) {
+    console.error(c('red', `Could not enumerate @Skill entries from ${entry}: ${(err as Error).message}`));
+    process.exit(1);
+  }
+
+  if (assets.length === 0) {
+    console.error(c('yellow', `No @Skill-decorated entries found in ${path.relative(cwd, entry) || entry}.`));
+    process.exit(1);
+  }
+
+  let selected = assets;
+  if (name) {
+    const match = assets.find((a) => a.skillName === name);
+    if (!match) {
+      console.error(c('red', `Skill "${name}" not found in ${options.fromPackage ?? path.relative(cwd, entry)}.`));
+      console.log(c('gray', `  Available: ${assets.map((a) => a.skillName).join(', ')}`));
+      process.exit(1);
+    }
+    selected = [match];
+  }
+
+  let installed = 0;
+  for (const asset of selected) {
+    const targetDir = path.join(targetBase, asset.skillName);
+    try {
+      await materializeProjectSkill(asset, targetDir);
+      installed++;
+      console.log(
+        `${c('green', '✓')} Installed ${c('bold', asset.skillName)} to ${c('cyan', path.relative(cwd, targetDir))}`,
+      );
+    } catch (err) {
+      console.error(c('yellow', `  Skipped ${asset.skillName}: ${(err as Error).message}`));
+    }
+  }
+
+  if (installed === 0) {
+    console.error(c('red', `No skills were installed (0/${selected.length}).`));
+    process.exit(1);
+  }
+
+  if (selected.length > 1) {
+    console.log(`\n${c('green', '✓')} Installed ${installed}/${selected.length} skills (provider: ${provider})`);
+  }
+
+  if (provider === 'claude') {
+    await ensureClaudeMdSkillsInstructions(cwd);
+  }
+}
+
+async function materializeProjectSkill(asset: ExtractedSkillAsset, targetDir: string): Promise<void> {
+  await ensureDir(targetDir);
+
+  const body =
+    asset.instructionFile && (await fileExists(asset.instructionFile)) ? await readFile(asset.instructionFile) : '';
+  const skillMd = composeSkillMd(
+    { name: asset.skillName, description: asset.description, tags: asset.tags, license: asset.license },
+    body,
+  );
+  await writeFile(path.join(targetDir, 'SKILL.md'), skillMd);
+
+  for (const kind of ['references', 'examples', 'scripts', 'assets'] as const) {
+    const src = asset.resourceDirs?.[kind];
+    if (!src) continue;
+    if (!(await fileExists(src))) continue;
+    const dest = path.join(targetDir, kind);
+    await cp(src, dest, { recursive: true });
+  }
+}
+
+interface InstalledSkillSummary {
+  name: string;
+  description: string;
+}
+
+/**
+ * Walk `<base>/<skill>/SKILL.md` and read the frontmatter `name` / `description`
+ * for each. Used by `ensureClaudeMdSkillsInstructions` to list both catalog
+ * and project-defined skills in the auto-generated block.
+ */
+async function scanInstalledSkills(base: string): Promise<InstalledSkillSummary[]> {
+  if (!(await fileExists(base))) return [];
+  const catalog = loadCatalog();
+  const catalogByName = new Map(catalog.skills.map((s) => [s.name, s] as const));
+
+  let entries: string[];
+  try {
+    entries = await readdir(base);
+  } catch {
+    return [];
+  }
+
+  const summaries: InstalledSkillSummary[] = [];
+  for (const entry of entries.sort()) {
+    const skillMdPath = path.join(base, entry, 'SKILL.md');
+    if (!(await fileExists(skillMdPath))) continue;
+
+    const fromCatalog = catalogByName.get(entry);
+    if (fromCatalog) {
+      summaries.push({ name: fromCatalog.name, description: fromCatalog.description });
+      continue;
+    }
+
+    // Project-defined skill — read frontmatter for description.
+    const content = await readFile(skillMdPath);
+    summaries.push({ name: entry, description: extractFrontmatterDescription(content) ?? `${entry} skill` });
+  }
+  return summaries;
+}
+
+function extractFrontmatterDescription(content: string): string | undefined {
+  if (!hasFrontmatter(content)) return undefined;
+  const end = content.indexOf('\n---', 4);
+  if (end < 0) return undefined;
+  const frontmatter = content.slice(4, end);
+  const match = frontmatter.match(/^description:\s*(.+)$/m);
+  if (!match) return undefined;
+  const raw = match[1].trim();
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    try {
+      return JSON.parse(raw.replace(/^'/, '"').replace(/'$/, '"'));
+    } catch {
+      return raw.slice(1, -1);
+    }
+  }
+  return raw;
 }

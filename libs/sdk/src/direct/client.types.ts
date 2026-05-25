@@ -806,6 +806,16 @@ export interface SkillAssetEntry {
     scripts?: string;
     assets?: string;
   };
+  /**
+   * Skill description from `@Skill({ description })`. Forwarded so build
+   * tooling can compose a SKILL.md frontmatter block when the source file
+   * has no frontmatter of its own.
+   */
+  description?: string;
+  /** Skill tags from `@Skill({ tags })`. */
+  tags?: string[];
+  /** Skill license from `@Skill({ license })`. */
+  license?: string;
 }
 
 /**

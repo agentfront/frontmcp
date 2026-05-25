@@ -396,6 +396,51 @@ class StandardsApp {}
 class MyServer {}
 ```
 
+## Installing a Project's `@Skill` on a User's Machine
+
+A `@Skill` registered on your server is reachable two ways:
+
+1. **Over MCP** — clients that speak the SEP-2640 `skill://` URI scheme
+   (Claude Desktop, custom MCP clients) discover registered skills
+   automatically when they connect to your server.
+2. **On the filesystem** — Claude Code's plugin/filesystem loader looks
+   for `SKILL.md` files under `.claude/skills/<name>/`. Decorator-only
+   registration is **not enough**; the SKILL.md (and any
+   `references/` / `examples/` directories) has to be copied to disk.
+
+The `frontmcp` CLI bridges the two via `frontmcp skills install
+--from-entry` / `--from-package`. The command bundles the entry file,
+boots the SDK in-memory, enumerates every `@Skill` you registered, and
+writes a Claude-Code-loadable `SKILL.md` for each (synthesizing
+frontmatter from the decorator metadata when the source markdown
+doesn't already have one):
+
+```bash
+# From the project checkout, during development
+frontmcp skills install example-project --from-entry src/main.ts -p claude
+frontmcp skills install --from-entry src/main.ts --all -p claude
+
+# From a published package the user has installed
+frontmcp skills install --from-package my-frontmcp-server --all -p claude
+```
+
+The resulting `.claude/skills/<skill-name>/` tree is the same shape as a
+catalog-installed skill, so the CLAUDE.md auto-generated block, the
+`/plugins` listing in Claude Code, and Cursor/Windsurf exports all work
+uniformly. See `frontmcp-skills-usage` for the full flag list and
+selector matrix.
+
+If you also want to ship slash commands and a `.claude-plugin/plugin.json`
+manifest, install the project as a Claude Code plugin instead of just the
+skills:
+
+```bash
+my-frontmcp-server install -p claude    # MCP server + commands + skills, all in one
+```
+
+The plugin path internally uses the same `@Skill` enumeration, so
+nothing about the decorator changes.
+
 ## HTTP Discovery
 
 When skills have `visibility` set to `'http'` or `'both'`, they are discoverable via HTTP endpoints.

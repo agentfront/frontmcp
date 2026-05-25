@@ -36,13 +36,32 @@ export function registerSkillsCommands(program: Command): void {
     .argument('[name]', 'Skill name to install (optional with --all, --tag, or --category)')
     .option('-p, --provider <provider>', 'Target provider: claude, codex (default: claude)', 'claude')
     .option('-d, --dir <directory>', 'Custom install directory (overrides provider default)')
-    .option('-a, --all', 'Install all skills from the catalog')
-    .option('-t, --tag <tag>', 'Install all skills matching a tag')
-    .option('-c, --category <category>', 'Install all skills in a category')
+    .option(
+      '-a, --all',
+      'Install all skills from the catalog (or all @Skill entries when --from-entry/--from-package is set)',
+    )
+    .option('-t, --tag <tag>', 'Install all skills matching a tag (catalog only)')
+    .option('-c, --category <category>', 'Install all skills in a category (catalog only)')
+    .option(
+      '--from-entry <path>',
+      'Install @Skill entries from a local project entry file instead of the framework catalog',
+    )
+    .option(
+      '--from-package <pkg>',
+      "Install @Skill entries from a published package's main entry instead of the framework catalog",
+    )
     .action(
       async (
         name: string | undefined,
-        options: { provider?: string; dir?: string; all?: boolean; tag?: string; category?: string },
+        options: {
+          provider?: string;
+          dir?: string;
+          all?: boolean;
+          tag?: string;
+          category?: string;
+          fromEntry?: string;
+          fromPackage?: string;
+        },
       ) => {
         const validProviders = ['claude', 'codex'] as const;
         type Provider = (typeof validProviders)[number];
@@ -58,6 +77,8 @@ export function registerSkillsCommands(program: Command): void {
           all: options.all,
           tag: options.tag,
           category: options.category,
+          fromEntry: options.fromEntry,
+          fromPackage: options.fromPackage,
         });
       },
     );
