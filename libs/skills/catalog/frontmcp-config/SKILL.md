@@ -14,7 +14,7 @@ metadata:
 
 # FrontMCP Configuration Router
 
-Entry point for configuring FrontMCP servers. This skill helps you find the right configuration skill based on what aspect of your server you need to set up.
+Entry point for configuring FrontMCP servers. This skill helps you find the right configuration reference (under `references/`) based on what aspect of your server you need to set up.
 
 ## When to Use This Skill
 
@@ -26,7 +26,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 
 ### Recommended
 
-- Looking up which skill covers a specific config option (CORS, rate limits, session TTL, etc.)
+- Looking up which reference covers a specific config option (CORS, rate limits, session TTL, etc.)
 - Understanding how configuration layers work (server-level vs app-level vs tool-level)
 - Reviewing the full configuration surface area before production deployment
 
@@ -36,7 +36,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 - You need to build components, not configure the server (see `frontmcp-development`)
 - You need to deploy, not configure (see `frontmcp-deployment`)
 
-> **Decision:** Use this skill when you need to figure out WHAT to configure. Use the specific skill when you already know.
+> **Decision:** Use this skill when you need to figure out WHAT to configure. Open the matching reference under `references/` directly when you already know.
 
 ## Prerequisites
 
@@ -46,13 +46,13 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 ## Steps
 
 1. Identify the configuration area you need using the Scenario Routing Table below
-2. Navigate to the specific configuration skill (e.g., `configure-transport`, `configure-auth`) for detailed instructions
+2. Navigate to the specific configuration reference (e.g., `references/configure-transport.md`, `references/configure-auth.md`) for detailed instructions
 3. Apply the configuration in your `@FrontMcp` or `@App` decorator
 4. Verify using the Verification Checklist at the end of this skill
 
 ## Scenario Routing Table
 
-| Scenario                                                       | Skill                                  | Description                                                         |
+| Scenario                                                       | Reference                              | Description                                                         |
 | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- |
 | Choose between SSE, Streamable HTTP, or stdio                  | `configure-transport`                  | Transport protocol selection with distributed session options       |
 | Set up CORS, port, base path, or request limits                | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports          |

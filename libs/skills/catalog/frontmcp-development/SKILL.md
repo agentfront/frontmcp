@@ -14,7 +14,7 @@ metadata:
 
 # FrontMCP Development Router
 
-Entry point for building MCP server components. This skill helps you find the right development skill based on what you want to build. It does not teach implementation details itself — it routes you to the specific skill that does.
+Entry point for building MCP server components. This skill helps you find the right development reference based on what you want to build. It does not teach implementation details itself — it routes you to the specific reference (under `references/`) that does.
 
 ## When to Use This Skill
 
@@ -26,7 +26,7 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 ### Recommended
 
-- Looking up the canonical name of a development skill to install or search
+- Looking up the canonical name of a development reference to install or search
 - Comparing component types to decide which fits your use case
 - Understanding how tools, resources, prompts, agents, and skills relate to each other
 
@@ -36,7 +36,7 @@ Entry point for building MCP server components. This skill helps you find the ri
 - You need to configure server settings, not build components (see `frontmcp-config`)
 - You need to deploy or build, not develop (see `frontmcp-deployment`)
 
-> **Decision:** Use this skill when you need to figure out WHAT to build. Use the specific skill when you already know.
+> **Decision:** Use this skill when you need to figure out WHAT to build. Open the matching reference under `references/` directly when you already know.
 
 ## Prerequisites
 
@@ -46,16 +46,16 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 ## Steps
 
-This is a router skill. The "steps" here are how to choose the right child skill, not how to implement a component.
+This is a router skill. The "steps" here are how to choose the right reference (a markdown file under `references/`), not how to implement a component.
 
 1. **Identify the component type** using the Scenario Routing Table below.
-2. **Open the matching skill** (e.g. `create-tool`, `create-resource`) and follow its Steps section.
-3. **Compose**, if needed: most non-trivial features need two or more components (e.g. tool + provider, resource + adapter). Read each child skill independently before wiring them together.
+2. **Open the matching reference** (e.g. `references/create-tool.md`, `references/create-resource.md`) and follow its Steps section.
+3. **Compose**, if needed: most non-trivial features need two or more components (e.g. tool + provider, resource + adapter). Read each reference independently before wiring them together.
 4. **Test before integration** (`frontmcp-testing`) — every component type has a unit-test recipe.
 
 ## Scenario Routing Table
 
-| Scenario                                                 | Skill                             | Description                                                                                   |
+| Scenario                                                 | Reference                         | Description                                                                                   |
 | -------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------- |
 | Expose an executable action that AI clients can call     | `create-tool`                     | Class-based or function-style tools with Zod input/output validation                          |
 | Expose read-only data via a URI                          | `create-resource`                 | Static resources or URI template resources for dynamic data                                   |
