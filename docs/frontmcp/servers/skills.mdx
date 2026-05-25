@@ -851,6 +851,23 @@ The `frontmcp skills` command tree ships **six** subcommands:
   frontmatter from the `@Skill` decorator metadata when the source
   markdown has none).
 
+```bash
+# Install a single project @Skill from a local entry
+frontmcp skills install example-skill --from-entry src/main.ts -p claude
+
+# Install every @Skill the project exposes
+frontmcp skills install --from-entry src/main.ts --all -p claude
+
+# Install from an npm-published package
+frontmcp skills install --from-package my-frontmcp-server --all -p claude
+```
+
+Skill names are validated against the same allowlist as plugin names
+(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`) before any filesystem write, so a
+malicious `@Skill({ name: '../escape' })` cannot land outside the
+target directory. Names that fail the check are skipped with a warning
+and the rest of the install continues.
+
 For the full flag tables, bulk-install patterns, and IDE-target output
 mapping, see the canonical reference shipped with the
 [`frontmcp-setup`](https://github.com/frontegg/frontmcp/blob/main/libs/skills/catalog/frontmcp-setup/references/frontmcp-skills-usage.md)

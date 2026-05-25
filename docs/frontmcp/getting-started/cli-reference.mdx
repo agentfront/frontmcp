@@ -86,8 +86,11 @@ Flags shared across the three subcommands:
 | `--dry-run`         | Print the plan; do not write                                                 |
 
 **End-user path (built bin):** every CLI built with `frontmcp build --target cli`
-inherits `install -p claude|codex`. Pass `-p` (repeatable) plus the same scope
-flags above to get the same plugin emit from the installed binary.
+inherits `install -p claude|codex` AND `uninstall -p claude|codex`. Pass `-p`
+(repeatable) plus the same scope flags above to get the same plugin emit (or
+removal) from the installed binary — the bin reads its sibling
+`bin-meta.json` and `_skills/` tree, no SDK boot or schema extraction required
+at install time.
 
 ```bash
 # Dev-time: from a FrontMCP project root
@@ -98,7 +101,17 @@ frontmcp plugin status --claude
 # End-user: from the installed bin
 my-bin install -p claude -p codex
 my-bin install --status
+my-bin uninstall -p claude          # remove the Claude plugin tree
+my-bin uninstall -p claude -p codex # remove both providers in one shot
 ```
+
+**SKILL.md frontmatter is synthesized from `@Skill` metadata.** When a server
+ships `@Skill({ name, description, tags, license, instructions: { file } })`
+entries, the install flow composes proper YAML frontmatter from the decorator
+fields (so Claude Code's filesystem loader can index the skill) and copies
+the instruction file body verbatim. If the source body already starts with a
+`---` frontmatter block, it is preserved as-is — the user's authoring is
+treated as authoritative.
 
 ---
 

@@ -512,6 +512,47 @@ Users can then use your server with:
 
 ---
 
+## One-shot install for Claude Code (`<bin> install -p claude`)
+
+Every server built with `frontmcp build --target cli` inherits an
+`install` subcommand that emits a full **Claude Code plugin** — MCP
+server entry, slash commands, and `@Skill`-decorated skills — in one
+step. End users don't need to hand-edit `.mcp.json` or place `SKILL.md`
+files manually:
+
+```bash
+# As an end user, after installing your server (e.g. via npm install -g):
+my-server install -p claude          # writes ./.claude/plugins/my-server/
+my-server install -p claude --scope user  # writes ~/.claude/plugins/my-server/
+my-server install -p claude -p codex      # also writes the Codex mcp_servers entry
+my-server install --status                # report what's installed per provider
+my-server uninstall -p claude             # remove the Claude plugin tree
+```
+
+Selective installs are supported via `--no-skills`, `--no-commands`,
+and `--only-mcp` (just register the MCP server, skip the plugin
+folder). `--dry-run` prints the file plan without writing.
+
+Compared to the manual `.mcp.json` flow above, the plugin install
+also:
+
+- composes proper `SKILL.md` frontmatter from each `@Skill`'s decorator
+  metadata (`name`, `description`, `tags`, `license`) so Claude Code's
+  filesystem loader can index the skill;
+- copies bundled `references/`, `examples/`, `scripts/`, `assets/`
+  resource directories alongside each `SKILL.md`;
+- writes a `.claude-plugin/plugin.json` manifest that registers the
+  MCP server, slash commands, and skill list in one file;
+- tracks framework-managed files via the manifest's `managedFiles`
+  array so re-running `install` is idempotent and user-added files
+  are never deleted on `uninstall`.
+
+For the dev-tool equivalent (`frontmcp plugin install --claude` from a
+project root) and the full flag reference, see the
+[CLI Reference](../getting-started/cli-reference#plugin-commands-issue-411).
+
+---
+
 ## Troubleshooting
 
 | Problem | Cause | Solution |

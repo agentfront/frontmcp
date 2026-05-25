@@ -270,6 +270,28 @@ my-bin uninstall -p claude            # remove only managed files
 └── skills/<name>/SKILL.md       # one per @Skill, with references/examples/scripts/assets subdirs
 ```
 
+### SKILL.md frontmatter synthesis
+
+Claude Code's filesystem loader discovers skills via the YAML frontmatter at
+the top of each `SKILL.md` (`name`, `description`, optional `tags`,
+`license`). A `@Skill`-decorated entry typically points
+`instructions.file` at a plain markdown body **without** frontmatter, so the
+install flow composes the frontmatter from the decorator metadata before
+writing the file:
+
+- `name` and `description` come from `@Skill({ name, description })`.
+- `tags` and `license` are forwarded when present.
+- The instruction file body is copied verbatim AFTER the synthesized
+  frontmatter block.
+- If the instruction file **already starts with `---`**, the existing
+  frontmatter is preserved as-is — the author is treated as authoritative.
+
+Skill names are validated against the same allowlist as plugin names
+(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`) before any filesystem write, so a malicious
+`@Skill({ name: '../escape' })` cannot land outside the plugin tree.
+
+### Idempotency
+
 Re-runs are idempotent: any file not listed in `_meta.frontmcp.managedFiles`
 (including unknown top-level keys the user added to `plugin.json`, like
 `hooks` or extra `mcpServers`) is preserved. Use `--dry-run` to inspect
