@@ -39,11 +39,11 @@ Complete build walkthroughs and best practices for FrontMCP servers. Each exampl
 
 ### Skip When
 
-- You need to learn one specific component type (use the specific skill, e.g., `create-tool`)
-- Looking for the right skill for a task (use domain routers: `frontmcp-development`, `frontmcp-deployment`, etc.)
+- You need to learn one specific component type (use the specific reference, e.g., `create-tool` under `frontmcp-development/references/`)
+- Looking for the right reference for a task (use domain routers: `frontmcp-development`, `frontmcp-deployment`, etc.)
 - You need CLI/install instructions for the skills system (see `frontmcp-skills-usage`)
 
-> **Decision:** Use this skill when you want to see how everything fits together. Use individual skills when you need focused instruction.
+> **Decision:** Use this skill when you want to see how everything fits together. Open individual references under each router's `references/` directory when you need focused instruction.
 
 ## Prerequisites
 
@@ -362,7 +362,7 @@ export class ResearcherAgent extends AgentContext {}
 
 ### Planning
 
-| Practice                                               | Why                                                               | Skill Reference                       |
+| Practice                                               | Why                                                               | Reference                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------- |
 | Start with the `@App` boundaries, not individual tools | Apps define module boundaries; tools are implementation details   | `multi-app-composition`               |
 | Choose auth mode and storage before writing tools      | Auth affects session handling, which affects storage requirements | `configure-auth`, `configure-session` |
@@ -370,7 +370,7 @@ export class ResearcherAgent extends AgentContext {}
 
 ### Organizing Code
 
-| Practice                                          | Why                                                         | Skill Reference                |
+| Practice                                          | Why                                                         | Reference                      |
 | ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------ |
 | One class per file with `<name>.<type>.ts` naming | Consistency, generator compatibility, clear imports         | `project-structure-standalone` |
 | Group by feature, not by type, for 10+ components | Feature folders scale better than flat `tools/` directories | `project-structure-standalone` |
@@ -378,7 +378,7 @@ export class ResearcherAgent extends AgentContext {}
 
 ### Writing Code
 
-| Practice                                        | Why                                                           | Skill Reference   |
+| Practice                                        | Why                                                           | Reference         |
 | ----------------------------------------------- | ------------------------------------------------------------- | ----------------- |
 | Always define `outputSchema` on tools           | Prevents data leaks, enables CodeCall chaining                | `create-tool`     |
 | Use `this.fail()` with MCP error classes        | Proper error codes in protocol responses                      | `create-tool`     |
@@ -473,5 +473,5 @@ when a server has been configured to host this skill.
 
 - [Your First Tool](https://docs.agentfront.dev/frontmcp/guides/your-first-tool)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`
-- Core skills: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing`
+- Core references: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing` (each lives under its parent router's `references/` directory, e.g. `frontmcp-development/references/create-tool.md`)
 - Mandatory boundaries: import MCP protocol types and `McpError` from `@frontmcp/protocol` (never directly from `@modelcontextprotocol/sdk`); use `@frontmcp/utils` for crypto and file-system operations.

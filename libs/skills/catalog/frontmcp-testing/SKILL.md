@@ -36,7 +36,7 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 - You need to build components, not test them (see `frontmcp-development`)
 - You need to deploy, not test (see `frontmcp-deployment`)
 
-> **Decision:** Use this skill for testing strategy and routing. Use `setup-testing` for hands-on Jest configuration and test writing.
+> **Decision:** Use this skill for testing strategy and routing. Open the `setup-testing` reference under `references/` for hands-on Jest configuration and test writing.
 
 ## Prerequisites
 
@@ -46,17 +46,17 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 
 ## Steps
 
-This is a router skill. Follow this order to pick a testing approach, then move to the target skill.
+This is a router skill. Follow this order to pick a testing approach, then move to the target reference under `references/`.
 
 1. **Pick the test layer** — unit (fastest, mock DI), integration (real DI scope), or E2E (real MCP client + server). Use the Testing Strategy table below.
 2. **Pick the component flavour** — tool / resource / prompt / agent / job — each has a distinct recipe.
-3. **Pick the runtime concern** — auth, browser/CLI build, direct vs streamable transport — and add the matching skill to your reading list.
-4. **Open the target skill** (e.g. `test-tool-unit`, `test-e2e-handler`, `test-auth`) and follow its Steps section.
-5. **Enforce coverage** — confirm the project's 95%+ thresholds are wired into Jest before merging (see `setup-testing`).
+3. **Pick the runtime concern** — auth, browser/CLI build, direct vs streamable transport — and add the matching reference to your reading list.
+4. **Open the target reference** (e.g. `references/test-tool-unit.md`, `references/test-e2e-handler.md`, `references/test-auth.md`) and follow its Steps section.
+5. **Enforce coverage** — confirm the project's 95%+ thresholds are wired into Jest before merging (see `references/setup-testing.md`).
 
 ## Scenario Routing Table
 
-| Scenario                                | Skill / Section                 | Description                                                                                          |
+| Scenario                                | Reference / Section             | Description                                                                                          |
 | --------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Set up Jest, coverage, and test harness | `setup-testing`                 | Full Jest config, test utilities, and coverage thresholds                                            |
 | Write unit tests for a tool             | `test-tool-unit`                | Mock DI, validate input/output, test error paths                                                     |
