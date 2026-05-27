@@ -216,6 +216,99 @@ describe('OperationToolFactory', () => {
       expect(factory.size).toBe(1);
     });
 
+    describe('classification registry wiring', () => {
+      function makeFactoryWithClassification() {
+        const toolRegistry = new FakeToolRegistry();
+        const providers = new FakeProviderRegistry();
+        const classificationRegistry = {
+          register: jest.fn(),
+          unregister: jest.fn(),
+        };
+        const factory = new OperationToolFactory({
+          toolRegistry: toolRegistry as unknown as ToolRegistry,
+          providers: providers as unknown as ProviderRegistry,
+          logger: noopLogger as never,
+          classificationRegistry: classificationRegistry as unknown as Parameters<
+            typeof OperationToolFactory
+          >[0]['classificationRegistry'],
+        });
+        return { factory, toolRegistry, classificationRegistry };
+      }
+
+      it('records a classification when both registry + pathsWithGet are provided', () => {
+        const { factory, classificationRegistry } = makeFactoryWithClassification();
+        // pathsWithGet is empty because the bundle has no GET on /v1/invoices;
+        // the classifier still produces a `tool` classification for POST,
+        // with no emit (since neither self nor parent have a GET counterpart).
+        const pathsWithGet = new Set<string>();
+        factory.register(buildEntry(), { pathsWithGet });
+
+        expect(classificationRegistry.register).toHaveBeenCalledTimes(1);
+        const [toolName, classification] = classificationRegistry.register.mock.calls[0];
+        expect(toolName).toBe('acme.createInvoice');
+        expect(classification.specId).toBe('acme');
+        expect(classification.method).toBe('POST');
+        expect(classification.path).toBe('/v1/invoices');
+        expect(classification.expose).toBe('tool');
+      });
+
+      it('emit is listChanged on self when POST collection has a matching GET in pathsWithGet', () => {
+        const { factory, classificationRegistry } = makeFactoryWithClassification();
+        // /v1/invoices has a GET in the bundle => POST is collection-create
+        // => emit listChanged on self.
+        const pathsWithGet = new Set(['/v1/invoices']);
+        factory.register(buildEntry(), { pathsWithGet });
+
+        const [, classification] = classificationRegistry.register.mock.calls[0];
+        expect(classification.emit).toEqual({
+          kind: 'listChanged',
+          pathTemplate: '/v1/invoices',
+          resourceUriTemplate: 'mcp+op://acme/v1/invoices',
+        });
+      });
+
+      it('skips classification when pathsWithGet is omitted', () => {
+        const { factory, classificationRegistry } = makeFactoryWithClassification();
+        factory.register(buildEntry()); // no ctx
+        expect(classificationRegistry.register).not.toHaveBeenCalled();
+      });
+
+      it('skips classification when the factory was constructed without a registry', () => {
+        const { factory } = makeFactory();
+        const pathsWithGet = new Set<string>();
+        expect(() => factory.register(buildEntry(), { pathsWithGet })).not.toThrow();
+      });
+
+      it('unregisterAll also clears the classification entries it added', () => {
+        const { factory, classificationRegistry } = makeFactoryWithClassification();
+        const pathsWithGet = new Set<string>();
+        factory.register(buildEntry({ op: { ...buildEntry().op, operationId: 'a' } }), { pathsWithGet });
+        factory.register(buildEntry({ op: { ...buildEntry().op, operationId: 'b' } }), { pathsWithGet });
+
+        expect(classificationRegistry.register).toHaveBeenCalledTimes(2);
+
+        factory.unregisterAll();
+
+        expect(classificationRegistry.unregister).toHaveBeenCalledTimes(2);
+        expect(classificationRegistry.unregister).toHaveBeenCalledWith('acme.a');
+        expect(classificationRegistry.unregister).toHaveBeenCalledWith('acme.b');
+      });
+
+      it('a classification failure is swallowed (warn-only) and does not block the tool registration', () => {
+        const { factory, toolRegistry, classificationRegistry } = makeFactoryWithClassification();
+        classificationRegistry.register.mockImplementationOnce(() => {
+          throw new Error('boom');
+        });
+
+        // The tool registration must still succeed even if classification
+        // throws — meta-tool surface stays available, only auto-notify is
+        // skipped.
+        expect(() => factory.register(buildEntry(), { pathsWithGet: new Set() })).not.toThrow();
+        expect(toolRegistry.registered).toHaveLength(1);
+        expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringMatching(/classification failed/));
+      });
+    });
+
     it('logs but does not throw when the underlying registry rejects an unregister', () => {
       const toolRegistry = new FakeToolRegistry();
       const providers = new FakeProviderRegistry();

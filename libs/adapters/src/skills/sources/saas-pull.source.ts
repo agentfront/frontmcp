@@ -1,9 +1,10 @@
 // file: plugins/plugin-skilled-openapi/src/sources/saas-pull.source.ts
 
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
-
+// All Node APIs route through `@frontmcp/utils` (env-aware via `#path` and
+// `#fs` subpath imports + assertNode guards). The build pipeline
+// (`frontmcp build --target <env>`) picks the right resolution per target.
 import type { FrontMcpLogger } from '@frontmcp/sdk';
+import { dirname, ensureDir, pathResolve, readFile, writeFile } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
@@ -148,14 +149,14 @@ export class SaasPullSource implements SkillBundleSource {
 
   private cachePath(): string {
     const dir = this.cacheDir ?? DEFAULT_CACHE_DIR;
-    return path.resolve(dir, `${this.options.expectedAudience.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`);
+    return pathResolve(dir, `${this.options.expectedAudience.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`);
   }
 
   private async persistCache(bundle: ResolvedBundle): Promise<void> {
     try {
       const filePath = this.cachePath();
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(bundle), 'utf8');
+      await ensureDir(dirname(filePath));
+      await writeFile(filePath, JSON.stringify(bundle));
     } catch (e) {
       this.logger.warn(`[saas-source] cache persist failed: ${(e as Error).message}`);
     }
@@ -164,7 +165,7 @@ export class SaasPullSource implements SkillBundleSource {
   private async loadCache(): Promise<ResolvedBundle | undefined> {
     try {
       const filePath = this.cachePath();
-      const raw = await fs.readFile(filePath, 'utf8');
+      const raw = await readFile(filePath, 'utf8');
       return parseOverlay({ kind: 'json', content: raw });
     } catch {
       return undefined;

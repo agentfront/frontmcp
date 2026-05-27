@@ -34,6 +34,7 @@ export {
   extname,
   isAbsolute,
   pathToFileURL,
+  pathSep,
 } from './path';
 
 // Content utilities
@@ -68,7 +69,10 @@ export {
   ensureDir,
   isDirEmpty,
   runCmd,
+  watchFile,
+  getSpawnFn,
 } from './fs';
+export type { FileWatcherHandle } from './fs';
 
 // Escape utilities (HTML, JS, XSS prevention)
 export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';

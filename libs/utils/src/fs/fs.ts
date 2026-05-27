@@ -38,6 +38,19 @@ function getSpawn(): typeof import('child_process').spawn {
   return _spawn as typeof import('child_process').spawn;
 }
 
+/**
+ * Lazily resolve `child_process.spawn` for callers that need to spawn a
+ * detached worker (CLI task runners, dev-server supervisors, etc.). Throws
+ * via `assertNode` on non-Node runtimes.
+ *
+ * **Node.js only.** Exposed because consumers (e.g. `CliTaskRunner` in the
+ * SDK) need a single place to reach `spawn` without a top-level
+ * `import 'node:child_process'` that V8 isolates would choke on.
+ */
+export function getSpawnFn(): typeof import('child_process').spawn {
+  return getSpawn();
+}
+
 // fs.constants.F_OK is always 0 in Node.js - define locally to avoid lazy-load in fileExists
 const F_OK = 0;
 
@@ -449,4 +462,59 @@ export function runCmd(
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`))));
     child.on('error', reject);
   });
+}
+
+/**
+ * Handle returned by {@link watchFile}. `close()` stops the watch and is safe
+ * to call multiple times. `onError` registers an error handler — useful for
+ * platforms (Linux watch-count limits, network filesystems) that surface
+ * mid-stream failures.
+ */
+export interface FileWatcherHandle {
+  close(): void;
+  onError(handler: (err: Error) => void): void;
+}
+
+/** Options for {@link watchFile}. Mirrors a subset of Node `fs.watch`. */
+export interface WatchFileOptions {
+  /** Watch a directory recursively. Node-specific; default false. */
+  recursive?: boolean;
+}
+
+/** Callback fired on each filesystem change event. */
+export type WatchFileListener = (eventType: 'rename' | 'change', filename: string | null) => void;
+
+/**
+ * Watch a file or directory for changes. Returns a handle the caller closes
+ * to stop watching.
+ *
+ * Accepts either a no-arg listener (the simple case) or one that receives
+ * the Node-shaped `(eventType, filename)` pair — both are tolerated so
+ * shallow callers stay terse while filesystem-walking callers get the full
+ * signal.
+ *
+ * **Node.js only** — calls `assertNode` at invocation time. Build-time env
+ * selection (`frontmcp build --target <env>`) keeps this off non-Node
+ * targets; runtime callers in V8 isolates will hit the assertion.
+ */
+export function watchFile(
+  p: string,
+  onChange: WatchFileListener | (() => void),
+  options?: WatchFileOptions,
+): FileWatcherHandle {
+  const fs = getFs();
+  const watcher = fs.watch(p, { persistent: false, recursive: options?.recursive === true }, (eventType, filename) => {
+    // Accept both shapes — Node's listener gets `(eventType, filename)`;
+    // older callers passed a no-arg `() => void`. The no-arg case still
+    // works because JS ignores extra arguments.
+    (onChange as WatchFileListener)(eventType as 'rename' | 'change', filename);
+  });
+  return {
+    close(): void {
+      watcher.close();
+    },
+    onError(handler: (err: Error) => void): void {
+      watcher.on('error', handler);
+    },
+  };
 }

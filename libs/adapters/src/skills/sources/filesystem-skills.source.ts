@@ -13,10 +13,22 @@
 // service map, or signature envelope — squeezing them through the bundle
 // path would force opinions that don't apply.
 
-import { watch as fsWatch, type FSWatcher } from 'node:fs';
-import { sep as pathSep } from 'node:path';
-
-import { basename, joinPath, pathResolve, readdir, readFile, realpath, stat } from '@frontmcp/utils';
+// All Node APIs route through `@frontmcp/utils` per CLAUDE.md. The
+// `watchFile` helper is Node-only at runtime (utils asserts Node) but the
+// import is safe in V8-isolate builds — they only fail if the consumer
+// actually instantiates this source on a non-Node target.
+import {
+  basename,
+  joinPath,
+  pathResolve,
+  pathSep,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+  watchFile,
+  type FileWatcherHandle,
+} from '@frontmcp/utils';
 
 /**
  * Lightweight logger surface — kept narrow so this module can sit in a
@@ -100,7 +112,7 @@ export class FilesystemSkillsSource {
   private readonly options: Required<FilesystemSkillsSourceOptions>;
   private readonly listeners = new Set<FilesystemSkillsListener>();
   private readonly known = new Map<string, FilesystemSkillContent>(); // absPath → last emitted content
-  private watcher: FSWatcher | undefined;
+  private watcher: FileWatcherHandle | undefined;
   private pollTimer: NodeJS.Timeout | undefined;
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private stopped = false;
@@ -252,21 +264,25 @@ export class FilesystemSkillsSource {
 
   private beginWatch(): void {
     try {
-      this.watcher = fsWatch(this.rootResolved, { recursive: true, persistent: false }, (_eventType, filename) => {
-        if (this.stopped) return;
-        // Filename may be null (some platforms). Without it we don't know
-        // which subdir to refresh, so do a coarse rescan.
-        if (!filename) {
-          this.scheduleRescan();
-          return;
-        }
-        // First path segment is the skill subdir name.
-        const first = filename.split(pathSep)[0];
-        if (!first || first.startsWith('.')) return; // editor swap files etc.
-        const absDir = joinPath(this.rootResolved, first);
-        this.scheduleRefresh(absDir);
-      });
-      this.watcher.on('error', (e) => {
+      this.watcher = watchFile(
+        this.rootResolved,
+        (_eventType, filename) => {
+          if (this.stopped) return;
+          // Filename may be null (some platforms). Without it we don't know
+          // which subdir to refresh, so do a coarse rescan.
+          if (!filename) {
+            this.scheduleRescan();
+            return;
+          }
+          // First path segment is the skill subdir name.
+          const first = filename.split(pathSep)[0];
+          if (!first || first.startsWith('.')) return; // editor swap files etc.
+          const absDir = joinPath(this.rootResolved, first);
+          this.scheduleRefresh(absDir);
+        },
+        { recursive: true },
+      );
+      this.watcher.onError((e) => {
         this.logger.warn(`[fs-skills] fs.watch error: ${e.message}; falling back to polling`);
         this.watcher?.close();
         this.watcher = undefined;

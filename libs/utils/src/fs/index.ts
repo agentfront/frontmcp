@@ -24,4 +24,7 @@ export {
   ensureDir,
   isDirEmpty,
   runCmd,
+  watchFile,
+  getSpawnFn,
 } from './fs';
+export type { FileWatcherHandle } from './fs';
