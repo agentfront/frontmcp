@@ -11,10 +11,26 @@ import { type ImportResolver } from '@frontmcp/uipack/resolver';
 // ToolUIRegistry
 // ============================================
 
+/** Per-tool resource metadata attached to `ui://widget/{tool}.html` content reads. */
+export interface UIResourceMeta {
+  /**
+   * CSP directives the host should apply to the widget iframe. Emitted on
+   * the resource content item's `_meta` so MCP Apps hosts (Claude) actually
+   * honor it — `_meta.ui.csp` on the tool is ignored (#455).
+   */
+  csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+  /**
+   * MCP Apps permissions (future-compatibility slot — currently sourced from
+   * `uiConfig.permissions` if present so it round-trips to the resource).
+   */
+  permissions?: unknown;
+}
+
 /** Tool UI Registry — manages compiled widgets and rendering. */
 export class ToolUIRegistry {
   private widgets = new Map<string, string>();
   private manifests = new Map<string, Record<string, unknown>>();
+  private resourceMeta = new Map<string, UIResourceMeta>();
   private resolver?: ImportResolver;
 
   constructor(resolver?: ImportResolver) {
@@ -31,6 +47,16 @@ export class ToolUIRegistry {
 
   getManifest(toolName: string): Record<string, unknown> | undefined {
     return this.manifests.get(toolName);
+  }
+
+  /**
+   * Per-tool resource metadata for the `ui://widget/{tool}.html` content read.
+   * Returns `undefined` when nothing was configured — the handler should
+   * omit `_meta` entirely in that case so MCP clients don't see an empty
+   * object.
+   */
+  getResourceMeta(toolName: string): UIResourceMeta | undefined {
+    return this.resourceMeta.get(toolName);
   }
 
   detectUIType(template: unknown): string {
@@ -64,6 +90,15 @@ export class ToolUIRegistry {
       hash: result.hash,
       size: result.size,
     });
+
+    // Record per-tool resource metadata so `handleUIResourceRead` can attach
+    // `_meta.ui.csp` / `_meta.ui.permissions` to the resource content item
+    // (Claude only honors CSP declared on the resource, not on the tool — #455).
+    const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
+    const permissions = uiConfig?.['permissions'] as UIResourceMeta['permissions'] | undefined;
+    if (csp || permissions !== undefined) {
+      this.resourceMeta.set(toolName, { csp, permissions });
+    }
   }
 
   async compileLeanWidgetAsync(options: Record<string, unknown>): Promise<void> {

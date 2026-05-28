@@ -39,6 +39,14 @@ export interface FileBundleOptions {
 /**
  * Content Security Policy for UI templates rendered in sandboxed iframes.
  * Based on OpenAI Apps SDK and MCP Apps (SEP-1865) specifications.
+ *
+ * **Where this is emitted (issue #455 fix):** FrontMCP attaches this
+ * configuration to the **resource** content item returned by
+ * `resources/read` for `ui://widget/{toolName}.html`, as both
+ * `_meta.ui.csp` (nested) and `_meta['ui/csp']` (slash) with snake_case
+ * `connect_domains` / `resource_domains` fields. MCP Apps hosts (notably
+ * Claude) only honor CSP declared on the resource — declarations on the
+ * tool's `_meta.ui.csp` are ignored.
  */
 export interface UIContentSecurityPolicy {
   /**
