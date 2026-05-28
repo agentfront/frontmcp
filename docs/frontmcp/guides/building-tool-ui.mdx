@@ -136,17 +136,21 @@ export default class GetWeatherTool extends ToolContext {
   Human-readable description of what the widget displays. Shown to users in UI-capable hosts.
 </ParamField>
 
-<ParamField path="ui.displayMode" type="'inline' | 'modal' | 'panel'">
-  How the widget should be displayed:
-  - `inline` - Rendered directly in the conversation
-  - `modal` - Opens in a modal dialog
-  - `panel` - Shows in a side panel
+<ParamField path="ui.displayMode" type="'inline' | 'fullscreen' | 'pip'">
+  Preferred display mode (hint to the host — may be ignored):
+  - `inline` - Rendered inline in the conversation (default)
+  - `fullscreen` - Request fullscreen display
+  - `pip` - Picture-in-picture
 </ParamField>
 
-<ParamField path="ui.servingMode" type="'static' | 'iframe'">
-  How the HTML is served:
-  - `static` - HTML string is returned directly
-  - `iframe` - Content is served via iframe URL
+<ParamField path="ui.servingMode" type="'auto' | 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'">
+  How the HTML is delivered to the client (default: `auto`):
+  - `auto` - Auto-select per host (OpenAI / Claude / unknown)
+  - `inline` - Embedded in tool response `_meta['ui/html']` (works everywhere)
+  - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
+  - `hybrid` - Shell pre-compiled; component code + data delivered per call in `_meta['ui/component']`
+  - `direct-url` - Served from an HTTP path on the MCP server (`directPath`)
+  - `custom-url` - Served from an external URL (`customWidgetUrl`, supports a `{token}` placeholder)
 </ParamField>
 
 <ParamField path="ui.template" type="function">
@@ -247,20 +251,22 @@ template: (ctx) => {
   const { temperature, conditions } = ctx.output;
 
   // Helper functions
-  const { escapeHtml, formatDate, formatNumber } = ctx.helpers;
+  const { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed } = ctx.helpers;
 
   // Always escape user-provided strings!
-  return `<p>${helpers.escapeHtml(location)}</p>`;
+  return `<p>${escapeHtml(location)}</p>`;
 }
 ```
 
 ### Available Helpers
 
-| Helper                       | Description                         |
-| ---------------------------- | ----------------------------------- |
-| `escapeHtml(str)`            | Escape HTML entities to prevent XSS |
-| `formatDate(date)`           | Format a date string                |
-| `formatNumber(num, options)` | Format numbers with locale support  |
+| Helper                            | Description                                                          |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `escapeHtml(str)`                 | Escape HTML entities to prevent XSS (handles `null`/`undefined`)     |
+| `formatDate(date, format?)`       | Format a date (accepts `Date` or ISO string)                         |
+| `formatCurrency(amount, ccy?)`    | ISO-4217 currency formatting (defaults to `'USD'`)                   |
+| `uniqueId(prefix?)`               | Generate a unique ID for DOM elements                                |
+| `jsonEmbed(data)`                 | Safely embed JSON in an inline `<script>` (escapes `</script>`)      |
 
 <Warning>
 Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.
@@ -305,7 +311,7 @@ import { z } from '@frontmcp/sdk';
       );
 
       const details = descriptionList([
-        { term: 'Total', description: helpers.formatNumber(output.totalExpenses, { style: 'currency', currency: 'USD' }) },
+        { term: 'Total', description: helpers.formatCurrency(output.totalExpenses, 'USD') },
         { term: 'Pending', description: String(output.pendingCount) },
         { term: 'Approved', description: String(output.approvedCount) },
       ], { layout: 'grid' });
@@ -339,19 +345,16 @@ export default class ExpenseSummaryTool extends ToolContext {
 
 ---
 
-## Platform Detection
+## Platform Considerations
 
-Different platforms (OpenAI, Claude, browsers) have different capabilities. Use theme utilities to adapt:
+Different MCP hosts have different capabilities and network policies:
 
-```typescript
-import { createTheme, canUseCdn, needsInlineScripts } from '@frontmcp/uipack/theme';
+- **OpenAI Apps SDK** — any CDN reachable; widget URI surfaces under `_meta['openai/outputTemplate']`
+- **Claude (MCP-UI)** — **only `cdnjs.cloudflare.com` is reachable**; prefer `resourceMode: 'inline'` so the widget shell is self-contained, and pin any `externals` to cdnjs URLs via `dependencies`
+- **MCP Inspector** — useful for local development; honors `servingMode: 'static'`
+- **Gemini / unknown hosts** — `ui` is ignored; the tool returns JSON only
 
-// Claude Artifacts blocks external requests
-// Use inline scripts when needed
-if (needsInlineScripts(platform)) {
-  // Inline Tailwind CSS
-}
-```
+The default `servingMode: 'auto'` selects the right mode per host. See the [`create-tool-ui` skill](https://docs.agentfront.dev/frontmcp/skills/create-tool-ui) for the full reference: serving modes, CSP, the `window.FrontMcpBridge` runtime, file-based `.tsx` widgets, and platform-specific troubleshooting.
 
 ---
 
