@@ -24,9 +24,16 @@
  */
 
 import type { ReadResourceResult } from '@frontmcp/protocol';
-import type { AIPlatformType } from '../../notification/notification.service';
 import { createDefaultBaseTemplate } from '@frontmcp/uipack/adapters';
-import { type ToolUIRegistry, isUIResourceUri, parseWidgetUri, getUIResourceMimeType } from './ui-shared';
+
+import type { AIPlatformType } from '../../notification/notification.service';
+import {
+  getUIResourceMimeType,
+  isUIResourceUri,
+  parseWidgetUri,
+  type ToolUIRegistry,
+  type UIResourceMeta,
+} from './ui-shared';
 
 /**
  * Result of handling a UI resource request
@@ -72,6 +79,52 @@ function generatePlaceholderWidget(toolName: string): string {
 }
 
 /**
+ * Build the `_meta` payload to attach to the widget resource's `contents[]`
+ * item. Returns `undefined` when no CSP / permissions were configured so the
+ * caller can omit `_meta` entirely.
+ *
+ * Issue #455: MCP Apps hosts (Claude in particular) only honor CSP declared
+ * on the UI resource (i.e. the `resources/read` content item's `_meta`), not
+ * on the tool's `_meta.ui.csp`. Emitting CSP here is what makes
+ * `ui.csp.connectDomains` / `ui.csp.resourceDomains` actually take effect.
+ */
+function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string): Record<string, unknown> | undefined {
+  const meta = registry.getResourceMeta(toolName);
+  if (!meta) return undefined;
+  const ui: Record<string, unknown> = {};
+  if (meta.csp) {
+    ui['csp'] = normalizeCspForResource(meta.csp);
+  }
+  if (meta.permissions !== undefined) {
+    ui['permissions'] = meta.permissions;
+  }
+  if (Object.keys(ui).length === 0) return undefined;
+  // Emit BOTH the nested form (`_meta.ui.csp` — what MCP Apps spec docs use)
+  // and the slash form (`_meta['ui/csp']` — what the broader FrontMCP `_meta`
+  // convention uses) so hosts on either side resolve it. They're cheap.
+  const out: Record<string, unknown> = { ui };
+  if (ui['csp'] !== undefined) out['ui/csp'] = ui['csp'];
+  if (ui['permissions'] !== undefined) out['ui/permissions'] = ui['permissions'];
+  return out;
+}
+
+/**
+ * Convert the user-facing camelCase CSP shape (`connectDomains` /
+ * `resourceDomains`) into the snake_case form MCP Apps hosts read
+ * (`connect_domains` / `resource_domains`). Preserves any extra keys
+ * the caller passed through so unknown / future-spec CSP fields are
+ * not silently dropped.
+ */
+function normalizeCspForResource(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
+  const { connectDomains, resourceDomains, ...rest } = csp as NonNullable<UIResourceMeta['csp']> &
+    Record<string, unknown>;
+  const out: Record<string, unknown> = { ...rest };
+  if (connectDomains !== undefined) out['connect_domains'] = connectDomains;
+  if (resourceDomains !== undefined) out['resource_domains'] = resourceDomains;
+  return out;
+}
+
+/**
  * Handle a UI resource read request
  *
  * @param uri - The UI resource URI
@@ -96,6 +149,11 @@ export function handleUIResourceRead(
   // This is used by OpenAI at discovery time
   const widgetParsed = parseWidgetUri(uri);
   if (widgetParsed) {
+    // Per-resource `_meta` (CSP / permissions). Claude only honors CSP
+    // declared on the resource content item, not on the tool's
+    // `_meta.ui.csp` — see issue #455.
+    const resourceMeta = buildResourceMetaForWidget(registry, widgetParsed.toolName);
+
     // Check for pre-compiled static widget from the developer's template
     // Static widgets are compiled at server startup for tools with servingMode: 'static'
     const cachedWidget = registry.getStaticWidget(widgetParsed.toolName);
@@ -110,6 +168,7 @@ export function handleUIResourceRead(
               uri,
               mimeType,
               text: cachedWidget,
+              ...(resourceMeta ? { _meta: resourceMeta } : {}),
             },
           ],
         },
@@ -132,6 +191,7 @@ export function handleUIResourceRead(
             uri,
             mimeType,
             text: html,
+            ...(resourceMeta ? { _meta: resourceMeta } : {}),
           },
         ],
       },

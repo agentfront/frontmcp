@@ -7,21 +7,25 @@
  * @packageDocumentation
  */
 
-import type { ImportResolver, ResolvedImport } from '../resolver/types';
 import { createEsmShResolver } from '../resolver/esm-sh.resolver';
 import { getPackageName, parseImports } from '../resolver/import-parser';
-import type {
-  UISource,
-  NpmSource,
-  FileSource,
-  ImportSource,
-  FunctionSource,
-  ResolvedComponent,
-  ComponentMeta,
-} from './types';
-import { isNpmSource, isFileSource, isImportSource, isFunctionSource, FRONTMCP_META_KEY } from './types';
+import type { ImportResolver, ResolvedImport } from '../resolver/types';
 import { safeJsonForScript } from '../utils';
 import { bundleFileSource, extractDefaultExportName } from './transpiler';
+import {
+  FRONTMCP_META_KEY,
+  isFileSource,
+  isFunctionSource,
+  isImportSource,
+  isNpmSource,
+  type ComponentMeta,
+  type FileSource,
+  type FunctionSource,
+  type ImportSource,
+  type NpmSource,
+  type ResolvedComponent,
+  type UISource,
+} from './types';
 
 const DEFAULT_META: ComponentMeta = {
   mcpAware: false,
@@ -42,6 +46,13 @@ export function resolveUISource(
     resolver?: ImportResolver;
     input?: unknown;
     output?: unknown;
+    /**
+     * When true, FileSource `.tsx`/`.jsx` widgets are bundled with React
+     * inlined (no esm.sh import map). Required for hosts that block external
+     * script execution (Claude — see #454). Passes through to
+     * `bundleFileSource({ bundleReact })`.
+     */
+    inlineReact?: boolean;
   },
 ): ResolvedComponent {
   const resolver = options?.resolver ?? createEsmShResolver();
@@ -55,7 +66,7 @@ export function resolveUISource(
   }
 
   if (isFileSource(source)) {
-    return resolveFileSource(source);
+    return resolveFileSource(source, { inlineReact: options?.inlineReact });
   }
 
   if (isFunctionSource(source)) {
@@ -99,21 +110,44 @@ function resolveImportSource(source: ImportSource): ResolvedComponent {
   };
 }
 
-function resolveFileSource(source: FileSource): ResolvedComponent {
+function resolveFileSource(source: FileSource, options: { inlineReact?: boolean } = {}): ResolvedComponent {
   const path = require('path') as typeof import('path');
   const ext = path.extname(source.file).toLowerCase();
 
   // React source files (.tsx/.jsx) — bundle with esbuild, embed as inline module
   if (ext === '.tsx' || ext === '.jsx') {
     const fs = require('fs') as typeof import('fs');
-    const filePath = path.isAbsolute(source.file) ? source.file : path.resolve(process.cwd(), source.file);
-    const rawSource = fs.readFileSync(filePath, 'utf-8');
+    // NOTE: relative paths resolve against `process.cwd()`, NOT the tool file's
+    // directory (issue #444). Anchor to the tool file by passing an absolute
+    // path via `fileURLToPath(new URL('./widget.tsx', import.meta.url))`.
+    const wasRelative = !path.isAbsolute(source.file);
+    const filePath = wasRelative ? path.resolve(process.cwd(), source.file) : source.file;
+    let rawSource: string;
+    try {
+      rawSource = fs.readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      const isNotFound = (err as NodeJS.ErrnoException)?.code === 'ENOENT';
+      if (isNotFound && wasRelative) {
+        throw new Error(
+          `FileSource widget "${source.file}" not found at "${filePath}". ` +
+            `Relative paths are resolved against process.cwd() ("${process.cwd()}"), not the tool file's directory. ` +
+            `To anchor the path to the tool file, pass an absolute path — e.g. ` +
+            `\`{ file: fileURLToPath(new URL('./widget.tsx', import.meta.url)) }\` from \`node:url\` ` +
+            `(see issue #444).`,
+        );
+      }
+      throw err;
+    }
 
     // Extract name from RAW source (before bundling changes export structure)
     const componentName = source.exportName || extractDefaultExportName(rawSource) || 'Component';
 
-    // Bundle: workspace deps resolved locally, react external
-    const bundled = bundleFileSource(rawSource, source.file, path.dirname(filePath), componentName);
+    // Bundle: workspace deps resolved locally. When `inlineReact` is set
+    // (resourceMode: 'inline'), React itself is bundled in — see #454.
+    // Otherwise React stays external and loads from the CDN at runtime.
+    const bundled = bundleFileSource(rawSource, source.file, path.dirname(filePath), componentName, {
+      bundleReact: options.inlineReact === true,
+    });
 
     // Parse bundled output for remaining external imports (react/react-dom subpaths)
     const parsed = parseImports(bundled.code);

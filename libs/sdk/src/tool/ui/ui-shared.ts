@@ -4,18 +4,33 @@
  * Internal module to avoid circular imports between index.ts and ui-resource.handler.ts.
  */
 
-import { renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
-import { MCP_APPS_MIME_TYPE } from '@frontmcp/uipack/adapters';
-import type { ImportResolver } from '@frontmcp/uipack/resolver';
+import { MCP_APPS_MIME_TYPE, renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
+import { type ImportResolver } from '@frontmcp/uipack/resolver';
 
 // ============================================
 // ToolUIRegistry
 // ============================================
 
+/** Per-tool resource metadata attached to `ui://widget/{tool}.html` content reads. */
+export interface UIResourceMeta {
+  /**
+   * CSP directives the host should apply to the widget iframe. Emitted on
+   * the resource content item's `_meta` so MCP Apps hosts (Claude) actually
+   * honor it — `_meta.ui.csp` on the tool is ignored (#455).
+   */
+  csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+  /**
+   * MCP Apps permissions (future-compatibility slot — currently sourced from
+   * `uiConfig.permissions` if present so it round-trips to the resource).
+   */
+  permissions?: unknown;
+}
+
 /** Tool UI Registry — manages compiled widgets and rendering. */
 export class ToolUIRegistry {
   private widgets = new Map<string, string>();
   private manifests = new Map<string, Record<string, unknown>>();
+  private resourceMeta = new Map<string, UIResourceMeta>();
   private resolver?: ImportResolver;
 
   constructor(resolver?: ImportResolver) {
@@ -34,6 +49,16 @@ export class ToolUIRegistry {
     return this.manifests.get(toolName);
   }
 
+  /**
+   * Per-tool resource metadata for the `ui://widget/{tool}.html` content read.
+   * Returns `undefined` when nothing was configured — the handler should
+   * omit `_meta` entirely in that case so MCP clients don't see an empty
+   * object.
+   */
+  getResourceMeta(toolName: string): UIResourceMeta | undefined {
+    return this.resourceMeta.get(toolName);
+  }
+
   detectUIType(template: unknown): string {
     return uipackDetectUIType(template);
   }
@@ -43,8 +68,20 @@ export class ToolUIRegistry {
     const template = options['template'];
     const input = options['input'] ?? {};
     const output = options['output'] ?? {};
+    const uiConfig = options['uiConfig'] as Record<string, unknown> | undefined;
+    // Prefer ui.resourceMode (configured by the user); fall back to a top-level
+    // override on options so tests / programmatic callers can pass it directly.
+    const resourceMode = (uiConfig?.['resourceMode'] ?? options['resourceMode']) as 'cdn' | 'inline' | undefined;
 
     if (!toolName || !template) return;
+
+    // Persist per-tool resource metadata (CSP / permissions) BEFORE render so
+    // `handleUIResourceRead` returns the right `_meta.ui.csp` even if the
+    // render fails (graceful degradation) and on re-compile when the user
+    // removes a previously-set csp/permissions field (we explicitly delete in
+    // that case so stale meta doesn't leak forward). Claude only honors CSP
+    // declared on the resource, not on the tool — #455.
+    this.updateResourceMetaFromConfig(toolName, uiConfig);
 
     const result = renderToolTemplate({
       toolName,
@@ -52,6 +89,7 @@ export class ToolUIRegistry {
       output,
       template,
       resolver: this.resolver,
+      resourceMode,
     });
 
     this.widgets.set(toolName, result.html);
@@ -60,6 +98,22 @@ export class ToolUIRegistry {
       hash: result.hash,
       size: result.size,
     });
+  }
+
+  /**
+   * Sync `resourceMeta[toolName]` to the current `uiConfig`. Called before
+   * every render so the entry stays consistent with the latest decorator
+   * state, including the case where a user removes a previously-set
+   * `ui.csp` / `ui.permissions` field on re-compile.
+   */
+  private updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
+    const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
+    const permissions = uiConfig?.['permissions'] as UIResourceMeta['permissions'] | undefined;
+    if (csp || permissions !== undefined) {
+      this.resourceMeta.set(toolName, { csp, permissions });
+    } else {
+      this.resourceMeta.delete(toolName);
+    }
   }
 
   async compileLeanWidgetAsync(options: Record<string, unknown>): Promise<void> {
@@ -104,10 +158,16 @@ export class ToolUIRegistry {
     const input = options['input'] ?? {};
     const output = options['output'] ?? {};
     const platformType = options['platformType'] as string | undefined;
+    const resourceMode = uiConfig?.['resourceMode'] as 'cdn' | 'inline' | undefined;
 
     if (!toolName || !template) {
       return { meta: {} };
     }
+
+    // Sync resource meta BEFORE render so a render-time failure (graceful
+    // degradation) still leaves `_meta.ui.csp` consistent with the current
+    // config — same reasoning as compileStaticWidgetAsync.
+    this.updateResourceMetaFromConfig(toolName, uiConfig);
 
     const result = renderToolTemplate({
       toolName,
@@ -116,6 +176,7 @@ export class ToolUIRegistry {
       template,
       platformType,
       resolver: this.resolver,
+      resourceMode,
     });
 
     // Cache the rendered HTML

@@ -6,7 +6,7 @@
 
 import { renderToolTemplate } from '../template-renderer';
 
-// Mock fs and esbuild for FileSource tests
+// Mock fs and esbuild for FileSource tests.
 jest.mock('fs', () => ({
   readFileSync: jest.fn(
     () => `
@@ -16,6 +16,13 @@ export default function Widget() {
 }
 `,
   ),
+  existsSync: jest.fn(() => true),
+}));
+
+// Short-circuit the #443 preflight: the path mock below replaces `path.join`,
+// which `isFrontmcpUiResolvable` calls — easier to mock the helper directly.
+jest.mock('../../component/ui-availability', () => ({
+  isFrontmcpUiResolvable: jest.fn(() => true),
 }));
 
 jest.mock('path', () => ({
@@ -109,6 +116,93 @@ describe('renderToolTemplate', () => {
 
       expect(result.meta).toHaveProperty('ui/html');
       expect(result.meta).toHaveProperty('ui/type', 'react');
+    });
+
+    it('plumbs resourceMode: "inline" down to esbuild, dropping React from externals (#454)', () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        resourceMode: 'inline',
+      });
+
+      // When resourceMode is 'inline', the bundler inlines React so the widget
+      // is self-contained — no esm.sh import map, renders in Claude (#454).
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual([]);
+    });
+
+    it('keeps React external by default (resourceMode unset)', () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+    });
+
+    it("auto-selects resourceMode:'inline' (and drops React from externals) when platformType is 'claude' and resourceMode is unset (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'claude',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual([]);
+    });
+
+    it("respects an explicit resourceMode:'cdn' on Claude (user opt-out of auto-inline) (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'claude',
+        resourceMode: 'cdn',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+    });
+
+    it("uses resourceMode:'cdn' by default for non-Claude platforms (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'openai',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
     });
   });
 

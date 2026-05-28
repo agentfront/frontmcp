@@ -1398,6 +1398,63 @@
           ]
         },
         {
+          "name": "create-tool-ui",
+          "description": "Render an interactive UI widget for a tool's result via @Tool({ ui }), MCP Apps (SEP-1865), and the ui:// resource scheme",
+          "examples": [
+            {
+              "name": "basic-html-template",
+              "description": "A minimal function template that renders the tool output as a styled HTML card using `ctx.helpers.escapeHtml`.",
+              "level": "basic",
+              "tags": ["development", "tool", "ui", "widget", "mcp-apps", "html", "basic"],
+              "features": [
+                "Adding `ui:` to `@Tool({...})` with a function template `(ctx) => string`",
+                "Reading `ctx.input`, `ctx.output`, and `ctx.helpers` from the typed `TemplateContext`",
+                "Escaping user-controlled strings via `ctx.helpers.escapeHtml(...)`",
+                "Letting `servingMode` default to `auto` so the SDK picks the right mode per host (OpenAI vs Claude vs no-UI)",
+                "Surfacing `widgetDescription` for the host UI"
+              ]
+            },
+            {
+              "name": "widget-with-csp-and-bridge",
+              "description": "An interactive widget that fetches from an allow-listed origin via `csp.connectDomains` and invokes another tool via `window.FrontMcpBridge.callTool`.",
+              "level": "intermediate",
+              "tags": ["development", "tool", "ui", "widget", "csp", "bridge", "interactive", "mcp-apps"],
+              "features": [
+                "Restricting widget network access with `csp.connectDomains` (CSP `connect-src`)",
+                "Enabling tool invocation from the widget via `widgetAccessible: true`",
+                "Calling another tool via `window.FrontMcpBridge.callTool(name, args)` instead of direct host APIs",
+                "Using `ctx.helpers.jsonEmbed(...)` to safely pass JSON into an inline `<script>` block",
+                "Surfacing status text during execution via `invocationStatus.invoking` / `invoked`"
+              ]
+            },
+            {
+              "name": "file-source-tsx-widget",
+              "description": "A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454).",
+              "level": "advanced",
+              "tags": [
+                "development",
+                "tool",
+                "ui",
+                "widget",
+                "file-source",
+                "tsx",
+                "react",
+                "cdn",
+                "mcp-apps",
+                "claude"
+              ],
+              "features": [
+                "Installing `@frontmcp/ui` at the same version as `@frontmcp/sdk` so `.tsx` widgets can bundle successfully (prerequisite — without it the bridge mount fails; see #443)",
+                "Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`",
+                "Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`",
+                "Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`",
+                "Setting `resourceMode: 'inline'` so React is bundled into the widget (no esm.sh import map) — makes the widget self-contained and renders in Claude (#454)",
+                "Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe"
+              ]
+            }
+          ]
+        },
+        {
           "name": "create-tool",
           "description": "Build MCP tools with Zod input/output validation and dependency injection",
           "examples": [

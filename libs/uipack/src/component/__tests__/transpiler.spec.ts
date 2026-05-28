@@ -4,7 +4,7 @@
  * Tests for transpileReactSource(), bundleFileSource(), and extractDefaultExportName().
  */
 
-import { transpileReactSource, extractDefaultExportName } from '../transpiler';
+import { extractDefaultExportName, transpileReactSource } from '../transpiler';
 
 describe('transpileReactSource', () => {
   it('should transpile TSX to React.createElement calls', () => {
@@ -148,13 +148,22 @@ describe('bundleFileSource', () => {
     expect(opts.bundle).toBe(true);
   });
 
-  it('should mark react and react-dom as external', () => {
+  it('should mark react and react-dom as external by default', () => {
     const { bundleFileSource: bundle } = require('../transpiler');
 
     bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget');
 
     const opts = mockBuildSync.mock.calls[0][0];
     expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+  });
+
+  it('drops react/react-dom from externals when bundleReact is true (#454)', () => {
+    const { bundleFileSource: bundle } = require('../transpiler');
+
+    bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget', { bundleReact: true });
+
+    const opts = mockBuildSync.mock.calls[0][0];
+    expect(opts.external).toEqual([]);
   });
 
   it('should set platform to browser', () => {
@@ -234,8 +243,26 @@ describe('bundleFileSource', () => {
       /Failed to bundle FileSource "widget\.tsx"/,
     );
     expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
-      /Ensure workspace packages are built/,
+      /ensure both packages are installed in the consuming project/,
     );
+  });
+
+  it('should throw a specific error when @frontmcp/ui is not installed (#443)', () => {
+    jest.doMock('../ui-availability', () => ({
+      isFrontmcpUiResolvable: () => false,
+    }));
+    try {
+      const { bundleFileSource: bundle } = require('../transpiler');
+
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
+        /requires the @frontmcp\/ui package/,
+      );
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
+        /npm install @frontmcp\/ui|yarn add @frontmcp\/ui/,
+      );
+    } finally {
+      jest.dontMock('../ui-availability');
+    }
   });
 
   it('should use write: false and format: esm', () => {

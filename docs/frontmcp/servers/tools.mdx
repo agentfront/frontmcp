@@ -839,8 +839,12 @@ FrontMCP auto-detects your template type:
 
 <CodeGroup>
 ```ts HTML Template
+import { type TemplateContext } from '@frontmcp/sdk';
+
 ui: {
-  template: (ctx) => `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
+  // Annotate `ctx` explicitly under strict / noImplicitAny.
+  template: (ctx: TemplateContext<MyInput, MyOutput>) =>
+    `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
 }
 ```
 
@@ -868,6 +872,10 @@ ui: {
 
 </CodeGroup>
 
+<Warning>
+**TypeScript: annotate the `ctx` parameter (TS7006).** When you inline an HTML template as an arrow function, you need to annotate `ctx`. Because `ui.template` is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), TypeScript can't pick a single contextual type for the arrow's parameter, so `template: (ctx) => …` errors with `Parameter 'ctx' implicitly has an 'any' type`. Either annotate `ctx: TemplateContext<MyInput, MyOutput>` (imported from `@frontmcp/sdk`), or move the widget into its own `.tsx` file and use the `FileSource` form (`template: { file: … }`) — both avoid the inference gap.
+</Warning>
+
 ### UI Configuration Options
 
 | Option               | Description                                                                             |
@@ -881,6 +889,46 @@ ui: {
 | `htmlResponsePrefix` | Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
 | `mdxComponents`      | Custom components for MDX templates                                                     |
 | `hydrate`            | Enable client-side React hydration for interactivity                                    |
+
+<Info>
+**`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails.
+
+In the default `resourceMode: 'cdn'` mode, `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk. When the framework selects `resourceMode: 'inline'` — either explicitly or via host detection (Claude, #456) — `react` and `react-dom` must also be resolvable from the consuming project so esbuild can bundle them into the widget; install them as devDependencies if your project doesn't already pull them in. See [building-tool-ui](/frontmcp/guides/building-tool-ui#step-1-install-the-ui-package) for the install snippet and the per-host trade-offs.
+</Info>
+
+<Warning>
+**FileSource paths resolve against `process.cwd()`, not the tool file.** A bare `template: { file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx` — and the mismatch only surfaces at tool-call time as `ENOENT`. Always anchor relative paths to the tool source with `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`), or pass an absolute path:
+
+```ts
+import { fileURLToPath } from 'node:url';
+const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url));
+
+ui: { template: { file: widgetPath } }
+```
+</Warning>
+
+<Info>
+**`resourceMode` is host-detected for `.tsx` widgets.** When you leave `resourceMode` unset, FrontMCP picks the right default per connecting client: Claude auto-switches to `'inline'` (React bundled in — #456), so the widget actually renders in Claude's sandboxed iframe. Other hosts keep `'cdn'` (smaller payload, fetched from esm.sh). Set the value explicitly to opt out of detection:
+
+```ts
+ui: {
+  template: { file: widgetPath },
+  // Leave resourceMode unset to host-detect (recommended).
+  // Or pin it explicitly:
+  // resourceMode: 'inline', // always bundle React inline
+}
+```
+
+Detection only applies to per-call rendering (inline / hybrid / lean serving modes). `servingMode: 'static'` widgets compile at server startup with no client context — set `resourceMode: 'inline'` explicitly when a static widget needs to render in Claude.
+</Info>
+
+<Info>
+**`ui.csp` is honored by Claude (#455).** FrontMCP now attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`), not just to the tool listing. Claude only reads CSP from the resource content — declarations on the tool were previously silently ignored. Use `ui.csp.connectDomains` for fetch/XHR/WebSocket allow-lists and `ui.csp.resourceDomains` for images / scripts / fonts / styles.
+</Info>
+
+<Info>
+**Widget files use the `*.widget.tsx` naming convention.** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck so widgets don't force the project to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds these excludes. For IDE typecheck of widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
+</Info>
 
 ### Using @frontmcp/ui Components
 

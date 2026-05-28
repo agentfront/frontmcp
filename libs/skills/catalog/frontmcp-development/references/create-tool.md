@@ -290,7 +290,7 @@ Supported `outputSchema` types:
 - **Zod raw shapes** (recommended): `{ field: z.string(), count: z.number() }` — structured JSON output with validation
 - **Zod schemas**: `z.object(...)`, `z.array(...)`, `z.union([...])` — for complex types
 - **Primitive literals**: `'string'`, `'number'`, `'boolean'`, `'date'` — for simple returns
-- **Media types**: `'image'`, `'audio'`, `'resource'`, `'resource_link'` — for binary/link content
+- **Media types**: `'image'`, `'audio'`, `'resource'`, `'resource_link'` — for binary/link content (use `'resource'` for inline UI / HTML payloads, or attach an interactive widget via the `ui` option — see [Tool UI](#tool-ui-interactive-widgets))
 - **Arrays**: `['string', 'image']` for multi-content responses
 
 ## Dependency Injection
@@ -469,6 +469,87 @@ Annotation fields:
 - `destructiveHint` -- Tool may perform destructive updates (default: true, meaningful only when readOnlyHint is false)
 - `idempotentHint` -- Calling repeatedly with same args has no additional effect (default: false)
 - `openWorldHint` -- Tool interacts with external entities (default: true)
+
+## Tool UI (Interactive Widgets)
+
+Attach an HTML widget to a tool's response via the `ui` option. Supported hosts (OpenAI Apps SDK, Claude Artifacts, MCP Inspector) render the widget in a sandboxed iframe alongside the structured JSON output, using the MCP Apps extension ([SEP-1865](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1865)) and the `ui://widget/{toolName}.html` resource URI scheme.
+
+**Recommended: keep the widget in its own file** (`./widget.tsx`, `./widget.jsx`, or `./widget.html`) and reference it from the tool via the `FileSource` form (`{ file: ... }`). This separates rendering from `execute()`, lets the widget get its own syntax highlighting / type-check / hot-reload, and avoids a giant template string inside the tool decorator.
+
+> **`.tsx`/`.jsx` widgets need `@frontmcp/ui` installed (issue #443).** FileSource widgets in those languages are bundled with an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project (`npm install @frontmcp/ui` or `yarn add @frontmcp/ui`) at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime; only `@frontmcp/ui` needs to be present on disk.
+
+> **Anchor the path to the tool file (issue #444).** Relative `file:` paths are resolved against `process.cwd()`, not the tool source's directory. A bare `{ file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx`, and the mismatch only surfaces as `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` from `node:url` (as in the example above) — or pass an absolute path — so the lookup is robust regardless of where the server is launched from.
+
+> **Name the widget file `*.widget.tsx` so it's excluded from server typecheck (issue #445).** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The default `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` and `**/*.widget.jsx`, so widgets don't force the server tsconfig to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds those excludes. If you want IDE typecheck for the widget source, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
+
+```typescript
+// src/apps/main/tools/show-ui-card.tool.ts
+import { fileURLToPath } from 'node:url';
+
+import { Tool, ToolContext, ToolInputOf, z } from '@frontmcp/sdk';
+
+const inputSchema = { name: z.string() };
+type ShowUiCardInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+
+// Anchor the widget path to this file (a bare relative path is resolved against
+// process.cwd() — issue #444 — so use import.meta.url instead).
+const widgetPath = fileURLToPath(new URL('./show-ui-card.widget.tsx', import.meta.url));
+
+@Tool({
+  name: 'show_ui_card',
+  description: 'Render a greeting card widget',
+  inputSchema,
+  outputSchema: { name: z.string() },
+  ui: {
+    template: { file: widgetPath },
+  },
+})
+class ShowUiCardTool extends ToolContext {
+  async execute(input: ShowUiCardInput) {
+    return { name: input.name };
+  }
+}
+```
+
+```tsx
+// src/apps/main/tools/show-ui-card.widget.tsx
+type Props = { input: { name: string }; output: { name: string } };
+
+export default function ShowUiCardWidget({ output }: Props) {
+  return <div>Hello {output.name}</div>;
+}
+```
+
+For quick prototypes or one-line widgets you can still inline a function/HTML template (`template: (ctx) => '<div>...</div>'`) — but graduate to a separate file as soon as the widget needs markup, styles, or state.
+
+> **TypeScript gotcha for inline function templates (TS7006).** Under `strict` / `noImplicitAny`, `template: (ctx) => …` fails with `Parameter 'ctx' implicitly has an 'any' type` (issue #442). `template` is a union of multiple callables (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), so TypeScript can't infer a single contextual type for `ctx`. Annotate it explicitly — `import { type TemplateContext } from '@frontmcp/sdk'` and write `template: (ctx: TemplateContext<MyInput, MyOutput>) => …` — or sidestep the issue by using the recommended FileSource form above.
+
+The `ui` option accepts a `ToolUIConfig` (re-exported from `@frontmcp/uipack/types`). The `template` field supports four formats — auto-detected by the renderer:
+
+| Format                | Shape                                                   | When to pick                                                                                    |
+| --------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **FileSource** ⭐     | `{ file: './widget.tsx' }`                              | **Recommended for anything non-trivial** — `.tsx` / `.jsx` / `.html` source files, transpiled   |
+| **React component**   | `MyWidget` — receives `{ input, output, helpers }`      | Importing a React component you already have; set `hydrate: false` (default) for Claude/ChatGPT |
+| **HTML / MDX string** | `'<div>...</div>'` or `'# Title\n<Card />'`             | Static markup; pair with `mdxComponents` for MDX                                                |
+| **Function**          | `(ctx) => string` — receives `input`/`output`/`helpers` | Quick demos / one-liners; pull out to a file once the widget grows                              |
+
+Common `ToolUIConfig` fields:
+
+- `template` -- Required. Function, HTML/MDX string, React component, or FileSource (`{ file }`)
+- `widgetDescription` -- Human-readable description surfaced to the host UI
+- `servingMode` -- `'auto'` (default) / `'inline'` / `'static'` / `'hybrid'` / `'direct-url'` / `'custom-url'`
+- `displayMode` -- `'inline'` (default) / `'fullscreen'` / `'pip'` — host display hint
+- `csp` -- `{ connectDomains?, resourceDomains? }` — CSP `connect-src` / `img-src` / `script-src` etc. for the sandboxed iframe
+- `contentSecurity` -- `{ allowUnsafeLinks?, allowInlineScripts?, bypassSanitization? }` — XSS / sanitization controls (keep defaults)
+- `widgetAccessible` -- `true` to expose `window.FrontMcpBridge.callTool` in the widget
+- `resourceUri` -- Override the auto-generated `ui://widget/{toolName}.html` URI
+- `uiType` -- `'auto'` (default) / `'html'` / `'react'` / `'mdx'` / `'markdown'` — force a renderer
+- `resourceMode` -- `'cdn'` (default) / `'inline'` — use `'inline'` for Claude Artifacts (network-blocked)
+- `hydrate` -- `false` (default) — enable client-side React hydration only when host renders deterministically
+- `externals`, `dependencies` -- CDN externals for FileSource templates (Claude only allows `cdnjs.cloudflare.com`)
+- `customShell`, `invocationStatus`, `widgetCapabilities`, `prefersBorder`, `sandboxDomain`, `htmlResponsePrefix` -- platform-specific knobs
+
+See [`create-tool-ui`](./create-tool-ui.md) for the full reference (all serving modes, the `window.FrontMcpBridge` API, CSP details, platform considerations, and worked examples). The `outputSchema: 'resource'` media type is a separate path: it returns an MCP resource (link or inline content) as part of the tool's content blocks, leaving rendering up to the host — use it for non-interactive payloads. The `ui` option is what wires a tool into the MCP Apps widget pipeline.
 
 ## Function-Style Builder
 
@@ -803,4 +884,4 @@ class ConvertCurrencyTool extends ToolContext {
 ## Reference
 
 - [Tools Documentation](https://docs.agentfront.dev/frontmcp/servers/tools)
-- Related skills: `create-resource`, `create-prompt`, `configure-throttle`, `create-agent`
+- Related skills: `create-resource`, `create-prompt`, `configure-throttle`, `create-agent`, `create-tool-ui`

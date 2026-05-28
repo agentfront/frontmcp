@@ -6,14 +6,14 @@
  * @packageDocumentation
  */
 
-import { buildShell } from '../shell/builder';
-import { createTemplateHelpers } from '../shell/data-injector';
 import { renderComponent } from '../component/renderer';
-import { detectUIType } from './type-detector';
-import { wrapDetectedContent } from './content-renderers';
-import { MCP_APPS_MIME_TYPE } from './constants';
 import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
+import { buildShell } from '../shell/builder';
+import { createTemplateHelpers } from '../shell/data-injector';
+import { MCP_APPS_MIME_TYPE } from './constants';
+import { wrapDetectedContent } from './content-renderers';
+import { detectUIType } from './type-detector';
 
 /**
  * Options for rendering a tool template.
@@ -31,6 +31,13 @@ export interface RenderToolTemplateOptions {
   platformType?: string;
   /** Optional import resolver with CDN overrides */
   resolver?: ImportResolver;
+  /**
+   * Resource loading mode. When `'inline'` and the template is a FileSource
+   * `.tsx`/`.jsx`, React is bundled into the output (no esm.sh import map)
+   * so the widget is fully self-contained — required for hosts that block
+   * external script execution like Claude (#454). Default `'cdn'`.
+   */
+  resourceMode?: 'cdn' | 'inline';
 }
 
 /**
@@ -81,8 +88,17 @@ function buildCspConfig(resolver?: ImportResolver) {
  * Use `template: { file: './my-component.tsx' }` instead.
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
-  const { toolName, input, output, template, resolver } = options;
+  const { toolName, input, output, template, resolver, platformType } = options;
   const uiType = detectUIType(template);
+
+  // When the user didn't pick a resourceMode, host-detect: Claude widget
+  // iframes block all external script execution (esm.sh, cdnjs — see #447),
+  // so `.tsx` / `.jsx` FileSource widgets only render under
+  // `resourceMode: 'inline'`. Other hosts (OpenAI Apps SDK, ChatGPT, Cursor,
+  // MCP Inspector) accept the smaller CDN-loaded payload. This is the (B)
+  // half of #456; the (A) half (`resourceMode: 'inline'` actually inlining
+  // React) shipped in #454.
+  const resourceMode: 'cdn' | 'inline' = options.resourceMode ?? (platformType === 'claude' ? 'inline' : 'cdn');
 
   const shellConfig = {
     toolName,
@@ -97,9 +113,14 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   let size = 0;
 
   if (typeof template === 'object' && template !== null && 'file' in template) {
-    // FileSource object — delegate to component renderer (esbuild + esm.sh import map)
+    // FileSource object — delegate to component renderer.
+    // When the user set `resourceMode: 'inline'`, propagate it as `inlineReact`
+    // so the bundler inlines React (fix for #454: makes Claude render the widget).
     const cspConfig = buildCspConfig(resolver);
-    const result = renderComponent({ source: template as FileSource }, { ...shellConfig, csp: cspConfig });
+    const result = renderComponent(
+      { source: template as FileSource, inlineReact: resourceMode === 'inline' },
+      { ...shellConfig, csp: cspConfig },
+    );
     html = result.html;
     hash = result.hash;
     size = result.size;

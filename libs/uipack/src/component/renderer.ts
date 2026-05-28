@@ -7,15 +7,13 @@
  * @packageDocumentation
  */
 
-import type { ShellConfig, ShellResult } from '../shell/types';
-import type { ImportResolver } from '../resolver/types';
-import type { UIConfig, ResolvedComponent } from './types';
-import { resolveUISource, generateMountScript } from './loader';
-import { buildShell } from '../shell/builder';
 import { createEsmShResolver } from '../resolver/esm-sh.resolver';
-import { createImportMapFromResolved } from '../resolver/import-map';
-import type { ResolvedImport } from '../resolver/types';
-import { generateImportMapScriptTag } from '../resolver/import-map';
+import { createImportMapFromResolved, generateImportMapScriptTag } from '../resolver/import-map';
+import { type ImportResolver, type ResolvedImport } from '../resolver/types';
+import { buildShell } from '../shell/builder';
+import { type ShellConfig, type ShellResult } from '../shell/types';
+import { generateMountScript, resolveUISource } from './loader';
+import { type ResolvedComponent, type UIConfig } from './types';
 
 /**
  * Render a complete HTML shell for a UI component.
@@ -42,6 +40,7 @@ export function renderComponent(config: UIConfig, shellConfig: ShellConfig): She
     resolver,
     input: shellConfig.input,
     output: shellConfig.output,
+    inlineReact: config.inlineReact === true,
   });
 
   const mergedShellConfig = {

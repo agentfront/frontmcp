@@ -72,6 +72,15 @@ export interface UIConfig<In = unknown, Out = unknown> {
   includeBridge?: boolean;
   /** Custom shell template (pre-resolved object or inline string). */
   customShell?: import('../shell/custom-shell-types').ResolvedShellTemplate | string;
+  /**
+   * When true, FileSource `.tsx`/`.jsx` widgets are bundled with React
+   * inlined (no esm.sh import map / no external `<script type="module">`).
+   * This is what `UITemplateConfig.resourceMode: 'inline'` is supposed to do
+   * end-to-end; setting it makes the widget self-contained and renders
+   * correctly in hosts that block external script execution (Claude
+   * Desktop / claude.ai — see issue #454).
+   */
+  inlineReact?: boolean;
 }
 
 /** Auto-detected or declared metadata on a component module */

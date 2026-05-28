@@ -37,6 +37,26 @@ yarn add @frontmcp/ui
 
 </CodeGroup>
 
+<Info>
+**Required for `.tsx`/`.jsx` FileSource widgets.** When you point `ui.template` at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Server-side bundling fails without this package installed. Match the version to `@frontmcp/sdk`. `react` and `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
+</Info>
+
+<Warning>
+**Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path.
+</Warning>
+
+<Info>
+**`resourceMode` is host-detected.** Leave it unset and FrontMCP auto-switches to `'inline'` when the connecting client is Claude (#456), so the widget actually renders in Claude's sandboxed iframe — React is bundled into the widget itself (#454). Other hosts keep `'cdn'` for a smaller payload. Set `resourceMode` explicitly to override the detection. Auto-detection only applies to per-call rendering modes (inline / hybrid / lean); `servingMode: 'static'` widgets are pre-compiled at startup with no client context, so set `resourceMode: 'inline'` explicitly when targeting Claude in static mode.
+</Info>
+
+<Info>
+**`ui.csp` is now emitted on the widget resource (#455).** FrontMCP attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`) so MCP Apps hosts — particularly Claude — actually honor it. Previously the CSP only appeared on the tool listing, where Claude ignored it.
+</Info>
+
+<Info>
+**Use the `*.widget.tsx` naming convention.** The scaffolded `tsconfig.json` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck (`frontmcp init` also adds the excludes to existing tsconfigs). Widget sources are bundled separately by uipack/esbuild at render time, so the server tsconfig doesn't need `jsx: 'react-jsx'` or `@types/react` for them. Add a sibling `tsconfig.widget.json` if you want IDE typecheck for widget files.
+</Info>
+
 ---
 
 ## Step 2: Create a Tool with UI Template
@@ -136,17 +156,21 @@ export default class GetWeatherTool extends ToolContext {
   Human-readable description of what the widget displays. Shown to users in UI-capable hosts.
 </ParamField>
 
-<ParamField path="ui.displayMode" type="'inline' | 'modal' | 'panel'">
-  How the widget should be displayed:
-  - `inline` - Rendered directly in the conversation
-  - `modal` - Opens in a modal dialog
-  - `panel` - Shows in a side panel
+<ParamField path="ui.displayMode" type="'inline' | 'fullscreen' | 'pip'">
+  Preferred display mode (hint to the host — may be ignored):
+  - `inline` - Rendered inline in the conversation (default)
+  - `fullscreen` - Request fullscreen display
+  - `pip` - Picture-in-picture
 </ParamField>
 
-<ParamField path="ui.servingMode" type="'static' | 'iframe'">
-  How the HTML is served:
-  - `static` - HTML string is returned directly
-  - `iframe` - Content is served via iframe URL
+<ParamField path="ui.servingMode" type="'auto' | 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'">
+  How the HTML is delivered to the client (default: `auto`):
+  - `auto` - Auto-select per host (OpenAI / Claude / unknown)
+  - `inline` - Embedded in tool response `_meta['ui/html']` (works everywhere)
+  - `static` - Pre-compiled at startup; client fetches `ui://widget/{toolName}.html` via `resources/read`
+  - `hybrid` - Shell pre-compiled; component code + data delivered per call in `_meta['ui/component']`
+  - `direct-url` - Served from an HTTP path on the MCP server (`directPath`)
+  - `custom-url` - Served from an external URL (`customWidgetUrl`, supports a `{token}` placeholder)
 </ParamField>
 
 <ParamField path="ui.template" type="function">
@@ -239,7 +263,10 @@ form(`
 The template function receives a context object with:
 
 ```typescript
-template: (ctx) => {
+import { type TemplateContext } from '@frontmcp/sdk';
+
+// Annotate `ctx` explicitly — see the TypeScript note below.
+template: (ctx: TemplateContext<MyInput, MyOutput>) => {
   // Input that was passed to the tool
   const { location, units } = ctx.input;
 
@@ -247,20 +274,26 @@ template: (ctx) => {
   const { temperature, conditions } = ctx.output;
 
   // Helper functions
-  const { escapeHtml, formatDate, formatNumber } = ctx.helpers;
+  const { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed } = ctx.helpers;
 
   // Always escape user-provided strings!
-  return `<p>${helpers.escapeHtml(location)}</p>`;
+  return `<p>${escapeHtml(location)}</p>`;
 }
 ```
 
+<Warning>
+**TypeScript: `ctx` must be annotated explicitly (TS7006).** Under `strict` / `noImplicitAny`, `template: (ctx) => …` fails with `Parameter 'ctx' implicitly has an 'any' type`. The `ui.template` field is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), so TypeScript can't pick a single contextual type for the arrow's parameter. Either annotate `ctx: TemplateContext<MyInput, MyOutput>` (imported from `@frontmcp/sdk`), or move the widget into its own `.tsx` file and use the `FileSource` form (`template: { file: … }`).
+</Warning>
+
 ### Available Helpers
 
-| Helper                       | Description                         |
-| ---------------------------- | ----------------------------------- |
-| `escapeHtml(str)`            | Escape HTML entities to prevent XSS |
-| `formatDate(date)`           | Format a date string                |
-| `formatNumber(num, options)` | Format numbers with locale support  |
+| Helper                            | Description                                                          |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `escapeHtml(str)`                 | Escape HTML entities to prevent XSS (handles `null`/`undefined`)     |
+| `formatDate(date, format?)`       | Format a date (accepts `Date` or ISO string)                         |
+| `formatCurrency(amount, ccy?)`    | ISO-4217 currency formatting (defaults to `'USD'`)                   |
+| `uniqueId(prefix?)`               | Generate a unique ID for DOM elements                                |
+| `jsonEmbed(data)`                 | Safely embed JSON in an inline `<script>` (escapes `</script>`)      |
 
 <Warning>
 Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.
@@ -305,7 +338,7 @@ import { z } from '@frontmcp/sdk';
       );
 
       const details = descriptionList([
-        { term: 'Total', description: helpers.formatNumber(output.totalExpenses, { style: 'currency', currency: 'USD' }) },
+        { term: 'Total', description: helpers.formatCurrency(output.totalExpenses, 'USD') },
         { term: 'Pending', description: String(output.pendingCount) },
         { term: 'Approved', description: String(output.approvedCount) },
       ], { layout: 'grid' });
@@ -339,19 +372,16 @@ export default class ExpenseSummaryTool extends ToolContext {
 
 ---
 
-## Platform Detection
+## Platform Considerations
 
-Different platforms (OpenAI, Claude, browsers) have different capabilities. Use theme utilities to adapt:
+Different MCP hosts have different capabilities and network policies:
 
-```typescript
-import { createTheme, canUseCdn, needsInlineScripts } from '@frontmcp/uipack/theme';
+- **OpenAI Apps SDK** — any CDN reachable; widget URI surfaces under `_meta['openai/outputTemplate']`
+- **Claude (MCP-UI)** — **only `cdnjs.cloudflare.com` is reachable**; prefer `resourceMode: 'inline'` so the widget shell is self-contained, and pin any `externals` to cdnjs URLs via `dependencies`
+- **MCP Inspector** — useful for local development; honors `servingMode: 'static'`
+- **Gemini / unknown hosts** — `ui` is ignored; the tool returns JSON only
 
-// Claude Artifacts blocks external requests
-// Use inline scripts when needed
-if (needsInlineScripts(platform)) {
-  // Inline Tailwind CSS
-}
-```
+The default `servingMode: 'auto'` selects the right mode per host. See the [Tool UI reference](/frontmcp/servers/tools#tool-ui) for the full surface: serving modes, CSP, the `window.FrontMcpBridge` runtime, file-based `.tsx` widgets, and platform-specific troubleshooting.
 
 ---
 

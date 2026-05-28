@@ -26,6 +26,7 @@ export { resolveUISource, generateMountScript } from './loader';
 
 // Transpiler
 export { transpileReactSource, bundleFileSource, extractDefaultExportName } from './transpiler';
+export type { BundleFileSourceOptions } from './transpiler';
 
 // Renderer
 export { renderComponent } from './renderer';
