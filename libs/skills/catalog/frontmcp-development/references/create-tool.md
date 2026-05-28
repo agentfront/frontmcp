@@ -478,6 +478,8 @@ Attach an HTML widget to a tool's response via the `ui` option. Supported hosts 
 
 > **`.tsx`/`.jsx` widgets need `@frontmcp/ui` installed (issue #443).** FileSource widgets in those languages are bundled with an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project (`npm install @frontmcp/ui` or `yarn add @frontmcp/ui`) at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime; only `@frontmcp/ui` needs to be present on disk.
 
+> **Anchor the path to the tool file (issue #444).** Relative `file:` paths are resolved against `process.cwd()`, not the tool source's directory. A bare `{ file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx`, and the mismatch only surfaces as `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` from `node:url` (as in the example above) — or pass an absolute path — so the lookup is robust regardless of where the server is launched from.
+
 ```typescript
 // src/apps/main/tools/show-ui-card.tool.ts
 import { fileURLToPath } from 'node:url';

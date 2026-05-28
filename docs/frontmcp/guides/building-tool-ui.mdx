@@ -41,6 +41,10 @@ yarn add @frontmcp/ui
 **Required for `.tsx`/`.jsx` FileSource widgets.** When you point `ui.template` at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Server-side bundling fails without this package installed. Match the version to `@frontmcp/sdk`. `react` and `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
 </Info>
 
+<Warning>
+**Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path.
+</Warning>
+
 ---
 
 ## Step 2: Create a Tool with UI Template

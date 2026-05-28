@@ -152,6 +152,19 @@ The file path is resolved at build/registration time; the bundler transpiles the
 
 > **Prerequisite: install `@frontmcp/ui` (issue #443).** `.tsx`/`.jsx` FileSource widgets require the `@frontmcp/ui` package — the FrontMCP transpiler injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Without it, server-side bundling fails. Install it at the same version as `@frontmcp/sdk` (`npm install @frontmcp/ui` or `yarn add @frontmcp/ui`). `react` and `react-dom` stay external and load from the CDN at runtime — only `@frontmcp/ui` needs to be present in the consuming project for bundling to succeed.
 
+> **Path resolution: relative paths are resolved against `process.cwd()`, not the tool file (issue #444).** A bare `template: { file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx` — and the mismatch only surfaces at tool-call time as `ENOENT`. Anchor the path to the tool source with `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`), or pass an absolute path. The framework now throws a specific error pointing at this when an ENOENT happens on a relative FileSource path.
+
+```typescript
+import { fileURLToPath } from 'node:url';
+
+const widgetPath = fileURLToPath(new URL('./chart-widget.tsx', import.meta.url));
+
+ui: {
+  template: { file: widgetPath },
+  // ...
+}
+```
+
 ## Template Helpers
 
 Available on `ctx.helpers` in function templates:
@@ -354,16 +367,16 @@ Bridge methods available on `window.FrontMcpBridge`:
 
 ## Troubleshooting
 
-| Problem                                                | Cause                                                               | Solution                                                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Widget renders blank in Claude                         | Default `resourceMode: 'cdn'` blocked by Claude's network policy    | Set `resourceMode: 'inline'` and route any `externals` through `cdnjs.cloudflare.com`                 |
-| "Loading widget…" hangs forever in Claude (FileSource) | `.tsx` widget fetched from `esm.sh` (blocked)                       | Provide `dependencies` overrides on `cdnjs.cloudflare.com`, or precompile and use a function template |
-| React error #418 (hydration mismatch)                  | `hydrate: true` in a host that re-renders inconsistently            | Set `hydrate: false` (default) — bridge IIFE handles interactivity                                    |
-| `window.FrontMcpBridge.callTool` returns `undefined`   | `widgetAccessible: true` not set                                    | Add `widgetAccessible: true` to the `ui` block                                                        |
-| `_meta.ui.csp` declared on the tool is ignored         | CSP must be on the _resource_, not the tool (issue #455)            | Use `csp:` inside the `ui:` block — the resource handler emits it; don't put it on `_meta`            |
-| `resources/list` doesn't show the widget URI           | `servingMode: 'inline'` only — widget isn't pre-registered          | Use `'auto'` or `'static'` if you want a discoverable resource                                        |
-| Widget appears on OpenAI but JSON-only on Claude       | Claude needs dual-payload mode; happens automatically with `'auto'` | Confirm `servingMode` is `'auto'` (or `'inline'`); set `htmlResponsePrefix` to label the HTML block   |
-| `.tsx` file path resolves wrong (issue #444)           | Relative `template: { file }` resolved against `process.cwd()`      | Use an absolute path or `new URL('./widget.tsx', import.meta.url).pathname` until #444 lands          |
+| Problem                                                | Cause                                                               | Solution                                                                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Widget renders blank in Claude                         | Default `resourceMode: 'cdn'` blocked by Claude's network policy    | Set `resourceMode: 'inline'` and route any `externals` through `cdnjs.cloudflare.com`                                                                                                           |
+| "Loading widget…" hangs forever in Claude (FileSource) | `.tsx` widget fetched from `esm.sh` (blocked)                       | Provide `dependencies` overrides on `cdnjs.cloudflare.com`, or precompile and use a function template                                                                                           |
+| React error #418 (hydration mismatch)                  | `hydrate: true` in a host that re-renders inconsistently            | Set `hydrate: false` (default) — bridge IIFE handles interactivity                                                                                                                              |
+| `window.FrontMcpBridge.callTool` returns `undefined`   | `widgetAccessible: true` not set                                    | Add `widgetAccessible: true` to the `ui` block                                                                                                                                                  |
+| `_meta.ui.csp` declared on the tool is ignored         | CSP must be on the _resource_, not the tool (issue #455)            | Use `csp:` inside the `ui:` block — the resource handler emits it; don't put it on `_meta`                                                                                                      |
+| `resources/list` doesn't show the widget URI           | `servingMode: 'inline'` only — widget isn't pre-registered          | Use `'auto'` or `'static'` if you want a discoverable resource                                                                                                                                  |
+| Widget appears on OpenAI but JSON-only on Claude       | Claude needs dual-payload mode; happens automatically with `'auto'` | Confirm `servingMode` is `'auto'` (or `'inline'`); set `htmlResponsePrefix` to label the HTML block                                                                                             |
+| `.tsx` file path resolves wrong (issue #444)           | Relative `template: { file }` resolved against `process.cwd()`      | Pass an absolute path — `fileURLToPath(new URL('./widget.tsx', import.meta.url))` from `node:url` — or anchor explicitly. The framework now throws a specific error pointing at this on ENOENT. |
 
 ## Packaging Notes
 

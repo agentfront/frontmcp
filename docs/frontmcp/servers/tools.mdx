@@ -894,6 +894,17 @@ ui: {
 **`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
 </Info>
 
+<Warning>
+**FileSource paths resolve against `process.cwd()`, not the tool file.** A bare `template: { file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx` — and the mismatch only surfaces at tool-call time as `ENOENT`. Always anchor relative paths to the tool source with `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`), or pass an absolute path:
+
+```ts
+import { fileURLToPath } from 'node:url';
+const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url));
+
+ui: { template: { file: widgetPath } }
+```
+</Warning>
+
 ### Using @frontmcp/ui Components
 
 Combine Tool UI with the `@frontmcp/ui` component library:
