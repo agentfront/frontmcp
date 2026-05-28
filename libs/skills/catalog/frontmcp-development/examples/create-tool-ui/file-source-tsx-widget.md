@@ -2,19 +2,20 @@
 name: file-source-tsx-widget
 reference: create-tool-ui
 level: advanced
-description: 'A `.tsx` FileSource widget that loads `chart.js` from `cdnjs.cloudflare.com` so it works in both OpenAI and Claude.'
-tags: [development, tool, ui, widget, file-source, tsx, react, claude, cdn, mcp-apps]
+description: "A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets)."
+tags: [development, tool, ui, widget, file-source, tsx, react, cdn, mcp-apps]
 features:
   - 'Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`'
   - 'Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`'
-  - 'Excluding `chart.js` from the bundle via `externals` and pinning a Claude-compatible CDN URL with `dependencies`'
-  - "Setting `resourceMode: 'inline'` so renderer scripts are embedded — required for Claude Artifacts"
+  - 'Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`'
+  - "Setting `resourceMode: 'inline'` so the renderer runtime scripts are embedded (helps OpenAI / Inspector reliability)"
   - 'Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe'
+  - 'Acknowledging the Claude target limitation: `.tsx` FileSource currently hangs on "Loading widget…" because the iframe blocks all external script execution including cdnjs'
 ---
 
 # File-Based `.tsx` Widget with CDN Externals
 
-A `.tsx` FileSource widget that loads `chart.js` from `cdnjs.cloudflare.com` so it works in both OpenAI and Claude.
+A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets).
 
 ## Code
 
@@ -55,16 +56,21 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
   ui: {
     widgetDescription: 'Monthly revenue chart',
     template: { file: widgetPath },
-    // `chart.js` is loaded from CDN at runtime instead of bundled.
+    // `chart.js` is loaded from a CDN at runtime instead of bundled. cdnjs is
+    // a sensible default; esm.sh is the framework default if you don't override.
+    // (NOTE — issues #447 / #454: Claude's widget iframe blocks ALL external
+    // script execution, including cdnjs. This example renders in OpenAI Apps
+    // SDK, ChatGPT, and MCP Inspector but currently hangs on "Loading widget…"
+    // in Claude. Use a self-contained `uiType: 'html'` template for Claude.)
     externals: ['chart.js'],
     dependencies: {
       'chart.js': {
-        // Only cdnjs.cloudflare.com is reachable from Claude Artifacts.
         url: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
         global: 'Chart',
       },
     },
-    // Embed the renderer scripts inline so the widget is self-contained for Claude.
+    // Embed the renderer runtime scripts inline (helps OpenAI / Inspector
+    // reliability on widget restart; does not unblock Claude — see note above).
     resourceMode: 'inline',
     // Static HTML only — no React hydration to dodge error #418 in iframe sandboxes.
     hydrate: false,
@@ -145,9 +151,10 @@ export { MainApp };
 
 - Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`
 - Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`
-- Excluding `chart.js` from the bundle via `externals` and pinning a Claude-compatible CDN URL with `dependencies`
-- Setting `resourceMode: 'inline'` so renderer scripts are embedded — required for Claude Artifacts
+- Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`
+- Setting `resourceMode: 'inline'` so the renderer runtime scripts are embedded (helps OpenAI / Inspector reliability)
 - Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe
+- Acknowledging the Claude target limitation: `.tsx` FileSource currently hangs on "Loading widget…" because the iframe blocks all external script execution including cdnjs
 
 ## Related
 
