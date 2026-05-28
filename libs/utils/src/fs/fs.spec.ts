@@ -1,27 +1,30 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+
 import {
-  fileExists,
-  readFileSync,
-  readFile,
-  readFileBuffer,
-  writeFile,
-  readJSON,
-  writeJSON,
-  ensureDir,
-  isDirEmpty,
-  runCmd,
-  mkdir,
-  rename,
-  unlink,
-  stat,
+  access,
   copyFile,
   cp,
-  readdir,
-  rm,
+  ensureDir,
+  fileExists,
+  getSpawnFn,
+  isDirEmpty,
+  mkdir,
   mkdtemp,
-  access,
+  readdir,
+  readFile,
+  readFileBuffer,
+  readFileSync,
+  readJSON,
+  rename,
+  rm,
+  runCmd,
+  stat,
+  unlink,
+  watchFile,
+  writeFile,
+  writeJSON,
 } from './fs';
 
 describe('FS Utils', () => {
@@ -508,6 +511,82 @@ describe('FS Utils', () => {
 
       // Calling isDirEmpty on a file should throw ENOTDIR
       await expect(isDirEmpty(filePath)).rejects.toThrow();
+    });
+  });
+
+  describe('watchFile', () => {
+    it('returns a handle whose close() detaches the underlying watcher', () => {
+      const handle = watchFile(tempDir, () => undefined);
+      expect(typeof handle.close).toBe('function');
+      expect(typeof handle.onError).toBe('function');
+      expect(() => handle.close()).not.toThrow();
+    });
+
+    it('fires the listener when a file inside the watched directory changes', async () => {
+      const filePath = path.join(tempDir, 'changes.txt');
+      await fs.promises.writeFile(filePath, 'a');
+
+      const events: Array<{ eventType: string; filename: string | null | undefined }> = [];
+      const handle = watchFile(tempDir, (eventType, filename) => {
+        events.push({ eventType, filename });
+      });
+
+      try {
+        // Wait a tick to let the watcher attach, then mutate the file.
+        await new Promise((r) => setTimeout(r, 10));
+        await fs.promises.writeFile(filePath, 'b');
+        // Give the watcher a few ms to deliver the event.
+        await new Promise((r) => setTimeout(r, 100));
+      } finally {
+        handle.close();
+      }
+
+      // fs.watch can coalesce events but at least one must arrive for the
+      // write above. Some platforms report `rename`, others `change` — we
+      // care only that the listener fired.
+      expect(events.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('forwards watcher errors via onError when registered', () => {
+      // Watching a non-existent path on most platforms either throws
+      // synchronously OR emits an error event. We accept either: the
+      // contract is "the caller can observe the failure".
+      //
+      // Platform note: on macOS + Linux (the dev + CI platforms today)
+      // `fs.watch` on a non-existent path raises ENOENT synchronously,
+      // so `threwSync` is the path normally exercised. Windows can
+      // sometimes attach the watcher and emit the error async via the
+      // 'error' event — covered by the `errors.length > 0` branch.
+      // If a future runtime silently succeeds on a non-existent path
+      // this test would (correctly) fail — that's the deliberate
+      // failure mode, not a flake.
+      const errors: Error[] = [];
+      let threwSync = false;
+      try {
+        const handle = watchFile(path.join(tempDir, 'no-such-dir'), () => undefined);
+        handle.onError((err) => errors.push(err));
+        handle.close();
+      } catch (e) {
+        threwSync = true;
+        expect((e as Error).message).toMatch(/ENOENT|no such file/i);
+      }
+      // At least one observable failure path exercised. Errors emitted
+      // async would land in `errors` if the platform allows attaching first.
+      // `errors.length >= 0` is trivially true, so we assert `> 0` to make
+      // the OR meaningful — the test only passes if SOME failure was
+      // observed (sync throw OR async error event).
+      expect(threwSync || errors.length > 0).toBe(true);
+    });
+  });
+
+  describe('getSpawnFn', () => {
+    it('returns the Node child_process.spawn function', () => {
+      const spawn = getSpawnFn();
+      expect(typeof spawn).toBe('function');
+      // Sanity: invoking it produces a ChildProcess with a kill() method.
+      const child = spawn(process.execPath, ['-e', 'process.exit(0)']);
+      expect(typeof child.kill).toBe('function');
+      child.kill();
     });
   });
 });

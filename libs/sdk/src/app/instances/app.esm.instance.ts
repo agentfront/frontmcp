@@ -77,6 +77,12 @@ class EmptySkillRegistry implements SkillRegistryInterface {
   getSkills(): SkillEntry[] {
     return [];
   }
+  getExecutableSkills(): SkillEntry[] {
+    return [];
+  }
+  getKnowledgeOnlySkills(): SkillEntry[] {
+    return [];
+  }
   findByName(): SkillEntry | undefined {
     return undefined;
   }

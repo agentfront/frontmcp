@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/skill.instance.ts
 
-import { dirname, fileExists, pathJoin, pathResolve, readJSON } from '@frontmcp/utils';
+import { dirname, fileExists, getCwd, pathJoin, pathResolve, readJSON } from '@frontmcp/utils';
 
 import {
   normalizeToolRef,
@@ -303,6 +303,25 @@ type SkillManifestEntry = {
 let skillManifestCache: Record<string, SkillManifestEntry> | null | undefined;
 
 /**
+ * Resolve the "main module directory" the build-time skill manifest is
+ * relative to. Uses `@frontmcp/utils#getCwd` which is env-aware (Node
+ * returns `process.cwd()`; browser/Worker builds return a sentinel that
+ * makes the subsequent `fileExists` call short-circuit to "manifest not
+ * found"). Returns undefined when no usable cwd is reachable.
+ *
+ * Lifted out of `resolveFromSkillManifest` so callers in V8 isolates
+ * don't have to walk through the manifest-load path at all.
+ */
+function getSkillManifestMainDir(): string | undefined {
+  try {
+    const cwd = getCwd();
+    return cwd && cwd.length > 0 ? cwd : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Try to load a skill resource (references or examples) from the given path,
  * falling back to the build-time manifest on ENOENT.
  */
@@ -345,9 +364,16 @@ async function resolveFromSkillManifest(skillName: string): Promise<string | und
   if (skillManifestCache === null) return undefined; // Already tried, not found
 
   if (skillManifestCache === undefined) {
-    // Try to load manifest from the main module's directory
+    // Resolve the project's "main dir" defensively — in V8 isolates this is
+    // unavailable and we short-circuit to "not found" rather than throwing
+    // `process is not defined` from a deep hot-path call.
+    const mainDir = getSkillManifestMainDir();
+    if (!mainDir) {
+      skillManifestCache = null;
+      return undefined;
+    }
+
     try {
-      const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
       const manifestPath = pathJoin(mainDir, '_skills', 'manifest.json');
       if (await fileExists(manifestPath)) {
         skillManifestCache = await readJSON(manifestPath);
@@ -368,7 +394,11 @@ async function resolveFromSkillManifest(skillName: string): Promise<string | und
   const entry = skillManifestCache[skillName];
   if (!entry?.instructions) return undefined;
 
-  const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+  // Resolve again rather than caching `mainDir` — the cache lives at module
+  // scope and could outlive a single tenant's working directory in
+  // multi-tenant or hot-reload scenarios. Cheap to recompute.
+  const mainDir = getSkillManifestMainDir();
+  if (!mainDir) return undefined;
   return pathResolve(mainDir, entry.instructions);
 }
 
@@ -388,6 +418,12 @@ export async function resolveResourceFromManifest(
   const relPath = entry?.[resourceType];
   if (!relPath) return undefined;
 
-  const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+  // Reuse the shared, isolate-safe manifest-root resolver. The previous
+  // `require.main?.filename ?? process.cwd()` form breaks under V8
+  // isolates (no `require`) and bundlers that strip module metadata; the
+  // helper above already routes through `@frontmcp/utils#getCwd()` and
+  // gracefully returns undefined when no main can be inferred.
+  const mainDir = getSkillManifestMainDir();
+  if (!mainDir) return undefined;
   return pathResolve(mainDir, relPath);
 }

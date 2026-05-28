@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/codecall.symbol.ts
 
-import { CodeCallVmPreset } from './codecall.types';
-import type { ToolCallResult, CallToolOptions } from './errors';
+import { type CodeCallVmPreset } from './codecall.types';
+import type { CallToolOptions, ToolCallResult } from './errors';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';
@@ -81,6 +81,20 @@ export interface CodeCallVmEnvironment {
   mcpLog?: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;
 
   mcpNotify?: (event: string, payload: Record<string, unknown>) => void;
+
+  /**
+   * Optional dotted-tool-name namespaces, e.g. `{ acme: { getUser: (...) => ... } }`.
+   *
+   * When present, the underlying enclave merges these into the VM globals so
+   * AgentScript can call `await acme.getUser({...})` instead of
+   * `await callTool('acme.getUser', {...})`.
+   *
+   * Each method delegates to `callTool` with the original full tool name, so
+   * all security checks, hooks, quotas, and audit paths run unchanged. Tools
+   * whose names cannot be expressed as `{validIdent}.{validIdent}` remain
+   * reachable only via `callTool`.
+   */
+  namespaces?: Record<string, Record<string, (input?: unknown, options?: CallToolOptions) => Promise<unknown>>>;
 }
 
 /**

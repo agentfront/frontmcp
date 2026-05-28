@@ -1,12 +1,12 @@
 // file: plugins/plugin-skilled-openapi/src/sources/static.source.ts
-
-// File reads route through `@frontmcp/utils` per project convention; the watch
-// API stays on `node:fs` because utils does not currently expose a watcher.
-import { watch as fsWatch, type FSWatcher } from 'node:fs';
-import * as path from 'node:path';
+//
+// All filesystem + path operations route through `@frontmcp/utils`, which
+// resolves to env-aware implementations via the `#path` / `#fs` subpath
+// imports and the `frontmcp build --target <env>` pipeline. Author code in
+// this repo never imports `node:fs` / `node:path` directly per CLAUDE.md.
 
 import type { FrontMcpLogger } from '@frontmcp/sdk';
-import { readFile } from '@frontmcp/utils';
+import { extname, pathResolve, readFile, watchFile, type FileWatcherHandle } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay, type OverlayInput } from '../bundle/overlay-parser';
@@ -26,7 +26,7 @@ export class StaticSource implements SkillBundleSource {
   readonly id: string;
 
   private listeners = new Set<BundleSourceListener>();
-  private watcher: FSWatcher | undefined;
+  private watcher: FileWatcherHandle | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
   private stopped = false;
 
@@ -66,9 +66,9 @@ export class StaticSource implements SkillBundleSource {
   }
 
   private async fetchOnce(): Promise<ResolvedBundle> {
-    const absPath = path.resolve(this.options.path);
+    const absPath = pathResolve(this.options.path);
     const raw = await readFile(absPath, 'utf8');
-    const ext = path.extname(absPath).toLowerCase();
+    const ext = extname(absPath).toLowerCase();
 
     let input: OverlayInput;
     if (ext === '.json') {
@@ -96,12 +96,14 @@ export class StaticSource implements SkillBundleSource {
   }
 
   private beginWatch(): void {
-    const absPath = path.resolve(this.options.path);
+    const absPath = pathResolve(this.options.path);
     try {
-      this.watcher = fsWatch(absPath, { persistent: false }, () => this.scheduleRefresh());
+      this.watcher = watchFile(absPath, () => this.scheduleRefresh());
     } catch (e) {
-      // Some platforms / file types reject fs.watch. Fall back to polling
-      // every 2s so dev workflow still works.
+      // `watchFile` is Node-only (utils calls assertNode internally). On
+      // platforms where fs.watch is rejected (containers without inotify),
+      // or in a non-Node runtime that somehow reaches this path, fall back
+      // to polling so the dev workflow still works wherever possible.
       this.logger.warn(`[static-source] fs.watch failed (${(e as Error).message}); polling at 2s instead`);
       const tick = (): void => {
         if (this.stopped) return;

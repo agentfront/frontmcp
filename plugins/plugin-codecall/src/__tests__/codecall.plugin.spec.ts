@@ -1,11 +1,12 @@
 // file: plugins/plugin-codecall/src/__tests__/codecall.plugin.spec.ts
 
+import { type ScopeEntry } from '@frontmcp/sdk';
+
 import CodeCallPlugin from '../codecall.plugin';
-import { CodeCallMode, CodeCallPluginOptionsInput } from '../codecall.types';
+import { type CodeCallMode, type CodeCallPluginOptionsInput } from '../codecall.types';
 import CodeCallConfig from '../providers/code-call.config';
-import EnclaveService from '../services/enclave.service';
 import { ToolSearchService } from '../services';
-import { ScopeEntry } from '@frontmcp/sdk';
+import EnclaveService from '../services/enclave.service';
 
 describe('CodeCallPlugin', () => {
   describe('constructor', () => {
@@ -484,6 +485,23 @@ describe('CodeCallPlugin', () => {
       it('should work with fullName property', () => {
         const isCodeCall = (plugin as any).isCodeCallTool({ fullName: 'codecall:describe' });
         expect(isCodeCall).toBe(true);
+      });
+
+      // Defensive guard: external tool entries can arrive with both name +
+      // fullName absent (or non-string), and a bare `.startsWith` would
+      // throw, taking down the whole list_tools filter. Pin the guarded
+      // behaviour so a regression that removes the `typeof` check fails
+      // here loudly.
+      it('returns false (not throw) when both name and fullName are missing', () => {
+        const isCodeCall = (plugin as any).isCodeCallTool({});
+        expect(isCodeCall).toBe(false);
+      });
+
+      it('returns false when both name and fullName are non-strings', () => {
+        // A pathological caller could set these to numbers/objects via JS
+        // (TS types don't help at runtime). The guard must reject loudly.
+        const isCodeCall = (plugin as any).isCodeCallTool({ name: 42, fullName: null });
+        expect(isCodeCall).toBe(false);
       });
     });
 

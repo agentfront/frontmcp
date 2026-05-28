@@ -1,5 +1,23 @@
 import 'reflect-metadata';
 
+// ── @frontmcp/adapters/skills imports (browser-safe pure primitives) ──
+//
+// These are the runtime-agnostic units the skills adapter + the
+// skilled-openapi plugin both build on: a markdown op-reference harvester,
+// the OpenAPI → MCP classifier, an in-memory classification registry, a
+// resource-URI template renderer, and the overlay/bundle JSON parser.
+// None of these touch the filesystem or process.env — they're pure
+// functions / pure-data classes, so the same code that runs the parity
+// e2e in Node also boots cleanly inside a browser bundle.
+import {
+  ClassificationRegistry,
+  classifyOne,
+  classifyOperations,
+  dedupeOpReferences,
+  extractOpReferences,
+  parseOverlay,
+  renderResourceUri,
+} from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 // ── @frontmcp/sdk imports (decorators, types, core) ──
 import { FrontMcp, Prompt, PromptContext, Resource, ResourceContext, Tool, ToolContext } from '@frontmcp/sdk';
@@ -114,6 +132,86 @@ check('FrontMcp-decorator', () => {
   @FrontMcp({ info: { name: 'browser-test', version: '0.0.1' }, apps: [], serve: false })
   class BrowserApp {}
   return typeof BrowserApp === 'function';
+});
+
+// ── @frontmcp/adapters/skills checks ──
+//
+// The harvester + classifier + registry are the load-bearing units that
+// the skilled-openapi plugin (and any future skills-aware integration)
+// builds on. Exercising them in a browser bundle proves they're truly
+// runtime-agnostic — a regression that drags in `node:fs` or
+// `node:crypto` would fail webpack/vite's browser target, AND any
+// runtime guard fall-through would surface as a thrown error in these
+// checks.
+
+check('extractOpReferences-markdown', () => {
+  const md = 'See [[op:acme/getUser]] and use op://acme/updateUser to mutate.';
+  const refs = extractOpReferences(md);
+  // We expect both styles to be picked up; order isn't part of the contract.
+  return (
+    refs.length === 2 &&
+    refs.some((r) => r.operationId === 'getUser') &&
+    refs.some((r) => r.operationId === 'updateUser')
+  );
+});
+
+check('dedupeOpReferences-stable', () => {
+  const md = '[[op:acme/getUser]] [[op:acme/getUser]] op://acme/getUser';
+  const refs = dedupeOpReferences(extractOpReferences(md));
+  return refs.length === 1 && refs[0]?.operationId === 'getUser';
+});
+
+check('classifyOperations-tool-and-resource', () => {
+  // A GET-with-path-param classifies as `both` (tool + resource); POST on
+  // the same template classifies as `tool` and emits an updated event.
+  const ops = [
+    { operationId: 'getUser', method: 'GET' as const, path: '/users/{id}' },
+    { operationId: 'updateUser', method: 'POST' as const, path: '/users/{id}' },
+  ];
+  const classified = classifyOperations('acme', ops);
+  const get = classified.find((c) => c.operationId === 'getUser');
+  const post = classified.find((c) => c.operationId === 'updateUser');
+  if (!get || !post) return false;
+  return get.expose === 'both' && post.expose === 'tool';
+});
+
+check('classifyOne-pathsWithGet', () => {
+  const c = classifyOne('acme', { operationId: 'createUser', method: 'POST', path: '/users' }, new Set(['/users']));
+  // POST /users with a GET on the same template → still tool, but with
+  // an emit kind targeting the list resource.
+  return c.expose === 'tool' && c.emit?.kind === 'listChanged';
+});
+
+check('ClassificationRegistry-roundtrip', () => {
+  const reg = new ClassificationRegistry();
+  const [c] = classifyOperations('acme', [{ operationId: 'getUser', method: 'GET', path: '/users/{id}' }]);
+  if (!c) return false;
+  reg.register('acme.getUser', c);
+  const stored = reg.lookup('acme.getUser');
+  return stored?.operationId === 'getUser';
+});
+
+check('renderResourceUri-template', () => {
+  const rendered = renderResourceUri('mcp+op://acme/users/{id}', { id: '42' });
+  return rendered.ok === true && rendered.uri === 'mcp+op://acme/users/42';
+});
+
+check('parseOverlay-json', () => {
+  // A minimal ResolvedBundle JSON document. parseOverlay normalises it
+  // into the canonical bundle shape the static-source consumer expects.
+  const json = JSON.stringify({
+    schemaVersion: 1,
+    bundleId: 'browser-demo',
+    version: '0.0.1',
+    generatedAt: new Date(0).toISOString(),
+    sourceDigest: '',
+    services: [],
+    authBindings: {},
+    skills: [],
+    operations: {},
+  });
+  const parsed = parseOverlay({ kind: 'json', content: json });
+  return parsed.bundleId === 'browser-demo';
 });
 
 // ── Render results to DOM ──

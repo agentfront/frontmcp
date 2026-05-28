@@ -43,3 +43,10 @@ export function isAbsolute(p: string): boolean {
 export function pathToFileURL(_p: string): URL {
   return notAvailable('pathToFileURL');
 }
+
+/**
+ * Platform-specific path separator. In browser/Worker builds we mirror POSIX
+ * (`/`) — these targets never read a real filesystem so the value is only
+ * used for string parsing, and POSIX matches the runtime's URL conventions.
+ */
+export const sep = '/';

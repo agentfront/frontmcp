@@ -1,0 +1,414 @@
+---
+title: Deploy Manifest
+slug: deployment/deploy-manifest
+icon: file-code
+description: The frontmcp.deploy.yaml v1 schema — declarative manifest that the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker
+keywords:
+  [
+    'frontmcp',
+    'mcp',
+    'deploy',
+    'deployment',
+    'manifest',
+    'yaml',
+    'cloudflare',
+    'github action',
+    'signing',
+    'secrets',
+    'bindings',
+    'classification',
+    'typescript',
+  ]
+---
+
+`frontmcp.deploy.yaml` is the declarative manifest the GitHub Action ingests on every push and the source of truth for what your Cloudflare Worker serves. This page is the full v1 schema reference.
+
+For the conceptual picture, see [Skills-Only Deployment](/frontmcp/features/skills-only-deployment); for the runtime that consumes the bundle, see [Cloudflare Worker](/frontmcp/deployment/cloudflare-worker).
+
+## Minimum viable manifest
+
+```yaml
+$schema: https://schemas.agentfront.dev/frontmcp-deploy/v1.json
+version: 1
+name: acme-mcp
+
+runtime:
+  target: cloudflare-worker
+  compatibilityDate: '2026-05-01'
+
+server:
+  info: { name: acme-mcp, version: 1.0.0 }
+
+specs: ./openapi/
+skills: { source: ./skills/ }
+
+bindings:
+  durableObjects:
+    - { binding: SESSIONS, className: SessionDO }
+  kvNamespaces:
+    - { binding: REPLAY_NONCE, id: '${env:KV_REPLAY_NONCE_ID}' }
+
+signing:
+  algorithm: ed25519
+  trustRoots:
+    - { kid: prod-2026-05, publicKeySecret: TRUSTED_PUBKEY_PROD }
+  replay:
+    windowSeconds: 300
+    nonceKv: REPLAY_NONCE
+
+auth: { provider: none }
+
+secrets:
+  - { name: TRUSTED_PUBKEY_PROD, required: true }
+```
+
+That's enough for the Worker to boot and accept signed bundles. Below: every field.
+
+## Top-level shape
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `$schema` | optional | URL pointer for editor autocomplete. Conventionally `https://schemas.agentfront.dev/frontmcp-deploy/v1.json`. |
+| `version` | yes | Must equal the literal `1` in v1.3. |
+| `name` | yes | Project name. Identifier: starts with a letter, then `[A-Za-z0-9_-]*`. |
+| `runtime` | yes | Target runtime + compatibility date. |
+| `server` | yes | Server identity (`info`) + optional `instructions` injected at MCP `initialize`. |
+| `specs` | yes | OpenAPI specs to ingest. Either a directory string or an array of `{ id, spec, baseUrl?, bindingName? }`. |
+| `skills` | optional (defaults to `{ source: './skills/' }`) | Where to find skills + optional `alwaysLoad` list + tag filter. |
+| `tags` | optional | Declared tag dictionary (OpenAPI-style `[{ name, description? }]`). |
+| `classification` | optional | Override rules on top of the OpenAPI → MCP classifier. |
+| `bindings` | yes | Cloudflare bindings — DO / D1 / KV / R2 / vars. |
+| `signing` | yes | Algorithm + trust roots + replay-guard config. |
+| `auth` | yes | Discriminated union: `none` / `frontegg` / `oauth` / `apiKey`. |
+| `secrets` | optional | Names-only list. Cross-validator enforces every referenced secret appears here. |
+| `environments` | optional | Per-env overlay map (deep-merged at deploy time). |
+
+Top-level keys are strict — unknown keys fail validation immediately.
+
+## `runtime`
+
+```yaml
+runtime:
+  target: cloudflare-worker        # only target in v1.3
+  compatibilityDate: '2026-05-01'  # ISO-8601 (YYYY-MM-DD); pins CF compat date
+  compatibilityFlags:              # optional Worker compat flags
+    - nodejs_compat
+```
+
+`compatibilityDate` follows Cloudflare's own date format. Future versions of the schema will add `vercel-edge` and `deno-deploy` to the `target` discriminator.
+
+## `server`
+
+```yaml
+server:
+  info:
+    name: acme-mcp
+    version: 1.0.0
+    title: ACME MCP            # optional
+  instructions: |              # optional, max 16 KB
+    You are connected to ACME's MCP server. Discover with searchSkills,
+    describe with describe, execute with execute. Capabilities are organized
+    as SKILLS.
+```
+
+`server.instructions` is what the MCP client receives at `initialize`. The existing `skillsConfig.injectInstructions` machinery (v1.2) decides how a per-skill summary follows (`append` by default).
+
+## `specs` — OpenAPI inventory
+
+Two shapes:
+
+```yaml
+specs: ./openapi/         # directory; loader auto-discovers *.{yaml,json}, specId = filename stem
+```
+
+```yaml
+specs:
+  - ./openapi/acme.yaml           # plain string entry — defaults id from filename
+  - id: billing                   # explicit form
+    spec: ./openapi/billing.yaml
+    baseUrl: https://billing.acme.com
+    bindingName: billing          # optional override for the AgentScript namespace
+```
+
+`bindingName` lets you keep a URI-safe spec id (e.g. `acme-api`) while exposing a JS-identifier namespace (`acmeApi`) to AgentScript.
+
+## `skills`
+
+```yaml
+skills:
+  source: ./skills/               # default
+  alwaysLoad:                     # optional — these skills' bindings are
+    - auth-helpers                # in every codecall:execute call regardless
+    - observability-helpers       # of what the agent passed
+  tags:
+    include: [public, billing]    # optional tag filter
+    exclude: [admin]
+```
+
+`alwaysLoad` IDs must be kebab-case (the cross-validator catches typos at deploy time). When the manifest also declares `tags[]`, every name in `tags.include` / `tags.exclude` must appear in that list.
+
+A skill in `./skills/<id>/` can also opt itself in via SKILL.md frontmatter:
+
+```yaml
+---
+name: auth-helpers
+description: Helpers every agent needs.
+alwaysLoad: true
+hideFromDiscovery: true   # optional — load without showing in search
+---
+```
+
+## `tags`
+
+OpenAPI-shaped tag dictionary, used for the scope filter:
+
+```yaml
+tags:
+  - { name: public,  description: Always exposed }
+  - { name: billing, description: Billing flows }
+  - { name: admin,   description: Admin only; excluded from prod }
+```
+
+The deploy pipeline's harvester also inherits operation tags from OpenAPI — an operation tagged `billing` in the spec contributes that tag to any skill that references it.
+
+## `classification` (overrides)
+
+By default the classifier follows HTTP semantics (see the [classification table](/frontmcp/features/skills-only-deployment#openapi-as-capability-inventory)). Override per-pattern:
+
+```yaml
+classification:
+  rules:
+    # The path-glob below uses ** for "any path"; * matches a single segment.
+    - { match: 'POST **/reset-password', emits: parent }
+    - { match: 'GET /metrics',           expose: tool }     # not a resource
+    - { match: 'DELETE /users/{id}',     emits: none }      # suppress notify
+```
+
+`match` is a `METHOD path-glob`. Method may be `*` to match any. `expose` overrides the MCP surface (`tool` / `resource` / `both`); `emits` overrides the resource-change notification target (`self` / `parent` / `none`). First match wins.
+
+## `bindings`
+
+Mirror `wrangler.toml` field shapes verbatim (camelCased in YAML). Strict — unknown keys reject.
+
+```yaml
+bindings:
+  durableObjects:
+    - { binding: SESSIONS, className: SessionDO }
+    - { binding: EVENTS,   className: EventStoreDO }
+    - { binding: BUNDLE,   className: BundleDO }
+  d1Databases:
+    - binding: AUDIT
+      databaseName: acme-audit
+      databaseId: '${env:D1_AUDIT_ID}'
+  kvNamespaces:
+    - { binding: BUNDLE_CACHE, id: '${env:KV_BUNDLE_CACHE_ID}' }
+    - { binding: REPLAY_NONCE, id: '${env:KV_REPLAY_NONCE_ID}' }
+  r2Buckets:
+    - { binding: SKILL_DATA, bucketName: acme-skill-data }
+  vars:
+    LOG_LEVEL: info
+```
+
+Binding names follow `BINDING_NAME_RE` — uppercase, digits, underscores, must start with a letter. The Action can emit a `wrangler.toml` from this section so you can keep both files in sync without duplicating fields.
+
+## `signing` — bundle envelope signature
+
+```yaml
+signing:
+  algorithm: ed25519              # or rs256
+  trustRoots:
+    - kid: prod-2026-05           # matches the JWS `kid` header
+      publicKeySecret: TRUSTED_PUBKEY_PROD
+  replay:
+    windowSeconds: 300            # default 300; range [10, 3600]
+    nonceKv: REPLAY_NONCE         # must reference a declared kvNamespaces[].binding
+```
+
+The cross-validator ensures `replay.nonceKv` matches a KV binding name in `bindings.kvNamespaces[]`. `publicKeySecret` must appear in `secrets[]`. The Worker verifies every resync envelope against the trust roots and rejects bundles older than `windowSeconds`.
+
+Key rotation is supported by listing multiple trust roots; the GH Action signs with the newest, the Worker accepts any matching `kid` for an overlap window.
+
+## `auth`
+
+Discriminated by `provider`:
+
+```yaml
+auth: { provider: none }
+```
+
+```yaml
+auth:
+  provider: frontegg
+  frontegg:
+    tenantResolver: subdomain       # or 'header' / 'jwt-claim'
+    audience: acme-mcp
+    issuerSecret: FRONTEGG_ISSUER_URL
+```
+
+```yaml
+auth:
+  provider: oauth
+  oauth:
+    issuer: https://issuer.example.com
+    audience: acme-mcp
+    credentialsSecret: M2M_CREDS    # optional, for machine-to-machine
+```
+
+```yaml
+auth:
+  provider: apiKey
+  apiKey:
+    header: X-API-Key
+    allowlistSecret: ACME_API_KEYS  # newline-separated allowlist of keys
+```
+
+Every `*Secret` name MUST appear in the top-level `secrets[]` list; the cross-validator enforces it.
+
+## `secrets`
+
+```yaml
+secrets:
+  - { name: TRUSTED_PUBKEY_PROD, required: true, description: 'Signing trust root (PEM)' }
+  - { name: FRONTEGG_ISSUER_URL, required: true }
+  - { name: ACME_API_TOKEN,      required: true, description: 'ACME API bearer' }
+```
+
+Names only — values are bound out-of-band:
+
+```bash
+wrangler secret put TRUSTED_PUBKEY_PROD
+```
+
+Names must match `[A-Z][A-Z0-9_]*` (SCREAMING_SNAKE_CASE). Inline values are not permitted by the schema.
+
+## `environments`
+
+Per-environment overlay. Scalars and nested objects deep-merge; `bindings` REPLACES (mirrors Cloudflare's `[env.X]` non-inheritance rule).
+
+```yaml
+environments:
+  staging:
+    specs:
+      - id: acme
+        spec: ./openapi/acme.yaml
+        baseUrl: https://api.staging.acme.com
+    skills:
+      tags: { include: [public, billing, ops] }
+    bindings:
+      vars: { LOG_LEVEL: debug }
+  production:
+    skills:
+      tags: { include: [public, billing, ops], exclude: [admin, experimental] }
+    bindings:
+      vars: { LOG_LEVEL: info }
+```
+
+Select an environment at build time with `frontmcp deploy build --env production` or via the GH Action's `environment:` input.
+
+## Cross-field validation
+
+Beyond the per-field schema, the parser runs a final cross-validation pass that catches:
+
+| Check | Error |
+| --- | --- |
+| `auth.*Secret` referenced but not declared | `Secret "<NAME>" referenced at <path> is not declared in secrets[]` |
+| `signing.trustRoots[].publicKeySecret` not declared | Same shape |
+| `signing.replay.nonceKv` not in `bindings.kvNamespaces[]` | `signing.replay.nonceKv "<X>" does not match any bindings.kvNamespaces[].binding` |
+| `skills.alwaysLoad[]` entry not kebab-case | `skills.alwaysLoad entry "<X>" is not a valid kebab-case skill id` |
+| Tag filter references an undeclared tag | `skills.tags references unknown tag "<X>" (not in tags[])` |
+
+All errors aggregate into one report — the parser returns `{ ok: false, errors: string[] }` rather than throwing on the first.
+
+```ts
+import { deployManifestSchema, crossValidateManifest } from '@frontmcp/adapters/skills';
+import * as YAML from 'yaml';
+import { readFileSync } from 'node:fs';
+
+const raw = YAML.parse(readFileSync('frontmcp.deploy.yaml', 'utf8'));
+const parsed = deployManifestSchema.parse(raw);   // throws on shape errors
+const cross = crossValidateManifest(parsed);
+if (!cross.ok) {
+  for (const err of cross.errors) console.error('manifest: ' + err);
+  process.exit(1);
+}
+```
+
+## Resource-change classification (auto-derived)
+
+The classifier output is implicit in the manifest — every OpenAPI operation it discovers is classified by HTTP semantics. The full ruleset:
+
+| Method | Path shape | Matching GET? | Surface | Notify on success |
+| --- | --- | --- | --- | --- |
+| `GET` | path-param (`/users/{id}`) | (the op) | `both` | — |
+| `GET` | no path-param (`/users`) | (the op) | `resource` | — |
+| `POST` | collection (`/users`) | yes | `tool` | `list_changed` on self |
+| `POST` | singular (`/users/{id}`) | yes | `tool` | `updated` on self |
+| `POST` | action (`/users/{id}/reset-pw`) | no | `tool` | `updated` on parent |
+| `POST` | any | no | `tool` | — |
+| `PUT` / `PATCH` | any | yes | `tool` | `updated` on self |
+| `PUT` / `PATCH` | any | no | `tool` | `updated` on parent (if any) |
+| `DELETE` | singular | — | `tool` | `list_changed` on parent |
+| `DELETE` | collection | yes | `tool` | `list_changed` on self |
+
+Override per pattern with `classification.rules`.
+
+<Note>
+  The runtime emits the notification **once per call regardless of which skill's binding made the call** — the notification is a property of the operation, not the skill. Two skills both calling the same `PUT /users/{id}` → still one event.
+</Note>
+
+## Public surface (TypeScript)
+
+For host code that wants to load + validate manifests programmatically:
+
+```ts
+import {
+  deployManifestSchema,
+  crossValidateManifest,
+  // Types
+  type DeployManifest,
+  type DeployManifestAuth,
+  type DeployManifestBindings,
+  type DeployManifestRuntime,
+  type DeployManifestSecret,
+  type DeployManifestServer,
+  type DeployManifestSigning,
+  type DeployManifestSkills,
+  type DeployManifestClassificationRule,
+  type DeployManifestEnvironmentOverlay,
+} from '@frontmcp/adapters/skills';
+```
+
+The build-time classifier + runtime dispatcher live next door:
+
+```ts
+import {
+  classifyOperations,
+  applyClassificationOverrides,
+  ClassificationRegistry,
+  buildResourceChangeNotification,
+  renderResourceUri,
+  type ClassifiedOperation,
+} from '@frontmcp/adapters/skills';
+```
+
+And the markdown harvester:
+
+```ts
+import {
+  extractOpReferences,
+  validateOpReferences,
+  dedupeOpReferences,
+  buildKnownOps,
+  type OpReference,
+  type OpReferenceDiagnostic,
+} from '@frontmcp/adapters/skills';
+```
+
+<CardGroup cols={2}>
+  <Card title="Skills-Only Deployment" icon="rocket-launch" href="/frontmcp/features/skills-only-deployment">
+    The model behind the manifest.
+  </Card>
+  <Card title="Cloudflare Worker target" icon="cloudflare" href="/frontmcp/deployment/cloudflare-worker">
+    How the Worker consumes a signed bundle.
+  </Card>
+</CardGroup>

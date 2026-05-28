@@ -217,9 +217,14 @@ export class BundleSyncService {
       if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
         try {
           this.operationToolFactory.unregisterAll();
+          // Precompute the set of path templates with a GET op in this
+          // bundle so the per-op classification can decide
+          // resource-vs-tool-vs-both + emit semantics. Done once before the
+          // loop so we don't pay O(N) inside each register() call.
+          const pathsWithGet = collectPathsWithGet(this.hiddenOps.values());
           for (const entry of this.hiddenOps.values()) {
             try {
-              this.operationToolFactory.register(entry);
+              this.operationToolFactory.register(entry, { pathsWithGet });
             } catch (regErr) {
               this.logger.warn(
                 `[bundle-sync] internal-tool register failed for ${entry.bundleId}.${entry.op.operationId}: ${(regErr as Error).message}`,
@@ -255,9 +260,10 @@ export class BundleSyncService {
       if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
         try {
           this.operationToolFactory.unregisterAll();
+          const pathsWithGet = collectPathsWithGet(snapshotEntries);
           for (const entry of snapshotEntries) {
             try {
-              this.operationToolFactory.register(entry);
+              this.operationToolFactory.register(entry, { pathsWithGet });
             } catch {
               // best-effort restore
             }
@@ -372,4 +378,20 @@ export class BundleSyncService {
       }
     }
   }
+}
+
+/**
+ * Build the set of path templates that have a GET operation across the given
+ * bundle entries. Consumed by the OpenAPI -> MCP classifier to decide
+ * resource-vs-tool-vs-both classification and emit semantics. Computed once
+ * per bundle swap so the per-op `register()` call is O(1) instead of O(N).
+ */
+function collectPathsWithGet(entries: Iterable<HiddenOpEntry>): ReadonlySet<string> {
+  const set = new Set<string>();
+  for (const entry of entries) {
+    if (typeof entry.op.httpMethod === 'string' && entry.op.httpMethod.toUpperCase() === 'GET') {
+      set.add(entry.op.pathTemplate);
+    }
+  }
+  return set;
 }

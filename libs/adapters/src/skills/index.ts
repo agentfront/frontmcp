@@ -131,3 +131,66 @@ export {
 // imports it alongside the audit signer/store classes from this barrel.
 // Re-exporting here keeps the docs and the public surface in sync.
 export { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';
+
+// Markdown harvester for OpenAPI operation references — used by the deploy
+// pipeline and the future LSP to surface `op://` and `[[op:...]]` mentions
+// inside skill bundles. See `harvester/op-reference.ts` for the contract.
+export {
+  buildKnownOps,
+  dedupeOpReferences,
+  extractOpReferences,
+  validateOpReferences,
+  type KnownOps,
+  type OpReference,
+  type OpReferenceDiagnostic,
+  type OpReferenceSyntax,
+  type SourceLocation,
+} from './harvester/op-reference';
+
+// Declarative deploy manifest (frontmcp.deploy.yaml) — v1 schema + parser +
+// cross-field validator. Consumed by the deploy CLI / GitHub Action to
+// produce the signed envelope that the Worker hot-reloads from.
+export {
+  applyEnvironmentOverlay,
+  crossValidateManifest,
+  deployManifestSchema,
+  type DeployManifest,
+  type DeployManifestAuth,
+  type DeployManifestBindings,
+  type DeployManifestClassificationRule,
+  type DeployManifestEnvironmentOverlay,
+  type DeployManifestRuntime,
+  type DeployManifestSecret,
+  type DeployManifestServer,
+  type DeployManifestSigning,
+  type DeployManifestSkills,
+} from './deploy/deploy-manifest.schema';
+
+// OpenAPI -> MCP classifier. Pure build-time function: turns a list of
+// operations into a per-op classification (tool/resource/both + notification
+// emit target + URI template). Consumed by the deploy pipeline.
+export {
+  applyClassificationOverrides,
+  classifyOne,
+  classifyOperations,
+  type ClassifiableHttpMethod,
+  type ClassificationOverrideRule,
+  type ClassifiedOperation,
+  type ExposeKind,
+  type InputOperation,
+  type MutationEmit,
+} from './classifier/openapi-classify';
+
+// Runtime resource-change dispatcher. Pure-function URI renderer + a small
+// in-memory registry of `${specId}.${operationId}` -> ClassifiedOperation
+// the runtime hook consumes after every successful tool call.
+export { renderResourceUri, type RenderResult } from './classifier/render-resource-uri';
+export {
+  buildResourceChangeNotification,
+  type BuildNotificationResult,
+  type ResourceChangeNotification,
+  type ResourceUpdatedNotification,
+  type ResourcesListChangedNotification,
+  type SuppressedReason,
+} from './classifier/resource-change-notification';
+export { ClassificationRegistry, type ClassificationRegistrySnapshot } from './classifier/classification-registry';

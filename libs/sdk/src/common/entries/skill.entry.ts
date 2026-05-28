@@ -1,7 +1,13 @@
 // file: libs/sdk/src/common/entries/skill.entry.ts
 
 import { type SkillContent, type SkillContext } from '../interfaces';
-import { normalizeToolRef, type SkillMetadata, type SkillResources, type SkillToolRef } from '../metadata';
+import {
+  normalizeToolRef,
+  type SkillMetadata,
+  type SkillReferencedOperation,
+  type SkillResources,
+  type SkillToolRef,
+} from '../metadata';
 import { type SkillRecord } from '../records';
 import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
@@ -108,6 +114,41 @@ export abstract class SkillEntry extends BaseEntry<SkillRecord, SkillContext, Sk
    */
   isHidden(): boolean {
     return this.metadata.hideFromDiscovery === true;
+  }
+
+  /**
+   * Check if this skill is always loaded — bindings derived from this skill
+   * are merged into every codecall:execute call regardless of the skills the
+   * agent passed. See SkillMetadata.alwaysLoad for guidance on when to set this.
+   */
+  isAlwaysLoaded(): boolean {
+    return this.metadata.alwaysLoad === true;
+  }
+
+  /**
+   * Get the OpenAPI operations this skill references in its markdown. Empty
+   * array for skills that haven't been through the harvester or that
+   * declare capabilities only via decorator `tools`.
+   */
+  getReferencedOperations(): SkillReferencedOperation[] {
+    return this.metadata.referencedOperations ?? [];
+  }
+
+  /**
+   * Whether this skill is "executable" — has at least one declared tool
+   * OR at least one referenced openapi operation. Skills with neither are
+   * pure-knowledge: discoverable via searchKnowledge, callable via execute()
+   * but with no tool bindings (the agentscript can only do pure computation).
+   */
+  isExecutable(): boolean {
+    const hasTools = (this.metadata.tools?.length ?? 0) > 0;
+    const hasOps = (this.metadata.referencedOperations?.length ?? 0) > 0;
+    return hasTools || hasOps;
+  }
+
+  /** Convenience inverse of {@link isExecutable}. */
+  isKnowledgeOnly(): boolean {
+    return !this.isExecutable();
   }
 
   /**

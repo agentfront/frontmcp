@@ -11,6 +11,7 @@
 //   - callable only via the SDK-internal `callTool` helper, which tags the
 //     request ctx with `internalCall: true`
 
+import { classifyOne, type ClassificationRegistry } from '@frontmcp/adapters/skills';
 import { type Token } from '@frontmcp/di';
 import {
   ToolInstance,
@@ -84,6 +85,26 @@ export interface OperationToolFactoryDeps {
   providers: ProviderRegistry;
   /** Logger for diagnostics. */
   logger: FrontMcpLogger;
+  /**
+   * Optional classification registry. When set together with `pathsWithGet`
+   * on each `register()` call, the factory also records the OpenAPI -> MCP
+   * classification for the operation so a runtime dispatcher hook can
+   * auto-emit `notifications/resources/updated` / `…/list_changed` on
+   * successful tool calls. Unregistering via `unregisterAll()` clears the
+   * matching classification entries.
+   */
+  classificationRegistry?: ClassificationRegistry;
+}
+
+/**
+ * Optional context passed per `register()` call so the factory can classify
+ * the operation against the rest of the bundle. Callers (typically the
+ * bundle-sync service) precompute `pathsWithGet` once over the bundle's
+ * full operation list before iterating.
+ */
+export interface OperationRegisterContext {
+  /** Set of path templates that have a GET op in the same bundle. */
+  pathsWithGet: ReadonlySet<string>;
 }
 
 /**
@@ -115,6 +136,8 @@ interface ToolCtxLike {
 export class OperationToolFactory {
   /** Map (bundleId|opId) → the executor function that doubles as registry token. */
   private registered = new Map<string, OperationExecutor>();
+  /** Tool names this factory has pushed into the classification registry. */
+  private classificationKeys = new Set<string>();
 
   constructor(private readonly deps: OperationToolFactoryDeps) {}
 
@@ -122,8 +145,15 @@ export class OperationToolFactory {
    * Register one operation as an internal tool. Idempotent — calling twice
    * with the same `(bundleId, operationId)` is a no-op (the existing
    * registration is left in place).
+   *
+   * When the factory was constructed with a `classificationRegistry` AND
+   * the caller supplies `ctx.pathsWithGet`, the factory also classifies the
+   * operation (per HTTP semantics) and pushes the result into the
+   * classification registry. A downstream `tools/call` hook can then look
+   * up the classification by tool name and auto-emit
+   * `notifications/resources/*` on success.
    */
-  register(entry: HiddenOpEntry): void {
+  register(entry: HiddenOpEntry, ctx?: OperationRegisterContext): void {
     const key = `${entry.bundleId}|${entry.op.operationId}`;
     if (this.registered.has(key)) return;
 
@@ -138,11 +168,38 @@ export class OperationToolFactory {
     const instance = new ToolInstance(record, this.deps.providers, OPERATION_TOOL_OWNER);
     this.deps.toolRegistry.registerToolInstance(instance);
     this.registered.set(key, executor);
+
+    // Optional classification registration. Both the registry and per-call
+    // pathsWithGet must be present; absent either, this is a no-op so the
+    // existing call sites that don't yet pass `ctx` keep working.
+    if (this.deps.classificationRegistry && ctx?.pathsWithGet) {
+      try {
+        const classification = classifyOne(
+          entry.bundleId,
+          {
+            operationId: entry.op.operationId,
+            method: entry.op.httpMethod,
+            path: entry.op.pathTemplate,
+          },
+          ctx.pathsWithGet,
+        );
+        const toolName = metadata.name;
+        this.deps.classificationRegistry.register(toolName, classification);
+        this.classificationKeys.add(toolName);
+      } catch (e) {
+        // Classification failure must not block tool registration — log and
+        // continue so the meta-tool surface stays available.
+        this.deps.logger.warn(
+          `[operation-tool-factory] classification failed for ${entry.bundleId}.${entry.op.operationId}: ${(e as Error).message}`,
+        );
+      }
+    }
   }
 
   /**
    * Unregister every tool this factory has registered. Used on bundle swap
-   * before re-registering the new bundle's operations.
+   * before re-registering the new bundle's operations. Also clears the
+   * classification entries this factory pushed.
    */
   unregisterAll(): void {
     for (const executor of this.registered.values()) {
@@ -154,6 +211,15 @@ export class OperationToolFactory {
       }
     }
     this.registered.clear();
+
+    // Clear classification entries this factory was responsible for. Other
+    // factories' entries (if any) are left intact.
+    if (this.deps.classificationRegistry && this.classificationKeys.size > 0) {
+      for (const toolName of this.classificationKeys) {
+        this.deps.classificationRegistry.unregister(toolName);
+      }
+      this.classificationKeys.clear();
+    }
   }
 
   /** Number of currently-registered internal operation tools (test/audit hook). */

@@ -1,0 +1,238 @@
+---
+title: Cloudflare Worker
+slug: deployment/cloudflare-worker
+icon: cloudflare
+description: Run FrontMCP on a Cloudflare Worker — the hosted v1.3 target with hot-reload via GitHub Action and a signed-bundle webhook
+keywords:
+  [
+    'frontmcp',
+    'mcp',
+    'cloudflare',
+    'cloudflare worker',
+    'deployment',
+    'edge',
+    'durable objects',
+    'd1',
+    'kv',
+    'r2',
+    'hot reload',
+    'github action',
+    'typescript',
+  ]
+---
+
+The Cloudflare Worker target is FrontMCP's first **hosted runtime**. Clients connect to `https://your-worker.example.com/mcp`; the Worker boots from a signed bundle assembled by the GitHub Action, and live-reloads on every push without redeploying.
+
+This page covers the Worker itself. The declarative configuration that drives it lives in [`frontmcp.deploy.yaml`](/frontmcp/deployment/deploy-manifest); the higher-level concepts behind the skills-only model are on the [Skills-Only Deployment](/frontmcp/features/skills-only-deployment) page.
+
+<Note>
+  v1.3 ships the Worker runtime as the **first** hosted target. The Vercel Edge and Deno Deploy targets are deferred — declared in the `runtime.target` discriminator but not yet implemented.
+</Note>
+
+## What a Worker entry file looks like
+
+The user's `worker.ts` is ~10 lines. Everything else is in the deploy bundle.
+
+```ts
+// worker.ts
+import { createWorker } from '@frontmcp/worker';
+import deployBundle from './frontmcp.deploy.bundle.js'; // emitted by the GH Action
+
+const { handler, durableObjects } = createWorker({
+  bundle: deployBundle,
+  env: 'production',
+});
+
+export default handler;
+export const { SessionDO, EventStoreDO, BundleDO } = durableObjects;
+```
+
+`createWorker` parses the manifest, applies the `environments.production` overlay, verifies the signed envelope against `TRUSTED_KEYS`, then assembles the FrontMCP runtime against the Worker's request handler.
+
+### Storage bindings (opinionated default)
+
+The Worker uses **Durable Objects + D1 + KV + R2** for its persistence stack:
+
+| Binding | Class / kind | Purpose |
+| --- | --- | --- |
+| `SESSIONS` | Durable Object (`SessionDO`) | MCP session store; survives Worker restarts so `/sse` and Streamable HTTP resumability work. |
+| `EVENTS` | Durable Object (`EventStoreDO`) | Event store for the MCP transport's resumability protocol. |
+| `BUNDLE` | Durable Object (`BundleDO`) | Last-good signed envelope + active classifications, hot-swappable. |
+| `AUDIT` | D1 database | Tamper-evident skill action audit log (hash-chained per the v1.2 audit spec). |
+| `BUNDLE_CACHE` | KV namespace | Fallback bundle reused on boot if a resync push fails. |
+| `REPLAY_NONCE` | KV namespace | Replay-guard dedupe set for the resync webhook (windowed by `signing.replay.windowSeconds`). |
+| `SKILL_DATA` | R2 bucket | Large skill `data/` blobs that don't fit in the bundle envelope. |
+
+These names mirror the [`bindings.*`](/frontmcp/deployment/deploy-manifest#bindings) section of the manifest verbatim. The Action can also emit a `wrangler.toml` from the manifest so you can stay in lockstep.
+
+## Hot-reload on every push
+
+The Worker exposes one internal endpoint — `POST /_frontmcp/resync` — that accepts a freshly-built, signed bundle and atomically swaps the in-memory skill registry and classification registry.
+
+```text
+GitHub push
+   │
+   │  frontmcp/deploy-action@v1
+   ▼
+1. Parse + cross-validate frontmcp.deploy.yaml
+2. Apply environments.<env> overlay
+3. Walk skills/; run the markdown op-reference harvester
+4. Run the OpenAPI → MCP classifier
+5. Inline & content-address all artifacts
+6. Sign the envelope (Ed25519 by default)
+7. POST → worker.example.com/_frontmcp/resync
+   │
+   ▼
+Worker:
+- Verify signature against trustRoots[].publicKeySecret
+- Replay-guard via REPLAY_NONCE KV (timestamp + nonce dedupe)
+- Diff the envelope; if anything in `bindings` / DO class names changed,
+  the response says "redeploy required" — otherwise apply in-memory
+- Replace skill + classification registries atomically
+- Emit notifications/{skills,tools,resources,prompts}/list_changed
+- Persist the new envelope into BUNDLE_CACHE KV as the last-good fallback
+```
+
+A `wrangler deploy` is only needed on *structural* changes — new Durable Object classes, new bindings, new compatibility flags. Day-to-day skill / OpenAPI changes are pure hot-reload.
+
+<Note>
+  The replay-guard window is shared with the v1.2 SaaS push hardening — same JWT + nonce machinery, generalised from skill-only bundles to the full deploy envelope.
+</Note>
+
+## Worker isolation strategy
+
+`codecall:execute` runs agent-authored AgentScript inside the Worker's V8 isolate. Two ingredients make this safe:
+
+1. **AST preflight on every call.** Each script is parsed by `@enclave-vm/ast` (pure-JS, Acorn-based, zero Node dependencies — Worker-safe). Disallowed identifiers are rejected before the script ever runs: `eval`, `Function`, `process`, `require`, dynamic `import`, raw `fetch`, top-level `globalThis` access, prototype walks, etc.
+2. **Frozen capability scope.** The script is executed via `new Function('skills', 'ctx', code)` with a frozen scope object containing only:
+    - The active skills' generated namespaces (`acme`, `billing`, …)
+    - `callTool` / `getTool` (still available for backward compat or non-namespaced names)
+    - `mcpLog` / `mcpNotify` (observability hooks)
+
+`@enclave-vm/core` (which the Node target uses) relies on `node:vm` and is therefore **not** Worker-safe — the Worker target uses the AST validator alone plus the frozen scope. This is the strategy documented in the v1.3 design memo and decided after the `@enclave-vm/*` Worker-compatibility audit.
+
+<Warning>
+  The Worker isolation model leans on the AST guard's correctness. If you author your own custom plugin tools that the AgentScript could reach (beyond the auto-generated OpenAPI namespaces), make sure those tools' implementations don't re-introduce escape hatches.
+</Warning>
+
+## Sessions on Durable Objects
+
+`SessionDO` is the FrontMCP session store. Long-lived MCP sessions (Streamable HTTP, `/sse`) are bound to a DO instance keyed by session id; the instance survives Worker restarts and routes incoming requests for that session deterministically.
+
+This converges with the broader session-HA design — the DO IS the external session store for the Cloudflare deployment target. Existing HA primitives (heartbeat, takeover, relay) apply unchanged; the DO simply provides the durable substrate.
+
+## Auth at the Worker edge
+
+The deploy manifest's `auth` block configures the gate. The four shapes:
+
+```yaml
+auth: { provider: none }
+```
+
+```yaml
+auth:
+  provider: frontegg
+  frontegg:
+    tenantResolver: subdomain
+    audience: acme-mcp
+    issuerSecret: FRONTEGG_ISSUER_URL
+```
+
+```yaml
+auth:
+  provider: oauth
+  oauth:
+    issuer: https://issuer.example.com
+    audience: acme-mcp
+    credentialsSecret: M2M_CREDS   # optional, for machine-to-machine
+```
+
+```yaml
+auth:
+  provider: apiKey
+  apiKey:
+    header: X-API-Key
+    allowlistSecret: ACME_API_KEYS
+```
+
+Frontegg integration runs JWT verification at the Worker edge — no upstream hop, no cold-start latency. Other providers follow the same shape: declare the secret name, populate it via `wrangler secret put`.
+
+## Secrets
+
+Secret values are *never* in the manifest. Every secret name referenced from `auth`, `signing.trustRoots`, or any plugin must appear in the manifest's `secrets[]` list (the cross-validator enforces this). Populate the actual values out-of-band:
+
+```bash
+wrangler secret put TRUSTED_PUBKEY_PROD
+wrangler secret put FRONTEGG_ISSUER_URL
+wrangler secret put ACME_API_TOKEN
+```
+
+Inside the Worker the values are available as `env.<NAME>`.
+
+## Wrangler config
+
+Most binding shapes mirror `wrangler.toml` field names verbatim (camelCased in the YAML). The Action can emit a wrangler.toml from your manifest so you don't have to maintain both:
+
+```bash
+frontmcp deploy emit-wrangler --env production > wrangler.toml
+```
+
+Then either keep that file or feed it directly into a `wrangler deploy` step in your workflow.
+
+## Sample `.github/workflows/deploy.yml`
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: frontmcp/deploy-action@v1
+        with:
+          # Builds + signs + POSTs the bundle to the Worker.
+          environment: production
+          signingKey: ${{ secrets.FRONTMCP_SIGNING_KEY }}
+          # Forwards the names through to `wrangler secret` if changed.
+          secrets: |
+            TRUSTED_PUBKEY_PROD
+            FRONTEGG_ISSUER_URL
+            ACME_API_TOKEN
+        env:
+          TRUSTED_PUBKEY_PROD: ${{ secrets.TRUSTED_PUBKEY_PROD }}
+          FRONTEGG_ISSUER_URL: ${{ secrets.FRONTEGG_ISSUER_URL }}
+          ACME_API_TOKEN: ${{ secrets.ACME_API_TOKEN }}
+```
+
+The action emits two outputs you can chain on:
+
+- `deployment-url` — the Worker URL the bundle was pushed to.
+- `bundle-sha256` — the content-addressed digest of the envelope. Pin in your release notes / audit trail.
+
+## Limits & known gaps
+
+- **`@enclave-vm/core` (full VM)** runs only on the Node target. The Worker target uses the AST-preflight + frozen-scope strategy instead. If your skills need the full enclave VM's pause/rerun semantics, host on Node (and watch the v1.7 roadmap for a Worker-compatible answer via CF Containers).
+- **`scripts/` skill execution** (Anthropic Agent Skills `scripts/` directory) ships in v1.7. The v1.3 Worker honours skill bundles structurally but doesn't execute `scripts/` blobs yet.
+- **Vault-backed credential resolver** isn't on the Worker yet — use CF secret bindings (`wrangler secret put`) for v1.3.
+
+<CardGroup cols={2}>
+  <Card title="Deploy manifest reference" icon="file-code" href="/frontmcp/deployment/deploy-manifest">
+    Every field of `frontmcp.deploy.yaml`, with examples.
+  </Card>
+  <Card title="Skills-Only Deployment" icon="rocket-launch" href="/frontmcp/features/skills-only-deployment">
+    The concept behind the runtime.
+  </Card>
+  <Card title="High Availability" icon="server" href="/frontmcp/deployment/high-availability">
+    Session HA primitives the Worker integrates with.
+  </Card>
+  <Card title="Skill-Based Workflows" icon="graduation-cap" href="/frontmcp/features/skill-based-workflows">
+    The skill primitive that powers everything.
+  </Card>
+</CardGroup>

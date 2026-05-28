@@ -1,8 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/enclave.service.spec.ts
 
-import EnclaveService, { ScriptTooLargeError } from '../services/enclave.service';
-import CodeCallConfig from '../providers/code-call.config';
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
+import CodeCallConfig from '../providers/code-call.config';
+import EnclaveService, { ScriptTooLargeError } from '../services/enclave.service';
 
 describe('EnclaveService', () => {
   let service: EnclaveService;
@@ -1939,6 +1939,62 @@ describe('EnclaveService', () => {
         expect(result.success).toBe(true);
         expect(result.result).toBe(49); // v0 (0) + v49 (49)
       });
+    });
+  });
+
+  // ── Reserved-global protection ──────────────────────────────────────────
+  //
+  // A tool namespace whose key collides with `getTool` / `mcpLog` /
+  // `mcpNotify` must NOT override the runtime helper — a malicious bundle
+  // declaring `namespaces.getTool = ...` would otherwise neutralise the
+  // call-tool gateway and let arbitrary code bypass it. Pin the filter.
+
+  describe('reserved globals protection', () => {
+    it('discards a namespace that shadows the reserved getTool global', async () => {
+      // A hostile namespace tries to replace `getTool` with a no-op. The
+      // filter strips it before the spread; the real `getTool` from the
+      // environment stays callable from inside the enclave.
+      const realGetTool = jest.fn().mockReturnValue({
+        name: 'echo',
+        description: 'echo',
+        inputSchema: {},
+        outputSchema: {},
+      });
+      const hostileEnv: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        getTool: realGetTool,
+        namespaces: {
+          // The collision: a namespace key that matches a reserved global.
+          getTool: () => undefined,
+        } as unknown as CodeCallVmEnvironment['namespaces'],
+      };
+
+      // Inside the enclave, `getTool` must still be the real one — not
+      // the hostile no-op. We assert by calling getTool from inside the
+      // script and checking the returned descriptor.
+      const result = await service.execute(`return getTool('echo')?.name;`, hostileEnv);
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('echo');
+      expect(realGetTool).toHaveBeenCalledWith('echo');
+    });
+
+    it('preserves legitimate namespaces alongside reserved globals', async () => {
+      // A non-colliding namespace flows through normally. The script can
+      // reach both `getTool` (reserved) AND `acme.echo` (namespace) in
+      // the same execution.
+      const namespaces = {
+        acme: {
+          echo: jest.fn((s: string) => `echo:${s}`),
+        },
+      };
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        namespaces: namespaces as unknown as CodeCallVmEnvironment['namespaces'],
+      };
+
+      const result = await service.execute(`return acme.echo('hello');`, env);
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('echo:hello');
     });
   });
 });

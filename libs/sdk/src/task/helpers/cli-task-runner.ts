@@ -13,7 +13,12 @@
  * @module task/helpers/cli-task-runner
  */
 
-import { spawn } from 'node:child_process';
+// `spawn` is resolved lazily through `@frontmcp/utils` so this module can be
+// imported by the main SDK barrel in V8-isolate builds (Cloudflare Workers,
+// Deno Deploy) without their bundlers eagerly pulling in `node:child_process`.
+// The runner can only execute on Node runtimes — calling `spawn` outside Node
+// throws via `assertNode` inside utils.
+import { getSpawnFn } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
 import type { TaskStore } from '../store';
@@ -51,7 +56,7 @@ export class CliTaskRunner implements TaskRunner {
       args: fullArgs,
     });
 
-    const child = spawn(exe, fullArgs, {
+    const child = getSpawnFn()(exe, fullArgs, {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, [RUN_TASK_ENV_VAR]: record.taskId },
