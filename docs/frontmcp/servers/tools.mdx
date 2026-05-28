@@ -917,6 +917,10 @@ ui: {
 </Info>
 
 <Info>
+**`ui.csp` is honored by Claude (#455).** FrontMCP now attaches `ui.csp` to the `resources/read` content item's `_meta.ui.csp` (and `_meta['ui/csp']`), not just to the tool listing. Claude only reads CSP from the resource content — declarations on the tool were previously silently ignored. Use `ui.csp.connectDomains` for fetch/XHR/WebSocket allow-lists and `ui.csp.resourceDomains` for images / scripts / fonts / styles.
+</Info>
+
+<Info>
 **Widget files use the `*.widget.tsx` naming convention.** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck so widgets don't force the project to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds these excludes. For IDE typecheck of widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
 </Info>
 
