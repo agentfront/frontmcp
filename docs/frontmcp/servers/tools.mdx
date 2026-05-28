@@ -906,14 +906,18 @@ ui: { template: { file: widgetPath } }
 </Warning>
 
 <Info>
-**Set `resourceMode: 'inline'` for Claude-compatible `.tsx` widgets.** The default `resourceMode: 'cdn'` emits an esm.sh import map for React, which Claude's sandboxed widget iframe blocks (the widget hangs on "Loading widget…"). With `resourceMode: 'inline'` the bundler inlines React and ReactDOM into the widget's `<script type="module">` so the output is fully self-contained and renders in every host:
+**`resourceMode` is host-detected for `.tsx` widgets.** When you leave `resourceMode` unset, FrontMCP picks the right default per connecting client: Claude auto-switches to `'inline'` (React bundled in — #456), so the widget actually renders in Claude's sandboxed iframe. Other hosts keep `'cdn'` (smaller payload, fetched from esm.sh). Set the value explicitly to opt out of detection:
 
 ```ts
 ui: {
   template: { file: widgetPath },
-  resourceMode: 'inline', // bundle React inline — works in Claude
+  // Leave resourceMode unset to host-detect (recommended).
+  // Or pin it explicitly:
+  // resourceMode: 'inline', // always bundle React inline
 }
 ```
+
+Detection only applies to per-call rendering (inline / hybrid / lean serving modes). `servingMode: 'static'` widgets compile at server startup with no client context — set `resourceMode: 'inline'` explicitly when a static widget needs to render in Claude.
 </Info>
 
 <Info>

@@ -46,7 +46,7 @@ yarn add @frontmcp/ui
 </Warning>
 
 <Info>
-**For Claude-compatible `.tsx` widgets, set `resourceMode: 'inline'`.** The default `'cdn'` mode emits an esm.sh import map for React, which Claude's widget iframe blocks (the widget hangs on "Loading widget…"). `resourceMode: 'inline'` bundles React into the widget itself so it's self-contained and renders in every host.
+**`resourceMode` is host-detected.** Leave it unset and FrontMCP auto-switches to `'inline'` when the connecting client is Claude (#456), so the widget actually renders in Claude's sandboxed iframe — React is bundled into the widget itself (#454). Other hosts keep `'cdn'` for a smaller payload. Set `resourceMode` explicitly to override the detection. Auto-detection only applies to per-call rendering modes (inline / hybrid / lean); `servingMode: 'static'` widgets are pre-compiled at startup with no client context, so set `resourceMode: 'inline'` explicitly when targeting Claude in static mode.
 </Info>
 
 <Info>

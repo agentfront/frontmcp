@@ -152,7 +152,8 @@ The file path is resolved at build/registration time; the bundler transpiles the
 
 > **Claude target reality check (issue #447).** Claude Desktop / claude.ai render widgets in a sandboxed iframe whose CSP blocks **all** external `<script src="https://…">` execution — including `cdnjs.cloudflare.com`. The two FrontMCP fixes that make Claude rendering robust:
 >
-> - **Set `resourceMode: 'inline'`** for `.tsx`/`.jsx` FileSource widgets (fixed in #454). With `resourceMode: 'inline'` the bundler inlines `react` / `react-dom` into the widget's `<script type="module">` — no esm.sh import map, no external module — so the widget is fully self-contained and runs under Claude's default CSP. The default `'cdn'` mode still uses esm.sh and is the right pick for OpenAI Apps SDK / ChatGPT / Cursor / MCP Inspector (smaller payload).
+> - **`resourceMode: 'inline'`** is now the default for Claude (fixed in #456); leave the field unset and the framework host-detects. For other platforms the default remains `'cdn'` (smaller payload). When `'inline'` is selected — either explicitly or by host detection — the bundler inlines `react` / `react-dom` into the widget's `<script type="module">` (#454 fix), so no esm.sh import map / external module is needed and the widget runs under Claude's default CSP. Setting `resourceMode` explicitly always wins over auto-detection.
+>   _Caveat_: host detection only applies to per-call rendering (inline / hybrid / lean modes). Static-mode widgets compile at startup with no client context — set `resourceMode: 'inline'` explicitly on `servingMode: 'static'` tools that target Claude.
 > - **`ui.csp` is now emitted on the resource** (fixed in #455). Previously FrontMCP only attached `_meta.ui.csp` to the tool listing, and Claude (per the MCP Apps spec) only honors CSP declared on the resource content item. The framework now also attaches `_meta.ui.csp` / `_meta['ui/csp']` to the `resources/read` response for `ui://widget/{toolName}.html`, so `connectDomains` / `resourceDomains` you declare under `ui.csp` are honored by Claude.
 >
 > If you don't want React at all, a `uiType: 'html'` function template with a single inline `<script>` block also works on every host.
@@ -327,14 +328,14 @@ Bridge methods available on `window.FrontMcpBridge`:
 
 ## Rendering Options
 
-| Option          | Default    | Effect                                                                                        |
-| --------------- | ---------- | --------------------------------------------------------------------------------------------- |
-| `uiType`        | `'auto'`   | Force renderer: `'html'`, `'react'`, `'mdx'`, `'markdown'`, or `'auto'` (detect)              |
-| `bundlingMode`  | `'static'` | `'static'` = pre-compile shell, inject data at runtime; `'dynamic'` = fresh HTML per call     |
-| `resourceMode`  | `'cdn'`    | `'cdn'` loads React/MDX/Handlebars from CDN; `'inline'` embeds all scripts (Claude Artifacts) |
-| `hydrate`       | `false`    | Enable React hydration after SSR (only when you've verified no mismatches)                    |
-| `customShell`   | —          | `{ inline?, url?, npm? }` source for a custom HTML shell template                             |
-| `mdxComponents` | —          | Components available in MDX templates without imports                                         |
+| Option          | Default                                              | Effect                                                                                                                                                                                       |
+| --------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uiType`        | `'auto'`                                             | Force renderer: `'html'`, `'react'`, `'mdx'`, `'markdown'`, or `'auto'` (detect)                                                                                                             |
+| `bundlingMode`  | `'static'`                                           | `'static'` = pre-compile shell, inject data at runtime; `'dynamic'` = fresh HTML per call                                                                                                    |
+| `resourceMode`  | `'cdn'` (host-detected — `'inline'` on Claude, #456) | `'cdn'` loads React/MDX/Handlebars from CDN; `'inline'` embeds them (and bundles React inline for `.tsx`/`.jsx` FileSource via #454). Leave unset to host-detect; set explicitly to opt out. |
+| `hydrate`       | `false`                                              | Enable React hydration after SSR (only when you've verified no mismatches)                                                                                                                   |
+| `customShell`   | —                                                    | `{ inline?, url?, npm? }` source for a custom HTML shell template                                                                                                                            |
+| `mdxComponents` | —                                                    | Components available in MDX templates without imports                                                                                                                                        |
 
 ## Platform Considerations
 

@@ -145,6 +145,58 @@ describe('renderToolTemplate', () => {
       const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
       expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
     });
+
+    it("auto-selects resourceMode:'inline' (and drops React from externals) when platformType is 'claude' and resourceMode is unset (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'claude',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual([]);
+    });
+
+    it("respects an explicit resourceMode:'cdn' on Claude (user opt-out of auto-inline) (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'claude',
+        resourceMode: 'cdn',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+    });
+
+    it("uses resourceMode:'cdn' by default for non-Claude platforms (#456)", () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        platformType: 'openai',
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+    });
   });
 
   describe('function template', () => {

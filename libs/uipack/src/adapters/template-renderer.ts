@@ -88,8 +88,17 @@ function buildCspConfig(resolver?: ImportResolver) {
  * Use `template: { file: './my-component.tsx' }` instead.
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
-  const { toolName, input, output, template, resolver, resourceMode } = options;
+  const { toolName, input, output, template, resolver, platformType } = options;
   const uiType = detectUIType(template);
+
+  // When the user didn't pick a resourceMode, host-detect: Claude widget
+  // iframes block all external script execution (esm.sh, cdnjs — see #447),
+  // so `.tsx` / `.jsx` FileSource widgets only render under
+  // `resourceMode: 'inline'`. Other hosts (OpenAI Apps SDK, ChatGPT, Cursor,
+  // MCP Inspector) accept the smaller CDN-loaded payload. This is the (B)
+  // half of #456; the (A) half (`resourceMode: 'inline'` actually inlining
+  // React) shipped in #454.
+  const resourceMode: 'cdn' | 'inline' = options.resourceMode ?? (platformType === 'claude' ? 'inline' : 'cdn');
 
   const shellConfig = {
     toolName,

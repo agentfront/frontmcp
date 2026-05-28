@@ -630,7 +630,16 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    *   self-contained widget that runs in hosts which block external script
    *   execution — including Claude Desktop / claude.ai (fix shipped for #454).
    *
-   * @default 'cdn'
+   * @default `'cdn'` for most platforms. When left unset, FrontMCP host-detects
+   *   the right default: `platformType === 'claude'` auto-switches to
+   *   `'inline'` so widgets actually render under Claude's CSP (#456). Set
+   *   the value explicitly to opt out of the detection.
+   *
+   *   **Auto-detection only applies to per-call rendering modes (inline /
+   *   hybrid / lean).** Static-mode widgets compile at server startup, before
+   *   any client connects, so the platform isn't known. If your tool uses
+   *   `servingMode: 'static'` and targets Claude, set `resourceMode: 'inline'`
+   *   explicitly.
    */
   resourceMode?: 'cdn' | 'inline';
 
