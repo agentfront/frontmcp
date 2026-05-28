@@ -476,6 +476,8 @@ Attach an HTML widget to a tool's response via the `ui` option. Supported hosts 
 
 **Recommended: keep the widget in its own file** (`./widget.tsx`, `./widget.jsx`, or `./widget.html`) and reference it from the tool via the `FileSource` form (`{ file: ... }`). This separates rendering from `execute()`, lets the widget get its own syntax highlighting / type-check / hot-reload, and avoids a giant template string inside the tool decorator.
 
+> **`.tsx`/`.jsx` widgets need `@frontmcp/ui` installed (issue #443).** FileSource widgets in those languages are bundled with an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project (`npm install @frontmcp/ui` or `yarn add @frontmcp/ui`) at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime; only `@frontmcp/ui` needs to be present on disk.
+
 ```typescript
 // src/apps/main/tools/show-ui-card.tool.ts
 import { fileURLToPath } from 'node:url';

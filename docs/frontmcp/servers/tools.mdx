@@ -890,6 +890,10 @@ ui: {
 | `mdxComponents`      | Custom components for MDX templates                                                     |
 | `hydrate`            | Enable client-side React hydration for interactivity                                    |
 
+<Info>
+**`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
+</Info>
+
 ### Using @frontmcp/ui Components
 
 Combine Tool UI with the `@frontmcp/ui` component library:

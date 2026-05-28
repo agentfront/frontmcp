@@ -4,7 +4,7 @@
  * Tests for transpileReactSource(), bundleFileSource(), and extractDefaultExportName().
  */
 
-import { transpileReactSource, extractDefaultExportName } from '../transpiler';
+import { extractDefaultExportName, transpileReactSource } from '../transpiler';
 
 describe('transpileReactSource', () => {
   it('should transpile TSX to React.createElement calls', () => {
@@ -234,8 +234,26 @@ describe('bundleFileSource', () => {
       /Failed to bundle FileSource "widget\.tsx"/,
     );
     expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
-      /Ensure workspace packages are built/,
+      /ensure both packages are installed in the consuming project/,
     );
+  });
+
+  it('should throw a specific error when @frontmcp/ui is not installed (#443)', () => {
+    jest.doMock('../ui-availability', () => ({
+      isFrontmcpUiResolvable: () => false,
+    }));
+    try {
+      const { bundleFileSource: bundle } = require('../transpiler');
+
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
+        /requires the @frontmcp\/ui package/,
+      );
+      expect(() => bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget')).toThrow(
+        /npm install @frontmcp\/ui|yarn add @frontmcp\/ui/,
+      );
+    } finally {
+      jest.dontMock('../ui-availability');
+    }
   });
 
   it('should use write: false and format: esm', () => {

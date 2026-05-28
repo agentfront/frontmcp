@@ -37,6 +37,10 @@ yarn add @frontmcp/ui
 
 </CodeGroup>
 
+<Info>
+**Required for `.tsx`/`.jsx` FileSource widgets.** When you point `ui.template` at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Server-side bundling fails without this package installed. Match the version to `@frontmcp/sdk`. `react` and `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
+</Info>
+
 ---
 
 ## Step 2: Create a Tool with UI Template

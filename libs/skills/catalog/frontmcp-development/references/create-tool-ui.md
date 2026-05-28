@@ -150,6 +150,8 @@ ui: {
 
 The file path is resolved at build/registration time; the bundler transpiles the `.tsx` and emits an import map that points listed `externals` at the CDN. **Claude only allows `cdnjs.cloudflare.com`** — if you're targeting Claude, override `dependencies` accordingly.
 
+> **Prerequisite: install `@frontmcp/ui` (issue #443).** `.tsx`/`.jsx` FileSource widgets require the `@frontmcp/ui` package — the FrontMCP transpiler injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Without it, server-side bundling fails. Install it at the same version as `@frontmcp/sdk` (`npm install @frontmcp/ui` or `yarn add @frontmcp/ui`). `react` and `react-dom` stay external and load from the CDN at runtime — only `@frontmcp/ui` needs to be present in the consuming project for bundling to succeed.
+
 ## Template Helpers
 
 Available on `ctx.helpers` in function templates:

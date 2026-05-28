@@ -8,7 +8,9 @@
  * @packageDocumentation
  */
 
-import type { TransformOptions, BuildOptions } from 'esbuild';
+import type { BuildOptions, TransformOptions } from 'esbuild';
+
+import { isFrontmcpUiResolvable } from './ui-availability';
 
 /**
  * Transpile React TSX/JSX source code into browser-ready ES module code.
@@ -59,6 +61,19 @@ export function bundleFileSource(
   resolveDir: string,
   componentName: string,
 ): { code: string } {
+  // Preflight: @frontmcp/ui must be installed in the consuming project, because the
+  // auto-generated mount below imports `McpBridgeProvider` from `@frontmcp/ui/react`
+  // and esbuild leaves that import unresolved otherwise. Surface a specific error
+  // here so consumers don't get a cryptic esbuild "Could not resolve" wrapped in
+  // monorepo-flavored advice (issue #443).
+  if (!isFrontmcpUiResolvable(resolveDir, process.cwd())) {
+    throw new Error(
+      `FileSource widget "${filename}" requires the @frontmcp/ui package, which provides ` +
+        `the React bridge mount that's injected at bundle time. ` +
+        `Install it (e.g. \`npm install @frontmcp/ui\` or \`yarn add @frontmcp/ui\`) and try again.`,
+    );
+  }
+
   const esbuild = require('esbuild') as typeof import('esbuild');
 
   const mountCode = `
@@ -163,7 +178,7 @@ if (__root) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Failed to bundle FileSource "${filename}": ${message}. ` +
-        `Ensure workspace packages are built (e.g. nx build ui).`,
+        `If the error mentions @frontmcp/ui or @frontmcp/uipack, ensure both packages are installed in the consuming project.`,
     );
   }
 }
