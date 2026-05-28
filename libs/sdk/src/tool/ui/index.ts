@@ -22,7 +22,7 @@ export {
   buildStaticWidgetUri,
   getUIResourceMimeType,
 } from './ui-shared';
-export type { ParsedWidgetUri } from './ui-shared';
+export type { ParsedWidgetUri, UIResourceMeta } from './ui-shared';
 
 // ============================================
 // Registry functions (delegating to @frontmcp/uipack)
