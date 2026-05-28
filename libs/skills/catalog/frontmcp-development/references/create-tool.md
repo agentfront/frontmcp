@@ -516,6 +516,8 @@ export default function ShowUiCardWidget({ output }: Props) {
 
 For quick prototypes or one-line widgets you can still inline a function/HTML template (`template: (ctx) => '<div>...</div>'`) — but graduate to a separate file as soon as the widget needs markup, styles, or state.
 
+> **TypeScript gotcha for inline function templates (TS7006).** Under `strict` / `noImplicitAny`, `template: (ctx) => …` fails with `Parameter 'ctx' implicitly has an 'any' type` (issue #442). `template` is a union of multiple callables (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), so TypeScript can't infer a single contextual type for `ctx`. Annotate it explicitly — `import { type TemplateContext } from '@frontmcp/sdk'` and write `template: (ctx: TemplateContext<MyInput, MyOutput>) => …` — or sidestep the issue by using the recommended FileSource form above.
+
 The `ui` option accepts a `ToolUIConfig` (re-exported from `@frontmcp/uipack/types`). The `template` field supports four formats — auto-detected by the renderer:
 
 | Format                | Shape                                                   | When to pick                                                                                    |

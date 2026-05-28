@@ -839,8 +839,12 @@ FrontMCP auto-detects your template type:
 
 <CodeGroup>
 ```ts HTML Template
+import { type TemplateContext } from '@frontmcp/sdk';
+
 ui: {
-  template: (ctx) => `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
+  // Annotate `ctx` explicitly under strict / noImplicitAny.
+  template: (ctx: TemplateContext<MyInput, MyOutput>) =>
+    `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
 }
 ```
 
@@ -867,6 +871,10 @@ ui: {
 ```
 
 </CodeGroup>
+
+<Warning>
+**TypeScript: annotate the `ctx` parameter (TS7006).** When you inline an HTML template as an arrow function, you need to annotate `ctx`. Because `ui.template` is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), TypeScript can't pick a single contextual type for the arrow's parameter, so `template: (ctx) => …` errors with `Parameter 'ctx' implicitly has an 'any' type`. Either annotate `ctx: TemplateContext<MyInput, MyOutput>` (imported from `@frontmcp/sdk`), or move the widget into its own `.tsx` file and use the `FileSource` form (`template: { file: … }`) — both avoid the inference gap.
+</Warning>
 
 ### UI Configuration Options
 

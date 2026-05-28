@@ -243,7 +243,10 @@ form(`
 The template function receives a context object with:
 
 ```typescript
-template: (ctx) => {
+import { type TemplateContext } from '@frontmcp/sdk';
+
+// Annotate `ctx` explicitly — see the TypeScript note below.
+template: (ctx: TemplateContext<MyInput, MyOutput>) => {
   // Input that was passed to the tool
   const { location, units } = ctx.input;
 
@@ -257,6 +260,10 @@ template: (ctx) => {
   return `<p>${escapeHtml(location)}</p>`;
 }
 ```
+
+<Warning>
+**TypeScript: `ctx` must be annotated explicitly (TS7006).** Under `strict` / `noImplicitAny`, `template: (ctx) => …` fails with `Parameter 'ctx' implicitly has an 'any' type`. The `ui.template` field is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`), so TypeScript can't pick a single contextual type for the arrow's parameter. Either annotate `ctx: TemplateContext<MyInput, MyOutput>` (imported from `@frontmcp/sdk`), or move the widget into its own `.tsx` file and use the `FileSource` form (`template: { file: … }`).
+</Warning>
 
 ### Available Helpers
 

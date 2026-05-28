@@ -89,8 +89,11 @@ What this gets you:
 ### Function template (recommended starting point)
 
 ```typescript
+import { type TemplateContext } from '@frontmcp/sdk';
+
 ui: {
-  template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.label)}</div>`,
+  template: (ctx: TemplateContext<MyInput, MyOutput>) =>
+    `<div>${ctx.helpers.escapeHtml(ctx.output.label)}</div>`,
 }
 ```
 
@@ -100,6 +103,8 @@ The function receives `TemplateContext<In, Out>`:
 - `ctx.output` — value returned from `execute()` (typed)
 - `ctx.structuredContent` — JSON form of the output (when `outputSchema` is set)
 - `ctx.helpers` — `escapeHtml`, `formatDate`, `formatCurrency`, `uniqueId`, `jsonEmbed`
+
+> **Annotate `ctx` explicitly (TS7006).** Under `strict` / `noImplicitAny`, writing `template: (ctx) => …` without a type annotation fails with `Parameter 'ctx' implicitly has an 'any' type` (issue #442). Root cause: `template` is a union of multiple callable shapes (`TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource`), so TypeScript can't pick a single contextual type for the arrow's parameter. Either annotate `ctx: TemplateContext<In, Out>` as shown above, or sidestep the issue entirely by moving the widget to its own file and using the [FileSource](#filesource-tsx-widgets) form — recommended for anything non-trivial.
 
 ### HTML/MDX string template
 
