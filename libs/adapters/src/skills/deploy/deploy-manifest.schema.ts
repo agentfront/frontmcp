@@ -387,16 +387,30 @@ export function applyEnvironmentOverlay(
   base: DeployManifest,
   overlay: DeployManifestEnvironmentOverlay,
 ): DeployManifest {
+  // Bindings REPLACE per wrangler semantics — an env that touches
+  // `bindings` declares its entire DO/KV inventory; nothing from base
+  // is inherited.
+  const effectiveBindings = overlay.bindings ?? base.bindings;
+
+  // Top-level `overlay.vars` is the surgical-additive form: each key is
+  // shallow-merged into the effective `bindings.vars` so an operator can
+  // tweak a handful of env vars without re-declaring the whole vars
+  // table. Conflicts go to the overlay (matches the rest of this
+  // function's "overlay wins" rule). When the overlay used the wholesale
+  // `bindings.vars` form instead, it's already inside `effectiveBindings`
+  // and we leave it alone.
+  const mergedBindings: DeployManifest['bindings'] =
+    overlay.vars !== undefined
+      ? { ...effectiveBindings, vars: { ...(effectiveBindings.vars ?? {}), ...overlay.vars } }
+      : effectiveBindings;
+
   return {
     ...base,
     server: overlay.server ? { ...base.server, ...overlay.server } : base.server,
     specs: overlay.specs ?? base.specs,
     skills: overlay.skills ? { ...base.skills, ...overlay.skills } : base.skills,
     classification: overlay.classification ?? base.classification,
-    // Bindings REPLACE per wrangler semantics — an env that touches
-    // `bindings` declares its entire DO/KV inventory; nothing from base
-    // is inherited.
-    bindings: overlay.bindings ?? base.bindings,
+    bindings: mergedBindings,
     auth: overlay.auth ?? base.auth,
   };
 }

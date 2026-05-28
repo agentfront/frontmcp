@@ -524,4 +524,56 @@ describe('applyEnvironmentOverlay', () => {
     expect(effective.tags).toEqual(parsed.tags);
     expect(effective.environments).toEqual(parsed.environments);
   });
+
+  // Top-level `overlay.vars` semantics — surgical-additive merge into
+  // the effective bindings.vars. The schema accepts both
+  // `bindings.vars` (full bindings replacement) AND a top-level
+  // `vars` block on the overlay; this test pins the latter shape so
+  // an operator can override a handful of vars without re-declaring
+  // the full bindings inventory.
+
+  it('shallow-merges top-level overlay.vars into the effective bindings.vars', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      bindings: {
+        ...baseValid.bindings,
+        vars: { LOG_LEVEL: 'info', REGION: 'us-east-1' },
+      },
+    });
+    const effective = applyEnvironmentOverlay(parsed, {
+      vars: { LOG_LEVEL: 'debug', FEATURE_X: 'on' },
+    });
+    expect(effective.bindings.vars).toEqual({
+      // base var preserved
+      REGION: 'us-east-1',
+      // overlay overrides existing
+      LOG_LEVEL: 'debug',
+      // overlay adds new key
+      FEATURE_X: 'on',
+    });
+  });
+
+  it('applies overlay.vars even when base.bindings.vars is absent', () => {
+    const parsed = deployManifestSchema.parse(baseValid);
+    expect(parsed.bindings.vars).toBeUndefined();
+    const effective = applyEnvironmentOverlay(parsed, { vars: { LOG_LEVEL: 'debug' } });
+    expect(effective.bindings.vars).toEqual({ LOG_LEVEL: 'debug' });
+  });
+
+  it('applies overlay.vars on top of a wholesale bindings replacement', () => {
+    // Both forms together: env replaces the full bindings block AND
+    // surgically tweaks vars on top. The wholesale `bindings.vars`
+    // is the starting point; the top-level `vars` shallow-merges over.
+    const parsed = deployManifestSchema.parse(baseValid);
+    const effective = applyEnvironmentOverlay(parsed, {
+      bindings: {
+        durableObjects: [],
+        kvNamespaces: [{ binding: 'REPLAY_NONCE', id: 'kv-prod' }],
+        vars: { LOG_LEVEL: 'info' },
+      },
+      vars: { LOG_LEVEL: 'debug', FEATURE_X: 'on' },
+    });
+    expect(effective.bindings.kvNamespaces).toEqual([{ binding: 'REPLAY_NONCE', id: 'kv-prod' }]);
+    expect(effective.bindings.vars).toEqual({ LOG_LEVEL: 'debug', FEATURE_X: 'on' });
+  });
 });

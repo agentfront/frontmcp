@@ -29,5 +29,13 @@ void startMockBillingServer(mockPort);
 // underneath validates the actual shape at runtime.
 type FrontMcpInput = Parameters<typeof FrontMcp>[0];
 
-@FrontMcp({ ...serverConfig, http: { port } } as unknown as FrontMcpInput)
+// Merge any pre-existing `http` block from `serverConfig` instead of
+// replacing it wholesale with `{ port }`. Today `serverConfig` declares no
+// `http` field (the shared config is transport-agnostic), so this is a
+// no-op at runtime — but the merge is cheap and protects against a future
+// edit that adds nested HTTP options (TLS, host, body limits) only to
+// have them silently dropped by this entrypoint.
+const baseHttp = (serverConfig as { http?: Record<string, unknown> }).http ?? {};
+
+@FrontMcp({ ...serverConfig, http: { ...baseHttp, port } } as unknown as FrontMcpInput)
 export default class Server {}
