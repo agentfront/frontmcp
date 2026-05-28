@@ -5,6 +5,7 @@ level: advanced
 description: "A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454)."
 tags: [development, tool, ui, widget, file-source, tsx, react, cdn, mcp-apps, claude]
 features:
+  - 'Installing `@frontmcp/ui` at the same version as `@frontmcp/sdk` so `.tsx` widgets can bundle successfully (prerequisite — without it the bridge mount fails; see #443)'
   - 'Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`'
   - 'Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`'
   - 'Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`'
@@ -147,6 +148,7 @@ export { MainApp };
 
 ## What This Demonstrates
 
+- Installing `@frontmcp/ui` at the same version as `@frontmcp/sdk` so `.tsx` widgets can bundle successfully (prerequisite — without it the bridge mount fails; see #443)
 - Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`
 - Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`
 - Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`

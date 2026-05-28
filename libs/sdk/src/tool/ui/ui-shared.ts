@@ -75,6 +75,14 @@ export class ToolUIRegistry {
 
     if (!toolName || !template) return;
 
+    // Persist per-tool resource metadata (CSP / permissions) BEFORE render so
+    // `handleUIResourceRead` returns the right `_meta.ui.csp` even if the
+    // render fails (graceful degradation) and on re-compile when the user
+    // removes a previously-set csp/permissions field (we explicitly delete in
+    // that case so stale meta doesn't leak forward). Claude only honors CSP
+    // declared on the resource, not on the tool — #455.
+    this.updateResourceMetaFromConfig(toolName, uiConfig);
+
     const result = renderToolTemplate({
       toolName,
       input,
@@ -90,14 +98,21 @@ export class ToolUIRegistry {
       hash: result.hash,
       size: result.size,
     });
+  }
 
-    // Record per-tool resource metadata so `handleUIResourceRead` can attach
-    // `_meta.ui.csp` / `_meta.ui.permissions` to the resource content item
-    // (Claude only honors CSP declared on the resource, not on the tool — #455).
+  /**
+   * Sync `resourceMeta[toolName]` to the current `uiConfig`. Called before
+   * every render so the entry stays consistent with the latest decorator
+   * state, including the case where a user removes a previously-set
+   * `ui.csp` / `ui.permissions` field on re-compile.
+   */
+  private updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
     const csp = uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined;
     const permissions = uiConfig?.['permissions'] as UIResourceMeta['permissions'] | undefined;
     if (csp || permissions !== undefined) {
       this.resourceMeta.set(toolName, { csp, permissions });
+    } else {
+      this.resourceMeta.delete(toolName);
     }
   }
 
@@ -148,6 +163,11 @@ export class ToolUIRegistry {
     if (!toolName || !template) {
       return { meta: {} };
     }
+
+    // Sync resource meta BEFORE render so a render-time failure (graceful
+    // degradation) still leaves `_meta.ui.csp` consistent with the current
+    // config — same reasoning as compileStaticWidgetAsync.
+    this.updateResourceMetaFromConfig(toolName, uiConfig);
 
     const result = renderToolTemplate({
       toolName,

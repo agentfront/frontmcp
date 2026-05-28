@@ -29,7 +29,7 @@ if (__root) {
 }
 `;
 
-// Mock fs.readFileSync and esbuild.buildSync to avoid real file I/O
+// Mock fs.readFileSync and esbuild.buildSync to avoid real file I/O.
 jest.mock('fs', () => ({
   readFileSync: jest.fn(
     () => `
@@ -41,6 +41,13 @@ export default function Widget() {
 }
 `,
   ),
+  existsSync: jest.fn(() => true),
+}));
+
+// Short-circuit the #443 preflight: the path mock below replaces `path.join`,
+// which `isFrontmcpUiResolvable` calls — easier to mock the helper directly.
+jest.mock('../ui-availability', () => ({
+  isFrontmcpUiResolvable: jest.fn(() => true),
 }));
 
 jest.mock('path', () => ({

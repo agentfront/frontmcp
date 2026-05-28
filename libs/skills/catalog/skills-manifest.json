@@ -1444,6 +1444,7 @@
                 "claude"
               ],
               "features": [
+                "Installing `@frontmcp/ui` at the same version as `@frontmcp/sdk` so `.tsx` widgets can bundle successfully (prerequisite — without it the bridge mount fails; see #443)",
                 "Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`",
                 "Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`",
                 "Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`",

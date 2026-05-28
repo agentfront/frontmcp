@@ -56,6 +56,30 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
     });
   });
 
+  it('preserves unknown / future CSP keys verbatim (normalizeCspForResource passthrough)', () => {
+    const registry = new ToolUIRegistry();
+    (registry as unknown as { widgets: Map<string, string> }).widgets.set('future_tool', '<html>f</html>');
+    (registry as unknown as { resourceMeta: Map<string, unknown> }).resourceMeta.set('future_tool', {
+      csp: {
+        connectDomains: ['https://api.example'],
+        // Hypothetical future MCP Apps CSP field — must survive normalization.
+        frame_ancestors: ["'none'"],
+        sandboxFlags: ['allow-scripts'],
+      } as unknown as { connectDomains: string[] },
+    });
+
+    const result = handleUIResourceRead('ui://widget/future_tool.html', registry);
+    const content = result.result?.contents?.[0] as Record<string, unknown>;
+    const meta = content['_meta'] as Record<string, unknown>;
+    const csp = (meta['ui'] as Record<string, unknown>)['csp'] as Record<string, unknown>;
+
+    expect(csp).toEqual({
+      connect_domains: ['https://api.example'],
+      frame_ancestors: ["'none'"],
+      sandboxFlags: ['allow-scripts'],
+    });
+  });
+
   it('emits csp keys in snake_case so MCP Apps hosts parse them', () => {
     const registry = new ToolUIRegistry();
     (registry as unknown as { widgets: Map<string, string> }).widgets.set('q', '<html>q</html>');
@@ -122,5 +146,32 @@ describe('ToolUIRegistry.getResourceMeta', () => {
       csp: { connectDomains: ['https://w.example'] },
       permissions: { foo: true },
     });
+  });
+
+  it('clears resourceMeta on re-compile when csp/permissions removed from uiConfig', () => {
+    // Exercise the private updateResourceMetaFromConfig hook by reaching in —
+    // we want to confirm the "delete on absence" branch protects against
+    // stale meta leaking forward when a tool's config is edited (#455 review).
+    const registry = new ToolUIRegistry();
+    const updateMeta = (
+      registry as unknown as {
+        updateResourceMetaFromConfig: (name: string, cfg: Record<string, unknown> | undefined) => void;
+      }
+    ).updateResourceMetaFromConfig.bind(registry);
+
+    updateMeta('shifty', { csp: { connectDomains: ['https://a.example'] } });
+    expect(registry.getResourceMeta('shifty')).toEqual({
+      csp: { connectDomains: ['https://a.example'] },
+      permissions: undefined,
+    });
+
+    // Re-compile with the csp removed → meta should be wiped, not stale.
+    updateMeta('shifty', {});
+    expect(registry.getResourceMeta('shifty')).toBeUndefined();
+
+    // And undefined config also clears.
+    updateMeta('shifty', { csp: { connectDomains: ['https://b.example'] } });
+    updateMeta('shifty', undefined);
+    expect(registry.getResourceMeta('shifty')).toBeUndefined();
   });
 });

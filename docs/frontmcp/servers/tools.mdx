@@ -891,7 +891,9 @@ ui: {
 | `hydrate`            | Enable client-side React hydration for interactivity                                    |
 
 <Info>
-**`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails. `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
+**`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails.
+
+In the default `resourceMode: 'cdn'` mode, `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk. When the framework selects `resourceMode: 'inline'` — either explicitly or via host detection (Claude, #456) — `react` and `react-dom` must also be resolvable from the consuming project so esbuild can bundle them into the widget; install them as devDependencies if your project doesn't already pull them in. See [building-tool-ui](/frontmcp/guides/building-tool-ui#step-1-install-the-ui-package) for the install snippet and the per-host trade-offs.
 </Info>
 
 <Warning>

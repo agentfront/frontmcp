@@ -6,7 +6,7 @@
 
 import { renderToolTemplate } from '../template-renderer';
 
-// Mock fs and esbuild for FileSource tests
+// Mock fs and esbuild for FileSource tests.
 jest.mock('fs', () => ({
   readFileSync: jest.fn(
     () => `
@@ -16,6 +16,13 @@ export default function Widget() {
 }
 `,
   ),
+  existsSync: jest.fn(() => true),
+}));
+
+// Short-circuit the #443 preflight: the path mock below replaces `path.join`,
+// which `isFrontmcpUiResolvable` calls — easier to mock the helper directly.
+jest.mock('../../component/ui-availability', () => ({
+  isFrontmcpUiResolvable: jest.fn(() => true),
 }));
 
 jest.mock('path', () => ({

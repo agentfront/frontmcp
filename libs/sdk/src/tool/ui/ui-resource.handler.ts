@@ -112,12 +112,15 @@ function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string):
  * Convert the user-facing camelCase CSP shape (`connectDomains` /
  * `resourceDomains`) into the snake_case form MCP Apps hosts read
  * (`connect_domains` / `resource_domains`). Preserves any extra keys
- * the caller passed through.
+ * the caller passed through so unknown / future-spec CSP fields are
+ * not silently dropped.
  */
 function normalizeCspForResource(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (csp.connectDomains) out['connect_domains'] = csp.connectDomains;
-  if (csp.resourceDomains) out['resource_domains'] = csp.resourceDomains;
+  const { connectDomains, resourceDomains, ...rest } = csp as NonNullable<UIResourceMeta['csp']> &
+    Record<string, unknown>;
+  const out: Record<string, unknown> = { ...rest };
+  if (connectDomains !== undefined) out['connect_domains'] = connectDomains;
+  if (resourceDomains !== undefined) out['resource_domains'] = resourceDomains;
   return out;
 }
 
