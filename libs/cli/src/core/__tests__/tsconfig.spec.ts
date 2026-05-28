@@ -79,8 +79,9 @@ describe('tsconfig utilities', () => {
     });
 
     it('drops non-string exclude entries while still adding widget patterns', () => {
-      const { result, added } = ensureWidgetExcludes({ exclude: ['node_modules', 123, true] as any });
-      expect(result.exclude).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
+      const input: Record<string, unknown> = { exclude: ['node_modules', 123, true] };
+      const { result, added } = ensureWidgetExcludes(input);
+      expect(result['exclude']).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
       expect(added).toEqual(['**/*.widget.tsx', '**/*.widget.jsx']);
     });
   });

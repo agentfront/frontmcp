@@ -72,12 +72,13 @@ export function ensureRequiredTsOptions(obj: Record<string, any>): Record<string
  * Preserves any existing exclude entries. Returns a new object — does not
  * mutate `obj`.
  */
-export function ensureWidgetExcludes(obj: Record<string, any>): {
-  result: Record<string, any>;
+export function ensureWidgetExcludes(obj: Record<string, unknown>): {
+  result: Record<string, unknown>;
   added: string[];
 } {
-  const next = { ...obj };
-  const existing: unknown[] = Array.isArray(next.exclude) ? next.exclude : [];
+  const next: Record<string, unknown> = { ...obj };
+  const rawExclude = next['exclude'];
+  const existing: unknown[] = Array.isArray(rawExclude) ? rawExclude : [];
   const seen = new Set(existing.filter((v): v is string => typeof v === 'string'));
   const added: string[] = [];
   for (const pattern of WIDGET_FILE_PATTERNS) {
@@ -86,7 +87,7 @@ export function ensureWidgetExcludes(obj: Record<string, any>): {
       added.push(pattern);
     }
   }
-  next.exclude = [...existing.filter((v): v is string => typeof v === 'string'), ...added];
+  next['exclude'] = [...existing.filter((v): v is string => typeof v === 'string'), ...added];
   return { result: next, added };
 }
 
