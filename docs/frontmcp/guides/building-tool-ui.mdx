@@ -45,6 +45,10 @@ yarn add @frontmcp/ui
 **Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path.
 </Warning>
 
+<Info>
+**Use the `*.widget.tsx` naming convention.** The scaffolded `tsconfig.json` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck (`frontmcp init` also adds the excludes to existing tsconfigs). Widget sources are bundled separately by uipack/esbuild at render time, so the server tsconfig doesn't need `jsx: 'react-jsx'` or `@types/react` for them. Add a sibling `tsconfig.widget.json` if you want IDE typecheck for widget files.
+</Info>
+
 ---
 
 ## Step 2: Create a Tool with UI Template

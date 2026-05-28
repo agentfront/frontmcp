@@ -2,6 +2,19 @@
 
 import * as path from 'path';
 
+import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
+
+import {
+  checkRequiredTsOptions,
+  deepMerge,
+  ensureRequiredTsOptions,
+  ensureWidgetExcludes,
+  RECOMMENDED_TSCONFIG,
+  REQUIRED_DECORATOR_FIELDS,
+  runInit,
+  WIDGET_FILE_PATTERNS,
+} from '../tsconfig';
+
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => {
   return {
@@ -10,16 +23,6 @@ jest.mock('@frontmcp/utils', () => {
     writeJSON: jest.fn(),
   };
 });
-
-import {
-  REQUIRED_DECORATOR_FIELDS,
-  RECOMMENDED_TSCONFIG,
-  deepMerge,
-  ensureRequiredTsOptions,
-  checkRequiredTsOptions,
-  runInit,
-} from '../tsconfig';
-import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
 
 describe('tsconfig utilities', () => {
   describe('REQUIRED_DECORATOR_FIELDS', () => {
@@ -43,6 +46,42 @@ describe('tsconfig utilities', () => {
 
     it('should have include array', () => {
       expect(RECOMMENDED_TSCONFIG.include).toEqual(['src/**/*']);
+    });
+
+    it('should exclude *.widget.tsx and *.widget.jsx by default (#445)', () => {
+      expect(RECOMMENDED_TSCONFIG.exclude).toEqual(expect.arrayContaining(['**/*.widget.tsx', '**/*.widget.jsx']));
+    });
+  });
+
+  describe('ensureWidgetExcludes (#445)', () => {
+    it('adds widget patterns when exclude is absent', () => {
+      const { result, added } = ensureWidgetExcludes({});
+      expect(result.exclude).toEqual(['**/*.widget.tsx', '**/*.widget.jsx']);
+      expect(added).toEqual(['**/*.widget.tsx', '**/*.widget.jsx']);
+    });
+
+    it('appends to existing exclude without duplicating', () => {
+      const { result, added } = ensureWidgetExcludes({ exclude: ['node_modules', '**/*.widget.tsx'] });
+      expect(result.exclude).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
+      expect(added).toEqual(['**/*.widget.jsx']);
+    });
+
+    it('returns added: [] when both patterns are already present', () => {
+      const { result, added } = ensureWidgetExcludes({ exclude: [...WIDGET_FILE_PATTERNS] });
+      expect(result.exclude).toEqual([...WIDGET_FILE_PATTERNS]);
+      expect(added).toEqual([]);
+    });
+
+    it('does not mutate the input object', () => {
+      const input = { exclude: ['node_modules'] };
+      ensureWidgetExcludes(input);
+      expect(input.exclude).toEqual(['node_modules']);
+    });
+
+    it('drops non-string exclude entries while still adding widget patterns', () => {
+      const { result, added } = ensureWidgetExcludes({ exclude: ['node_modules', 123, true] as any });
+      expect(result.exclude).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
+      expect(added).toEqual(['**/*.widget.tsx', '**/*.widget.jsx']);
     });
   });
 
@@ -269,6 +308,52 @@ describe('tsconfig utilities', () => {
         }),
       );
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('verified and updated'));
+    });
+
+    it('adds widget-file excludes to existing tsconfig.json that overrides exclude without them (#445)', async () => {
+      // `deepMerge` overwrites arrays, so an existing `exclude` wins over
+      // RECOMMENDED_TSCONFIG's. `ensureWidgetExcludes` is the safety net.
+      const existing = {
+        compilerOptions: { strict: true },
+        include: ['src/**/*'],
+        exclude: ['node_modules'],
+      };
+      (readJSON as jest.Mock).mockResolvedValue(existing);
+
+      await runInit('/test/dir');
+
+      const writtenConfig = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1];
+      expect(writtenConfig.exclude).toEqual(['node_modules', '**/*.widget.tsx', '**/*.widget.jsx']);
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringMatching(/Added widget-file excludes.*issue #445/));
+    });
+
+    it('inherits widget excludes from RECOMMENDED_TSCONFIG when existing has no exclude (#445)', async () => {
+      // deepMerge starts with RECOMMENDED, so if the user has no `exclude`,
+      // the widget patterns come along for free — no "Added …" log needed.
+      const existing = {
+        compilerOptions: { strict: true },
+        include: ['src/**/*'],
+      };
+      (readJSON as jest.Mock).mockResolvedValue(existing);
+
+      await runInit('/test/dir');
+
+      const writtenConfig = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1];
+      expect(writtenConfig.exclude).toEqual(expect.arrayContaining(['**/*.widget.tsx', '**/*.widget.jsx']));
+    });
+
+    it('does not log an "Added widget-file excludes" line when patterns already present (#445)', async () => {
+      const existing = {
+        compilerOptions: { strict: true },
+        include: ['src/**/*'],
+        exclude: ['**/*.widget.tsx', '**/*.widget.jsx'],
+      };
+      (readJSON as jest.Mock).mockResolvedValue(existing);
+
+      await runInit('/test/dir');
+
+      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
+      expect(logs.some((line) => /Added widget-file excludes/.test(line))).toBe(false);
     });
 
     it('should use process.cwd() if no baseDir provided', async () => {

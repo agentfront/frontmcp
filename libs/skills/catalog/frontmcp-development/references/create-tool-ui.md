@@ -154,6 +154,8 @@ The file path is resolved at build/registration time; the bundler transpiles the
 
 > **Path resolution: relative paths are resolved against `process.cwd()`, not the tool file (issue #444).** A bare `template: { file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx` — and the mismatch only surfaces at tool-call time as `ENOENT`. Anchor the path to the tool source with `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`), or pass an absolute path. The framework now throws a specific error pointing at this when an ENOENT happens on a relative FileSource path.
 
+> **Name widget files `*.widget.tsx` / `*.widget.jsx` (issue #445).** `.tsx`/`.jsx` widget sources are bundled separately by uipack/esbuild at render time — they aren't subject to the server's `tsc --noEmit` pass. Newly scaffolded `tsconfig.json` files exclude `**/*.widget.tsx` / `**/*.widget.jsx` so widgets don't need the server tsconfig to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds the excludes if they're missing. Keep the `.widget.tsx` naming convention; if you want IDE/editor typecheck for widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
+
 ```typescript
 import { fileURLToPath } from 'node:url';
 

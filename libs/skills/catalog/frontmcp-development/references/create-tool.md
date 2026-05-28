@@ -480,6 +480,8 @@ Attach an HTML widget to a tool's response via the `ui` option. Supported hosts 
 
 > **Anchor the path to the tool file (issue #444).** Relative `file:` paths are resolved against `process.cwd()`, not the tool source's directory. A bare `{ file: './widget.tsx' }` from `src/tools/foo.tool.ts` looks for `<cwd>/widget.tsx`, not `src/tools/widget.tsx`, and the mismatch only surfaces as `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` from `node:url` (as in the example above) — or pass an absolute path — so the lookup is robust regardless of where the server is launched from.
 
+> **Name the widget file `*.widget.tsx` so it's excluded from server typecheck (issue #445).** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The default `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` and `**/*.widget.jsx`, so widgets don't force the server tsconfig to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds those excludes. If you want IDE typecheck for the widget source, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
+
 ```typescript
 // src/apps/main/tools/show-ui-card.tool.ts
 import { fileURLToPath } from 'node:url';
