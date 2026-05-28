@@ -8,9 +8,9 @@
  * @packageDocumentation
  */
 
+import type { FileSource } from '../component/types';
 import type { CDNDependency } from '../resolver/types';
 import type { CustomShellSource } from '../shell/custom-shell-types';
-import type { FileSource } from '../component/types';
 
 /**
  * Configuration options for bundling file-based components.
@@ -231,7 +231,9 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  *   For unsupported clients (e.g., Gemini): skips UI entirely (returns JSON only).
  *
  * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
- *   Works on all platforms including network-blocked ones.
+ *   Works on all platforms including network-blocked ones, **provided the HTML
+ *   itself is fully self-contained** (no external `<script src>` / module
+ *   import maps). See the Claude target note on {@link UITemplateConfig.resourceMode}.
  *
  * - `'static'`: Pre-compiled at startup, resolved via `tools/list` (ui:// resource URI).
  *   Widget is fetched via MCP `resources/read`.
@@ -242,6 +244,17 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * - `'direct-url'`: HTTP endpoint on MCP server.
  *
  * - `'custom-url'`: Custom URL (CDN or external hosting).
+ *
+ * ## Claude target caveat (issue #447)
+ *
+ * Claude Desktop / claude.ai render widgets in a sandboxed iframe whose CSP
+ * blocks **all** external script execution — including esm.sh — regardless of
+ * what's set on the tool's `_meta.ui.csp` (Claude only honors CSP declared
+ * on the UI resource; see issue #455). React `FileSource` templates and any
+ * widget that loads runtime modules from a CDN will silently hang on the
+ * "Loading widget…" placeholder in Claude. Only fully self-contained HTML
+ * (all JS inline, no import map, no `<script src="https://…">`) renders
+ * reliably in Claude today.
  */
 export type WidgetServingMode =
   | 'auto' // Automatically select based on client capabilities (default)
@@ -296,7 +309,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - React component: `MyWidget` - receives props with input/output/helpers
    * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   template: TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource;
 
   /**
@@ -463,7 +476,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * }
    * ```
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   mdxComponents?: Record<string, any>;
 
   // ============================================
@@ -598,13 +611,25 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   bundlingMode?: 'static' | 'dynamic';
 
   /**
-   * Resource loading mode.
+   * Resource loading mode for renderer runtime scripts (React, MDX, Handlebars).
    *
-   * - `'cdn'`: Load React/MDX/Handlebars from CDN URLs (lightweight)
-   * - `'inline'`: Embed all scripts in HTML (self-contained)
+   * - `'cdn'`: Load runtime scripts from CDN URLs (lightweight). Works in OpenAI
+   *   Apps SDK, ChatGPT, Cursor, MCP Inspector, and other CDN-permissive hosts.
    *
-   * Use 'cdn' for most platforms (OpenAI, ChatGPT, Cursor).
-   * Use 'inline' for network-blocked environments (Claude Artifacts).
+   * - `'inline'`: Embed renderer scripts in the HTML (self-contained for the
+   *   renderer's own runtime). Intended for network-blocked hosts.
+   *
+   * ## Claude target caveat (issues #447 / #454)
+   *
+   * Claude Desktop / claude.ai block all external `<script src="https://…">`
+   * loads in widget iframes. `'inline'` embeds the **renderer runtime**, but
+   * for `FileSource` (`.tsx`/`.jsx`) templates the user's component code is
+   * still served via an `esm.sh` import map (`react`, `react-dom/client`,
+   * `react/jsx-runtime`) — those modules are blocked and the widget hangs on
+   * the "Loading widget…" placeholder forever (see #454 for the open
+   * tracking bug). Until then, `.tsx` FileSource widgets do not render in
+   * Claude; for Claude targets use a fully self-contained `uiType: 'html'`
+   * function template that emits a single inline `<script>` block.
    *
    * @default 'cdn'
    */
@@ -674,9 +699,18 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Package names should match npm package names. The CDN URL is resolved
    * from the built-in CDN registry or from explicit `dependencies` overrides.
    *
-   * **Platform considerations:**
-   * - Claude only allows `cdnjs.cloudflare.com` (blocked network)
-   * - OpenAI/Cursor/other platforms can use any CDN
+   * **Platform considerations (issue #447):**
+   * - **Claude Desktop / claude.ai**: the widget iframe blocks all external
+   *   script execution regardless of CSP, including `cdnjs.cloudflare.com`.
+   *   Even pinning `dependencies` to cdnjs URLs is not enough today —
+   *   `.tsx` `FileSource` widgets that rely on a CDN import map for React
+   *   itself hang on the "Loading widget…" placeholder (see #454 / #455).
+   *   Use a fully self-contained `uiType: 'html'` function template for
+   *   Claude until those land.
+   * - **OpenAI Apps SDK / ChatGPT / Cursor / MCP Inspector**: any CDN works;
+   *   esm.sh is the default. Pinning to `cdnjs.cloudflare.com` via
+   *   `dependencies` overrides is recommended only when targeting hosts
+   *   with stricter CSP than esm.sh allows.
    *
    * @example
    * ```typescript

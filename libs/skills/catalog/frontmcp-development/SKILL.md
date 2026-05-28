@@ -244,11 +244,11 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 
 ### `create-tool-ui`
 
-| Example                                                                                 | Level        | Description                                                                                                                                            |
-| --------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`basic-html-template`](./examples/create-tool-ui/basic-html-template.md)               | Basic        | A minimal function template that renders the tool output as a styled HTML card using `ctx.helpers.escapeHtml`.                                         |
-| [`widget-with-csp-and-bridge`](./examples/create-tool-ui/widget-with-csp-and-bridge.md) | Intermediate | An interactive widget that fetches from an allow-listed origin via `csp.connectDomains` and invokes another tool via `window.FrontMcpBridge.callTool`. |
-| [`file-source-tsx-widget`](./examples/create-tool-ui/file-source-tsx-widget.md)         | Advanced     | A `.tsx` FileSource widget that loads `chart.js` from `cdnjs.cloudflare.com` so it works in both OpenAI and Claude.                                    |
+| Example                                                                                 | Level        | Description                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-html-template`](./examples/create-tool-ui/basic-html-template.md)               | Basic        | A minimal function template that renders the tool output as a styled HTML card using `ctx.helpers.escapeHtml`.                                                                                                                            |
+| [`widget-with-csp-and-bridge`](./examples/create-tool-ui/widget-with-csp-and-bridge.md) | Intermediate | An interactive widget that fetches from an allow-listed origin via `csp.connectDomains` and invokes another tool via `window.FrontMcpBridge.callTool`.                                                                                    |
+| [`file-source-tsx-widget`](./examples/create-tool-ui/file-source-tsx-widget.md)         | Advanced     | A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets). |
 
 ### `create-tool`
 

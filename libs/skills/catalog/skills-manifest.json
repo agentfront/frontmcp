@@ -1429,26 +1429,16 @@
             },
             {
               "name": "file-source-tsx-widget",
-              "description": "A `.tsx` FileSource widget that loads `chart.js` from `cdnjs.cloudflare.com` so it works in both OpenAI and Claude.",
+              "description": "A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets).",
               "level": "advanced",
-              "tags": [
-                "development",
-                "tool",
-                "ui",
-                "widget",
-                "file-source",
-                "tsx",
-                "react",
-                "claude",
-                "cdn",
-                "mcp-apps"
-              ],
+              "tags": ["development", "tool", "ui", "widget", "file-source", "tsx", "react", "cdn", "mcp-apps"],
               "features": [
                 "Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`",
                 "Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`",
-                "Excluding `chart.js` from the bundle via `externals` and pinning a Claude-compatible CDN URL with `dependencies`",
-                "Setting `resourceMode: 'inline'` so renderer scripts are embedded — required for Claude Artifacts",
-                "Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe"
+                "Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`",
+                "Setting `resourceMode: 'inline'` so the renderer runtime scripts are embedded (helps OpenAI / Inspector reliability)",
+                "Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe",
+                "Acknowledging the Claude target limitation: `.tsx` FileSource currently hangs on \"Loading widget…\" because the iframe blocks all external script execution including cdnjs"
               ]
             }
           ]
