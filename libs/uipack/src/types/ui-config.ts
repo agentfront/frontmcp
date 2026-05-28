@@ -616,20 +616,11 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'cdn'`: Load runtime scripts from CDN URLs (lightweight). Works in OpenAI
    *   Apps SDK, ChatGPT, Cursor, MCP Inspector, and other CDN-permissive hosts.
    *
-   * - `'inline'`: Embed renderer scripts in the HTML (self-contained for the
-   *   renderer's own runtime). Intended for network-blocked hosts.
-   *
-   * ## Claude target caveat (issues #447 / #454)
-   *
-   * Claude Desktop / claude.ai block all external `<script src="https://…">`
-   * loads in widget iframes. `'inline'` embeds the **renderer runtime**, but
-   * for `FileSource` (`.tsx`/`.jsx`) templates the user's component code is
-   * still served via an `esm.sh` import map (`react`, `react-dom/client`,
-   * `react/jsx-runtime`) — those modules are blocked and the widget hangs on
-   * the "Loading widget…" placeholder forever (see #454 for the open
-   * tracking bug). Until then, `.tsx` FileSource widgets do not render in
-   * Claude; for Claude targets use a fully self-contained `uiType: 'html'`
-   * function template that emits a single inline `<script>` block.
+   * - `'inline'`: Embed everything in the HTML. For `FileSource` (`.tsx`/`.jsx`)
+   *   templates, React and ReactDOM are bundled into the widget's
+   *   `<script type="module">` (no esm.sh import map). The output is a fully
+   *   self-contained widget that runs in hosts which block external script
+   *   execution — including Claude Desktop / claude.ai (fix shipped for #454).
    *
    * @default 'cdn'
    */

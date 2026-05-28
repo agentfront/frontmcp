@@ -906,6 +906,17 @@ ui: { template: { file: widgetPath } }
 </Warning>
 
 <Info>
+**Set `resourceMode: 'inline'` for Claude-compatible `.tsx` widgets.** The default `resourceMode: 'cdn'` emits an esm.sh import map for React, which Claude's sandboxed widget iframe blocks (the widget hangs on "Loading widget…"). With `resourceMode: 'inline'` the bundler inlines React and ReactDOM into the widget's `<script type="module">` so the output is fully self-contained and renders in every host:
+
+```ts
+ui: {
+  template: { file: widgetPath },
+  resourceMode: 'inline', // bundle React inline — works in Claude
+}
+```
+</Info>
+
+<Info>
 **Widget files use the `*.widget.tsx` naming convention.** `.tsx`/`.jsx` widgets are bundled separately by uipack/esbuild at render time. The `tsconfig.json` scaffolded by `frontmcp init` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck so widgets don't force the project to set `jsx: 'react-jsx'` or pull in `@types/react`. Running `frontmcp init` on an existing project also adds these excludes. For IDE typecheck of widget sources, add a sibling `tsconfig.widget.json` with `jsx: 'react-jsx'` and `include: ['src/**/*.widget.tsx']`.
 </Info>
 

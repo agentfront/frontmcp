@@ -46,6 +46,10 @@ yarn add @frontmcp/ui
 </Warning>
 
 <Info>
+**For Claude-compatible `.tsx` widgets, set `resourceMode: 'inline'`.** The default `'cdn'` mode emits an esm.sh import map for React, which Claude's widget iframe blocks (the widget hangs on "Loading widget…"). `resourceMode: 'inline'` bundles React into the widget itself so it's self-contained and renders in every host.
+</Info>
+
+<Info>
 **Use the `*.widget.tsx` naming convention.** The scaffolded `tsconfig.json` excludes `**/*.widget.tsx` / `**/*.widget.jsx` from the server typecheck (`frontmcp init` also adds the excludes to existing tsconfigs). Widget sources are bundled separately by uipack/esbuild at render time, so the server tsconfig doesn't need `jsx: 'react-jsx'` or `@types/react` for them. Add a sibling `tsconfig.widget.json` if you want IDE typecheck for widget files.
 </Info>
 

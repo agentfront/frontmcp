@@ -2,20 +2,19 @@
 name: file-source-tsx-widget
 reference: create-tool-ui
 level: advanced
-description: "A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets)."
-tags: [development, tool, ui, widget, file-source, tsx, react, cdn, mcp-apps]
+description: "A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454)."
+tags: [development, tool, ui, widget, file-source, tsx, react, cdn, mcp-apps, claude]
 features:
   - 'Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`'
   - 'Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`'
   - 'Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`'
-  - "Setting `resourceMode: 'inline'` so the renderer runtime scripts are embedded (helps OpenAI / Inspector reliability)"
+  - "Setting `resourceMode: 'inline'` so React is bundled into the widget (no esm.sh import map) — makes the widget self-contained and renders in Claude (#454)"
   - 'Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe'
-  - 'Acknowledging the Claude target limitation: `.tsx` FileSource currently hangs on "Loading widget…" because the iframe blocks all external script execution including cdnjs'
 ---
 
 # File-Based `.tsx` Widget with CDN Externals
 
-A `.tsx` FileSource widget that bundles a React chart component for OpenAI Apps SDK / ChatGPT / MCP Inspector (Claude support is currently broken — see #447 / #454 — use a self-contained `uiType: 'html'` template for Claude targets).
+A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454).
 
 ## Code
 
@@ -56,12 +55,7 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
   ui: {
     widgetDescription: 'Monthly revenue chart',
     template: { file: widgetPath },
-    // `chart.js` is loaded from a CDN at runtime instead of bundled. cdnjs is
-    // a sensible default; esm.sh is the framework default if you don't override.
-    // (NOTE — issues #447 / #454: Claude's widget iframe blocks ALL external
-    // script execution, including cdnjs. This example renders in OpenAI Apps
-    // SDK, ChatGPT, and MCP Inspector but currently hangs on "Loading widget…"
-    // in Claude. Use a self-contained `uiType: 'html'` template for Claude.)
+    // `chart.js` is loaded from a CDN at runtime instead of bundled.
     externals: ['chart.js'],
     dependencies: {
       'chart.js': {
@@ -69,8 +63,12 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
         global: 'Chart',
       },
     },
-    // Embed the renderer runtime scripts inline (helps OpenAI / Inspector
-    // reliability on widget restart; does not unblock Claude — see note above).
+    // `resourceMode: 'inline'` makes the widget self-contained: React and
+    // ReactDOM are bundled into the widget's <script type="module"> instead of
+    // being loaded via an esm.sh import map. This is what lets the widget
+    // render in Claude (whose sandboxed iframe blocks all external scripts —
+    // see #454). The default 'cdn' mode is fine for OpenAI Apps SDK /
+    // ChatGPT / MCP Inspector (smaller payload).
     resourceMode: 'inline',
     // Static HTML only — no React hydration to dodge error #418 in iframe sandboxes.
     hydrate: false,
@@ -152,9 +150,8 @@ export { MainApp };
 - Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`
 - Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`
 - Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`
-- Setting `resourceMode: 'inline'` so the renderer runtime scripts are embedded (helps OpenAI / Inspector reliability)
+- Setting `resourceMode: 'inline'` so React is bundled into the widget (no esm.sh import map) — makes the widget self-contained and renders in Claude (#454)
 - Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe
-- Acknowledging the Claude target limitation: `.tsx` FileSource currently hangs on "Loading widget…" because the iframe blocks all external script execution including cdnjs
 
 ## Related
 

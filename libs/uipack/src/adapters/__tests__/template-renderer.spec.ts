@@ -110,6 +110,41 @@ describe('renderToolTemplate', () => {
       expect(result.meta).toHaveProperty('ui/html');
       expect(result.meta).toHaveProperty('ui/type', 'react');
     });
+
+    it('plumbs resourceMode: "inline" down to esbuild, dropping React from externals (#454)', () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+        resourceMode: 'inline',
+      });
+
+      // When resourceMode is 'inline', the bundler inlines React so the widget
+      // is self-contained — no esm.sh import map, renders in Claude (#454).
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual([]);
+    });
+
+    it('keeps React external by default (resourceMode unset)', () => {
+      const esbuild = require('esbuild');
+      const buildSyncSpy = esbuild.buildSync as jest.Mock;
+      buildSyncSpy.mockClear();
+
+      renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: { file: '/app/widget.tsx' },
+      });
+
+      const opts = buildSyncSpy.mock.calls.at(-1)?.[0];
+      expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+    });
   });
 
   describe('function template', () => {

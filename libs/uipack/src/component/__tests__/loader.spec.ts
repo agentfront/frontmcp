@@ -92,3 +92,45 @@ describe('resolveFileSource — relative .tsx/.jsx FileSource (#444)', () => {
     expect(() => resolveUISource(source)).not.toThrow(/process\.cwd/);
   });
 });
+
+describe('resolveUISource — inlineReact plumbing for FileSource (#454)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('passes inlineReact through to bundleFileSource as bundleReact: true', () => {
+    const fs = require('fs');
+    const path = require('path');
+    (path.isAbsolute as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue('export default function Widget(){}');
+
+    const esbuild = require('esbuild');
+    const buildSyncSpy = esbuild.buildSync as jest.Mock;
+    buildSyncSpy.mockClear();
+
+    const { resolveUISource } = require('../loader');
+    resolveUISource({ file: '/abs/widget.tsx' }, { inlineReact: true });
+
+    const opts = buildSyncSpy.mock.calls[0][0];
+    // When inlineReact is true, bundleFileSource passes bundleReact: true,
+    // which empties the esbuild `external` array so React is inlined.
+    expect(opts.external).toEqual([]);
+  });
+
+  it('keeps React external by default (inlineReact unset)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    (path.isAbsolute as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue('export default function Widget(){}');
+
+    const esbuild = require('esbuild');
+    const buildSyncSpy = esbuild.buildSync as jest.Mock;
+    buildSyncSpy.mockClear();
+
+    const { resolveUISource } = require('../loader');
+    resolveUISource({ file: '/abs/widget.tsx' });
+
+    const opts = buildSyncSpy.mock.calls[0][0];
+    expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+  });
+});

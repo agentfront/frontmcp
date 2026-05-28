@@ -148,13 +148,22 @@ describe('bundleFileSource', () => {
     expect(opts.bundle).toBe(true);
   });
 
-  it('should mark react and react-dom as external', () => {
+  it('should mark react and react-dom as external by default', () => {
     const { bundleFileSource: bundle } = require('../transpiler');
 
     bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget');
 
     const opts = mockBuildSync.mock.calls[0][0];
     expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
+  });
+
+  it('drops react/react-dom from externals when bundleReact is true (#454)', () => {
+    const { bundleFileSource: bundle } = require('../transpiler');
+
+    bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget', { bundleReact: true });
+
+    const opts = mockBuildSync.mock.calls[0][0];
+    expect(opts.external).toEqual([]);
   });
 
   it('should set platform to browser', () => {

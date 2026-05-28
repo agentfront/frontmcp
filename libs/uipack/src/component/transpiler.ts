@@ -55,11 +55,28 @@ export function transpileReactSource(source: string, filename?: string): string 
  * @param componentName - Name of the component to mount (extracted from source)
  * @returns Bundled JavaScript source code
  */
+/**
+ * Options for `bundleFileSource`.
+ */
+export interface BundleFileSourceOptions {
+  /**
+   * When true, `react` / `react-dom` / `react-dom/client` and the JSX runtime
+   * subpaths are bundled into the output instead of being declared external.
+   *
+   * Used by `resourceMode: 'inline'` to produce a truly self-contained widget
+   * that runs in hosts that block external script execution (e.g. Claude
+   * Desktop / claude.ai — see issue #454). Default `false` keeps the original
+   * behavior where React is loaded from the CDN via an import map.
+   */
+  bundleReact?: boolean;
+}
+
 export function bundleFileSource(
   source: string,
   filename: string,
   resolveDir: string,
   componentName: string,
+  options: BundleFileSourceOptions = {},
 ): { code: string } {
   // Preflight: @frontmcp/ui must be installed in the consuming project, because the
   // auto-generated mount below imports `McpBridgeProvider` from `@frontmcp/ui/react`
@@ -164,7 +181,11 @@ if (__root) {
       format: 'esm',
       target: 'es2020',
       jsx: 'automatic',
-      external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+      // When `bundleReact` is set (resourceMode: 'inline'), React itself is
+      // bundled — required for hosts that block external script execution
+      // such as Claude (#454). Otherwise React stays external and is loaded
+      // via the import map emitted by the renderer.
+      external: options.bundleReact ? [] : ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
       alias,
       define: { 'process.env.NODE_ENV': '"production"' },
       platform: 'browser',

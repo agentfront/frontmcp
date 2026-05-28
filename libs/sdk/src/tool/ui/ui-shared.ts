@@ -4,9 +4,8 @@
  * Internal module to avoid circular imports between index.ts and ui-resource.handler.ts.
  */
 
-import { renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
-import { MCP_APPS_MIME_TYPE } from '@frontmcp/uipack/adapters';
-import type { ImportResolver } from '@frontmcp/uipack/resolver';
+import { MCP_APPS_MIME_TYPE, renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
+import { type ImportResolver } from '@frontmcp/uipack/resolver';
 
 // ============================================
 // ToolUIRegistry
@@ -43,6 +42,10 @@ export class ToolUIRegistry {
     const template = options['template'];
     const input = options['input'] ?? {};
     const output = options['output'] ?? {};
+    const uiConfig = options['uiConfig'] as Record<string, unknown> | undefined;
+    // Prefer ui.resourceMode (configured by the user); fall back to a top-level
+    // override on options so tests / programmatic callers can pass it directly.
+    const resourceMode = (uiConfig?.['resourceMode'] ?? options['resourceMode']) as 'cdn' | 'inline' | undefined;
 
     if (!toolName || !template) return;
 
@@ -52,6 +55,7 @@ export class ToolUIRegistry {
       output,
       template,
       resolver: this.resolver,
+      resourceMode,
     });
 
     this.widgets.set(toolName, result.html);
@@ -104,6 +108,7 @@ export class ToolUIRegistry {
     const input = options['input'] ?? {};
     const output = options['output'] ?? {};
     const platformType = options['platformType'] as string | undefined;
+    const resourceMode = uiConfig?.['resourceMode'] as 'cdn' | 'inline' | undefined;
 
     if (!toolName || !template) {
       return { meta: {} };
@@ -116,6 +121,7 @@ export class ToolUIRegistry {
       template,
       platformType,
       resolver: this.resolver,
+      resourceMode,
     });
 
     // Cache the rendered HTML
