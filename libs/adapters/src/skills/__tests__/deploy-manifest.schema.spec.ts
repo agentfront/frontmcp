@@ -421,6 +421,48 @@ describe('crossValidateManifest', () => {
     });
     expect(crossValidateManifest(parsed)).toEqual({ ok: true });
   });
+
+  // Multi-env aggregation: a valid env should NOT mask errors in a sibling
+  // env. Pin the contract that the report carries every env's errors with
+  // each one prefixed by its env name so an operator can fix in one pass
+  // rather than fix → re-deploy → discover-next-env-error.
+  it('lists errors from every failing environment without suppressing other passing envs', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      environments: {
+        // env "staging" is fine — should NOT contribute errors.
+        staging: {
+          bindings: {
+            durableObjects: [{ binding: 'SESSIONS', className: 'SessionDO' }],
+            kvNamespaces: [{ binding: 'REPLAY_NONCE', id: 'kv-id-staging' }],
+          },
+        },
+        // env "production" has TWO problems: missing replay-nonce KV AND
+        // a typo'd alwaysLoad. The report must surface both, prefixed.
+        production: {
+          bindings: {
+            durableObjects: [{ binding: 'SESSIONS', className: 'SessionDO' }],
+            kvNamespaces: [{ binding: 'OTHER_KV', id: 'kv-id-prod' }],
+          },
+          skills: { source: './skills/', alwaysLoad: ['BadId'] },
+        },
+      },
+    });
+    const result = crossValidateManifest(parsed);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Both production errors present.
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/environments\.production: signing\.replay\.nonceKv/),
+          expect.stringMatching(/environments\.production: skills\.alwaysLoad entry "BadId"/),
+        ]),
+      );
+      // Zero staging errors (staging is valid — must not bleed into the
+      // report just because production failed).
+      expect(result.errors.filter((e) => e.startsWith('environments.staging:'))).toEqual([]);
+    }
+  });
 });
 
 describe('applyEnvironmentOverlay', () => {
