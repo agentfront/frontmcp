@@ -48,8 +48,14 @@ describe('SearchKnowledgeTool', () => {
       search: jest.fn(),
     };
 
-    tool = new (SearchKnowledgeTool as any)();
-    tool.scope = { skills: mockRegistry } as never;
+    // The mocked `ToolContext` constructor (above) accepts no required
+    // args, so a zero-arg `new` call is the contract used by the
+    // SDK-internal flow. Cast the class to a parameterless constructor so
+    // jest can instantiate it without `any`. `scope` is then injected
+    // matching the field's declared mock type from the `tool` local.
+    type SearchKnowledgeToolCtor = new () => SearchKnowledgeTool;
+    tool = new (SearchKnowledgeTool as unknown as SearchKnowledgeToolCtor)() as typeof tool;
+    tool.scope = { skills: mockRegistry };
   });
 
   it('returns ranked knowledge-only skills', async () => {

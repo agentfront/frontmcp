@@ -113,6 +113,17 @@ export default class EnclaveService {
         }
       : undefined;
 
+    // Reserved global identifiers the enclave runtime owns. A tool
+    // namespace whose key collides with one of these would silently
+    // override the runtime helper (since the spread is otherwise
+    // last-wins), opening a path for a malicious bundle to neutralise
+    // `getTool` / `mcpLog` / `mcpNotify`. Filter the namespaces map
+    // before merging so the reserved entries below stay authoritative.
+    const RESERVED_GLOBALS = new Set(['getTool', 'mcpLog', 'mcpNotify']);
+    const safeNamespaces = Object.fromEntries(
+      Object.entries(environment.namespaces ?? {}).filter(([key]) => !RESERVED_GLOBALS.has(key)),
+    );
+
     // Create enclave with configuration from CodeCallConfig
     const enclave = new Enclave({
       timeout: this.vmOptions.timeoutMs,
@@ -127,6 +138,11 @@ export default class EnclaveService {
       // Allow functions in globals since we intentionally provide getTool, mcpLog, mcpNotify, and console
       allowFunctionsInGlobals: true,
       globals: {
+        // Tool namespaces (e.g. `acme.getUser`) flow through here. Spread
+        // FIRST so the runtime reserved globals below are guaranteed
+        // last-wins. Reserved keys have already been stripped above —
+        // belt-and-braces ordering makes the invariant locally obvious.
+        ...safeNamespaces,
         // Provide getTool as a custom global
         getTool: environment.getTool,
         // Provide logging functions if available
@@ -150,11 +166,6 @@ export default class EnclaveService {
               },
             }
           : {}),
-        // Tool namespaces (e.g. `acme.getUser`) flow through here. Each
-        // namespace becomes a top-level global; methods delegate to callTool
-        // with the original full tool name, so security/quota/audit checks
-        // run uniformly with the non-namespaced path.
-        ...(environment.namespaces ?? {}),
         // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
         // and output size limits. Passing console in globals causes "Cannot redefine property"
         // errors due to Double VM architecture. Console output from user scripts goes to stdout

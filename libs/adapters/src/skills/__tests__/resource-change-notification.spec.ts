@@ -178,7 +178,13 @@ describe('ClassificationRegistry', () => {
   it('throws on register with empty toolName', () => {
     const r = new ClassificationRegistry();
     const [c] = classifyOperations('acme', [{ operationId: 'getUser', method: 'GET', path: '/users/{id}' }]);
-    expect(() => r.register('', c)).toThrow(/non-empty string/);
+    // Per CLAUDE.md: don't skip error class `instanceof` checks in tests.
+    // The implementation throws a plain Error (no custom class); assert
+    // the constructor in addition to the message so a regression that
+    // swaps the throw to a string would also fail this test.
+    const act = () => r.register('', c);
+    expect(act).toThrow(Error);
+    expect(act).toThrow(/non-empty string/);
   });
 
   it('registerAll partitions added vs replaced and uses ${specId}.${operationId}', () => {

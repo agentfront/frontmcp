@@ -151,6 +151,7 @@ export {
 // cross-field validator. Consumed by the deploy CLI / GitHub Action to
 // produce the signed envelope that the Worker hot-reloads from.
 export {
+  applyEnvironmentOverlay,
   crossValidateManifest,
   deployManifestSchema,
   type DeployManifest,

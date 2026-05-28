@@ -26,13 +26,21 @@
  */
 export type OpReferenceSyntax = 'uri' | 'wikilink';
 
-/** Zero-based source location. */
+/**
+ * Source location of a parsed op-reference inside the original markdown.
+ *
+ * `line` and `column` are **1-based** to match editor + LSP conventions
+ * (the harvester is consumed by both the documentation tooling and the
+ * VS Code LSP extension; matching their 1-based convention avoids
+ * off-by-one bugs at every integration). `offset` is the absolute
+ * 0-based character index into the source string for direct slicing.
+ */
 export interface SourceLocation {
   /** 1-based line number (matches editor + LSP conventions). */
   line: number;
   /** 1-based column number. */
   column: number;
-  /** Absolute character offset from the start of the source. */
+  /** Absolute character offset from the start of the source (0-based). */
   offset: number;
 }
 

@@ -7,5 +7,5 @@ export {
   extname,
   isAbsolute,
   pathToFileURL,
-  sep as pathSep,
+  sep,
 } from '#path';

@@ -364,15 +364,58 @@ export type DeployManifestEnvironmentOverlay = z.infer<typeof environmentOverlay
 // ============================================================================
 
 /**
- * Validations that the Zod schema can't express in a single pass — e.g.
- * "every secret referenced from auth/signing/bindings appears in secrets[]".
+ * Apply an environment overlay onto the base manifest, returning the
+ * effective manifest for that environment.
  *
- * Run AFTER `deployManifestSchema.parse(...)` succeeds.
+ * Semantics, locked by deploy-manifest.mdx:
+ *   - `server`, `skills` — shallow-merge (overlay fields override base
+ *     fields of the same name; unspecified fields fall through).
+ *   - `specs`, `classification`, `bindings`, `auth` — REPLACE wholesale
+ *     when present (mirrors wrangler's `[env.<name>]` non-inheritance).
+ *     `bindings` REPLACING is load-bearing for env-aware validation:
+ *     a prod overlay can swap the entire KV/DO inventory.
+ *   - `signing`, `secrets`, `tags`, `environments` — not overridable
+ *     (no field on the overlay schema); copied through from base.
+ *
+ * Exposed publicly so consumers (deploy CLI, worker-runtime) reuse this
+ * single source of truth rather than re-implementing merge rules. The
+ * tetros-side `applyEnvironmentOverlay` mirror in
+ * `worker-runtime/src/envelope.ts` should pull from here once the OSS
+ * package is published.
  */
-export function crossValidateManifest(manifest: DeployManifest): { ok: true } | { ok: false; errors: string[] } {
-  const errors: string[] = [];
+export function applyEnvironmentOverlay(
+  base: DeployManifest,
+  overlay: DeployManifestEnvironmentOverlay,
+): DeployManifest {
+  return {
+    ...base,
+    server: overlay.server ? { ...base.server, ...overlay.server } : base.server,
+    specs: overlay.specs ?? base.specs,
+    skills: overlay.skills ? { ...base.skills, ...overlay.skills } : base.skills,
+    classification: overlay.classification ?? base.classification,
+    // Bindings REPLACE per wrangler semantics — an env that touches
+    // `bindings` declares its entire DO/KV inventory; nothing from base
+    // is inherited.
+    bindings: overlay.bindings ?? base.bindings,
+    auth: overlay.auth ?? base.auth,
+  };
+}
 
-  // 1. All referenced secrets must be declared.
+/**
+ * Run the schema-can't-express checks against ONE effective manifest
+ * (either the base or a per-environment overlay). Pushes its findings
+ * into `errors`, prefixed by `label` so a multi-env report stays
+ * unambiguous about which env each error came from.
+ *
+ * Extracted from `crossValidateManifest` so the base manifest AND every
+ * env overlay get the SAME validation pass — silent skipping of env-
+ * specific overrides was the bug that motivated the refactor.
+ */
+function validateEffectiveManifest(manifest: DeployManifest, label: string, errors: string[]): void {
+  // 1. All referenced secrets must be declared. Note: `secrets[]` is NOT
+  //    overridable per-env (not in the overlay schema), so we always
+  //    cross-check against the base's declarations regardless of which
+  //    env's effective manifest is being inspected.
   const declaredSecrets = new Set((manifest.secrets ?? []).map((s) => s.name));
 
   const refs: Array<{ where: string; name: string }> = [];
@@ -389,36 +432,67 @@ export function crossValidateManifest(manifest: DeployManifest): { ok: true } | 
 
   for (const ref of refs) {
     if (!declaredSecrets.has(ref.name)) {
-      errors.push(`Secret "${ref.name}" referenced at ${ref.where} is not declared in secrets[]`);
+      errors.push(`${label}Secret "${ref.name}" referenced at ${ref.where} is not declared in secrets[]`);
     }
   }
 
-  // 2. signing.replay.nonceKv must reference a declared KV binding.
+  // 2. signing.replay.nonceKv must reference a declared KV binding in the
+  //    EFFECTIVE bindings (env can replace bindings wholesale).
   const declaredKv = new Set((manifest.bindings.kvNamespaces ?? []).map((kv) => kv.binding));
   if (!declaredKv.has(manifest.signing.replay.nonceKv)) {
     errors.push(
-      `signing.replay.nonceKv "${manifest.signing.replay.nonceKv}" does not match any bindings.kvNamespaces[].binding`,
+      `${label}signing.replay.nonceKv "${manifest.signing.replay.nonceKv}" does not match any bindings.kvNamespaces[].binding`,
     );
   }
 
   // 3. Every alwaysLoad id should look like a valid skill name (loader will
-  //    confirm the skill exists in the source dir; here we only catch obvious
-  //    typos at the syntactic level).
+  //    confirm the skill exists in the source dir; here we only catch
+  //    obvious typos at the syntactic level).
   for (const id of manifest.skills.alwaysLoad ?? []) {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-      errors.push(`skills.alwaysLoad entry "${id}" is not a valid kebab-case skill id`);
+      errors.push(`${label}skills.alwaysLoad entry "${id}" is not a valid kebab-case skill id`);
     }
   }
 
-  // 4. Tag-filter sets must reference declared tags if any tags[] is present.
+  // 4. Tag-filter sets must reference declared tags if any tags[] is
+  //    present. `tags[]` lives only at the top level — an env overlay
+  //    can override the tag FILTER (`skills.tags`) but not the
+  //    declarations themselves.
   if (manifest.tags) {
     const declaredTags = new Set(manifest.tags.map((t) => t.name));
     const tagFilter = manifest.skills.tags;
     for (const t of [...(tagFilter?.include ?? []), ...(tagFilter?.exclude ?? [])]) {
       if (!declaredTags.has(t)) {
-        errors.push(`skills.tags references unknown tag "${t}" (not in tags[])`);
+        errors.push(`${label}skills.tags references unknown tag "${t}" (not in tags[])`);
       }
     }
+  }
+}
+
+/**
+ * Validations that the Zod schema can't express in a single pass — e.g.
+ * "every secret referenced from auth/signing/bindings appears in secrets[]".
+ *
+ * Iterates `manifest.environments` AFTER checking the base manifest, so
+ * an env overlay that replaces `bindings` or `auth` is held to the same
+ * contract — a prod-only typo can no longer slip past validation by
+ * hiding inside an `environments.production` block.
+ *
+ * Run AFTER `deployManifestSchema.parse(...)` succeeds.
+ */
+export function crossValidateManifest(manifest: DeployManifest): { ok: true } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+
+  // Base manifest validation: errors come back un-prefixed (preserves the
+  // pre-refactor message shape that callers + tests pin against).
+  validateEffectiveManifest(manifest, '', errors);
+
+  // Per-environment validation: re-run every check against the effective
+  // manifest with the overlay applied. Prefix each error with the env
+  // name so a multi-env report unambiguously identifies the source.
+  for (const [envName, overlay] of Object.entries(manifest.environments ?? {})) {
+    const effective = applyEnvironmentOverlay(manifest, overlay);
+    validateEffectiveManifest(effective, `environments.${envName}: `, errors);
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors };

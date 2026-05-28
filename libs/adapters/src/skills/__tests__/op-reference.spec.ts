@@ -146,14 +146,22 @@ describe('buildKnownOps', () => {
     const known = buildKnownOps(['acme/getUser', 'acme/updateUser', 'billing/getInvoice']);
 
     expect(Array.from(known.keys()).sort()).toEqual(['acme', 'billing']);
-    expect(Array.from(known.get('acme')!).sort()).toEqual(['getUser', 'updateUser']);
-    expect(Array.from(known.get('billing')!)).toEqual(['getInvoice']);
+
+    const acme = known.get('acme');
+    expect(acme).toBeDefined();
+    expect(Array.from(acme ?? []).sort()).toEqual(['getUser', 'updateUser']);
+
+    const billing = known.get('billing');
+    expect(billing).toBeDefined();
+    expect(Array.from(billing ?? [])).toEqual(['getInvoice']);
   });
 
   it('silently ignores malformed entries', () => {
     const known = buildKnownOps(['no-slash', '/leading-slash', 'trailing/', 'acme/ok']);
     expect(Array.from(known.keys())).toEqual(['acme']);
-    expect(Array.from(known.get('acme')!)).toEqual(['ok']);
+    const acme = known.get('acme');
+    expect(acme).toBeDefined();
+    expect(Array.from(acme ?? [])).toEqual(['ok']);
   });
 
   it('returns an empty map for empty input', () => {

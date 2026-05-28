@@ -187,8 +187,12 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    */
 
   private isCodeCallTool(tool: ToolEntry<any, any, any, any>): boolean {
+    // Guard against missing/non-string names — tool entries from external
+    // sources can have either field absent, and calling `.startsWith` on a
+    // falsy value would throw inside the list_tools filter (taking down
+    // the whole listing instead of returning false for this single tool).
     const name = tool.name || tool.fullName;
-    return name.startsWith('codecall:');
+    return typeof name === 'string' && name.startsWith('codecall:');
   }
 
   /**

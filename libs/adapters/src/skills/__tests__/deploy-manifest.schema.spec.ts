@@ -1,6 +1,11 @@
 // file: libs/adapters/src/skills/__tests__/deploy-manifest.schema.spec.ts
 
-import { crossValidateManifest, deployManifestSchema, type DeployManifest } from '../deploy/deploy-manifest.schema';
+import {
+  applyEnvironmentOverlay,
+  crossValidateManifest,
+  deployManifestSchema,
+  type DeployManifest,
+} from '../deploy/deploy-manifest.schema';
 
 const baseValid: DeployManifest = {
   version: 1,
@@ -319,5 +324,162 @@ describe('crossValidateManifest', () => {
       // At least: undeclared trust-root secret + missing replay KV
       expect(result.errors.length).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  // ── Environment-overlay validation ─────────────────────────────────────
+  //
+  // Before the env-aware refactor, `crossValidateManifest` only inspected
+  // the top-level manifest. An overlay that replaced `bindings` with a
+  // set that did NOT include the KV referenced by `signing.replay.nonceKv`
+  // would slip past validation and only fail at deploy time. These tests
+  // pin the new env-aware behaviour against regressions.
+
+  it('catches a per-environment bindings override that drops the replay-nonce KV', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      environments: {
+        production: {
+          // The base manifest declares `REPLAY_NONCE`; the prod overlay
+          // replaces bindings wholesale, omitting it. `signing.replay`
+          // isn't overridable so prod still references "REPLAY_NONCE"
+          // which no longer exists in the effective env bindings.
+          bindings: {
+            durableObjects: [{ binding: 'SESSIONS', className: 'SessionDO' }],
+            kvNamespaces: [{ binding: 'OTHER_KV', id: 'kv-id-prod' }],
+          },
+        },
+      },
+    });
+    const result = crossValidateManifest(parsed);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/environments\.production: signing\.replay\.nonceKv "REPLAY_NONCE"/),
+        ]),
+      );
+    }
+  });
+
+  it('catches a per-environment auth override that references an undeclared secret', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      // Only TRUSTED_PUBKEY_PROD is declared in base.secrets[].
+      environments: {
+        staging: {
+          auth: {
+            provider: 'apiKey',
+            apiKey: { allowlistSecret: 'STAGING_ALLOWLIST_NOT_DECLARED' },
+          },
+        },
+      },
+    });
+    const result = crossValidateManifest(parsed);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /environments\.staging: Secret "STAGING_ALLOWLIST_NOT_DECLARED" referenced at auth\.apiKey\.allowlistSecret/,
+          ),
+        ]),
+      );
+    }
+  });
+
+  it('catches a per-environment skills.alwaysLoad typo', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      environments: {
+        staging: {
+          skills: { source: './skills/', alwaysLoad: ['NotKebabCase'] },
+        },
+      },
+    });
+    const result = crossValidateManifest(parsed);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/environments\.staging: skills\.alwaysLoad entry "NotKebabCase"/),
+        ]),
+      );
+    }
+  });
+
+  it('accepts a valid per-environment override', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      environments: {
+        production: {
+          bindings: {
+            durableObjects: [{ binding: 'SESSIONS', className: 'SessionDO' }],
+            kvNamespaces: [{ binding: 'REPLAY_NONCE', id: 'kv-id-prod' }],
+          },
+        },
+      },
+    });
+    expect(crossValidateManifest(parsed)).toEqual({ ok: true });
+  });
+});
+
+describe('applyEnvironmentOverlay', () => {
+  // The merge rules are load-bearing for env-aware cross-validation AND
+  // for runtime overlay application in the Worker; pinning them here
+  // keeps the OSS and tetros sides honest about which fields merge vs
+  // replace.
+
+  it('shallow-merges server (overlay fields override, others fall through)', () => {
+    const parsed = deployManifestSchema.parse(baseValid);
+    const effective = applyEnvironmentOverlay(parsed, {
+      server: { info: { name: 'acme-prod', version: '2.0.0' } },
+    });
+    expect(effective.server.info.name).toBe('acme-prod');
+    expect(effective.server.info.version).toBe('2.0.0');
+  });
+
+  it('REPLACES bindings wholesale (mirrors wrangler [env.<name>] semantics)', () => {
+    const parsed = deployManifestSchema.parse(baseValid);
+    const effective = applyEnvironmentOverlay(parsed, {
+      bindings: {
+        durableObjects: [],
+        kvNamespaces: [{ binding: 'ONLY_PROD_KV', id: 'kv-id-prod' }],
+      },
+    });
+    // The base's SESSIONS DO is gone; only the prod KV remains.
+    expect(effective.bindings.durableObjects).toEqual([]);
+    expect(effective.bindings.kvNamespaces?.map((kv) => kv.binding)).toEqual(['ONLY_PROD_KV']);
+  });
+
+  it('REPLACES specs / classification / auth when present, otherwise keeps base', () => {
+    const parsed = deployManifestSchema.parse(baseValid);
+    const replaced = applyEnvironmentOverlay(parsed, {
+      specs: './openapi-prod/',
+      auth: { provider: 'none' },
+    });
+    expect(replaced.specs).toBe('./openapi-prod/');
+    expect(replaced.auth.provider).toBe('none');
+
+    const empty = applyEnvironmentOverlay(parsed, {});
+    expect(empty.specs).toBe(parsed.specs);
+    expect(empty.auth).toEqual(parsed.auth);
+  });
+
+  it('does NOT modify signing / secrets / tags / environments (they are not overridable)', () => {
+    const parsed = deployManifestSchema.parse({
+      ...baseValid,
+      tags: [{ name: 't' }],
+      environments: { staging: {} },
+    });
+    const effective = applyEnvironmentOverlay(parsed, {
+      bindings: {
+        durableObjects: [],
+        kvNamespaces: [{ binding: 'REPLAY_NONCE', id: 'kv-id-prod' }],
+      },
+    });
+    expect(effective.signing).toEqual(parsed.signing);
+    expect(effective.secrets).toEqual(parsed.secrets);
+    expect(effective.tags).toEqual(parsed.tags);
+    expect(effective.environments).toEqual(parsed.environments);
   });
 });

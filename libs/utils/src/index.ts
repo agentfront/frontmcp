@@ -34,7 +34,7 @@ export {
   extname,
   isAbsolute,
   pathToFileURL,
-  pathSep,
+  sep,
 } from './path';
 
 // Content utilities

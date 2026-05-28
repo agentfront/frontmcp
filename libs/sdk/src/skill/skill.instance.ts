@@ -418,6 +418,12 @@ export async function resolveResourceFromManifest(
   const relPath = entry?.[resourceType];
   if (!relPath) return undefined;
 
-  const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+  // Reuse the shared, isolate-safe manifest-root resolver. The previous
+  // `require.main?.filename ?? process.cwd()` form breaks under V8
+  // isolates (no `require`) and bundlers that strip module metadata; the
+  // helper above already routes through `@frontmcp/utils#getCwd()` and
+  // gracefully returns undefined when no main can be inferred.
+  const mainDir = getSkillManifestMainDir();
+  if (!mainDir) return undefined;
   return pathResolve(mainDir, relPath);
 }

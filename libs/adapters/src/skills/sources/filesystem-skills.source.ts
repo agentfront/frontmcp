@@ -21,10 +21,10 @@ import {
   basename,
   joinPath,
   pathResolve,
-  pathSep,
   readdir,
   readFile,
   realpath,
+  sep,
   stat,
   watchFile,
   type FileWatcherHandle,
@@ -201,7 +201,7 @@ export class FilesystemSkillsSource {
         // race with concurrent delete or broken symlink — skip
         continue;
       }
-      if (!resolved.startsWith(this.rootResolved + pathSep) && resolved !== this.rootResolved) {
+      if (!resolved.startsWith(this.rootResolved + sep) && resolved !== this.rootResolved) {
         this.logger.warn(`[fs-skills] skipping ${name}: realpath escapes skillsDir`);
         continue;
       }
@@ -275,7 +275,7 @@ export class FilesystemSkillsSource {
             return;
           }
           // First path segment is the skill subdir name.
-          const first = filename.split(pathSep)[0];
+          const first = filename.split(sep)[0];
           if (!first || first.startsWith('.')) return; // editor swap files etc.
           const absDir = joinPath(this.rootResolved, first);
           this.scheduleRefresh(absDir);

@@ -79,8 +79,12 @@ describe('SearchSkillsTool', () => {
       search: jest.fn(),
     };
 
-    tool = new (SearchSkillsTool as any)();
-    tool.scope = { skills: mockRegistry } as never;
+    // Mirror search-knowledge.tool.spec.ts: the mocked ToolContext takes
+    // no required args, so we can cast to a parameterless constructor and
+    // avoid `any`. `scope` is injected matching the typed local.
+    type SearchSkillsToolCtor = new () => SearchSkillsTool;
+    tool = new (SearchSkillsTool as unknown as SearchSkillsToolCtor)() as typeof tool;
+    tool.scope = { skills: mockRegistry };
   });
 
   describe('happy path', () => {

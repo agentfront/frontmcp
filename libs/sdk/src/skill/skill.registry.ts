@@ -110,6 +110,18 @@ export interface SkillRegistryInterface {
   getSkills(options?: boolean | GetSkillsOptions): SkillEntry[];
 
   /**
+   * Get the "executable" subset — skills that declare at least one tool OR
+   * at least one referenced openapi operation. Drives `codecall:searchSkills`.
+   */
+  getExecutableSkills(options?: GetSkillsOptions): SkillEntry[];
+
+  /**
+   * Get the "knowledge-only" subset — skills with no tools and no referenced
+   * openapi operations. Drives `codecall:searchKnowledge`.
+   */
+  getKnowledgeOnlySkills(options?: GetSkillsOptions): SkillEntry[];
+
+  /**
    * Find a skill by name.
    * @param name - The skill name
    */
