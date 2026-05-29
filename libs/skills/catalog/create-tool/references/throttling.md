@@ -76,12 +76,12 @@ Order of effects per call:
 
 ## Common combinations
 
-| Scenario                               | Recipe                                                               |
-| -------------------------------------- | -------------------------------------------------------------------- |
-| Spammy external API                    | `rateLimit: { 60, 60_000 }` (60/min)                                 |
-| Shared DB / GPU                        | `concurrency: { maxConcurrent: 5 }`                                  |
-| Anything calling LLMs / 3rd-party HTTP | `timeout: { executeMs: 30_000 }`                                     |
-| All three                              | `rateLimit: { 10, 60_000 }, concurrency: { 2 }, timeout: { 30_000 }` |
+| Scenario                               | Recipe                                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Spammy external API                    | `rateLimit: { maxRequests: 60, windowMs: 60_000 }` (60/min)                                                           |
+| Shared DB / GPU                        | `concurrency: { maxConcurrent: 5 }`                                                                                   |
+| Anything calling LLMs / 3rd-party HTTP | `timeout: { executeMs: 30_000 }`                                                                                      |
+| All three                              | `rateLimit: { maxRequests: 10, windowMs: 60_000 }, concurrency: { maxConcurrent: 2 }, timeout: { executeMs: 30_000 }` |
 
 ## Propagating the abort signal
 

@@ -91,8 +91,8 @@ import { fileURLToPath } from 'node:url';
 const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url));
 ui: {
   template: {
-    file: widgetPath;
-  }
+    file: widgetPath,
+  },
 }
 ```
 

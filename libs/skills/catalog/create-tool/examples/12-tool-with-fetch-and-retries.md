@@ -76,8 +76,16 @@ export class CreateIssueTool extends ToolContext {
         this.fail(new PublicMcpError(`GitHub upstream failed after ${MAX_ATTEMPTS} attempts`));
       }
 
+      // Retry-After is either a number of seconds ("120") or an HTTP-date — handle both.
       const retryAfter = response.headers.get('retry-after');
-      const baseDelay = retryAfter ? Number(retryAfter) * 1_000 : BASE_DELAY_MS * 2 ** (attempt - 1);
+      const retryAfterMs = (() => {
+        if (!retryAfter) return undefined;
+        const seconds = Number(retryAfter);
+        if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+        const at = Date.parse(retryAfter);
+        return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
+      })();
+      const baseDelay = retryAfterMs ?? BASE_DELAY_MS * 2 ** (attempt - 1);
       const jitter = Math.floor(Math.random() * baseDelay * 0.2);
       await this.notify(
         `Attempt ${attempt} returned ${response.status}; retrying in ${baseDelay + jitter}ms`,

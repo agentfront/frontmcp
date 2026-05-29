@@ -5,7 +5,7 @@ description: Tool returning structured JSON declared via a Zod raw shape outputS
 tags: [output-schema, zod-shape, structured-output]
 features:
   - 'Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), … }`'
-  - 'Constraining values with `.int().min(0).max(100)` so invalid output is rejected at the boundary'
+  - 'Constraining values with `.int().min(0)` so invalid output is rejected at the boundary'
   - "Letting unrelated fields returned by the implementation (e.g. an upstream API's extras) be stripped silently"
   - "Deriving `OrderSummaryOutput` once so the type and runtime contract can't drift"
 ---
@@ -73,6 +73,6 @@ export class OrderSummaryTool extends ToolContext {
 ## What This Demonstrates
 
 - Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), … }`
-- Constraining values with `.int().min(0).max(100)` so invalid output is rejected at the boundary
+- Constraining values with `.int().min(0)` so invalid output is rejected at the boundary
 - Letting unrelated fields returned by the implementation (e.g. an upstream API's extras) be stripped silently
 - Deriving `OrderSummaryOutput` once so the type and runtime contract can't drift

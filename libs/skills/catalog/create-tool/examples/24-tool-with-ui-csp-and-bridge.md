@@ -20,7 +20,7 @@ The advanced widget pattern. The tool's response renders a stock-quote card with
 
 ```typescript
 // src/apps/main/tools/get-quote/get-quote.tool.ts
-import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import { PublicMcpError, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 const inputSchema = { symbol: z.string().regex(/^[A-Z]{1,5}$/) };
 const outputSchema = { symbol: z.string(), priceUsd: z.number(), asOf: z.string() };
@@ -34,6 +34,9 @@ const outputSchema = { symbol: z.string(), priceUsd: z.number(), asOf: z.string(
 export class GetQuoteTool extends ToolContext {
   async execute(input: { symbol: string }) {
     const res = await this.fetch(`https://api.market.example/quote/${input.symbol}`);
+    if (!res.ok) {
+      this.fail(new PublicMcpError(`Quote upstream returned ${res.status} ${res.statusText}`));
+    }
     const body = (await res.json()) as { price: number; ts: string };
     return { symbol: input.symbol, priceUsd: body.price, asOf: body.ts };
   }
@@ -42,7 +45,7 @@ export class GetQuoteTool extends ToolContext {
 
 ```typescript
 // src/apps/main/tools/show-quote/show-quote.tool.ts
-import { Tool, ToolContext, z, type TemplateContext } from '@frontmcp/sdk';
+import { PublicMcpError, Tool, ToolContext, z, type TemplateContext } from '@frontmcp/sdk';
 
 const inputSchema = { symbol: z.string().regex(/^[A-Z]{1,5}$/) };
 const outputSchema = { symbol: z.string(), priceUsd: z.number(), asOf: z.string() };
@@ -100,6 +103,9 @@ type Out = { symbol: string; priceUsd: number; asOf: string };
 export class ShowQuoteTool extends ToolContext {
   async execute(input: In): Promise<Out> {
     const res = await this.fetch(`https://api.market.example/quote/${input.symbol}`);
+    if (!res.ok) {
+      this.fail(new PublicMcpError(`Quote upstream returned ${res.status} ${res.statusText}`));
+    }
     const body = (await res.json()) as { price: number; ts: string };
     return { symbol: input.symbol, priceUsd: body.price, asOf: body.ts };
   }

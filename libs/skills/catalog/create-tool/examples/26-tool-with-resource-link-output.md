@@ -48,7 +48,6 @@ import { EXPORTS } from '../tokens';
 
 const inputSchema = {
   datasetId: z.string().uuid(),
-  format: z.enum(['csv', 'json']).default('csv'),
 };
 const outputSchema = 'resource_link';
 
@@ -60,12 +59,12 @@ const outputSchema = 'resource_link';
   annotations: { idempotentHint: false },
 })
 export class StartExportTool extends ToolContext {
-  async execute(input: { datasetId: string; format: 'csv' | 'json' }) {
+  async execute(input: { datasetId: string }) {
     const exports = this.get(EXPORTS);
-    const exportId = await exports.create(input.datasetId, input.format);
+    const exportId = await exports.create(input.datasetId);
 
     // Return JUST the URI. The client fetches the body via resources/read.
-    return { uri: `export://${exportId}.${input.format}` };
+    return { uri: `export://${exportId}.csv` };
   }
 }
 ```

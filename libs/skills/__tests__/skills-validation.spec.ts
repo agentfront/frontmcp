@@ -1121,7 +1121,10 @@ describe('skills catalog validation', () => {
           ? body.match(/^## Accessing this skill$/im)
           : body.match(/^## Accessing This Skill$/m);
         expect(headingMatch).not.toBeNull();
-        const idx = body.indexOf(headingMatch![0]);
+        if (headingMatch === null) {
+          throw new Error(`Missing "Accessing This Skill" heading for ${dir}`);
+        }
+        const idx = body.indexOf(headingMatch[0]);
         expect(idx).toBeGreaterThanOrEqual(0);
         const section = body.slice(idx);
         const nextHeading = section.indexOf('\n## ', 1);

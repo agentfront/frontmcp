@@ -65,7 +65,7 @@ export class ShowWeatherCardTool extends ToolContext {
 
 `ui.template` is a union of multiple callable shapes (`TemplateBuilderFn | string | ((props: any) => any) | FileSource`). TypeScript can't pick a single contextual type for the arrow's parameter, so `template: (ctx) => …` fails under `strict` / `noImplicitAny` with TS7006:
 
-```
+```text
 Parameter 'ctx' implicitly has an 'any' type.
 ```
 

@@ -9,7 +9,7 @@ Two endorsed layouts. Pick based on tool count per app and whether each tool has
 
 ## Flat siblings (≤3 tools per app, or each tool fits in one screen)
 
-```
+```text
 src/apps/main/tools/
 ├── get-weather.tool.ts        # @Tool class, execute()
 ├── get-weather.schema.ts      # input/output schemas + derived types
@@ -21,7 +21,7 @@ src/apps/main/tools/
 
 ## Folder-per-tool (>3 tools per app, or tool has helpers / fixtures / errors)
 
-```
+```text
 src/apps/main/tools/
 ├── get-weather/
 │   ├── get-weather.tool.ts        # @Tool class, execute()

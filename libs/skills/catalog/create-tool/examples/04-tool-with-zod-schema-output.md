@@ -48,7 +48,7 @@ export type ResolvePrincipalOutput = ToolOutputOf<{ outputSchema: typeof outputS
 
 ```typescript
 // src/apps/main/tools/resolve-principal.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { PublicMcpError, Tool, ToolContext } from '@frontmcp/sdk';
 
 import { PRINCIPALS } from '../tokens';
 import {

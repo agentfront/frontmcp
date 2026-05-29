@@ -20,7 +20,7 @@ The foundation. Two files (schema + tool), schemas as the single source of truth
 
 ## Files
 
-```
+```text
 src/apps/main/tools/
 ├── greet-user.schema.ts      # input/output schemas + derived types
 ├── greet-user.tool.ts        # @Tool class, execute()

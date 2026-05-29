@@ -71,7 +71,7 @@ See [`output-schema.md`](../references/output-schema.md) for the full taxonomy.
 
 ```bash
 # Grep for tools without outputSchema — should return 0 hits
-grep -L 'outputSchema:' $(grep -rl '@Tool' src/**/*.tool.ts)
+grep -L 'outputSchema:' $(grep -rl '@Tool' --include='*.tool.ts' src/)
 ```
 
 A failing CI step that runs this grep is the cheapest way to enforce the rule across a codebase.

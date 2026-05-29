@@ -20,7 +20,7 @@ The `examples` field is purely advisory — AI clients use it to surface canned 
 
 ```typescript
 // src/apps/main/tools/convert-currency.tool.ts
-import { Tool, ToolContext, z } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
 
 const inputSchema = {
   amount: z.number().positive(),
@@ -52,7 +52,9 @@ const outputSchema = { converted: z.number(), rate: z.number(), asOf: z.string()
   ],
 })
 export class ConvertCurrencyTool extends ToolContext {
-  async execute(input: { amount: number; from: string; to: string }) {
+  async execute(
+    input: ToolInputOf<{ inputSchema: typeof inputSchema }>,
+  ): Promise<ToolOutputOf<{ outputSchema: typeof outputSchema }>> {
     const rate = await this.fetchRate(input.from, input.to);
     return { converted: +(input.amount * rate).toFixed(2), rate, asOf: new Date().toISOString() };
   }

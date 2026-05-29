@@ -53,5 +53,5 @@ Why it's bad: change the schema (`city` → `location`, add `units`) without tou
 
 ```bash
 # Find tool files where execute() uses an inline object literal type — likely a violation
-grep -rE 'execute\(input:\s*\{' src/**/*.tool.ts
+grep -rE 'execute\(input:\s*\{' --include='*.tool.ts' src/
 ```

@@ -144,7 +144,7 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
 
 ## Decision tree
 
-```
+```text
 1. What kind of tool?
    ├── Tiny one-off → function-style: `tool({...})((input, ctx) => …)`
    │   See: examples/02-basic-function-tool.md
