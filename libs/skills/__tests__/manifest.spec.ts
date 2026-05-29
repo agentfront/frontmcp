@@ -2,7 +2,7 @@
  * Skills manifest validation tests.
  */
 
-import { VALID_TARGETS, VALID_CATEGORIES, VALID_BUNDLES } from '../src/manifest';
+import { VALID_BUNDLES, VALID_CATEGORIES, VALID_TARGETS } from '../src/manifest';
 
 describe('manifest constants', () => {
   it('should export valid targets', () => {
@@ -24,7 +24,8 @@ describe('manifest constants', () => {
     expect(VALID_CATEGORIES).toContain('production');
     expect(VALID_CATEGORIES).toContain('extensibility');
     expect(VALID_CATEGORIES).toContain('observability');
-    expect(VALID_CATEGORIES).toHaveLength(9);
+    expect(VALID_CATEGORIES).toContain('development/create');
+    expect(VALID_CATEGORIES).toHaveLength(10);
   });
 
   it('should export valid bundles', () => {

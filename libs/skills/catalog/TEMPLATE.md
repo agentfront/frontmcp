@@ -166,3 +166,29 @@ frontmatter `name`.
 
 - [Documentation](https://docs.agentfront.dev/frontmcp/...)
 - Related skills: `related-skill-a`, `related-skill-b`
+
+---
+
+## Alternative: `layout: 'component'`
+
+The template above describes the **router layout** (`layout: 'router'`, the default) — a Scenario Routing Table SKILL.md, `references/<topic>.md` files, and examples grouped under `examples/<topic>/<example>.md`.
+
+For per-thing skills (`create-tool`, `create-resource`, `create-prompt`, etc.) use the **component layout** instead. Opt in by setting `layout: component` in the manifest entry. Differences:
+
+| Aspect               | Router layout (default)                                           | Component layout                                                                                                                                                                                                             |
+| -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| SKILL.md frontmatter | Minimal — `name`, `description`, optional `priority`/`visibility` | **Rich** — multi-line `description:` with an explicit `Triggers:` list, `paths:` glob array, `when_to_use` block, top-level `priority`/`visibility`/`tags`/`category`. Designed for Claude Code's auto-discovery heuristics. |
+| `examples/`          | Grouped: `examples/<reference>/<example>.md`                      | Flat: `examples/<example>.md`                                                                                                                                                                                                |
+| `rules/`             | Not used                                                          | `rules/<rule>.md` — short DO/DON'T constraint files with `name`, `constraint`, `severity: required                                                                                                                           | recommended` frontmatter |
+| Manifest entry       | `references[].examples[]`                                         | Top-level `examples[]` + top-level `rules[]`                                                                                                                                                                                 |
+| SKILL.md body        | "Scenario Routing Table" pointing at references                   | "Scenario Routing Table" pointing at examples + a `Rules` table pointing at `rules/*.md`                                                                                                                                     |
+
+Every example file MUST still satisfy the same alignment invariants enforced by `skills-validation.spec.ts`:
+
+- Frontmatter `description` = first paragraph after the H1.
+- Frontmatter `features` = bullets under `## What This Demonstrates`.
+- Manifest example entry `description` / `level` / `tags` / `features` = the file's frontmatter.
+
+For component-layout skills the manifest sync extends to `rules[]`: the rule file's frontmatter `constraint` and `severity` must match the manifest entry.
+
+See `create-tool/SKILL.md` for a complete working example of the component layout.
