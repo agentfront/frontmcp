@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import type { DisplayMode, HostContext } from '../types';
+import type { DisplayMode, HostContext, WidgetSize } from '../types';
 import { BaseAdapter, DEFAULT_CAPABILITIES } from './base-adapter';
 
 /**
@@ -26,6 +26,8 @@ interface OpenAISDK {
     onToolResult?(callback: (result: unknown) => void): () => void;
     close(): Promise<void>;
     getContext?(): Partial<HostContext>;
+    /** Optional sizing hint API (forward-compat; some Apps SDK builds expose it). */
+    setWidgetHeight?(height: number): Promise<void> | void;
   };
 }
 
@@ -74,7 +76,7 @@ export class OpenAIAdapter extends BaseAdapter {
    */
   canHandle(): boolean {
     if (typeof window === 'undefined') return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const win = window as any;
     return Boolean(win.openai?.canvas);
   }
@@ -86,7 +88,7 @@ export class OpenAIAdapter extends BaseAdapter {
     if (this._initialized) return;
 
     // Get OpenAI SDK reference
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     this._openai = (window as any).openai as OpenAISDK;
 
     // Call base initialization (loads widget state, reads injected data)
@@ -181,6 +183,24 @@ export class OpenAIAdapter extends BaseAdapter {
     }
     await this._openai.canvas.setDisplayMode(mode);
     this._hostContext = { ...this._hostContext, displayMode: mode };
+  }
+
+  /**
+   * Report a desired widget size to ChatGPT.
+   *
+   * The Apps SDK normally measures DOM height itself, so this forwards to the
+   * SDK's sizing API only when one is exposed (`setWidgetHeight`) and otherwise
+   * no-ops. A `displayMode` hint is forwarded to `setDisplayMode`.
+   */
+  override async setSize(size: WidgetSize): Promise<void> {
+    const canvas = this._openai?.canvas;
+    if (!canvas) return;
+    if (size.displayMode && canvas.setDisplayMode) {
+      await canvas.setDisplayMode(size.displayMode);
+    }
+    if (typeof size.height === 'number' && canvas.setWidgetHeight) {
+      await canvas.setWidgetHeight(size.height);
+    }
   }
 
   override async requestClose(): Promise<void> {

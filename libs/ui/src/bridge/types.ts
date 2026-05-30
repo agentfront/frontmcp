@@ -49,6 +49,20 @@ export interface ViewportInfo {
 }
 
 /**
+ * Desired widget size reported to the host via {@link PlatformAdapter.setSize}.
+ */
+export interface WidgetSize {
+  /** Desired content height in CSS pixels. */
+  height?: number;
+  /** Desired content width in CSS pixels. */
+  width?: number;
+  /** CSS aspect-ratio hint (e.g. `'16 / 9'` or `1.5`). */
+  aspectRatio?: string | number;
+  /** Optional display-mode hint forwarded to hosts that couple sizing to it. */
+  displayMode?: DisplayMode;
+}
+
+/**
  * Host context provided by the AI platform.
  */
 export interface HostContext {
@@ -207,6 +221,17 @@ export interface PlatformAdapter {
    * @param mode - Desired display mode
    */
   requestDisplayMode(mode: DisplayMode): Promise<void>;
+
+  /**
+   * Report a desired widget size to the host.
+   *
+   * Behaviour is host-specific: hosts that measure the DOM themselves
+   * (Claude, generic web) treat this as a no-op; ext-apps hosts receive a
+   * `ui/setSize` request; OpenAI forwards to its Apps SDK when available.
+   *
+   * @param size - Desired widget dimensions
+   */
+  setSize(size: WidgetSize): Promise<void>;
 
   /**
    * Request widget close.
@@ -491,6 +516,7 @@ export interface FrontMcpBridgeInterface {
   sendMessage(content: string): Promise<void>;
   openLink(url: string): Promise<void>;
   requestDisplayMode(mode: DisplayMode): Promise<void>;
+  setSize(size: WidgetSize): Promise<void>;
   setWidgetState(state: Record<string, unknown>): void;
   onContextChange(callback: (changes: Partial<HostContext>) => void): () => void;
   onToolResult(callback: (result: unknown) => void): () => void;

@@ -564,6 +564,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Use custom resourceUri from config if provided, otherwise auto-generate
           const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
+          // Copy widget sizing hints (preferredHeight / minHeight / maxHeight /
+          // aspectRatio) onto the nested _meta.ui object. Read straight from
+          // uiConfig — same place CSP is sourced — NOT from the manifest, which
+          // never carries these fields. Emitted for all platforms so hosts that
+          // read sizing from tools/list (rather than __mcpWidgetSizing) get the
+          // same hints.
+          const applySizingMeta = (uiMeta: Record<string, unknown>): void => {
+            if (uiConfig.preferredHeight !== undefined) uiMeta['preferredHeight'] = uiConfig.preferredHeight;
+            if (uiConfig.minHeight !== undefined) uiMeta['minHeight'] = uiConfig.minHeight;
+            if (uiConfig.maxHeight !== undefined) uiMeta['maxHeight'] = uiConfig.maxHeight;
+            if (uiConfig.aspectRatio !== undefined) uiMeta['aspectRatio'] = uiConfig.aspectRatio;
+          };
+
           if (isExtApps) {
             // MCP Apps specification — nested _meta.ui object per spec
             const uiMeta: Record<string, unknown> = {
@@ -591,6 +604,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               }
             }
 
+            applySizingMeta(uiMeta);
+
             meta['ui'] = uiMeta;
 
             // Additional FrontMCP extension keys (outside ui namespace)
@@ -609,6 +624,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             if (uiConfig.csp) {
               uiMeta['csp'] = uiConfig.csp;
             }
+
+            applySizingMeta(uiMeta);
 
             meta['ui'] = uiMeta;
 

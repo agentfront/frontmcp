@@ -5,8 +5,8 @@
  */
 
 import { buildShell } from '../builder';
-import type { ShellConfig } from '../types';
 import type { ResolvedShellTemplate } from '../custom-shell-types';
+import type { ShellConfig } from '../types';
 
 // ============================================
 // Default Shell Behavior (regression)
@@ -83,6 +83,113 @@ describe('buildShell - default shell', () => {
     expect(result.hash.length).toBeGreaterThan(0);
     expect(result.size).toBeGreaterThan(0);
     expect(result.size).toBe(Buffer.byteLength(result.html, 'utf-8'));
+  });
+});
+
+// ============================================
+// Widget Sizing
+// ============================================
+
+describe('buildShell - widget sizing', () => {
+  const baseConfig: ShellConfig = {
+    toolName: 'sized_tool',
+    output: { message: 'Hello' },
+  };
+
+  it('should NOT inject sizing CSS or assign __mcpWidgetSizing when no sizing configured', () => {
+    const result = buildShell('<div>Hello</div>', baseConfig);
+    // The bridge IIFE always *references* window.__mcpWidgetSizing (to read it),
+    // but with no sizing configured the data-injection script must not *assign*
+    // it, and no sizing <style> block should be emitted.
+    expect(result.html).not.toContain('window.__mcpWidgetSizing =');
+    expect(result.html).not.toMatch(/<style>html, body \{/);
+  });
+
+  it('should inject initial height CSS for numeric preferredHeight (→ px)', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { preferredHeight: 420 },
+    });
+    expect(result.html).toContain('height: 420px;');
+    expect(result.html).toContain('#root { min-height: 420px;');
+  });
+
+  it('should pass string CSS lengths through verbatim', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { preferredHeight: '50vh', minHeight: '10rem' },
+    });
+    expect(result.html).toContain('height: 50vh;');
+    expect(result.html).toContain('min-height: 10rem;');
+  });
+
+  it('should inject min/max-height and aspect-ratio', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { minHeight: 100, maxHeight: 600, aspectRatio: '16 / 9' },
+    });
+    expect(result.html).toContain('min-height: 100px;');
+    expect(result.html).toContain('max-height: 600px;');
+    expect(result.html).toContain('aspect-ratio: 16 / 9;');
+  });
+
+  it('should assign __mcpWidgetSizing global with the sizing config', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { preferredHeight: 300, autoResize: true },
+    });
+    expect(result.html).toContain('window.__mcpWidgetSizing =');
+    expect(result.html).toContain('"preferredHeight":300');
+  });
+
+  it('should assign __mcpWidgetSizing when only autoResize:false is set (opt-out)', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { autoResize: false },
+    });
+    expect(result.html).toContain('window.__mcpWidgetSizing =');
+    expect(result.html).toContain('"autoResize":false');
+  });
+
+  it('should include the auto-resize runtime in the bridge by default', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { preferredHeight: 300 },
+    });
+    expect(result.html).toContain('__initAutoResize');
+  });
+
+  it('should sanitize CSS values inside the <style> block (no tag/decl breakout)', () => {
+    const result = buildShell('<div>Hello</div>', {
+      ...baseConfig,
+      sizing: { preferredHeight: '300px;}</style><script>alert(1)' },
+    });
+
+    // Isolate the injected height declaration from the sizing <style> block —
+    // `< > { } ;` are stripped from the value, so it can't break out of the
+    // declaration or the <style> tag.
+    const declMatch = result.html.match(/<style>html, body \{[^}]*?height: ([^;]*);/);
+    expect(declMatch).toBeTruthy();
+    const declValue = declMatch![1];
+    // No tag breakout, no extra `}` to close the rule early, no `;` to start a
+    // new declaration — the malicious chars are gone.
+    expect(declValue).not.toContain('<');
+    expect(declValue).not.toContain('>');
+    expect(declValue).not.toContain('}');
+    expect(declValue).not.toContain(';');
+    // The stripped value survives as an (inert) CSS token.
+    expect(declValue).toBe('300px/stylescriptalert(1)');
+  });
+
+  it('should inject sizing into custom shells via the DATA placeholder', () => {
+    const template = '<html><head>{{DATA}}{{BRIDGE}}</head><body>{{CONTENT}}</body></html>';
+    const result = buildShell('<div>Widget</div>', {
+      ...baseConfig,
+      customShell: template,
+      sizing: { preferredHeight: 240 },
+    });
+    expect(result.html).toContain('window.__mcpWidgetSizing');
+    expect(result.html).toContain('height: 240px;');
   });
 });
 

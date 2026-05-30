@@ -2,7 +2,7 @@
  * IIFE Generator Tests
  */
 
-import { generateBridgeIIFE, generatePlatformBundle, UNIVERSAL_BRIDGE_SCRIPT, BRIDGE_SCRIPT_TAGS } from '../runtime';
+import { BRIDGE_SCRIPT_TAGS, generateBridgeIIFE, generatePlatformBundle, UNIVERSAL_BRIDGE_SCRIPT } from '../runtime';
 
 describe('IIFE Generator', () => {
   describe('generateBridgeIIFE', () => {
@@ -214,6 +214,47 @@ describe('IIFE Generator', () => {
     it('should support localStorage for widget state', () => {
       expect(script).toContain('localStorage');
       expect(script).toContain('frontmcp:widget');
+    });
+  });
+
+  describe('auto-resize routine', () => {
+    it('should include the auto-resize initializer', () => {
+      const script = generateBridgeIIFE();
+      expect(script).toContain('__initAutoResize');
+      expect(script).toContain('__applySizingCss');
+    });
+
+    it('should read the injected __mcpWidgetSizing global', () => {
+      const script = generateBridgeIIFE();
+      expect(script).toContain('window.__mcpWidgetSizing');
+    });
+
+    it('should feature-detect ResizeObserver before observing', () => {
+      const script = generateBridgeIIFE();
+      expect(script).toContain("typeof ResizeObserver === 'undefined'");
+      expect(script).toContain('new ResizeObserver');
+    });
+
+    it('should respect autoResize:false (opt-out short-circuit)', () => {
+      const script = generateBridgeIIFE();
+      expect(script).toContain('sizing.autoResize === false');
+    });
+
+    it('should expose a bridge setSize API and report through it', () => {
+      const script = generateBridgeIIFE();
+      expect(script).toContain('FrontMcpBridge.prototype.setSize');
+      expect(script).toContain('window.FrontMcpBridge.setSize');
+    });
+
+    it('should emit ui/setSize from the ext-apps adapter', () => {
+      const script = generateBridgeIIFE({ adapters: ['ext-apps', 'generic'] });
+      expect(script).toContain('setSize:');
+      expect(script).toContain("'ui/setSize'");
+    });
+
+    it('is present even when only the generic adapter is selected', () => {
+      const script = generateBridgeIIFE({ adapters: ['generic'] });
+      expect(script).toContain('__initAutoResize');
     });
   });
 });

@@ -56,6 +56,7 @@ export type {
   UserAgentInfo,
   SafeAreaInsets,
   ViewportInfo,
+  WidgetSize,
   HostContext,
   // Adapter
   AdapterCapabilities,

@@ -3,7 +3,7 @@
  */
 
 import { AdapterRegistry } from '../core/adapter-registry';
-import type { PlatformAdapter, AdapterCapabilities, HostContext, DisplayMode } from '../types';
+import type { AdapterCapabilities, DisplayMode, HostContext, PlatformAdapter } from '../types';
 
 // Minimal mock adapter that doesn't need window
 class MockAdapter implements PlatformAdapter {
@@ -87,6 +87,9 @@ class MockAdapter implements PlatformAdapter {
     /* noop */
   }
   async requestDisplayMode(): Promise<void> {
+    /* noop */
+  }
+  async setSize(): Promise<void> {
     /* noop */
   }
   async requestClose(): Promise<void> {

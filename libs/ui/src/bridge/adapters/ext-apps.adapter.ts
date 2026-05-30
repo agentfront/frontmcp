@@ -9,17 +9,18 @@
  */
 
 import type {
+  AdapterConfig,
   DisplayMode,
-  HostContext,
-  JsonRpcRequest,
-  JsonRpcResponse,
-  JsonRpcNotification,
+  ExtAppsHostContextChangeParams,
   ExtAppsInitializeParams,
   ExtAppsInitializeResult,
   ExtAppsToolInputParams,
   ExtAppsToolResultParams,
-  ExtAppsHostContextChangeParams,
-  AdapterConfig,
+  HostContext,
+  JsonRpcNotification,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  WidgetSize,
 } from '../types';
 import { BaseAdapter, DEFAULT_CAPABILITIES } from './base-adapter';
 
@@ -110,7 +111,6 @@ export class ExtAppsAdapter extends BaseAdapter {
     const inIframe = window.parent !== window;
     if (!inIframe) return false;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
 
     // Check we're not already detected as OpenAI
@@ -225,6 +225,18 @@ export class ExtAppsAdapter extends BaseAdapter {
   override async requestDisplayMode(mode: DisplayMode): Promise<void> {
     await this._sendRequest('ui/setDisplayMode', { mode });
     this._hostContext = { ...this._hostContext, displayMode: mode };
+  }
+
+  /**
+   * Report a desired widget size to the host via the FrontMCP `ui/setSize`
+   * request (parallels `ui/setDisplayMode`).
+   */
+  override async setSize(size: WidgetSize): Promise<void> {
+    await this._sendRequest('ui/setSize', {
+      height: size.height,
+      width: size.width,
+      aspectRatio: size.aspectRatio,
+    });
   }
 
   override async requestClose(): Promise<void> {

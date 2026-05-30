@@ -160,7 +160,14 @@ function buildCustomShell(
     input: ctx.input,
     output: ctx.output,
     structuredContent: ctx.structuredContent,
+    sizing: ctx.sizing,
   });
+
+  // Static sizing CSS rides along with the {{DATA}} placeholder so it lands in
+  // <head> for custom shells (which have no dedicated sizing slot). The runtime
+  // auto-resize behaviour ships inside the bridge IIFE ({{BRIDGE}}).
+  const sizingStyle = buildSizingStyleTag(ctx.sizing);
+  const dataWithSizing = sizingStyle ? `${dataScript}\n${sizingStyle}` : dataScript;
 
   let bridgeHtml = '';
   if (ctx.includeBridge) {
@@ -170,7 +177,7 @@ function buildCustomShell(
 
   const html = applyShellTemplate(template, {
     csp: cspTag,
-    data: dataScript,
+    data: dataWithSizing,
     bridge: bridgeHtml,
     content,
     title: ctx.title ? escapeHtmlForTag(ctx.title) : '',

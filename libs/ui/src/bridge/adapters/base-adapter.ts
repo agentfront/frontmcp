@@ -8,13 +8,14 @@
  */
 
 import type {
-  PlatformAdapter,
   AdapterCapabilities,
   DisplayMode,
-  UserAgentInfo,
-  SafeAreaInsets,
-  ViewportInfo,
   HostContext,
+  PlatformAdapter,
+  SafeAreaInsets,
+  UserAgentInfo,
+  ViewportInfo,
+  WidgetSize,
 } from '../types';
 
 /**
@@ -178,6 +179,12 @@ export abstract class BaseAdapter implements PlatformAdapter {
     throw new Error('requestDisplayMode not implemented');
   }
 
+  async setSize(_size: WidgetSize): Promise<void> {
+    // Default: no-op. Hosts that measure the DOM themselves (Claude, generic
+    // web) don't need an explicit size report. Override in adapters whose host
+    // exposes a sizing channel (ext-apps, OpenAI).
+  }
+
   async requestClose(): Promise<void> {
     // Default: no-op (host controls widget lifecycle)
   }
@@ -282,7 +289,6 @@ export abstract class BaseAdapter implements PlatformAdapter {
   protected _readInjectedData(): void {
     if (typeof window === 'undefined') return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
 
     if (win.__mcpToolInput) {
@@ -335,7 +341,6 @@ export abstract class BaseAdapter implements PlatformAdapter {
    */
   protected _getStateKey(): string {
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolName = (window as any).__mcpToolName || 'unknown';
       return `frontmcp:widget:${toolName}`;
     }

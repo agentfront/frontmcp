@@ -9,16 +9,17 @@
  */
 
 import type {
-  PlatformAdapter,
   AdapterCapabilities,
   BridgeConfig,
-  DisplayMode,
-  HostContext,
-  FrontMcpBridgeInterface,
-  BridgeEventType,
   BridgeEventPayloads,
+  BridgeEventType,
+  DisplayMode,
+  FrontMcpBridgeInterface,
+  HostContext,
+  PlatformAdapter,
+  WidgetSize,
 } from '../types';
-import { AdapterRegistry, defaultRegistry } from './adapter-registry';
+import { defaultRegistry, type AdapterRegistry } from './adapter-registry';
 
 /**
  * Default bridge configuration.
@@ -317,6 +318,15 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
   async requestDisplayMode(mode: DisplayMode): Promise<void> {
     const adapter = this._ensureInitialized();
     return adapter.requestDisplayMode(mode);
+  }
+
+  /**
+   * Report a desired widget size to the host.
+   * @param size - Desired widget dimensions
+   */
+  async setSize(size: WidgetSize): Promise<void> {
+    const adapter = this._ensureInitialized();
+    return adapter.setSize(size);
   }
 
   /**

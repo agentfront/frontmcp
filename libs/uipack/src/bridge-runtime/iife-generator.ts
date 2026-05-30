@@ -115,6 +115,10 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
 
   // Expose global
   parts.push('window.FrontMcpBridge = bridge;');
+  parts.push('');
+
+  // Auto-resize: apply sizing CSS + observe #root, reporting height to the host.
+  parts.push(generateAutoResize());
 
   // Inject loading indicator into #root while esm.sh modules download.
   // This runs synchronously in <head>, so #root may not exist yet.
@@ -143,6 +147,119 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
   }
 
   return code;
+}
+
+/**
+ * Generate the auto-resize routine.
+ *
+ * Reads `window.__mcpWidgetSizing` (injected by the shell when the tool's `ui`
+ * config sets any sizing field), applies the configured CSS as a runtime
+ * fallback (covers render paths that don't emit the static `<style>`), and —
+ * unless `autoResize === false` — installs a debounced `ResizeObserver` on
+ * `#root` that reports the measured content height to the host via
+ * `bridge.setSize(...)`.
+ *
+ * Everything is feature-detected and wrapped in try/catch so older hosts (no
+ * `ResizeObserver`) degrade gracefully to CSS-only sizing.
+ */
+function generateAutoResize(): string {
+  return `
+function __applySizingCss(sizing) {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  function toLen(v) { return typeof v === 'number' ? v + 'px' : v; }
+  var de = document.documentElement;
+  var body = document.body;
+  var root = document.getElementById('root');
+  if (sizing.preferredHeight != null) {
+    var ph = toLen(sizing.preferredHeight);
+    de.style.height = ph;
+    if (body) body.style.height = ph;
+    if (root && !root.style.minHeight) root.style.minHeight = ph;
+  }
+  if (sizing.minHeight != null) {
+    var mh = toLen(sizing.minHeight);
+    de.style.minHeight = mh;
+    if (body) body.style.minHeight = mh;
+    if (root) root.style.minHeight = mh;
+  }
+  if (sizing.maxHeight != null) {
+    var mx = toLen(sizing.maxHeight);
+    de.style.maxHeight = mx;
+    if (body) body.style.maxHeight = mx;
+    if (root) root.style.maxHeight = mx;
+  }
+  if (sizing.aspectRatio != null && root) {
+    root.style.aspectRatio = String(sizing.aspectRatio);
+  }
+}
+
+function __initAutoResize() {
+  if (typeof window === 'undefined') return;
+  var sizing = window.__mcpWidgetSizing;
+  if (!sizing || typeof sizing !== 'object') return;
+
+  // Apply CSS as a runtime fallback (the static <style> may be absent on some
+  // render paths). Wait for the body if it isn't ready yet.
+  function apply() { try { __applySizingCss(sizing); } catch (e) {} }
+  if (typeof document !== 'undefined' && document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+
+  // Auto-resize defaults ON; opt out with autoResize:false.
+  if (sizing.autoResize === false) return;
+  if (typeof ResizeObserver === 'undefined') return;
+
+  function startObserving() {
+    var target = document.getElementById('root') || document.body;
+    if (!target) return;
+
+    var rafId = null;
+    var lastReported = -1;
+    function report() {
+      rafId = null;
+      try {
+        var rect = target.getBoundingClientRect();
+        var height = Math.ceil(rect.height);
+        var width = Math.ceil(rect.width);
+        if (height === lastReported || height <= 0) return;
+        lastReported = height;
+        var payload = { height: height, width: width };
+        if (sizing.aspectRatio != null) payload.aspectRatio = sizing.aspectRatio;
+        if (window.FrontMcpBridge && typeof window.FrontMcpBridge.setSize === 'function') {
+          window.FrontMcpBridge.setSize(payload).catch(function() {});
+        }
+        window.dispatchEvent(new CustomEvent('widget:resize', { detail: payload }));
+      } catch (e) {}
+    }
+    function schedule() {
+      // Debounce via rAF; fall back to setTimeout if rAF is unavailable.
+      if (rafId != null) return;
+      if (typeof requestAnimationFrame === 'function') {
+        rafId = requestAnimationFrame(report);
+      } else {
+        rafId = setTimeout(report, 100);
+      }
+    }
+
+    try {
+      var ro = new ResizeObserver(function() { schedule(); });
+      ro.observe(target);
+      window.__mcpResizeObserver = ro;
+    } catch (e) {}
+    // Report once on init so the host gets an initial measurement.
+    schedule();
+  }
+
+  if (typeof document !== 'undefined' && document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserving);
+  } else {
+    startObserving();
+  }
+}
+__initAutoResize();
+`.trim();
 }
 
 /**
@@ -261,6 +378,19 @@ var OpenAIAdapter = {
     return Promise.resolve();
   },
   requestDisplayMode: function(context, mode) {
+    return Promise.resolve();
+  },
+  setSize: function(context, size) {
+    // OpenAI Apps SDK measures DOM height itself; if a sizing API surfaces on
+    // window.openai, forward to it, otherwise no-op (CSS drives layout).
+    try {
+      if (window.openai && typeof window.openai.requestDisplayMode === 'function' && size && size.displayMode) {
+        window.openai.requestDisplayMode(size.displayMode);
+      }
+      if (window.openai && typeof window.openai.setWidgetHeight === 'function' && size && typeof size.height === 'number') {
+        window.openai.setWidgetHeight(size.height);
+      }
+    } catch (e) {}
     return Promise.resolve();
   },
   requestClose: function(context) {
@@ -512,6 +642,15 @@ var ExtAppsAdapter = {
   requestDisplayMode: function(context, mode) {
     return this.sendRequest('ui/setDisplayMode', { mode: mode });
   },
+  setSize: function(context, size) {
+    // FrontMCP sizing channel — parallels ui/setDisplayMode. Reports the
+    // measured/desired widget dimensions to the host.
+    return this.sendRequest('ui/setSize', {
+      height: size && size.height,
+      width: size && size.width,
+      aspectRatio: size && size.aspectRatio
+    });
+  },
   requestClose: function(context) {
     return this.sendRequest('ui/close', {});
   },
@@ -604,6 +743,10 @@ var ClaudeAdapter = {
   requestDisplayMode: function() {
     return Promise.resolve();
   },
+  setSize: function() {
+    // Claude measures the rendered DOM height itself — CSS-only, no reporting.
+    return Promise.resolve();
+  },
   requestClose: function() {
     return Promise.resolve();
   }
@@ -659,6 +802,9 @@ var GeminiAdapter = {
   requestDisplayMode: function() {
     return Promise.resolve();
   },
+  setSize: function() {
+    return Promise.resolve();
+  },
   requestClose: function() {
     return Promise.resolve();
   }
@@ -696,6 +842,9 @@ var GenericAdapter = {
     return Promise.resolve();
   },
   requestDisplayMode: function() {
+    return Promise.resolve();
+  },
+  setSize: function() {
     return Promise.resolve();
   },
   requestClose: function() {
@@ -941,6 +1090,15 @@ FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
   return this._adapter.requestDisplayMode(this._context, mode).then(function() {
     self._context.hostContext.displayMode = mode;
   });
+};
+
+// Report a desired widget size to the host. \`size\` is { height?, width?, aspectRatio? }.
+// Per-adapter behaviour: Claude/generic no-op (host measures the DOM),
+// ext-apps sends ui/setSize, OpenAI forwards to its SDK when available.
+FrontMcpBridge.prototype.setSize = function(size) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.setSize) return Promise.resolve();
+  return this._adapter.setSize(this._context, size || {});
 };
 
 FrontMcpBridge.prototype.requestClose = function() {
