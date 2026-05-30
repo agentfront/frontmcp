@@ -57,6 +57,7 @@ import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry'
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import ResourceRegistry from '../resource/resource.registry';
+import { registerCustomHttpRoutes } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import { createSkillToolGuardHook } from '../skill/hooks';
 import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
@@ -871,6 +872,22 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
     await this.transportService.ready;
+
+    // Register first-class custom HTTP routes (issue #465). Runs after auth is
+    // ready so `auth: true` routes can dispatch the `session:verify` flow. The
+    // reserved-path guard uses the resolved entryPath + routeBase, so it is
+    // aware of split-by-app scope bases (e.g. /mcp/billing).
+    registerCustomHttpRoutes({
+      routes: this.metadata.http?.routes,
+      server: this.server,
+      // `session:verify` input uses a loose passthrough request shape; the
+      // ServerRequest class instance satisfies it at runtime.
+      verifySession: (request) =>
+        this.runFlow('session:verify', { request: request as unknown as Record<string, unknown> }),
+      entryPath: this.entryPath,
+      routeBase: this.routeBase,
+      logger: this.logger,
+    });
 
     // Initialize channels if enabled (after notification service and all registries are ready)
     const channelsConfig = this.metadata.channels as ChannelsConfigOptions | undefined;

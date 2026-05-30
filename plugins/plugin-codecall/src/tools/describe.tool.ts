@@ -66,8 +66,12 @@ export default class DescribeTool extends ToolContext {
       // Get input schema - convert from Zod to ensure descriptions are included
       const inputSchema = this.getInputSchema(tool);
 
-      // Get output schema - convert from Zod if needed
-      const outputSchema = this.toJsonSchema(tool.outputSchema);
+      // Get output schema as JSON Schema. Prefer the `rawOutputSchema` passthrough
+      // (OpenAPI / remote tools) so their output is surfaced — it was previously ignored,
+      // leaving those tools with no output schema. Otherwise convert the declared Zod
+      // output. Unlike `tools/list`, codecall keeps unions / non-object schemas (useful
+      // context for the model), so it uses its own permissive converter.
+      const outputSchema = this.toJsonSchema(tool.rawOutputSchema ?? tool.outputSchema);
 
       // Generate usage examples: user-provided > smart generation > basic fallback
       const usageExamples = this.generateExamples(tool, inputSchema ?? undefined);

@@ -4,10 +4,37 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
+import type { HttpMethod, ServerRequestHandler } from '../../../interfaces';
 import type { RawZodShape } from '../../common.types';
 import type { CorsOptions, HttpOptionsInterface } from './interfaces';
 
 type CorsOriginCallback = Extract<CorsOptions['origin'], Function>;
+
+/** HTTP methods accepted by custom routes — mirrors the `HttpMethod` union. */
+const HTTP_METHODS = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+  'OPTIONS',
+  'HEAD',
+] as const satisfies readonly HttpMethod[];
+
+/**
+ * Custom HTTP route schema (issue #465). `handler` is a function, which Zod
+ * cannot introspect, so we validate it with `z.custom` — the same pattern used
+ * for `hostFactory` (`z.any()`) and the CORS origin callback. Type safety for
+ * the handler signature is enforced via the `HttpRouteConfig` TS interface.
+ */
+const httpRouteSchema = z.object({
+  method: z.enum(HTTP_METHODS),
+  path: z.string().min(1),
+  handler: z.custom<ServerRequestHandler>((v) => typeof v === 'function', {
+    message: 'route.handler must be a function (req, res, next) => void | Promise<void>',
+  }),
+  auth: z.boolean().optional(),
+});
 
 /**
  * Body-parser-compatible size limit. Accepts:
@@ -100,6 +127,12 @@ export const httpOptionsSchema = z.object({
    * Falls back to `bodyLimit` when omitted (handled at the adapter layer).
    */
   urlencodedLimit: bodyParserLimitSchema.optional(),
+  /**
+   * First-class custom HTTP routes (issue #465). Mounted on the same Express
+   * app as the MCP endpoint; public by default, `auth: true` opts into the MCP
+   * `session:verify` flow. Reserved-path collisions are rejected at startup.
+   */
+  routes: z.array(httpRouteSchema).optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

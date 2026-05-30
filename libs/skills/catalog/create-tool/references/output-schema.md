@@ -129,6 +129,38 @@ Structured object outputs are converted to JSON Schema and advertised on the too
 
 If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape or `z.object`) — that's the form that gets advertised.
 
+### Exposure mode
+
+A cascading `output` policy controls _how_ the (object-shaped) schema reaches clients in `tools/list`. Declare it on `@FrontMcp`, `@App`, or `@Tool`:
+
+```typescript
+output?: {
+  schemaMode?: 'definition' | 'description' | 'both' | 'none'; // default 'definition'
+  schemaDescriptionFormat?: 'summary' | 'jsonSchema';          // default 'summary'
+};
+```
+
+| `schemaMode`    | Effect                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `'definition'`  | **Default.** Advertise the schema as the tool's `outputSchema` (JSON Schema).           |
+| `'description'` | Fold a readable rendering of the schema into the tool description; omit `outputSchema`. |
+| `'both'`        | Advertise as `outputSchema` **and** fold it into the description.                       |
+| `'none'`        | Expose nothing — no `outputSchema`, no description suffix.                              |
+
+`schemaDescriptionFormat` controls the rendering for `'description'` / `'both'`: `'summary'` (default) is a compact property list; `'jsonSchema'` is a fenced JSON Schema block.
+
+The effective value resolves with a **Tool > App > server > default** cascade — set a server-wide default on `@FrontMcp` and override per tool. This mirrors the OpenAPI adapter's `outputSchema.mode`.
+
+```typescript
+// This tool folds its schema into the description instead of advertising `outputSchema`
+@Tool({ name: 'get_status', inputSchema, outputSchema, output: { schemaMode: 'description' } })
+class GetStatusTool extends ToolContext {
+  /* … */
+}
+```
+
+The default (`'definition'`) preserves the current behavior described above — omit `output` entirely and nothing changes.
+
 ## Why this matters
 
 - **Data leak prevention** — without `outputSchema`, accidentally returning `{ result, internalApiKey }` leaks the key. With it, only `result` flows.

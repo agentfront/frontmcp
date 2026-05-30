@@ -18,7 +18,7 @@
 // Import types from ui-config for use in this file
 import type { ZodTypeAny } from '@frontmcp/lazy-zod';
 
-import type { WidgetServingMode as _WidgetServingMode } from './ui-config';
+import type { WidgetServingMode as _WidgetServingMode, WidgetSizeValue as _WidgetSizeValue } from './ui-config';
 
 // Re-export shared types from ui-config for backwards compatibility
 export type {
@@ -28,10 +28,13 @@ export type {
   UIContentSecurityPolicy,
   WidgetDisplayMode,
   WidgetServingMode,
+  WidgetSizeValue,
 } from './ui-config';
 
 // Use the internal alias for WidgetServingMode within this file
 type WidgetServingMode = _WidgetServingMode;
+// Use the internal alias for WidgetSizeValue within this file
+type WidgetSizeValue = _WidgetSizeValue;
 
 // ============================================
 // UI Type (Renderer Selection)
@@ -559,6 +562,30 @@ export interface UIMetaFields {
    * Maps to `_meta['ui/displayMode']`.
    */
   'ui/displayMode'?: DisplayMode;
+
+  /**
+   * Preferred initial widget height.
+   * Maps to `_meta['ui/preferredHeight']`.
+   */
+  'ui/preferredHeight'?: WidgetSizeValue;
+
+  /**
+   * Minimum widget height.
+   * Maps to `_meta['ui/minHeight']`.
+   */
+  'ui/minHeight'?: WidgetSizeValue;
+
+  /**
+   * Maximum widget height.
+   * Maps to `_meta['ui/maxHeight']`.
+   */
+  'ui/maxHeight'?: WidgetSizeValue;
+
+  /**
+   * CSS aspect-ratio for the widget.
+   * Maps to `_meta['ui/aspectRatio']`.
+   */
+  'ui/aspectRatio'?: string | number;
 
   /**
    * Whether widget can invoke tools via MCP bridge.

@@ -118,6 +118,32 @@ await this.progress(50, 100, 'Halfway done');
 await this.progress(100, 100, 'Complete');
 ```
 
+#### notifyResourceUpdated(uri)
+
+Notify subscribed clients that a resource's contents changed. Sends `notifications/resources/updated` to every session subscribed to `uri` (via `resources/subscribe`); a no-op for sessions that aren't subscribed. Call this after a tool mutates state that backs a `@Resource` so subscribers re-fetch.
+
+```typescript
+notifyResourceUpdated(uri: string): void
+```
+
+```typescript
+await this.saveNote(input);
+this.notifyResourceUpdated(`notes://${input.id}`); // subscribers re-fetch this resource
+```
+
+#### notifyResourceListChanged()
+
+Broadcast `notifications/resources/list_changed` so clients re-run `resources/list`. Call this when a tool adds or removes resources at runtime.
+
+```typescript
+notifyResourceListChanged(): void
+```
+
+```typescript
+await this.deleteNote(input.id);
+this.notifyResourceListChanged(); // clients re-run resources/list
+```
+
 ### Elicitation Methods
 
 #### elicit\<S\>(message, requestedSchema, options?)

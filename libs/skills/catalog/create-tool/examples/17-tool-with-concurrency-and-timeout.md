@@ -59,13 +59,15 @@ export class RenderPdfTool extends ToolContext {
   ): Promise<Buffer> {
     // pretend this is puppeteer / wkhtmltopdf / a Rust binary that honors its own deadline
     return new Promise((resolve, reject) => {
-      const done = setTimeout(() => resolve(Buffer.from('%PDF-1.4 …')), 1_000);
+      // clear the deadline only once the render actually resolves
+      const done = setTimeout(() => {
+        clearTimeout(deadline);
+        resolve(Buffer.from('%PDF-1.4 …'));
+      }, 1_000);
       const deadline = setTimeout(() => {
         clearTimeout(done);
         reject(new Error('render exceeded deadline'));
       }, options.deadlineMs);
-      // ensure the deadline timer is cleared once the render resolves
-      void Promise.resolve().then(() => clearTimeout(deadline));
     });
   }
 }

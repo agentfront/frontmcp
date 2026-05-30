@@ -1,5 +1,6 @@
 // file: libs/sdk/src/common/entries/tool.entry.ts
 
+import { toJSONSchema, z } from '@frontmcp/lazy-zod';
 import {
   type AuthInfo,
   type CallToolRequest,
@@ -131,7 +132,6 @@ export abstract class ToolEntry<
     // Convert Zod schema shape to JSON Schema
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
-        const { z, toJSONSchema } = require('zod');
         return toJSONSchema(z.object(this.inputSchema));
       } catch (error) {
         // Log the error for debugging purposes
@@ -188,7 +188,6 @@ export abstract class ToolEntry<
     }
 
     try {
-      const { z, toJSONSchema } = require('zod');
       // Duck-type a Zod schema (z.object(), z.discriminatedUnion(), …) vs a raw shape
       // ({ field: z.string() }); identity-based instanceof is avoided so a duplicated zod
       // module copy cannot break detection.
@@ -201,7 +200,10 @@ export abstract class ToolEntry<
         return null;
       }
 
-      const zodSchema = isZodSchema ? schema : z.object(schema as Record<string, unknown>);
+      // `schema` is a Zod type (z.object()/discriminatedUnion/…) or a raw shape at
+      // runtime, but `unknown` to TS. Narrow to the Zod-object type both z.object() and
+      // toJSONSchema() accept (the raw-shape cast mirrors the inputSchema path above).
+      const zodSchema = isZodSchema ? (schema as ReturnType<typeof z.object>) : z.object(schema as ToolInputType);
       const json = toJSONSchema(zodSchema) as Record<string, unknown>;
 
       // MCP requires outputSchema to be a top-level object schema; skip anything else

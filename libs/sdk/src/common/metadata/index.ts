@@ -4,6 +4,7 @@ export { ProviderScope } from '@frontmcp/di';
 export type { ProviderMetadata } from '@frontmcp/di';
 
 export * from './front-mcp.metadata';
+export * from './output-policy';
 export * from './flow.metadata';
 export * from './hook.metadata';
 export * from './app.metadata';

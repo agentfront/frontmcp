@@ -1,5 +1,17 @@
 // tools/flows/list-tools.flow.ts
-import { Flow, FlowBase, FlowControl, FlowHooksOf, ToolEntry, type FlowPlan, type FlowRunOptions } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowControl,
+  FlowHooksOf,
+  formatOutputSchemaForDescription,
+  resolveOutputSchemaMode,
+  resolveSchemaDescriptionFormat,
+  ToolEntry,
+  type FlowPlan,
+  type FlowRunOptions,
+  type OutputPolicy,
+} from '../../common';
 
 import 'reflect-metadata';
 
@@ -424,6 +436,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
       // All platforms now use ui/* keys per the MCP Apps specification
 
+      // Resolve the output-schema exposure policy once (per-tool: Tool > App > server).
+      const serverOutput = (this.scope.metadata as { output?: OutputPolicy }).output;
+      const appOutputById = new Map<string, OutputPolicy | undefined>(
+        this.scope.apps.getApps().map((app) => [app.id, (app.metadata as { output?: OutputPolicy }).output]),
+      );
+
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
         let inputSchema: any;
@@ -461,22 +479,38 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           item.execution = { taskSupport };
         }
 
-        // Add outputSchema if available. getRawOutputSchema() returns the explicit
-        // rawOutputSchema (OpenAPI / remote passthrough) or, for hand-authored tools,
-        // a JSON Schema derived from the declared Zod-shape / z.object() outputSchema.
-        // Note: When elicitation is enabled, getRawOutputSchema() transparently extends
-        // the schema to include the elicitation fallback response type
-        const rawOutput = tool.getRawOutputSchema();
-        if (rawOutput) {
-          // MCP spec requires outputSchema to have type: 'object' at the top level.
-          // Strip non-compliant schemas to prevent a single tool from breaking the entire tools/list response.
-          const schema = rawOutput as Record<string, unknown>;
-          if (schema['type'] === 'object') {
-            item.outputSchema = schema as typeof item.outputSchema;
-          } else {
-            this.logger.warn(
-              `parseTools: tool "${finalName}" has outputSchema without type: 'object' — stripping to maintain MCP compliance`,
-            );
+        // Expose the output schema per the resolved mode (Tool > App > server; default
+        // 'definition'). 'definition'/'both' advertise it as item.outputSchema;
+        // 'description'/'both' fold a readable rendering into the description; 'none' skips it.
+        const toolOutput = (tool.metadata as { output?: OutputPolicy }).output;
+        const appOutput = appOutputById.get(tool.owner.id);
+        const schemaMode = resolveOutputSchemaMode(toolOutput, appOutput, serverOutput);
+
+        if (schemaMode === 'definition' || schemaMode === 'both') {
+          // getRawOutputSchema() returns the explicit rawOutputSchema (OpenAPI / remote
+          // passthrough) or a JSON Schema derived from the declared Zod-shape / z.object()
+          // outputSchema (elicitation-extended when elicitation is enabled).
+          const rawOutput = tool.getRawOutputSchema();
+          if (rawOutput) {
+            // MCP spec requires outputSchema to have type: 'object' at the top level.
+            // Strip non-compliant schemas to prevent a single tool from breaking the entire tools/list response.
+            const schema = rawOutput as Record<string, unknown>;
+            if (schema['type'] === 'object') {
+              item.outputSchema = schema as typeof item.outputSchema;
+            } else {
+              this.logger.warn(
+                `parseTools: tool "${finalName}" has outputSchema without type: 'object' — stripping to maintain MCP compliance`,
+              );
+            }
+          }
+        }
+
+        if (schemaMode === 'description' || schemaMode === 'both') {
+          // Use the clean (non-elicitation-extended) schema for the human-readable description.
+          const outputJsonSchema = tool.getOutputJsonSchema();
+          if (outputJsonSchema) {
+            const format = resolveSchemaDescriptionFormat(toolOutput, appOutput, serverOutput);
+            item.description = (item.description ?? '') + formatOutputSchemaForDescription(outputJsonSchema, format);
           }
         }
 

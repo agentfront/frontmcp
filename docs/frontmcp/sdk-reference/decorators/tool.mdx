@@ -93,6 +93,7 @@ class BadTool extends ToolContext {
 | `annotations`    | `ToolAnnotations`           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) |
 | `examples`       | `ToolExample[]`             | Usage examples (`description`, `input`, optional `output`)                          |
 | `ui`             | `ToolUIConfig`              | UI widget configuration (`template`, `csp`, sanitization options)                   |
+| `output`         | `OutputPolicy`              | Output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Resolved Tool > App > server > default. See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
 | `hideFromDiscovery` | `boolean`                | Deprecated alias for `visibility: 'hidden'`                                         |
 
 ### Output Types
@@ -281,13 +282,18 @@ async execute(input) {
 ### Authentication
 
 ```typescript
+import { UnauthorizedError } from '@frontmcp/sdk';
+
 async execute(input) {
   // Rich, typed identity (preferred)
   const userId = this.auth.user.sub;          // subject (e.g. JWT `sub`)
   const email = this.auth.user.email;
   const tenantId = this.auth.claims['tenantId']; // raw JWT claim
   if (!this.auth.hasRole('admin')) {
-    throw new Error('Admin role required');
+    // Use the SDK error flow, not `throw new Error(...)` — a raw Error is
+    // redacted to "Internal error" before it reaches the client, whereas a
+    // PublicMcpError's message is surfaced. `this.fail` never returns.
+    this.fail(new UnauthorizedError('Admin role required'));
   }
 }
 ```

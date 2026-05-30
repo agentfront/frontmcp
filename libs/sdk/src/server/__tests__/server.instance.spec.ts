@@ -121,6 +121,34 @@ describe('FrontMcpServerInstance', () => {
     });
   });
 
+  describe('registerRoute delegation (custom http.routes plumbing)', () => {
+    it('delegates registerRoute to the host adapter', () => {
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      const spy = jest.spyOn(instance.host, 'registerRoute');
+      const handler = jest.fn();
+
+      instance.registerRoute('GET', '/download/:id', handler);
+
+      expect(spy).toHaveBeenCalledWith('GET', '/download/:id', handler);
+    });
+
+    it('accepts a routes array in config without affecting host construction', () => {
+      // routes are registered from the scope, not the server instance — the
+      // server simply carries them through on `config`.
+      const handler = jest.fn();
+      const instance = new FrontMcpServerInstance({
+        port: 3001,
+        entryPath: '',
+        routes: [{ method: 'GET', path: '/ping', handler }],
+      });
+
+      expect(instance.config.routes).toHaveLength(1);
+      expect(instance.config.routes?.[0]).toMatchObject({ method: 'GET', path: '/ping' });
+      // Adapter still constructed with just the permissive CORS default.
+      expect(capturedAdapterArgs[0]).toEqual({ cors: { origin: true, credentials: false } });
+    });
+  });
+
   describe('health endpoint', () => {
     it('should register health route on prepare()', () => {
       const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
