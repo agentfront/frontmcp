@@ -20,30 +20,33 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 | `this.fetch(input, init?)`                                       | HTTP fetch with context propagation (trace headers, etc.)                                                      |
 | `this.notify(message, level?)`                                   | Send a log-level notification to the client                                                                    |
 | `this.progress(progress, total?, message?)`                      | Send a progress notification. Returns `Promise<boolean>` (false when no progress token in request)             |
+| `this.notifyResourceUpdated(uri)`                                | Tell subscribed clients a resource's contents changed (`notifications/resources/updated`)                      |
+| `this.notifyResourceListChanged()`                               | Tell clients the resource list changed (`notifications/resources/list_changed`)                                |
 | `this.elicit(message, schema)`                                   | Request interactive input from the user mid-execution. See [`elicitation.md`](./elicitation.md)                |
 | `this.isPlatform(os)` / `this.isRuntime(rt)` / `this.isEnv(env)` | Imperative platform checks (declarative form is `availableWhen` — see [`availability.md`](./availability.md))  |
 
 ## Properties
 
-| Property        | Type               | Description                                                      |
-| --------------- | ------------------ | ---------------------------------------------------------------- |
-| `this.input`    | `In`               | The validated input object (same value as the `input` parameter) |
-| `this.output`   | `Out \| undefined` | The output value (available after `execute()` returns)           |
-| `this.metadata` | tool metadata      | Frozen view of the `@Tool({...})` config                         |
-| `this.scope`    | scope instance     | The current scope — DI lookups, child scopes                     |
-| `this.context`  | `FrontMcpContext`  | Per-request context (see below)                                  |
+| Property        | Type                  | Description                                                                                                                                                                |
+| --------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `this.input`    | `In`                  | The validated input object (same value as the `input` parameter)                                                                                                           |
+| `this.output`   | `Out \| undefined`    | The output value (available after `execute()` returns)                                                                                                                     |
+| `this.metadata` | tool metadata         | Frozen view of the `@Tool({...})` config                                                                                                                                   |
+| `this.scope`    | scope instance        | The current scope — DI lookups, child scopes                                                                                                                               |
+| `this.context`  | `FrontMcpContext`     | Per-request context (see below)                                                                                                                                            |
+| `this.auth`     | `FrontMcpAuthContext` | User identity & claims — `this.auth.user.sub`, `this.auth.claims['…']`, `hasRole()`, `hasPermission()`, `hasScope()`. Use this (not `this.context.authInfo`) for identity. |
 
 ## `this.context` (FrontMcpContext)
 
-| Property       | Type                | Description                                                            |
-| -------------- | ------------------- | ---------------------------------------------------------------------- |
-| `requestId`    | `string`            | Unique ID for this request                                             |
-| `sessionId`    | `string`            | Session identifier (for stateful transports)                           |
-| `scopeId`      | `string`            | Scope identifier (for multi-app servers)                               |
-| `authInfo`     | `Partial<AuthInfo>` | Authentication info — `userId`, `email`, `scopes`, `tokens`, …         |
-| `traceContext` | `TraceContext`      | Distributed-tracing context (propagated to `this.fetch` automatically) |
-| `timestamp`    | `number`            | Request start timestamp                                                |
-| `metadata`     | `RequestMetadata`   | Request headers, client IP, MCP client name/version                    |
+| Property       | Type              | Description                                                                                                                                                                                              |
+| -------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requestId`    | `string`          | Unique ID for this request                                                                                                                                                                               |
+| `sessionId`    | `string`          | Session identifier (for stateful transports)                                                                                                                                                             |
+| `scopeId`      | `string`          | Scope identifier (for multi-app servers)                                                                                                                                                                 |
+| `authInfo`     | `AuthInfo`        | Raw validated access token — `token`, `clientId`, `scopes`, `expiresAt?`, `resource?`, `extra?`. For user identity / JWT claims use `this.auth` (`this.auth.user.sub`, `this.auth.claims['…']`) instead. |
+| `traceContext` | `TraceContext`    | Distributed-tracing context (propagated to `this.fetch` automatically)                                                                                                                                   |
+| `timestamp`    | `number`          | Request start timestamp                                                                                                                                                                                  |
+| `metadata`     | `RequestMetadata` | Request headers, client IP, MCP client name/version                                                                                                                                                      |
 
 ## DI: `this.get` vs `this.tryGet`
 
@@ -80,7 +83,7 @@ Use `this.get` (throws) when the tool genuinely requires the dependency. Use `th
 async execute(input: { url: string }) {
   const response = await this.fetch(input.url);
   if (!response.ok) {
-    this.fail(new InternalError(`upstream returned ${response.status}`));
+    this.fail(new InternalMcpError(`upstream returned ${response.status}`));
   }
   return response.json();
 }
@@ -119,6 +122,16 @@ async execute(input: { items: string[] }) {
 - `this.notify(msg, level?)` — sends `notifications/message` to the client (`debug` / `info` / `warning` / `error`). Always-best-effort.
 - `this.progress(n, total?, msg?)` — sends `notifications/progress` IF the request had a progress token. Returns `false` when no token was provided (so the call costs almost nothing if nobody's listening).
 - `this.mark(stage)` — server-side breadcrumb, surfaced in logs / metrics / traces. No client notification.
+- `this.notifyResourceUpdated(uri)` — sends `notifications/resources/updated` to every session subscribed to `uri` (via `resources/subscribe`); no-op for non-subscribers. Call it when a tool mutates state that backs a `@Resource` so subscribers re-fetch.
+- `this.notifyResourceListChanged()` — broadcasts `notifications/resources/list_changed` so clients re-run `resources/list`. Call it after a tool adds or removes resources at runtime.
+
+```typescript
+async execute(input: { id: string; title: string }) {
+  await this.get(NOTES).save(input.id, input.title);
+  this.notifyResourceUpdated(`notes://${input.id}`); // subscribers re-fetch this resource
+  return { ok: true };
+}
+```
 
 See [`18-tool-with-progress-and-notify`](../examples/18-tool-with-progress-and-notify.md).
 
@@ -141,5 +154,5 @@ async execute(input: Input) {
 ## See also
 
 - [`error-handling.md`](./error-handling.md)
-- [`auth-providers.md`](./auth-providers.md) — `this.context.authInfo` and `this.authProviders`
+- [`auth-providers.md`](./auth-providers.md) — `this.authProviders` (and `this.auth` for user identity / claims)
 - [`elicitation.md`](./elicitation.md) — `this.elicit`

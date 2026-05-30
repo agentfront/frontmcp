@@ -7,7 +7,7 @@ features:
   - "Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`"
   - "Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available"
   - 'Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation'
-  - 'Knowing what happens on mismatch — `EntryUnavailableError` (`-32099`) with `data.missingAxes` so clients show the right "not available here" reason'
+  - 'Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right "not available here" reason'
 ---
 
 # Tool With Availability Constraints
@@ -72,7 +72,7 @@ export class RotateSecretsTool extends ToolContext {
 - Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`
 - Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available
 - Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation
-- Knowing what happens on mismatch — `EntryUnavailableError` (`-32099`) with `data.missingAxes` so clients show the right "not available here" reason
+- Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right "not available here" reason
 
 ## Axes (recap)
 

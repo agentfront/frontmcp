@@ -57,7 +57,8 @@ export class CreateIssueTool extends ToolContext {
           'idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({ title: input.title, body: input.body }),
-        signal: this.context.abortSignal,
+        // `this.fetch` applies its own per-request timeout; the tool-level
+        // `timeout` below caps the whole retry loop at the framework level.
       });
 
       if (response.ok) {

@@ -143,9 +143,8 @@ protected elicit<S extends ZodType>(
 
 ```typescript
 interface ElicitResult<T> {
-  status: 'accept' | 'reject' | 'timeout';
+  status: 'accept' | 'cancel' | 'decline';
   content?: T;
-  validationErrors?: string[];
 }
 ```
 

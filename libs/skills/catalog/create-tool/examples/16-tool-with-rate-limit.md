@@ -4,8 +4,8 @@ level: intermediate
 description: 'Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.'
 tags: [throttling, rate-limit, abuse-protection]
 features:
-  - Capping the tool to N invocations per windowMs (per-session by default)
-  - "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) and a retry-after hint clients can back off against"
+  - "Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`"
+  - "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against"
   - 'Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services'
   - Sizing the limit against upstream quota / billing — not just "what feels reasonable"
 ---
@@ -14,7 +14,7 @@ features:
 
 Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.
 
-The first throttle to reach for. Caps invocations over time. Per-session by default — a runaway agent loop on one session can't burn through a quota that other sessions need.
+The first throttle to reach for. Caps invocations over time. The default partition is `'global'` (one shared limit); this example sets `partitionBy: 'session'` so a runaway agent loop on one session can't burn through a quota that other sessions need.
 
 ## Code
 
@@ -33,7 +33,7 @@ const outputSchema = { translated: z.string(), sourceLang: z.string() };
   description: 'Translate text via the external translation API (billed per call)',
   inputSchema,
   outputSchema,
-  rateLimit: { maxRequests: 60, windowMs: 60_000 }, // 60 calls / minute / session
+  rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'session' }, // 60 calls / minute / session
   authProviders: ['translate-api'],
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 })
@@ -55,8 +55,8 @@ export class TranslateTool extends ToolContext {
 
 ## What This Demonstrates
 
-- Capping the tool to N invocations per windowMs (per-session by default)
-- Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) and a retry-after hint clients can back off against
+- Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`
+- Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against
 - Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services
 - Sizing the limit against upstream quota / billing — not just "what feels reasonable"
 
@@ -68,4 +68,4 @@ export class TranslateTool extends ToolContext {
 
 ## Global vs per-session
 
-The default scope is per-session. For shared resources where the limit must hold across all sessions, see the `throttling` reference for `scope: 'global'` (server-wide).
+The default partition is `'global'` — one limit shared across all callers. For a limit that's tracked independently per session, set `partitionBy: 'session'` (so a runaway loop on one session can't burn through everyone's budget). See the `throttling` reference for the full set of `partitionBy` strategies (`'global' | 'session' | 'userId' | 'ip'` or a custom function).

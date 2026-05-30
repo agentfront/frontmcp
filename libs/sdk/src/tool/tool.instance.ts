@@ -118,7 +118,10 @@ export class ToolInstance<
    * OR an elicitation pending response. This is transparent to consumers.
    */
   override getRawOutputSchema(): unknown {
-    const baseSchema = this.rawOutputSchema;
+    // Prefer an explicit passthrough JSON Schema (OpenAPI / remote tools); otherwise derive
+    // JSON Schema from the declared Zod-shape / z.object() outputSchema so hand-authored tools
+    // advertise their output in tools/list — symmetric with how inputSchema is advertised.
+    const baseSchema = this.rawOutputSchema ?? this.getOutputJsonSchema() ?? undefined;
 
     // Check if elicitation is enabled in scope (default: false)
     const elicitationEnabled = this.scope.metadata.elicitation?.enabled === true;

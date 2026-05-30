@@ -905,6 +905,8 @@ const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url
 
 ui: { template: { file: widgetPath } }
 ```
+
+In a **CommonJS** project (`"type": "commonjs"`), `import.meta.url` is unavailable — anchor with `join(__dirname, 'weather.widget.tsx')` (from `node:path`) instead. Both forms are invariant to `process.cwd()`.
 </Warning>
 
 <Info>

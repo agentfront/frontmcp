@@ -41,17 +41,19 @@ const outputSchema = { sent: z.boolean(), channel: z.string() };
 export class SendToSlackTool extends ToolContext {
   async execute(input: { channel: string; text: string; username?: string; iconEmoji?: string }) {
     const headers = await this.authProviders.headers('slack-webhook');
-    // headers includes:
+    // `headers` is a plain `Record<string, string>` (NOT a `Headers` object), e.g.:
     //   { 'x-slack-webhook-url': 'https://hooks.slack.com/services/T.../B.../...' }
-    // The framework reads it from the vault, decrypts with the per-session AES-256-GCM key,
-    // and never returns the raw value — it's only available indirectly via these headers.
+    // Read values with string-index access (`headers['x-...']`), not `headers.get(...)`.
+    // The framework reads the value from the vault, decrypts with the per-session AES-256-GCM
+    // key, and never returns the raw value — it's only available indirectly via these headers.
 
-    // Non-null assertion is safe here because we declared `authProviders: ['slack-webhook']`
+    // Reading the key directly is safe here because we declared `authProviders: ['slack-webhook']`
     // (required: true by default), so the framework already rejected the call before `execute()`
     // if the vault entry was missing — by the time we read the header, the provider is guaranteed
-    // to have produced it. If you ever switch the provider to `required: false`, drop the `!`
-    // and use `?? this.fail(new PublicMcpError('No Slack webhook configured'))` instead.
-    const webhookUrl = headers.get('x-slack-webhook-url')!;
+    // to have produced it. If you ever switch the provider to `required: false`, `headers` will be
+    // an empty object `{}` when no credential is set, so guard with
+    // `if (!webhookUrl) this.fail(new PublicMcpError('No Slack webhook configured'))` instead.
+    const webhookUrl = headers['x-slack-webhook-url'];
     const response = await this.fetch(webhookUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

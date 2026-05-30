@@ -5,7 +5,7 @@ description: this.elicit — request interactive input mid-execution. Server ena
 
 # Elicitation
 
-`this.elicit(message, schema)` lets a tool ask for additional input mid-execution. The MCP client renders a UI (form / prompt), the user fills it in, and the response flows back to your `execute()` body.
+`this.elicit(message, requestedSchema)` lets a tool ask for additional input mid-execution. The MCP client renders a UI (form / prompt), the user fills it in, and the response flows back to your `execute()` body. `requestedSchema` must be a Zod schema (e.g. `z.object({...})`), not a raw field map.
 
 ## Prerequisite — enable at server level
 
@@ -33,16 +33,19 @@ For production, configure a Redis-backed elicitation store via `elicitation.stor
 })
 class ConfirmDeleteTool extends ToolContext {
   async execute(input: { resourceId: string }) {
-    const result = await this.elicit('Permanently delete this resource? This cannot be undone.', {
-      confirm: z.boolean().describe('Type true to confirm'),
-      reason: z.string().optional().describe('Optional reason for the audit log'),
-    });
+    const result = await this.elicit(
+      'Permanently delete this resource? This cannot be undone.',
+      z.object({
+        confirm: z.boolean().describe('Type true to confirm'),
+        reason: z.string().optional().describe('Optional reason for the audit log'),
+      }),
+    );
 
-    if (result.action !== 'accept' || !result.data.confirm) {
+    if (result.status !== 'accept' || !result.content?.confirm) {
       return { deleted: false };
     }
 
-    await this.get(ResourceService).delete(input.resourceId, { reason: result.data.reason });
+    await this.get(ResourceService).delete(input.resourceId, { reason: result.content.reason });
     return { deleted: true };
   }
 }
@@ -53,25 +56,28 @@ class ConfirmDeleteTool extends ToolContext {
 `this.elicit` returns:
 
 ```typescript
-type ElicitationResult<T> =
-  | { action: 'accept'; data: T } // user filled the form and submitted
-  | { action: 'decline' } // user clicked decline / no
-  | { action: 'cancel' }; // user closed the prompt without responding
+interface ElicitResult<T> {
+  status: 'accept' | 'decline' | 'cancel';
+  content?: T; // present only when status === 'accept'
+}
 ```
 
-Always check `result.action` before reading `result.data` — `data` only exists on `accept`.
+Always check `result.status === 'accept'` before reading `result.content` — `content` only exists on `accept`.
 
 ## Multiple fields, optional fields, defaults
 
 ```typescript
-const result = await this.elicit('Choose deployment options', {
-  environment: z.enum(['staging', 'production']).default('staging'),
-  rollback: z.boolean().default(false).describe('Roll back on first health-check failure'),
-  notifyChannel: z.string().optional().describe('Slack channel for notifications (e.g. #ops)'),
-});
+const result = await this.elicit(
+  'Choose deployment options',
+  z.object({
+    environment: z.enum(['staging', 'production']).default('staging'),
+    rollback: z.boolean().default(false).describe('Roll back on first health-check failure'),
+    notifyChannel: z.string().optional().describe('Notification channel (e.g. #ops)'),
+  }),
+);
 
-if (result.action === 'accept') {
-  // result.data: { environment: 'staging' | 'production'; rollback: boolean; notifyChannel?: string }
+if (result.status === 'accept') {
+  // result.content: { environment: 'staging' | 'production'; rollback: boolean; notifyChannel?: string }
 }
 ```
 
@@ -98,8 +104,8 @@ Early returns must still match `outputSchema`:
 
 ```typescript
 async execute(input: { resourceId: string }) {
-  const result = await this.elicit('Delete?', { confirm: z.boolean() });
-  if (result.action !== 'accept') {
+  const result = await this.elicit('Delete?', z.object({ confirm: z.boolean() }));
+  if (result.status !== 'accept') {
     // Must return a value matching outputSchema — not a raw error string
     return { deleted: false };
   }
@@ -110,7 +116,7 @@ async execute(input: { resourceId: string }) {
 If declining should propagate as an error to the client (rather than a normal output), use `this.fail` instead:
 
 ```typescript
-if (result.action === 'decline') {
+if (result.status === 'decline') {
   this.fail(new PublicMcpError('User declined the destructive action.'));
 }
 ```

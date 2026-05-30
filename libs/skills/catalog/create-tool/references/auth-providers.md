@@ -50,8 +50,10 @@ For scopes, required-vs-optional, or aliases:
 class DeployAppTool extends ToolContext {
   async execute(input: DeployInput) {
     const githubHeaders = await this.authProviders.headers('github');
-    // `cloud` is the alias for the optional `aws` provider:
-    const cloudHeaders = (await this.authProviders.tryHeaders('cloud')) ?? null;
+    // `cloud` is the alias for the optional `aws` provider. `headers()` yields
+    // an empty object `{}` when the optional credential isn't available:
+    const cloudHeaders = await this.authProviders.headers('cloud');
+    const hasCloud = Object.keys(cloudHeaders).length > 0;
     // …
   }
 }
@@ -59,19 +61,19 @@ class DeployAppTool extends ToolContext {
 
 ### Fields
 
-| Field      | Type       | Default  | Meaning                                                                                                                                                       |
-| ---------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`     | `string`   | —        | Must match a registered `@AuthProvider` on the server                                                                                                         |
-| `required` | `boolean`  | `true`   | If `true`, the tool fails before `execute()` runs when no credentials are available. If `false`, the call proceeds; check via `this.authProviders.tryHeaders` |
-| `scopes`   | `string[]` | —        | Required OAuth scopes. The framework triggers incremental auth if the session lacks them                                                                      |
-| `alias`    | `string`   | = `name` | Local name for the provider — useful when two tools want the same provider under different labels                                                             |
+| Field      | Type       | Default  | Meaning                                                                                                                                                                                                                                              |
+| ---------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | `string`   | —        | Must match a registered `@AuthProvider` on the server                                                                                                                                                                                                |
+| `required` | `boolean`  | `true`   | If `true`, the tool fails before `execute()` runs when no credentials are available. If `false`, the call proceeds; `this.authProviders.headers(name)` returns `{}` (empty) when the credential is absent — check with `Object.keys(...).length > 0` |
+| `scopes`   | `string[]` | —        | Required OAuth scopes. The framework triggers incremental auth if the session lacks them                                                                                                                                                             |
+| `alias`    | `string`   | = `name` | Local name for the provider — useful when two tools want the same provider under different labels                                                                                                                                                    |
 
 ## When auth is missing
 
 For a `required: true` provider with no credentials:
 
-1. The framework throws `AuthRequiredError` BEFORE `execute()` runs.
-2. The client receives an MCP error with code `-32001` and `data.authUrl` pointing at the OAuth start URL.
+1. The framework aborts the call BEFORE `execute()` runs.
+2. The client receives an MCP UNAUTHORIZED error (code `-32001`) with `data.authUrl` pointing at the OAuth start URL.
 3. The user completes the OAuth flow.
 4. The client retries the tool call.
 
@@ -88,25 +90,27 @@ const headers = await this.authProviders.headers('github');
 const response = await this.fetch(url, { headers });
 ```
 
-`headers(name)` throws if creds aren't available (only safe to call inside a tool that declared the provider as `required: true`).
+`headers(name)` returns a plain `Record<string, string>` (NOT a `Headers` object — read values with `headers['x-foo']`, not `headers.get(...)`). It never throws: when no credential is available it returns an empty object `{}`. For a `required: true` provider the framework already guaranteed creds before `execute()` ran, so it's non-empty; for a `required: false` provider, guard with `Object.keys(headers).length > 0`.
 
-`tryHeaders(name)` returns `Headers | null` — for `required: false` providers.
-
-### B. Raw token (for non-HTTP transports — gRPC, WebSocket, custom)
+### B. Raw token / credential fields (for non-HTTP transports — gRPC, WebSocket, custom)
 
 ```typescript
-const token = await this.authProviders.token('github');
-// token: { value: string, type: 'bearer' | 'basic' | … }
+const resolved = await this.authProviders.get('github');
+// resolved is `ResolvedCredential | null`:
+//   { credential, providerId, acquiredAt, expiresAt?, isValid, scope }
+// The token lives under `.credential`. For an oauth provider:
+const accessToken = resolved?.credential.accessToken;
 ```
 
 ### C. Full credential record (vault access)
 
 ```typescript
-const creds = await this.authProviders.get('github');
-// { accessToken, refreshToken?, expiresAt?, scopes, … }
+const resolved = await this.authProviders.get('github');
+// resolved?.credential is the typed credential, e.g. for oauth:
+//   { type: 'oauth', accessToken, refreshToken?, expiresAt?, tokenType, … }
 ```
 
-Use the highest-level API that works (headers > token > full record) — the framework can short-circuit refresh / vault round-trips for the simpler APIs.
+Use the highest-level API that works (headers > full credential record via `get`) — `headers()` can short-circuit refresh / vault round-trips and formats the auth header for you.
 
 ## Credential vault
 

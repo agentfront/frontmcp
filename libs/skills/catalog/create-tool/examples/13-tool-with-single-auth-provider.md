@@ -71,14 +71,15 @@ export class ListReposTool extends ToolContext {
 
 ```typescript
 // ❌ unnecessary — the framework already did all of this before execute() ran:
-if (!this.context.authInfo.tokens?.github) {
+const cred = await this.authProviders.get('github');
+if (!cred) {
   this.fail(new PublicMcpError('No GitHub auth — please sign in', { authUrl: '…' }));
 }
-const accessToken = this.context.authInfo.tokens.github;
-if (Date.now() >= accessToken.expiresAt) {
+const accessToken = cred.credential.accessToken;
+if (cred.expiresAt && Date.now() >= cred.expiresAt) {
   /* refresh */
 }
-const headers = { Authorization: `Bearer ${accessToken.value}` };
+const headers = { Authorization: `Bearer ${accessToken}` };
 ```
 
 The single line `await this.authProviders.headers('github')` covers it all.

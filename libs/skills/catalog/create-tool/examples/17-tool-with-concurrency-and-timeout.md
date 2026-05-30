@@ -2,11 +2,11 @@
 name: 17-tool-with-concurrency-and-timeout
 level: advanced
 description: 'Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) — caps simultaneous in-flight work AND hard-caps per-call duration.'
-tags: [throttling, concurrency, timeout, abort-signal]
+tags: [throttling, concurrency, timeout]
 features:
   - 'Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)'
   - "Hard-bounding any single call with `timeout: { executeMs }` so a wedged invocation can't hold a concurrency slot indefinitely"
-  - 'Propagating `this.context.abortSignal` to in-flight work so the timeout actually cancels it'
+  - 'Giving long child work its own deadline, since `timeout` bounds `execute()` but does not pass an abort signal into it'
   - 'Combining `rateLimit` + `concurrency` + `timeout` as a production triple'
 ---
 
@@ -40,9 +40,10 @@ const outputSchema = { data: z.string(), mimeType: z.literal('application/pdf'),
 })
 export class RenderPdfTool extends ToolContext {
   async execute(input: { template: 'invoice' | 'report' | 'contract'; data: Record<string, unknown> }) {
-    const pdfBuffer = await this.renderPdf(input.template, input.data, {
-      signal: this.context.abortSignal, // propagate the tool timeout into the renderer
-    });
+    // Pass a per-render deadline straight into the renderer. `timeout` caps the
+    // overall execute() duration at the framework level, but it does NOT hand
+    // execute() an abort signal — so bound long child work explicitly here.
+    const pdfBuffer = await this.renderPdf(input.template, input.data, { deadlineMs: 25_000 });
 
     return {
       data: pdfBuffer.toString('base64'),
@@ -54,15 +55,17 @@ export class RenderPdfTool extends ToolContext {
   private async renderPdf(
     _template: string,
     _data: Record<string, unknown>,
-    options: { signal: AbortSignal },
+    options: { deadlineMs: number },
   ): Promise<Buffer> {
-    // pretend this is puppeteer / wkhtmltopdf / a Rust binary — anything that honors AbortSignal
+    // pretend this is puppeteer / wkhtmltopdf / a Rust binary that honors its own deadline
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve(Buffer.from('%PDF-1.4 …')), 1_000);
-      options.signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        reject(new Error('aborted'));
-      });
+      const done = setTimeout(() => resolve(Buffer.from('%PDF-1.4 …')), 1_000);
+      const deadline = setTimeout(() => {
+        clearTimeout(done);
+        reject(new Error('render exceeded deadline'));
+      }, options.deadlineMs);
+      // ensure the deadline timer is cleared once the render resolves
+      void Promise.resolve().then(() => clearTimeout(deadline));
     });
   }
 }
@@ -72,7 +75,7 @@ export class RenderPdfTool extends ToolContext {
 
 - Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)
 - Hard-bounding any single call with `timeout: { executeMs }` so a wedged invocation can't hold a concurrency slot indefinitely
-- Propagating `this.context.abortSignal` to in-flight work so the timeout actually cancels it
+- Giving long child work its own deadline, since `timeout` bounds `execute()` but does not pass an abort signal into it
 - Combining `rateLimit` + `concurrency` + `timeout` as a production triple
 
 ## How they interact
@@ -81,7 +84,7 @@ Per call, in order:
 
 1. `rateLimit` → reject early if over limit (no concurrency slot consumed)
 2. `concurrency` → queue until a slot opens (queue depth is unbounded by default)
-3. `timeout` → wraps `execute()` once it actually runs; on expiry, throws `ToolTimeoutError` AND fires `this.context.abortSignal`
+3. `timeout` → wraps `execute()` once it actually runs; on expiry, throws `ExecutionTimeoutError` (from `@frontmcp/guard`) and aborts the wrapped execution internally
 
 The three controls are **orthogonal** — each addresses a different failure mode:
 
@@ -91,6 +94,6 @@ The three controls are **orthogonal** — each addresses a different failure mod
 | `concurrency` | Resource exhaustion (CPU, GPU, DB connections) |
 | `timeout`     | Stuck calls holding slots forever              |
 
-## Why the abort signal matters
+## Why a child-level deadline matters
 
-Without propagating `this.context.abortSignal` to the child work, `timeout` fires but the underlying PDF renderer keeps going — burning CPU even though the call already errored out to the client. With the signal propagated, the renderer can clean up and free the concurrency slot for the next queued call.
+`timeout` aborts the wrapped `execute()` at the framework level and throws `ExecutionTimeoutError`, but it does **not** pass an abort signal into your code — there is no `this.context.abortSignal`. So if the underlying PDF renderer has no deadline of its own, it keeps going after the timeout fires, burning CPU even though the call already errored out to the client. Give long child work its own bound (as `deadlineMs` does above) so the renderer can clean up and free the concurrency slot for the next queued call.

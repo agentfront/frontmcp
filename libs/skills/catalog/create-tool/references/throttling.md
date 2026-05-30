@@ -14,13 +14,16 @@ Cap invocations over a time window.
 ```typescript
 @Tool({
   name: 'send_notification',
-  rateLimit: { maxRequests: 100, windowMs: 60_000 }, // 100 calls / minute
+  // 100 calls / minute, shared across all callers (partitionBy defaults to 'global')
+  rateLimit: { maxRequests: 100, windowMs: 60_000 },
+  // For a per-session limit instead:
+  // rateLimit: { maxRequests: 100, windowMs: 60_000, partitionBy: 'session' },
   // …
 })
 ```
 
-- **Scope**: per-session by default. The session ID is the rate-limit key. To rate-limit globally, set `scope: 'global'` (be sure the server can absorb the burst).
-- **Behavior on overflow**: the tool call returns a `RateLimitError` (HTTP status 429, MCP error code `'RATE_LIMIT_EXCEEDED'`). The error's payload carries a retry-after hint so clients can back off intelligently.
+- **Partition**: `partitionBy: 'global'` by default — one shared limit across all callers. To scope the limit per session, set `partitionBy: 'session'` (the session ID becomes the rate-limit key). Other values: `'userId'`, `'ip'`, or a custom `(ctx) => string` function.
+- **Behavior on overflow**: the tool call returns a `RateLimitError` (HTTP status 429, MCP error code `'RATE_LIMIT_EXCEEDED'`). The retry-after hint is carried in the error message string (`Rate limit exceeded. Retry after N seconds`) so clients can back off intelligently.
 - **No half-allowed**: a call either counts fully toward the limit or doesn't run at all. Long-running calls don't block the window — only the start counts.
 
 ## `concurrency`
@@ -52,7 +55,7 @@ Hard deadline on a single execution.
 ```
 
 - **Scope**: per call. Wraps the entire `execute()` invocation.
-- **Behavior on timeout**: the framework throws a `ToolTimeoutError` (subclass of `PublicMcpError`) and emits a `notifications/cancelled` for any progress token. The tool's `execute()` is signaled via the AbortSignal you can read from `this.context.abortSignal` — propagate it to `this.fetch` and any child operations.
+- **Behavior on timeout**: the framework throws an `ExecutionTimeoutError` (from `@frontmcp/guard`, code `'EXECUTION_TIMEOUT'`, HTTP status 408) and aborts the wrapped execution. The abort is internal to the timeout guard — it is **not** surfaced into `execute()` as a readable signal, so don't expect to observe it from inside the tool body.
 - **Default**: no timeout. Tools can hang forever unless `timeout` is set.
 
 ## Interaction
@@ -83,18 +86,21 @@ Order of effects per call:
 | Anything calling LLMs / 3rd-party HTTP | `timeout: { executeMs: 30_000 }`                                                                                      |
 | All three                              | `rateLimit: { maxRequests: 10, windowMs: 60_000 }, concurrency: { maxConcurrent: 2 }, timeout: { executeMs: 30_000 }` |
 
-## Propagating the abort signal
+## Timeout and abort signals
 
-When a `timeout` fires, `execute()` receives an AbortSignal via `this.context.abortSignal`. Propagate it to abort in-flight work:
+`timeout` does **not** hand your `execute()` an abort signal — the abort lives inside the timeout guard and is not exposed on the context. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
+
+The only tool-level abort signal is `this.signal`, and it is populated **only** for task-augmented `tools/call` invocations (cancelled via `tasks/cancel`) — not by `timeout`. It is `undefined` for ordinary calls, so guard for that:
 
 ```typescript
 async execute(input: { url: string }) {
-  const response = await this.fetch(input.url, { signal: this.context.abortSignal });
+  // this.signal is defined only for task-augmented calls; undefined otherwise
+  const response = await this.fetch(input.url, { signal: this.signal });
   return response.json();
 }
 ```
 
-`this.fetch` propagates the signal automatically if you don't pass one — but explicit is safer for nested fetches.
+For ordinary calls, rely on `this.fetch`'s own per-request timeout (default 30s) to bound in-flight HTTP work; `timeout` then caps the overall `execute()` duration.
 
 ## See also
 

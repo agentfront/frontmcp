@@ -29,10 +29,22 @@ class GetWeatherTool extends ToolContext {
 
 ## Signature
 
+The decorator is generic over the input shape `I` and (optionally) the output
+schema `O`. It returns a class decorator that rewraps the decorated class,
+inferring the `ToolContext` input/output type parameters from the options — so
+you write a plain `class … extends ToolContext` with no explicit generics. The
+signature below is illustrative:
+
 ```typescript
-function Tool<I extends ZodRawShape, O extends OutputSchema>(
-  opts: ToolMetadataOptions<I, O>
-): TypedClassDecorator
+// outputSchema provided → execute()'s return type is checked against it
+function Tool<I extends ZodRawShape, O>(
+  opts: ToolMetadataOptions<I, O> & { outputSchema: O },
+): <C>(cls: C) => C; // rewrapped with inferred ToolContext<…, In, Out>
+
+// outputSchema omitted → execute() may return anything
+function Tool<I extends ZodRawShape>(
+  opts: ToolMetadataOptions<I, any> & { outputSchema?: never },
+): <C>(cls: C) => C;
 ```
 
 ## Type Safety
@@ -136,9 +148,11 @@ class BadTool extends ToolContext {
 })
 class SensitiveTool extends ToolContext {
   async execute(input) {
-    // Access is validated before execute() is called
-    const token = this.context.authInfo?.token;
-    return await callApi(token, input.data);
+    // Access is validated before execute() is called.
+    // Prefer the typed identity getter for user/claims:
+    const userId = this.auth.user.sub;
+    const token = this.context.authInfo?.token; // raw bearer for outbound calls
+    return await callApi(token, input.data, userId);
   }
 }
 ```
@@ -268,9 +282,13 @@ async execute(input) {
 
 ```typescript
 async execute(input) {
-  const auth = this.context.authInfo;
-  const token = auth?.token;
-  const user = auth?.user;
+  // Rich, typed identity (preferred)
+  const userId = this.auth.user.sub;          // subject (e.g. JWT `sub`)
+  const email = this.auth.user.email;
+  const tenantId = this.auth.claims['tenantId']; // raw JWT claim
+  if (!this.auth.hasRole('admin')) {
+    throw new Error('Admin role required');
+  }
 }
 ```
 

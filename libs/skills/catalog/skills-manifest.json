@@ -170,8 +170,8 @@
           "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` — for outputs that aren't plain JSON.",
           "tags": ["output-schema", "media-output", "image", "multi-content"],
           "features": [
-            "Returning a base64-encoded image with `outputSchema: 'image'` and `{ data, mimeType }`",
-            "Returning audio with `outputSchema: 'audio'` (same `{ data, mimeType }` shape, audio MIME types)",
+            "Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`",
+            "Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)",
             "Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response",
             "When to pick a media literal vs `'resource_link'` (host-fetched URI)"
           ]
@@ -203,12 +203,12 @@
         {
           "name": "11-tool-with-fetch",
           "level": "intermediate",
-          "description": "Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and timing out via the abort signal.",
+          "description": "Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.",
           "tags": ["fetch", "http", "external-api", "error-handling"],
           "features": [
             "Using `this.fetch(url, init?)` so trace context propagates to the upstream service",
             "Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error",
-            "Passing `this.context.abortSignal` to the fetch so a tool `timeout` cancels in-flight HTTP work",
+            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal",
             "Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow"
           ]
         },
@@ -240,11 +240,11 @@
           "name": "14-tool-with-multiple-auth-providers",
           "level": "advanced",
           "description": "Tool with the full `authProviders` mapping form — one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
-          "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.tryHeaders"],
+          "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
           "features": [
             "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
             "Requesting specific OAuth scopes so the framework triggers incremental auth when missing",
-            "Resolving an optional provider via `await this.authProviders.tryHeaders('cloud')` (returns `null` when absent)",
+            "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
             "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
           ]
         },
@@ -266,8 +266,8 @@
           "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.",
           "tags": ["throttling", "rate-limit", "abuse-protection"],
           "features": [
-            "Capping the tool to N invocations per windowMs (per-session by default)",
-            "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) and a retry-after hint clients can back off against",
+            "Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`",
+            "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against",
             "Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services",
             "Sizing the limit against upstream quota / billing — not just \"what feels reasonable\""
           ]
@@ -276,11 +276,11 @@
           "name": "17-tool-with-concurrency-and-timeout",
           "level": "advanced",
           "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) — caps simultaneous in-flight work AND hard-caps per-call duration.",
-          "tags": ["throttling", "concurrency", "timeout", "abort-signal"],
+          "tags": ["throttling", "concurrency", "timeout"],
           "features": [
             "Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)",
             "Hard-bounding any single call with `timeout: { executeMs }` so a wedged invocation can't hold a concurrency slot indefinitely",
-            "Propagating `this.context.abortSignal` to in-flight work so the timeout actually cancels it",
+            "Giving long child work its own deadline, since `timeout` bounds `execute()` but does not pass an abort signal into it",
             "Combining `rateLimit` + `concurrency` + `timeout` as a production triple"
           ]
         },
@@ -302,8 +302,8 @@
           "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` — the safe pattern for destructive or expensive actions.",
           "tags": ["elicitation", "this.elicit", "destructive-action", "confirmation"],
           "features": [
-            "Calling `this.elicit(message, { fieldSchema })` to request interactive input mid-`execute()`",
-            "Branching on `result.action` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`",
+            "Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`",
+            "Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`",
             "Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently",
             "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't"
           ]
@@ -329,7 +329,7 @@
             "Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`",
             "Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available",
             "Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation",
-            "Knowing what happens on mismatch — `EntryUnavailableError` (`-32099`) with `data.missingAxes` so clients show the right \"not available here\" reason"
+            "Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
           ]
         },
         {
@@ -386,7 +386,7 @@
           "description": "Tool returning `outputSchema: 'resource_link'` — the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
           "tags": ["output-schema", "resource_link", "large-payload", "caching"],
           "features": [
-            "Returning `outputSchema: 'resource_link'` from a tool — `{ uri }` only, body fetched separately",
+            "Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately",
             "Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body",
             "When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)",
             "Cross-linking to the `create-resource` skill for the URI-template resource on the other end"
@@ -395,13 +395,13 @@
         {
           "name": "27-tool-with-examples-metadata",
           "level": "basic",
-          "description": "Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples surfaced in `tools/list` so AI clients can render them as quick-action suggestions.",
-          "tags": ["examples-metadata", "discovery", "tools-list"],
+          "description": "Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
+          "tags": ["examples-metadata", "codecall", "describe"],
           "features": [
-            "Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so AI clients see canned invocations",
-            "Writing realistic example inputs so the description in `tools/list` is concrete, not abstract",
-            "Including `output?` for examples where showing the expected result helps client UX (preview tiles, etc.)",
-            "Why `examples` are advisory metadata — never relied on by the framework, only surfaced to discovery"
+            "Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations",
+            "Writing realistic example inputs so the generated describe output is concrete, not abstract",
+            "Including `output?` for examples where showing the expected result helps an agent understand the tool",
+            "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
           ]
         }
       ],

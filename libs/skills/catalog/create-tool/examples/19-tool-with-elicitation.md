@@ -4,8 +4,8 @@ level: advanced
 description: 'Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` — the safe pattern for destructive or expensive actions.'
 tags: [elicitation, this.elicit, destructive-action, confirmation]
 features:
-  - 'Calling `this.elicit(message, { fieldSchema })` to request interactive input mid-`execute()`'
-  - 'Branching on `result.action` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`'
+  - 'Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`'
+  - 'Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`'
   - 'Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently'
   - "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't"
 ---
@@ -57,40 +57,43 @@ export class DeleteUserTool extends ToolContext {
     const user = await users.findById(input.userId);
     if (!user) this.fail(new PublicMcpError(`No such user: ${input.userId}`));
 
-    const elicited = await this.elicit(`Permanently delete ${user.email}? This cannot be undone.`, {
-      confirm: z.boolean().describe('Set to true to confirm'),
-      reason: z.string().optional().describe('Reason for the audit log'),
-    });
+    const elicited = await this.elicit(
+      `Permanently delete ${user.email}? This cannot be undone.`,
+      z.object({
+        confirm: z.boolean().describe('Set to true to confirm'),
+        reason: z.string().optional().describe('Reason for the audit log'),
+      }),
+    );
 
-    if (elicited.action === 'cancel') {
+    if (elicited.status === 'cancel') {
       return { outcome: 'cancelled' as const, userId: input.userId, reason: 'User closed prompt' };
     }
-    if (elicited.action === 'decline' || !elicited.data.confirm) {
+    if (elicited.status === 'decline' || !elicited.content?.confirm) {
       return { outcome: 'cancelled' as const, userId: input.userId, reason: 'User declined' };
     }
 
-    await users.delete(input.userId, { reason: elicited.data.reason });
-    return { outcome: 'deleted' as const, userId: input.userId, reason: elicited.data.reason };
+    await users.delete(input.userId, { reason: elicited.content.reason });
+    return { outcome: 'deleted' as const, userId: input.userId, reason: elicited.content.reason };
   }
 }
 ```
 
 ## What This Demonstrates
 
-- Calling `this.elicit(message, { fieldSchema })` to request interactive input mid-`execute()`
-- Branching on `result.action` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`
+- Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`
+- Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`
 - Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently
 - Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't
 
-## `result.action` matrix
+## `result.status` matrix
 
-| Action      | When                                      | Always check `result.data`?                  |
-| ----------- | ----------------------------------------- | -------------------------------------------- |
-| `'accept'`  | User filled the form and submitted        | Yes — `result.data` is typed from the schema |
-| `'decline'` | User clicked decline / no                 | No — `data` is absent                        |
-| `'cancel'`  | User closed the prompt without responding | No — `data` is absent                        |
+| Status      | When                                      | Always check `result.content`?                  |
+| ----------- | ----------------------------------------- | ----------------------------------------------- |
+| `'accept'`  | User filled the form and submitted        | Yes — `result.content` is typed from the schema |
+| `'decline'` | User clicked decline / no                 | No — `content` is absent                        |
+| `'cancel'`  | User closed the prompt without responding | No — `content` is absent                        |
 
-The Zod schema you pass to `this.elicit` defines the `result.data` type when action is `'accept'`.
+The Zod schema you pass to `this.elicit` defines the `result.content` type when status is `'accept'`.
 
 ## Early returns must match `outputSchema`
 

@@ -79,16 +79,24 @@ export default class DemoServer {}
 ## 5. The test
 
 ```typescript
-// src/apps/main/tools/greet-user.tool.spec.ts
-import { testTool } from '@frontmcp/testing';
+// src/apps/main/tools/greet-user.e2e.spec.ts
+import { expect, test } from '@frontmcp/testing';
 
-import { GreetUserTool } from './greet-user.tool';
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
 
-describe('GreetUserTool', () => {
-  it('greets the user', async () => {
-    const result = await testTool(GreetUserTool).call({ name: 'Ada' });
-    expect(result).toEqual({ greeting: 'Hello, Ada!' });
-  });
+test('greets the user', async ({ mcp }) => {
+  // mcp.tools.call returns a ToolResultWrapper around the MCP CallToolResult —
+  // not the bare return value. Assert on the MCP result, not on `{ greeting }` directly.
+  const result = await mcp.tools.call('greet_user', { name: 'Ada' });
+
+  expect(result).toBeSuccessful();
+  // structuredContent mirrors the typed output schema.
+  expect(result.json()).toEqual({ greeting: 'Hello, Ada!' });
+  // …or assert on the rendered text content.
+  expect(result).toHaveTextContent('Hello, Ada!');
 });
 ```
 
@@ -106,7 +114,7 @@ yarn test    # runs the spec
 - Used a **raw Zod shape** for `inputSchema` (not `z.object({...})`) — the framework wraps it internally.
 - Always defined an **`outputSchema`**. Without it, any field your code accidentally returns leaks to the client.
 - Registered the tool in an **`@App({ tools })`**, not directly on `@FrontMcp` — apps own modularity and per-app lifecycle / auth.
-- Wrote a **`.tool.spec.ts`** unit test using `@frontmcp/testing` — happy-path coverage from day one.
+- Wrote a test using the **`@frontmcp/testing`** fixture API (`test.use` + `{ mcp }`) — booting the real server and asserting on the MCP `CallToolResult` (via `result.json()` / `toHaveTextContent`), not on a bare return value.
 
 ## What's next
 

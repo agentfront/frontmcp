@@ -32,23 +32,29 @@ class MainApp {}
 
 ## With `ctx`
 
-The handler receives `(input, ctx)`. `ctx` exposes the same methods a class tool would have via `this.*`:
+The handler receives `(input, ctx)`. `ctx` is the tool's `ToolContext`, but from an external `(input, ctx) => …` handler you can only reach its **public** surface — the same members a class tool reaches via `this.*` that aren't `protected`:
 
 ```typescript
+import { PublicMcpError } from '@frontmcp/sdk';
+
 const GetCurrentUser = tool({
   name: 'get_current_user',
   description: 'Return the authenticated user',
   inputSchema: {},
   outputSchema: { id: z.string(), email: z.string().email() },
 })(async (_input, ctx) => {
-  const userId = ctx.context.authInfo.userId;
-  if (!userId) ctx.fail(new PublicMcpError('No authenticated user'));
+  // Identity comes from `ctx.auth` (not `ctx.context.authInfo`, which is the raw access token).
+  const userId = ctx.auth.user?.sub;
+  // `ctx.fail(...)` is protected → not callable here. Throw a PublicMcpError instead.
+  if (!userId) throw new PublicMcpError('No authenticated user');
   const users = ctx.get(USER_SERVICE);
   return users.findById(userId);
 });
 ```
 
-`ctx` provides: `get`, `tryGet`, `fail`, `respond`, `mark`, `fetch`, `notify`, `progress`, `context`, `input`, `metadata`, `scope`, `elicit`, `isPlatform`, `isRuntime`, `isEnv`.
+`ctx` provides (public): `get`, `tryGet`, `mark`, `fetch`, `respond`, `context`, `scope`, `input`, `metadata`, `isPlatform`, `isRuntime`, `isEnv`, `callTool`, `auth`, `config`, `clientInfo`, `platform`.
+
+> `fail`, `notify`, `progress`, and `elicit` are **`protected`** on `ToolContext` — they're reachable only from inside a class tool's `execute()` (via `this.*`), **not** from an external function-builder handler (calling them on `ctx` is a compile error). To signal a failure from a function tool, `throw new PublicMcpError(...)`. If you need `notify` / `progress` / `elicit`, use a class tool.
 
 ## When to pick which
 
@@ -73,7 +79,7 @@ tool({ … })(async (input, ctx) => { /* … */ });          // async
 
 ## All the decorator options work
 
-`rateLimit`, `concurrency`, `timeout`, `annotations`, `authProviders`, `availableWhen`, `examples`, `hideFromDiscovery` are all valid on the function builder:
+`rateLimit`, `concurrency`, `timeout`, `annotations`, `authProviders`, `availableWhen`, `examples`, `visibility` (and the deprecated `hideFromDiscovery` alias) are all valid on the function builder:
 
 ```typescript
 const SendEmail = tool({

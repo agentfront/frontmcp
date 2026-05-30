@@ -4,8 +4,8 @@ level: intermediate
 description: "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` — for outputs that aren't plain JSON."
 tags: [output-schema, media-output, image, multi-content]
 features:
-  - "Returning a base64-encoded image with `outputSchema: 'image'` and `{ data, mimeType }`"
-  - "Returning audio with `outputSchema: 'audio'` (same `{ data, mimeType }` shape, audio MIME types)"
+  - "Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`"
+  - "Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)"
   - "Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response"
   - "When to pick a media literal vs `'resource_link'` (host-fetched URI)"
 ---
@@ -36,6 +36,7 @@ export class RenderChartTool extends ToolContext {
   async execute(input: { labels: string[]; values: number[] }) {
     const pngBuffer = await this.renderPng(input);
     return {
+      type: 'image' as const, // required — without it the content block is dropped
       data: pngBuffer.toString('base64'),
       mimeType: 'image/png' as const,
     };
@@ -57,6 +58,7 @@ export class TtsTool extends ToolContext {
   async execute(input: { text: string }) {
     const wavBuffer = await this.synthesize(input.text);
     return {
+      type: 'audio' as const, // required — without it the content block is dropped
       data: wavBuffer.toString('base64'),
       mimeType: 'audio/wav' as const,
     };
@@ -79,7 +81,10 @@ export class AnalyzeImageTool extends ToolContext {
     const detection = await this.detect(input.imageUrl);
     const summary = `Detected: ${detection.objects.join(', ')}.`;
     const annotated = await this.annotate(input.imageUrl, detection);
-    return [summary, { data: annotated.toString('base64'), mimeType: 'image/png' as const }] as const;
+    return [
+      summary,
+      { type: 'image' as const, data: annotated.toString('base64'), mimeType: 'image/png' as const },
+    ] as const;
   }
 
   private async detect(_url: string) {
@@ -93,8 +98,8 @@ export class AnalyzeImageTool extends ToolContext {
 
 ## What This Demonstrates
 
-- Returning a base64-encoded image with `outputSchema: 'image'` and `{ data, mimeType }`
-- Returning audio with `outputSchema: 'audio'` (same `{ data, mimeType }` shape, audio MIME types)
+- Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`
+- Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)
 - Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response
 - When to pick a media literal vs `'resource_link'` (host-fetched URI)
 

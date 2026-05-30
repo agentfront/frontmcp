@@ -42,6 +42,23 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
 - **Tool sources move around at build time.** ESM build output is often in `dist/`; `.tool.ts` becomes `.tool.js`. The relative reference's resolution chain is fragile to that.
 - **`fileURLToPath(new URL('./x', import.meta.url))` is invariant.** It anchors to the **source file** that contains the URL literal — same answer at dev, build, and runtime.
 
+## CommonJS projects (`__dirname`)
+
+`import.meta.url` is **ESM-only**. In a CommonJS project (`package.json` `"type": "commonjs"`, or `tsconfig` `"module": "commonjs"`) `import.meta` is unavailable and the build fails. Anchor with `__dirname` instead — the CJS equivalent, equally invariant to `process.cwd()`:
+
+```typescript
+import { join } from 'node:path';
+
+const widgetPath = join(__dirname, 'sales-chart.widget.tsx');
+
+@Tool({
+  name: 'sales_chart',
+  ui: { template: { file: widgetPath } },
+})
+```
+
+Pick the anchor that matches your module system — both resolve to the tool source's directory regardless of cwd. The rule is only that the path must **never** be a bare relative string.
+
 ## Also: name the widget `*.widget.tsx`
 
 The scaffolded `tsconfig.json` excludes `**/*.widget.tsx` from the server typecheck (issue #445). Naming widgets `sales-chart.widget.tsx` keeps server `tsc --noEmit` happy without dragging React types into the server config.

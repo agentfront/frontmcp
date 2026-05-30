@@ -89,15 +89,15 @@ const tool = registry.getExported('search_tool', { ignoreCase: true });
 Produce unique, conflict-aware exported names for all tools.
 
 ```typescript
-exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, ToolEntry>
+exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolEntry }>
 ```
 
 **Example:**
 
 ```typescript
 const exportedNames = registry.exportResolvedNames();
-for (const [name, tool] of exportedNames) {
-  console.log(`${name} → ${tool.qualifiedId}`);
+for (const { name, instance } of exportedNames) {
+  console.log(`${name} → ${instance.qualifiedId}`);
 }
 // Output:
 // search → app1:search
@@ -140,7 +140,7 @@ const appTools = registry.listByOwner('my-app');
 Register a pre-constructed ToolInstance directly.
 
 ```typescript
-registerToolInstance(tool: ToolInstance): void
+registerToolInstance(tool: ToolEntry): void
 ```
 
 <Note>
@@ -153,7 +153,7 @@ Subscribe to tool change events.
 
 ```typescript
 subscribe(
-  opts: SubscribeOptions,
+  opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
   cb: (event: ToolChangeEvent) => void
 ): () => void
 ```
@@ -176,14 +176,14 @@ unsubscribe();
 Get MCP capabilities for tools.
 
 ```typescript
-getCapabilities(): { listChanged: boolean }
+getCapabilities(): Partial<ServerCapabilities>
 ```
 
 **Example:**
 
 ```typescript
 const caps = registry.getCapabilities();
-// { listChanged: true }
+// { tools: { listChanged: true } }
 ```
 
 ### hasAny()
@@ -199,7 +199,7 @@ hasAny(): boolean
 Adopt tools from a child registry.
 
 ```typescript
-adoptFromChild(child: ToolRegistry, childOwner: Owner): void
+adoptFromChild(child: ToolRegistry, _childOwner: EntryOwnerRef): void
 ```
 
 <Note>

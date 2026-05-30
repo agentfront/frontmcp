@@ -84,8 +84,9 @@ Binary content or links to MCP resources:
 ```typescript
 @Tool({ name: 'render_chart', inputSchema, outputSchema: 'image' })
 class RenderChartTool extends ToolContext {
-  async execute(input: ChartInput): Promise<{ data: string; mimeType: string }> {
+  async execute(input: ChartInput): Promise<{ type: 'image'; data: string; mimeType: string }> {
     return {
+      type: 'image' as const, // required — without it the content block is dropped
       data: 'iVBORw0KGgoAAAANSU…', // base64
       mimeType: 'image/png',
     };
@@ -93,12 +94,14 @@ class RenderChartTool extends ToolContext {
 }
 ```
 
-| Literal           | Return shape                                                            |
-| ----------------- | ----------------------------------------------------------------------- |
-| `'image'`         | `{ data: base64String, mimeType: 'image/png' \| 'image/jpeg' \| … }`    |
-| `'audio'`         | `{ data: base64String, mimeType: 'audio/wav' \| 'audio/mpeg' \| … }`    |
-| `'resource'`      | `{ uri: 'custom://…', mimeType?, text? \| blob? }` (inline resource)    |
-| `'resource_link'` | `{ uri: 'custom://…' }` (link only — host fetches via `resources/read`) |
+Each return object must carry the matching `type` discriminator (`'image'`, `'audio'`, `'resource'`, `'resource_link'`) — without it the content block is silently dropped:
+
+| Literal           | Return shape                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `'image'`         | `{ type: 'image', data: base64String, mimeType: 'image/png' \| 'image/jpeg' \| … }`            |
+| `'audio'`         | `{ type: 'audio', data: base64String, mimeType: 'audio/wav' \| 'audio/mpeg' \| … }`            |
+| `'resource'`      | `{ type: 'resource', resource: { uri: 'custom://…', mimeType?, text? \| blob? } }`             |
+| `'resource_link'` | `{ type: 'resource_link', uri: 'custom://…' }` (link only — host fetches via `resources/read`) |
 
 See [`26-tool-with-resource-link-output`](../examples/26-tool-with-resource-link-output.md) for the resource-link pattern.
 
@@ -109,20 +112,29 @@ Some tools return more than one block — e.g. a text summary plus an image:
 ```typescript
 @Tool({ name: 'analyze_image', inputSchema, outputSchema: ['string', 'image'] })
 class AnalyzeImageTool extends ToolContext {
-  async execute(input: { imageUrl: string }): Promise<[string, { data: string; mimeType: string }]> {
+  async execute(input: { imageUrl: string }): Promise<[string, { type: 'image'; data: string; mimeType: string }]> {
     const summary = 'Detected: 2 people, 1 cat.';
     const annotated = await this.annotate(input.imageUrl);
-    return [summary, { data: annotated, mimeType: 'image/png' }];
+    return [summary, { type: 'image' as const, data: annotated, mimeType: 'image/png' }];
   }
 }
 ```
+
+## Advertisement in `tools/list`
+
+Structured object outputs are converted to JSON Schema and advertised on the tool's `outputSchema` in `tools/list` — symmetric with how `inputSchema` is advertised:
+
+- **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema.
+- **Not advertised:** primitives (`'string'` / `'number'` / `'boolean'` / `'date'`), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), multi-content arrays (`['string', 'image']`), and unions (`z.discriminatedUnion(...)`). These flow through `content` rather than `structuredContent`, and the MCP spec requires `outputSchema` to be a top-level `type: 'object'` — so there is nothing object-shaped to advertise. Runtime output validation still applies to every form.
+
+If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape or `z.object`) — that's the form that gets advertised.
 
 ## Why this matters
 
 - **Data leak prevention** — without `outputSchema`, accidentally returning `{ result, internalApiKey }` leaks the key. With it, only `result` flows.
 - **CodeCall compatibility** — the CodeCall plugin uses `outputSchema` to chain tool calls in its VM. Tools without it degrade chain-ability.
 - **Compile-time type safety** — `ToolContext` infers `execute()`'s return type from `outputSchema` (when `ToolOutputOf<>` is used). The compiler catches divergence at build time.
-- **Self-documenting** — `tools/list` exposes the output structure; AI clients pick tools partly based on what they return.
+- **Self-documenting** — a structured object `outputSchema` is converted to JSON Schema and exposed in `tools/list` (see [Advertisement in `tools/list`](#advertisement-in-toolslist)); AI clients pick tools partly based on what they return.
 
 ## See also
 

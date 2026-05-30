@@ -1,20 +1,20 @@
 ---
 name: 27-tool-with-examples-metadata
 level: basic
-description: 'Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples surfaced in `tools/list` so AI clients can render them as quick-action suggestions.'
-tags: [examples-metadata, discovery, tools-list]
+description: 'Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.'
+tags: [examples-metadata, codecall, describe]
 features:
-  - 'Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so AI clients see canned invocations'
-  - 'Writing realistic example inputs so the description in `tools/list` is concrete, not abstract'
-  - 'Including `output?` for examples where showing the expected result helps client UX (preview tiles, etc.)'
-  - 'Why `examples` are advisory metadata — never relied on by the framework, only surfaced to discovery'
+  - 'Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations'
+  - 'Writing realistic example inputs so the generated describe output is concrete, not abstract'
+  - 'Including `output?` for examples where showing the expected result helps an agent understand the tool'
+  - 'Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`'
 ---
 
 # Tool With Examples Metadata
 
-Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples surfaced in `tools/list` so AI clients can render them as quick-action suggestions.
+Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.
 
-The `examples` field is purely advisory — AI clients use it to surface canned invocations in their UI (quick-action buttons, prompt suggestions, tool-picker previews). Use it for any tool that benefits from concrete usage hints.
+The `examples` field is purely advisory — the CodeCall `describe` tool uses it as the highest-priority source of usage examples (user-provided examples take precedence over auto-generated ones, up to 5). It is **not** emitted in the `tools/list` MCP response. Use it for any tool that benefits from concrete usage hints when CodeCall is enabled.
 
 ## Code
 
@@ -67,25 +67,24 @@ export class ConvertCurrencyTool extends ToolContext {
 
 ## What This Demonstrates
 
-- Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so AI clients see canned invocations
-- Writing realistic example inputs so the description in `tools/list` is concrete, not abstract
-- Including `output?` for examples where showing the expected result helps client UX (preview tiles, etc.)
-- Why `examples` are advisory metadata — never relied on by the framework, only surfaced to discovery
+- Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations
+- Writing realistic example inputs so the generated describe output is concrete, not abstract
+- Including `output?` for examples where showing the expected result helps an agent understand the tool
+- Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`
 
 ## Where examples show up
 
-- **`tools/list` MCP response** — clients can render them as quick-action chips, suggestion lists, tool-picker previews.
-- **`frontmcp skills list` CLI** — when the tool is documented in a skill catalog.
-- **Generated docs** — `frontmcp build --target sdk` includes them in the published API.
+- **`codecall:describe`** — the CodeCall plugin's `describe` tool uses these as its top-priority source of usage examples (user-provided examples win over auto-generated ones, capped at 5). This is the one place `examples` is actually read.
+- **Not in `tools/list`** — the `tools/list` MCP response does not include `examples`; clients never see them there.
 
 ## When to include `output?`
 
 - ✅ When showing the expected output makes the tool's purpose clearer at a glance.
-- ✅ For UI clients that render result previews — knowing the shape lets them lay out the chip / card before the user clicks.
+- ✅ When an agent benefits from seeing a representative result shape in the `codecall:describe` output before composing a call.
 - ❌ For tools where the output is highly variable / live data (e.g. `web_search` results). Just show the input.
 
 ## Don't
 
-- Don't put sensitive example data — `examples` are public. Use synthetic IDs (`u_1`), test addresses (`@example.com`), demo amounts.
+- Don't put sensitive example data — `examples` are surfaced verbatim to agents via `codecall:describe`. Use synthetic IDs (`u_1`), test addresses (`@example.com`), demo amounts.
 - Don't pad with low-value examples just to hit a count. 2–4 well-chosen examples beats 20 trivial ones.
 - Don't rely on `examples` for documentation — they're advisory hints, not formal docs. Put substantive guidance in `description`.

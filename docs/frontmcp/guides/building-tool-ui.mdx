@@ -42,7 +42,7 @@ yarn add @frontmcp/ui
 </Info>
 
 <Warning>
-**Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path.
+**Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path. In a **CommonJS** project, `import.meta.url` is unavailable — use `join(__dirname, 'widget.tsx')` (from `node:path`) instead.
 </Warning>
 
 <Info>

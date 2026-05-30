@@ -34,15 +34,23 @@ export const AddNumbers = tool({
 ```
 
 ```typescript
-// src/apps/main/tools/add-numbers.tool.spec.ts
-import { testTool } from '@frontmcp/testing';
+// src/apps/main/tools/add-numbers.e2e.spec.ts
+import { expect, test } from '@frontmcp/testing';
 
-import { AddNumbers } from './add-numbers.tool';
+test.use({
+  server: './src/main.ts',
+  port: 3004,
+});
 
-describe('AddNumbers', () => {
-  it('adds two numbers', async () => {
-    expect(await testTool(AddNumbers).call({ a: 2, b: 3 })).toBe(5);
-  });
+test('adds two numbers', async ({ mcp }) => {
+  // mcp.tools.call returns a ToolResultWrapper around the MCP CallToolResult.
+  // A primitive `outputSchema: 'number'` surfaces as text content "5" and
+  // structuredContent `{ content: 5 }` — assert on the MCP result, not on `5` directly.
+  const result = await mcp.tools.call('add_numbers', { a: 2, b: 3 });
+
+  expect(result).toBeSuccessful();
+  expect(result).toHaveTextContent('5');
+  expect(result.json()).toEqual({ content: 5 });
 });
 ```
 
@@ -69,4 +77,4 @@ export class MainApp {}
 - ❌ Anything that needs `this.get(TOKEN)` — promote to class
 - ❌ Anything with a `ui:` widget — class + folder-per-tool layout is cleaner
 
-See [`references/function-style-builder.md`](../references/function-style-builder.md) for the full `tool()` surface, including `(input, ctx)` handler form with `ctx.get` / `ctx.fail` / `ctx.fetch`.
+See [`references/function-style-builder.md`](../references/function-style-builder.md) for the full `tool()` surface, including `(input, ctx)` handler form with `ctx.get` / `ctx.fetch` (to fail, `throw new PublicMcpError(...)` — `ctx.fail` is class-tool only).

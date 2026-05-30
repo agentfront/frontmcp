@@ -85,8 +85,8 @@ export class ExportDataTool extends ToolContext {
     //    dataset they happen to know the ID of. Concretely: look up the dataset
     //    scoped to the caller's tenant / user identity, fail fast if missing.
     const datasets = this.get(DATASETS);
-    const userId = this.context.authInfo.userId;
-    const tenantId = this.context.authInfo.tenantId;
+    const userId = this.auth.user.sub;
+    const tenantId = this.auth.claims['tenantId'] as string | undefined;
     const dataset = await datasets.findForUser(input.datasetId, { userId, tenantId });
     if (!dataset) {
       this.fail(new ResourceNotFoundError(`dataset:${input.datasetId}`));

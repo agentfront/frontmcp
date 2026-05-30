@@ -461,7 +461,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           item.execution = { taskSupport };
         }
 
-        // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
+        // Add outputSchema if available. getRawOutputSchema() returns the explicit
+        // rawOutputSchema (OpenAPI / remote passthrough) or, for hand-authored tools,
+        // a JSON Schema derived from the declared Zod-shape / z.object() outputSchema.
         // Note: When elicitation is enabled, getRawOutputSchema() transparently extends
         // the schema to include the elicitation fallback response type
         const rawOutput = tool.getRawOutputSchema();

@@ -21,7 +21,7 @@ async execute(input: { id: string }) {
     this.fail(new ResourceNotFoundError(`record:${input.id}`)); // -32002, message reaches client
   }
 
-  if (record.tenantId !== this.context.authInfo.tenantId) {
+  if (record.tenantId !== this.auth.claims['tenantId']) {
     this.fail(new PublicMcpError('Access denied')); // generic public message
   }
 

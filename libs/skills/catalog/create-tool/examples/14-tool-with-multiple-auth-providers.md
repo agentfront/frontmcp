@@ -2,11 +2,11 @@
 name: 14-tool-with-multiple-auth-providers
 level: advanced
 description: 'Tool with the full `authProviders` mapping form — one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.'
-tags: [auth-providers, oauth, scopes, optional-auth, this.authProviders.tryHeaders]
+tags: [auth-providers, oauth, scopes, optional-auth, this.authProviders.headers]
 features:
   - 'Using the object form of `authProviders` to set `required`, `scopes`, and `alias`'
   - Requesting specific OAuth scopes so the framework triggers incremental auth when missing
-  - "Resolving an optional provider via `await this.authProviders.tryHeaders('cloud')` (returns `null` when absent)"
+  - "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)"
   - "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
 ---
 
@@ -47,13 +47,14 @@ const outputSchema = {
 export class DeployAppTool extends ToolContext {
   async execute(input: { repo: string; environment: 'staging' | 'production'; dryRun: boolean }) {
     const githubHeaders = await this.authProviders.headers('github');
-    const cloudHeaders = await this.authProviders.tryHeaders('cloud'); // null when AWS not connected
+    const cloudHeaders = await this.authProviders.headers('cloud'); // {} when AWS not connected
+    const hasCloud = Object.keys(cloudHeaders).length > 0;
 
     // 1. Build artifact from the repo (always works — we have GitHub creds)
     const buildId = await this.triggerBuild(input.repo, githubHeaders);
 
     // 2. Deploy — only if cloud creds are present
-    if (!cloudHeaders || input.dryRun) {
+    if (!hasCloud || input.dryRun) {
       return {
         deploymentId: `preview-${buildId}`,
         url: `https://preview.example.com/${buildId}`,
@@ -69,10 +70,10 @@ export class DeployAppTool extends ToolContext {
     };
   }
 
-  private async triggerBuild(_repo: string, _headers: Headers): Promise<string> {
+  private async triggerBuild(_repo: string, _headers: Record<string, string>): Promise<string> {
     return 'b_42';
   }
-  private async deployToCloud(_buildId: string, _env: string, _headers: Headers): Promise<string> {
+  private async deployToCloud(_buildId: string, _env: string, _headers: Record<string, string>): Promise<string> {
     return 'd_99';
   }
 }
@@ -82,7 +83,7 @@ export class DeployAppTool extends ToolContext {
 
 - Using the object form of `authProviders` to set `required`, `scopes`, and `alias`
 - Requesting specific OAuth scopes so the framework triggers incremental auth when missing
-- Resolving an optional provider via `await this.authProviders.tryHeaders('cloud')` (returns `null` when absent)
+- Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)
 - Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing
 
 ## Field reference (from auth-providers.md)

@@ -1,18 +1,18 @@
 ---
 name: 11-tool-with-fetch
 level: intermediate
-description: 'Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and timing out via the abort signal.'
+description: 'Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.'
 tags: [fetch, http, external-api, error-handling]
 features:
   - 'Using `this.fetch(url, init?)` so trace context propagates to the upstream service'
   - 'Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error'
-  - 'Passing `this.context.abortSignal` to the fetch so a tool `timeout` cancels in-flight HTTP work'
+  - "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal"
   - "Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow"
 ---
 
 # Tool With Fetch
 
-Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and timing out via the abort signal.
+Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.
 
 `this.fetch` is the standard `fetch` plus trace-context propagation. Always use it instead of bare `fetch` so distributed tracing stitches the upstream call into the same trace as the MCP request.
 
@@ -38,7 +38,7 @@ const outputSchema = {
   description: 'Current weather from api.weather.example',
   inputSchema,
   outputSchema,
-  timeout: { executeMs: 10_000 }, // abort the fetch if the upstream hangs
+  timeout: { executeMs: 10_000 }, // cap the whole call if the upstream hangs
 })
 export class GetWeatherTool extends ToolContext {
   async execute(input: { city: string; units: 'celsius' | 'fahrenheit' }) {
@@ -48,7 +48,8 @@ export class GetWeatherTool extends ToolContext {
 
     const response = await this.fetch(url, {
       headers: { accept: 'application/json' },
-      signal: this.context.abortSignal, // propagate the tool timeout
+      // `this.fetch` applies its own request timeout (default 30s). The tool-level
+      // `timeout` below caps the whole execute() at the framework level.
     });
 
     if (response.status === 404) {
@@ -73,7 +74,7 @@ export class GetWeatherTool extends ToolContext {
 
 - Using `this.fetch(url, init?)` so trace context propagates to the upstream service
 - Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error
-- Passing `this.context.abortSignal` to the fetch so a tool `timeout` cancels in-flight HTTP work
+- Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal
 - Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow
 
 ## Don't do this

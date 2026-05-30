@@ -141,12 +141,17 @@ The bridge routes to the right host adapter (OpenAI SDK / Claude postMessage / F
 
 ## Host considerations
 
-| Host                 | Notes                                                                                                                                                                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **OpenAI Apps SDK**  | Any CDN works. `_meta['openai/outputTemplate']` advertises the widget.                                                                                                                                                    |
-| **Claude (MCP-UI)**  | Widget iframe blocks all external script execution. Use `resourceMode: 'inline'` (auto-detected when you leave it unset) so React bundles in. CSP must be on the resource — framework handles it via `ui.csp` (#455 fix). |
-| **MCP Inspector**    | Useful for local development. Static mode works fine.                                                                                                                                                                     |
-| **Gemini / unknown** | `ui` is ignored — JSON output is returned.                                                                                                                                                                                |
+| Host                 | Notes                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OpenAI Apps SDK**  | Any CDN works. The widget is advertised the same way as for every host — `tools/list` emits `_meta.ui.resourceUri` pointing at `ui://widget/{toolName}.html` (the MCP Apps `ui/*` namespace); there is no `openai/outputTemplate` key. |
+| **Claude (MCP-UI)**  | Widget iframe blocks all external script execution. Use `resourceMode: 'inline'` (auto-detected when you leave it unset) so React bundles in. CSP must be on the resource — framework handles it via `ui.csp` (#455 fix).              |
+| **MCP Inspector**    | Useful for local development. Static mode works fine.                                                                                                                                                                                  |
+| **Gemini / unknown** | `ui` is ignored — JSON output is returned.                                                                                                                                                                                             |
+
+## Current limitations
+
+- **Widget height is host-dependent.** There's no portable height / auto-resize control. `displayMode: 'fullscreen'` is a hint a host may ignore, and there's no `preferredHeight` / `aspectRatio`. Some hosts honor a `ui/notifications/size-changed` message; Claude measures the iframe DOM height directly, so a widget that needs a fixed tall area (media players, canvases) can render clipped. Size content to its natural height where possible.
+- **Don't push large payloads through the widget.** Claude's sandbox CSP blocks external `connect-src`, so an inline widget can't reliably lazy-load multi-MB data, and a single MCP message is a poor carrier for it either. For large or streamed data, return a `resource_link` (see [`output-schema.md`](./output-schema.md)) and let the host fetch the resource — don't embed it in the widget or the tool result.
 
 ## Examples
 

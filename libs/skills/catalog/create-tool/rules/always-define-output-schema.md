@@ -55,7 +55,7 @@ class GetWeatherTool extends ToolContext {
 1. **Output validation prevents data leaks.** Without `outputSchema`, every field your code accidentally includes (or that an upstream API drops in unsolicited — auth tokens, internal IDs, debug traces, PII) reaches the MCP client. With it, only declared fields pass through; everything else is stripped.
 2. **CodeCall plugin compatibility.** The CodeCall plugin uses `outputSchema` to understand what a tool returns, enabling correct VM-based orchestration and pass-by-reference. Tools without `outputSchema` degrade CodeCall's ability to chain calls.
 3. **Type safety on `execute()`'s return type.** With `outputSchema` declared, `ToolContext` infers the expected return type from it. The compiler tells you when your return value diverges from the declared shape.
-4. **Self-documenting tools.** `tools/list` exposes the output structure to AI clients; they can choose the right tool based on what it returns.
+4. **Self-documenting tools.** A structured object `outputSchema` (a Zod raw shape or `z.object`) is converted to JSON Schema and advertised in `tools/list`, so AI clients can choose the right tool by what it returns. Primitive / media / multi-content-array / union outputs flow through `content` instead and aren't advertised as `outputSchema` — that's expected (the MCP `outputSchema` must be a top-level object).
 
 ## How to apply
 

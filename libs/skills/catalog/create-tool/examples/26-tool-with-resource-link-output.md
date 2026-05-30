@@ -4,7 +4,7 @@ level: advanced
 description: "Tool returning `outputSchema: 'resource_link'` — the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads."
 tags: [output-schema, resource_link, large-payload, caching]
 features:
-  - "Returning `outputSchema: 'resource_link'` from a tool — `{ uri }` only, body fetched separately"
+  - "Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately"
   - "Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body"
   - "When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)"
   - 'Cross-linking to the `create-resource` skill for the URI-template resource on the other end'
@@ -63,15 +63,16 @@ export class StartExportTool extends ToolContext {
     const exports = this.get(EXPORTS);
     const exportId = await exports.create(input.datasetId);
 
-    // Return JUST the URI. The client fetches the body via resources/read.
-    return { uri: `export://${exportId}.csv` };
+    // Return the resource link — include the `type: 'resource_link'` discriminator
+    // (without it the content block is dropped). The client fetches the body via resources/read.
+    return { type: 'resource_link' as const, uri: `export://${exportId}.csv` };
   }
 }
 ```
 
 ## What This Demonstrates
 
-- Returning `outputSchema: 'resource_link'` from a tool — `{ uri }` only, body fetched separately
+- Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately
 - Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body
 - When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)
 - Cross-linking to the `create-resource` skill for the URI-template resource on the other end

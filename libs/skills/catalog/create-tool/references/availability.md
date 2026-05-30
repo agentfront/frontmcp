@@ -52,11 +52,11 @@ On Linux / Windows servers, this tool simply doesn't exist — it's not in `tool
 
 ## Error shape on mismatch
 
-When the constraint fails at call time, FrontMCP throws `EntryUnavailableError` (`-32099`). Its `data` carries `missingAxes: string[]` (since #417) so clients can surface a specific reason without parsing prose:
+When the constraint fails at call time, FrontMCP throws `EntryUnavailableError` (string code `'ENTRY_UNAVAILABLE'`, JSON-RPC `-32003` FORBIDDEN, HTTP 403). Its `data` carries `missingAxes: string[]` (since #417) so clients can surface a specific reason without parsing prose:
 
 ```json
 {
-  "code": -32099,
+  "code": -32003,
   "message": "Tool 'deploy_service' is not available in this environment.",
   "data": {
     "missingAxes": ["env"],
