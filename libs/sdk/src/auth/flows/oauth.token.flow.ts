@@ -70,10 +70,59 @@ import {
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
+  type ServerRequest,
 } from '../../common';
 import type { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
+
+/**
+ * Resolve the token-request parameters from a parsed-or-raw request body
+ * (#473). Prefers the already-parsed `request.body` from the host's body
+ * parser; when that is empty/missing (e.g. a hybrid Content-Type the parser
+ * skipped, or a host that does not parse bodies) it falls back to parsing the
+ * raw string body as `application/x-www-form-urlencoded` and then as JSON.
+ *
+ * Returns an empty object when nothing usable is present so the caller's zod
+ * validation produces a precise field error rather than throwing.
+ */
+function coerceTokenRequestBody(request: ServerRequest): Record<string, unknown> {
+  const body: unknown = request.body;
+
+  // Already parsed into a non-empty object → use as-is (clean Content-Type).
+  if (body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body as object).length > 0) {
+    return body as Record<string, unknown>;
+  }
+
+  // Raw string body (parser skipped it) → try urlencoded, then JSON.
+  if (typeof body === 'string' && body.length > 0) {
+    return parseRawTokenBody(body);
+  }
+
+  // Empty object / null / undefined → let zod produce a precise field error.
+  return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+}
+
+/** Parse a raw string body as urlencoded form data, falling back to JSON. */
+function parseRawTokenBody(raw: string): Record<string, unknown> {
+  // Try urlencoded first — OAuth token requests are urlencoded by spec.
+  if (raw.includes('=')) {
+    const params = new URLSearchParams(raw);
+    const out: Record<string, string> = {};
+    for (const [k, v] of params) out[k] = v;
+    if (Object.keys(out).length > 0) return out;
+  }
+  // Fall back to JSON.
+  try {
+    const json: unknown = JSON.parse(raw);
+    if (json && typeof json === 'object' && !Array.isArray(json)) {
+      return json as Record<string, unknown>;
+    }
+  } catch {
+    // not JSON — fall through
+  }
+  return {};
+}
 
 // RFC 7636 PKCE: code_verifier is 43–128 chars from ALPHA / DIGIT / "-" / "." / "_" / "~"
 const pkceVerifierRegex = /^[A-Za-z0-9_.~-]{43,128}$/;
@@ -182,21 +231,34 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     const isDefaultAuthProvider = !metadata.auth;
     const isOrchestrated = !isDefaultAuthProvider;
 
-    try {
-      const body = tokenRequestSchema.parse(request.body);
+    // #473 — tolerate hybrid Content-Type headers. The Express adapter now
+    // routes hybrid headers (e.g. `application/json, application/x-www-form-
+    // urlencoded`, sent by the MCP Inspector token refresh) to the right
+    // parser, but as a defensive fallback we also re-parse the raw body here
+    // when `request.body` arrived empty/missing (e.g. a host adapter that did
+    // not parse it). This keeps clean single-type bodies working unchanged.
+    const rawBody = coerceTokenRequestBody(request);
+
+    const parsed = tokenRequestSchema.safeParse(rawBody);
+    if (parsed.success) {
       this.state.set({
         isDefaultAuthProvider,
         isOrchestrated,
-        body,
-        grantType: body.grant_type,
+        body: parsed.data,
+        grantType: parsed.data.grant_type,
       });
-    } catch (err) {
-      this.logger.warn('Invalid token request body', err);
+    } else {
+      // Surface the actual zod issue (#473) instead of an opaque message so
+      // misconfigured clients can see WHICH field failed. The issue path/
+      // message contain no secrets (grant_type, client_id, redirect_uri, …).
+      const issue = parsed.error.issues[0];
+      const detail = issue ? `${issue.path.join('.') || '(body)'}: ${issue.message}` : 'could not parse request body';
+      this.logger.warn(`Invalid token request body — ${detail}`);
       this.state.set({
         isDefaultAuthProvider,
         isOrchestrated,
         error: 'invalid_request',
-        errorDescription: 'Invalid request body',
+        errorDescription: `Invalid request body (${detail})`,
       });
     }
   }

@@ -110,7 +110,11 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       });
       return;
     }
-    const issuer = this.scope.auth.issuer;
+    // Derive the authorization server from the request base (Host/X-Forwarded-*)
+    // rather than the static boot-time issuer (#467). Behind a proxy or tunnel
+    // the boot-time issuer (e.g. http://localhost:PORT) does not match the URL
+    // the client actually reached, which breaks discovery. The request-derived
+    // base mirrors the resource URL the same flow already advertises.
     // Transparent scope
     this.respond({
       kind: 'json',
@@ -118,7 +122,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       contentType: 'application/json; charset=utf-8',
       body: {
         resource,
-        authorization_servers: [issuer],
+        authorization_servers: [baseUrl],
         scopes_supported: scopesSupported,
         bearer_methods_supported: ['header'],
       },

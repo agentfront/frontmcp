@@ -160,15 +160,22 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // For incremental auth, email is not required (user already authenticated)
-    if (!isIncremental && !email) {
+    // Retrieve the pending authorization
+    const localAuth = this.scope.auth as LocalPrimaryAuth;
+
+    // #468 — email opt-out for single-operator local setups.
+    // `requireEmail` defaults to true (historical behavior). When explicitly
+    // false, a non-incremental login without an email is allowed and the code
+    // is minted against a stable anonymous subject (see createAuthorizationCode
+    // below). For incremental auth email was never required.
+    const localOptions = localAuth.options as { requireEmail?: boolean; anonymousSubject?: string };
+    const requireEmail = localOptions.requireEmail ?? true;
+    if (!isIncremental && !email && requireEmail) {
       this.logger.warn('Missing email in callback');
       this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Email is required'), 400));
       return;
     }
 
-    // Retrieve the pending authorization
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
     const pendingAuth = await localAuth.authorizationStore.getPendingAuthorization(pendingAuthId);
 
     if (!pendingAuth) {
@@ -183,8 +190,20 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Generate a user sub from email (in production, this would come from a user database)
-    // For incremental auth, we might need to use existing session's user sub
-    const userSub = email ? this.generateUserSub(email) : undefined;
+    // For incremental auth, we might need to use existing session's user sub.
+    // #468 — when email is opted out (requireEmail=false) and none was provided
+    // for a non-incremental login, derive a STABLE anonymous sub from the
+    // configured subject so the single operator keeps a consistent identity and
+    // a code can still be minted (createAuthorizationCode requires userSub).
+    let userSub: string | undefined;
+    if (email) {
+      userSub = this.generateUserSub(email);
+    } else if (!isIncremental && !requireEmail) {
+      const anonymousSubject = localOptions.anonymousSubject ?? 'local-operator';
+      userSub = this.generateUserSub(anonymousSubject);
+    } else {
+      userSub = undefined;
+    }
 
     // Validate federated login is enabled for this authorization request
     if (isFederated && !pendingAuth.federatedLogin) {
@@ -437,6 +456,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('createAuthorizationCode')
   async createAuthorizationCode() {
+    // Read from the non-throwing state proxy: only clientId/redirectUri/codeChallenge/userSub
+    // are truly required (validated explicitly below). The rest are optional, and reading an
+    // undefined optional field off `state.required` throws InvokeStateMissingKeyError → a 500
+    // on every non-federated local login (no `resource`/`name`/`selectedProviders`/…).
     const {
       clientId,
       redirectUri,
@@ -453,7 +476,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       skippedProviders,
-    } = this.state.required;
+    } = this.state;
 
     // Validate required fields before creating authorization code
     if (!clientId || !redirectUri || !codeChallenge || !userSub) {

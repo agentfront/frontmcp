@@ -24,7 +24,7 @@ import {
   type Type,
 } from '../common';
 import { FRONTMCP_CONTEXT, FrontMcpContextStorage } from '../context';
-import { InternalMcpError, RequestContextNotAvailableError } from '../errors';
+import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
 import type HookRegistry from '../hooks/hook.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
@@ -110,6 +110,28 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
               case 'respond':
                 return writeHttpResponse(response, e.output as any);
             }
+          }
+          // Public MCP errors carry a client-safe status + message (e.g. a 401
+          // from ensureAuthInfo when a verified token's session can't be
+          // reconstructed — #471). Render them with their real status instead
+          // of masking everything as a 500, and forward an RFC 6750
+          // `WWW-Authenticate` challenge when the error supplies one.
+          if (e instanceof PublicMcpError) {
+            const challenge = (e as { wwwAuthenticate?: unknown }).wwwAuthenticate;
+            this.logger.warn('Public error in flow', {
+              flow: this.name,
+              name: e.name,
+              status: e.statusCode,
+              code: e.code,
+            });
+            return writeHttpResponse(response, {
+              kind: 'json',
+              status: e.statusCode,
+              body: { error: e.getPublicMessage() },
+              ...(typeof challenge === 'string' && challenge.length > 0
+                ? { headers: { 'WWW-Authenticate': challenge } }
+                : {}),
+            });
           }
           // Log unhandled errors for visibility (non-FlowControl errors indicate bugs)
           this.logger.error('Unhandled error in flow', {

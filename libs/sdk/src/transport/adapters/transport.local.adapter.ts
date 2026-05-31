@@ -17,7 +17,7 @@ import {
   type McpElicitResult,
   type PendingElicit,
 } from '../../elicitation';
-import { ElicitationNotSupportedError } from '../../errors';
+import { ElicitationNotSupportedError, UnauthorizedError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
 import { buildChannelInstructions, composeInitializeInstructions } from '../../skill/skill-instructions.helper';
@@ -334,14 +334,21 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const { token, user, session } = req[ServerRequestTokens.auth];
 
     // Session must always exist at this point — created in session.verify (public mode)
-    // or synced from flow state in onInitialize (reconnect). A missing session indicates
-    // a bug in session propagation, not a recoverable runtime condition.
+    // or synced from flow state in onInitialize (reconnect). A missing session here
+    // means a verified token could not be tied back to a live session (e.g. the
+    // session was evicted/expired and could not be reconstructed). That is an
+    // authentication-recovery condition for the client, NOT an internal bug, so we
+    // surface a 401 challenge (#471) rather than letting a plain Error bubble up as a
+    // generic 500/-32000. PublicMcpError-derived errors are rendered by the flow
+    // runner with their statusCode and any `wwwAuthenticate` challenge.
     // The previous fallback:${Date.now()} was predictable, unencrypted, and could collide.
     if (!session?.id) {
-      throw new Error(
-        'Session ID is required in ensureAuthInfo. ' +
-          'This indicates a bug in session propagation — the session should have been set by the flow.',
+      const err = new UnauthorizedError(
+        'Session could not be reconstructed for the provided token. Re-authenticate to start a new session.',
       );
+      // RFC 6750 §3 — challenge the client to re-authenticate with a bearer token.
+      (err as { wwwAuthenticate?: string }).wwwAuthenticate = 'Bearer';
+      throw err;
     }
     const sessionId = session.id;
     const sessionPayload = session.payload ?? { protocol: 'streamable-http' as const };

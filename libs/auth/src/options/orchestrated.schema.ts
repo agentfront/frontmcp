@@ -43,6 +43,11 @@ const sharedAuthFields = {
 export const localAuthSchema = z.object({
   mode: z.literal('local'),
   ...sharedAuthFields,
+  // #468 — opt-out of the email requirement at /oauth/callback for
+  // single-operator local setups. Defaults preserve the historical behavior
+  // (email required) so existing configs are unaffected.
+  requireEmail: z.boolean().default(true),
+  anonymousSubject: z.string().min(1).default('local-operator'),
 } satisfies RawZodShape<LocalAuthOptionsInterface>);
 
 // ============================================

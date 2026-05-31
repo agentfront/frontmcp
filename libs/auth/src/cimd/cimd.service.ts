@@ -5,31 +5,30 @@
  *
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
-import type { CimdLogger } from './cimd.logger';
-import { noopLogger } from './cimd.logger';
 import { InMemoryCimdCache, type CimdCacheBackend } from './cimd.cache';
 import {
-  CimdFetchError,
-  CimdValidationError,
   CimdClientIdMismatchError,
+  CimdFetchError,
   CimdResponseTooLargeError,
+  CimdValidationError,
   RedirectUriMismatchError,
 } from './cimd.errors';
+import { noopLogger, type CimdLogger } from './cimd.logger';
 import {
-  clientMetadataDocumentSchema,
-  cimdConfigSchema,
   cimdCacheConfigSchema,
-  cimdSecurityConfigSchema,
+  cimdConfigSchema,
   cimdNetworkConfigSchema,
-  type ClientMetadataDocument,
+  cimdSecurityConfigSchema,
+  clientMetadataDocumentSchema,
+  type CimdCacheConfig,
   type CimdConfig,
   type CimdConfigInput,
-  type CimdResolutionResult,
-  type CimdCacheConfig,
-  type CimdSecurityConfig,
   type CimdNetworkConfig,
+  type CimdResolutionResult,
+  type CimdSecurityConfig,
+  type ClientMetadataDocument,
 } from './cimd.types';
-import { isCimdClientId, validateClientIdUrl, hasOnlyLocalhostRedirectUris } from './cimd.validator';
+import { hasOnlyLocalhostRedirectUris, isCimdClientId, validateClientIdUrl } from './cimd.validator';
 
 /**
  * CIMD Service for resolving and validating client metadata documents.
@@ -419,15 +418,43 @@ export class CimdService {
 }
 
 /**
+ * Loopback interface hostnames per RFC 8252 §7.3. A native app's redirect
+ * to one of these uses an ephemeral, OS-assigned port that the client cannot
+ * register ahead of time, so the authorization server MUST compare the
+ * redirect_uri ignoring the port for these hosts.
+ *
+ * Node's `URL.hostname` keeps the brackets on IPv6 literals (`[::1]`), so the
+ * bracketed form is included alongside the bare form for robustness.
+ */
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', '[::1]', 'localhost']);
+
+/**
+ * Whether a hostname (as returned by `URL.hostname`) refers to the loopback
+ * interface per RFC 8252 §7.3. Handles the bracketed IPv6 form `[::1]`.
+ */
+function isLoopbackHostname(hostname: string): boolean {
+  return LOOPBACK_HOSTNAMES.has(hostname.toLowerCase());
+}
+
+/**
  * Normalize a redirect_uri for comparison.
  *
  * Removes trailing slashes and normalizes case for scheme/host.
+ *
+ * RFC 8252 §7.3: for loopback redirects (`127.0.0.1`, `[::1]`, `localhost`)
+ * the port is OS-assigned and ephemeral, so it is dropped from the normalized
+ * form — scheme + loopback host + path must match, but the port may differ.
+ * Non-loopback hosts keep their port (exact match).
  */
 function normalizeRedirectUri(uri: string): string {
   try {
     const url = new URL(uri);
-    // Normalize scheme and host to lowercase, but preserve path case
-    let normalized = `${url.protocol.toLowerCase()}//${url.host.toLowerCase()}`;
+    // Normalize scheme and host to lowercase, but preserve path case.
+    // For loopback hosts, drop the port (RFC 8252 §7.3) by comparing only the
+    // hostname, so `127.0.0.1:1234` ≡ `127.0.0.1:5678` and `[::1]:1234` ≡
+    // `[::1]:5678`. Non-loopback hosts keep their `host` (port included).
+    const host = isLoopbackHostname(url.hostname) ? url.hostname.toLowerCase() : url.host.toLowerCase();
+    let normalized = `${url.protocol.toLowerCase()}//${host}`;
     normalized += url.pathname.replace(/\/+$/, '') || '/';
     if (url.search) normalized += url.search;
     return normalized;

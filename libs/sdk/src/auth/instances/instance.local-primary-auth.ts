@@ -163,7 +163,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     super(options);
     this.logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
     this.port = this.providers.getActiveScope().metadata.http?.port ?? 3001;
-    this.host = 'localhost';
+    // Boot-time host fallback for the issuer. Previously hard-coded to
+    // 'localhost', which produced wrong issuer/discovery URLs behind a proxy
+    // or tunnel (#467). An explicit `local.issuer` (preferred) or the
+    // FRONTMCP_PUBLIC_HOST env var override this; otherwise fall back to
+    // 'localhost'. Request-derived discovery (well-known flows) is the runtime
+    // source of truth — this only affects boot-time defaults.
+    this.host = getEnv('FRONTMCP_PUBLIC_HOST')?.trim() || 'localhost';
     this.issuer = this.deriveIssuer(options);
 
     const jwtSecret = getEnv('JWT_SECRET');

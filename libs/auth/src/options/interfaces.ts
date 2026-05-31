@@ -8,9 +8,9 @@
 // IMPORTANT: Keep these interfaces in sync with the Zod schemas.
 // The typecheck.ts file will fail to compile if they get out of sync.
 
-import { JSONWebKeySet, JWK } from '../common/jwt.types';
-import type { RedisConfig } from '../session/transport-session.types';
 import type { CimdConfigInput } from '../cimd';
+import { type JSONWebKeySet, type JWK } from '../common/jwt.types';
+import type { RedisConfig } from '../session/transport-session.types';
 
 // ============================================
 // SHARED CONFIG INTERFACES
@@ -321,6 +321,28 @@ export interface LocalAuthOptionsInterface {
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
   cimd?: CimdConfigInput;
+  /**
+   * Require an email at the `/oauth/callback` login step.
+   *
+   * When `true` (default) the callback rejects a non-incremental login that
+   * carries no email — the historical behavior. Set to `false` for
+   * single-operator local setups (e.g. Claude Code against `mode: 'local'`)
+   * where a login should mint a code without prompting for an email; the
+   * callback then derives a stable anonymous `sub` from
+   * {@link LocalAuthOptionsInterface.anonymousSubject}.
+   *
+   * @default true
+   */
+  requireEmail?: boolean;
+  /**
+   * Stable subject identifier used to mint the authorization code when
+   * {@link LocalAuthOptionsInterface.requireEmail} is `false` and no email is
+   * provided. Defaults to `'local-operator'`. The same value always maps to
+   * the same `sub`, so the single operator keeps a stable identity.
+   *
+   * @default 'local-operator'
+   */
+  anonymousSubject?: string;
 }
 
 export interface RemoteAuthOptionsInterface {
