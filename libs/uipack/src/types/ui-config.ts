@@ -435,12 +435,18 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Whether the widget should auto-report its content height to the host as it
    * changes (via a debounced `ResizeObserver` on `#root`).
    *
+   * Only takes effect when the widget configures sizing — i.e. at least one
+   * sizing field (`preferredHeight` / `minHeight` / `maxHeight` / `aspectRatio` /
+   * `autoResize`) is set, which is what causes the runtime to be injected. A
+   * widget with no sizing config does not auto-resize at all. When sizing is
+   * configured, auto-resize is on unless you set this to `false`.
+   *
    * - Claude / static widgets: the host measures DOM height itself, so this is
    *   a CSS-only no-op.
    * - OpenAI: forwarded through the Apps SDK sizing API.
    * - ext-apps hosts: reported via the `ui/setSize` request.
    *
-   * @default true
+   * @default true (when the widget configures sizing)
    */
   autoResize?: boolean;
 
