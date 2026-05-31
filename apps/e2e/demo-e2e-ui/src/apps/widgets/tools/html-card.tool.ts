@@ -36,6 +36,12 @@ type Output = z.infer<typeof outputSchema>;
   ui: {
     servingMode: 'auto',
     displayMode: 'inline',
+    // Widget sizing — exercised by the sizing e2e spec.
+    preferredHeight: 320,
+    minHeight: 120,
+    maxHeight: 640,
+    aspectRatio: '16 / 9',
+    autoResize: true,
     widgetDescription: 'Displays a styled HTML card with title, content, and optional footer.',
     template: (ctx) => {
       // title comes from output, content/footer come from input

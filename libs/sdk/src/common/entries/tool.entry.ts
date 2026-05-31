@@ -1,5 +1,6 @@
 // file: libs/sdk/src/common/entries/tool.entry.ts
 
+import { toJSONSchema, z } from '@frontmcp/lazy-zod';
 import {
   type AuthInfo,
   type CallToolRequest,
@@ -131,7 +132,6 @@ export abstract class ToolEntry<
     // Convert Zod schema shape to JSON Schema
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
-        const { z, toJSONSchema } = require('zod');
         return toJSONSchema(z.object(this.inputSchema));
       } catch (error) {
         // Log the error for debugging purposes
@@ -143,6 +143,78 @@ export abstract class ToolEntry<
     }
 
     return null;
+  }
+
+  /** Cached output JSON Schema result (undefined = not yet computed, null = none) */
+  private _cachedOutputJsonSchema?: Record<string, unknown> | null;
+
+  /**
+   * Get the tool's output schema as JSON Schema (cached after first call).
+   *
+   * Prefers an explicit `rawOutputSchema` (the JSON Schema set by the OpenAPI adapter /
+   * remote tools); otherwise converts a Zod-shape or `z.object()` `outputSchema` to JSON
+   * Schema — symmetric with {@link getInputJsonSchema}. Returns `null` for output forms
+   * that have no object-typed schema to advertise: primitive / media string literals
+   * (`'string'`, `'image'`, …), multi-content arrays (`['string', 'image']`), and any
+   * schema that does not serialize to a top-level `type: 'object'` (e.g. a union) — those
+   * flow through `content`, not `structuredContent`, per the MCP spec.
+   *
+   * @returns JSON Schema object, or null if there is no advertisable output schema.
+   */
+  getOutputJsonSchema(): Record<string, unknown> | null {
+    if (this._cachedOutputJsonSchema !== undefined) return this._cachedOutputJsonSchema;
+
+    const result = this.computeOutputJsonSchema();
+    this._cachedOutputJsonSchema = result;
+    return result;
+  }
+
+  private computeOutputJsonSchema(): Record<string, unknown> | null {
+    // Prefer rawOutputSchema when it is already a JSON Schema object (OpenAPI / remote passthrough).
+    if (
+      typeof this.rawOutputSchema === 'object' &&
+      this.rawOutputSchema !== null &&
+      !Array.isArray(this.rawOutputSchema)
+    ) {
+      return this.rawOutputSchema as Record<string, unknown>;
+    }
+
+    const schema = this.outputSchema as unknown;
+
+    // Primitive / media literals ('string' | 'number' | 'image' | …) and multi-content
+    // arrays (['string', 'image']) have no object outputSchema — they flow via `content`.
+    if (!schema || typeof schema === 'string' || Array.isArray(schema)) {
+      return null;
+    }
+
+    try {
+      // Duck-type a Zod schema (z.object(), z.discriminatedUnion(), …) vs a raw shape
+      // ({ field: z.string() }); identity-based instanceof is avoided so a duplicated zod
+      // module copy cannot break detection.
+      const isZodSchema =
+        typeof (schema as { safeParse?: unknown }).safeParse === 'function' &&
+        typeof (schema as { parse?: unknown }).parse === 'function';
+
+      if (!isZodSchema && Object.keys(schema as Record<string, unknown>).length === 0) {
+        // Empty raw shape — nothing meaningful to advertise.
+        return null;
+      }
+
+      // `schema` is a Zod type (z.object()/discriminatedUnion/…) or a raw shape at
+      // runtime, but `unknown` to TS. Narrow to the Zod-object type both z.object() and
+      // toJSONSchema() accept (the raw-shape cast mirrors the inputSchema path above).
+      const zodSchema = isZodSchema ? (schema as ReturnType<typeof z.object>) : z.object(schema as ToolInputType);
+      const json = toJSONSchema(zodSchema) as Record<string, unknown>;
+
+      // MCP requires outputSchema to be a top-level object schema; skip anything else
+      // (e.g. a discriminated union serializes to `anyOf`, not `type: 'object'`).
+      return json && json['type'] === 'object' ? json : null;
+    } catch (error) {
+      if (isDebug() || isDevelopment()) {
+        console.warn('[ToolEntry] Failed to convert output Zod schema to JSON Schema:', error);
+      }
+      return null;
+    }
   }
 
   /**

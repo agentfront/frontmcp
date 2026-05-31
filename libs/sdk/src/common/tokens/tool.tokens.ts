@@ -22,6 +22,7 @@ export const FrontMcpToolTokens = {
   timeout: tokenFactory.meta('timeout'), // Timeout configuration
   availableWhen: tokenFactory.meta('availableWhen'), // Environment availability constraint
   execution: tokenFactory.meta('execution'), // Execution hints (taskSupport, etc.)
+  output: tokenFactory.meta('output'), // Output policy (allowNonFinite, schemaMode, ...)
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');

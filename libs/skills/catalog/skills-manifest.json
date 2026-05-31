@@ -2,6 +2,463 @@
   "version": 1,
   "skills": [
     {
+      "name": "create-tool",
+      "category": "development/create",
+      "description": "ALWAYS use this skill when the user asks to build, modify, or audit a FrontMCP tool. Covers @Tool({...}) end-to-end: class and function-style tools, Zod input/output schemas with derived execute() types, dependency injection, error handling, throttling (rate-limit / concurrency / timeout), auth providers, availability constraints, elicitation, interactive UI widgets (MCP Apps / SEP-1865 — including .tsx FileSource, CSP, window.FrontMcpBridge, host-detect resourceMode), annotations, examples metadata, registration in @App, and per-tool unit testing.",
+      "path": "create-tool",
+      "targets": ["all"],
+      "hasResources": true,
+      "layout": "component",
+      "tags": [
+        "development",
+        "tool",
+        "create-tool",
+        "decorator",
+        "input-schema",
+        "output-schema",
+        "ToolContext",
+        "ui",
+        "mcp-apps",
+        "annotations",
+        "throttling",
+        "auth-providers",
+        "availability",
+        "elicitation"
+      ],
+      "bundle": ["recommended", "minimal", "full"],
+      "priority": 10,
+      "references": [
+        {
+          "name": "quick-start",
+          "description": "60-second tour — minimal tool, schemas, registration, calling it."
+        },
+        {
+          "name": "decorator-options",
+          "description": "Every field on `@Tool({...})` — what it does, default, when to set it."
+        },
+        {
+          "name": "input-schema",
+          "description": "Define the tool's input contract — raw Zod shapes, refinements, defaults, optional fields."
+        },
+        {
+          "name": "output-schema",
+          "description": "Define the tool's output contract — Zod shape, primitives, media, multi-content arrays."
+        },
+        {
+          "name": "derived-types",
+          "description": "Derive execute() parameter and return types from the schemas via ToolInputOf / ToolOutputOf."
+        },
+        {
+          "name": "execution-context",
+          "description": "What ToolContext provides at runtime — this.get, this.fetch, this.notify, this.context."
+        },
+        {
+          "name": "error-handling",
+          "description": "this.fail, MCP error classes, error flow — when to throw vs fail."
+        },
+        {
+          "name": "throttling",
+          "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults."
+        },
+        {
+          "name": "auth-providers",
+          "description": "authProviders shorthand vs full mapping, scopes, alias, credential vault basics."
+        },
+        {
+          "name": "availability",
+          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform."
+        },
+        {
+          "name": "elicitation",
+          "description": "this.elicit — request interactive input mid-execution. Server enable + accept/decline/cancel flow."
+        },
+        {
+          "name": "ui-widgets",
+          "description": "@Tool({ ui }) — template formats, servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
+        },
+        {
+          "name": "annotations",
+          "description": "readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title — behavioral hints for clients."
+        },
+        {
+          "name": "function-style-builder",
+          "description": "tool({...})(handler) — when to pick over a class, register, ctx parameter."
+        },
+        {
+          "name": "remote-and-esm",
+          "description": "Tool.esm / Tool.remote — load tools from ESM URLs or remote MCP servers."
+        },
+        {
+          "name": "registration",
+          "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition."
+        },
+        {
+          "name": "file-layout",
+          "description": "Flat sibling vs folder-per-tool layouts. <name>.schema.ts / <name>.tool.ts / <name>.tool.spec.ts."
+        },
+        {
+          "name": "testing",
+          "description": "Per-tool unit tests — @frontmcp/testing, mocking DI, asserting output validation."
+        }
+      ],
+      "examples": [
+        {
+          "name": "01-basic-class-tool",
+          "level": "basic",
+          "description": "Minimal class-based tool with Zod input/output schemas and types derived from the schemas. The foundation every other example builds on.",
+          "tags": ["foundation", "class-tool", "output-schema", "derived-types"],
+          "features": [
+            "Extending `ToolContext` (no generics) and implementing `execute()`",
+            "Hoisting `inputSchema` / `outputSchema` to a sibling `.schema.ts` file",
+            "Deriving the `execute()` parameter and return types via `ToolInputOf<>` / `ToolOutputOf<>`",
+            "Using a Zod raw shape for `inputSchema` (not `z.object(...)`)",
+            "Always defining `outputSchema` so the tool can't accidentally leak extra fields",
+            "Registering the tool in an `@App({ tools })`"
+          ]
+        },
+        {
+          "name": "02-basic-function-tool",
+          "level": "basic",
+          "description": "Function-style `tool({...})(handler)` for a tiny pure-input tool — pick this over a class only when the tool needs no DI / lifecycle / UI.",
+          "tags": ["foundation", "function-tool", "tool-builder"],
+          "features": [
+            "Using the `tool({...})(handler)` builder for a one-liner",
+            "Returning a primitive via `outputSchema: 'number'`",
+            "Registering the function-style tool in `@App({ tools })` exactly like a class tool",
+            "When function-style is the right choice (and when it isn't)"
+          ]
+        },
+        {
+          "name": "03-tool-with-zod-shape-output",
+          "level": "basic",
+          "description": "Tool returning structured JSON declared via a Zod raw shape outputSchema — the recommended pattern for any complex output.",
+          "tags": ["output-schema", "zod-shape", "structured-output"],
+          "features": [
+            "Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), … }`",
+            "Constraining values with `.int().min(0)` so invalid output is rejected at the boundary",
+            "Letting unrelated fields returned by the implementation (e.g. an upstream API's extras) be stripped silently",
+            "Deriving `OrderSummaryOutput` once so the type and runtime contract can't drift"
+          ]
+        },
+        {
+          "name": "04-tool-with-zod-schema-output",
+          "level": "advanced",
+          "description": "Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema — for outputs that branch on a kind field.",
+          "tags": ["output-schema", "zod-schema", "discriminated-union"],
+          "features": [
+            "Using a full Zod schema (`z.discriminatedUnion(...)`) as `outputSchema` instead of a raw shape",
+            "Branching the runtime output on a discriminant `kind` literal",
+            "Letting TypeScript narrow the return type per branch (via `as const` on the discriminant)",
+            "Knowing when full Zod schemas are the right pick (unions, transforms) and when a raw shape is enough"
+          ]
+        },
+        {
+          "name": "05-tool-with-primitive-output",
+          "level": "basic",
+          "description": "Tool returning a single primitive — `outputSchema: 'string' | 'number' | 'boolean' | 'date'` for single-value outputs.",
+          "tags": ["output-schema", "primitive-output"],
+          "features": [
+            "Using a primitive literal (`'string'`, `'number'`, `'boolean'`, `'date'`) for `outputSchema`",
+            "Returning the bare value directly from `execute()` instead of wrapping it",
+            "Picking primitive literals over a one-field Zod shape for ergonomic clarity",
+            "Four concrete tools in one file (`fmt_currency`, `add`, `is_palindrome`, `now`) demonstrating each primitive form"
+          ]
+        },
+        {
+          "name": "06-tool-with-media-output",
+          "level": "intermediate",
+          "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` — for outputs that aren't plain JSON.",
+          "tags": ["output-schema", "media-output", "image", "multi-content"],
+          "features": [
+            "Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`",
+            "Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)",
+            "Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response",
+            "When to pick a media literal vs `'resource_link'` (host-fetched URI)"
+          ]
+        },
+        {
+          "name": "08-tool-with-provider-injection",
+          "level": "intermediate",
+          "description": "Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` — the standard pattern for tools that talk to a database or external API.",
+          "tags": ["di", "provider", "this.get", "error-handling"],
+          "features": [
+            "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`",
+            "Implementing a `@Provider` and registering it in the same `@App` as the tool",
+            "Resolving the service inside `execute()` via `this.get(USER_SERVICE)` (throws when missing)",
+            "Translating \"not found\" into `ResourceNotFoundError` via `this.fail(...)` so the client gets a proper MCP error code (-32002)"
+          ]
+        },
+        {
+          "name": "09-tool-with-multiple-providers",
+          "level": "intermediate",
+          "description": "Tool composing three DI services — config (env-only), cache (optional, `tryGet`), and database (required) — the realistic shape for a production tool.",
+          "tags": ["di", "multiple-providers", "cache-aside", "tryGet"],
+          "features": [
+            "Resolving multiple providers via `this.get(TOKEN)` and `this.tryGet(TOKEN)`",
+            "Cache-aside pattern — check `tryGet(CACHE)` first, fall back to the database",
+            "Reading typed config from a `CONFIG` token vs `process.env` directly",
+            "Letting the tool work in production (with cache) AND in test (without it)"
+          ]
+        },
+        {
+          "name": "11-tool-with-fetch",
+          "level": "intermediate",
+          "description": "Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.",
+          "tags": ["fetch", "http", "external-api", "error-handling"],
+          "features": [
+            "Using `this.fetch(url, init?)` so trace context propagates to the upstream service",
+            "Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error",
+            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal",
+            "Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow"
+          ]
+        },
+        {
+          "name": "12-tool-with-fetch-and-retries",
+          "level": "advanced",
+          "description": "Tool calling a flaky external API with exponential backoff retries, an Idempotency-Key for safety, and respect for `Retry-After` on 429s.",
+          "tags": ["fetch", "retries", "exponential-backoff", "idempotency-key", "429-rate-limit"],
+          "features": [
+            "Retrying on transient errors (5xx + 429) with exponential backoff plus jitter",
+            "Generating an `Idempotency-Key` so retried POSTs don't duplicate side effects on the upstream",
+            "Respecting an upstream `Retry-After` header on 429 responses instead of guessing",
+            "Capping the total retry budget with `timeout: { executeMs }` so a wedged upstream can't hang the call indefinitely"
+          ]
+        },
+        {
+          "name": "13-tool-with-single-auth-provider",
+          "level": "intermediate",
+          "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand — credentials loaded before `execute()` runs.",
+          "tags": ["auth-providers", "oauth", "github", "this.authProviders"],
+          "features": [
+            "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
+            "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
+            "Letting the framework reject unauthenticated calls before `execute()` runs (no auth-check boilerplate)",
+            "Trusting the framework to handle token refresh, expiration, and the OAuth start URL"
+          ]
+        },
+        {
+          "name": "14-tool-with-multiple-auth-providers",
+          "level": "advanced",
+          "description": "Tool with the full `authProviders` mapping form — one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
+          "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
+          "features": [
+            "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
+            "Requesting specific OAuth scopes so the framework triggers incremental auth when missing",
+            "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
+            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
+          ]
+        },
+        {
+          "name": "15-tool-with-credential-vault",
+          "level": "advanced",
+          "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth.",
+          "tags": ["auth-providers", "credential-vault", "slack-webhook", "encryption-at-rest"],
+          "features": [
+            "Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`",
+            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth",
+            "Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)",
+            "Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)"
+          ]
+        },
+        {
+          "name": "16-tool-with-rate-limit",
+          "level": "intermediate",
+          "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.",
+          "tags": ["throttling", "rate-limit", "abuse-protection"],
+          "features": [
+            "Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`",
+            "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against",
+            "Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services",
+            "Sizing the limit against upstream quota / billing — not just \"what feels reasonable\""
+          ]
+        },
+        {
+          "name": "17-tool-with-concurrency-and-timeout",
+          "level": "advanced",
+          "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) — caps simultaneous in-flight work AND hard-caps per-call duration.",
+          "tags": ["throttling", "concurrency", "timeout"],
+          "features": [
+            "Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)",
+            "Hard-bounding any single call with `timeout: { executeMs }` so a wedged invocation can't hold a concurrency slot indefinitely",
+            "Giving long child work its own deadline, since `timeout` bounds `execute()` but does not pass an abort signal into it",
+            "Combining `rateLimit` + `concurrency` + `timeout` as a production triple"
+          ]
+        },
+        {
+          "name": "18-tool-with-progress-and-notify",
+          "level": "intermediate",
+          "description": "Long-running tool emitting progress updates (`this.progress`), log notifications (`this.notify`), and stage markers (`this.mark`) — the standard pattern for jobs you don't want to feel hung.",
+          "tags": ["progress", "notifications", "mark", "long-running"],
+          "features": [
+            "Emitting per-item progress with `await this.progress(current, total, message)`",
+            "Sending free-form log notifications at `info` / `warning` / `error` levels with `await this.notify(message, level)`",
+            "Marking execution stages with `this.mark(stage)` so observability tools have breadcrumbs",
+            "Letting `this.progress(...)` return `false` cheaply when no progress token was provided (zero-cost when nobody's listening)"
+          ]
+        },
+        {
+          "name": "19-tool-with-elicitation",
+          "level": "advanced",
+          "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` — the safe pattern for destructive or expensive actions.",
+          "tags": ["elicitation", "this.elicit", "destructive-action", "confirmation"],
+          "features": [
+            "Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`",
+            "Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`",
+            "Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently",
+            "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't"
+          ]
+        },
+        {
+          "name": "20-tool-with-annotations",
+          "level": "basic",
+          "description": "Four tools showing the standard annotation combinations — read-only query, destructive delete, send-email side-effecting, external-API search — and the client behavior each combination opts into.",
+          "tags": ["annotations", "readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"],
+          "features": [
+            "Setting `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` to opt into specific client behaviors (auto-retry, confirmation gating, parallelization)",
+            "Providing a human-readable `title` that overrides the snake_case `name` in client UIs",
+            "Picking the conservative defaults when the annotations aren't obvious (omitting fields is safer than guessing)",
+            "Why `send_email` sets `idempotentHint: false` (each call sends a new email) while `delete_user` sets it to `true` (deleting twice still leaves the user deleted)"
+          ]
+        },
+        {
+          "name": "21-tool-with-availability-constraints",
+          "level": "advanced",
+          "description": "Three tools showing the `availableWhen` axes — macOS-only OS gate, production+Node runtime gate, and a `surface` gate that allows agent + job invocation but blocks direct MCP-client calls.",
+          "tags": ["availableWhen", "os", "runtime", "surface", "EntryUnavailableError"],
+          "features": [
+            "Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`",
+            "Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available",
+            "Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation",
+            "Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
+          ]
+        },
+        {
+          "name": "22-tool-with-ui-html-template",
+          "level": "intermediate",
+          "description": "Tool with an inline HTML function template — `ui: { template: (ctx) => '<div>…</div>' }` — for a quick widget that doesn't need a separate `.tsx` file.",
+          "tags": ["ui", "ui-widgets", "html-template", "escapeHtml", "TemplateContext"],
+          "features": [
+            "Adding a `ui:` block with a function template `(ctx: TemplateContext<In, Out>) => string`",
+            "Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type",
+            "Always escaping user-controlled output with `ctx.helpers.escapeHtml(...)` so the widget can't XSS itself",
+            "Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you"
+          ]
+        },
+        {
+          "name": "23-tool-with-ui-filesource-tsx",
+          "level": "advanced",
+          "description": "Tool with a `.tsx` widget in a separate file via the `FileSource` form — the recommended pattern for any React widget. Path anchored with `import.meta.url` so it survives any cwd.",
+          "tags": ["ui", "ui-widgets", "FileSource", "tsx", "import.meta.url", "host-detect"],
+          "features": [
+            "Pointing `template` at a sibling `.tsx` file via the `FileSource` form `{ file: ... }`",
+            "Anchoring the path to the tool source with `fileURLToPath(new URL('./...widget.tsx', import.meta.url))` so `process.cwd()` doesn't matter",
+            "Leaving `resourceMode` unset — the framework host-detects (`'inline'` for Claude, `'cdn'` for others)",
+            "Naming the widget `*.widget.tsx` so the scaffolded `tsconfig.json`'s `exclude` keeps it out of the server typecheck"
+          ]
+        },
+        {
+          "name": "24-tool-with-ui-csp-and-bridge",
+          "level": "advanced",
+          "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` — the full pattern for live-data widgets that need cross-tool composition.",
+          "tags": ["ui", "csp", "widgetAccessible", "FrontMcpBridge", "interactive-widget"],
+          "features": [
+            "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
+            "Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs",
+            "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `</script>`)",
+            "Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback"
+          ]
+        },
+        {
+          "name": "25-tool-handing-off-to-job",
+          "level": "advanced",
+          "description": "Thin tool that validates input and enqueues a `@Job` to do the heavy lifting — the right pattern for any operation that takes more than a few seconds.",
+          "tags": ["composition", "jobs", "job-handoff", "hideFromDiscovery"],
+          "features": [
+            "Splitting a long-running operation into a thin tool (validates, enqueues, returns a tracking handle) plus a `@Job` (does the work)",
+            "Returning the job ID + status URL from the tool so the client can poll or stream updates",
+            "Using `availableWhen: { surface: ['mcp', 'agent'] }` on the tool while leaving the heavy `@Job` invisible to direct invocation",
+            "Why this beats running the heavy work inside `execute()` (avoids tool-call timeout limits, lets the job retry independently)"
+          ]
+        },
+        {
+          "name": "26-tool-with-resource-link-output",
+          "level": "advanced",
+          "description": "Tool returning `outputSchema: 'resource_link'` — the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
+          "tags": ["output-schema", "resource_link", "large-payload", "caching"],
+          "features": [
+            "Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately",
+            "Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body",
+            "When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)",
+            "Cross-linking to the `create-resource` skill for the URI-template resource on the other end"
+          ]
+        },
+        {
+          "name": "27-tool-with-examples-metadata",
+          "level": "basic",
+          "description": "Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
+          "tags": ["examples-metadata", "codecall", "describe"],
+          "features": [
+            "Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations",
+            "Writing realistic example inputs so the generated describe output is concrete, not abstract",
+            "Including `output?` for examples where showing the expected result helps an agent understand the tool",
+            "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "name": "always-define-output-schema",
+          "constraint": "Every `@Tool` defines `outputSchema`.",
+          "severity": "required"
+        },
+        {
+          "name": "derive-execute-types",
+          "constraint": "`execute()` parameter and return types come from `ToolInputOf<>` / `ToolOutputOf<>` — never duplicated inline.",
+          "severity": "required"
+        },
+        {
+          "name": "input-schema-is-raw-shape",
+          "constraint": "`inputSchema` is a raw Zod shape, never `z.object(...)`.",
+          "severity": "required"
+        },
+        {
+          "name": "no-toolcontext-generics",
+          "constraint": "`class MyTool extends ToolContext` — never `extends ToolContext<typeof inputSchema>`.",
+          "severity": "required"
+        },
+        {
+          "name": "no-try-catch-around-execute",
+          "constraint": "Do not wrap the body of `execute()` in `try/catch`. The framework owns the error flow.",
+          "severity": "required"
+        },
+        {
+          "name": "register-in-app",
+          "constraint": "Register tools in `@App({ tools })`, not directly on `@FrontMcp({ tools })` (the latter is the simple-server escape hatch).",
+          "severity": "recommended"
+        },
+        {
+          "name": "snake-case-tool-names",
+          "constraint": "Tool `name:` field is always `snake_case` (e.g. `get_weather`, not `getWeather`).",
+          "severity": "required"
+        },
+        {
+          "name": "use-this-fail-for-business-errors",
+          "constraint": "`this.fail(new SomeMcpError(...))` for business-logic errors — never raw `throw new Error(...)`.",
+          "severity": "required"
+        },
+        {
+          "name": "widget-paths-anchor-with-import-meta-url",
+          "constraint": "`.tsx` widget paths in `ui.template: { file }` are anchored via `fileURLToPath(new URL(...))`, never bare relative.",
+          "severity": "required"
+        },
+        {
+          "name": "widget-resource-mode-host-detect",
+          "constraint": "Leave `ui.resourceMode` unset — the framework host-detects (`inline` for Claude, `cdn` for others).",
+          "severity": "recommended"
+        }
+      ]
+    },
+    {
       "name": "frontmcp-config",
       "category": "config",
       "description": "Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.",
@@ -1318,186 +1775,6 @@
                 "Using `tags` for skill categorization and filtering",
                 "Controlling discovery with `visibility: 'mcp'` (MCP-only) vs `visibility: 'both'` (default)",
                 "Using `hideFromDiscovery: true` to register a skill that is invocable by name but not listed"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "create-tool-annotations",
-          "description": "Reference for MCP tool annotation hints like readOnly, destructive, and idempotent",
-          "examples": [
-            {
-              "name": "destructive-delete-tool",
-              "description": "Demonstrates annotating a tool that deletes data, enabling MCP clients to warn users before execution.",
-              "level": "intermediate",
-              "tags": ["development", "elicitation", "tool", "annotations", "destructive", "delete"],
-              "features": [
-                "Setting `destructiveHint: true` on the delete tool so MCP clients can trigger confirmation warnings",
-                "Setting `idempotentHint: true` on the delete tool because deleting the same user twice produces the same outcome",
-                "Setting `openWorldHint: true` on the email tool because it interacts with an external SMTP service",
-                "Setting `idempotentHint: false` on the email tool because each call sends a new email",
-                "How different annotation combinations express different behavioral contracts"
-              ]
-            },
-            {
-              "name": "readonly-query-tool",
-              "description": "Demonstrates annotating a tool that only reads data, signaling to MCP clients that it has no side effects and is safe to retry.",
-              "level": "basic",
-              "tags": ["development", "database", "local", "tool", "annotations", "readonly"],
-              "features": [
-                "Setting `readOnlyHint: true` to indicate the tool performs no mutations",
-                "Setting `destructiveHint: false` to tell clients no data will be deleted or overwritten",
-                "Setting `idempotentHint: true` because repeated calls with the same input produce the same result",
-                "Setting `openWorldHint: false` because the tool only accesses local database data",
-                "Using `title` to provide a human-friendly display name for MCP client UIs"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "create-tool-output-schema-types",
-          "description": "Reference for all supported outputSchema types including Zod shapes and JSON Schema",
-          "examples": [
-            {
-              "name": "primitive-and-media-outputs",
-              "description": "Demonstrates using primitive string literals and media types as `outputSchema` for tools that return plain text, images, or multi-content arrays.",
-              "level": "intermediate",
-              "tags": ["development", "output-schema", "tool", "output", "schema", "types"],
-              "features": [
-                "Using `'string'` literal to return plain text output",
-                "Using `'image'` literal to return base64 image data",
-                "Using `['string', 'image']` array to return multi-content (text plus image) in a single response",
-                "Other available primitives: `'number'`, `'boolean'`, `'date'`",
-                "Other available media types: `'audio'`, `'resource'`, `'resource_link'`"
-              ]
-            },
-            {
-              "name": "zod-raw-shape-output",
-              "description": "Demonstrates the recommended approach of using a Zod raw shape as `outputSchema` for structured, validated JSON output.",
-              "level": "basic",
-              "tags": ["development", "codecall", "output-schema", "tool", "output", "schema"],
-              "features": [
-                "Using a Zod raw shape (plain object with Zod types) as `outputSchema` for structured output",
-                "The output is validated at runtime against the schema before being returned to the client",
-                "This is the recommended pattern for CodeCall compatibility and data leak prevention",
-                "The `execute()` return type is automatically inferred from the output schema"
-              ]
-            },
-            {
-              "name": "zod-schema-advanced-output",
-              "description": "Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, including `z.object()`, `z.array()`, `z.union()`, and `z.discriminatedUnion()`.",
-              "level": "advanced",
-              "tags": ["development", "output-schema", "tool", "output", "schema", "types"],
-              "features": [
-                "Using `z.object()` for structured output with nested arrays and nullable fields",
-                "Using `z.discriminatedUnion()` to return different output shapes based on a discriminant field",
-                "Full Zod schemas provide the same validation as raw shapes but support more complex types",
-                "Output is validated at runtime -- mismatched return values trigger validation errors"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "create-tool-ui",
-          "description": "Render an interactive UI widget for a tool's result via @Tool({ ui }), MCP Apps (SEP-1865), and the ui:// resource scheme",
-          "examples": [
-            {
-              "name": "basic-html-template",
-              "description": "A minimal function template that renders the tool output as a styled HTML card using `ctx.helpers.escapeHtml`.",
-              "level": "basic",
-              "tags": ["development", "tool", "ui", "widget", "mcp-apps", "html", "basic"],
-              "features": [
-                "Adding `ui:` to `@Tool({...})` with a function template `(ctx) => string`",
-                "Reading `ctx.input`, `ctx.output`, and `ctx.helpers` from the typed `TemplateContext`",
-                "Escaping user-controlled strings via `ctx.helpers.escapeHtml(...)`",
-                "Letting `servingMode` default to `auto` so the SDK picks the right mode per host (OpenAI vs Claude vs no-UI)",
-                "Surfacing `widgetDescription` for the host UI"
-              ]
-            },
-            {
-              "name": "widget-with-csp-and-bridge",
-              "description": "An interactive widget that fetches from an allow-listed origin via `csp.connectDomains` and invokes another tool via `window.FrontMcpBridge.callTool`.",
-              "level": "intermediate",
-              "tags": ["development", "tool", "ui", "widget", "csp", "bridge", "interactive", "mcp-apps"],
-              "features": [
-                "Restricting widget network access with `csp.connectDomains` (CSP `connect-src`)",
-                "Enabling tool invocation from the widget via `widgetAccessible: true`",
-                "Calling another tool via `window.FrontMcpBridge.callTool(name, args)` instead of direct host APIs",
-                "Using `ctx.helpers.jsonEmbed(...)` to safely pass JSON into an inline `<script>` block",
-                "Surfacing status text during execution via `invocationStatus.invoking` / `invoked`"
-              ]
-            },
-            {
-              "name": "file-source-tsx-widget",
-              "description": "A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454).",
-              "level": "advanced",
-              "tags": [
-                "development",
-                "tool",
-                "ui",
-                "widget",
-                "file-source",
-                "tsx",
-                "react",
-                "cdn",
-                "mcp-apps",
-                "claude"
-              ],
-              "features": [
-                "Installing `@frontmcp/ui` at the same version as `@frontmcp/sdk` so `.tsx` widgets can bundle successfully (prerequisite — without it the bridge mount fails; see #443)",
-                "Pointing `template` at a sibling `.tsx` file via the `FileSource` form: `{ file: ... }`",
-                "Resolving the file path relative to the tool source (not `process.cwd()`) using `import.meta.url`",
-                "Excluding `chart.js` from the bundle via `externals` and pinning a CDN URL with `dependencies`",
-                "Setting `resourceMode: 'inline'` so React is bundled into the widget (no esm.sh import map) — makes the widget self-contained and renders in Claude (#454)",
-                "Setting `hydrate: false` (default) to avoid React error #418 inside the host iframe"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "create-tool",
-          "description": "Build MCP tools with Zod input/output validation and dependency injection",
-          "examples": [
-            {
-              "name": "basic-class-tool",
-              "description": "A minimal tool using the class-based pattern with Zod input validation, output schema, and types derived from the schemas.",
-              "level": "basic",
-              "tags": ["development", "tool", "class"],
-              "features": [
-                "Extending `ToolContext` and implementing the `execute()` method",
-                "Using a Zod raw shape for `inputSchema` (not wrapped in `z.object()`)",
-                "Defining `outputSchema` to validate and restrict output fields",
-                "Deriving `execute()` input/output types from the schemas via `ToolInputOf<>` / `ToolOutputOf<>` (no duplicated annotation)",
-                "Co-locating schema and tool in sibling files (`<name>.schema.ts` / `<name>.tool.ts`)",
-                "Registering the tool in an `@App` via the `tools` array"
-              ]
-            },
-            {
-              "name": "tool-with-di-and-errors",
-              "description": "A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors, with `execute()` types derived from the schemas.",
-              "level": "intermediate",
-              "tags": ["development", "database", "tool", "di", "errors"],
-              "features": [
-                "Defining a typed DI token with `Token<T>` and resolving it via `this.get()`",
-                "Using `this.fail()` with `ResourceNotFoundError` for MCP-compliant error responses",
-                "Letting infrastructure errors (database failures) propagate naturally to the framework",
-                "Deriving `execute()` types from `inputSchema` / `outputSchema` via `ToolInputOf<>` / `ToolOutputOf<>`",
-                "Folder-per-tool layout (`tools/delete-record/{schema,tool,index}.ts`) for tools with local helpers or error types",
-                "Registering both the provider and tool in the same `@App`"
-              ]
-            },
-            {
-              "name": "tool-with-rate-limiting-and-progress",
-              "description": "A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations, with `execute()` types derived from the schemas.",
-              "level": "advanced",
-              "tags": ["development", "throttle", "tool", "rate", "limiting", "progress"],
-              "features": [
-                "Configuring `rateLimit`, `concurrency`, and `timeout` for throttling protection",
-                "Sending progress updates to the client with `this.progress(progress, total, message?)`",
-                "Using `this.mark(stage)` for execution stage tracking and debugging",
-                "Sending log-level notifications with `this.notify(message, level)`",
-                "Setting tool `annotations` to communicate behavioral hints to clients",
-                "Deriving `execute()` types from the schemas via `ToolInputOf<>` / `ToolOutputOf<>`"
               ]
             }
           ]

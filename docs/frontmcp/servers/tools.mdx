@@ -208,6 +208,55 @@ class CalculateTotalTool extends ToolContext {
 }
 ```
 
+### Output schema exposure
+
+By default a structured `outputSchema` is advertised as the tool's `outputSchema` (JSON Schema) in `tools/list`. The `output` policy lets you control **where** that schema surfaces. It is declarable on `@Tool`, `@App`, and `@FrontMcp`, and the effective value for a tool is resolved with a **Tool > App > server > default** cascade — mirroring the [OpenAPI adapter's `outputSchema.mode`](/frontmcp/adapters/openapi-adapter#output-schema-display).
+
+```ts
+output?: {
+  allowNonFinite?: boolean;                                    // default false — see Output validation
+  schemaMode?: 'definition' | 'description' | 'both' | 'none'; // default 'definition'
+  schemaDescriptionFormat?: 'summary' | 'jsonSchema';          // default 'summary'
+}
+```
+
+| `schemaMode`    | Effect                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `'definition'`  | **(Default)** Advertise the schema as the tool's `outputSchema` (JSON Schema).                   |
+| `'description'` | Fold a readable rendering of the schema into the tool `description`, and omit `outputSchema`.    |
+| `'both'`        | Advertise as `outputSchema` **and** fold it into the description.                                |
+| `'none'`        | Do not expose the output schema anywhere.                                                        |
+
+When the schema is folded into the description (`'description'` / `'both'`), `schemaDescriptionFormat` picks the rendering: `'summary'` (a compact human-readable property list) or `'jsonSchema'` (a fenced JSON Schema code block).
+
+```ts
+@Tool({
+  name: 'calculate-total',
+  inputSchema: { /* … */ },
+  outputSchema: z.object({ subtotal: z.number(), tax: z.number(), total: z.number() }),
+  // Some clients don't render `outputSchema` — fold it into the description instead.
+  output: { schemaMode: 'description' },
+})
+class CalculateTotalTool extends ToolContext {
+  /* … */
+}
+```
+
+Set it once at the server level to apply a house style everywhere, then override per tool where needed:
+
+```ts
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  output: { schemaMode: 'both', schemaDescriptionFormat: 'summary' },
+})
+export default class MyServer {}
+```
+
+<Note>
+Output-schema exposure only applies to structured object outputs (a Zod raw shape or a top-level `z.object`) — the same forms that get advertised as `outputSchema`. Primitive, media, multi-content, and union outputs flow through `content` and have nothing object-shaped to expose. Runtime output validation still applies to every form regardless of `schemaMode`.
+</Note>
+
 ---
 
 ## Return Values
@@ -316,6 +365,7 @@ execute() {
 | `annotations`       | MCP-defined hints about tool behavior                        |
 | `examples`          | Usage examples for discovery and LLM understanding           |
 | `ui`                | Visual widget configuration (template, display mode, etc.)   |
+| `output`            | Output-validation + output-schema exposure policy — see [Output schema exposure](#output-schema-exposure) |
 | `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
 | `availableWhen`     | Restrict discovery and execution to specific environments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
 
@@ -905,6 +955,8 @@ const widgetPath = fileURLToPath(new URL('./weather.widget.tsx', import.meta.url
 
 ui: { template: { file: widgetPath } }
 ```
+
+In a **CommonJS** project (`"type": "commonjs"`), `import.meta.url` is unavailable — anchor with `join(__dirname, 'weather.widget.tsx')` (from `node:path`) instead. Both forms are invariant to `process.cwd()`.
 </Warning>
 
 <Info>

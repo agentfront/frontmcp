@@ -266,6 +266,65 @@ describe('renderToolTemplate', () => {
     });
   });
 
+  describe('widget sizing', () => {
+    it('should carry sizing fields onto the response meta', () => {
+      const result = renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: '<div>Hello</div>',
+        sizing: { preferredHeight: 420, minHeight: 100, maxHeight: 600, aspectRatio: '16 / 9' },
+      });
+
+      expect(result.meta).toHaveProperty('ui/preferredHeight', 420);
+      expect(result.meta).toHaveProperty('ui/minHeight', 100);
+      expect(result.meta).toHaveProperty('ui/maxHeight', 600);
+      expect(result.meta).toHaveProperty('ui/aspectRatio', '16 / 9');
+    });
+
+    it('should only emit the sizing fields that are set', () => {
+      const result = renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: '<div>Hello</div>',
+        sizing: { preferredHeight: '50vh' },
+      });
+
+      expect(result.meta).toHaveProperty('ui/preferredHeight', '50vh');
+      expect(result.meta).not.toHaveProperty('ui/minHeight');
+      expect(result.meta).not.toHaveProperty('ui/maxHeight');
+      expect(result.meta).not.toHaveProperty('ui/aspectRatio');
+    });
+
+    it('should NOT emit sizing meta keys when no sizing configured', () => {
+      const result = renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: '<div>Hello</div>',
+      });
+
+      expect(result.meta).not.toHaveProperty('ui/preferredHeight');
+      expect(result.meta).not.toHaveProperty('ui/minHeight');
+      expect(result.meta).not.toHaveProperty('ui/maxHeight');
+      expect(result.meta).not.toHaveProperty('ui/aspectRatio');
+    });
+
+    it('should inject sizing CSS + __mcpWidgetSizing into the rendered HTML', () => {
+      const result = renderToolTemplate({
+        toolName: 'test_tool',
+        input: {},
+        output: {},
+        template: '<div>Hello</div>',
+        sizing: { preferredHeight: 300 },
+      });
+
+      expect(result.html).toContain('window.__mcpWidgetSizing');
+      expect(result.html).toContain('height: 300px;');
+    });
+  });
+
   describe('size and hash', () => {
     it('should return non-zero size', () => {
       const result = renderToolTemplate({

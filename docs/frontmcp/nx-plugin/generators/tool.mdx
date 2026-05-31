@@ -29,21 +29,30 @@ src/tools/fetch-contacts.tool.ts
 ```
 
 ```ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
+
+// Hoist only the schemas — the rest of the @Tool config (name, description,
+// annotations, throttling, …) stays inside @Tool({…}) where it naturally
+// lives. Changing a schema field automatically updates the derived TS types.
+const inputSchema = {
+  value: z.string().describe('TODO: replace with actual input'),
+};
+
+const outputSchema = {
+  result: z.string().describe('TODO: replace with actual output'),
+};
+
+export type FetchContactsInput = ToolInputOf<{ inputSchema: typeof inputSchema }>;
+export type FetchContactsOutput = ToolOutputOf<{ outputSchema: typeof outputSchema }>;
 
 @Tool({
   name: 'fetch-contacts',
   description: 'TODO: describe what this tool does',
-  inputSchema: {
-    value: z.string().describe('TODO: replace with actual input'),
-  },
-  outputSchema: {
-    result: z.string().describe('TODO: replace with actual output'),
-  },
+  inputSchema,
+  outputSchema,
 })
 export default class FetchContactsTool extends ToolContext {
-  async execute(input: { value: string }) {
+  async execute(input: FetchContactsInput): Promise<FetchContactsOutput> {
     // TODO: implement
     return { result: input.value };
   }

@@ -7,13 +7,14 @@
  * @packageDocumentation
  */
 
-import type { ShellConfig, ShellResult } from './types';
-import type { ResolvedShellTemplate } from './custom-shell-types';
-import { buildCSPMetaTag } from './csp';
-import { buildDataInjectionScript } from './data-injector';
 import { generateBridgeIIFE } from '../bridge-runtime';
-import { validateShellTemplate } from './custom-shell-validator';
+import { buildCSPMetaTag } from './csp';
 import { applyShellTemplate } from './custom-shell-applier';
+import type { ResolvedShellTemplate } from './custom-shell-types';
+import { validateShellTemplate } from './custom-shell-validator';
+import { buildDataInjectionScript } from './data-injector';
+import { buildSizingStyleTag } from './sizing-css';
+import type { ShellConfig, ShellResult } from './types';
 
 /**
  * Build an HTML shell wrapping the provided content.
@@ -36,10 +37,20 @@ import { applyShellTemplate } from './custom-shell-applier';
  * ```
  */
 export function buildShell(content: string, config: ShellConfig): ShellResult {
-  const { toolName, csp, withShell = true, input, output, structuredContent, includeBridge = true, title } = config;
+  const {
+    toolName,
+    csp,
+    withShell = true,
+    input,
+    output,
+    structuredContent,
+    includeBridge = true,
+    title,
+    sizing,
+  } = config;
 
   const { customShell } = config;
-  const dataScript = buildDataInjectionScript({ toolName, input, output, structuredContent });
+  const dataScript = buildDataInjectionScript({ toolName, input, output, structuredContent, sizing });
 
   if (!withShell) {
     // Shell-less mode: just data injection + content (custom shell ignored)
@@ -61,6 +72,7 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
       structuredContent,
       includeBridge,
       title,
+      sizing,
     });
   }
 
@@ -79,6 +91,13 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
 
   // Data injection
   headParts.push(dataScript);
+
+  // Static sizing CSS (min/max-height, aspect-ratio, initial height). The
+  // runtime auto-resize behaviour ships inside the bridge IIFE below.
+  const sizingStyle = buildSizingStyleTag(sizing);
+  if (sizingStyle) {
+    headParts.push(sizingStyle);
+  }
 
   // Bridge runtime
   if (includeBridge) {
@@ -117,6 +136,7 @@ function buildCustomShell(
     structuredContent?: unknown;
     includeBridge: boolean;
     title?: string;
+    sizing?: ShellConfig['sizing'];
   },
 ): ShellResult {
   let template: string;
@@ -140,7 +160,14 @@ function buildCustomShell(
     input: ctx.input,
     output: ctx.output,
     structuredContent: ctx.structuredContent,
+    sizing: ctx.sizing,
   });
+
+  // Static sizing CSS rides along with the {{DATA}} placeholder so it lands in
+  // <head> for custom shells (which have no dedicated sizing slot). The runtime
+  // auto-resize behaviour ships inside the bridge IIFE ({{BRIDGE}}).
+  const sizingStyle = buildSizingStyleTag(ctx.sizing);
+  const dataWithSizing = sizingStyle ? `${dataScript}\n${sizingStyle}` : dataScript;
 
   let bridgeHtml = '';
   if (ctx.includeBridge) {
@@ -150,7 +177,7 @@ function buildCustomShell(
 
   const html = applyShellTemplate(template, {
     csp: cspTag,
-    data: dataScript,
+    data: dataWithSizing,
     bridge: bridgeHtml,
     content,
     title: ctx.title ? escapeHtmlForTag(ctx.title) : '',

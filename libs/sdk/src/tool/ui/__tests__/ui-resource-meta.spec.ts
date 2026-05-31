@@ -126,6 +126,75 @@ describe('handleUIResourceRead — resource-level _meta (#455)', () => {
   });
 });
 
+describe('ToolUIRegistry — widget sizing round-trip', () => {
+  it('renderAndRegisterAsync returns ui/* sizing meta keys from uiConfig', async () => {
+    const registry = new ToolUIRegistry();
+    const { meta } = await registry.renderAndRegisterAsync({
+      toolName: 'sized',
+      input: {},
+      output: { value: 1 },
+      uiConfig: {
+        template: '<div>Hello</div>',
+        preferredHeight: 420,
+        minHeight: 100,
+        maxHeight: 600,
+        aspectRatio: '16 / 9',
+      },
+    });
+
+    expect(meta['ui/preferredHeight']).toBe(420);
+    expect(meta['ui/minHeight']).toBe(100);
+    expect(meta['ui/maxHeight']).toBe(600);
+    expect(meta['ui/aspectRatio']).toBe('16 / 9');
+  });
+
+  it('renderAndRegisterAsync injects sizing CSS + __mcpWidgetSizing into the widget HTML', async () => {
+    const registry = new ToolUIRegistry();
+    await registry.renderAndRegisterAsync({
+      toolName: 'sized2',
+      input: {},
+      output: {},
+      uiConfig: { template: '<div>Hi</div>', preferredHeight: 300, autoResize: false },
+    });
+
+    const html = registry.getStaticWidget('sized2');
+    expect(html).toBeDefined();
+    expect(html).toContain('window.__mcpWidgetSizing =');
+    expect(html).toContain('height: 300px;');
+    expect(html).toContain('"autoResize":false');
+  });
+
+  it('compileStaticWidgetAsync threads sizing from uiConfig into the cached widget', async () => {
+    const registry = new ToolUIRegistry();
+    await registry.compileStaticWidgetAsync({
+      toolName: 'sized3',
+      template: '<div>Static</div>',
+      uiConfig: { template: '<div>Static</div>', preferredHeight: '50vh' },
+    });
+
+    const html = registry.getStaticWidget('sized3');
+    expect(html).toBeDefined();
+    expect(html).toContain('window.__mcpWidgetSizing =');
+    expect(html).toContain('height: 50vh;');
+  });
+
+  it('does NOT inject sizing when uiConfig has no sizing fields', async () => {
+    const registry = new ToolUIRegistry();
+    const { meta } = await registry.renderAndRegisterAsync({
+      toolName: 'plain_sized',
+      input: {},
+      output: {},
+      uiConfig: { template: '<div>Plain</div>' },
+    });
+
+    expect(meta).not.toHaveProperty('ui/preferredHeight');
+    const html = registry.getStaticWidget('plain_sized');
+    // The bridge IIFE always references window.__mcpWidgetSizing to read it;
+    // with no sizing configured, the data-injection script must not assign it.
+    expect(html).not.toContain('window.__mcpWidgetSizing =');
+  });
+});
+
 describe('ToolUIRegistry.getResourceMeta', () => {
   it('returns undefined when no meta was recorded', () => {
     const registry = new ToolUIRegistry();

@@ -195,6 +195,38 @@ export abstract class ToolContext<
     return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
   }
 
+  /**
+   * Notify subscribed clients that a resource's contents changed.
+   *
+   * Sends `notifications/resources/updated` to every session subscribed to `uri`
+   * (via `resources/subscribe`); a no-op for sessions that aren't subscribed. Call
+   * this when a tool mutates state that backs a `@Resource` so subscribers re-fetch.
+   *
+   * @param uri - The URI of the resource whose contents changed.
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   await this.saveNote(input);
+   *   this.notifyResourceUpdated(`notes://${input.id}`);
+   *   return { ok: true };
+   * }
+   * ```
+   */
+  protected notifyResourceUpdated(uri: string): void {
+    this.scope.notifications.notifyResourceUpdated(uri);
+  }
+
+  /**
+   * Notify all connected clients that the set of available resources changed.
+   *
+   * Broadcasts `notifications/resources/list_changed` so clients re-run
+   * `resources/list`. Call this when a tool adds or removes resources at runtime.
+   */
+  protected notifyResourceListChanged(): void {
+    this.scope.notifications.broadcastNotification('notifications/resources/list_changed');
+  }
+
   // ============================================
   // Elicitation API
   // ============================================

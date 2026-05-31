@@ -12,6 +12,7 @@ import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils
 
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type RawZodShape } from '../types';
+import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type ToolUIConfig } from './tool-ui.metadata';
 
 // ============================================
@@ -409,6 +410,14 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   execution?: {
     taskSupport?: 'required' | 'optional' | 'forbidden';
   };
+
+  /**
+   * Output policy for this tool — overrides `@App` and `@FrontMcp`. Controls
+   * non-finite handling (`allowNonFinite`) and how `outputSchema` is exposed in
+   * `tools/list` (`schemaMode`: `'definition'` (default) / `'description'` / `'both'` /
+   * `'none'`; `schemaDescriptionFormat`: `'summary'` (default) / `'jsonSchema'`).
+   */
+  output?: OutputPolicy;
 }
 
 /**
@@ -462,5 +471,6 @@ export const frontMcpToolMetadataSchema = z
         taskSupport: z.enum(['required', 'optional', 'forbidden']).optional(),
       })
       .optional(),
+    output: outputPolicySchema.optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

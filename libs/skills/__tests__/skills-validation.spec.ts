@@ -29,6 +29,36 @@ function loadManifestSync(): SkillManifest {
   return JSON.parse(content) as SkillManifest;
 }
 
+/**
+ * Resolve the catalog layout for a skill directory by consulting the
+ * manifest. `layout: 'component'` skills use a different SKILL.md
+ * structure (rich frontmatter for Claude auto-trigger, flat examples,
+ * no TEMPLATE.md-derived section headings) and need a different set
+ * of structural checks than the legacy `'router'` layout.
+ *
+ * Lazy-cached so we don't re-parse the manifest per assertion. The cache
+ * is reset in a top-level `beforeEach` (see the describe block below) so
+ * watch-mode reruns pick up edits to `skills-manifest.json` instead of
+ * holding a stale layout map across runs.
+ */
+let _layoutCache: Map<string, 'router' | 'component'> | undefined;
+function getSkillLayout(dir: string): 'router' | 'component' {
+  if (!_layoutCache) {
+    _layoutCache = new Map();
+    const manifest = loadManifestSync();
+    for (const entry of manifest.skills) {
+      _layoutCache.set(entry.path, entry.layout ?? 'router');
+    }
+  }
+  return _layoutCache.get(dir) ?? 'router';
+}
+function resetSkillLayoutCache(): void {
+  _layoutCache = undefined;
+}
+function isComponentLayout(dir: string): boolean {
+  return getSkillLayout(dir) === 'component';
+}
+
 function findAllSkillDirs(): string[] {
   const dirs: string[] = [];
   const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
@@ -182,6 +212,20 @@ function getAllReferenceFiles(): { skill: string; file: string; fullPath: string
   return results;
 }
 
+/**
+ * Walk every skill in the catalog and surface its example files.
+ *
+ * Handles both layouts:
+ *
+ * - Router (legacy `frontmcp-*` skills): `examples/<reference>/<example>.md`
+ *   — examples are grouped under a parent reference. `reference` is set to
+ *   the subdirectory name.
+ *
+ * - Component (new per-thing skills like `create-tool`): `examples/<example>.md`
+ *   — examples live flat under `examples/` with no parent reference. `reference`
+ *   is set to the sentinel `'_top'` so callers can detect the layout without
+ *   stat'ing the path again.
+ */
 function getAllExampleFiles(): { skill: string; reference: string; file: string; fullPath: string }[] {
   const results: { skill: string; reference: string; file: string; fullPath: string }[] = [];
   const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
@@ -191,20 +235,55 @@ function getAllExampleFiles(): { skill: string; reference: string; file: string;
   for (const entry of entries) {
     const examplesDir = path.join(CATALOG_DIR, entry, 'examples');
     if (!fs.existsSync(examplesDir)) continue;
-    const refDirs = fs.readdirSync(examplesDir).filter((f) => {
-      return fs.statSync(path.join(examplesDir, f)).isDirectory();
-    });
-    for (const refDir of refDirs) {
-      const refPath = path.join(examplesDir, refDir);
-      const files = fs.readdirSync(refPath).filter((f) => f.endsWith('.md'));
-      for (const file of files) {
+    const items = fs.readdirSync(examplesDir);
+    for (const item of items) {
+      const itemPath = path.join(examplesDir, item);
+      const stat = fs.statSync(itemPath);
+      if (stat.isDirectory()) {
+        // Router layout: examples grouped under references.
+        const files = fs.readdirSync(itemPath).filter((f) => f.endsWith('.md'));
+        for (const file of files) {
+          results.push({
+            skill: entry,
+            reference: item,
+            file,
+            fullPath: path.join(itemPath, file),
+          });
+        }
+      } else if (stat.isFile() && item.endsWith('.md')) {
+        // Component layout: flat examples directly under examples/.
         results.push({
           skill: entry,
-          reference: refDir,
-          file,
-          fullPath: path.join(refPath, file),
+          reference: '_top',
+          file: item,
+          fullPath: itemPath,
         });
       }
+    }
+  }
+  return results;
+}
+
+/**
+ * Return every rule file for component-layout skills:
+ * `rules/<rule>.md`. Router-layout skills don't have a `rules/` directory.
+ */
+function getAllRuleFiles(): { skill: string; file: string; fullPath: string }[] {
+  const results: { skill: string; file: string; fullPath: string }[] = [];
+  const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
+    const full = path.join(CATALOG_DIR, f);
+    return fs.statSync(full).isDirectory() && f !== 'node_modules';
+  });
+  for (const entry of entries) {
+    const rulesDir = path.join(CATALOG_DIR, entry, 'rules');
+    if (!fs.existsSync(rulesDir)) continue;
+    const files = fs.readdirSync(rulesDir).filter((f) => f.endsWith('.md'));
+    for (const file of files) {
+      results.push({
+        skill: entry,
+        file,
+        fullPath: path.join(rulesDir, file),
+      });
     }
   }
   return results;
@@ -217,6 +296,13 @@ describe('skills catalog validation', () => {
   beforeAll(() => {
     manifest = loadManifestSync();
     skillDirs = findAllSkillDirs();
+  });
+
+  beforeEach(() => {
+    // Watch-mode safety: the manifest can be edited between runs (especially
+    // when iterating on a component-layout skill); reset the cached layout
+    // map so each describe block sees the freshly-loaded layout assignments.
+    resetSkillLayoutCache();
   });
 
   describe('manifest structure', () => {
@@ -424,6 +510,11 @@ describe('skills catalog validation', () => {
     it('manifest descriptions should match SKILL.md frontmatter descriptions', () => {
       const mismatches: string[] = [];
       for (const entry of manifest.skills) {
+        // Component-layout skills intentionally use a rich, multi-line
+        // SKILL.md `description:` block (triggers + when-to-use prose, tuned
+        // for Claude Code's auto-discovery) and a shorter listing-friendly
+        // description in the manifest. They are not expected to match.
+        if (entry.layout === 'component') continue;
         const content = fs.readFileSync(path.join(CATALOG_DIR, entry.path, 'SKILL.md'), 'utf-8');
         const { frontmatter } = parseSkillMdFrontmatter(content);
         const mdDesc = frontmatter['description'] as string | undefined;
@@ -440,7 +531,9 @@ describe('skills catalog validation', () => {
       ...getAllReferenceFiles(),
       ...getAllExampleFiles().map(({ skill, file, fullPath, reference }) => ({
         skill,
-        file: `examples/${reference}/${file}`,
+        // Router-layout examples live under examples/<ref>/<file>; component-layout
+        // examples are flat under examples/<file> (reference === '_top').
+        file: reference === '_top' ? `examples/${file}` : `examples/${reference}/${file}`,
         fullPath,
       })),
     ];
@@ -525,13 +618,16 @@ describe('skills catalog validation', () => {
   });
 
   describe('examples validation', () => {
-    it('every examples/ subfolder should match a reference filename', () => {
+    it('every examples/ subfolder should match a reference filename (router layout only)', () => {
       const mismatches: string[] = [];
       const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
         const full = path.join(CATALOG_DIR, f);
         return fs.statSync(full).isDirectory() && f !== 'node_modules';
       });
       for (const entry of entries) {
+        // Component-layout skills use a flat examples/ directory — there are
+        // no subfolders to match against references. Skip them entirely.
+        if (isComponentLayout(entry)) continue;
         const examplesDir = path.join(CATALOG_DIR, entry, 'examples');
         if (!fs.existsSync(examplesDir)) continue;
         const refsDir = path.join(CATALOG_DIR, entry, 'references');
@@ -556,34 +652,43 @@ describe('skills catalog validation', () => {
     it('every example .md file should have valid frontmatter', () => {
       const invalid: string[] = [];
       for (const { skill, reference, file, fullPath } of getAllExampleFiles()) {
+        const isComponent = reference === '_top';
         const content = fs.readFileSync(fullPath, 'utf-8');
         const { frontmatter } = parseSkillMdFrontmatter(content);
         const expectedName = file.replace(/\.md$/, '');
+        const locDisplay = isComponent ? `${skill}/examples/${file}` : `${skill}/examples/${reference}/${file}`;
         if (!frontmatter['name'] || typeof frontmatter['name'] !== 'string') {
-          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "name" in frontmatter`);
+          invalid.push(`${locDisplay}: missing or invalid "name" in frontmatter`);
         }
         if (frontmatter['name'] && frontmatter['name'] !== expectedName) {
-          invalid.push(
-            `${skill}/examples/${reference}/${file}: frontmatter "name" must match filename "${expectedName}"`,
-          );
+          invalid.push(`${locDisplay}: frontmatter "name" must match filename "${expectedName}"`);
         }
-        if (!frontmatter['reference'] || typeof frontmatter['reference'] !== 'string') {
-          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "reference" in frontmatter`);
+        // Router-layout examples are grouped under a parent reference and MUST
+        // declare it. Component-layout examples are flat and do not have one.
+        if (!isComponent) {
+          if (!frontmatter['reference'] || typeof frontmatter['reference'] !== 'string') {
+            invalid.push(`${locDisplay}: missing or invalid "reference" in frontmatter`);
+          }
+          if (frontmatter['reference'] && frontmatter['reference'] !== reference) {
+            invalid.push(
+              `${locDisplay}: frontmatter "reference" is "${frontmatter['reference']}" but expected "${reference}"`,
+            );
+          }
         }
         if (
           !frontmatter['level'] ||
           !(VALID_EXAMPLE_LEVELS as readonly string[]).includes(frontmatter['level'] as string)
         ) {
           invalid.push(
-            `${skill}/examples/${reference}/${file}: missing or invalid "level" in frontmatter (must be ${VALID_EXAMPLE_LEVELS.join(', ')})`,
+            `${locDisplay}: missing or invalid "level" in frontmatter (must be ${VALID_EXAMPLE_LEVELS.join(', ')})`,
           );
         }
         if (!frontmatter['description'] || typeof frontmatter['description'] !== 'string') {
-          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "description" in frontmatter`);
+          invalid.push(`${locDisplay}: missing or invalid "description" in frontmatter`);
         }
         const tags = frontmatter['tags'];
         if (!Array.isArray(tags) || tags.length === 0 || tags.some((tag) => typeof tag !== 'string' || !tag.trim())) {
-          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "tags" in frontmatter`);
+          invalid.push(`${locDisplay}: missing or invalid "tags" in frontmatter`);
         }
         const features = frontmatter['features'];
         if (
@@ -591,13 +696,7 @@ describe('skills catalog validation', () => {
           features.length === 0 ||
           features.some((feature) => typeof feature !== 'string' || !feature.trim())
         ) {
-          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "features" in frontmatter`);
-        }
-        // reference field should match the parent directory name
-        if (frontmatter['reference'] && frontmatter['reference'] !== reference) {
-          invalid.push(
-            `${skill}/examples/${reference}/${file}: frontmatter "reference" is "${frontmatter['reference']}" but expected "${reference}"`,
-          );
+          invalid.push(`${locDisplay}: missing or invalid "features" in frontmatter`);
         }
       }
       expect(invalid).toEqual([]);
@@ -606,6 +705,8 @@ describe('skills catalog validation', () => {
     it('example frontmatter should stay aligned with the example body', () => {
       const mismatches: string[] = [];
       for (const { skill, reference, file, fullPath } of getAllExampleFiles()) {
+        const isComponent = reference === '_top';
+        const locDisplay = isComponent ? `${skill}/examples/${file}` : `${skill}/examples/${reference}/${file}`;
         const content = fs.readFileSync(fullPath, 'utf-8');
         const { frontmatter } = parseSkillMdFrontmatter(content);
         const description = typeof frontmatter['description'] === 'string' ? frontmatter['description'] : '';
@@ -616,14 +717,10 @@ describe('skills catalog validation', () => {
         const whatThisDemonstrates = extractSectionBullets(content, 'What This Demonstrates');
 
         if (description !== firstParagraph) {
-          mismatches.push(
-            `${skill}/examples/${reference}/${file}: frontmatter "description" must match the first paragraph after the H1`,
-          );
+          mismatches.push(`${locDisplay}: frontmatter "description" must match the first paragraph after the H1`);
         }
         if (JSON.stringify(features) !== JSON.stringify(whatThisDemonstrates)) {
-          mismatches.push(
-            `${skill}/examples/${reference}/${file}: frontmatter "features" must match the "What This Demonstrates" bullets`,
-          );
+          mismatches.push(`${locDisplay}: frontmatter "features" must match the "What This Demonstrates" bullets`);
         }
       }
       expect(mismatches).toEqual([]);
@@ -631,7 +728,10 @@ describe('skills catalog validation', () => {
 
     it('manifest example entries should match example file metadata', () => {
       const mismatches: string[] = [];
+      // Router-layout key: "<path>/<ref>/<name>"; component-layout key: "<path>/_top/<name>".
       const manifestExampleKeys = new Set<string>();
+
+      // Router-layout entries (entry.references[].examples[]).
       for (const entry of manifest.skills) {
         if (!entry.references) continue;
         for (const ref of entry.references) {
@@ -682,6 +782,53 @@ describe('skills catalog validation', () => {
         }
       }
 
+      // Component-layout entries (entry.examples[] at the top level).
+      for (const entry of manifest.skills) {
+        if (entry.layout !== 'component') continue;
+        const examples = entry.examples ?? [];
+        const examplesDir = path.join(CATALOG_DIR, entry.path, 'examples');
+        for (const example of examples) {
+          manifestExampleKeys.add(`${entry.path}/_top/${example.name}`);
+          const exampleFile = path.join(examplesDir, `${example.name}.md`);
+          if (!fs.existsSync(exampleFile)) {
+            mismatches.push(`${entry.name}/${example.name}.md listed in manifest but missing on disk`);
+            continue;
+          }
+          if (!(VALID_EXAMPLE_LEVELS as readonly string[]).includes(example.level)) {
+            mismatches.push(`${entry.name}/${example.name} has invalid level "${example.level}"`);
+          }
+          if (!Array.isArray(example.tags) || example.tags.length === 0) {
+            mismatches.push(`${entry.name}/${example.name} has invalid manifest tags`);
+          }
+          if (!Array.isArray(example.features) || example.features.length === 0) {
+            mismatches.push(`${entry.name}/${example.name} has invalid manifest features`);
+          }
+
+          const { frontmatter } = parseSkillMdFrontmatter(fs.readFileSync(exampleFile, 'utf-8'));
+          const fileDescription = typeof frontmatter['description'] === 'string' ? frontmatter['description'] : '';
+          const fileLevel = typeof frontmatter['level'] === 'string' ? frontmatter['level'] : '';
+          const fileTags = Array.isArray(frontmatter['tags'])
+            ? frontmatter['tags'].filter((tag): tag is string => typeof tag === 'string')
+            : [];
+          const fileFeatures = Array.isArray(frontmatter['features'])
+            ? frontmatter['features'].filter((feature): feature is string => typeof feature === 'string')
+            : [];
+
+          if (example.description !== fileDescription) {
+            mismatches.push(`${entry.name}/${example.name}: manifest description differs from example file`);
+          }
+          if (example.level !== fileLevel) {
+            mismatches.push(`${entry.name}/${example.name}: manifest level differs from example file`);
+          }
+          if (JSON.stringify(example.tags) !== JSON.stringify(fileTags)) {
+            mismatches.push(`${entry.name}/${example.name}: manifest tags differ from example file`);
+          }
+          if (JSON.stringify(example.features) !== JSON.stringify(fileFeatures)) {
+            mismatches.push(`${entry.name}/${example.name}: manifest features differ from example file`);
+          }
+        }
+      }
+
       for (const { skill, reference, file } of getAllExampleFiles()) {
         const exampleName = file.replace(/\.md$/, '');
         const key = `${skill}/${reference}/${exampleName}`;
@@ -691,6 +838,87 @@ describe('skills catalog validation', () => {
       }
 
       expect(mismatches).toEqual([]);
+    });
+
+    it('component-layout rule entries should match rule file frontmatter', () => {
+      const mismatches: string[] = [];
+      const manifestRuleKeys = new Set<string>();
+
+      for (const entry of manifest.skills) {
+        if (entry.layout !== 'component') continue;
+        const rules = entry.rules ?? [];
+        const rulesDir = path.join(CATALOG_DIR, entry.path, 'rules');
+        for (const rule of rules) {
+          manifestRuleKeys.add(`${entry.path}/${rule.name}`);
+          const ruleFile = path.join(rulesDir, `${rule.name}.md`);
+          if (!fs.existsSync(ruleFile)) {
+            mismatches.push(`${entry.name}/${rule.name}.md listed in manifest but missing on disk`);
+            continue;
+          }
+          if (!rule.constraint || typeof rule.constraint !== 'string') {
+            mismatches.push(`${entry.name}/${rule.name}: manifest "constraint" must be a non-empty string`);
+          }
+          if (rule.severity && !['required', 'recommended'].includes(rule.severity)) {
+            mismatches.push(`${entry.name}/${rule.name}: manifest "severity" must be 'required' or 'recommended'`);
+          }
+
+          const { frontmatter } = parseSkillMdFrontmatter(fs.readFileSync(ruleFile, 'utf-8'));
+          const fileName = typeof frontmatter['name'] === 'string' ? frontmatter['name'] : '';
+          const fileConstraint = typeof frontmatter['constraint'] === 'string' ? frontmatter['constraint'] : '';
+          const fileSeverity = typeof frontmatter['severity'] === 'string' ? frontmatter['severity'] : undefined;
+
+          if (fileName && fileName !== rule.name) {
+            mismatches.push(
+              `${entry.name}/${rule.name}: rule file frontmatter "name" is "${fileName}" but expected "${rule.name}"`,
+            );
+          }
+          if (rule.constraint !== fileConstraint) {
+            mismatches.push(`${entry.name}/${rule.name}: manifest constraint differs from rule file`);
+          }
+          if (fileSeverity && fileSeverity !== (rule.severity ?? 'required')) {
+            mismatches.push(
+              `${entry.name}/${rule.name}: rule file severity "${fileSeverity}" differs from manifest "${rule.severity ?? 'required'}"`,
+            );
+          }
+        }
+      }
+
+      for (const { skill, file } of getAllRuleFiles()) {
+        const ruleName = file.replace(/\.md$/, '');
+        const key = `${skill}/${ruleName}`;
+        if (!manifestRuleKeys.has(key)) {
+          mismatches.push(`${key}.md exists on disk but is missing from the manifest rules[]`);
+        }
+      }
+
+      expect(mismatches).toEqual([]);
+    });
+
+    it('layout-specific manifest fields should be populated consistently', () => {
+      const issues: string[] = [];
+      for (const entry of manifest.skills) {
+        const layout = entry.layout ?? 'router';
+        if (layout === 'component') {
+          if (!entry.examples || entry.examples.length === 0) {
+            issues.push(`${entry.name}: layout 'component' requires a non-empty top-level examples[]`);
+          }
+          if (!entry.rules || entry.rules.length === 0) {
+            issues.push(
+              `${entry.name}: layout 'component' should declare rules[] (component skills exist to bundle DO/DON'T constraints)`,
+            );
+          }
+        } else {
+          if (entry.examples && entry.examples.length > 0) {
+            issues.push(
+              `${entry.name}: layout 'router' must not declare top-level examples[] — group examples under references[].examples[] instead`,
+            );
+          }
+          if (entry.rules && entry.rules.length > 0) {
+            issues.push(`${entry.name}: layout 'router' must not declare top-level rules[]`);
+          }
+        }
+      }
+      expect(issues).toEqual([]);
     });
 
     it('reference example tables should match manifest example metadata', () => {
@@ -833,6 +1061,11 @@ describe('skills catalog validation', () => {
     it.each(findAllSkillDirs().map((d) => [d]))(
       '"%s" body contains the canonical sections required by TEMPLATE.md',
       (dir) => {
+        // Component-layout skills use a different structure (rich frontmatter,
+        // Decision Tree / Scenario Routing Table / Inherited Defaults / Rules
+        // sections instead of the TEMPLATE.md headings). The structural
+        // expectations for them are encoded below in a separate it.each block.
+        if (isComponentLayout(dir)) return;
         const body = readSkillFile(dir);
         // Each catalog skill must, at minimum, have these top-level
         // sections so consumers see a uniform structure regardless of
@@ -852,16 +1085,46 @@ describe('skills catalog validation', () => {
     );
 
     it.each(findAllSkillDirs().map((d) => [d]))(
+      '"%s" component-layout skills carry the rich-frontmatter shape',
+      (dir) => {
+        if (!isComponentLayout(dir)) return;
+        const body = readSkillFile(dir);
+        const { frontmatter } = parseSkillMdFrontmatter(body);
+        // These are the auto-trigger hooks Claude Code reads. Component
+        // skills must declare all of them — that's the whole point of the
+        // new layout.
+        expect(typeof frontmatter['description']).toBe('string');
+        expect((frontmatter['description'] as string).length).toBeGreaterThan(80);
+        expect(typeof frontmatter['when_to_use']).toBe('string');
+        expect(typeof frontmatter['paths']).toBe('string');
+        expect(frontmatter['layout']).toBe('component');
+        // Body still needs a few human-readable sections so the skill is
+        // skim-able by a developer, but the section names are intentionally
+        // freer than the legacy TEMPLATE.md set.
+        for (const heading of ['## Decision tree', '## Scenario routing table', '## References', '## Rules']) {
+          expect(body).toContain(heading);
+        }
+      },
+    );
+
+    it.each(findAllSkillDirs().map((d) => [d]))(
       '"%s" Accessing This Skill section names the skill correctly',
       (dir) => {
+        // Component skills use a lower-cased `## Accessing this skill`
+        // heading; assertion below is case-insensitive for that branch.
         const body = readSkillFile(dir);
         const { frontmatter } = parseSkillMdFrontmatter(body);
         const name = frontmatter['name'];
         if (typeof name !== 'string') return;
 
-        // The section is generated per skill — the literal name should
-        // appear in the URI examples it documents.
-        const idx = body.indexOf('## Accessing This Skill');
+        const headingMatch = isComponentLayout(dir)
+          ? body.match(/^## Accessing this skill$/im)
+          : body.match(/^## Accessing This Skill$/m);
+        expect(headingMatch).not.toBeNull();
+        if (headingMatch === null) {
+          throw new Error(`Missing "Accessing This Skill" heading for ${dir}`);
+        }
+        const idx = body.indexOf(headingMatch[0]);
         expect(idx).toBeGreaterThanOrEqual(0);
         const section = body.slice(idx);
         const nextHeading = section.indexOf('\n## ', 1);

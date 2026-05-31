@@ -10,7 +10,8 @@ import { renderComponent } from '../component/renderer';
 import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
-import { createTemplateHelpers } from '../shell/data-injector';
+import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
+import type { WidgetSizing } from '../shell/types';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { wrapDetectedContent } from './content-renderers';
 import { detectUIType } from './type-detector';
@@ -38,6 +39,12 @@ export interface RenderToolTemplateOptions {
    * external script execution like Claude (#454). Default `'cdn'`.
    */
   resourceMode?: 'cdn' | 'inline';
+  /**
+   * Widget sizing config (preferred/min/max height, aspect-ratio, auto-resize).
+   * Drives the static sizing CSS + `window.__mcpWidgetSizing` injection in the
+   * shell, and is mirrored onto the returned `meta` as `ui/preferredHeight` etc.
+   */
+  sizing?: WidgetSizing;
 }
 
 /**
@@ -88,7 +95,7 @@ function buildCspConfig(resolver?: ImportResolver) {
  * Use `template: { file: './my-component.tsx' }` instead.
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
-  const { toolName, input, output, template, resolver, platformType } = options;
+  const { toolName, input, output, template, resolver, platformType, sizing } = options;
   const uiType = detectUIType(template);
 
   // When the user didn't pick a resourceMode, host-detect: Claude widget
@@ -106,6 +113,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     output,
     includeBridge: true,
     resolver,
+    sizing,
   };
 
   let html: string;
@@ -173,6 +181,16 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     'ui/type': uiType,
     'ui/mimeType': MCP_APPS_MIME_TYPE,
   };
+
+  // Mirror sizing config onto the response meta so hosts that read it from
+  // `_meta` (rather than `__mcpWidgetSizing`) get the same hints. Only emit the
+  // fields that were actually set.
+  if (hasSizing(sizing)) {
+    if (sizing.preferredHeight !== undefined) meta['ui/preferredHeight'] = sizing.preferredHeight;
+    if (sizing.minHeight !== undefined) meta['ui/minHeight'] = sizing.minHeight;
+    if (sizing.maxHeight !== undefined) meta['ui/maxHeight'] = sizing.maxHeight;
+    if (sizing.aspectRatio !== undefined) meta['ui/aspectRatio'] = sizing.aspectRatio;
+  }
 
   return {
     html,

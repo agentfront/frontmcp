@@ -17,6 +17,7 @@ export {
   type TemplateBuilderFn,
   type WidgetServingMode,
   type WidgetDisplayMode,
+  type WidgetSizeValue,
   // Re-export UITemplateConfig as ToolUIConfig for backwards compatibility
   type UITemplateConfig as ToolUIConfig,
   // New Widget Runtime Types

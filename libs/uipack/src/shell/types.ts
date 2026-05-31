@@ -42,6 +42,27 @@ export interface ShellConfig {
   title?: string;
   /** Custom shell template (pre-resolved object or inline string). */
   customShell?: ResolvedShellTemplate | string;
+  /** Widget sizing configuration (height/aspect-ratio/auto-resize). */
+  sizing?: WidgetSizing;
+}
+
+/**
+ * Widget sizing configuration injected into the shell document.
+ *
+ * Drives both the static sizing CSS (initial/min/max height, aspect-ratio) and
+ * the runtime auto-resize behaviour (via `window.__mcpWidgetSizing`).
+ */
+export interface WidgetSizing {
+  /** Preferred initial height (number → px, string → any CSS length). */
+  preferredHeight?: number | string;
+  /** Minimum height (number → px, string → any CSS length). */
+  minHeight?: number | string;
+  /** Maximum height (number → px, string → any CSS length). */
+  maxHeight?: number | string;
+  /** CSS aspect-ratio (e.g. `'16 / 9'` or `1.5`). */
+  aspectRatio?: string | number;
+  /** Whether the runtime auto-reports content height to the host. Default true. */
+  autoResize?: boolean;
 }
 
 /**

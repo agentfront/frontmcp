@@ -46,6 +46,7 @@ import {
 } from '../types';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { outputPolicySchema, type OutputPolicy } from './output-policy';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -248,18 +249,17 @@ export interface FrontMcpBaseMetadata {
   };
 
   /**
-   * Output-validation policy applied after entry-level Zod parsing succeeds.
+   * Output policy applied to every tool (overridable per `@App` / `@Tool`):
    *
-   * `allowNonFinite: true` lets `Infinity`, `-Infinity`, and `NaN` pass through
-   * to JSON serialization (where they become `null`). Default is `false` —
-   * non-finite numeric output throws `InvalidOutputError`, surfacing silent
-   * `JSON.stringify` corruption that `z.number()` would otherwise let through.
+   * - `allowNonFinite`: lets `Infinity` / `-Infinity` / `NaN` reach JSON serialization
+   *   (where they become `null`). Default `false` — non-finite output throws
+   *   `InvalidOutputError`, surfacing silent `JSON.stringify` corruption.
+   * - `schemaMode`: how `outputSchema` is exposed in `tools/list` — `'definition'`
+   *   (default) / `'description'` / `'both'` / `'none'`.
    *
-   * @default { allowNonFinite: false }
+   * @default { allowNonFinite: false, schemaMode: 'definition' }
    */
-  output?: {
-    allowNonFinite?: boolean;
-  };
+  output?: OutputPolicy;
 
   /**
    * Jobs and workflows configuration.
@@ -547,11 +547,7 @@ export const frontMcpBaseSchema = z.object({
    * serialization (where they become `null`). Default is `false` — non-finite
    * numeric output throws `InvalidOutputError`.
    */
-  output: z
-    .object({
-      allowNonFinite: z.boolean().optional().default(false),
-    })
-    .optional(),
+  output: outputPolicySchema.optional(),
   jobs: z
     .object({
       enabled: z.boolean(),
@@ -773,11 +769,7 @@ const frontMcpLiteSchema = z.object({
   authorities: z.any().optional(),
   // Output-validation policy (see `frontMcpBaseSchema.output`). CLI mode
   // honors the same `allowNonFinite` switch as the full server.
-  output: z
-    .object({
-      allowNonFinite: z.boolean().optional().default(false),
-    })
-    .optional(),
+  output: outputPolicySchema.optional(),
 });
 
 /**

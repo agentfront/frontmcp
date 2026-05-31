@@ -55,32 +55,29 @@ This is a router skill. The "steps" here are how to choose the right reference (
 
 ## Scenario Routing Table
 
-| Scenario                                                 | Reference                         | Description                                                                                                 |
-| -------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Expose an executable action that AI clients can call     | `create-tool`                     | Class-based or function-style tools with Zod input/output validation                                        |
-| Expose read-only data via a URI                          | `create-resource`                 | Static resources or URI template resources for dynamic data                                                 |
-| Create a reusable conversation template or system prompt | `create-prompt`                   | Prompt entries with arguments and multi-turn message sequences                                              |
-| Build an autonomous AI loop that orchestrates tools      | `create-agent`                    | Agent entries with LLM config, inner tools, and swarm handoff                                               |
-| Register shared services or configuration via DI         | `create-provider`                 | Dependency injection tokens, lifecycle hooks, factory providers                                             |
-| Run a background task with progress and retries          | `create-job`                      | Job entries with attempt tracking, retry config, and progress                                               |
-| Chain multiple jobs into a sequential pipeline           | `create-workflow`                 | Workflow entries that compose jobs with data passing                                                        |
-| Write instruction-only AI guidance (no code execution)   | `create-skill`                    | Skill entries with markdown instructions from files, strings, or URLs                                       |
-| Write AI guidance that also orchestrates tools           | `create-skill-with-tools`         | Skill entries that combine instructions with registered tools                                               |
-| Look up any decorator signature or option                | `decorators-guide`                | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more                         |
-| Overview of all official adapters                        | `official-adapters`               | Router to all adapter types; adapter vs plugin comparison                                                   |
-| Integrate an external API via OpenAPI spec               | `openapi-adapter`                 | OpenapiAdapter with auth, polling, filtering, transforms, format resolution, $ref security                  |
-| Use official plugins (caching, remember, feature flags)  | `official-plugins`                | Built-in plugins for caching, session memory, approval, and feature flags (dashboard is beta)               |
-| Connect to an external data source via a custom adapter  | `create-adapter`                  | Create custom adapters for external data sources                                                            |
-| Configure LLM settings for an agent component            | `create-agent-llm-config`         | Configure LLM settings for agent components                                                                 |
-| Add will/did/around lifecycle hooks to a plugin          | `create-plugin-hooks`             | Add lifecycle hooks to plugins (will/did/around)                                                            |
-| Annotate tools with client hints for AI clients          | `create-tool-annotations`         | Add MCP tool annotations for client hints                                                                   |
-| Define typed output schemas for tool responses           | `create-tool-output-schema-types` | Define typed output schemas for tools                                                                       |
-| Render an interactive UI widget for a tool's result      | `create-tool-ui`                  | Configure `@Tool({ ui })` widgets via MCP Apps (SEP-1865), `ui://widget/<tool>.html` resources, CSP, bridge |
+| Scenario                                                                                                                                                                                        | Reference                                                      | Description                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Expose an executable action that AI clients can call (full surface: schemas, DI, errors, throttling, auth, availability, elicitation, UI widgets, annotations, examples metadata, registration) | **[`create-tool` (top-level skill)](../create-tool/SKILL.md)** | Single source of truth for everything inside `@Tool({...})`. Subsumes the former `create-tool`, `create-tool-annotations`, `create-tool-output-schema-types`, and `create-tool-ui` references. |
+| Expose read-only data via a URI                                                                                                                                                                 | `create-resource`                                              | Static resources or URI template resources for dynamic data                                                                                                                                    |
+| Create a reusable conversation template or system prompt                                                                                                                                        | `create-prompt`                                                | Prompt entries with arguments and multi-turn message sequences                                                                                                                                 |
+| Build an autonomous AI loop that orchestrates tools                                                                                                                                             | `create-agent`                                                 | Agent entries with LLM config, inner tools, and swarm handoff                                                                                                                                  |
+| Register shared services or configuration via DI                                                                                                                                                | `create-provider`                                              | Dependency injection tokens, lifecycle hooks, factory providers                                                                                                                                |
+| Run a background task with progress and retries                                                                                                                                                 | `create-job`                                                   | Job entries with attempt tracking, retry config, and progress                                                                                                                                  |
+| Chain multiple jobs into a sequential pipeline                                                                                                                                                  | `create-workflow`                                              | Workflow entries that compose jobs with data passing                                                                                                                                           |
+| Write instruction-only AI guidance (no code execution)                                                                                                                                          | `create-skill`                                                 | Skill entries with markdown instructions from files, strings, or URLs                                                                                                                          |
+| Write AI guidance that also orchestrates tools                                                                                                                                                  | `create-skill-with-tools`                                      | Skill entries that combine instructions with registered tools                                                                                                                                  |
+| Look up any decorator signature or option                                                                                                                                                       | `decorators-guide`                                             | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more                                                                                                            |
+| Overview of all official adapters                                                                                                                                                               | `official-adapters`                                            | Router to all adapter types; adapter vs plugin comparison                                                                                                                                      |
+| Integrate an external API via OpenAPI spec                                                                                                                                                      | `openapi-adapter`                                              | OpenapiAdapter with auth, polling, filtering, transforms, format resolution, $ref security                                                                                                     |
+| Use official plugins (caching, remember, feature flags)                                                                                                                                         | `official-plugins`                                             | Built-in plugins for caching, session memory, approval, and feature flags (dashboard is beta)                                                                                                  |
+| Connect to an external data source via a custom adapter                                                                                                                                         | `create-adapter`                                               | Create custom adapters for external data sources                                                                                                                                               |
+| Configure LLM settings for an agent component                                                                                                                                                   | `create-agent-llm-config`                                      | Configure LLM settings for agent components                                                                                                                                                    |
+| Add will/did/around lifecycle hooks to a plugin                                                                                                                                                 | `create-plugin-hooks`                                          | Add lifecycle hooks to plugins (will/did/around)                                                                                                                                               |
 
 ## Recommended Reading Order
 
 1. **`decorators-guide`** — Start here to understand the full decorator landscape
-2. **`create-tool`** — The most common building block; learn tools first
+2. **[`create-tool`](../create-tool/SKILL.md)** — The most common building block (top-level skill — covers schemas, DI, errors, throttling, auth, UI widgets, annotations); learn tools first
 3. **`create-resource`** — Expose data alongside tools
 4. **`create-prompt`** — Add reusable conversation templates
 5. **`create-provider`** — Share services across tools and resources via DI
@@ -89,7 +86,6 @@ This is a router skill. The "steps" here are how to choose the right reference (
 8. **`create-skill`** / **`create-skill-with-tools`** — Author your own skills (meta)
 9. **`official-adapters`** / **`openapi-adapter`** — Integrate external APIs via OpenAPI specs
 10. **`official-plugins`** — Add caching, session memory, feature flags, and more
-11. **`create-tool-ui`** — Add a rendered widget to a tool response (MCP Apps / SEP-1865)
 
 ## Cross-Cutting Patterns
 
@@ -227,36 +223,9 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`directory-based-skill`](./examples/create-skill/directory-based-skill.md) | Advanced     | A skill loaded from a directory structure with SKILL.md frontmatter, plus file-based and URL-based instruction sources. |
 | [`parameterized-skill`](./examples/create-skill/parameterized-skill.md)     | Intermediate | A skill with customizable parameters, usage examples for AI guidance, and controlled visibility.                        |
 
-### `create-tool-annotations`
+### `create-tool` (migrated to top-level skill)
 
-| Example                                                                                    | Level        | Description                                                                                                                     |
-| ------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| [`destructive-delete-tool`](./examples/create-tool-annotations/destructive-delete-tool.md) | Intermediate | Demonstrates annotating a tool that deletes data, enabling MCP clients to warn users before execution.                          |
-| [`readonly-query-tool`](./examples/create-tool-annotations/readonly-query-tool.md)         | Basic        | Demonstrates annotating a tool that only reads data, signaling to MCP clients that it has no side effects and is safe to retry. |
-
-### `create-tool-output-schema-types`
-
-| Example                                                                                                    | Level        | Description                                                                                                                                                    |
-| ---------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`primitive-and-media-outputs`](./examples/create-tool-output-schema-types/primitive-and-media-outputs.md) | Intermediate | Demonstrates using primitive string literals and media types as `outputSchema` for tools that return plain text, images, or multi-content arrays.              |
-| [`zod-raw-shape-output`](./examples/create-tool-output-schema-types/zod-raw-shape-output.md)               | Basic        | Demonstrates the recommended approach of using a Zod raw shape as `outputSchema` for structured, validated JSON output.                                        |
-| [`zod-schema-advanced-output`](./examples/create-tool-output-schema-types/zod-schema-advanced-output.md)   | Advanced     | Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, including `z.object()`, `z.array()`, `z.union()`, and `z.discriminatedUnion()`. |
-
-### `create-tool-ui`
-
-| Example                                                                                 | Level        | Description                                                                                                                                                                                    |
-| --------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-html-template`](./examples/create-tool-ui/basic-html-template.md)               | Basic        | A minimal function template that renders the tool output as a styled HTML card using `ctx.helpers.escapeHtml`.                                                                                 |
-| [`widget-with-csp-and-bridge`](./examples/create-tool-ui/widget-with-csp-and-bridge.md) | Intermediate | An interactive widget that fetches from an allow-listed origin via `csp.connectDomains` and invokes another tool via `window.FrontMcpBridge.callTool`.                                         |
-| [`file-source-tsx-widget`](./examples/create-tool-ui/file-source-tsx-widget.md)         | Advanced     | A `.tsx` FileSource widget that bundles a React chart component and renders in every host — including Claude — by setting `resourceMode: 'inline'` so React is inlined into the widget (#454). |
-
-### `create-tool`
-
-| Example                                                                                                  | Level        | Description                                                                                                    |
-| -------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`basic-class-tool`](./examples/create-tool/basic-class-tool.md)                                         | Basic        | A minimal tool using the class-based pattern with Zod input validation and output schema.                      |
-| [`tool-with-di-and-errors`](./examples/create-tool/tool-with-di-and-errors.md)                           | Intermediate | A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.               |
-| [`tool-with-rate-limiting-and-progress`](./examples/create-tool/tool-with-rate-limiting-and-progress.md) | Advanced     | A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations. |
+The full `@Tool({...})` surface — including the former `create-tool-annotations`, `create-tool-output-schema-types`, and `create-tool-ui` references — now lives in the top-level [`create-tool`](../create-tool/SKILL.md) skill. See its [`examples/`](../create-tool/examples/) directory for 25 combination examples covering schemas, DI, errors, throttling, auth, availability, elicitation, UI widgets, annotations, examples metadata, and job hand-off.
 
 ### `create-workflow`
 
@@ -309,4 +278,4 @@ when a server has been configured to host this skill.
 ## Reference
 
 - [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
-- Related skills: `create-tool`, `create-tool-ui`, `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `openapi-adapter`, `official-plugins`
+- Related skills: [`create-tool`](../create-tool/SKILL.md) (top-level), `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `openapi-adapter`, `official-plugins`

@@ -281,6 +281,14 @@ export type WidgetServingMode =
  */
 export type WidgetDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
+/**
+ * A widget sizing value.
+ *
+ * - `number` — interpreted as CSS pixels (e.g. `420` → `420px`).
+ * - `string` — any valid CSS length (e.g. `'50vh'`, `'24rem'`, `'480px'`).
+ */
+export type WidgetSizeValue = number | string;
+
 // ============================================
 // UI Template Configuration
 // ============================================
@@ -391,6 +399,56 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Note: Host may not support all modes; this is a preference hint.
    */
   displayMode?: WidgetDisplayMode;
+
+  /**
+   * Preferred initial height for the widget iframe.
+   *
+   * Applied as the starting height on the shell document (`html`/`body`/`#root`)
+   * and exposed to the host via `_meta['ui/preferredHeight']`. A `number` is
+   * treated as CSS pixels; a `string` is any valid CSS length (`'50vh'`,
+   * `'24rem'`). When `autoResize` is enabled the runtime grows/shrinks from
+   * this baseline to fit content.
+   */
+  preferredHeight?: WidgetSizeValue;
+
+  /**
+   * Minimum height for the widget. Applied as `min-height` CSS and exposed via
+   * `_meta['ui/minHeight']`. Auto-resize never reports a height below this.
+   */
+  minHeight?: WidgetSizeValue;
+
+  /**
+   * Maximum height for the widget. Applied as `max-height` CSS and exposed via
+   * `_meta['ui/maxHeight']`. Auto-resize never reports a height above this.
+   */
+  maxHeight?: WidgetSizeValue;
+
+  /**
+   * CSS `aspect-ratio` for the widget (e.g. `'16 / 9'` or `1.5`). Applied as
+   * `aspect-ratio` CSS on the shell and exposed via `_meta['ui/aspectRatio']`.
+   * When set, hosts that honor it size the widget by ratio instead of by
+   * measured content height.
+   */
+  aspectRatio?: string | number;
+
+  /**
+   * Whether the widget should auto-report its content height to the host as it
+   * changes (via a debounced `ResizeObserver` on `#root`).
+   *
+   * Only takes effect when the widget configures sizing — i.e. at least one
+   * sizing field (`preferredHeight` / `minHeight` / `maxHeight` / `aspectRatio` /
+   * `autoResize`) is set, which is what causes the runtime to be injected. A
+   * widget with no sizing config does not auto-resize at all. When sizing is
+   * configured, auto-resize is on unless you set this to `false`.
+   *
+   * - Claude / static widgets: the host measures DOM height itself, so this is
+   *   a CSS-only no-op.
+   * - OpenAI: forwarded through the Apps SDK sizing API.
+   * - ext-apps hosts: reported via the `ui/setSize` request.
+   *
+   * @default true (when the widget configures sizing)
+   */
+  autoResize?: boolean;
 
   /**
    * Human-readable description shown to users about what the widget does.

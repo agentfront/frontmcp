@@ -24,6 +24,7 @@ export {
   // Widget Serving & Display
   type WidgetServingMode,
   type WidgetDisplayMode,
+  type WidgetSizeValue,
   // UI Template Configuration
   type UITemplateConfig,
   type UITemplate,

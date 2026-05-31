@@ -6,6 +6,42 @@
 
 import { MCP_APPS_MIME_TYPE, renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
 import { type ImportResolver } from '@frontmcp/uipack/resolver';
+import { type WidgetSizing } from '@frontmcp/uipack/shell';
+
+/**
+ * Extract widget sizing config (`preferredHeight` / `minHeight` / `maxHeight` /
+ * `aspectRatio` / `autoResize`) from a tool's `ui` config so it flows into the
+ * rendered shell (CSS + `__mcpWidgetSizing`) and the response `_meta`.
+ *
+ * Returns `undefined` when no sizing field is set so widgets that don't opt in
+ * stay byte-for-byte unchanged.
+ */
+function extractSizing(uiConfig: Record<string, unknown> | undefined): WidgetSizing | undefined {
+  if (!uiConfig) return undefined;
+  const sizing: WidgetSizing = {};
+  let has = false;
+  if (uiConfig['preferredHeight'] !== undefined) {
+    sizing.preferredHeight = uiConfig['preferredHeight'] as WidgetSizing['preferredHeight'];
+    has = true;
+  }
+  if (uiConfig['minHeight'] !== undefined) {
+    sizing.minHeight = uiConfig['minHeight'] as WidgetSizing['minHeight'];
+    has = true;
+  }
+  if (uiConfig['maxHeight'] !== undefined) {
+    sizing.maxHeight = uiConfig['maxHeight'] as WidgetSizing['maxHeight'];
+    has = true;
+  }
+  if (uiConfig['aspectRatio'] !== undefined) {
+    sizing.aspectRatio = uiConfig['aspectRatio'] as WidgetSizing['aspectRatio'];
+    has = true;
+  }
+  if (uiConfig['autoResize'] !== undefined) {
+    sizing.autoResize = uiConfig['autoResize'] as WidgetSizing['autoResize'];
+    has = true;
+  }
+  return has ? sizing : undefined;
+}
 
 // ============================================
 // ToolUIRegistry
@@ -90,6 +126,7 @@ export class ToolUIRegistry {
       template,
       resolver: this.resolver,
       resourceMode,
+      sizing: extractSizing(uiConfig),
     });
 
     this.widgets.set(toolName, result.html);
@@ -177,6 +214,7 @@ export class ToolUIRegistry {
       platformType,
       resolver: this.resolver,
       resourceMode,
+      sizing: extractSizing(uiConfig),
     });
 
     // Cache the rendered HTML

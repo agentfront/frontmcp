@@ -7,21 +7,42 @@
  * @packageDocumentation
  */
 
-import { safeJsonForScript, escapeHtml, escapeScriptClose } from '../utils';
+import { escapeHtml, escapeScriptClose, safeJsonForScript } from '../utils';
+import type { WidgetSizing } from './types';
+
+/**
+ * Whether a sizing config carries any value worth injecting/applying.
+ *
+ * `autoResize` is reported even when it's the only field set so authors can
+ * opt OUT (`autoResize: false`) without also setting a height.
+ */
+export function hasSizing(sizing?: WidgetSizing): sizing is WidgetSizing {
+  if (!sizing) return false;
+  return (
+    sizing.preferredHeight !== undefined ||
+    sizing.minHeight !== undefined ||
+    sizing.maxHeight !== undefined ||
+    sizing.aspectRatio !== undefined ||
+    sizing.autoResize !== undefined
+  );
+}
 
 /**
  * Generate a script tag that injects tool data as window globals.
  *
  * Sets `window.__mcpToolName`, `window.__mcpToolInput`,
- * `window.__mcpToolOutput`, and `window.__mcpStructuredContent`.
+ * `window.__mcpToolOutput`, and `window.__mcpStructuredContent`. When `sizing`
+ * is provided it also sets `window.__mcpWidgetSizing` so the bridge runtime can
+ * apply CSS and drive auto-resize.
  */
 export function buildDataInjectionScript(options: {
   toolName: string;
   input?: unknown;
   output?: unknown;
   structuredContent?: unknown;
+  sizing?: WidgetSizing;
 }): string {
-  const { toolName, input, output, structuredContent } = options;
+  const { toolName, input, output, structuredContent, sizing } = options;
 
   const lines = [
     `window.__mcpAppsEnabled = true;`,
@@ -30,6 +51,10 @@ export function buildDataInjectionScript(options: {
     `window.__mcpToolOutput = ${safeJsonForScript(output ?? null)};`,
     `window.__mcpStructuredContent = ${safeJsonForScript(structuredContent ?? null)};`,
   ];
+
+  if (hasSizing(sizing)) {
+    lines.push(`window.__mcpWidgetSizing = ${safeJsonForScript(sizing)};`);
+  }
 
   return `<script>\n${lines.join('\n')}\n</script>`;
 }

@@ -18,12 +18,28 @@ export type SkillCategory =
   | 'setup'
   | 'deployment'
   | 'development'
+  | 'development/create'
   | 'config'
   | 'testing'
   | 'guides'
   | 'production'
   | 'extensibility'
   | 'observability';
+
+/**
+ * Catalog layouts the validator understands.
+ *
+ * - `router` (default): the legacy shape used by skills like `frontmcp-development`
+ *   — a Scenario Routing Table SKILL.md plus `references/<topic>.md` files with
+ *   examples grouped in `examples/<topic>/<example>.md` subdirectories.
+ *
+ * - `component`: the new per-thing layout used by skills like `create-tool`
+ *   — flat `examples/<example>.md` (no per-reference grouping), an optional
+ *   `rules/` directory with short DO/DON'T files, and rich SKILL.md frontmatter
+ *   designed for Claude Code's auto-trigger heuristics (explicit `triggers:`,
+ *   `paths:` globs, `when_to_use`).
+ */
+export type SkillLayout = 'router' | 'component';
 
 /**
  * Bundle membership for curated scaffold presets.
@@ -87,6 +103,40 @@ export interface SkillReferenceEntry {
 }
 
 /**
+ * Top-level example entry used by `layout: 'component'` skills, where
+ * examples live flat under `examples/<example>.md` (not grouped under a
+ * parent reference). Shape mirrors {@link SkillReferenceExampleEntry} so
+ * downstream consumers can use a uniform metadata type.
+ */
+export interface SkillComponentExampleEntry {
+  /** Example name — matches filename without extension */
+  name: string;
+  /** Short description of what the example demonstrates */
+  description: string;
+  /** Complexity level */
+  level: SkillExampleLevel;
+  /** Searchable tags for the example */
+  tags: string[];
+  /** Concrete APIs or patterns the example demonstrates */
+  features: string[];
+}
+
+/**
+ * Top-level rule entry used by `layout: 'component'` skills. Rules are short
+ * DO / DON'T constraint files under `rules/<rule>.md`. The body explains the
+ * rule, gives good / bad examples, and (where possible) ends with a grep-based
+ * verification snippet.
+ */
+export interface SkillComponentRuleEntry {
+  /** Rule name — matches filename without extension */
+  name: string;
+  /** One-sentence statement of the rule */
+  constraint: string;
+  /** Enforcement strength — `required` for must-follow, `recommended` for nudges */
+  severity?: 'required' | 'recommended';
+}
+
+/**
  * A single entry in the skills catalog manifest.
  *
  * This is the core contract connecting SKILL.md files to scaffolding,
@@ -107,6 +157,29 @@ export interface SkillCatalogEntry {
   hasResources: boolean;
   /** Resolved reference metadata from references/ directory */
   references?: SkillReferenceEntry[];
+  /**
+   * Catalog layout — see {@link SkillLayout}. Defaults to `'router'` when
+   * absent for backward compatibility with the legacy frontmcp-* router
+   * skills.
+   */
+  layout?: SkillLayout;
+  /**
+   * Top-level example entries — only populated when `layout === 'component'`.
+   * Router-layout skills group examples under `references[].examples`
+   * instead.
+   */
+  examples?: SkillComponentExampleEntry[];
+  /**
+   * Top-level rule entries — only populated when `layout === 'component'`.
+   * Each rule corresponds to a file in `rules/<name>.md`.
+   */
+  rules?: SkillComponentRuleEntry[];
+  /**
+   * Priority hint surfaced to Claude Code's auto-discovery. Higher number =
+   * earlier in the ranking. Mirrors `metadata.priority` in SKILL.md
+   * frontmatter.
+   */
+  priority?: number;
   /** Target-specific storage defaults (e.g., { node: 'redis-docker', vercel: 'vercel-kv' }) */
   storageDefault?: Record<string, string>;
   /** Tags for secondary filtering and search */
@@ -151,6 +224,7 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'setup',
   'deployment',
   'development',
+  'development/create',
   'config',
   'testing',
   'guides',
@@ -158,6 +232,9 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'extensibility',
   'observability',
 ];
+
+/** Valid layouts for manifest validation */
+export const VALID_LAYOUTS: readonly SkillLayout[] = ['router', 'component'];
 
 /** Valid bundles for manifest validation */
 export const VALID_BUNDLES: readonly SkillBundle[] = ['recommended', 'minimal', 'full'];

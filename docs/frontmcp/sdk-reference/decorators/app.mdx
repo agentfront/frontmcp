@@ -51,6 +51,7 @@ function App(providedMetadata: LocalAppMetadata): ClassDecorator
 | `description` | `string`                            | Human-readable description                                                                                                 |
 | `auth`        | `AuthOptionsInput`                  | App-level auth configuration (overrides gateway auth)                                                                      |
 | `standalone`  | `boolean \| 'includeInParent'`      | If `true`, the app gets its own scope. If `'includeInParent'`, it acts as a separated scope under the app-name prefix.     |
+| `output`      | `OutputPolicy`                      | App-level output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Overrides the server policy; overridable per `@Tool` (Tool > App > server). See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
 
 ### Components
 

@@ -31,6 +31,7 @@ import {
 } from '../schemas';
 import { authOptionsSchema, type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
+import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 
 /**
@@ -147,6 +148,12 @@ export interface LocalAppMetadata {
   auth?: AuthOptionsInput;
 
   /**
+   * Output policy for this app's tools — overrides the server (`@FrontMcp`),
+   * overridden by `@Tool`. See `@FrontMcp({ output })` for the fields.
+   */
+  output?: OutputPolicy;
+
+  /**
    * If true, the app will NOT be included and will act as a separated scope.
    * If false, the app will be included in MultiApp frontmcp server.
    * If 'includeInParent', the app will be included in the gateway's
@@ -172,6 +179,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   workflows: z.array(annotatedFrontMcpWorkflowsSchema).optional(),
   channels: z.array(annotatedFrontMcpChannelsSchema).optional(),
   auth: authOptionsSchema.optional(),
+  output: outputPolicySchema.optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])
     .optional()
