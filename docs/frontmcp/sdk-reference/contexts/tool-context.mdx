@@ -123,7 +123,7 @@ await this.progress(100, 100, 'Complete');
 Notify subscribed clients that a resource's contents changed. Sends `notifications/resources/updated` to every session subscribed to `uri` (via `resources/subscribe`); a no-op for sessions that aren't subscribed. Call this after a tool mutates state that backs a `@Resource` so subscribers re-fetch.
 
 ```typescript
-notifyResourceUpdated(uri: string): void
+protected notifyResourceUpdated(uri: string): void
 ```
 
 ```typescript
@@ -136,7 +136,7 @@ this.notifyResourceUpdated(`notes://${input.id}`); // subscribers re-fetch this 
 Broadcast `notifications/resources/list_changed` so clients re-run `resources/list`. Call this when a tool adds or removes resources at runtime.
 
 ```typescript
-notifyResourceListChanged(): void
+protected notifyResourceListChanged(): void
 ```
 
 ```typescript

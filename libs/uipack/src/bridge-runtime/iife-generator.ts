@@ -195,6 +195,9 @@ function __applySizingCss(sizing) {
 
 function __initAutoResize() {
   if (typeof window === 'undefined') return;
+  // Idempotent: a re-injected IIFE must not stack observers.
+  if (window.__mcpAutoResizeInit) return;
+  window.__mcpAutoResizeInit = true;
   var sizing = window.__mcpWidgetSizing;
   if (!sizing || typeof sizing !== 'object') return;
 
@@ -244,6 +247,10 @@ function __initAutoResize() {
     }
 
     try {
+      // Disconnect any prior observer before creating a new one (no leaks/dupes).
+      if (window.__mcpResizeObserver && typeof window.__mcpResizeObserver.disconnect === 'function') {
+        window.__mcpResizeObserver.disconnect();
+      }
       var ro = new ResizeObserver(function() { schedule(); });
       ro.observe(target);
       window.__mcpResizeObserver = ro;

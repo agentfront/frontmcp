@@ -50,6 +50,16 @@ function toCssLength(value: number | string): string {
 export function buildSizingStyleTag(sizing?: WidgetSizing): string {
   if (!hasSizing(sizing)) return '';
 
+  // Only emit a <style> block for CSS-affecting fields. An autoResize-only config
+  // (e.g. `{ autoResize: false }`) drives the runtime, not static CSS, so it must
+  // not produce a stray `margin: 0` style tag.
+  const hasCssSizing =
+    sizing.preferredHeight !== undefined ||
+    sizing.minHeight !== undefined ||
+    sizing.maxHeight !== undefined ||
+    sizing.aspectRatio !== undefined;
+  if (!hasCssSizing) return '';
+
   const rootRules: string[] = [];
   const docRules: string[] = ['margin: 0;'];
 

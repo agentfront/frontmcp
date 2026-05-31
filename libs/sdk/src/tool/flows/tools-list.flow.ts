@@ -565,16 +565,17 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
           // Copy widget sizing hints (preferredHeight / minHeight / maxHeight /
-          // aspectRatio) onto the nested _meta.ui object. Read straight from
-          // uiConfig — same place CSP is sourced — NOT from the manifest, which
-          // never carries these fields. Emitted for all platforms so hosts that
-          // read sizing from tools/list (rather than __mcpWidgetSizing) get the
-          // same hints.
+          // aspectRatio / autoResize) onto the nested _meta.ui object. Read straight
+          // from uiConfig — same place CSP is sourced — NOT from the manifest, which
+          // never carries these fields. Emitted for all platforms so hosts that read
+          // sizing from tools/list (rather than __mcpWidgetSizing) get the same hints,
+          // including an explicit `autoResize: false` opt-out.
           const applySizingMeta = (uiMeta: Record<string, unknown>): void => {
             if (uiConfig.preferredHeight !== undefined) uiMeta['preferredHeight'] = uiConfig.preferredHeight;
             if (uiConfig.minHeight !== undefined) uiMeta['minHeight'] = uiConfig.minHeight;
             if (uiConfig.maxHeight !== undefined) uiMeta['maxHeight'] = uiConfig.maxHeight;
             if (uiConfig.aspectRatio !== undefined) uiMeta['aspectRatio'] = uiConfig.aspectRatio;
+            if (uiConfig.autoResize !== undefined) uiMeta['autoResize'] = uiConfig.autoResize;
           };
 
           if (isExtApps) {

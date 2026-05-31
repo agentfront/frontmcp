@@ -178,6 +178,9 @@ function __applySizingCss(sizing) {
 
 function __initAutoResize() {
   if (typeof window === 'undefined') return;
+  // Idempotent: a re-injected IIFE must not stack observers.
+  if (window.__mcpAutoResizeInit) return;
+  window.__mcpAutoResizeInit = true;
   var sizing = window.__mcpWidgetSizing;
   if (!sizing || typeof sizing !== 'object') return;
 
@@ -227,6 +230,10 @@ function __initAutoResize() {
     }
 
     try {
+      // Disconnect any prior observer before creating a new one (no leaks/dupes).
+      if (window.__mcpResizeObserver && typeof window.__mcpResizeObserver.disconnect === 'function') {
+        window.__mcpResizeObserver.disconnect();
+      }
       var ro = new ResizeObserver(function() { schedule(); });
       ro.observe(target);
       window.__mcpResizeObserver = ro;
@@ -1089,13 +1096,20 @@ FrontMcpBridge.prototype._setupDataToolCallHandler = function() {
 `.trim();
 }
 
+const MAX_MINIFY_CODE_LENGTH = 500000;
+
 /**
  * Simple JS minification (removes extra whitespace and newlines).
  */
 function minifyJS(code: string): string {
+  // Guard against ReDoS on large inputs
+  if (code.length > MAX_MINIFY_CODE_LENGTH) {
+    return code;
+  }
+
   return code
     .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
-    .replace(/\/\/.*$/gm, '') // Remove line comments
+    .replace(/(^|[^:])\/\/.*$/gm, '$1') // Remove line comments (but not :// in URLs)
     .replace(/\s+/g, ' ') // Collapse whitespace
     .replace(/\s*([{};,:()[\]])\s*/g, '$1') // Remove space around punctuation
     .replace(/;\}/g, '}') // Remove trailing semicolons before }

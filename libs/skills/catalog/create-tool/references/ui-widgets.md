@@ -152,9 +152,38 @@ The bridge routes to the right host adapter (OpenAI SDK / Claude postMessage / F
 | **MCP Inspector**    | Useful for local development. Static mode works fine.                                                                                                                                                                                  |
 | **Gemini / unknown** | `ui` is ignored — JSON output is returned.                                                                                                                                                                                             |
 
+## Widget sizing
+
+Set sizing in the `ui` config — no hand-rolled `ui/notifications/size-changed` + `ResizeObserver` needed:
+
+```typescript
+ui: {
+  template: MediaPlayerWidget,
+  preferredHeight: 480,   // number → px; or a CSS string like '50vh'
+  minHeight: 200,
+  maxHeight: '80vh',
+  aspectRatio: '16 / 9',  // optional; '16 / 9' or a number like 1.78
+  autoResize: true,       // default; reports content height as it changes
+}
+```
+
+What FrontMCP does with it:
+
+- **Static sizing CSS** — `preferredHeight` (initial `height`), `minHeight`, `maxHeight`, and `aspectRatio` are injected as a `<style>` block on `html` / `body` / `#root`, so the widget opens at the right size before any JS runs.
+- **`_meta` hints** — the same values ride along on the response/discovery `_meta` as `ui/preferredHeight`, `ui/minHeight`, `ui/maxHeight`, `ui/aspectRatio` (and nested under `_meta.ui` in `tools/list`), so hosts that read sizing from metadata pick it up.
+- **Runtime auto-resize** — when `autoResize !== false` and `ResizeObserver` is available, the bridge observes `#root` and reports the measured height to the host (debounced via `requestAnimationFrame`), also firing a `widget:resize` event you can listen for. Call `window.FrontMcpBridge.setSize({ height, width, aspectRatio })` to report manually.
+
+Per-host behavior:
+
+- **Claude / static widgets** — the host measures the iframe DOM height itself, so auto-resize is effectively CSS-only (the `setSize` report is a no-op). The injected CSS is what makes a fixed-tall widget (media players, canvases) open without clipping.
+- **OpenAI ChatGPT** — auto-resize forwards to the Apps SDK sizing API when one is exposed; otherwise the SDK's own DOM measurement applies.
+- **ext-apps hosts** — the measured size is reported via a `ui/setSize` request (parallels `ui/setDisplayMode`).
+- **Gemini / generic / unknown** — `setSize` is a no-op; only the static CSS applies.
+
+`displayMode: 'fullscreen'` remains a separate, best-effort hint a host may ignore.
+
 ## Current limitations
 
-- **Widget height is host-dependent.** There's no portable height / auto-resize control. `displayMode: 'fullscreen'` is a hint a host may ignore, and there's no `preferredHeight` / `aspectRatio`. Some hosts honor a `ui/notifications/size-changed` message; Claude measures the iframe DOM height directly, so a widget that needs a fixed tall area (media players, canvases) can render clipped. Size content to its natural height where possible.
 - **Don't push large payloads through the widget.** Claude's sandbox CSP blocks external `connect-src`, so an inline widget can't reliably lazy-load multi-MB data, and a single MCP message is a poor carrier for it either. For large or streamed data, return a `resource_link` (see [`output-schema.md`](./output-schema.md)) and let the host fetch the resource — don't embed it in the widget or the tool result.
 
 ## Examples
