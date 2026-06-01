@@ -63,6 +63,47 @@ describe('openDatabase', () => {
       fs.rmSync(base, { recursive: true, force: true });
     }
   });
+
+  it('wraps a directory-creation failure deterministically (ensureDirSync throws)', () => {
+    // Force the mkdir branch (open-database.ts:44-47) regardless of platform/perms
+    // by mocking ensureDirSync, so we always assert the "create directory" wording
+    // rather than falling through to the "open database" branch. Isolated module
+    // registry so the real ensureDirSync is untouched for the other tests/files.
+    jest.isolateModules(() => {
+      jest.doMock('@frontmcp/utils', () => {
+        const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+        return {
+          ...actual,
+          ensureDirSync: jest.fn(() => {
+            throw new Error('EACCES: permission denied');
+          }),
+        };
+      });
+      const { openDatabase: isolatedOpen } = require('../open-database') as typeof import('../open-database');
+      expect(() => isolatedOpen('/some/deep/nested/dir/db.sqlite', 'WidenStore')).toThrow(
+        /WidenStore: failed to create directory ".*": EACCES: permission denied/,
+      );
+      jest.dontMock('@frontmcp/utils');
+    });
+  });
+
+  it('preserves a non-Error thrown from ensureDirSync via String(err)', () => {
+    jest.isolateModules(() => {
+      jest.doMock('@frontmcp/utils', () => {
+        const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+        return {
+          ...actual,
+          ensureDirSync: jest.fn(() => {
+            // Non-Error throw exercises the `String(err)` fallback branch.
+            throw 'raw-string-failure';
+          }),
+        };
+      });
+      const { openDatabase: isolatedOpen } = require('../open-database') as typeof import('../open-database');
+      expect(() => isolatedOpen('/another/deep/dir/db.sqlite', 'WidenStore')).toThrow(/raw-string-failure/);
+      jest.dontMock('@frontmcp/utils');
+    });
+  });
 });
 
 describe('loadBetterSqlite3', () => {

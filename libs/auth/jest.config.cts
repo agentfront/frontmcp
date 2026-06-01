@@ -7,6 +7,11 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/auth',
+  // Run coverage single-worker for determinism. Under parallel workers a pre-existing
+  // worker-teardown force-exit (no persistent open handle — all cleanup timers already
+  // call .unref()) can drop a whole suite's coverage, flaking the global thresholds.
+  // Normal `nx test auth` stays parallel/fast; only `--coverage` forces one worker.
+  ...(process.argv.some((arg) => arg.includes('coverage')) ? { maxWorkers: 1 } : {}),
   // Transform jose ESM module
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   // Auth has coverage gaps - using lower threshold for incremental improvement.
