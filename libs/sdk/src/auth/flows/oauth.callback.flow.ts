@@ -11,7 +11,17 @@
  * with a real identity provider or user database.
  */
 
-import { createFederatedAuthSession, escapeHtml, startNextProvider, type ProviderPkce } from '@frontmcp/auth';
+import {
+  createFederatedAuthSession,
+  escapeHtml,
+  renderLocalLoginPage,
+  startNextProvider,
+  type AuthenticateContext,
+  type AuthenticateResult,
+  type LoginConfig,
+  type LoginRenderContext,
+  type ProviderPkce,
+} from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
 
@@ -45,6 +55,22 @@ const stateSchema = z.object({
   // Generated
   authorizationCode: z.string().optional(),
   userSub: z.string().optional(),
+  // Checkpoint 3a — custom verification (authenticate()) results.
+  // Submitted login fields (built-in email/name + any custom `login.fields`).
+  loginFields: z.record(z.string(), z.string()).optional(),
+  // Custom claims returned by authenticate(), embedded (namespaced) in the token.
+  customClaims: z.record(z.string(), z.unknown()).optional(),
+  // Checkpoint 3b — credentials returned by authenticate(), persisted into the
+  // per-session credential vault keyed by the minted userSub at code-mint time.
+  credentials: z
+    .array(
+      z.object({
+        key: z.string(),
+        secret: z.string(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional(),
   // Progressive/Incremental Authorization
   isIncremental: z.boolean().default(false),
   targetAppId: z.string().optional(),
@@ -105,6 +131,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const email = request.query['email'] as string | undefined;
     const name = request.query['name'] as string | undefined;
 
+    // Checkpoint 3a — gather all submitted login fields (email/name + any custom
+    // `login.fields`) for a configured authenticate() verifier. Values come from
+    // the GET query and, defensively, a urlencoded POST body. Reserved OAuth
+    // control params are excluded so they can't masquerade as login fields.
+    const loginFields = this.collectLoginFields(request);
+
     // Progressive/Incremental Authorization Parameters
     const isIncremental = request.query['incremental'] === 'true';
     const targetAppId = request.query['app_id'] as string | undefined;
@@ -135,6 +167,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       selectedTools,
+      loginFields,
     });
 
     if (isIncremental) {
@@ -152,7 +185,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, email, isIncremental, isFederated, selectedProviders, selectedTools } = this.state;
+    const { pendingAuthId, email, isIncremental, isFederated, selectedProviders, selectedTools, loginFields } =
+      this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -163,14 +197,29 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // Retrieve the pending authorization
     const localAuth = this.scope.auth as LocalPrimaryAuth;
 
+    // Checkpoint 3a — a configured custom `authenticate` verifier takes over the
+    // login-completion decision. When it is set, the built-in email requirement
+    // no longer applies (the verifier owns required-field semantics via
+    // `login.fields`).
+    const localOptions = localAuth.options as {
+      requireEmail?: boolean;
+      anonymousSubject?: string;
+      login?: LoginConfig;
+      authenticate?: (
+        input: { fields: Record<string, string> },
+        ctx: AuthenticateContext,
+      ) => Promise<AuthenticateResult>;
+    };
+    const authenticateFn = typeof localOptions.authenticate === 'function' ? localOptions.authenticate : undefined;
+
     // #468 — email opt-out for single-operator local setups.
     // `requireEmail` defaults to true (historical behavior). When explicitly
     // false, a non-incremental login without an email is allowed and the code
     // is minted against a stable anonymous subject (see createAuthorizationCode
-    // below). For incremental auth email was never required.
-    const localOptions = localAuth.options as { requireEmail?: boolean; anonymousSubject?: string };
+    // below). For incremental auth email was never required. A custom
+    // `authenticate` verifier bypasses this check entirely.
     const requireEmail = localOptions.requireEmail ?? true;
-    if (!isIncremental && !email && requireEmail) {
+    if (!authenticateFn && !isIncremental && !email && requireEmail) {
       this.logger.warn('Missing email in callback');
       this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Email is required'), 400));
       return;
@@ -205,6 +254,41 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       userSub = undefined;
     }
 
+    // Checkpoint 3a — run the custom verifier (non-incremental logins only).
+    // On success, derive the subject (explicit `sub` → subject strategy → the
+    // anonymous fallback) and stash custom claims for the minted token. On
+    // failure, re-render the login page with the error instead of proceeding.
+    if (authenticateFn && !isIncremental) {
+      const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
+      if (!result.ok) {
+        // Keep the pending auth alive so the user can retry on the re-rendered page.
+        this.respond(
+          httpRespond.html(this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result)),
+        );
+        return;
+      }
+      userSub =
+        result.sub ??
+        this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {}) ??
+        this.generateUserSub(localOptions.anonymousSubject ?? 'local-operator');
+      if (result.claims) {
+        this.state.set('customClaims', result.claims);
+      }
+      // Checkpoint 3b — stash credentials returned by authenticate() so they can
+      // be persisted into the per-session vault keyed by the minted userSub at
+      // code-mint time (createAuthorizationCode). Each credential is validated to
+      // have a string key + secret; malformed entries are dropped.
+      if (Array.isArray(result.credentials) && result.credentials.length > 0) {
+        const creds = result.credentials.filter(
+          (c): c is { key: string; secret: string; metadata?: Record<string, unknown> } =>
+            !!c && typeof c.key === 'string' && typeof c.secret === 'string',
+        );
+        if (creds.length > 0) {
+          this.state.set('credentials', creds);
+        }
+      }
+    }
+
     // Validate federated login is enabled for this authorization request
     if (isFederated && !pendingAuth.federatedLogin) {
       this.logger.warn('Federated login not enabled for this authorization request');
@@ -215,21 +299,55 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // Calculate skipped providers from federated login
     let skippedProviders: string[] | undefined;
     if (isFederated && pendingAuth.federatedLogin) {
-      // Require at least one provider to be selected
-      if (!selectedProviders || selectedProviders.length === 0) {
-        this.logger.warn('No federated providers selected');
-        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'No federated providers selected'), 400));
+      // Gate JWT issuance on the configured threshold. When top-level
+      // `auth.providers` are declared, the default minimum is 1 ("no JWT until
+      // ≥1 linked"); `federatedAuth.minProviders` raises it. The app-level
+      // federation path (no configured providers) keeps the historical ≥1 rule.
+      const federatedConfig = (
+        localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
+      ).federatedAuth;
+      // Default minimum is 1 in both the configured-providers and the legacy
+      // app-level federation paths (historical "≥1 selected" behavior).
+      const minProviders = federatedConfig?.minProviders ?? 1;
+      const requiredProviders = federatedConfig?.requiredProviders ?? [];
+
+      const selected = selectedProviders ?? [];
+
+      // Refuse to mint a token until the minimum number of providers is linked.
+      if (selected.length < minProviders) {
+        this.logger.warn(`Insufficient federated providers selected: ${selected.length} < ${minProviders}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage(
+              'invalid_request',
+              `At least ${minProviders} provider${minProviders === 1 ? '' : 's'} must be linked`,
+            ),
+            400,
+          ),
+        );
         return;
       }
 
       const allProviders = pendingAuth.federatedLogin.providerIds;
-      const selected = selectedProviders;
 
       // Validate selectedProviders against allowed providerIds
       const invalidProviders = selected.filter((id) => !allProviders.includes(id));
       if (invalidProviders.length > 0) {
         this.logger.warn(`Invalid provider IDs: ${invalidProviders.join(', ')}`);
         this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid provider selection'), 400));
+        return;
+      }
+
+      // Require every explicitly-required provider to be among the selected set.
+      const missingRequired = requiredProviders.filter((id) => !selected.includes(id));
+      if (missingRequired.length > 0) {
+        this.logger.warn(`Missing required providers: ${missingRequired.join(', ')}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('invalid_request', `Required provider(s) not linked: ${missingRequired.join(', ')}`),
+            400,
+          ),
+        );
         return;
       }
 
@@ -476,6 +594,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       skippedProviders,
+      // Checkpoint 3a — custom claims from authenticate()
+      customClaims,
+      // Checkpoint 3b — credentials from authenticate()
+      credentials,
     } = this.state;
 
     // Validate required fields before creating authorization code
@@ -515,6 +637,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       skippedProviderIds: skippedProviders,
       consentEnabled: consentEnabled,
       federatedLoginUsed: isFederated,
+      // Checkpoint 3a — custom claims to embed (namespaced) in the access token.
+      customClaims,
     });
 
     this.logger.info(
@@ -523,6 +647,30 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }${isFederated ? ` (federated with ${selectedProviders?.length || 0} providers)` : ''}`,
     );
     this.state.set('authorizationCode', code);
+
+    // Checkpoint 3b — persist authenticate() credentials into the per-session
+    // credential vault, keyed by the SAME userSub baked into the minted token.
+    // rotateVault() mints a fresh vaultId first so a reconnect starts EMPTY
+    // (prior ciphertext becomes undecryptable). Best-effort: a vault failure
+    // must not break the login (the code is already minted).
+    if (credentials && credentials.length > 0) {
+      const vault = localAuth.credentialVault;
+      if (vault) {
+        try {
+          const vaultId = await vault.rotateVault(userSub);
+          for (const cred of credentials) {
+            await vault.store(userSub, vaultId, cred.key, { secret: cred.secret, metadata: cred.metadata });
+          }
+          this.logger.info(`Persisted ${credentials.length} credential(s) to the session vault`);
+        } catch (err) {
+          this.logger.error(
+            `Failed to persist authenticate() credentials: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } else {
+        this.logger.warn('authenticate() returned credentials but no credential vault is configured; ignoring');
+      }
+    }
   }
 
   @Stage('redirectToClient')
@@ -565,6 +713,178 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }`,
     );
     this.respond(httpRespond.redirect(url.toString()));
+  }
+
+  /**
+   * Reserved OAuth/flow control params that must never be treated as custom
+   * login fields when collecting input for a custom `authenticate` verifier.
+   */
+  private static readonly RESERVED_LOGIN_PARAMS = new Set<string>([
+    'pending_auth_id',
+    'incremental',
+    'app_id',
+    'federated',
+    'providers',
+    'tools',
+    'csrf',
+    'action',
+    'app',
+    'state',
+    'code',
+    'redirect_uri',
+    'client_id',
+    'response_type',
+    'code_challenge',
+    'code_challenge_method',
+    'scope',
+    'resource',
+  ]);
+
+  /**
+   * Collect submitted login-field values (built-in `email`/`name` plus any
+   * custom `login.fields`) from the GET query and a urlencoded POST body.
+   * Reserved OAuth/flow control params are excluded so they cannot be forwarded
+   * to the verifier as if they were login fields. Only string values are kept.
+   */
+  private collectLoginFields(request: { query?: Record<string, unknown>; body?: unknown }): Record<string, string> {
+    const fields: Record<string, string> = {};
+    const absorb = (source: Record<string, unknown> | undefined) => {
+      if (!source || typeof source !== 'object') return;
+      for (const [key, value] of Object.entries(source)) {
+        if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
+        if (typeof value === 'string') {
+          fields[key] = value;
+        } else if (Array.isArray(value) && typeof value[0] === 'string') {
+          // Multi-valued field (e.g. duplicate query keys) — keep the first.
+          fields[key] = value[0];
+        }
+      }
+    };
+    absorb(request.query as Record<string, unknown> | undefined);
+    // Defensive: some adapters parse a urlencoded POST body into request.body.
+    if (request.body && typeof request.body === 'object' && !Array.isArray(request.body)) {
+      absorb(request.body as Record<string, unknown>);
+    }
+    return fields;
+  }
+
+  /**
+   * Build the {@link AuthenticateContext} from the flow scope and invoke the
+   * configured verifier. Verifier exceptions are caught and converted to a
+   * generic failure so a throwing verifier never produces a 500.
+   */
+  private async runAuthenticate(
+    authenticateFn: (
+      input: { fields: Record<string, string> },
+      ctx: AuthenticateContext,
+    ) => Promise<AuthenticateResult>,
+    fields: Record<string, string>,
+    pendingAuth: { clientId: string },
+  ): Promise<AuthenticateResult> {
+    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    const ctx: AuthenticateContext = {
+      get: <T>(token: unknown): T => this.get(token as Parameters<typeof this.get>[0]) as T,
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => this.contextFetch(input, init),
+      logger: this.scope.logger.child('authenticate'),
+      clientId: pendingAuth.clientId,
+      clientName,
+    };
+
+    try {
+      const result = await authenticateFn({ fields }, ctx);
+      if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
+        this.logger.error('authenticate() returned a malformed result');
+        return { ok: false, message: 'Authentication failed. Please try again.' };
+      }
+      return result;
+    } catch (err) {
+      // A throwing verifier must not crash the flow — reject cleanly and let the
+      // user retry. The detailed error is logged server-side only.
+      this.logger.error(`authenticate() threw: ${err instanceof Error ? err.message : String(err)}`);
+      return { ok: false, message: 'Authentication failed. Please try again.' };
+    }
+  }
+
+  /**
+   * Outbound fetch handed to the verifier. Routes through the auth instance's
+   * `fetch` when available (so tests / adapters can intercept it), else the
+   * global fetch.
+   */
+  private contextFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const auth = this.scope.auth as { fetch?: (i: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+    if (typeof auth?.fetch === 'function') {
+      return auth.fetch(input, init);
+    }
+    return fetch(input, init);
+  }
+
+  /**
+   * Resolve a human-readable client name for the verifier context. Uses the
+   * CIMD `client_name` when the client_id is a CIMD URL and resolvable; falls
+   * back to the raw client_id.
+   */
+  private async resolveClientName(clientId: string): Promise<string> {
+    try {
+      const localAuth = this.scope.auth as {
+        cimdService?: {
+          enabled?: boolean;
+          isCimdClientId?: (id: string) => boolean;
+          resolveClientMetadata?: (id: string) => Promise<{ metadata?: { client_name?: string } }>;
+        };
+      };
+      const cimd = localAuth.cimdService;
+      if (cimd?.enabled && cimd.isCimdClientId?.(clientId) && cimd.resolveClientMetadata) {
+        const resolution = await cimd.resolveClientMetadata(clientId);
+        if (resolution?.metadata?.client_name) return resolution.metadata.client_name;
+      }
+    } catch {
+      // Best-effort only; fall back to the client_id.
+    }
+    return clientId;
+  }
+
+  /**
+   * Derive a subject from the configured login subject strategy.
+   *
+   * - `per-account`: hash the value of `login.subject.fromField` into a stable
+   *   subject (same account → same `sub`).
+   * - otherwise (`per-session` / unset): return undefined so the caller falls
+   *   back to the anonymous subject.
+   */
+  private deriveSubjectFromStrategy(
+    login: LoginConfig | undefined,
+    fields: Record<string, string>,
+  ): string | undefined {
+    const subject = login?.subject;
+    if (subject?.strategy === 'per-account' && subject.fromField) {
+      const seed = fields[subject.fromField];
+      if (seed) return this.generateUserSub(seed);
+    }
+    return undefined;
+  }
+
+  /**
+   * Re-render the local login page after a failed authenticate(), surfacing the
+   * verifier's message (and pre-selecting `retryField`). Submitted values are
+   * preserved on the form so the user does not have to re-enter everything.
+   */
+  private renderLoginRetryPage(
+    pendingAuth: { clientId: string; scopes: string[] },
+    login: LoginConfig | undefined,
+    fields: Record<string, string>,
+    failure: { message: string; retryField?: string },
+  ): string {
+    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const ctx: LoginRenderContext = {
+      clientId: pendingAuth.clientId,
+      clientName: pendingAuth.clientId,
+      scopes: pendingAuth.scopes ?? [],
+      pendingAuthId: this.state.required.pendingAuthId,
+      callbackPath,
+      fields: login?.fields ?? {},
+      error: failure.message,
+    };
+    return renderLocalLoginPage(login, ctx, fields);
   }
 
   /**

@@ -63,6 +63,12 @@ export interface AuthorizationCodeRecord {
   federatedLoginUsed?: boolean;
   /** Pending auth ID for token migration (federated login) */
   pendingAuthId?: string;
+  /**
+   * Custom claims returned by a local `authenticate` verifier (Checkpoint 3a).
+   * Embedded (namespaced) in the minted access token. Reserved claims
+   * (sub/iss/exp/…) are stripped when signed.
+   */
+  customClaims?: Record<string, unknown>;
 }
 
 /**
@@ -192,6 +198,8 @@ export const authorizationCodeRecordSchema = z.object({
   consentEnabled: z.boolean().optional(),
   federatedLoginUsed: z.boolean().optional(),
   pendingAuthId: z.string().optional(),
+  // Custom claims from a local authenticate() verifier (Checkpoint 3a).
+  customClaims: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -215,6 +223,8 @@ export interface CreateCodeRecordParams {
   federatedLoginUsed?: boolean;
   // Token migration ID (for federated auth)
   pendingAuthId?: string;
+  // Custom claims from a local authenticate() verifier (Checkpoint 3a).
+  customClaims?: Record<string, unknown>;
 }
 
 /**
@@ -296,6 +306,7 @@ export function buildCodeRecord(params: CreateCodeRecordParams): AuthorizationCo
     consentEnabled: params.consentEnabled,
     federatedLoginUsed: params.federatedLoginUsed,
     pendingAuthId: params.pendingAuthId,
+    customClaims: params.customClaims,
   };
 }
 

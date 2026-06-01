@@ -54,6 +54,8 @@ export class Server {}
 | `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }`      | `'memory'`        | Token storage backend (see [Token Storage](#token-storage))  |
 | `requireEmail`       | `boolean`                                                             | `true`            | Require an email at the login callback (see [Single-Operator](#single-operator-mode-requireemail-false)) |
 | `anonymousSubject`   | `string`                                                              | `'local-operator'`| Stable `sub` minted when `requireEmail: false` and no email is provided |
+| `login`              | `LoginConfig`                                                        | _unset_           | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
+| `authenticate`       | `(input, ctx) => Promise<AuthenticateResult>`                        | _unset_           | Custom verification step run at the login callback before a token is minted — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
 | `consent`            | `ConsentConfig`                                                       | `{ enabled: false }` | Consent / tool-authorization config (see [Consent](#consent-and-tool-authorization)) |
 | `allowDefaultPublic` | `boolean`                                                             | `false`           | Allow unauthenticated access                                 |
 | `anonymousScopes`    | `string[]`                                                            | `['anonymous']`   | Scopes for anonymous sessions                                |
@@ -188,6 +190,204 @@ auth: {
 ```
 
 When `requireEmail` is `false` and no email is supplied, the callback derives a **stable** `sub` from `anonymousSubject` (default `'local-operator'`), so the operator keeps a consistent identity across logins. With the default `requireEmail: true`, a non-incremental login without an email is rejected with a 400.
+
+---
+
+## Custom Login Fields and Verification (`login` / `authenticate`)
+
+Local mode ships a zero-config email/name login page. To collect different
+credentials and verify them yourself — for example an API key checked against an
+upstream service — add a declarative `login` config and an `authenticate`
+verifier. **Both are optional; omitting them preserves the default login page and
+flow exactly.**
+
+### Declarative login fields
+
+`login.fields` appends (or, in the built-in page, replaces the default email/name
+inputs with) custom fields. Each field is keyed by its form name:
+
+```typescript
+auth: {
+  mode: 'local',
+  login: {
+    title: 'Sign in with your API key',
+    subtitle: 'Paste your key to continue',
+    logoUri: 'https://acme.example/logo.png',
+    fields: {
+      apiKey: { type: 'password', label: 'API Key', required: true, placeholder: 'sk-...' },
+      region: {
+        type: 'select',
+        label: 'Region',
+        options: [
+          { value: 'us', label: 'United States' },
+          { value: 'eu', label: 'Europe' },
+        ],
+      },
+    },
+    // Derive a stable subject from a submitted field (same value → same `sub`).
+    subject: { fromField: 'apiKey', strategy: 'per-account' },
+  },
+}
+```
+
+Field `type` is one of `'text' | 'password' | 'email' | 'select' | 'hidden'`.
+For a `select`, supply `options: Array<{ value; label }>`.
+
+For full control over the markup, provide `login.render` instead — it receives a
+`LoginRenderContext` (`clientId`, `clientName`, `logoUri`, `scopes`,
+`pendingAuthId`, `callbackPath`, `fields`, and `error` on re-render) and must
+return a complete HTML document. The form must submit `pending_auth_id` and the
+field values back to `callbackPath`.
+
+### The `authenticate` verifier
+
+`authenticate` runs at the login callback before any token is minted. It receives
+the submitted fields and a context, and returns a discriminated result:
+
+```typescript
+auth: {
+  mode: 'local',
+  login: { fields: { apiKey: { type: 'password', label: 'API Key', required: true } } },
+  authenticate: async (input, ctx) => {
+    // Verify the submitted credential (e.g. against an upstream API).
+    const res = await ctx.fetch('https://api.example.com/verify', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${input.fields.apiKey}` },
+    });
+    if (!res.ok) {
+      return { ok: false, message: 'Invalid API key', retryField: 'apiKey' };
+    }
+    const { accountId, tier } = (await res.json()) as { accountId: string; tier: string };
+    return {
+      ok: true,
+      sub: accountId,                 // explicit subject (optional)
+      claims: { tenantId: accountId, plan: tier }, // custom JWT claims
+    };
+  },
+}
+```
+
+- **`input.fields`** — the submitted login fields (built-in `email`/`name` plus
+  any `login.fields`). Reserved OAuth/flow-control params (`pending_auth_id`,
+  `scope`, `client_id`, `redirect_uri`, `code`, …) are never included.
+- **`ctx`** — `{ get<T>(token), fetch(input, init?), logger, clientId?, clientName? }`.
+  Use `ctx.get` to resolve DI services and `ctx.fetch` for outbound verification.
+- **On `{ ok: true }`** — a token is minted. The subject is `result.sub`, else the
+  `login.subject` strategy (`per-account` hashes `fromField`), else the
+  `anonymousSubject` fallback. `result.claims` are embedded in the access token.
+- **On `{ ok: false }`** — the login page is re-rendered with `message` shown and
+  submitted values preserved; **no code is issued**. Use `retryField` to hint
+  which field to correct.
+
+When `authenticate` is set, the built-in **email requirement no longer applies** —
+your verifier owns required-field semantics via `login.fields`.
+
+### Custom claims in the token
+
+`result.claims` are merged into the signed access token alongside the standard
+claims. **Reserved claims (`sub`, `iss`, `aud`, `exp`, `iat`, `nbf`, `jti`,
+`scope`, `email`, `name`, `picture`, `roles`, `consent`, `federated`) are
+stripped** so a verifier can never forge identity, lifetime, or scope. Read them
+back from the auth context (e.g. via an authorities claims pipe) or directly off
+the verified JWT.
+
+---
+
+## Per-Session Credential Vault (`this.credentials`)
+
+An `{ ok: true }` result may return `credentials: Array<{ key; secret; metadata? }>`.
+FrontMCP **persists** these into a built-in, per-session, **AES-256-GCM-encrypted**
+credential vault keyed by the authenticated subject (`sub`), and exposes them to
+tools via `this.credentials`. The vault is enabled automatically in `local` (and
+`remote`) modes — there is nothing to wire up.
+
+```typescript
+auth: {
+  mode: 'local',
+  login: {
+    fields: { apiKey: { type: 'password', label: 'API Key', required: true } },
+  },
+  authenticate: async (input) => {
+    const apiKey = input.fields['apiKey'];
+    if (!(await isValid(apiKey))) return { ok: false, message: 'Invalid API key' };
+    return {
+      ok: true,
+      // Persisted, encrypted, keyed by the minted `sub`:
+      credentials: [{ key: 'acme', secret: apiKey, metadata: { baseUrl: 'https://acme.example' } }],
+    };
+  },
+}
+```
+
+Read credentials from any tool via `this.credentials`:
+
+```typescript
+@Tool({ name: 'call_acme' })
+class CallAcmeTool extends ToolContext {
+  async execute(input: Input): Promise<Output> {
+    const cred = await this.credentials.get('acme'); // { secret, metadata } | undefined
+    if (!cred) {
+      // Ask the agent to connect it mid-session via a framework-signed URL:
+      const res = await this.credentials.requireConnect({ key: 'acme' });
+      if (!res.connected) return { connectUrl: res.resumeUrl };
+    }
+    const keys = await this.credentials.list(); // ['acme', …]
+    // use cred.secret / cred.metadata …
+  }
+}
+```
+
+### Vault behavior and security
+
+- **At-rest encryption** — credentials are sealed with AES-256-GCM via the shared
+  `VaultEncryption` primitive. The per-record key is derived (HKDF) from a fresh
+  per-session `vaultId` plus a pepper from `VAULT_SECRET ?? JWT_SECRET`. When
+  neither is set, a random per-process pepper is used (logged with a warning) and
+  credentials do not survive a restart — never plaintext.
+- **Per-session rotation** — every fresh authorize mints a new `vaultId`, so a
+  **disconnect + reconnect yields an empty vault** and the prior session's
+  ciphertext becomes undecryptable.
+- **Subject isolation** — the derived key mixes in the `sub`, so one subject can
+  never read another's credentials.
+- **Backed by `tokenStorage`** — the vault uses the same `auth.tokenStorage`
+  backend (memory / Redis / SQLite), so it is persistent wherever your token
+  stores are.
+- **No PII** — only the credential `secret`/`metadata` you pass are stored
+  (encrypted); FrontMCP never persists login PII.
+
+### `this.credentials` API
+
+| Method                                  | Returns                                   | Description                                                                 |
+| --------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------- |
+| `get(key)`                              | `Promise<{ secret, metadata } \| undefined>` | Decrypt a credential for the request's subject.                             |
+| `list()`                                | `Promise<string[]>`                       | List credential keys in the current session vault.                          |
+| `requireConnect({ key, context? })`     | `Promise<RequireConnectResult>`           | Return the credential if connected, else a framework-signed resume URL.     |
+
+### Mid-session connect (`requireConnect` + `/oauth/connect`)
+
+When a tool needs a credential that is not connected, `requireConnect({ key })`
+returns a **framework-signed**, short-lived resume URL
+(`/oauth/connect?token=…`). The token is an HMAC over `{ sub, key, context, exp }`
+signed with the server secret and verified constant-time, so it cannot be
+retargeted to another subject/key. Opening the URL renders a single-field
+add-credential page (reusing your `login.fields`); on submit FrontMCP re-invokes
+your `authenticate()` with a `resume` context and **additively** stores the
+returned credential into the existing session vault:
+
+```typescript
+authenticate: async (input) => {
+  if (input.resume) {
+    // Mid-session connect: { sub, key, context? } is set.
+    const value = input.fields[Object.keys(input.fields)[0]];
+    if (!(await isValid(value))) return { ok: false, message: 'Invalid value' };
+    return { ok: true, credentials: [{ key: input.resume.key, secret: value }] };
+  }
+  // …initial login branch…
+}
+```
+
+If the subject's vault has been rotated away (the session is gone), the connect
+is **refused** — a stale link can never resurrect a dead session.
 
 ---
 

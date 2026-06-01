@@ -590,6 +590,18 @@
                 "Loading `clientId` from environment variables instead of hardcoding",
                 "Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls"
               ]
+            },
+            {
+              "name": "local-credential-vault",
+              "description": "Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "vault", "credentials", "this-credentials"],
+              "features": [
+                "Returning `credentials: [{ key, secret, metadata? }]` from `authenticate()` so FrontMCP persists them encrypted, keyed by the minted `sub`",
+                "Reading a per-session credential from a tool via `this.credentials.get(key)` (no `this.authProviders` wiring needed)",
+                "Prompting the agent to connect a missing credential mid-session with `this.credentials.requireConnect({ key })` (framework-signed `/oauth/connect` URL)",
+                "Understanding per-session rotation: a reconnect yields an empty vault and old ciphertext is undecryptable"
+              ]
             }
           ]
         },

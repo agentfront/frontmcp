@@ -57,8 +57,13 @@ export {
   buildFederatedLoginPage,
   buildToolConsentPage,
   buildLoginPage,
+  buildConnectPage,
+  buildConnectSuccessPage,
   buildErrorPage,
   renderToHtml,
+  // Local-login rendering helper (Checkpoint 3a)
+  renderLocalLoginPage,
+  toLoginExtraFields,
 } from './ui';
 export type {
   ThemeColors,
@@ -68,6 +73,7 @@ export type {
   AppAuthCard,
   ProviderCard,
   ToolCard,
+  LoginExtraField,
 } from './ui';
 
 // ============================================
@@ -195,6 +201,17 @@ export {
   isSoonExpiring,
   isSoonExpiringProvider,
   tryJwtExp,
+  // Session Credential Vault (Checkpoint 3b)
+  SessionCredentialVault,
+  createSessionCredentialVault,
+  // Credential resume-link signing
+  signCredentialResumeToken,
+  verifyCredentialResumeToken,
+  buildCredentialResumeUrl,
+  DEFAULT_RESUME_TTL_MS,
+  // Credentials accessor (`this.credentials`)
+  CREDENTIALS_ACCESSOR,
+  CredentialsAccessorImpl,
 } from './session';
 export type {
   // OAuth Authorization Store types
@@ -306,6 +323,20 @@ export type {
   TokenRefreshCtx,
   TokenRefreshResult,
   TokenRefresher,
+  // Session Credential Vault types (Checkpoint 3b)
+  StoredCredential,
+  SessionCredentialVaultOptions,
+  CreateSessionCredentialVaultOptions,
+  // Credential resume-link types
+  CredentialResumePayload,
+  // Credentials accessor types
+  CredentialsAccessor,
+  CredentialValue,
+  CredentialNotConnected,
+  CredentialConnected,
+  RequireConnectResult,
+  RequireConnectOptions,
+  CredentialsAccessorDeps,
 } from './session';
 
 // ============================================

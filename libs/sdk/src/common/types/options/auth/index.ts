@@ -16,6 +16,7 @@ export type {
   ConsentConfig,
   FederatedAuthConfig,
   IncrementalAuthConfig,
+  UpstreamProviderOptions,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
@@ -23,6 +24,18 @@ export type {
   LocalOrRemoteAuthOptionsInterface,
   AuthOptionsInterface,
   AuthMode,
+  // Local login customization + authenticate() (Checkpoint 3a)
+  LoginFieldConfig,
+  LoginSubjectConfig,
+  LoginConfig,
+  LoginRenderContext,
+  AuthenticateInput,
+  AuthenticateContext,
+  AuthenticateCredential,
+  AuthenticateSuccess,
+  AuthenticateFailure,
+  AuthenticateResult,
+  AuthenticateFn,
   // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
@@ -46,6 +59,7 @@ export {
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
+  upstreamProviderSchema,
 } from '@frontmcp/auth';
 
 export type {
@@ -68,6 +82,8 @@ export type {
   FederatedAuthConfigInput,
   IncrementalAuthConfigZod,
   IncrementalAuthConfigInput,
+  UpstreamProviderOptionsZod,
+  UpstreamProviderOptionsInput,
   RedisConfig,
 } from '@frontmcp/auth';
 
@@ -86,7 +102,14 @@ export type { TransparentAuthOptions, TransparentAuthOptionsInput } from '@front
 // ============================================
 // LOCAL / REMOTE MODE SCHEMAS
 // ============================================
-export { localAuthSchema, remoteAuthSchema, orchestratedLocalSchema, orchestratedRemoteSchema } from '@frontmcp/auth';
+export {
+  localAuthSchema,
+  remoteAuthSchema,
+  loginConfigSchema,
+  authenticateFnSchema,
+  orchestratedLocalSchema,
+  orchestratedRemoteSchema,
+} from '@frontmcp/auth';
 export type {
   LocalAuthOptions,
   LocalAuthOptionsInput,

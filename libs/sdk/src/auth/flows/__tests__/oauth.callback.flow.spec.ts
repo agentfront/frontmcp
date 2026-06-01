@@ -143,3 +143,165 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
     expect(typeof state.userSub).toBe('string');
   });
 });
+
+describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => {
+  it('on ok:true derives sub + stashes custom claims and proceeds (no email required)', async () => {
+    const authenticate = jest.fn().mockResolvedValue({
+      ok: true,
+      sub: 'verified-user-1',
+      claims: { tenantId: 'acme', plan: 'pro' },
+    });
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', authenticate } as any,
+    });
+    const pendingAuthId = await seedPendingAuth(scope);
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/oauth/callback',
+      // No email — authenticate() bypasses the email requirement.
+      query: { pending_auth_id: pendingAuthId, apiKey: 'secret-123' },
+    });
+
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { output, state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+
+    // Verifier was called with the submitted (non-reserved) login fields.
+    expect(authenticate).toHaveBeenCalledTimes(1);
+    expect(authenticate.mock.calls[0][0]).toEqual({ fields: { apiKey: 'secret-123' } });
+    // No error page; sub comes from the verifier; claims are stashed for the token.
+    expect(output).toBeUndefined();
+    expect(state.userSub).toBe('verified-user-1');
+    expect(state.customClaims).toEqual({ tenantId: 'acme', plan: 'pro' });
+  });
+
+  it('excludes reserved OAuth/flow-control params from the fields passed to authenticate()', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true, sub: 'u2' });
+    const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate } as any });
+    const pendingAuthId = await seedPendingAuth(scope);
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/oauth/callback',
+      query: {
+        pending_auth_id: pendingAuthId,
+        // Reserved OAuth / flow-control params that must NOT reach the verifier.
+        scope: 'read',
+        client_id: 'x',
+        redirect_uri: 'http://x/cb',
+        code: 'abc',
+        csrf: 'c',
+        // A legitimate custom login field.
+        apiKey: 'k',
+      },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+
+    const fields = authenticate.mock.calls[0][0].fields as Record<string, string>;
+    expect(fields).toEqual({ apiKey: 'k' });
+    expect(fields['scope']).toBeUndefined();
+    expect(fields['client_id']).toBeUndefined();
+    expect(fields['redirect_uri']).toBeUndefined();
+    expect(fields['code']).toBeUndefined();
+    expect(fields['pending_auth_id']).toBeUndefined();
+  });
+
+  it('on ok:false re-renders the login page with the error message (does not proceed)', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: false, message: 'Invalid API key', retryField: 'apiKey' });
+    const scope = createMockScopeEntry({
+      auth: {
+        mode: 'local',
+        authenticate,
+        login: { fields: { apiKey: { type: 'password', label: 'API Key' } } },
+      } as any,
+    });
+    const pendingAuthId = await seedPendingAuth(scope);
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/oauth/callback',
+      query: { pending_auth_id: pendingAuthId, apiKey: 'wrong' },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { output, state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+
+    // The flow responds with the re-rendered login page (HTML 200), not a redirect.
+    expect(output?.kind).toBe('html');
+    expect(String(output?.body)).toContain('Invalid API key');
+    expect(String(output?.body)).toContain('name="apiKey"');
+    // Submitted value is preserved on the re-render.
+    expect(String(output?.body)).toContain('value="wrong"');
+    // No subject derived — login did not complete.
+    expect(state.userSub).toBeUndefined();
+  });
+
+  it('derives sub from the per-account subject strategy when no explicit sub is returned', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true }); // no sub
+    const mk = async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'local',
+          authenticate,
+          login: { subject: { fromField: 'account', strategy: 'per-account' } },
+        } as any,
+      });
+      const pendingAuthId = await seedPendingAuth(scope);
+      const input = createMockHttpRequest({
+        method: 'GET',
+        path: '/oauth/callback',
+        query: { pending_auth_id: pendingAuthId, account: 'acct-42' },
+      });
+      const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+      const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+      return state.userSub as string;
+    };
+    const subA = await mk();
+    const subB = await mk();
+    // Same account → same stable sub.
+    expect(subA).toBeTruthy();
+    expect(subB).toBe(subA);
+  });
+
+  it('captures credentials returned by authenticate() into flow state (Checkpoint 3b)', async () => {
+    const authenticate = jest.fn().mockResolvedValue({
+      ok: true,
+      sub: 'cred-user-1',
+      credentials: [
+        { key: 'acme', secret: 'sk-acme', metadata: { region: 'us' } },
+        // Malformed entries must be dropped.
+        { key: 'bad' }, // no secret
+        { secret: 'orphan' }, // no key
+      ],
+    });
+    const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate } as any });
+    const pendingAuthId = await seedPendingAuth(scope);
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/oauth/callback',
+      query: { pending_auth_id: pendingAuthId, apiKey: 'k' },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+
+    // Only the well-formed credential is captured for downstream persistence.
+    expect(state.credentials).toEqual([{ key: 'acme', secret: 'sk-acme', metadata: { region: 'us' } }]);
+  });
+
+  it('a throwing verifier is handled cleanly (re-render, no crash)', async () => {
+    const authenticate = jest.fn().mockRejectedValue(new Error('upstream down'));
+    const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate } as any });
+    const pendingAuthId = await seedPendingAuth(scope);
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/oauth/callback',
+      query: { pending_auth_id: pendingAuthId, apiKey: 'k' },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { output } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+    // Falls back to a generic failure page, never a 500/throw.
+    expect(output?.kind).toBe('html');
+    expect(String(output?.body)).toContain('Authentication failed');
+  });
+});

@@ -16,6 +16,7 @@ export type {
   ConsentConfig,
   FederatedAuthConfig,
   IncrementalAuthConfig,
+  UpstreamProviderOptions,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
@@ -23,6 +24,18 @@ export type {
   LocalOrRemoteAuthOptionsInterface,
   AuthOptionsInterface,
   AuthMode,
+  // Local login customization + authenticate() (Checkpoint 3a)
+  LoginFieldConfig,
+  LoginSubjectConfig,
+  LoginConfig,
+  LoginRenderContext,
+  AuthenticateInput,
+  AuthenticateContext,
+  AuthenticateCredential,
+  AuthenticateSuccess,
+  AuthenticateFailure,
+  AuthenticateResult,
+  AuthenticateFn,
   // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
@@ -46,6 +59,7 @@ export {
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
+  upstreamProviderSchema,
 } from './shared.schemas';
 
 export type {
@@ -68,6 +82,8 @@ export type {
   FederatedAuthConfigInput,
   IncrementalAuthConfig as IncrementalAuthConfigZod,
   IncrementalAuthConfigInput,
+  UpstreamProviderOptions as UpstreamProviderOptionsZod,
+  UpstreamProviderOptionsInput,
   RedisConfig,
 } from './shared.schemas';
 
@@ -89,6 +105,9 @@ export type { TransparentAuthOptions, TransparentAuthOptionsInput } from './tran
 export {
   localAuthSchema,
   remoteAuthSchema,
+  // Local login customization + authenticate() schemas (Checkpoint 3a)
+  loginConfigSchema,
+  authenticateFnSchema,
   // Deprecated compat aliases
   orchestratedLocalSchema,
   orchestratedRemoteSchema,

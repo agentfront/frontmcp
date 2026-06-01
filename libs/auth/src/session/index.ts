@@ -86,6 +86,34 @@ export type {
   AuthorizationVault,
 } from './authorization-vault';
 
+// Session Credential Vault (Checkpoint 3b) — per-session encrypted credential store
+export { SessionCredentialVault } from './session-credential-vault';
+export type { StoredCredential, SessionCredentialVaultOptions } from './session-credential-vault';
+export { createSessionCredentialVault } from './session-credential-vault.factory';
+export type { CreateSessionCredentialVaultOptions } from './session-credential-vault.factory';
+
+// Credential resume-link signing (framework-signed mid-session connect URL)
+export {
+  signCredentialResumeToken,
+  verifyCredentialResumeToken,
+  buildCredentialResumeUrl,
+  DEFAULT_RESUME_TTL_MS,
+} from './credential-resume-link';
+export type { CredentialResumePayload } from './credential-resume-link';
+
+// Credentials accessor (`this.credentials` ToolContext API)
+export { CREDENTIALS_ACCESSOR } from './credentials-accessor';
+export type {
+  CredentialsAccessor,
+  CredentialValue,
+  CredentialNotConnected,
+  CredentialConnected,
+  RequireConnectResult,
+  RequireConnectOptions,
+} from './credentials-accessor';
+export { CredentialsAccessorImpl } from './credentials-accessor.impl';
+export type { CredentialsAccessorDeps } from './credentials-accessor.impl';
+
 // Vault Encryption
 export { encryptedDataSchema, encryptedVaultEntrySchema, VaultEncryption } from './vault-encryption';
 export type {

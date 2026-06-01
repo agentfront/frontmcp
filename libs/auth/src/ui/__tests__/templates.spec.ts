@@ -3,16 +3,16 @@
  */
 import {
   buildConsentPage,
-  buildIncrementalAuthPage,
-  buildFederatedLoginPage,
-  buildToolConsentPage,
-  buildLoginPage,
   buildErrorPage,
-  renderToHtml,
+  buildFederatedLoginPage,
+  buildIncrementalAuthPage,
+  buildLoginPage,
+  buildToolConsentPage,
   escapeHtml,
-  AppAuthCard,
-  ProviderCard,
-  ToolCard,
+  renderToHtml,
+  type AppAuthCard,
+  type ProviderCard,
+  type ToolCard,
 } from '../templates';
 
 describe('escapeHtml (re-export)', () => {
@@ -687,6 +687,81 @@ describe('buildLoginPage', () => {
 
     expect(html).not.toContain('<script>alert("xss")</script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  // --------------------------------------------------------------
+  // Checkpoint 3a — extended login page (custom fields/title/error)
+  // --------------------------------------------------------------
+
+  it('renders custom fields in place of the default email/name inputs', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      extraFields: [
+        { name: 'apiKey', type: 'password', label: 'API Key', required: true, placeholder: 'sk-...' },
+        {
+          name: 'region',
+          type: 'select',
+          label: 'Region',
+          options: [
+            { value: 'us', label: 'United States' },
+            { value: 'eu', label: 'Europe' },
+          ],
+        },
+      ],
+    });
+
+    // Custom fields are present…
+    expect(html).toContain('name="apiKey"');
+    expect(html).toContain('type="password"');
+    expect(html).toContain('API Key');
+    expect(html).toContain('<select');
+    expect(html).toContain('United States');
+    // …and the default email input is gone (replaced).
+    expect(html).not.toContain('name="email"');
+    expect(html).not.toContain('(optional)');
+  });
+
+  it('renders an error banner when provided', () => {
+    const html = buildLoginPage({ ...defaultParams, error: 'Invalid API key' });
+    expect(html).toContain('Invalid API key');
+  });
+
+  it('escapes XSS in an error banner', () => {
+    const html = buildLoginPage({ ...defaultParams, error: '<img src=x onerror=alert(1)>' });
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img');
+  });
+
+  it('uses a custom title, subtitle, and logo', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      title: 'Welcome Back',
+      subtitle: 'Enter your credentials',
+      logoUri: 'https://acme.example/logo.png',
+    });
+    expect(html).toContain('Welcome Back');
+    expect(html).toContain('Enter your credentials');
+    expect(html).toContain('https://acme.example/logo.png');
+    // Default heading is overridden.
+    expect(html).not.toContain('>Sign In<');
+  });
+
+  it('renders a hidden field without a visible label', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      extraFields: [{ name: 'tenant', type: 'hidden', value: 'acme' }],
+    });
+    expect(html).toContain('type="hidden"');
+    expect(html).toContain('name="tenant"');
+    expect(html).toContain('value="acme"');
+  });
+
+  it('pre-fills custom field values (re-render after error)', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      extraFields: [{ name: 'username', type: 'text', label: 'Username', value: 'alice' }],
+    });
+    expect(html).toContain('value="alice"');
   });
 });
 

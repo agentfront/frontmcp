@@ -19,40 +19,56 @@ import {
 
 // --- Mocks -----------------------------------------------------------------
 
-const connectMemory = jest.fn().mockResolvedValue(undefined);
-const connectRedis = jest.fn().mockResolvedValue(undefined);
-const MemoryStorageAdapterCtor = jest.fn().mockImplementation(() => ({
-  __kind: 'memory',
-  connect: connectMemory,
-}));
-const RedisStorageAdapterCtor = jest.fn().mockImplementation((opts: unknown) => ({
-  __kind: 'redis',
-  opts,
-  connect: connectRedis,
-}));
-
-// Provide only the two constructors the factory imports at runtime. Avoid
-// `requireActual` so the real storage module (and any background timers/handles
-// it might initialize) is never loaded — that previously left a worker hanging.
-jest.mock('@frontmcp/utils', () => ({
-  MemoryStorageAdapter: MemoryStorageAdapterCtor,
-  RedisStorageAdapter: RedisStorageAdapterCtor,
-}));
-
-const connectSqlite = jest.fn().mockResolvedValue(undefined);
-const SqliteStorageAdapterCtor = jest.fn().mockImplementation((opts: unknown) => ({
-  __kind: 'sqlite',
-  opts,
-  connect: connectSqlite,
-}));
+// Define spies INSIDE the jest.mock factories. jest.mock is hoisted above the
+// subject import, so the factory runs before any top-level const initializes —
+// referencing outer consts (even `mock`-prefixed) throws a temporal-dead-zone
+// ReferenceError. Spies are exposed on the mocked module and retrieved below.
+// Avoiding `requireActual` also keeps the real storage module (and its timers)
+// from loading, which previously left a worker hanging.
+jest.mock('@frontmcp/utils', () => {
+  const connectMemory = jest.fn().mockResolvedValue(undefined);
+  const connectRedis = jest.fn().mockResolvedValue(undefined);
+  return {
+    MemoryStorageAdapter: jest.fn().mockImplementation(() => ({ __kind: 'memory', connect: connectMemory })),
+    RedisStorageAdapter: jest
+      .fn()
+      .mockImplementation((opts: unknown) => ({ __kind: 'redis', opts, connect: connectRedis })),
+    __connectMemory: connectMemory,
+    __connectRedis: connectRedis,
+  };
+});
 
 jest.mock(
   '@frontmcp/storage-sqlite',
-  () => ({
-    SqliteStorageAdapter: SqliteStorageAdapterCtor,
-  }),
+  () => {
+    const connectSqlite = jest.fn().mockResolvedValue(undefined);
+    return {
+      SqliteStorageAdapter: jest
+        .fn()
+        .mockImplementation((opts: unknown) => ({ __kind: 'sqlite', opts, connect: connectSqlite })),
+      __connectSqlite: connectSqlite,
+    };
+  },
   { virtual: true },
 );
+
+// Retrieve the in-factory spies for assertions (evaluated after hoisting → no TDZ).
+const utilsMock = jest.requireMock('@frontmcp/utils') as {
+  MemoryStorageAdapter: jest.Mock;
+  RedisStorageAdapter: jest.Mock;
+  __connectMemory: jest.Mock;
+  __connectRedis: jest.Mock;
+};
+const sqliteMock = jest.requireMock('@frontmcp/storage-sqlite') as {
+  SqliteStorageAdapter: jest.Mock;
+  __connectSqlite: jest.Mock;
+};
+const mockMemoryStorageAdapterCtor = utilsMock.MemoryStorageAdapter;
+const mockRedisStorageAdapterCtor = utilsMock.RedisStorageAdapter;
+const mockSqliteStorageAdapterCtor = sqliteMock.SqliteStorageAdapter;
+const connectMemory = utilsMock.__connectMemory;
+const connectRedis = utilsMock.__connectRedis;
+const connectSqlite = sqliteMock.__connectSqlite;
 
 describe('token-storage.factory', () => {
   beforeEach(() => {
@@ -96,7 +112,7 @@ describe('token-storage.factory', () => {
     it('returns a connected memory adapter for undefined config', async () => {
       const adapter = (await createTokenStorageAdapter(undefined)) as unknown as { __kind: string };
       expect(adapter.__kind).toBe('memory');
-      expect(MemoryStorageAdapterCtor).toHaveBeenCalledTimes(1);
+      expect(mockMemoryStorageAdapterCtor).toHaveBeenCalledTimes(1);
       expect(connectMemory).toHaveBeenCalledTimes(1);
     });
 
@@ -117,7 +133,7 @@ describe('token-storage.factory', () => {
       })) as unknown as { __kind: string };
 
       expect(adapter.__kind).toBe('sqlite');
-      expect(SqliteStorageAdapterCtor).toHaveBeenCalledWith({
+      expect(mockSqliteStorageAdapterCtor).toHaveBeenCalledWith({
         path: '/tmp/auth.sqlite',
         encryption: { secret: 's3cr3t' },
         ttlCleanupIntervalMs: 30000,
@@ -128,7 +144,7 @@ describe('token-storage.factory', () => {
 
     it('applies SQLite defaults (ttlCleanupIntervalMs / walMode) when omitted', async () => {
       await createTokenStorageAdapter({ sqlite: { path: '/tmp/auth.sqlite' } });
-      expect(SqliteStorageAdapterCtor).toHaveBeenCalledWith({
+      expect(mockSqliteStorageAdapterCtor).toHaveBeenCalledWith({
         path: '/tmp/auth.sqlite',
         encryption: undefined,
         ttlCleanupIntervalMs: 60000,
@@ -142,7 +158,7 @@ describe('token-storage.factory', () => {
       })) as unknown as { __kind: string; opts: { config: unknown; keyPrefix: string } };
 
       expect(adapter.__kind).toBe('redis');
-      expect(RedisStorageAdapterCtor).toHaveBeenCalledWith({
+      expect(mockRedisStorageAdapterCtor).toHaveBeenCalledWith({
         config: { host: 'redis.example.com', port: 6380, password: 'pw', db: 2, tls: true },
         keyPrefix: 'auth:',
       });
@@ -151,7 +167,7 @@ describe('token-storage.factory', () => {
 
     it('defaults the Redis keyPrefix to an empty string', async () => {
       await createTokenStorageAdapter({ redis: { host: 'localhost' } });
-      expect(RedisStorageAdapterCtor).toHaveBeenCalledWith({
+      expect(mockRedisStorageAdapterCtor).toHaveBeenCalledWith({
         config: { host: 'localhost', port: undefined, password: undefined, db: undefined, tls: undefined },
         keyPrefix: '',
       });

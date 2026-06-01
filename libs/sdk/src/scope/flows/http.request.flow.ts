@@ -1,3 +1,4 @@
+import { ORCHESTRATED_AUTH_ACCESSOR, OrchestratedAuthAccessorAdapter, OrchestratedAuthorization } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -222,6 +223,17 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
               sessionPayload: session?.payload,
             },
           });
+
+          // Bind `this.orchestration` for tools in orchestrated (local/remote)
+          // mode. The real OrchestratedAuthorization (with getToken/hasProvider/…)
+          // is created by session:verify and carries the per-request token store;
+          // register it as a request-scoped context token so the
+          // ORCHESTRATED_AUTH_ACCESSOR DI lookup resolves a live accessor instead
+          // of throwing. Non-orchestrated authorizations leave it unbound (the
+          // context extension is only installed in orchestrated mode anyway).
+          if (result.authorization instanceof OrchestratedAuthorization) {
+            ctx.setContextToken(ORCHESTRATED_AUTH_ACCESSOR, new OrchestratedAuthAccessorAdapter(result.authorization));
+          }
         }
       }
     } catch (error) {

@@ -19,13 +19,14 @@
 import {
   buildFederatedLoginPage,
   buildIncrementalAuthPage,
-  buildLoginPage,
   escapeHtml,
+  renderLocalLoginPage,
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
   type DetectedAuthProvider,
   type FederatedLoginStateRecord,
+  type LoginConfig,
   type ProviderCard,
 } from '@frontmcp/auth';
 import { z, type ZodError } from '@frontmcp/lazy-zod';
@@ -194,6 +195,26 @@ declare global {
 const name = 'oauth:authorize' as const;
 const Stage = StageHookOf(name);
 
+/**
+ * Top-level `auth.providers` declared for local-mode multi-provider
+ * orchestration. Only `local` mode carries `providers`; everything else
+ * returns an empty list so the app-level federation path is unchanged.
+ */
+function getConfiguredProviders(auth: unknown): Array<{ id: string; scopes?: string[] }> {
+  const providers = (auth as { providers?: unknown } | undefined)?.providers;
+  if (!Array.isArray(providers)) {
+    return [];
+  }
+  return providers.filter(
+    (p): p is { id: string; scopes?: string[] } => !!p && typeof (p as { id?: unknown }).id === 'string',
+  );
+}
+
+/** Provider ids declared via top-level `auth.providers` (local-mode federation). */
+function getConfiguredProviderIds(auth: unknown): string[] {
+  return getConfiguredProviders(auth).map((p) => p.id);
+}
+
 @Flow({
   name,
   plan,
@@ -226,14 +247,17 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     const isDefaultAuthProvider = !metadata.auth;
 
-    // Check if orchestrated mode with multiple providers (requires federated login)
-    // This is determined by checking if there are multiple apps with different auth providers
+    // Check if orchestrated mode requires federated login. Two triggers:
+    // 1. Top-level `auth.providers` declared (local-mode multi-provider
+    //    orchestration — GitHub/Slack/Jira as a turnkey local default).
+    // 2. Apps with their own auth providers (app-level federation).
     let requiresFederatedLogin = false;
     if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+      const configProviders = getConfiguredProviderIds(metadata.auth);
       // Check if scope has apps with different auth providers
       const apps = this.scope.apps.getApps();
       const appsWithAuth = apps.filter((app) => app.metadata.auth);
-      requiresFederatedLogin = appsWithAuth.length > 0;
+      requiresFederatedLogin = configProviders.length > 0 || appsWithAuth.length > 0;
     }
 
     // Check if consent flow is enabled
@@ -415,15 +439,27 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const apps = this.scope.apps.getApps();
       const providerIds: string[] = [];
 
-      // Add parent provider
-      if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+      // Add top-level configured providers (local-mode multi-provider
+      // orchestration — these have real registered provider configs).
+      for (const id of getConfiguredProviderIds(metadata.auth)) {
+        if (!providerIds.includes(id)) {
+          providerIds.push(id);
+        }
+      }
+
+      // Add parent provider only when there are no top-level configured
+      // providers (the legacy app-level federation path).
+      if (providerIds.length === 0 && metadata.auth && isOrchestratedMode(metadata.auth)) {
         providerIds.push('__parent__');
       }
 
       // Add app-level providers
       for (const app of apps) {
         if (app.metadata.auth) {
-          providerIds.push(app.metadata.id || app.metadata.name);
+          const appId = app.metadata.id || app.metadata.name;
+          if (!providerIds.includes(appId)) {
+            providerIds.push(appId);
+          }
         }
       }
 
@@ -524,10 +560,25 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     if (requiresFederatedLogin) {
       const apps = this.scope.apps.getApps();
       const providers: DetectedAuthProvider[] = [];
-
-      // Add parent provider
       const { metadata } = this.scope;
-      if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+
+      // Add top-level configured providers (local-mode multi-provider
+      // orchestration). These are real upstream providers the user links.
+      const configuredProviders = getConfiguredProviders(metadata.auth);
+      const hasConfiguredProviders = configuredProviders.length > 0;
+      for (const p of configuredProviders) {
+        providers.push({
+          id: p.id,
+          mode: 'local',
+          appIds: [p.id],
+          scopes: p.scopes ?? [],
+          isParentProvider: false,
+        });
+      }
+
+      // Add parent provider only on the legacy app-level federation path
+      // (no top-level configured providers).
+      if (!hasConfiguredProviders && metadata.auth && isOrchestratedMode(metadata.auth)) {
         providers.push({
           id: '__parent__',
           mode: metadata.auth.mode,
@@ -540,21 +591,24 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // Add app-level providers
       for (const app of apps) {
         if (app.metadata.auth) {
-          providers.push({
-            id: app.metadata.id || app.metadata.name,
-            providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
-            mode: app.metadata.auth.mode,
-            appIds: [app.metadata.id || app.metadata.name],
-            scopes: [],
-            isParentProvider: false,
-          });
+          const appId = app.metadata.id || app.metadata.name;
+          if (!providers.some((p) => p.id === appId)) {
+            providers.push({
+              id: appId,
+              providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
+              mode: app.metadata.auth.mode,
+              appIds: [appId],
+              scopes: [],
+              isParentProvider: false,
+            });
+          }
         }
       }
 
       const detection: AuthProviderDetectionResult = {
         providers: new Map(providers.map((p) => [p.id, p])),
         requiresOrchestration: true,
-        parentProviderId: '__parent__',
+        parentProviderId: hasConfiguredProviders ? undefined : '__parent__',
         childProviderIds: providers.filter((p) => !p.isParentProvider).map((p) => p.id),
         uniqueProviderCount: providers.length,
         validationErrors: [],
@@ -628,7 +682,13 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Render a simple login page using HTMX templates
+   * Render the local login page.
+   *
+   * Honors `auth.login` (Checkpoint 3a): a `login.render` override yields full
+   * custom HTML, `login.fields` extends the built-in form, and otherwise the
+   * unchanged default email/name page is rendered. Rendering is delegated to
+   * the shared `renderLocalLoginPage` helper so the authorize flow and the
+   * callback error re-render stay in sync.
    */
   private renderLoginPage(params: {
     pendingAuthId: string;
@@ -636,17 +696,29 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     clientName?: string;
     scope: string;
     redirectUri: string;
-    logoUri?: string; // TODO: Add logo support to buildLoginPage template
+    logoUri?: string;
   }): string {
-    const { pendingAuthId, clientId, clientName, scope } = params;
+    const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
     const callbackPath = `${this.scope.fullPath}/oauth/callback`;
 
-    return buildLoginPage({
+    // Read the optional login customization from the local auth options.
+    // Only local mode carries `login`; any other mode leaves it undefined,
+    // preserving the default page exactly.
+    const auth = this.scope.metadata.auth;
+    const login: LoginConfig | undefined =
+      auth && auth.mode === 'local' ? (auth as { login?: LoginConfig }).login : undefined;
+
+    const ctx = {
+      clientId,
       clientName: clientName ?? clientId,
-      scope,
+      logoUri,
+      scopes: scope ? scope.split(' ').filter(Boolean) : [],
       pendingAuthId,
       callbackPath,
-    });
+      fields: login?.fields ?? {},
+    };
+
+    return renderLocalLoginPage(login, ctx);
   }
 
   /**

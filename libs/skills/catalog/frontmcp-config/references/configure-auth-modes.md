@@ -55,6 +55,8 @@ auth: {
 
 Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `JWT_SECRET` or tokens are invalidated on every restart. For a single operator (e.g. Claude Code), add `requireEmail: false` to skip the email prompt (a stable `sub` is derived from `anonymousSubject`, default `'local-operator'`).
 
+To collect and verify your own credentials, add a declarative `login` (custom page fields / title / subject strategy) and an `authenticate(input, ctx)` verifier that returns `{ ok: true, sub?, claims? }` (custom claims are embedded in the token; reserved claims are stripped) or `{ ok: false, message }` (re-renders the login page; no code issued). Both are optional and default to the built-in email login. See `configure-auth.md` for a full example.
+
 **Use when:** Standalone servers with full auth control, development with local OAuth.
 
 ## Remote Mode

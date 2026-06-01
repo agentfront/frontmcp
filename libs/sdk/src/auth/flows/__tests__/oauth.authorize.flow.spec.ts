@@ -681,6 +681,83 @@ describe('OAuth Authorize Flow', () => {
         contains: ['Authorization Error'],
       });
     });
+
+    // ----------------------------------------------------------------
+    // Checkpoint 3a — custom login page (login.fields / login.render)
+    // ----------------------------------------------------------------
+
+    it('renders custom login.fields in place of the default email/name form', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'local',
+          login: {
+            title: 'Sign in to Acme',
+            fields: { apiKey: { type: 'password', label: 'API Key', required: true } },
+          },
+        } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({ scope: 'openid' });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      expectOAuthHtmlPage(output, { contains: ['Sign in to Acme', 'name="apiKey"', 'type="password"'] });
+      expect(output.body).not.toContain('name="email"');
+    });
+
+    it('uses a full login.render override when provided', async () => {
+      const render = jest.fn(() => '<html><body>FULLY-CUSTOM-LOGIN</body></html>');
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', login: { render } } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      expect(render).toHaveBeenCalledTimes(1);
+      // The render context carries client identity, scopes, pendingAuthId, callbackPath.
+      const ctx = render.mock.calls[0][0] as { clientId: string; pendingAuthId: string; callbackPath: string };
+      expect(ctx.clientId).toBe(params.client_id);
+      expect(ctx.pendingAuthId).toBeTruthy();
+      expect(ctx.callbackPath).toContain('/oauth/callback');
+      expectOAuthHtmlPage(output, { contains: ['FULLY-CUSTOM-LOGIN'] });
+    });
+
+    it('still renders the default login page when no login config is set (default preserved)', async () => {
+      const scope = createMockScopeEntry({ auth: { mode: 'local' } as never });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({ scope: 'openid profile' });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      // Unchanged default form: Sign In + email/name inputs.
+      expectOAuthHtmlPage(output, { contains: ['Sign In', 'name="email"', 'name="name"'] });
+    });
   });
 
   // ============================================
@@ -770,6 +847,95 @@ describe('OAuth Authorize Flow', () => {
 
       expect(output.kind).toBe('html');
       expect(output.body).toMatch(/Sign In|Select Authorization Providers/);
+    });
+
+    // ----------------------------------------------------------------
+    // Multi-OAuth-provider orchestration — top-level `auth.providers`
+    // ----------------------------------------------------------------
+
+    it('requires federated login when top-level auth.providers are declared (no apps with auth)', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'local',
+          providers: [
+            {
+              id: 'github',
+              authorizationEndpoint: 'https://github.example.com/authorize',
+              tokenEndpoint: 'https://github.example.com/token',
+              clientId: 'gh',
+            },
+            {
+              id: 'slack',
+              authorizationEndpoint: 'https://slack.example.com/authorize',
+              tokenEndpoint: 'https://slack.example.com/token',
+              clientId: 'sl',
+            },
+          ],
+        } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      await runFlowStages(flow, ['parseInput', 'validateInput', 'checkIfAuthorized', 'prepareAuthorizationRequest']);
+
+      const state = flow.state.snapshot();
+      expect(state.requiresFederatedLogin).toBe(true);
+      // The pending record carries the real provider ids (not __parent__).
+      const store = scope.auth.authorizationStore as InMemoryAuthorizationStore;
+      const pending = await store.getPendingAuthorization(state.pendingAuthId as string);
+      expect(pending?.federatedLogin?.providerIds).toEqual(['github', 'slack']);
+    });
+
+    it('renders a federated provider-selection page listing the configured providers', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'local',
+          providers: [
+            {
+              id: 'github',
+              authorizationEndpoint: 'https://github.example.com/authorize',
+              tokenEndpoint: 'https://github.example.com/token',
+              clientId: 'gh',
+            },
+            {
+              id: 'slack',
+              authorizationEndpoint: 'https://slack.example.com/authorize',
+              tokenEndpoint: 'https://slack.example.com/token',
+              clientId: 'sl',
+            },
+            {
+              id: 'jira',
+              authorizationEndpoint: 'https://jira.example.com/authorize',
+              tokenEndpoint: 'https://jira.example.com/token',
+              clientId: 'jr',
+            },
+          ],
+        } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      expect(output.kind).toBe('html');
+      expect(output.body).toContain('Select Authorization Providers');
+      expect(output.body).toContain('github');
+      expect(output.body).toContain('slack');
+      expect(output.body).toContain('jira');
+      // No __parent__ placeholder leaks into the configured-provider path.
+      expect(output.body).not.toContain('__parent__');
     });
   });
 

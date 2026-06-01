@@ -9,6 +9,7 @@ import {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   JwksService,
+  SessionCredentialVault,
   StorageAuthorizationStore,
   StorageFederatedAuthSessionStore,
   StorageOrchestratedTokenStore,
@@ -18,7 +19,15 @@ import {
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
 } from '@frontmcp/auth';
-import { base64urlDecode, getEnv, randomBytes, randomUUID, sha256Hex, type StorageAdapter } from '@frontmcp/utils';
+import {
+  base64urlDecode,
+  getEnv,
+  MemoryStorageAdapter,
+  randomBytes,
+  randomUUID,
+  sha256Hex,
+  type StorageAdapter,
+} from '@frontmcp/utils';
 
 import {
   FrontMcpAuth,
@@ -29,6 +38,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import {
+  isLocalMode,
   isOrchestratedLocal,
   isOrchestratedMode,
   isPublicMode,
@@ -36,10 +46,14 @@ import {
   type PublicAuthOptions,
   type RemoteAuthOptions,
 } from '../../common/types/options/auth';
+import { installContextExtensions } from '../../context/context-extension';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { CimdService } from '../cimd';
+import { createCredentialsProviders } from '../credentials';
+import { credentialsContextExtension } from '../credentials/credentials.context-extension';
 import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
+import OauthConnectFlow from '../flows/oauth.connect.flow';
 import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
@@ -86,7 +100,34 @@ export interface ConsentMetadata {
   skippedProviderIds?: string[];
   consentEnabled?: boolean;
   federatedLoginUsed?: boolean;
+  /**
+   * Custom claims from a local `authenticate` verifier (Checkpoint 3a). Merged
+   * into the access token by {@link LocalPrimaryAuth.signAccessToken} with a
+   * reserved-claim guard so they can never clobber sub/iss/exp/etc.
+   */
+  customClaims?: Record<string, unknown>;
 }
+
+/**
+ * Reserved JWT claim names that a custom `authenticate` verifier must never be
+ * able to override. Any such keys in `customClaims` are dropped before signing.
+ */
+const RESERVED_JWT_CLAIMS = new Set<string>([
+  'sub',
+  'iss',
+  'aud',
+  'exp',
+  'iat',
+  'nbf',
+  'jti',
+  'scope',
+  'email',
+  'name',
+  'picture',
+  'roles',
+  'consent',
+  'federated',
+]);
 
 /**
  * Extended token response from upstream providers (includes id_token)
@@ -160,6 +201,18 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /** Storage adapter backing the persistent stores (kept for disposal). */
   private storageAdapter?: StorageAdapter;
+
+  /**
+   * Per-session encrypted credential vault (Checkpoint 3b). Backs
+   * `this.credentials` in tools and persists `authenticate()` credentials.
+   * Constructed in {@link initialize} once the storage backend is known.
+   */
+  private credentialVaultImpl?: SessionCredentialVault;
+
+  /** Per-session encrypted credential vault (Checkpoint 3b), if enabled. */
+  get credentialVault(): SessionCredentialVault | undefined {
+    return this.credentialVaultImpl;
+  }
 
   /** OAuth authorization-code / pending / refresh-token store. */
   get authorizationStore(): AuthorizationStore {
@@ -314,6 +367,65 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     }
   }
 
+  /**
+   * Build the per-session credential vault (Checkpoint 3b) and register the
+   * `this.credentials` accessor + the `/oauth/connect` add-credential flow.
+   *
+   * Skipped in pure public mode (no authenticated subject / no authenticate()
+   * verifier there). The vault shares the persistent StorageAdapter when one is
+   * configured; otherwise it uses a dedicated in-memory adapter. The HMAC pepper
+   * and resume-link signing key both derive from the server JWT secret
+   * (`this.secret`), so resume URLs are framework-signed with the same trust
+   * root as the access tokens.
+   */
+  private async initializeCredentialVault(): Promise<void> {
+    // Public mode has no authenticate() verifier and no stable sub — no vault.
+    if (isPublicMode(this.options)) {
+      return;
+    }
+
+    let storage: StorageAdapter;
+    if (this.storageAdapter) {
+      // Reuse the persistent adapter (Redis/SQLite) backing the token stores.
+      storage = this.storageAdapter;
+    } else {
+      // Memory default — a dedicated in-memory adapter for the vault.
+      const memory = new MemoryStorageAdapter();
+      await memory.connect();
+      storage = memory;
+    }
+
+    // Pepper: VAULT_SECRET ?? JWT_SECRET, else the in-memory default secret.
+    // SessionCredentialVault warns when no env secret is set (random fallback);
+    // we pass the decoded server secret so behavior matches the token signer.
+    const pepper = getEnv('VAULT_SECRET') ?? getEnv('JWT_SECRET') ?? undefined;
+
+    this.credentialVaultImpl = new SessionCredentialVault({
+      storage,
+      pepper,
+      logger: this.logger.child('SessionCredentialVault'),
+    });
+
+    // The resume-link HMAC key is the server JWT secret (constant-time verified
+    // by the connect flow). Reuse the exact bytes the access tokens are signed
+    // with so the trust root is identical.
+    const signingSecret = new TextDecoder().decode(this.secret);
+    const basePath = this.issuer;
+
+    await this.providers.addDynamicProviders(
+      createCredentialsProviders({
+        vault: this.credentialVaultImpl,
+        signingSecret,
+        basePath,
+      }),
+    );
+
+    // Install `this.credentials` on ExecutionContextBase (idempotent).
+    installContextExtensions('credentials', [credentialsContextExtension]);
+
+    this.logger.debug('SessionCredentialVault initialized; this.credentials enabled');
+  }
+
   async signAnonymousJwt() {
     const sub = randomUUID();
     return new SignJWT({ sub, role: 'user', anonymous: true })
@@ -357,6 +469,19 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
           selectedProviders: consentMetadata.selectedProviderIds ?? [],
           skippedProviders: consentMetadata.skippedProviderIds ?? [],
         };
+      }
+
+      // Checkpoint 3a — merge custom claims from a local authenticate() verifier.
+      // Reserved claims (sub/iss/exp/scope/…) are dropped so a verifier can never
+      // forge identity/lifetime/scope claims; everything else is merged in.
+      if (consentMetadata.customClaims) {
+        for (const [key, value] of Object.entries(consentMetadata.customClaims)) {
+          if (RESERVED_JWT_CLAIMS.has(key)) {
+            this.logger.warn(`Dropping reserved claim "${key}" from authenticate() custom claims`);
+            continue;
+          }
+          claims[key] = value;
+        }
       }
     }
 
@@ -442,15 +567,19 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       name: codeRecord.userName,
     };
 
-    // Build consent metadata from code record
+    // Build consent metadata from code record. Includes custom claims from a
+    // local authenticate() verifier (Checkpoint 3a) so they are embedded in the
+    // minted access token even when consent/federation are not in play.
+    const hasCustomClaims = !!codeRecord.customClaims && Object.keys(codeRecord.customClaims).length > 0;
     const consentMetadata: ConsentMetadata | undefined =
-      codeRecord.consentEnabled || codeRecord.federatedLoginUsed
+      codeRecord.consentEnabled || codeRecord.federatedLoginUsed || hasCustomClaims
         ? {
             selectedToolIds: codeRecord.selectedToolIds,
             selectedProviderIds: codeRecord.selectedProviderIds,
             skippedProviderIds: codeRecord.skippedProviderIds,
             consentEnabled: codeRecord.consentEnabled,
             federatedLoginUsed: codeRecord.federatedLoginUsed,
+            customClaims: codeRecord.customClaims,
           }
         : undefined;
 
@@ -563,6 +692,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     federatedLoginUsed?: boolean;
     // Token migration ID (for federated auth)
     pendingAuthId?: string;
+    // Custom claims from a local authenticate() verifier (Checkpoint 3a)
+    customClaims?: Record<string, unknown>;
   }): Promise<string> {
     const codeRecord = this.authorizationStore.createCodeRecord({
       clientId: params.clientId,
@@ -582,6 +713,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: params.federatedLoginUsed,
       // Token migration ID (for federated auth)
       pendingAuthId: params.pendingAuthId,
+      // Custom claims from a local authenticate() verifier (Checkpoint 3a)
+      customClaims: params.customClaims,
     });
 
     await this.authorizationStore.storeAuthorizationCode(codeRecord);
@@ -594,6 +727,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // Swap in persistent (Redis/SQLite) stores when configured. Runs before the
     // server signals ready, so flows always see the final store instances.
     await this.initializeStores();
+
+    // Bridge declarative `auth.providers` (local-mode multi-provider
+    // orchestration) into the upstream-provider registry so the federated
+    // /oauth/authorize + /oauth/provider/:id/callback flows can drive them.
+    this.registerConfiguredProviders();
+
+    // Build the per-session credential vault and register `this.credentials`
+    // (Checkpoint 3b). Runs after initializeStores so it can share the same
+    // persistent StorageAdapter when one is configured.
+    await this.initializeCredentialVault();
 
     // TODO: create separated jwk service for local/remote auth options
     this.providers.injectProvider({
@@ -642,6 +785,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       OauthAuthorizeFlow /** GET /oauth/authorize */,
       OauthTokenFlow /** POST /oauth/token */,
       OauthCallbackFlow /** GET /oauth/callback - login callback */,
+      OauthConnectFlow /** GET|POST /oauth/connect - mid-session add-credential (Checkpoint 3b) */,
       OauthRegisterFlow /** POST /oauth/register */,
       OauthProviderCallbackFlow /** GET /oauth/provider/:providerId/callback */,
     );
@@ -657,6 +801,53 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   registerProvider(config: UpstreamProviderConfig): void {
     this.providerConfigs.set(config.id, config);
     this.logger.info(`Registered upstream provider: ${config.id}`);
+  }
+
+  /**
+   * Bridge declarative `auth.providers` (local-mode multi-provider orchestration)
+   * into the upstream-provider registry. Runs once during `initialize()`.
+   *
+   * For each declared provider we map the ergonomic `authorizeUrl`/`tokenUrl`
+   * aliases onto the canonical `authorizationEndpoint`/`tokenEndpoint`, default
+   * `name`/`scopes`, and compute the per-provider callback URL from the issuer
+   * (`${issuer}/oauth/provider/${id}/callback`). No-op when not local mode or
+   * when no providers are declared, so existing configs are unaffected.
+   *
+   * Security: only non-PII provider metadata is read here; client secrets are
+   * kept in the provider config and never logged or exposed to the LLM.
+   */
+  private registerConfiguredProviders(): void {
+    if (!isLocalMode(this.options)) {
+      return;
+    }
+    const providers = this.options.providers;
+    if (!providers || providers.length === 0) {
+      return;
+    }
+
+    for (const p of providers) {
+      const authorizationEndpoint = p.authorizationEndpoint ?? p.authorizeUrl;
+      const tokenEndpoint = p.tokenEndpoint ?? p.tokenUrl;
+      if (!authorizationEndpoint || !tokenEndpoint) {
+        // Schema enforces this, but guard defensively rather than register a
+        // half-configured provider that would fail mid-flow.
+        this.logger.warn(`Skipping provider "${p.id}": missing authorization or token endpoint`);
+        continue;
+      }
+
+      this.registerProvider({
+        id: p.id,
+        name: p.name ?? p.id,
+        authorizationEndpoint,
+        tokenEndpoint,
+        userInfoEndpoint: p.userInfoEndpoint,
+        jwksUri: p.jwksUri,
+        clientId: p.clientId,
+        clientSecret: p.clientSecret,
+        scopes: p.scopes ?? [],
+        callbackUrl: `${this.issuer}/oauth/provider/${p.id}/callback`,
+      });
+    }
   }
 
   /**

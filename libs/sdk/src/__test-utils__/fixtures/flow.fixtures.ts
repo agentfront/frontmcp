@@ -7,8 +7,10 @@
  */
 
 import 'reflect-metadata';
-import { FlowControl, FlowMetadata, ScopeEntry, FrontMcpLogger, FrontMcpAuth } from '../../common';
+
 import { InMemoryAuthorizationStore, type AuthorizationStore } from '@frontmcp/auth';
+
+import { FlowControl, type FlowMetadata, type FrontMcpAuth, type FrontMcpLogger, type ScopeEntry } from '../../common';
 
 // ============================================
 // Types
@@ -92,6 +94,7 @@ export function createMockLogger(): FrontMcpLogger {
     error: jest.fn(),
     info: jest.fn(),
     debug: jest.fn(),
+    verbose: jest.fn(),
     child: jest.fn().mockReturnThis(),
   } as unknown as FrontMcpLogger;
 }

@@ -1,19 +1,17 @@
 /**
  * Authorization Store Tests
  */
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 import {
-  verifyPkce,
   generatePkceChallenge,
   InMemoryAuthorizationStore,
   RedisAuthorizationStore,
+  verifyPkce,
+  type AuthorizationCodeRecord,
+  type PendingAuthorizationRecord,
+  type PkceChallenge,
+  type RefreshTokenRecord,
 } from '../authorization.store';
-import type {
-  PkceChallenge,
-  AuthorizationCodeRecord,
-  PendingAuthorizationRecord,
-  RefreshTokenRecord,
-} from '../authorization.store';
-import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // Mock @frontmcp/utils - spread real module and only mock randomUUID
 jest.mock('@frontmcp/utils', () => {
@@ -368,6 +366,18 @@ describe('InMemoryAuthorizationStore', () => {
       expect(record.consentEnabled).toBe(true);
       expect(record.federatedLoginUsed).toBe(true);
       expect(record.pendingAuthId).toBe('pending-123');
+    });
+
+    it('should carry customClaims from a local authenticate() verifier (Checkpoint 3a)', () => {
+      const record = makeCodeRecord(store, {
+        customClaims: { tenantId: 'acme', plan: 'pro' },
+      });
+      expect(record.customClaims).toEqual({ tenantId: 'acme', plan: 'pro' });
+    });
+
+    it('should leave customClaims undefined when not provided', () => {
+      const record = makeCodeRecord(store);
+      expect(record.customClaims).toBeUndefined();
     });
   });
 
