@@ -169,7 +169,11 @@ try {
 
 ## Consent UI
 
-The built-in consent UI lets users choose which apps to authorize:
+<Warning>
+  The interactive **tool-selection consent page is not rendered today.** The `consent` config drives tool-authorization *enforcement* (the authorized tools are carried as a token claim and checked at call time), defaulting to all available tools. The mock below illustrates the intended multi-app authorization experience, not current behavior. The per-provider/per-app authorization steps in the federated and incremental flows above *are* rendered. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization).
+</Warning>
+
+The intended consent experience lets users choose which apps to authorize:
 
 ```
 +----------------------------------------------------------+

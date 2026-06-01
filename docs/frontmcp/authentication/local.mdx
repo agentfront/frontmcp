@@ -10,8 +10,30 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'authentication', 'auth'
 FrontMCP includes a built-in OAuth 2.1 authorization server for self-contained authentication scenarios.
 
 <Warning>
-  The built-in login page accepts any email format without validation. Replace with a real identity provider for production use.
+  The built-in login page accepts any email format without validation and is intended for development. Replace with a real identity provider for production use.
 </Warning>
+
+## Token Signing (HS256)
+
+Local mode signs every token it issues — access tokens and the anonymous JWT — with **HS256, a symmetric secret**. The secret comes from the `JWT_SECRET` environment variable:
+
+```bash
+JWT_SECRET=$(openssl rand -hex 32)
+```
+
+```typescript
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  auth: { mode: 'local' },
+})
+export class Server {}
+```
+
+<Warning>
+  If `JWT_SECRET` is unset, FrontMCP logs a warning and falls back to a **random per-process secret**. Every restart then invalidates all previously issued tokens. Set a stable `JWT_SECRET` for any deployment where tokens must survive a restart.
+</Warning>
+
+Because signing is symmetric, the same secret both signs and verifies tokens. Local mode does **not** generate an RSA/EC key pair, and there is no private signing key to manage. The `/.well-known/jwks.json` endpoint is served for OAuth-discovery compatibility but local mode does not publish asymmetric public keys there.
 
 ## Basic Configuration
 
@@ -20,7 +42,6 @@ FrontMCP includes a built-in OAuth 2.1 authorization server for self-contained a
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
     mode: 'local',
-    consent: { enabled: true },
   },
 })
 export class Server {}
@@ -28,13 +49,16 @@ export class Server {}
 
 ## Configuration Options
 
-| Option               | Type                                 | Default              | Description                      |
-| -------------------- | ------------------------------------ | -------------------- | -------------------------------- |
-| `consent`            | `ConsentConfig`                      | `{ enabled: false }` | Consent UI configuration         |
-| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`           | Token storage backend            |
-| `allowDefaultPublic` | `boolean`                            | `false`              | Allow unauthenticated access     |
-| `anonymousScopes`    | `string[]`                           | `['anonymous']`      | Scopes for anonymous sessions    |
-| `incrementalAuth`    | `IncrementalAuthConfig`              | `{ enabled: true }`  | Progressive authorization config |
+| Option               | Type                                                                  | Default           | Description                                                  |
+| -------------------- | --------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------ |
+| `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }`      | `'memory'`        | Token storage backend (see [Token Storage](#token-storage))  |
+| `requireEmail`       | `boolean`                                                             | `true`            | Require an email at the login callback (see [Single-Operator](#single-operator-mode-requireemail-false)) |
+| `anonymousSubject`   | `string`                                                              | `'local-operator'`| Stable `sub` minted when `requireEmail: false` and no email is provided |
+| `consent`            | `ConsentConfig`                                                       | `{ enabled: false }` | Consent / tool-authorization config (see [Consent](#consent-and-tool-authorization)) |
+| `allowDefaultPublic` | `boolean`                                                             | `false`           | Allow unauthenticated access                                 |
+| `anonymousScopes`    | `string[]`                                                            | `['anonymous']`   | Scopes for anonymous sessions                                |
+| `local.issuer`       | `string`                                                             | auto-derived      | Override the issuer (see [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy)) |
+| `incrementalAuth`    | `IncrementalAuthConfig`                                               | `{ enabled: true }` | Progressive authorization config                           |
 
 ---
 
@@ -126,68 +150,50 @@ When `federated=true` and providers are selected:
 
 ---
 
-## Key Management
+## Behind a Tunnel or Reverse Proxy
 
-### Auto-Generated Keys
+OAuth discovery (`/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`) is **derived from the incoming request host** at runtime, and the OAuth endpoints are advertised at the root (`/oauth/authorize`, `/oauth/token`, …). This means discovery works correctly behind a tunnel (e.g. `ngrok`, Cloudflare Tunnel) or when the server is mounted under an `http.entryPath` — no extra configuration needed for discovery itself.
 
-By default, FrontMCP generates RS256 keys at startup:
+Two knobs affect the **boot-time issuer** (the `iss` claim baked into tokens before any request arrives):
+
+- **`FRONTMCP_PUBLIC_HOST`** — sets only the discovery **host** for the boot-time issuer. The scheme stays `http` and the port stays the configured HTTP port.
+- **`local.issuer`** — sets the full issuer string. Use this when you need a different scheme/port (e.g. advertise `https://mcp.example.com` with no explicit port behind a TLS-terminating proxy).
 
 ```typescript
 auth: {
   mode: 'local',
-  // Keys auto-generated
+  local: {
+    // Aligns the token `iss` with what clients reach through the proxy.
+    issuer: 'https://mcp.example.com',
+  },
 }
 ```
 
 <Info>
-  Auto-generated keys are lost on restart. Existing tokens become invalid.
+  Token verification accepts the issuer, so tokens minted under a different scheme/port are still tolerated behind a TLS proxy. `local.issuer` is the supported way to make the boot-time issuer match what discovery advertises.
 </Info>
 
-### Persistent Keys
+---
 
-Provide keys for stable token validation:
+## Single-Operator Mode (`requireEmail: false`)
 
-```typescript
-auth: {
-  mode: 'local',
-  local: {
-    signKey: {
-      kty: 'RSA',
-      kid: 'my-key-id',
-      alg: 'RS256',
-      n: '...',  // RSA modulus
-      e: 'AQAB',
-      d: '...',  // Private exponent
-      // ... other JWK parameters
-    },
-  },
-}
-```
-
-### ES256 Keys
-
-Use ES256 for smaller tokens:
+The built-in login callback normally requires an email. For single-operator local setups — for example pointing Claude Code at a `mode: 'local'` server — set `requireEmail: false` so a login mints an authorization code without prompting for an email:
 
 ```typescript
 auth: {
   mode: 'local',
-  local: {
-    signKey: {
-      kty: 'EC',
-      crv: 'P-256',
-      x: '...',
-      y: '...',
-      d: '...',
-    },
-  },
+  requireEmail: false,            // skip the email prompt at /oauth/callback
+  anonymousSubject: 'local-operator', // stable `sub` for the single operator (default)
 }
 ```
+
+When `requireEmail` is `false` and no email is supplied, the callback derives a **stable** `sub` from `anonymousSubject` (default `'local-operator'`), so the operator keeps a consistent identity across logins. With the default `requireEmail: true`, a non-incremental login without an email is rejected with a 400.
 
 ---
 
 ## Dynamic Client Registration
 
-DCR allows clients to register programmatically. DCR is enabled by default in development.
+DCR lets clients register programmatically. The `/oauth/register` endpoint is **development-only**: when `NODE_ENV=production` it behaves as if it does not exist (the registration is short-circuited). Registered clients are held in an in-memory map — there is no persistent client store and no client allowlist.
 
 ### Registration Request
 
@@ -219,7 +225,7 @@ Content-Type: application/json
 ```
 
 <Warning>
-  DCR is intended for development only. In production, pre-register clients. DCR only allows localhost redirect URIs by default.
+  DCR is for development only and is disabled in production (`NODE_ENV=production`). It accepts only `localhost`/loopback-IP `redirect_uris`, and only the `none`, `client_secret_post`, and `client_secret_basic` auth methods. Pre-register clients for production.
 </Warning>
 
 ---
@@ -258,16 +264,40 @@ export class Server {}
 
 ## Token Storage
 
+`tokenStorage` controls where authorization codes, refresh tokens, and federated-auth sessions are persisted. It is honored in local mode and supports three backends. The default (`'memory'`) loses all state on restart.
+
 ### In-Memory (Development)
 
 ```typescript
 auth: {
   mode: 'local',
-  tokenStorage: 'memory',
+  tokenStorage: 'memory', // default — lost on restart
 }
 ```
 
-### Redis (Production)
+### SQLite (Single-Node Persistence)
+
+Persist tokens to a local SQLite file — survives restart without running Redis. `path` is required:
+
+```typescript
+auth: {
+  mode: 'local',
+  tokenStorage: {
+    sqlite: {
+      path: './data/auth.sqlite',
+      encryption: { secret: process.env.AUTH_DB_SECRET! }, // optional at-rest encryption
+      walMode: true,                 // default true
+      ttlCleanupIntervalMs: 60000,   // default 60000
+    },
+  },
+}
+```
+
+<Info>
+  SQLite persistence requires the `@frontmcp/storage-sqlite` package (lazy-loaded — only needed when you use the `sqlite` backend).
+</Info>
+
+### Redis (Multi-Instance Persistence)
 
 ```typescript
 auth: {
@@ -283,28 +313,30 @@ auth: {
 }
 ```
 
+<Info>
+  When a persistent backend is configured but fails to connect at startup, FrontMCP fails closed (throws) rather than silently falling back to memory — this avoids surprising token loss on restart.
+</Info>
+
 ---
 
-## Consent Configuration
+## Consent and Tool Authorization
 
-Enable and customize the consent UI:
+Local mode supports a `consent` config that drives **tool-authorization enforcement**. When `consent.enabled` is `true`, the set of authorized tools is carried as a `selectedTools` claim in the issued token and enforced at call time (`isToolAuthorized`).
 
 ```typescript
 auth: {
   mode: 'local',
   consent: {
     enabled: true,
-    groupByApp: true,           // Group tools by app
-    showDescriptions: true,     // Show tool descriptions
-    allowSelectAll: true,       // Allow selecting all tools
-    requireSelection: true,     // Require at least one tool
-    rememberConsent: true,      // Remember for future sessions
-    excludedTools: ['health'],  // Always available tools
-    defaultSelectedTools: [],   // Pre-selected tools
-    customMessage: 'Select the tools you want to grant access to.',
+    excludedTools: ['health'],  // always available, never gated
+    defaultSelectedTools: [],   // pre-selected tools
   },
 }
 ```
+
+<Warning>
+  **No interactive tool-selection page is rendered today.** The `consent` config and the token-claim enforcement are wired, but the built-in authorize flow does not display a tool-picker — the login page is shown and, on submit, the token defaults to **all available tools**. The other `ConsentConfig` fields (`groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `rememberConsent`, `customMessage`) describe a tool-selection UI that is **not yet rendered** and currently have no runtime effect. Treat `consent` as "enforce the authorized-tools claim", not "let users pick tools in a browser."
+</Warning>
 
 ---
 
@@ -313,25 +345,25 @@ auth: {
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
 
+// JWT_SECRET signs tokens (HS256). Set a stable value so tokens survive restart.
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
     mode: 'local',
-    consent: { enabled: true },
+    // Persist auth state across restarts (SQLite shown; { redis } also works).
     tokenStorage: {
-      redis: {
-        host: process.env.REDIS_HOST!,
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
+      sqlite: {
+        path: './data/auth.sqlite',
+        encryption: { secret: process.env.AUTH_DB_SECRET! },
       },
     },
     refresh: {
       enabled: true,
       skewSeconds: 60,
     },
-    local: {
-      signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
-    },
+    // Single operator (e.g. Claude Code): no email prompt, stable identity.
+    requireEmail: false,
+    anonymousSubject: 'local-operator',
     incrementalAuth: {
       enabled: true,
       allowSkip: true,
@@ -346,37 +378,16 @@ export class Server {}
 
 ## Auth UI Template Builders
 
-FrontMCP provides server-side HTML template builders for all authentication UI pages. These render with Tailwind CSS and require no build step.
+`@frontmcp/auth` ships server-side HTML template builders that render with no build step. The local authorize flow uses `buildLoginPage()` (and, for multi-provider/incremental flows, `buildFederatedLoginPage()` / `buildIncrementalAuthPage()`). The remaining builders are exported for custom use but are **not** wired into the built-in local flow today.
 
-| Builder | Purpose |
-| ------- | ------- |
-| `buildLoginPage()` | Email/password login form |
-| `buildConsentPage()` | Multi-app tool authorization with Authorize/Skip buttons |
-| `buildIncrementalAuthPage()` | Single-app auth for previously skipped apps |
-| `buildFederatedLoginPage()` | Multi-provider selection UI with optional skip |
-| `buildToolConsentPage()` | Tool-level consent within an app |
-| `buildErrorPage()` | Error display with description |
-
-### Customization
-
-Templates accept a `ThemeConfig` for visual customization:
-
-```typescript
-import type { ThemeConfig, ThemeColors, ThemeFonts } from '@frontmcp/auth';
-```
-
-| Option | Type | Description |
-| ------ | ---- | ----------- |
-| `colors` | `ThemeColors` | Primary, background, text, border colors |
-| `fonts` | `ThemeFonts` | Heading and body font families |
-
-### Layout Variants
-
-| Layout | Function | Use Case |
-| ------ | -------- | -------- |
-| `centeredCardLayout()` | Small centered card | Login, error pages |
-| `wideLayout()` | Full-width card | Consent with many tools |
-| `extraWideLayout()` | Extra-wide card | Federated login with many providers |
+| Builder | Purpose | Used by built-in local flow? |
+| ------- | ------- | ---------------------------- |
+| `buildLoginPage()` | Email login form | Yes |
+| `buildFederatedLoginPage()` | Multi-provider selection UI | Yes (federated/multi-app) |
+| `buildIncrementalAuthPage()` | Single-app auth for previously skipped apps | Yes (incremental) |
+| `buildConsentPage()` | Multi-app tool authorization | No — not rendered (see [Consent](#consent-and-tool-authorization)) |
+| `buildToolConsentPage()` | Tool-level consent within an app | No — not rendered |
+| `buildErrorPage()` | Error display with description | Yes (error paths) |
 
 ---
 
@@ -384,16 +395,18 @@ import type { ThemeConfig, ThemeColors, ThemeFonts } from '@frontmcp/auth';
 
 <AccordionGroup>
   <Accordion title="Tokens invalid after restart">
-    Auto-generated keys are lost on restart. Either:
-    - Provide persistent keys via `local.signKey`
-    - Use Redis for token storage
-    - Accept that users must re-authenticate
+    Two independent causes:
+    - **Signing secret rotated.** When `JWT_SECRET` is unset, a random per-process secret is used, so every restart invalidates tokens. Set a stable `JWT_SECRET`.
+    - **In-memory token storage.** Authorization codes / refresh tokens live in memory by default. Use `tokenStorage: { sqlite: { path } }` (single node) or `{ redis }` (multi-instance) to persist them.
   </Accordion>
   <Accordion title="PKCE verification failed">
     Ensure you're using S256 challenge method and the code_verifier matches the original code_challenge.
   </Accordion>
+  <Accordion title="Discovery / issuer wrong behind a tunnel">
+    Discovery is request-host-derived, so it usually works behind a proxy automatically. If the token `iss` must match a public HTTPS URL, set `local.issuer` (full URL) or `FRONTMCP_PUBLIC_HOST` (host only). See [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy).
+  </Accordion>
   <Accordion title="Session not found across instances">
-    When running multiple server instances, use Redis for token storage to share session state.
+    When running multiple server instances, use `tokenStorage: { redis }` to share auth state.
   </Accordion>
 </AccordionGroup>
 

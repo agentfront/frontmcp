@@ -24,7 +24,7 @@
           "outExtension": {
             ".js": ".js"
           },
-          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/storage-sqlite", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },
@@ -46,7 +46,7 @@
           "outExtension": {
             ".js": ".mjs"
           },
-          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/storage-sqlite", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },

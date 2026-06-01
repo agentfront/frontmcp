@@ -473,16 +473,60 @@
           "description": "Detailed comparison of public, transparent, local, and remote auth modes",
           "examples": [
             {
-              "name": "local-self-signed-tokens",
-              "description": "Configure a server that signs its own JWT tokens with consent and incremental auth enabled.",
-              "level": "intermediate",
-              "tags": ["config", "auth", "redis", "local", "auth-modes", "modes"],
+              "name": "local-minimal",
+              "description": "Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "hs256", "auth-modes", "modes"],
               "features": [
-                "Using `mode: 'local'` so the server signs its own JWTs",
+                "Using `mode: 'local'` with no other auth options to run the built-in OAuth 2.1 server",
+                "Relying on `JWT_SECRET` for HS256 token signing (symmetric secret, no key pair)",
+                "Accepting the default in-memory `tokenStorage` for local development (state is lost on restart)"
+              ]
+            },
+            {
+              "name": "local-self-signed-tokens",
+              "description": "Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "sqlite", "redis", "auth-modes", "modes"],
+              "features": [
+                "Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)",
                 "Setting `local.issuer` and `expectedAudience` to control token claims",
-                "Enabling `consent` for explicit user authorization flow",
-                "Enabling `incrementalAuth` to request additional scopes progressively",
-                "Using Redis for token storage in production"
+                "Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart",
+                "Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments",
+                "Enabling `consent` for tool-authorization enforcement (token claim checked at call time; no picker UI yet)"
+              ]
+            },
+            {
+              "name": "local-single-operator",
+              "description": "Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "single-operator", "claude-code", "auth-modes"],
+              "features": [
+                "Setting `requireEmail: false` so the login callback mints a code without prompting for an email",
+                "Setting `anonymousSubject` so the single operator gets a stable `sub` across logins",
+                "Persisting tokens with SQLite so the operator stays logged in across restarts"
+              ]
+            },
+            {
+              "name": "local-consent-enforcement",
+              "description": "Enable consent in local mode to enforce a per-token authorized-tools claim, keeping essential tools always available via excludedTools.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "consent", "tool-authorization", "auth-modes"],
+              "features": [
+                "Setting `consent.enabled` so the issued token carries an authorized-tools claim enforced at call time",
+                "Listing `excludedTools` so essential tools are always available and never gated by consent",
+                "Understanding that no interactive tool-selection page is rendered today (the claim defaults to all available tools)"
+              ]
+            },
+            {
+              "name": "local-behind-tunnel",
+              "description": "Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "tunnel", "proxy", "issuer", "auth-modes"],
+              "features": [
+                "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
+                "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
+                "Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)"
               ]
             },
             {
