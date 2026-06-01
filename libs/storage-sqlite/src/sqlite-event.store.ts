@@ -6,6 +6,8 @@
  */
 
 import type Database from 'better-sqlite3';
+
+import { openDatabase } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /**
@@ -60,15 +62,8 @@ export class SqliteEventStore implements EventStoreInterface {
   private stmts: PreparedStatements | null = null;
 
   constructor(options: SqliteEventStoreOptions) {
-    // Lazy require
-
-    const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    try {
-      this.db = new BetterSqlite3(options.path);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`SqliteEventStore: failed to open database at "${options.path}": ${message}`);
-    }
+    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
+    this.db = openDatabase(options.path, 'SqliteEventStore');
 
     if (options.walMode !== false) {
       this.db.pragma('journal_mode = WAL');

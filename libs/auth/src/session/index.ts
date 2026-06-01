@@ -12,6 +12,15 @@ export {
   // Functions
   verifyPkce,
   generatePkceChallenge,
+  // Record builders (pure, backend-agnostic)
+  generateAuthorizationCode,
+  generateRefreshTokenValue,
+  buildCodeRecord,
+  buildPendingRecord,
+  buildRefreshTokenRecord,
+  AUTH_CODE_TTL_MS,
+  PENDING_AUTH_TTL_MS,
+  REFRESH_TOKEN_TTL_MS,
   // Schemas
   pkceChallengeSchema,
   authorizationCodeRecordSchema,
@@ -25,7 +34,14 @@ export type {
   RefreshTokenRecord,
   ConsentStateRecord,
   FederatedLoginStateRecord,
+  CreateCodeRecordParams,
+  CreatePendingRecordParams,
+  CreateRefreshTokenRecordParams,
 } from './authorization.store';
+
+// Storage-backed Authorization Store (memory / Redis / SQLite via StorageAdapter)
+export { StorageAuthorizationStore } from './storage-authorization.store';
+export type { StorageAuthorizationStoreOptions } from './storage-authorization.store';
 
 // Authorization Vault
 export {
@@ -202,6 +218,10 @@ export type { VercelKvSessionConfig } from './vercel-kv-session.store';
 export { InMemoryOrchestratedTokenStore } from './orchestrated-token.store';
 export type { InMemoryOrchestratedTokenStoreOptions } from './orchestrated-token.store';
 
+// Storage-backed Orchestrated Token Store (memory / Redis / SQLite)
+export { StorageOrchestratedTokenStore } from './storage-orchestrated-token.store';
+export type { StorageOrchestratedTokenStoreOptions } from './storage-orchestrated-token.store';
+
 // Federated Auth Session
 export {
   InMemoryFederatedAuthSessionStore,
@@ -223,6 +243,18 @@ export type {
   FederatedAuthSessionStore,
   FederatedAuthSessionCreateParams,
 } from './federated-auth.session';
+
+// Storage-backed Federated Auth Session Store (memory / Redis / SQLite)
+export { StorageFederatedAuthSessionStore } from './storage-federated-auth.session';
+export type { StorageFederatedAuthSessionStoreOptions } from './storage-federated-auth.session';
+
+// Token-storage adapter factory (memory / Redis / SQLite)
+export {
+  createTokenStorageAdapter,
+  isRedisTokenStorage,
+  isSqliteTokenStorage,
+  isPersistentTokenStorage,
+} from './token-storage.factory';
 
 // Encrypted Authorization Vault
 export { redisVaultEntrySchema, EncryptedRedisVault, createEncryptedVault } from './encrypted-authorization-vault';

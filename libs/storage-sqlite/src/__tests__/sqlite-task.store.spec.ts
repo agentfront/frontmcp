@@ -51,14 +51,14 @@ describe('SqliteTaskStore', () => {
   });
 
   describe('constructor', () => {
-    it('throws on invalid db path', () => {
+    it('throws on an unwritable db path', () => {
       expect(
         () =>
           new SqliteTaskStore({
             path: '/this/path/should/not/exist/db.sqlite',
             ttlCleanupIntervalMs: 0,
           }),
-      ).toThrow(/failed to open database/i);
+      ).toThrow(/failed to (create directory|open database)/i);
     });
 
     it('honors walMode=false', () => {

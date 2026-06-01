@@ -26,7 +26,6 @@ import {
   type ConsentStateRecord,
   type DetectedAuthProvider,
   type FederatedLoginStateRecord,
-  type InMemoryAuthorizationStore,
   type ProviderCard,
 } from '@frontmcp/auth';
 import { z, type ZodError } from '@frontmcp/lazy-zod';
@@ -407,7 +406,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
     const localAuth = auth as LocalPrimaryAuth;
-    const store = localAuth.authorizationStore as InMemoryAuthorizationStore;
+    const store = localAuth.authorizationStore;
 
     // Build federated login state if multiple providers
     let federatedLogin: FederatedLoginStateRecord | undefined;

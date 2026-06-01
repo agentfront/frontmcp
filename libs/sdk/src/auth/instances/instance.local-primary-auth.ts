@@ -1,16 +1,22 @@
 import { SignJWT } from 'jose';
 
 import {
+  createTokenStorageAdapter,
   InMemoryAuthorizationStore,
   InMemoryFederatedAuthSessionStore,
   InMemoryOrchestratedTokenStore,
+  isPersistentTokenStorage,
   JwksService,
+  StorageAuthorizationStore,
+  StorageFederatedAuthSessionStore,
+  StorageOrchestratedTokenStore,
   verifyPkce,
   type AuthorizationStore,
   type FederatedAuthSessionStore,
+  type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
 } from '@frontmcp/auth';
-import { base64urlDecode, getEnv, randomBytes, randomUUID, sha256Hex } from '@frontmcp/utils';
+import { base64urlDecode, getEnv, randomBytes, randomUUID, sha256Hex, type StorageAdapter } from '@frontmcp/utils';
 
 import {
   FrontMcpAuth,
@@ -28,7 +34,6 @@ import {
   type PublicAuthOptions,
   type RemoteAuthOptions,
 } from '../../common/types/options/auth';
-import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { CimdService } from '../cimd';
 import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
@@ -126,15 +131,48 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly keys: JWK[] = [];
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
-  readonly authorizationStore: AuthorizationStore;
   private jwks = new JwksService();
   private cimdService: CimdService | undefined;
 
-  /** Federated auth session store for multi-provider flows */
-  readonly federatedSessionStore: FederatedAuthSessionStore;
+  /**
+   * Token storage backend selected from `options.tokenStorage`.
+   * - `'memory'` / undefined → in-memory stores (default; lost on restart).
+   * - `{ redis }` / `{ sqlite }` → adapter-backed stores that survive restart.
+   *
+   * The three stores below are constructed in-memory synchronously in the
+   * constructor (preserving the exact legacy default behavior). When a
+   * persistent backend is configured, {@link initializeStores} swaps in the
+   * StorageAdapter-backed implementations during async `initialize()`, before
+   * the server signals ready.
+   */
+  private readonly tokenStorage: TokenStorageConfig | undefined;
 
-  /** Token store for upstream provider tokens */
-  readonly orchestratedTokenStore: TokenStore;
+  /** OAuth authorization-code / pending / refresh-token store. */
+  private authorizationStoreImpl: AuthorizationStore;
+
+  /** Federated auth session store for multi-provider flows. */
+  private federatedSessionStoreImpl: FederatedAuthSessionStore;
+
+  /** Token store for upstream provider tokens. */
+  private orchestratedTokenStoreImpl: TokenStore;
+
+  /** Storage adapter backing the persistent stores (kept for disposal). */
+  private storageAdapter?: StorageAdapter;
+
+  /** OAuth authorization-code / pending / refresh-token store. */
+  get authorizationStore(): AuthorizationStore {
+    return this.authorizationStoreImpl;
+  }
+
+  /** Federated auth session store for multi-provider flows. */
+  get federatedSessionStore(): FederatedAuthSessionStore {
+    return this.federatedSessionStoreImpl;
+  }
+
+  /** Token store for upstream provider tokens. */
+  get orchestratedTokenStore(): TokenStore {
+    return this.orchestratedTokenStoreImpl;
+  }
 
   /** Provider configurations (indexed by provider ID) */
   private readonly providerConfigs = new Map<string, UpstreamProviderConfig>();
@@ -143,17 +181,6 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   private readonly accessTokenTtlSeconds = 3600;
   /** Default refresh token TTL (30 days) */
   private readonly refreshTokenTtlSeconds = 30 * 24 * 3600;
-
-  /**
-   * Get the authorization store as InMemoryAuthorizationStore with type guard.
-   * This ensures type safety when using InMemory-specific methods.
-   */
-  private getInMemoryStore(): InMemoryAuthorizationStore {
-    if (!(this.authorizationStore instanceof InMemoryAuthorizationStore)) {
-      throw new InMemoryStoreRequiredError('LocalPrimaryAuth record creation');
-    }
-    return this.authorizationStore;
-  }
 
   constructor(
     private scope: ScopeEntry,
@@ -180,12 +207,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.secret = DEFAULT_NO_AUTH_SECRET;
     }
 
-    // Initialize authorization store (in-memory for now, Redis later)
-    this.authorizationStore = new InMemoryAuthorizationStore();
+    // Read the token-storage selection. Only local/remote/orchestrated modes
+    // carry `tokenStorage`; public mode does not (treated as 'memory').
+    this.tokenStorage = this.readTokenStorage(options);
 
-    // Initialize federated auth stores
-    this.federatedSessionStore = new InMemoryFederatedAuthSessionStore();
-    this.orchestratedTokenStore = new InMemoryOrchestratedTokenStore({
+    // Default (memory) path: construct in-memory stores synchronously so the
+    // out-of-the-box behavior is byte-for-byte identical to before. Persistent
+    // backends (redis/sqlite) are swapped in by `initializeStores()` during the
+    // async `initialize()` step below.
+    this.authorizationStoreImpl = new InMemoryAuthorizationStore();
+    this.federatedSessionStoreImpl = new InMemoryFederatedAuthSessionStore();
+    this.orchestratedTokenStoreImpl = new InMemoryOrchestratedTokenStore({
       encryptionKey: this.secret, // Reuse JWT secret for token encryption
     });
 
@@ -218,6 +250,55 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     }
 
     return basePath;
+  }
+
+  /**
+   * Read the `tokenStorage` selection off the auth options. Only
+   * local/remote/orchestrated modes declare it; public mode does not, in which
+   * case we treat it as the in-memory default.
+   */
+  private readTokenStorage(options: LocalPrimaryAuthOptions): TokenStorageConfig | undefined {
+    if ('tokenStorage' in options) {
+      return (options as { tokenStorage?: TokenStorageConfig }).tokenStorage;
+    }
+    return undefined;
+  }
+
+  /**
+   * When a persistent token-storage backend (Redis/SQLite) is configured, build
+   * a shared `StorageAdapter` and swap the three in-memory stores for their
+   * adapter-backed equivalents. For `'memory'` (or unset) this is a no-op, so
+   * the default behavior is preserved exactly.
+   *
+   * The orchestrated-token store keeps using the JWT secret as its encryption
+   * key, so upstream provider tokens stay encrypted at rest in every backend.
+   */
+  private async initializeStores(): Promise<void> {
+    if (!isPersistentTokenStorage(this.tokenStorage)) {
+      return; // memory default — keep the synchronously-constructed in-memory stores
+    }
+
+    try {
+      const adapter = await createTokenStorageAdapter(this.tokenStorage);
+      this.storageAdapter = adapter;
+
+      this.authorizationStoreImpl = new StorageAuthorizationStore(adapter);
+      this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
+      this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
+        encryptionKey: this.secret,
+      });
+
+      const backend =
+        this.tokenStorage && typeof this.tokenStorage === 'object' && 'sqlite' in this.tokenStorage
+          ? 'sqlite'
+          : 'redis';
+      this.logger.info(`Token storage initialized with persistent backend: ${backend}`);
+    } catch (err) {
+      // Persistence was explicitly requested; failing closed (rather than
+      // silently using memory) avoids surprising token loss on restart.
+      this.logger.error('Failed to initialize persistent token storage', err);
+      throw err;
+    }
   }
 
   async signAnonymousJwt() {
@@ -380,7 +461,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     }
 
     // Create refresh token
-    const refreshTokenRecord = this.getInMemoryStore().createRefreshTokenRecord({
+    const refreshTokenRecord = this.authorizationStore.createRefreshTokenRecord({
       clientId,
       userSub: user.sub,
       scopes: codeRecord.scopes,
@@ -429,7 +510,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const accessToken = await this.signAccessToken(user, tokenRecord.scopes, tokenRecord.resource);
 
     // Rotate refresh token
-    const newRefreshRecord = this.getInMemoryStore().createRefreshTokenRecord({
+    const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
       clientId,
       userSub: tokenRecord.userSub,
       scopes: tokenRecord.scopes,
@@ -470,8 +551,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // Token migration ID (for federated auth)
     pendingAuthId?: string;
   }): Promise<string> {
-    const store = this.getInMemoryStore();
-    const codeRecord = store.createCodeRecord({
+    const codeRecord = this.authorizationStore.createCodeRecord({
       clientId: params.clientId,
       redirectUri: params.redirectUri,
       scopes: params.scopes,
@@ -498,6 +578,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   protected async initialize(): Promise<void> {
+    // Swap in persistent (Redis/SQLite) stores when configured. Runs before the
+    // server signals ready, so flows always see the final store instances.
+    await this.initializeStores();
+
     // TODO: create separated jwk service for local/remote auth options
     this.providers.injectProvider({
       value: this.jwks,

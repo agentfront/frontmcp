@@ -77,8 +77,14 @@ export {
   // OAuth Authorization Store
   InMemoryAuthorizationStore,
   RedisAuthorizationStore,
+  StorageAuthorizationStore,
   verifyPkce,
   generatePkceChallenge,
+  generateAuthorizationCode,
+  generateRefreshTokenValue,
+  buildCodeRecord,
+  buildPendingRecord,
+  buildRefreshTokenRecord,
   pkceChallengeSchema,
   authorizationCodeRecordSchema,
   // Credential schemas
@@ -164,8 +170,10 @@ export {
   VercelKvSessionStore,
   // Orchestrated Token Store
   InMemoryOrchestratedTokenStore,
+  StorageOrchestratedTokenStore,
   // Federated Auth Session
   InMemoryFederatedAuthSessionStore,
+  StorageFederatedAuthSessionStore,
   toSessionRecord,
   fromSessionRecord,
   createFederatedAuthSession,
@@ -173,6 +181,11 @@ export {
   getNextProvider,
   completeCurrentProvider,
   startNextProvider,
+  // Token-storage adapter factory
+  createTokenStorageAdapter,
+  isRedisTokenStorage,
+  isSqliteTokenStorage,
+  isPersistentTokenStorage,
   // Encrypted Authorization Vault
   redisVaultEntrySchema,
   EncryptedRedisVault,
@@ -192,6 +205,10 @@ export type {
   RefreshTokenRecord,
   ConsentStateRecord,
   FederatedLoginStateRecord,
+  CreateCodeRecordParams,
+  CreatePendingRecordParams,
+  CreateRefreshTokenRecordParams,
+  StorageAuthorizationStoreOptions,
   // Credential types
   CredentialType,
   OAuthCredential,
@@ -271,6 +288,8 @@ export type {
   VercelKvSessionConfig,
   // Orchestrated Token Store types
   InMemoryOrchestratedTokenStoreOptions,
+  StorageOrchestratedTokenStoreOptions,
+  StorageFederatedAuthSessionStoreOptions,
   // Federated Auth Session types
   ProviderPkce,
   ProviderTokens,

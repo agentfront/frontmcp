@@ -54,7 +54,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json",
+          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm"
+        ],
+        "parallel": false
       }
     },
     "test": {

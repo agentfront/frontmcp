@@ -160,12 +160,30 @@ export interface RemoteProviderConfig {
 }
 
 /**
+ * SQLite configuration for token storage.
+ *
+ * `path` is required: the auth layer has no default-path resolver, so SQLite
+ * persistence is opt-in and explicit.
+ */
+export interface TokenStorageSqliteConfig {
+  /** Path to the `.sqlite` database file used for auth persistence. */
+  path: string;
+  /** Optional at-rest value encryption (AES-256-GCM via HKDF-SHA256). */
+  encryption?: { secret: string };
+  /** Interval in ms for purging expired keys (default 60000). */
+  ttlCleanupIntervalMs?: number;
+  /** Enable WAL mode for better read concurrency (default true). */
+  walMode?: boolean;
+}
+
+/**
  * Token storage configuration (simplified, BC-030)
  *
- * Either the string 'memory' for in-memory storage,
- * or an object { redis: RedisConfig } for Redis storage.
+ * - `'memory'` — in-memory storage (default; lost on restart).
+ * - `{ redis: RedisConfig }` — Redis-backed persistence.
+ * - `{ sqlite: TokenStorageSqliteConfig }` — local SQLite-file persistence.
  */
-export type TokenStorageConfig = 'memory' | { redis: RedisConfig };
+export type TokenStorageConfig = 'memory' | { redis: RedisConfig } | { sqlite: TokenStorageSqliteConfig };
 
 /**
  * Token refresh configuration

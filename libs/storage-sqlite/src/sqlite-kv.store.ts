@@ -6,7 +6,9 @@
  */
 
 import type Database from 'better-sqlite3';
-import { deriveEncryptionKey, encryptValue, decryptValue } from './encryption';
+
+import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
+import { openDatabase } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
@@ -41,15 +43,8 @@ export class SqliteKvStore {
   private stmts: KvPreparedStatements | null = null;
 
   constructor(options: SqliteStorageOptions) {
-    // Lazy require to avoid bundling when not used
-
-    const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    try {
-      this.db = new BetterSqlite3(options.path);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`SqliteKvStore: failed to open database at "${options.path}": ${message}`);
-    }
+    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
+    this.db = openDatabase(options.path, 'SqliteKvStore');
 
     // Enable WAL mode for better concurrency
     if (options.walMode !== false) {

@@ -1,6 +1,7 @@
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { SqliteEventStore } from '../sqlite-event.store';
 import { sqliteStorageOptionsSchema } from '../sqlite.options';
 
@@ -222,7 +223,7 @@ describe('SqliteEventStore', () => {
   });
 
   describe('constructor error handling', () => {
-    it('should throw descriptive error for invalid db path', () => {
+    it('should throw descriptive error for an unwritable db path', () => {
       expect(() => {
         new SqliteEventStore({
           path: '/nonexistent/dir/bad/test.sqlite',
@@ -230,7 +231,7 @@ describe('SqliteEventStore', () => {
           maxEvents: 100,
           ttlMs: 300000,
         });
-      }).toThrow('SqliteEventStore: failed to open database');
+      }).toThrow(/SqliteEventStore: failed to (create directory|open database)/);
     });
 
     it('should throw descriptive error for non-Error exception', () => {

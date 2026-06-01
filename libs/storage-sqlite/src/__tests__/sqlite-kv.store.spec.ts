@@ -1,6 +1,7 @@
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { SqliteKvStore } from '../sqlite-kv.store';
 
 function tmpDbPath(): string {
@@ -171,10 +172,29 @@ describe('SqliteKvStore', () => {
   });
 
   describe('constructor error handling', () => {
-    it('should throw descriptive error for invalid db path', () => {
+    it('should throw descriptive error for an unwritable db path', () => {
+      // A root-level directory an unprivileged process cannot create. The store
+      // attempts to create the parent dir first, so the descriptive error comes
+      // from the directory-creation step.
       expect(() => {
         new SqliteKvStore({ path: '/nonexistent/dir/bad/test.sqlite', ttlCleanupIntervalMs: 0 });
-      }).toThrow('SqliteKvStore: failed to open database');
+      }).toThrow(/SqliteKvStore: failed to (create directory|open database)/);
+    });
+
+    it('creates missing parent directories for a writable nested path', () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-kv-mkdir-'));
+      const nested = path.join(base, 'a', 'b', 'c', 'auth.sqlite');
+      expect(fs.existsSync(path.dirname(nested))).toBe(false);
+
+      const s = new SqliteKvStore({ path: nested, ttlCleanupIntervalMs: 0 });
+      try {
+        s.set('k', 'v');
+        expect(s.get('k')).toBe('v');
+        expect(fs.existsSync(nested)).toBe(true);
+      } finally {
+        s.close();
+        fs.rmSync(base, { recursive: true, force: true });
+      }
     });
   });
 

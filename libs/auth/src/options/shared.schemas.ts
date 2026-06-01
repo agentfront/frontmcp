@@ -232,12 +232,54 @@ export const flatRemoteProviderFields = {
 // ============================================
 
 /**
+ * SQLite configuration for token storage.
+ *
+ * Mirrors the SQLite options consumed by `@frontmcp/storage-sqlite`. Unlike the
+ * SDK's transport/session SQLite config, `path` is REQUIRED here: the auth layer
+ * has no default-path resolver, so persistence is opt-in and explicit.
+ */
+export const tokenStorageSqliteSchema = z.object({
+  /** Path to the `.sqlite` database file used for auth persistence. */
+  path: z.string().min(1),
+
+  /**
+   * Encryption configuration for at-rest encryption of stored values.
+   * Independent of the AES-GCM blob encryption already applied to upstream
+   * provider tokens by the orchestrated-token store.
+   */
+  encryption: z
+    .object({
+      secret: z.string().min(1),
+    })
+    .optional(),
+
+  /**
+   * Interval in milliseconds for purging expired keys.
+   * @default 60000
+   */
+  ttlCleanupIntervalMs: z.number().int().nonnegative().optional(),
+
+  /**
+   * Enable WAL mode for better read concurrency.
+   * @default true
+   */
+  walMode: z.boolean().optional(),
+});
+
+export type TokenStorageSqliteConfig = z.infer<typeof tokenStorageSqliteSchema>;
+
+/**
  * Token storage configuration for local/remote modes.
  *
- * Simple string 'memory' for in-memory storage,
- * or an object with redis config for Redis storage.
+ * - `'memory'` — in-memory storage (default; lost on restart).
+ * - `{ redis }` — Redis-backed persistence.
+ * - `{ sqlite }` — local SQLite-file persistence (survives restart, no Redis).
  */
-export const tokenStorageConfigSchema = z.union([z.literal('memory'), z.object({ redis: redisConfigSchema })]);
+export const tokenStorageConfigSchema = z.union([
+  z.literal('memory'),
+  z.object({ redis: redisConfigSchema }),
+  z.object({ sqlite: tokenStorageSqliteSchema }),
+]);
 
 export type TokenStorageConfig = z.infer<typeof tokenStorageConfigSchema>;
 export type TokenStorageConfigInput = z.input<typeof tokenStorageConfigSchema>;
