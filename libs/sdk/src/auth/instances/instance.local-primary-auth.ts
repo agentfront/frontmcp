@@ -3,6 +3,7 @@ import { SignJWT } from 'jose';
 import {
   createTokenStorageAdapter,
   InMemoryAuthorizationStore,
+  InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
   InMemoryOrchestratedTokenStore,
   isPersistentTokenStorage,
@@ -11,10 +12,12 @@ import {
   JwksService,
   SessionCredentialVault,
   StorageAuthorizationStore,
+  StorageConsentStore,
   StorageFederatedAuthSessionStore,
   StorageOrchestratedTokenStore,
   verifyPkce,
   type AuthorizationStore,
+  type ConsentStore,
   type FederatedAuthSessionStore,
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
@@ -199,6 +202,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /** Token store for upstream provider tokens. */
   private orchestratedTokenStoreImpl: TokenStore;
 
+  /** Remembered per-(user, client) consent selections (`rememberConsent`). */
+  private consentStoreImpl: ConsentStore;
+
   /** Storage adapter backing the persistent stores (kept for disposal). */
   private storageAdapter?: StorageAdapter;
 
@@ -227,6 +233,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /** Token store for upstream provider tokens. */
   get orchestratedTokenStore(): TokenStore {
     return this.orchestratedTokenStoreImpl;
+  }
+
+  /**
+   * Remembered per-(user, client) consent selections, backing
+   * `auth.consent.rememberConsent`. Shares the configured token-storage backend
+   * (memory by default; Redis/SQLite when persistent storage is configured).
+   */
+  get consentStore(): ConsentStore {
+    return this.consentStoreImpl;
   }
 
   /** Provider configurations (indexed by provider ID) */
@@ -275,6 +290,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.orchestratedTokenStoreImpl = new InMemoryOrchestratedTokenStore({
       encryptionKey: this.secret, // Reuse JWT secret for token encryption
     });
+    this.consentStoreImpl = new InMemoryConsentStore();
 
     // Initialize CIMD service if orchestrated mode
     if (isOrchestratedMode(options)) {
@@ -352,6 +368,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
       });
+      this.consentStoreImpl = new StorageConsentStore(adapter);
 
       const backend: 'sqlite' | 'redis' | 'unknown' = isSqliteTokenStorage(this.tokenStorage)
         ? 'sqlite'

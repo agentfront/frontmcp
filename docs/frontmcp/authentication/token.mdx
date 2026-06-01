@@ -285,7 +285,7 @@ auth: {
 3. The user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent.selectedTools` claim, and **enforced on every `tools/call`** — an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`).
 
 <Note>
-  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and stay all-tools-allowed. `excludedTools` are always available. `rememberConsent` is accepted but does not yet persist a prior selection.
+  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and stay all-tools-allowed. `excludedTools` are always available. `rememberConsent` (default `true`) persists each user's per-client selection and reuses it on the next login, re-prompting only when a NEW tool appears; set it `false` to always re-show the screen.
 </Note>
 
 ### Tool-Level Scopes

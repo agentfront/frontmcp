@@ -211,6 +211,134 @@ describe('OAuth Callback Flow — consent gate', () => {
     expect(String(output?.body)).toContain('Invalid tool selection');
   });
 
+  // ===========================================================
+  // rememberConsent (per-(user, client) selection reuse)
+  // ===========================================================
+  describe('rememberConsent', () => {
+    it('persists the submitted selection (seenToolIds = full offered set)', async () => {
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', requireEmail: false, consent: { enabled: true } } as any,
+        apps: [{ id: 'notes', name: 'Notes' }],
+        tools: TOOLS,
+      });
+      const pendingAuthId = await seedConsentPendingAuth(scope, ['notes:create', 'notes:list']);
+
+      const { output, state } = await runCallback(scope, {
+        pending_auth_id: pendingAuthId,
+        email: 'user@example.com',
+        consent_submitted: '1',
+        tools: ['notes:create'],
+      });
+      expect(output).toBeUndefined();
+
+      // The record is keyed by the SAME derived userSub the mint used.
+      const record = await (scope as any).auth.consentStore.get(state.userSub, 'local-client');
+      expect(record).toBeTruthy();
+      expect(record.selectedToolIds).toEqual(['notes:create']);
+      expect(record.seenToolIds).toEqual(['notes:create', 'notes:list']);
+      expect(typeof record.updatedAt).toBe('number');
+    });
+
+    it('SKIPS the consent screen on a revisit and mints the remembered selection (+ excluded)', async () => {
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', requireEmail: false, consent: { enabled: true, excludedTools: ['notes:list'] } } as any,
+        apps: [{ id: 'notes', name: 'Notes' }],
+        tools: TOOLS,
+      });
+
+      // First login: submit a selection (persists under the derived userSub).
+      const firstId = await seedConsentPendingAuth(scope, ['notes:create']);
+      await runCallback(scope, {
+        pending_auth_id: firstId,
+        email: 'user@example.com',
+        consent_submitted: '1',
+        tools: ['notes:create'],
+      });
+
+      // Second login (FIRST visit — no submission): must SKIP the screen.
+      const secondId = await seedConsentPendingAuth(scope, ['notes:create']);
+      const { output, state } = await runCallback(scope, {
+        pending_auth_id: secondId,
+        email: 'user@example.com',
+      });
+
+      // No consent page rendered — the gate was skipped and we proceed to mint.
+      expect(output).toBeUndefined();
+      expect(state.consentEnabled).toBe(true);
+      // Minted set = remembered selection ∪ always-available excludedTools.
+      expect(new Set(state.selectedTools)).toEqual(new Set(['notes:create', 'notes:list']));
+    });
+
+    it('RE-PROMPTS pre-filled with the prior selection when a NEW tool appears', async () => {
+      // First server only offers `notes:create`.
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', requireEmail: false, consent: { enabled: true } } as any,
+        apps: [{ id: 'notes', name: 'Notes' }],
+        tools: [TOOLS[0]],
+      });
+      const firstId = await seedConsentPendingAuth(scope, ['notes:create']);
+      await runCallback(scope, {
+        pending_auth_id: firstId,
+        email: 'user@example.com',
+        consent_submitted: '1',
+        tools: ['notes:create'],
+      });
+
+      // A new tool (`notes:list`) is now available → re-prompt PRE-FILLED.
+      const scope2 = createMockScopeEntry({
+        auth: { mode: 'local', requireEmail: false, consent: { enabled: true } } as any,
+        apps: [{ id: 'notes', name: 'Notes' }],
+        tools: TOOLS,
+      });
+      // Reuse the SAME remembered store so the prior selection is visible.
+      (scope2 as any).auth.consentStore = (scope as any).auth.consentStore;
+
+      const secondId = await seedConsentPendingAuth(scope2, ['notes:create', 'notes:list']);
+      const { output } = await runCallback(scope2, {
+        pending_auth_id: secondId,
+        email: 'user@example.com',
+      });
+
+      // The consent screen is rendered (NOT skipped) so the user decides on the new tool.
+      expect(output?.kind).toBe('html');
+      expect(String(output?.body)).toContain('Select Tools to Enable');
+      // Prior selection pre-checked; the NEW tool is present but unchecked.
+      const body = String(output?.body);
+      const createCheckbox = body.match(/value="notes:create"[^>]*/)?.[0] ?? '';
+      const listCheckbox = body.match(/value="notes:list"[^>]*/)?.[0] ?? '';
+      expect(createCheckbox).toContain('checked');
+      expect(listCheckbox).not.toContain('checked');
+    });
+
+    it('does NOT skip or persist when rememberConsent is false (default behavior preserved)', async () => {
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', requireEmail: false, consent: { enabled: true, rememberConsent: false } } as any,
+        apps: [{ id: 'notes', name: 'Notes' }],
+        tools: TOOLS,
+      });
+
+      // Submit a selection — with rememberConsent off, nothing is persisted.
+      const firstId = await seedConsentPendingAuth(scope, ['notes:create', 'notes:list']);
+      const { state } = await runCallback(scope, {
+        pending_auth_id: firstId,
+        email: 'user@example.com',
+        consent_submitted: '1',
+        tools: ['notes:create'],
+      });
+      const record = await (scope as any).auth.consentStore.get(state.userSub, 'local-client');
+      expect(record).toBeNull();
+
+      // A subsequent first-visit login STILL shows the consent screen.
+      const secondId = await seedConsentPendingAuth(scope, ['notes:create', 'notes:list']);
+      const { output } = await runCallback(scope, {
+        pending_auth_id: secondId,
+        email: 'user@example.com',
+      });
+      expect(output?.kind).toBe('html');
+      expect(String(output?.body)).toContain('Select Tools to Enable');
+    });
+  });
+
   it('does NOT render consent when consent is disabled (default preserved — mints all available)', async () => {
     const scope = createMockScopeEntry({
       auth: { mode: 'local', requireEmail: false } as any, // no consent config

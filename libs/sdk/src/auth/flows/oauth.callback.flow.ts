@@ -398,10 +398,58 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const effectiveFederated = isFederated || !!pendingAuth.federatedLogin;
     const consentGateApplies = consentEnabled && !effectiveFederated && !isIncremental;
 
+    // `rememberConsent` (default true): reuse a prior per-(user, client) tool
+    // selection so a returning user is not re-prompted unless a NEW tool appeared.
+    const rememberConsent = consentConfig?.rememberConsent ?? true;
+
+    let finalSelectedTools = availableToolIds;
+    // True when a remembered selection lets us skip the consent screen entirely
+    // (it is already reconciled against the current available set, so Step 2
+    // validation/requireSelection is bypassed for this minting pass).
+    let rememberSkip = false;
+
+    // Step 0 (rememberConsent): on a first visit (no submission yet), consult the
+    // remembered record for this (user, client).
+    if (consentGateApplies && rememberConsent && userSub && !consentSubmitted && selectedTools === undefined) {
+      const remembered = await localAuth.consentStore.get(userSub, pendingAuth.clientId);
+      if (remembered) {
+        const seen = new Set(remembered.seenToolIds);
+        const hasNewTool = availableToolIds.some((id) => !seen.has(id));
+        if (!hasNewTool) {
+          // No new tools since the last consent → SKIP the screen and mint with
+          // the remembered selection narrowed to what is still available (+ the
+          // always-available excludedTools, merged below).
+          const stillSelected = remembered.selectedToolIds.filter((id) => availableToolIds.includes(id));
+          this.logger.info('rememberConsent: prior selection reused — skipping consent screen');
+          // The reconciled selection (+ always-available excludedTools) is what
+          // gets written into state.selectedTools by the final state.set below.
+          finalSelectedTools = [...new Set([...stillSelected, ...excludedTools])];
+          rememberSkip = true;
+        } else {
+          // A new tool appeared → re-render the screen PRE-FILLED with the
+          // remembered selection so the user decides about the new one (a newly
+          // added tool is never silently granted).
+          this.logger.info('rememberConsent: new tool detected — re-prompting pre-filled with prior selection');
+          this.respond(
+            httpRespond.html(
+              this.renderConsentScreen(
+                pendingAuth,
+                consentConfig,
+                { email, name, loginFields },
+                undefined,
+                remembered.selectedToolIds,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     // Step 1: consent enabled but the user has not yet submitted a selection →
     // render the consent screen. Do NOT delete the pending authorization; the
     // consent form GETs back to this same endpoint with the identity + `tools=`.
-    if (consentGateApplies && !consentSubmitted && selectedTools === undefined) {
+    if (consentGateApplies && !rememberSkip && !consentSubmitted && selectedTools === undefined) {
       this.logger.info('Consent enabled and not yet submitted — rendering consent screen');
       this.respond(
         httpRespond.html(this.renderConsentScreen(pendingAuth, consentConfig, { email, name, loginFields })),
@@ -410,8 +458,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Step 2: a selection was submitted (or consent is disabled / auto).
-    let finalSelectedTools = availableToolIds;
-    if (consentGateApplies) {
+    if (consentGateApplies && !rememberSkip) {
       const submitted = selectedTools ?? [];
 
       // Reject any tool id that was not offered (excluded tools are never valid
@@ -448,6 +495,25 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
           ),
         );
         return;
+      }
+
+      // Persist the selection so a later login for the same (user, client) can
+      // reuse it (rememberConsent). `seenToolIds` records the full offered set so
+      // a newly-added tool re-prompts instead of being silently granted. No PII
+      // is stored — only the opaque subject, client id, and tool ids.
+      if (rememberConsent && userSub) {
+        try {
+          await localAuth.consentStore.set({
+            userSub,
+            clientId: pendingAuth.clientId,
+            selectedToolIds: submitted,
+            seenToolIds: availableToolIds,
+            updatedAt: Date.now(),
+          });
+        } catch (err) {
+          // Remembering is best-effort: a store failure must not block minting.
+          this.logger.warn('rememberConsent: failed to persist selection', err);
+        }
       }
 
       // The minted token's consent set is the user's selection PLUS the always
@@ -1003,6 +1069,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     consentConfig: ConsentConfig | undefined,
     identity: { email?: string; name?: string; loginFields?: Record<string, string> },
     error?: string,
+    /**
+     * When supplied (rememberConsent prefill on a new-tool re-prompt), these tool
+     * ids are pre-checked INSTEAD of `consentConfig.defaultSelectedTools`, so the
+     * user revisits their remembered selection and only has to decide about the
+     * newly-added tool(s).
+     */
+    preSelectedTools?: string[],
   ): string {
     const callbackPath = `${this.scope.fullPath}/oauth/callback`;
 
@@ -1038,7 +1111,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       customMessage: consentConfig?.customMessage,
       allowSelectAll: consentConfig?.allowSelectAll ?? true,
       requireSelection: consentConfig?.requireSelection ?? true,
-      defaultSelectedTools: consentConfig?.defaultSelectedTools,
+      // A remembered selection (rememberConsent re-prompt) overrides the static
+      // `defaultSelectedTools` pre-check so the user revisits exactly what they
+      // previously consented to.
+      defaultSelectedTools: preSelectedTools ?? consentConfig?.defaultSelectedTools,
       error,
       hiddenFields,
     });

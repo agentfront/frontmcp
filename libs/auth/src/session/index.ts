@@ -276,6 +276,14 @@ export type {
 export { StorageFederatedAuthSessionStore } from './storage-federated-auth.session';
 export type { StorageFederatedAuthSessionStoreOptions } from './storage-federated-auth.session';
 
+// Remembered Consent Store (per-(user, client) tool selection)
+export { InMemoryConsentStore, consentRecordKey } from './consent.store';
+export type { ConsentStore, RememberedConsentRecord } from './consent.store';
+
+// Storage-backed Remembered Consent Store (memory / Redis / SQLite)
+export { StorageConsentStore } from './storage-consent.store';
+export type { StorageConsentStoreOptions } from './storage-consent.store';
+
 // Token-storage adapter factory (memory / Redis / SQLite)
 export {
   createTokenStorageAdapter,

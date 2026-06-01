@@ -188,6 +188,10 @@ export {
   getNextProvider,
   completeCurrentProvider,
   startNextProvider,
+  // Remembered Consent Store
+  InMemoryConsentStore,
+  StorageConsentStore,
+  consentRecordKey,
   // Token-storage adapter factory
   createTokenStorageAdapter,
   isRedisTokenStorage,
@@ -317,6 +321,10 @@ export type {
   FederatedAuthSessionRecord,
   FederatedAuthSessionStore,
   FederatedAuthSessionCreateParams,
+  // Remembered Consent Store types
+  ConsentStore,
+  RememberedConsentRecord,
+  StorageConsentStoreOptions,
   // Encrypted Authorization Vault types
   RedisVaultEntry,
   EncryptionContext,

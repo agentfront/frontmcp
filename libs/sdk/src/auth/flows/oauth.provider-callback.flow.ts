@@ -536,47 +536,106 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         : undefined;
     const consentEnabled = consentConfig?.enabled === true;
 
+    // Stable subject for rememberConsent — derived identically to the minted
+    // token's `userSub` below so the remembered key matches the issued identity.
+    // Federated sessions only carry a stable sub when the initial login form (or
+    // a provider) supplied one; when only an email is present we derive from it.
+    // If neither is available there is no stable identity, so rememberConsent is
+    // skipped for that session (documented limitation).
+    const rememberConsent = consentConfig?.rememberConsent ?? true;
+    const consentUserSub =
+      session.userInfo.sub || (session.userInfo.email ? this.generateUserSub(session.userInfo.email) : undefined);
+    const canRemember = consentEnabled && rememberConsent && !!consentUserSub;
+
     let selectedToolIds: string[] | undefined;
     if (consentEnabled) {
       const { availableToolIds } = projectConsentTools(this.scope, consentConfig?.excludedTools);
 
-      // Pass 1: not yet submitted → render the consent screen (keep the session).
+      // Pass 1: not yet submitted → consult the remembered selection (if any) and
+      // either SKIP the screen (no new tools) or re-render PRE-FILLED with it
+      // (new tool appeared); otherwise render the screen fresh (keep the session).
       if (!consent?.consentSubmitted) {
-        this.logger.info('Federated auth: all providers linked, rendering consent screen');
-        this.respond(httpRespond.html(this.renderConsentScreen(session, consentConfig)));
-        return;
+        if (canRemember && consentUserSub) {
+          const remembered = await localAuth.consentStore.get(consentUserSub, session.clientId);
+          if (remembered) {
+            const seen = new Set(remembered.seenToolIds);
+            const hasNewTool = availableToolIds.some((id) => !seen.has(id));
+            if (!hasNewTool) {
+              const stillSelected = remembered.selectedToolIds.filter((id) => availableToolIds.includes(id));
+              this.logger.info('rememberConsent (federated): prior selection reused — skipping consent screen');
+              selectedToolIds = [...new Set([...stillSelected, ...(consentConfig?.excludedTools ?? [])])];
+              // Fall through to mint with the remembered selection.
+            } else {
+              this.logger.info(
+                'rememberConsent (federated): new tool detected — re-prompting pre-filled with prior selection',
+              );
+              this.respond(
+                httpRespond.html(
+                  this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds),
+                ),
+              );
+              return;
+            }
+          }
+        }
+
+        if (selectedToolIds === undefined) {
+          this.logger.info('Federated auth: all providers linked, rendering consent screen');
+          this.respond(httpRespond.html(this.renderConsentScreen(session, consentConfig)));
+          return;
+        }
       }
 
-      // Pass 2: validate the submitted selection.
-      const submitted = consent.selectedTools ?? [];
-      const invalid = submitted.filter((id) => !availableToolIds.includes(id));
-      if (invalid.length > 0) {
-        this.logger.warn(`Federated consent: invalid tool selection: ${invalid.join(', ')}`);
-        this.respond(
-          httpRespond.html(
-            this.renderErrorPage(
-              'invalid_request',
-              'Invalid tool selection. Please restart authorization and choose from the available tools.',
+      // Pass 2: validate the submitted selection (skipped when a remembered
+      // selection was reused above and already populated `selectedToolIds`).
+      if (selectedToolIds === undefined) {
+        const submitted = consent?.selectedTools ?? [];
+        const invalid = submitted.filter((id) => !availableToolIds.includes(id));
+        if (invalid.length > 0) {
+          this.logger.warn(`Federated consent: invalid tool selection: ${invalid.join(', ')}`);
+          this.respond(
+            httpRespond.html(
+              this.renderErrorPage(
+                'invalid_request',
+                'Invalid tool selection. Please restart authorization and choose from the available tools.',
+              ),
+              400,
             ),
-            400,
-          ),
-        );
-        return;
-      }
+          );
+          return;
+        }
 
-      const requireSelection = consentConfig?.requireSelection ?? true;
-      if (requireSelection && submitted.length === 0) {
-        this.logger.info('Federated consent: empty submit with requireSelection — re-rendering');
-        this.respond(
-          httpRespond.html(
-            this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
-          ),
-        );
-        return;
-      }
+        const requireSelection = consentConfig?.requireSelection ?? true;
+        if (requireSelection && submitted.length === 0) {
+          this.logger.info('Federated consent: empty submit with requireSelection — re-rendering');
+          this.respond(
+            httpRespond.html(
+              this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
+            ),
+          );
+          return;
+        }
 
-      // Consented set = selection ∪ always available excludedTools.
-      selectedToolIds = [...new Set([...submitted, ...(consentConfig?.excludedTools ?? [])])];
+        // Persist the selection so a later federated login for the same
+        // (user, client) can reuse it. Best-effort: a store failure must not
+        // block minting. No PII — opaque subject, client id, and tool ids only.
+        if (canRemember && consentUserSub) {
+          try {
+            await localAuth.consentStore.set({
+              userSub: consentUserSub,
+              clientId: session.clientId,
+              selectedToolIds: submitted,
+              seenToolIds: availableToolIds,
+              updatedAt: Date.now(),
+            });
+          } catch (err) {
+            this.logger.warn('rememberConsent (federated): failed to persist selection', err);
+          }
+        }
+
+        // Consented set = selection ∪ always available excludedTools.
+        selectedToolIds = [...new Set([...submitted, ...(consentConfig?.excludedTools ?? [])])];
+      }
     }
 
     // Create authorization code with consent/federated data
@@ -627,7 +686,17 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    * (and `consent_submitted=1`), so {@link handleConsentSubmission} completes
    * the mint. Honors the same `auth.consent` flags as the non-federated path.
    */
-  private renderConsentScreen(session: FederatedAuthSession, consentConfig: ConsentConfig, error?: string): string {
+  private renderConsentScreen(
+    session: FederatedAuthSession,
+    consentConfig: ConsentConfig,
+    error?: string,
+    /**
+     * rememberConsent prefill: pre-check these tool ids INSTEAD of
+     * `consentConfig.defaultSelectedTools` so a returning user revisits their
+     * prior selection on a new-tool re-prompt.
+     */
+    preSelectedTools?: string[],
+  ): string {
     const callbackPath = `${this.scope.fullPath}/oauth/provider/_consent/callback`;
     const { toolCards } = projectConsentTools(this.scope, consentConfig.excludedTools);
 
@@ -646,7 +715,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       customMessage: consentConfig.customMessage,
       allowSelectAll: consentConfig.allowSelectAll ?? true,
       requireSelection: consentConfig.requireSelection ?? true,
-      defaultSelectedTools: consentConfig.defaultSelectedTools,
+      // A remembered selection (rememberConsent re-prompt) overrides the static
+      // `defaultSelectedTools` pre-check.
+      defaultSelectedTools: preSelectedTools ?? consentConfig.defaultSelectedTools,
       error,
       // Round-trip the session id so the resubmit re-loads the same session.
       hiddenFields: [{ name: 'consent_session', value: session.id }],

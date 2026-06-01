@@ -305,7 +305,7 @@ consent: {
 When `consent.enabled` is `true`, the local flow renders an **interactive tool-selection screen** after login and **enforces the selection at call time**: the chosen tool ids are embedded in the token's `consent` claim and a `tools/call` to an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`). The flags `groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `customMessage`, `excludedTools`, and `defaultSelectedTools` are all honored. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization) for the full table.
 
 <Note>
-  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and are unaffected — all tools remain callable. `rememberConsent` is accepted but does not yet persist a prior selection.
+  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and are unaffected — all tools remain callable. `rememberConsent` (default `true`) persists each user's per-client selection and reuses it on the next login, re-prompting only when a NEW tool appears; set it `false` to always re-show the screen.
 </Note>
 
 ### Incremental Authorization

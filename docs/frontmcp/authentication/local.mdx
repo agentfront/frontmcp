@@ -635,6 +635,7 @@ auth: {
     allowSelectAll: true,      // render the "select all" / "toggle all" controls (default)
     requireSelection: true,    // reject an empty submit and re-render with an error (default)
     customMessage: 'Choose the tools this client may use.', // optional subtitle override
+    rememberConsent: true,     // reuse a prior per-(user, client) selection (default)
     excludedTools: ['ping'],   // never offered, never required — ALWAYS available
     defaultSelectedTools: ['create-note'], // pre-checked on the screen
   },
@@ -651,6 +652,7 @@ auth: {
 | `allowSelectAll`       | `true` (default) renders the select-all + per-app toggle controls; `false` removes them.                 |
 | `requireSelection`     | `true` (default) rejects an empty submit by re-rendering with an error; `false` allows zero tools.        |
 | `customMessage`        | Replaces the default subtitle on the consent screen.                                                     |
+| `rememberConsent`      | `true` (default) persists the user's selection per (user, client) and reuses it on the next login (re-prompting only when a NEW tool appears); `false` always re-shows the screen. |
 | `excludedTools`        | Never offered on the screen and never required — these tools are **always available** regardless of the selection. |
 | `defaultSelectedTools` | Pre-checked when the screen first renders. When omitted, **all** tools are pre-checked.                   |
 
@@ -666,8 +668,22 @@ auth: {
   **Federated (multi-provider) logins** show the consent screen AFTER the last
   provider is linked (in the provider-callback flow), then complete the mint —
   so consent applies uniformly to single-operator and federated logins.
-  `rememberConsent` is accepted in the schema but does not yet persist a prior
-  selection across logins.
+</Note>
+
+<Note>
+  **`rememberConsent` (default `true`)** persists each user's per-client tool
+  selection (keyed by `consent:{userSub}:{clientId}`) so a returning user is not
+  re-prompted. On a later login: if every currently-available tool was already
+  offered before, the screen is **skipped** and the token is minted with the
+  remembered selection (intersected with what's still available, plus
+  `excludedTools`). If a **new** tool has appeared since, the screen is re-shown
+  **pre-filled** with the prior selection so the user explicitly decides about
+  the new tool — a newly-added tool is never silently granted. The record stores
+  only the opaque subject, client id, and tool ids (no PII), and shares the
+  configured `tokenStorage` backend (in-memory by default; Redis/SQLite persists
+  it across restarts). Set `rememberConsent: false` to always re-show the screen.
+  Enforcement is unchanged — the minted token's `consent.selectedTools` claim
+  still drives every `tools/call`.
 </Note>
 
 ---

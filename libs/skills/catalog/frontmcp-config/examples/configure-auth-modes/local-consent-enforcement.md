@@ -8,6 +8,7 @@ features:
   - 'Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call'
   - 'Listing `excludedTools` so essential tools are never offered and are always available'
   - 'Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools'
+  - 'Pinning `rememberConsent: false` to re-show the screen on every login (the default `true` reuses a prior per-(user, client) selection and only re-prompts when a NEW tool appears)'
 ---
 
 # Local Consent Enforcement
@@ -51,6 +52,11 @@ class DeleteAccountTool extends ToolContext {
     consent: {
       enabled: true,
       requireSelection: true, // reject an empty submit (default)
+      // Re-show the screen on every login so the user must explicitly opt into
+      // delete_account each time. `rememberConsent` defaults to `true` (reuse a
+      // prior per-(user, client) selection); pin it `false` for an opt-in-every-time
+      // screen like this one.
+      rememberConsent: false,
       // `health` is never offered on the consent screen and is always callable.
       excludedTools: ['health'],
       // Pre-check nothing dangerous: the user must explicitly opt into delete_account.
@@ -73,6 +79,7 @@ class Server {}
 - Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call
 - Listing `excludedTools` so essential tools are never offered and are always available
 - Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools
+- Pinning `rememberConsent: false` to re-show the screen on every login (the default `true` reuses a prior per-(user, client) selection and only re-prompts when a NEW tool appears)
 
 ## Related
 

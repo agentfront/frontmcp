@@ -29,6 +29,10 @@ const port = Number.isNaN(parsedPort) ? 3158 : parsedPort;
       showDescriptions: true,
       allowSelectAll: true,
       requireSelection: true,
+      // Pin OFF so the existing consent assertions are deterministic: every
+      // login (even repeated same-user logins) must re-show the consent screen.
+      // The rememberConsent behavior is covered by main.consent-remember.ts.
+      rememberConsent: false,
       // `ping` is always available: never shown on the consent screen and
       // never blocked at call time.
       excludedTools: ['ping'],

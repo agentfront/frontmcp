@@ -8,7 +8,7 @@
 
 import 'reflect-metadata';
 
-import { InMemoryAuthorizationStore, type AuthorizationStore } from '@frontmcp/auth';
+import { InMemoryAuthorizationStore, InMemoryConsentStore, type AuthorizationStore } from '@frontmcp/auth';
 
 import { FlowControl, type FlowMetadata, type FrontMcpAuth, type FrontMcpLogger, type ScopeEntry } from '../../common';
 
@@ -114,6 +114,9 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
 
   return {
     authorizationStore: store,
+    // Remembered-consent store (rememberConsent). A fresh in-memory store per
+    // mock auth so flow tests can drive skip/prefill/persist behavior.
+    consentStore: new InMemoryConsentStore(),
     options: options || { mode: 'public' },
     ready: Promise.resolve(),
   } as unknown as FrontMcpAuth;

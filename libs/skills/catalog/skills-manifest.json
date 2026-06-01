@@ -515,7 +515,8 @@
               "features": [
                 "Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call",
                 "Listing `excludedTools` so essential tools are never offered and are always available",
-                "Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools"
+                "Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools",
+                "Pinning `rememberConsent: false` to re-show the screen on every login (the default `true` reuses a prior per-(user, client) selection and only re-prompts when a NEW tool appears)"
               ]
             },
             {
