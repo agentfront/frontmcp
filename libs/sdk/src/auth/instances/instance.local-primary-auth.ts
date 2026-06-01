@@ -948,6 +948,21 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       }
 
       const tokenData = (await response.json()) as UpstreamTokenResponse;
+
+      // Defensive: a 200 MUST carry a usable access_token. A misbehaving upstream
+      // (or a proxy under load) can return 200 with an error-ish or empty body that
+      // omits `access_token`. Without this guard the federated callback stores an
+      // empty credential and still mints a JWT that claims the provider is linked,
+      // so `this.orchestration.getToken()` later resolves to null. Treat a tokenless
+      // 200 as an exchange error so the flow halts and no tokenless JWT is issued.
+      if (typeof tokenData?.access_token !== 'string' || tokenData.access_token.length === 0) {
+        this.logger.error(`Provider ${providerId} returned 200 without an access_token`);
+        return {
+          error: 'provider_error',
+          error_description: `Provider ${providerId} did not return an access_token`,
+        };
+      }
+
       this.logger.info(`Successfully exchanged code with provider: ${providerId}`);
 
       return tokenData;

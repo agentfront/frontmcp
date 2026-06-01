@@ -12,12 +12,15 @@
  */
 
 import {
+  buildToolConsentPage,
   createFederatedAuthSession,
   escapeHtml,
   renderLocalLoginPage,
   startNextProvider,
   type AuthenticateContext,
   type AuthenticateResult,
+  type ConsentConfig,
+  type ConsentHiddenField,
   type LoginConfig,
   type LoginRenderContext,
   type ProviderPkce,
@@ -36,6 +39,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
@@ -84,6 +88,9 @@ const stateSchema = z.object({
   // Consent
   consentEnabled: z.boolean().default(false),
   selectedTools: z.array(z.string()).optional(),
+  // True when the consent form was submitted (distinguishes an empty selection
+  // from a first visit so an empty `requireSelection` submit doesn't loop).
+  consentSubmitted: z.boolean().default(false),
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
@@ -151,12 +158,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Consent Parameters (from POST body or query)
-    // Note: For consent, we might use POST, but GET is also supported
-    const toolsParam = request.query['tools'];
+    // Tools can be read from either the query (GET) or a urlencoded POST body
+    // (the consent form POSTs back here). `selectedTools` stays `undefined`
+    // until the consent form is submitted.
+    const toolsParam = request.query['tools'] ?? this.readBodyParam(request, 'tools');
     let selectedTools: string[] | undefined;
     if (toolsParam) {
       selectedTools = Array.isArray(toolsParam) ? toolsParam : [toolsParam];
     }
+
+    // `consent_submitted` distinguishes "the user submitted the consent form
+    // with zero tools checked" (marker present, `selectedTools` empty) from
+    // "consent screen not yet shown" (marker absent). Without it an empty
+    // submit is indistinguishable from a first visit and would loop.
+    const consentSubmitted =
+      request.query['consent_submitted'] === '1' || this.readBodyParam(request, 'consent_submitted') === '1';
 
     this.state.set({
       pendingAuthId,
@@ -167,6 +183,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       selectedTools,
+      consentSubmitted,
       loginFields,
     });
 
@@ -185,8 +202,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, email, isIncremental, isFederated, selectedProviders, selectedTools, loginFields } =
-      this.state;
+    const {
+      pendingAuthId,
+      email,
+      name,
+      isIncremental,
+      isFederated,
+      selectedProviders,
+      selectedTools,
+      consentSubmitted,
+      loginFields,
+    } = this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -205,6 +231,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       requireEmail?: boolean;
       anonymousSubject?: string;
       login?: LoginConfig;
+      consent?: ConsentConfig;
       authenticate?: (
         input: { fields: Record<string, string> },
         ctx: AuthenticateContext,
@@ -354,12 +381,42 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       skippedProviders = allProviders.filter((id) => !selected.includes(id));
     }
 
-    // Get consent state
+    // ----- Consent gate -----
+    // Get consent state from the pending record (set by the authorize flow) and
+    // the consent config (flags) from the local auth options.
     const consentEnabled = pendingAuth.consent?.enabled ?? false;
+    const consentConfig = localOptions.consent;
+    const excludedTools = consentConfig?.excludedTools ?? [];
+    // The offerable set = what the authorize flow stored (already excludes
+    // `excludedTools`). Excluded tools are always available and never required.
     const availableToolIds = pendingAuth.consent?.availableToolIds ?? [];
 
-    if (consentEnabled && selectedTools) {
-      const invalidToolIds = selectedTools.filter((toolId) => !availableToolIds.includes(toolId));
+    // Federated logins mint in the provider-callback flow AFTER all providers
+    // are linked; consent for federated is shown there (or routed back here with
+    // a selection). So the callback only runs the consent gate for the
+    // non-federated, non-incremental local login path.
+    const effectiveFederated = isFederated || !!pendingAuth.federatedLogin;
+    const consentGateApplies = consentEnabled && !effectiveFederated && !isIncremental;
+
+    // Step 1: consent enabled but the user has not yet submitted a selection →
+    // render the consent screen. Do NOT delete the pending authorization; the
+    // consent form GETs back to this same endpoint with the identity + `tools=`.
+    if (consentGateApplies && !consentSubmitted && selectedTools === undefined) {
+      this.logger.info('Consent enabled and not yet submitted — rendering consent screen');
+      this.respond(
+        httpRespond.html(this.renderConsentScreen(pendingAuth, consentConfig, { email, name, loginFields })),
+      );
+      return;
+    }
+
+    // Step 2: a selection was submitted (or consent is disabled / auto).
+    let finalSelectedTools = availableToolIds;
+    if (consentGateApplies) {
+      const submitted = selectedTools ?? [];
+
+      // Reject any tool id that was not offered (excluded tools are never valid
+      // selections — they are always available without being selected).
+      const invalidToolIds = submitted.filter((toolId) => !availableToolIds.includes(toolId));
       if (invalidToolIds.length > 0) {
         this.logger.warn(`Invalid consent tool selection: ${invalidToolIds.join(', ')}`);
         this.respond(
@@ -373,10 +430,30 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         );
         return;
       }
-    }
 
-    // If consent was enabled and user submitted selection, use it; otherwise use all available
-    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : availableToolIds;
+      // `requireSelection` (default true): an empty submit is rejected by
+      // re-rendering the consent screen with an error instead of minting a
+      // token with zero tools. The pending authorization is kept alive.
+      const requireSelection = consentConfig?.requireSelection ?? true;
+      if (requireSelection && submitted.length === 0) {
+        this.logger.info('Consent submitted with no tools selected — re-rendering with requireSelection error');
+        this.respond(
+          httpRespond.html(
+            this.renderConsentScreen(
+              pendingAuth,
+              consentConfig,
+              { email, name, loginFields },
+              'Please select at least one tool to continue.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      // The minted token's consent set is the user's selection PLUS the always
+      // available `excludedTools` (which are enforced as allowed at call time).
+      finalSelectedTools = [...new Set([...submitted, ...excludedTools])];
+    }
 
     this.state.set({
       clientId: pendingAuth.clientId,
@@ -393,7 +470,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       existingSessionId: pendingAuth.existingSessionId,
       existingAuthorizationId: pendingAuth.existingAuthorizationId,
       // Federated Login
-      isFederated: isFederated || !!pendingAuth.federatedLogin,
+      isFederated: effectiveFederated,
       selectedProviders: selectedProviders,
       skippedProviders: skippedProviders,
       // Consent
@@ -401,7 +478,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       selectedTools: finalSelectedTools,
     });
 
-    // Clean up the pending authorization
+    // Clean up the pending authorization (only now that we are proceeding to
+    // mint — the consent-render branches above return WITHOUT deleting it).
     await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
   }
 
@@ -746,6 +824,25 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * Reserved OAuth/flow control params are excluded so they cannot be forwarded
    * to the verifier as if they were login fields. Only string values are kept.
    */
+  /**
+   * Defensively read a single param from a urlencoded POST body (some adapters
+   * parse the body into `request.body`). The consent form uses a GET round-trip
+   * (mirroring the federated page) so query params are the primary source; this
+   * is a fallback for adapters that route a POST body instead. Multi-valued
+   * keys keep all values so checkbox groups (`tools`) survive a POST.
+   */
+  private readBodyParam(request: { body?: unknown }, key: string): string | string[] | undefined {
+    const body = request.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+    const value = (body as Record<string, unknown>)[key];
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      const strings = value.filter((v): v is string => typeof v === 'string');
+      return strings.length > 0 ? strings : undefined;
+    }
+    return undefined;
+  }
+
   private collectLoginFields(request: { query?: Record<string, unknown>; body?: unknown }): Record<string, string> {
     const fields: Record<string, string> = {};
     const absorb = (source: Record<string, unknown> | undefined) => {
@@ -885,6 +982,66 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       error: failure.message,
     };
     return renderLocalLoginPage(login, ctx, fields);
+  }
+
+  /**
+   * Render the tool-consent screen.
+   *
+   * The form GETs back to `/oauth/callback` carrying `pending_auth_id`,
+   * `consent_submitted=1`, the resolved identity (`email`/`name` + any custom
+   * `login.fields`), and the chosen `tools=` checkboxes — so the resubmit
+   * re-derives the SAME subject and proceeds to mint.
+   *
+   * Honors the `auth.consent` flags: `groupByApp`, `showDescriptions`,
+   * `customMessage`, `allowSelectAll`, `requireSelection`, `defaultSelectedTools`
+   * (pre-checked), and `excludedTools` (filtered out of the offered set by
+   * {@link projectConsentTools}). `error` re-renders the screen with a banner
+   * (used for an empty `requireSelection` submit).
+   */
+  private renderConsentScreen(
+    pendingAuth: { id: string; clientId: string },
+    consentConfig: ConsentConfig | undefined,
+    identity: { email?: string; name?: string; loginFields?: Record<string, string> },
+    error?: string,
+  ): string {
+    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+
+    // Derive the offered tool cards from the scope via the shared projection so
+    // the screen, the validation set, and call-time enforcement agree (and
+    // `excludedTools` are removed here too).
+    const { toolCards } = projectConsentTools(this.scope, consentConfig?.excludedTools);
+
+    // Round-trip the identity (and any custom login fields) so the resubmit
+    // re-derives the same subject. Reserved control params are never re-emitted
+    // as login fields. Only string values are carried; nothing sensitive is
+    // added by the framework — what the user submitted on the login form is
+    // round-tripped, mirroring `renderLoginRetryPage`.
+    const hiddenFields: ConsentHiddenField[] = [];
+    if (identity.email) hiddenFields.push({ name: 'email', value: identity.email });
+    if (identity.name) hiddenFields.push({ name: 'name', value: identity.name });
+    for (const [key, value] of Object.entries(identity.loginFields ?? {})) {
+      if (key === 'email' || key === 'name') continue; // already added above
+      if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
+      hiddenFields.push({ name: key, value });
+    }
+
+    return buildToolConsentPage({
+      tools: toolCards,
+      clientName: pendingAuth.clientId,
+      pendingAuthId: pendingAuth.id,
+      csrfToken: '',
+      callbackPath,
+      userName: identity.name,
+      userEmail: identity.email,
+      groupByApp: consentConfig?.groupByApp ?? true,
+      showDescriptions: consentConfig?.showDescriptions ?? true,
+      customMessage: consentConfig?.customMessage,
+      allowSelectAll: consentConfig?.allowSelectAll ?? true,
+      requireSelection: consentConfig?.requireSelection ?? true,
+      defaultSelectedTools: consentConfig?.defaultSelectedTools,
+      error,
+      hiddenFields,
+    });
   }
 
   /**

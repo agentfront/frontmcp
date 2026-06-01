@@ -168,6 +168,47 @@ export class ToolNotFoundError extends PublicMcpError {
 }
 
 /**
+ * Tool not consented error.
+ *
+ * Thrown at `tools/call` time when consent mode is enabled and the caller's
+ * verified token carries a `consent` claim whose selected-tool set does NOT
+ * include the requested tool. This is the runtime enforcement of the consent
+ * screen: a user who unchecked a tool during authorization cannot invoke it.
+ *
+ * Tokens with NO consent metadata (consent disabled) never reach this error —
+ * the call-tool flow skips the check entirely so the default (allow-all)
+ * behavior is preserved.
+ *
+ * Mapped to JSON-RPC -32003 (FORBIDDEN) so clients can distinguish a
+ * deliberately-withheld tool from a missing one (-32601 / 404).
+ */
+export class ToolNotConsentedError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+  readonly toolName: string;
+
+  constructor(toolName: string) {
+    super(
+      `Tool "${toolName}" was not consented for this session. Re-authorize and select it to enable access.`,
+      'TOOL_NOT_CONSENTED',
+      403,
+    );
+    this.toolName = toolName;
+  }
+
+  toJsonRpcError(): {
+    code: number;
+    message: string;
+    data: { tool: string };
+  } {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { tool: this.toolName },
+    };
+  }
+}
+
+/**
  * Entry unavailable in the current environment.
  * Thrown when a tool/resource/prompt/skill/agent exists but is restricted
  * by its `availableWhen` constraint (os, runtime, deployment, provider,

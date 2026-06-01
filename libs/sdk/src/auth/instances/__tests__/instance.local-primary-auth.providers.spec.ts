@@ -147,3 +147,61 @@ describe('LocalPrimaryAuth — declarative providers bridge', () => {
     expect(auth.getProviderConfig('github')).toBeUndefined();
   });
 });
+
+describe('LocalPrimaryAuth — exchangeProviderCode upstream validation', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  async function authWithGithub() {
+    return makeAuth({
+      mode: 'local',
+      providers: [
+        {
+          id: 'github',
+          authorizeUrl: 'https://gh.example.com/authorize',
+          tokenUrl: 'https://gh.example.com/token',
+          clientId: 'gh-client',
+        },
+      ],
+    });
+  }
+
+  // A 200 without access_token must be treated as an exchange error so the
+  // federated flow halts and never mints a JWT that claims the provider is
+  // linked while the orchestration token store holds an empty credential.
+  it('rejects a 200 response that omits access_token', async () => {
+    const auth = await authWithGithub();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ token_type: 'Bearer' }) }) as never;
+
+    const result = await auth.exchangeProviderCode('github', 'code-123');
+    expect('error' in result).toBe(true);
+    expect((result as { error: string }).error).toBe('provider_error');
+  });
+
+  it('rejects a 200 response with an empty access_token', async () => {
+    const auth = await authWithGithub();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ access_token: '' }) }) as never;
+
+    const result = await auth.exchangeProviderCode('github', 'code-123');
+    expect('error' in result).toBe(true);
+  });
+
+  it('returns the token payload when access_token is present', async () => {
+    const auth = await authWithGithub();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: 'gho_abc', token_type: 'Bearer', expires_in: 3600 }),
+    }) as never;
+
+    const result = await auth.exchangeProviderCode('github', 'code-123');
+    expect('error' in result).toBe(false);
+    expect((result as { access_token: string }).access_token).toBe('gho_abc');
+  });
+});

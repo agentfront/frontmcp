@@ -169,9 +169,9 @@ try {
 
 ## Consent UI
 
-<Warning>
-  The interactive **tool-selection consent page is not rendered today.** The `consent` config drives tool-authorization *enforcement* (the authorized tools are carried as a token claim and checked at call time), defaulting to all available tools. The mock below illustrates the intended multi-app authorization experience, not current behavior. The per-provider/per-app authorization steps in the federated and incremental flows above *are* rendered. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization).
-</Warning>
+<Note>
+  The interactive **tool-selection consent screen is rendered** when `consent.enabled` is `true`: after login (or, for federated flows, after the last provider links), `/oauth/callback` shows a tool picker, and the chosen tools are embedded in the token's `consent` claim and enforced on every `tools/call` (an unselected tool is rejected with `TOOL_NOT_CONSENTED`). The mock below illustrates a multi-app authorization variant; the shipped screen is the single tool-selection page. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization).
+</Note>
 
 The intended consent experience lets users choose which apps to authorize:
 

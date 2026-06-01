@@ -584,6 +584,113 @@ describe('buildToolConsentPage', () => {
     expect(html).not.toContain('<script>alert("xss")</script>');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  // ---- Consent config flag honoring ----
+
+  const twoTools = [
+    { toolId: 'tool1', toolName: 'Create Issue', description: 'Creates an issue', appId: 'github', appName: 'GitHub' },
+    { toolId: 'tool2', toolName: 'List Issues', description: 'Lists issues', appId: 'github', appName: 'GitHub' },
+  ] as ToolCard[];
+
+  it('GETs back to the callback path with a consent_submitted marker', () => {
+    const html = buildToolConsentPage(defaultParams);
+    expect(html).toContain('method="GET"');
+    expect(html).toContain('action="/oauth/tools"');
+    expect(html).toContain('name="consent_submitted"');
+  });
+
+  it('honors showDescriptions:false by omitting tool descriptions', () => {
+    const shown = buildToolConsentPage({ ...defaultParams, tools: twoTools, showDescriptions: true });
+    expect(shown).toContain('Creates an issue');
+
+    const hidden = buildToolConsentPage({ ...defaultParams, tools: twoTools, showDescriptions: false });
+    expect(hidden).not.toContain('Creates an issue');
+    expect(hidden).not.toContain('Lists issues');
+    // Tool names are still present.
+    expect(hidden).toContain('Create Issue');
+  });
+
+  it('honors customMessage by replacing the default subtitle', () => {
+    const html = buildToolConsentPage({ ...defaultParams, customMessage: 'Pick the tools you trust this agent with.' });
+    expect(html).toContain('Pick the tools you trust this agent with.');
+    expect(html).not.toContain('You can change this later.');
+  });
+
+  it('escapes XSS in customMessage', () => {
+    const html = buildToolConsentPage({ ...defaultParams, customMessage: '<script>alert(1)</script>' });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('honors allowSelectAll:false by removing the select-all and toggle-all controls', () => {
+    const html = buildToolConsentPage({ ...defaultParams, tools: twoTools, allowSelectAll: false });
+    expect(html).not.toContain('id="select-all"');
+    expect(html).not.toContain('Select all tools');
+    expect(html).not.toContain('Toggle All');
+  });
+
+  it('honors requireSelection by wiring the submit button to disable at zero selected', () => {
+    const required = buildToolConsentPage({ ...defaultParams, tools: twoTools, requireSelection: true });
+    expect(required).toContain('id="consent-submit"');
+    expect(required).toContain('submitBtn.disabled = checked.length === 0');
+
+    const optional = buildToolConsentPage({ ...defaultParams, tools: twoTools, requireSelection: false });
+    expect(optional).not.toContain('submitBtn.disabled = checked.length === 0');
+  });
+
+  it('honors defaultSelectedTools by pre-checking only the listed tools', () => {
+    const html = buildToolConsentPage({ ...defaultParams, tools: twoTools, defaultSelectedTools: ['tool1'] });
+    // tool1 is checked, tool2 is not.
+    expect(html).toContain('value="tool1" class="mt-0.5 w-5 h-5 rounded border-gray-300" checked');
+    expect(html).toContain('value="tool2" class="mt-0.5 w-5 h-5 rounded border-gray-300">');
+    // Count reflects 1 of 2 pre-checked.
+    expect(html).toContain('1 of 2 selected');
+  });
+
+  it('pre-checks ALL tools when defaultSelectedTools is omitted (historical default)', () => {
+    const html = buildToolConsentPage({ ...defaultParams, tools: twoTools });
+    expect(html).toContain('value="tool1" class="mt-0.5 w-5 h-5 rounded border-gray-300" checked');
+    expect(html).toContain('value="tool2" class="mt-0.5 w-5 h-5 rounded border-gray-300" checked');
+    expect(html).toContain('2 of 2 selected');
+  });
+
+  it('honors groupByApp:false by rendering a flat list (no per-app header)', () => {
+    const grouped = buildToolConsentPage({ ...defaultParams, tools: twoTools, groupByApp: true });
+    expect(grouped).toContain('data-app="github"');
+
+    const flat = buildToolConsentPage({ ...defaultParams, tools: twoTools, groupByApp: false });
+    expect(flat).toContain('data-app="__all__"');
+    expect(flat).not.toContain('data-app="github"');
+    // Both tools still render.
+    expect(flat).toContain('Create Issue');
+    expect(flat).toContain('List Issues');
+  });
+
+  it('renders an error banner when an error is provided', () => {
+    const html = buildToolConsentPage({ ...defaultParams, error: 'Please select at least one tool to continue.' });
+    expect(html).toContain('Please select at least one tool to continue.');
+    expect(html).toContain('bg-red-50');
+  });
+
+  it('renders round-trip hidden fields (identity / federated context)', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      hiddenFields: [
+        { name: 'email', value: 'user@test.local' },
+        { name: 'consent_session', value: 'fed-session-123' },
+      ],
+    });
+    expect(html).toContain('name="email" value="user@test.local"');
+    expect(html).toContain('name="consent_session" value="fed-session-123"');
+  });
+
+  it('escapes XSS in hidden field values', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      hiddenFields: [{ name: 'name', value: '"><script>alert(1)</script>' }],
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+  });
 });
 
 describe('buildLoginPage', () => {

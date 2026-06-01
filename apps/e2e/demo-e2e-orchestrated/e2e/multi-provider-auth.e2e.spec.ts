@@ -184,14 +184,29 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       let clientCode: string | undefined;
 
       // Follow the redirect chain: callback → github mock → /oauth/provider/github/callback
-      // → client redirect_uri (carrying the FrontMCP authorization code).
-      for (let hop = 0; hop < 8 && !clientCode; hop++) {
+      // → (consent screen) → client redirect_uri (carrying the FrontMCP authorization code).
+      // Consent mode is enabled on this server, so after the last provider is
+      // linked the provider-callback renders the tool-consent screen (200 HTML)
+      // which GETs back to /oauth/provider/_consent/callback with the selection.
+      for (let hop = 0; hop < 10; hop++) {
         const res = await fetch(current, { redirect: 'manual' });
         const location = res.headers.get('location');
         if (!location) {
-          // Not a redirect — surface the body to aid debugging if the flow stalls.
-          expect(res.status).toBeGreaterThanOrEqual(300);
-          break;
+          // No redirect: this should be the consent screen. Submit a selection
+          // (consent_session is round-tripped as a hidden field).
+          const html = await res.text();
+          expect(res.status).toBe(200);
+          expect(html).toContain('Select Tools to Enable');
+          const sessionMatch = html.match(/name="consent_session"\s+value="([^"]+)"/);
+          expect(sessionMatch).toBeTruthy();
+
+          const consentUrl = new URL(`${server.info.baseUrl}/oauth/provider/_consent/callback`);
+          consentUrl.searchParams.set('consent_session', sessionMatch![1]);
+          consentUrl.searchParams.set('consent_submitted', '1');
+          // Select the github tool so the downstream-token tool call is consented.
+          consentUrl.searchParams.set('tools', 'github-repos');
+          current = consentUrl.toString();
+          continue;
         }
         const next = new URL(location, current);
         if (next.origin === 'http://127.0.0.1:65000' && next.pathname === '/callback') {

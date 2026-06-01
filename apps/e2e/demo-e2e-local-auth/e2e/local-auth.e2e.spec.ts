@@ -140,7 +140,8 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
       project: 'demo-e2e-local-auth',
       startupTimeout: 60000,
       debug: process.env['DEBUG'] === '1',
-      // tokenStorage defaults to 'memory'; requireEmail defaults to false.
+      // tokenStorage defaults to 'memory'; the demo server sets requireEmail: false
+      // (the framework default is true) so emailless logins succeed.
     });
     baseUrl = server.info.baseUrl;
   }, 90000);

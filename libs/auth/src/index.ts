@@ -74,6 +74,7 @@ export type {
   ProviderCard,
   ToolCard,
   LoginExtraField,
+  ConsentHiddenField,
 } from './ui';
 
 // ============================================

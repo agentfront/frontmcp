@@ -281,12 +281,12 @@ auth: {
 ### How Consent Works Today
 
 1. User authenticates via the built-in login page.
-2. The issued token carries a `consent.selectedTools` claim (defaulting to **all available tools** — there is no interactive picker yet).
-3. At call time, the token's authorized-tools claim is enforced (`isToolAuthorized`).
+2. `/oauth/callback` renders an **interactive tool-selection screen** listing the available tools (honoring `groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `customMessage`, `excludedTools`, `defaultSelectedTools`).
+3. The user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent.selectedTools` claim, and **enforced on every `tools/call`** — an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`).
 
-<Warning>
-  The interactive tool-selection page is **not rendered** today, and the UI-shaped `ConsentConfig` fields have no runtime effect. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization).
-</Warning>
+<Note>
+  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and stay all-tools-allowed. `excludedTools` are always available. `rememberConsent` is accepted but does not yet persist a prior selection.
+</Note>
 
 ### Tool-Level Scopes
 

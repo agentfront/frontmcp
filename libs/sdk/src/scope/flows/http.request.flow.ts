@@ -1,4 +1,11 @@
-import { ORCHESTRATED_AUTH_ACCESSOR, OrchestratedAuthAccessorAdapter, OrchestratedAuthorization } from '@frontmcp/auth';
+import {
+  deriveAuthorizationId,
+  ORCHESTRATED_AUTH_ACCESSOR,
+  OrchestratedAuthAccessorAdapter,
+  OrchestratedAuthorization,
+  type OrchestratedProviderState,
+  type OrchestratedTokenStore,
+} from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -225,15 +232,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           });
 
           // Bind `this.orchestration` for tools in orchestrated (local/remote)
-          // mode. The real OrchestratedAuthorization (with getToken/hasProvider/…)
-          // is created by session:verify and carries the per-request token store;
-          // register it as a request-scoped context token so the
-          // ORCHESTRATED_AUTH_ACCESSOR DI lookup resolves a live accessor instead
-          // of throwing. Non-orchestrated authorizations leave it unbound (the
-          // context extension is only installed in orchestrated mode anyway).
-          if (result.authorization instanceof OrchestratedAuthorization) {
-            ctx.setContextToken(ORCHESTRATED_AUTH_ACCESSOR, new OrchestratedAuthAccessorAdapter(result.authorization));
-          }
+          // mode so `this.orchestration.getToken(id)` resolves a live upstream
+          // token instead of throwing the Null-accessor error.
+          await this.bindOrchestrationAccessor(ctx, token, user);
         }
       }
     } catch (error) {
@@ -243,6 +244,61 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       }
       throw error;
     }
+  }
+
+  /**
+   * Build a live {@link OrchestratedAuthAccessorAdapter} for the verified request
+   * and register it under {@link ORCHESTRATED_AUTH_ACCESSOR} so tools can read
+   * upstream provider tokens via `this.orchestration.getToken(id)`.
+   *
+   * `session:verify` returns a lightweight authorization (`{ token, user, … }`)
+   * rather than a full OrchestratedAuthorization, so we reconstruct one here from
+   * the verified JWT + the primary auth's encrypted token store (the same store
+   * the federated provider-callback flow wrote upstream tokens into, keyed by
+   * `deriveAuthorizationId(token)`). No-op unless the scope is in orchestrated
+   * mode with a token store and a non-empty bearer token — so public/transparent
+   * and anonymous requests are unaffected.
+   *
+   * Security: tokens stay server-side and AES-GCM-encrypted at rest; only the
+   * non-PII provider ids are read here to project the authorization.
+   */
+  private async bindOrchestrationAccessor(
+    ctx: { setContextToken: (token: unknown, instance: unknown) => void },
+    token: string,
+    user: { sub?: string; name?: string; email?: string; picture?: string; exp?: number },
+  ): Promise<void> {
+    const auth = this.scope.auth as
+      | { orchestratedTokenStore?: OrchestratedTokenStore; options?: { mode?: string } }
+      | undefined;
+    // Only local/remote (orchestrated) modes carry an upstream token store.
+    const mode = auth?.options?.mode;
+    const isOrchestrated = mode === 'local' || mode === 'remote';
+    if (!token || !auth?.orchestratedTokenStore || !isOrchestrated) {
+      return;
+    }
+
+    const tokenStore = auth.orchestratedTokenStore;
+
+    // Load the providers the user linked (written by the federated flow under
+    // the same authorization id). Failure to read must not break the request.
+    let providers: Record<string, OrchestratedProviderState> | undefined;
+    try {
+      const authorizationId = deriveAuthorizationId(token);
+      const providerIds = await tokenStore.getProviderIds(authorizationId);
+      providers = Object.fromEntries(providerIds.map((id) => [id, { id }]));
+    } catch (err) {
+      this.logger.warn(`[${this.requestId}] failed to load orchestrated providers: ${String(err)}`);
+    }
+
+    const authorization = OrchestratedAuthorization.create({
+      token,
+      user: { sub: user.sub ?? 'unknown', name: user.name, email: user.email, picture: user.picture },
+      expiresAt: user.exp ? user.exp * 1000 : undefined,
+      tokenStore,
+      providers,
+    });
+
+    ctx.setContextToken(ORCHESTRATED_AUTH_ACCESSOR, new OrchestratedAuthAccessorAdapter(authorization));
   }
 
   @Stage('router')

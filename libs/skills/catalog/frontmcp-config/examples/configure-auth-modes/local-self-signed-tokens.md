@@ -9,7 +9,7 @@ features:
   - 'Setting `local.issuer` and `expectedAudience` to control token claims'
   - 'Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart'
   - 'Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments'
-  - 'Enabling `consent` for tool-authorization enforcement (token claim checked at call time; no picker UI yet)'
+  - 'Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time'
 ---
 
 # Local Self-Signed Tokens
@@ -66,7 +66,7 @@ class Server {}
 - Setting `local.issuer` and `expectedAudience` to control token claims
 - Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart
 - Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments
-- Enabling `consent` for tool-authorization enforcement (token claim checked at call time; no picker UI yet)
+- Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time
 
 ## Related
 

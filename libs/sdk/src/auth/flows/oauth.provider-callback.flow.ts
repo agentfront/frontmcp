@@ -19,11 +19,13 @@
  */
 
 import {
+  buildToolConsentPage,
   completeCurrentProvider,
   escapeHtml,
   getNextProvider,
   isSessionComplete,
   startNextProvider,
+  type ConsentConfig,
   type FederatedAuthSession,
   type ProviderPkce,
   type ProviderTokens,
@@ -45,6 +47,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { InternalMcpError } from '../../errors';
+import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
@@ -63,12 +66,17 @@ const stateSchema = z.object({
   // Provider tokens
   providerTokens: z.unknown().optional(), // ProviderTokens
   providerUserInfo: z.unknown().optional(), // ProviderUserInfo
+  // Consent round-trip (the consent screen GETs back here after all providers
+  // are linked): the federated session id + the submitted tool selection.
+  consentSessionId: z.string().optional(),
+  consentSubmitted: z.boolean().default(false),
+  selectedTools: z.array(z.string()).optional(),
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
-  pre: ['parseInput', 'loadFederatedSession', 'validateProviderCallback'],
+  pre: ['parseInput', 'handleConsentSubmission', 'loadFederatedSession', 'validateProviderCallback'],
   execute: ['exchangeProviderCode', 'storeProviderTokens', 'handleNextProviderOrComplete'],
 } as const satisfies FlowPlan<string>;
 
@@ -126,17 +134,68 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const errorDescription = request.query['error_description'] as string | undefined;
     const providerState = request.query['state'] as string | undefined;
 
+    // Consent round-trip params (set when the consent screen GETs back here
+    // after all providers are linked). `consent_session` identifies the still
+    // alive federated session; `tools` is the submitted selection.
+    const consentSessionId = request.query['consent_session'] as string | undefined;
+    const consentSubmitted = request.query['consent_submitted'] === '1';
+    const toolsParam = request.query['tools'];
+    const selectedTools = toolsParam ? (Array.isArray(toolsParam) ? toolsParam : [toolsParam]) : undefined;
+
     this.state.set({
       providerId,
       code,
       error,
       errorDescription,
       providerState,
+      consentSessionId,
+      consentSubmitted,
+      selectedTools,
     });
 
     if (providerId) {
       this.logger.info(`Provider callback received for: ${providerId}`);
     }
+  }
+
+  /**
+   * Handle a consent-screen submission for a federated login.
+   *
+   * Federated logins complete (mint the code) here, AFTER all providers are
+   * linked. When consent mode is enabled, {@link completeFederatedAuth} first
+   * renders the consent screen, which GETs back to this endpoint with
+   * `consent_session=<sessionId>` + `tools=`. This stage loads that still alive
+   * session, applies the selection (validating + `requireSelection`), and
+   * completes the mint — short-circuiting the provider-code path entirely.
+   */
+  @Stage('handleConsentSubmission')
+  async handleConsentSubmission() {
+    const { consentSessionId, consentSubmitted, selectedTools } = this.state;
+    if (!consentSessionId) {
+      return; // Not a consent round-trip — fall through to the provider-callback path.
+    }
+
+    const localAuth = this.getLocalAuth();
+    const sessionStore = localAuth.federatedSessionStore;
+    if (!sessionStore) {
+      this.respond(
+        httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),
+      );
+      return;
+    }
+
+    const session = await sessionStore.get(consentSessionId);
+    if (!session) {
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('invalid_request', 'Authentication session expired. Please try again.'),
+          400,
+        ),
+      );
+      return;
+    }
+
+    await this.completeFederatedAuth(session, { consentSubmitted, selectedTools });
   }
 
   @Stage('loadFederatedSession')
@@ -448,14 +507,77 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Complete the federated auth flow and issue FrontMCP JWT
+   * Complete the federated auth flow and issue FrontMCP JWT.
+   *
+   * When consent mode is enabled this runs in two passes:
+   *  1. First reach (no `consent.consentSubmitted`): render the consent screen,
+   *     which GETs back to this endpoint with `consent_session` + `tools=`. The
+   *     federated session is kept ALIVE for the round-trip.
+   *  2. Resubmit (`consent.consentSubmitted` true): validate the selection
+   *     (honoring `requireSelection`) and mint the code with the consented set.
+   *
+   * With consent disabled, it mints immediately (historical behavior).
    */
-  private async completeFederatedAuth(session: FederatedAuthSession): Promise<void> {
+  private async completeFederatedAuth(
+    session: FederatedAuthSession,
+    consent?: { consentSubmitted?: boolean; selectedTools?: string[] },
+  ): Promise<void> {
     const localAuth = this.getLocalAuth();
 
     // Build selected provider IDs from completed providers
     const selectedProviderIds = Array.from(session.completedProviders.keys());
     const skippedProviderIds = session.skippedProviders;
+
+    // ----- Consent gate (federated) -----
+    const metadataAuth = this.scope.metadata.auth;
+    const consentConfig =
+      metadataAuth && isOrchestratedMode(metadataAuth)
+        ? (metadataAuth.consent as ConsentConfig | undefined)
+        : undefined;
+    const consentEnabled = consentConfig?.enabled === true;
+
+    let selectedToolIds: string[] | undefined;
+    if (consentEnabled) {
+      const { availableToolIds } = projectConsentTools(this.scope, consentConfig?.excludedTools);
+
+      // Pass 1: not yet submitted → render the consent screen (keep the session).
+      if (!consent?.consentSubmitted) {
+        this.logger.info('Federated auth: all providers linked, rendering consent screen');
+        this.respond(httpRespond.html(this.renderConsentScreen(session, consentConfig)));
+        return;
+      }
+
+      // Pass 2: validate the submitted selection.
+      const submitted = consent.selectedTools ?? [];
+      const invalid = submitted.filter((id) => !availableToolIds.includes(id));
+      if (invalid.length > 0) {
+        this.logger.warn(`Federated consent: invalid tool selection: ${invalid.join(', ')}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage(
+              'invalid_request',
+              'Invalid tool selection. Please restart authorization and choose from the available tools.',
+            ),
+            400,
+          ),
+        );
+        return;
+      }
+
+      const requireSelection = consentConfig?.requireSelection ?? true;
+      if (requireSelection && submitted.length === 0) {
+        this.logger.info('Federated consent: empty submit with requireSelection — re-rendering');
+        this.respond(
+          httpRespond.html(
+            this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
+          ),
+        );
+        return;
+      }
+
+      // Consented set = selection ∪ always available excludedTools.
+      selectedToolIds = [...new Set([...submitted, ...(consentConfig?.excludedTools ?? [])])];
+    }
 
     // Create authorization code with consent/federated data
     // Include pendingAuthId for token migration in token exchange flow
@@ -473,6 +595,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       selectedProviderIds,
       skippedProviderIds,
       federatedLoginUsed: true,
+      // Consent data (only set when consent mode is enabled)
+      consentEnabled: consentEnabled || undefined,
+      selectedToolIds,
       // Token migration: pendingAuthId links to tokens stored during provider callbacks
       pendingAuthId: session.pendingAuthId,
     });
@@ -494,6 +619,38 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       `Federated auth complete: ${selectedProviderIds.length} providers authenticated, redirecting to client`,
     );
     this.respond(httpRespond.redirect(url.toString()));
+  }
+
+  /**
+   * Render the federated consent screen. The form GETs back to this provider
+   * callback endpoint with `consent_session=<sessionId>` + the chosen `tools=`
+   * (and `consent_submitted=1`), so {@link handleConsentSubmission} completes
+   * the mint. Honors the same `auth.consent` flags as the non-federated path.
+   */
+  private renderConsentScreen(session: FederatedAuthSession, consentConfig: ConsentConfig, error?: string): string {
+    const callbackPath = `${this.scope.fullPath}/oauth/provider/_consent/callback`;
+    const { toolCards } = projectConsentTools(this.scope, consentConfig.excludedTools);
+
+    return buildToolConsentPage({
+      tools: toolCards,
+      clientName: session.clientId,
+      // The pending_auth_id input is unused on the federated round-trip (we key
+      // off `consent_session`), but the builder requires it; reuse the session id.
+      pendingAuthId: session.id,
+      csrfToken: '',
+      callbackPath,
+      userName: session.userInfo.name,
+      userEmail: session.userInfo.email,
+      groupByApp: consentConfig.groupByApp ?? true,
+      showDescriptions: consentConfig.showDescriptions ?? true,
+      customMessage: consentConfig.customMessage,
+      allowSelectAll: consentConfig.allowSelectAll ?? true,
+      requireSelection: consentConfig.requireSelection ?? true,
+      defaultSelectedTools: consentConfig.defaultSelectedTools,
+      error,
+      // Round-trip the session id so the resubmit re-loads the same session.
+      hiddenFields: [{ name: 'consent_session', value: session.id }],
+    });
   }
 
   /**

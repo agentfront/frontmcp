@@ -18,6 +18,7 @@ import {
   randomUUID,
 } from '@frontmcp/utils';
 
+import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import {
   Flow,
   FlowBase,
@@ -44,6 +45,7 @@ import {
   TaskAugmentationRequiredError,
   TaskStoreNotInitializedError,
   ToolExecutionError,
+  ToolNotConsentedError,
   ToolNotFoundError,
 } from '../../errors';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
@@ -568,6 +570,27 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async checkToolAuthorization() {
     this.logger.verbose('checkToolAuthorization:start');
     const { tool, authInfo } = this.state;
+
+    // ----- Consent enforcement (per-client tool selection) -----
+    // When the verified token carries an ENABLED `consent` claim, the caller
+    // may only invoke tools they selected on the consent screen. A token with
+    // NO consent metadata (consent disabled) returns `undefined` here and the
+    // check is skipped entirely — preserving the default allow-all behavior.
+    //
+    // Trusted internal dispatch (`internalCall: true`, e.g. a tool/agent
+    // invoking another tool) bypasses consent: the user consented to the entry
+    // tool, and inner composition is an implementation detail — mirroring the
+    // internal-visibility bypass in `findTool`.
+    const consentCtx = this.input.ctx as { internalCall?: boolean } | undefined;
+    if (!consentCtx?.internalCall) {
+      const consentedToolIds = getConsentedToolIds(authInfo);
+      if (consentedToolIds && tool && !isToolConsented(consentedToolIds, tool.name, tool.fullName)) {
+        this.logger.info(
+          `checkToolAuthorization: tool "${tool.fullName || tool.name}" not in consented set — rejecting`,
+        );
+        throw new ToolNotConsentedError(tool.fullName || tool.name);
+      }
+    }
 
     // Get authorization from authInfo.extra if available
     const authorization = authInfo?.extra?.['authorization'] as

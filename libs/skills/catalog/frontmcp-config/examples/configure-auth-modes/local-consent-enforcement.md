@@ -2,17 +2,17 @@
 name: local-consent-enforcement
 reference: configure-auth-modes
 level: intermediate
-description: 'Enable consent in local mode to enforce a per-token authorized-tools claim, keeping essential tools always available via excludedTools.'
+description: 'Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools.'
 tags: [config, auth, local, consent, tool-authorization, auth-modes]
 features:
-  - 'Setting `consent.enabled` so the issued token carries an authorized-tools claim enforced at call time'
-  - 'Listing `excludedTools` so essential tools are always available and never gated by consent'
-  - 'Understanding that no interactive tool-selection page is rendered today (the claim defaults to all available tools)'
+  - 'Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call'
+  - 'Listing `excludedTools` so essential tools are never offered and are always available'
+  - 'Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools'
 ---
 
 # Local Consent Enforcement
 
-Enable consent in local mode to enforce a per-token authorized-tools claim, keeping essential tools always available via excludedTools.
+Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools.
 
 ## Code
 
@@ -50,8 +50,11 @@ class DeleteAccountTool extends ToolContext {
     mode: 'local',
     consent: {
       enabled: true,
-      // `health` is always callable and never gated by the authorized-tools claim.
+      requireSelection: true, // reject an empty submit (default)
+      // `health` is never offered on the consent screen and is always callable.
       excludedTools: ['health'],
+      // Pre-check nothing dangerous: the user must explicitly opt into delete_account.
+      defaultSelectedTools: [],
     },
   },
   tools: [HealthTool, DeleteAccountTool],
@@ -67,9 +70,9 @@ class Server {}
 
 ## What This Demonstrates
 
-- Setting `consent.enabled` so the issued token carries an authorized-tools claim enforced at call time
-- Listing `excludedTools` so essential tools are always available and never gated by consent
-- Understanding that no interactive tool-selection page is rendered today (the claim defaults to all available tools)
+- Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call
+- Listing `excludedTools` so essential tools are never offered and are always available
+- Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools
 
 ## Related
 

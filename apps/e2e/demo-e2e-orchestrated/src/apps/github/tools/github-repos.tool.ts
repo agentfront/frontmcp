@@ -35,11 +35,8 @@ const outputSchema = z.object({
 })
 export class GitHubReposTool extends ToolContext {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
-    const authInfo = this.getAuthInfo();
-    const user = authInfo?.user as { sub?: string } | undefined;
-    const isAuthenticated = !!user?.sub;
-
-    if (!isAuthenticated) {
+    // Orchestrated auth: `this.orchestration` is bound for authenticated requests.
+    if (!this.orchestration.isAuthenticated) {
       return {
         success: false,
         tokenReceived: false,

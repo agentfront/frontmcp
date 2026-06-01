@@ -57,6 +57,8 @@ export class Server {}
 | `login`              | `LoginConfig`                                                        | _unset_           | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
 | `authenticate`       | `(input, ctx) => Promise<AuthenticateResult>`                        | _unset_           | Custom verification step run at the login callback before a token is minted — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
 | `consent`            | `ConsentConfig`                                                       | `{ enabled: false }` | Consent / tool-authorization config (see [Consent](#consent-and-tool-authorization)) |
+| `providers`          | `UpstreamProviderOptions[]`                                          | _unset_           | Upstream OAuth providers to orchestrate (see [Multi-Provider Orchestration](#multi-provider-orchestration-providers)) |
+| `federatedAuth`      | `FederatedAuthConfig`                                                | _unset_           | Federated-login gating: `minProviders`, `requiredProviders`, `stateValidation` |
 | `allowDefaultPublic` | `boolean`                                                             | `false`           | Allow unauthenticated access                                 |
 | `anonymousScopes`    | `string[]`                                                            | `['anonymous']`   | Scopes for anonymous sessions                                |
 | `local.issuer`       | `string`                                                             | auto-derived      | Override the issuer (see [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy)) |
@@ -149,6 +151,102 @@ When `federated=true` and providers are selected:
 - Expired authorization: Returns 400 with "request expired" message
 - Invalid provider selection: Returns 400 with "invalid provider selection" message
 - Missing required fields: Returns 500 with error page
+
+---
+
+## Multi-Provider Orchestration (`providers`)
+
+Declare upstream OAuth providers (GitHub, Slack, Jira, …) directly on `mode: 'local'` to make multi-provider orchestration a turnkey default. FrontMCP then:
+
+- shows a federated provider-selection page at `/oauth/authorize`,
+- exchanges each provider's code at `/oauth/provider/{id}/callback`,
+- stores each provider's tokens **encrypted, server-side** (never exposed to the LLM),
+- exposes them to tools via `this.orchestration.getToken(id)`.
+
+```ts
+@FrontMcp({
+  auth: {
+    mode: 'local',
+    // Orchestrate GitHub + Slack + Jira as the local default.
+    providers: [
+      {
+        id: 'github',
+        // `authorizeUrl`/`tokenUrl` are accepted aliases for
+        // `authorizationEndpoint`/`tokenEndpoint`.
+        authorizeUrl: 'https://github.com/login/oauth/authorize',
+        tokenUrl: 'https://github.com/login/oauth/access_token',
+        clientId: process.env.GITHUB_CLIENT_ID!,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        scopes: ['read:user', 'repo'],
+      },
+      { id: 'slack', authorizeUrl: '…', tokenUrl: '…', clientId: '…', scopes: ['users:read'] },
+      { id: 'jira', authorizeUrl: '…', tokenUrl: '…', clientId: '…' },
+    ],
+    // No JWT is minted until at least one provider is linked.
+    federatedAuth: { minProviders: 1 },
+  },
+})
+export class Server {}
+```
+
+### Provider fields (`UpstreamProviderOptions`)
+
+| Field                    | Type       | Required | Description                                              |
+| ------------------------ | ---------- | -------- | -------------------------------------------------------- |
+| `id`                     | `string`   | yes      | Stable provider id used in `this.orchestration.getToken(id)` |
+| `authorizationEndpoint`  | `string`   | yes\*    | Authorization endpoint (alias: `authorizeUrl`)           |
+| `tokenEndpoint`          | `string`   | yes\*    | Token endpoint (alias: `tokenUrl`)                       |
+| `clientId`               | `string`   | yes      | OAuth client id from the upstream provider               |
+| `clientSecret`           | `string`   | no       | OAuth client secret (confidential clients)               |
+| `scopes`                 | `string[]` | no       | Scopes to request (defaults to `[]`)                     |
+| `name`                   | `string`   | no       | Display name (defaults to `id`)                          |
+| `userInfoEndpoint`       | `string`   | no       | User-info endpoint to enrich the session identity        |
+| `jwksUri`                | `string`   | no       | JWKS URI for upstream `id_token` validation              |
+
+\* At least one of the canonical name or its alias is required for each endpoint. The per-provider callback URL is computed automatically as `${issuer}/oauth/provider/${id}/callback` — register that exact URL with each provider.
+
+### Gating the JWT (`federatedAuth`)
+
+`federatedAuth` controls when a FrontMCP JWT is minted during federated login:
+
+| Field               | Type       | Default              | Description                                                       |
+| ------------------- | ---------- | -------------------- | ----------------------------------------------------------------- |
+| `minProviders`      | `number`   | `1` (when providers) | Refuse to mint a JWT until at least this many providers are linked |
+| `requiredProviders` | `string[]` | _unset_              | Every id listed here must be among the linked providers            |
+| `stateValidation`   | `'strict' \| 'format'` | `'strict'` | How strictly to validate the OAuth `state` on provider callbacks   |
+
+When `providers` are configured the default minimum is **1** ("no JWT until ≥1 linked"); the callback returns a `400` until the threshold (and every `requiredProviders` id) is satisfied.
+
+### Reading upstream tokens in tools (`this.orchestration`)
+
+In orchestrated (`local`/`remote`) mode, authenticated tool calls can read the linked providers' tokens via `this.orchestration`:
+
+```ts
+@Tool({ name: 'github_repos' })
+class GitHubReposTool extends ToolContext {
+  async execute() {
+    // Throws if the provider was not linked.
+    const token = await this.orchestration.getToken('github');
+    // Or null-returning variant:
+    const maybe = await this.orchestration.tryGetToken('slack');
+
+    if (this.orchestration.hasProvider('jira')) {
+      const jira = await this.orchestration.getToken('jira');
+    }
+
+    const res = await fetch('https://api.github.com/user/repos', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return { repos: await res.json() };
+  }
+}
+```
+
+`getToken(id)` resolves the decrypted upstream token from server-side storage (refreshing it when a refresh token is available); tokens are never placed in the JWT or exposed to the model. `tryGetToken(id)` returns `null` instead of throwing when a provider was skipped.
+
+<Note>
+  No PII is stored by FrontMCP: only the upstream provider tokens (AES-256-GCM encrypted at rest) and the non-PII provider ids are persisted.
+</Note>
 
 ---
 
@@ -521,22 +619,56 @@ auth: {
 
 ## Consent and Tool Authorization
 
-Local mode supports a `consent` config that drives **tool-authorization enforcement**. When `consent.enabled` is `true`, the set of authorized tools is carried as a `selectedTools` claim in the issued token and enforced at call time (`isToolAuthorized`).
+Local mode supports a `consent` config that renders an **interactive tool-selection screen** during login and **enforces the selection at call time**. When `consent.enabled` is `true`:
+
+1. After the user authenticates, `/oauth/callback` renders a **consent screen** (HTTP 200 HTML) listing the available tools.
+2. The user's selection is GET-submitted back to `/oauth/callback` (carrying `pending_auth_id`, the resolved identity, and the checked `tools=`), and only then is the authorization code minted.
+3. The chosen tool ids are embedded in the issued token's `consent` claim and **enforced on every `tools/call`** — a call to a tool the user did **not** select is rejected with a `TOOL_NOT_CONSENTED` error (JSON-RPC `-32003`, Forbidden).
 
 ```typescript
 auth: {
   mode: 'local',
   consent: {
     enabled: true,
-    excludedTools: ['health'],  // always available, never gated
-    defaultSelectedTools: [],   // pre-selected tools
+    groupByApp: true,          // group tools under per-app cards (default)
+    showDescriptions: true,    // show each tool's description (default)
+    allowSelectAll: true,      // render the "select all" / "toggle all" controls (default)
+    requireSelection: true,    // reject an empty submit and re-render with an error (default)
+    customMessage: 'Choose the tools this client may use.', // optional subtitle override
+    excludedTools: ['ping'],   // never offered, never required — ALWAYS available
+    defaultSelectedTools: ['create-note'], // pre-checked on the screen
   },
 }
 ```
 
-<Warning>
-  **No interactive tool-selection page is rendered today.** The `consent` config and the token-claim enforcement are wired, but the built-in authorize flow does not display a tool-picker — the login page is shown and, on submit, the token defaults to **all available tools**. The other `ConsentConfig` fields (`groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `rememberConsent`, `customMessage`) describe a tool-selection UI that is **not yet rendered** and currently have no runtime effect. Treat `consent` as "enforce the authorized-tools claim", not "let users pick tools in a browser."
-</Warning>
+### Honored `ConsentConfig` flags
+
+| Flag                   | Effect                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `enabled`              | Turns the consent screen + runtime enforcement on. Default `false` (no screen, all tools allowed).       |
+| `groupByApp`           | `true` (default) groups tools under per-app cards; `false` renders a flat list.                          |
+| `showDescriptions`     | `true` (default) shows each tool's description; `false` hides them.                                       |
+| `allowSelectAll`       | `true` (default) renders the select-all + per-app toggle controls; `false` removes them.                 |
+| `requireSelection`     | `true` (default) rejects an empty submit by re-rendering with an error; `false` allows zero tools.        |
+| `customMessage`        | Replaces the default subtitle on the consent screen.                                                     |
+| `excludedTools`        | Never offered on the screen and never required — these tools are **always available** regardless of the selection. |
+| `defaultSelectedTools` | Pre-checked when the screen first renders. When omitted, **all** tools are pre-checked.                   |
+
+<Note>
+  **Runtime enforcement is the security boundary.** The selected tool ids are
+  carried as the token's `consent` claim and checked on every `tools/call`.
+  Tokens minted WITHOUT consent (consent disabled, or tokens created directly
+  via the test/programmatic factory) carry no `consent` claim and are
+  unaffected — all tools remain callable. `excludedTools` are always allowed.
+</Note>
+
+<Note>
+  **Federated (multi-provider) logins** show the consent screen AFTER the last
+  provider is linked (in the provider-callback flow), then complete the mint —
+  so consent applies uniformly to single-operator and federated logins.
+  `rememberConsent` is accepted in the schema but does not yet persist a prior
+  selection across logins.
+</Note>
 
 ---
 
@@ -585,8 +717,8 @@ export class Server {}
 | `buildLoginPage()` | Email login form | Yes |
 | `buildFederatedLoginPage()` | Multi-provider selection UI | Yes (federated/multi-app) |
 | `buildIncrementalAuthPage()` | Single-app auth for previously skipped apps | Yes (incremental) |
-| `buildConsentPage()` | Multi-app tool authorization | No — not rendered (see [Consent](#consent-and-tool-authorization)) |
-| `buildToolConsentPage()` | Tool-level consent within an app | No — not rendered |
+| `buildConsentPage()` | Multi-app authorization (per-app cards) | No — not rendered |
+| `buildToolConsentPage()` | Tool-selection consent screen | Yes (when `consent.enabled`; see [Consent](#consent-and-tool-authorization)) |
 | `buildErrorPage()` | Error display with description | Yes (error paths) |
 
 ---

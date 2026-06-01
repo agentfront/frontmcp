@@ -100,9 +100,60 @@ Key local-mode options:
 
 - `tokenStorage` -- where authorization codes / refresh tokens / federated sessions persist. Defaults to `'memory'` (lost on restart). Use `{ sqlite: { path } }` for single-node persistence or `{ redis: { ... } }` for multi-instance. This is honored in local mode.
 - `requireEmail` (default `true`) -- when `false`, the login callback mints a code without prompting for an email, deriving a stable `sub` from `anonymousSubject` (default `'local-operator'`). Use for single-operator setups (e.g. Claude Code).
-- `consent` -- enables tool-authorization enforcement (authorized tools are carried as a token claim and checked at call time). Note: there is **no interactive tool-selection page** today; the token defaults to all available tools.
+- `consent` -- enables an **interactive tool-selection screen** during login AND **call-time enforcement**. When `consent.enabled` is `true`, `/oauth/callback` renders a consent screen (after authentication) listing the available tools; the user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent` claim, and enforced on every `tools/call` — a call to an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`). Honored flags: `groupByApp` (default `true`), `showDescriptions` (default `true`), `allowSelectAll` (default `true`), `requireSelection` (default `true` — rejects an empty submit), `customMessage`, `excludedTools` (never offered, always available), `defaultSelectedTools` (pre-checked). Federated logins show the screen after the last provider links. Tokens minted without consent (disabled, or via the test factory) carry no claim and stay all-tools-allowed. `rememberConsent` is accepted but does not yet persist across logins.
 - `login` -- customize the built-in login page: `title` / `subtitle` / `logoUri`, declarative `fields` (each `{ type: 'text'|'password'|'email'|'select'|'hidden'; label?; required?; placeholder?; options? }`), a full HTML `render(ctx)` override, and a `subject` strategy (`{ fromField, strategy: 'per-session'|'per-account' }`). Omitting `login` keeps the default email/name page.
 - `authenticate(input, ctx)` -- custom verification run at the login callback **before** a token is minted. `input.fields` carries the submitted login fields (reserved OAuth params excluded); `ctx` is `{ get, fetch, logger, clientId?, clientName? }`. Return `{ ok: true, sub?, claims? }` to mint a token (custom `claims` are embedded in the JWT; reserved claims like `sub`/`iss`/`exp`/`scope` are stripped) or `{ ok: false, message, retryField? }` to re-render the login page with the error (no code issued). When set, the email requirement no longer applies.
+- `providers` -- declarative upstream OAuth providers (GitHub, Slack, Jira, …) to orchestrate. When set, FrontMCP federates them at `/oauth/authorize`, stores each provider's tokens **encrypted server-side**, and exposes them to tools via `this.orchestration.getToken(id)`. See [Multi-provider orchestration](#multi-provider-orchestration-providers--federatedauth) below.
+- `federatedAuth` -- gates JWT issuance during federated login: `minProviders` (default `1` when `providers` are set — "no JWT until ≥1 linked"), `requiredProviders` (ids that must all be linked), and `stateValidation` (`'strict'` default).
+
+### Multi-provider orchestration (`providers` + `federatedAuth`)
+
+Declare upstream providers to make multi-provider orchestration a turnkey local default. No JWT is minted until the `minProviders` threshold (and every `requiredProviders` id) is met; linked providers' tokens are read by tools via `this.orchestration`.
+
+```typescript
+@FrontMcp({
+  info: { name: 'internal-api', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    providers: [
+      {
+        id: 'github',
+        // `authorizeUrl`/`tokenUrl` are accepted aliases for
+        // `authorizationEndpoint`/`tokenEndpoint`.
+        authorizeUrl: 'https://github.com/login/oauth/authorize',
+        tokenUrl: 'https://github.com/login/oauth/access_token',
+        clientId: process.env.GITHUB_CLIENT_ID!,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        scopes: ['read:user', 'repo'],
+      },
+      { id: 'slack', authorizeUrl: '…', tokenUrl: '…', clientId: '…', scopes: ['users:read'] },
+    ],
+    federatedAuth: { minProviders: 1, requiredProviders: ['github'] },
+  },
+})
+class Server {}
+```
+
+`UpstreamProviderOptions` fields: `id` (required; used in `getToken(id)`), `authorizationEndpoint`/`authorizeUrl` (required), `tokenEndpoint`/`tokenUrl` (required), `clientId` (required), `clientSecret?`, `scopes?`, `name?`, `userInfoEndpoint?`, `jwksUri?`. The per-provider callback URL is auto-computed as `${issuer}/oauth/provider/${id}/callback` — register that URL with each provider.
+
+Tools read downstream tokens through the `this.orchestration` context extension (available in `local`/`remote` mode):
+
+```typescript
+@Tool({ name: 'github_repos' })
+class GitHubReposTool extends ToolContext {
+  async execute() {
+    if (!this.orchestration.isAuthenticated) return { error: 'not authenticated' };
+    const token = await this.orchestration.getToken('github'); // throws if not linked
+    const maybe = await this.orchestration.tryGetToken('slack'); // null if skipped
+    const res = await fetch('https://api.github.com/user/repos', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return { repos: await res.json() };
+  }
+}
+```
+
+Tokens stay server-side and AES-256-GCM-encrypted at rest — never placed in the JWT or exposed to the model. No login PII is stored (only provider tokens + non-PII provider ids).
 
 ### Custom login + verification (`login` / `authenticate`)
 

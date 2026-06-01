@@ -493,7 +493,7 @@
                 "Setting `local.issuer` and `expectedAudience` to control token claims",
                 "Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart",
                 "Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments",
-                "Enabling `consent` for tool-authorization enforcement (token claim checked at call time; no picker UI yet)"
+                "Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time"
               ]
             },
             {
@@ -509,13 +509,13 @@
             },
             {
               "name": "local-consent-enforcement",
-              "description": "Enable consent in local mode to enforce a per-token authorized-tools claim, keeping essential tools always available via excludedTools.",
+              "description": "Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools.",
               "level": "intermediate",
               "tags": ["config", "auth", "local", "consent", "tool-authorization", "auth-modes"],
               "features": [
-                "Setting `consent.enabled` so the issued token carries an authorized-tools claim enforced at call time",
-                "Listing `excludedTools` so essential tools are always available and never gated by consent",
-                "Understanding that no interactive tool-selection page is rendered today (the claim defaults to all available tools)"
+                "Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call",
+                "Listing `excludedTools` so essential tools are never offered and are always available",
+                "Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools"
               ]
             },
             {
@@ -527,6 +527,27 @@
                 "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
                 "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
                 "Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)"
+              ]
+            },
+            {
+              "name": "local-multi-provider-orchestration",
+              "description": "Orchestrate multiple upstream OAuth providers (GitHub + Slack) in local mode, gate the JWT until they are linked, and read downstream tokens in tools via this.orchestration.",
+              "level": "advanced",
+              "tags": [
+                "config",
+                "auth",
+                "local",
+                "orchestration",
+                "federated",
+                "providers",
+                "multi-provider",
+                "auth-modes"
+              ],
+              "features": [
+                "Declaring an `auth.providers` array so FrontMCP federates GitHub + Slack at /oauth/authorize and stores their tokens encrypted server-side",
+                "Using `authorizeUrl`/`tokenUrl` aliases and letting the per-provider callback URL be auto-computed as ${issuer}/oauth/provider/${id}/callback",
+                "Gating JWT issuance with `federatedAuth.minProviders` / `requiredProviders` so no token is minted until the linked-provider threshold is met",
+                "Reading downstream provider tokens in a tool via `this.orchestration.getToken(id)` / `tryGetToken(id)` without exposing them to the LLM"
               ]
             },
             {

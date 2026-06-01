@@ -6,6 +6,7 @@ export {
   InternalMcpError,
   // Tool errors
   ToolNotFoundError,
+  ToolNotConsentedError,
   ToolExecutionError,
   // Availability errors
   EntryUnavailableError,

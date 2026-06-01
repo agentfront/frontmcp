@@ -48,7 +48,7 @@ auth: {
   expectedAudience: 'my-api',
   // 'memory' (default, lost on restart) | { sqlite: { path } } | { redis: { ... } }
   tokenStorage: { sqlite: { path: './data/auth.sqlite' } },
-  consent: { enabled: true }, // tool-authz enforcement; no picker UI yet
+  consent: { enabled: true }, // tool-selection screen at login + call-time enforcement
   incrementalAuth: { enabled: true },
 }
 ```
@@ -57,7 +57,22 @@ Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `
 
 To collect and verify your own credentials, add a declarative `login` (custom page fields / title / subject strategy) and an `authenticate(input, ctx)` verifier that returns `{ ok: true, sub?, claims? }` (custom claims are embedded in the token; reserved claims are stripped) or `{ ok: false, message }` (re-renders the login page; no code issued). Both are optional and default to the built-in email login. See `configure-auth.md` for a full example.
 
-**Use when:** Standalone servers with full auth control, development with local OAuth.
+To orchestrate **multiple upstream OAuth providers** (GitHub, Slack, Jira, …) declare a `providers` array — FrontMCP federates them at `/oauth/authorize`, refuses to mint a JWT until `federatedAuth.minProviders` (default `1`) are linked, stores each provider's tokens encrypted server-side, and exposes them to tools via `this.orchestration.getToken(id)`:
+
+```typescript
+auth: {
+  mode: 'local',
+  providers: [
+    { id: 'github', authorizeUrl: '…', tokenUrl: '…', clientId: '…', scopes: ['repo'] },
+    { id: 'slack', authorizeUrl: '…', tokenUrl: '…', clientId: '…' },
+  ],
+  federatedAuth: { minProviders: 1, requiredProviders: ['github'] }, // no JWT until linked
+}
+```
+
+See `configure-auth.md` → "Multi-provider orchestration" for the full provider schema and the `this.orchestration` tool API.
+
+**Use when:** Standalone servers with full auth control, development with local OAuth, orchestrating several upstream OAuth providers behind one MCP server.
 
 ## Remote Mode
 
@@ -77,28 +92,29 @@ auth: {
 
 ## Comparison Table
 
-| Feature                | Public        | Transparent     | Local                       | Remote                      |
-| ---------------------- | ------------- | --------------- | --------------------------- | --------------------------- |
-| Token issuance         | Anonymous JWT | None (upstream) | Self-signed (HS256)         | Self-signed (HS256)         |
-| Signing                | HS256 secret  | Upstream JWKS   | HS256 secret (`JWT_SECRET`) | HS256 secret (`JWT_SECRET`) |
-| Token refresh          | No            | No              | Yes                         | Yes                         |
-| PKCE support           | No            | No              | Yes                         | Yes                         |
-| Token persistence      | n/a           | n/a             | memory / sqlite / redis     | memory / sqlite / redis     |
-| Tool-authz enforcement | No            | No              | Optional (no picker UI)     | Optional (no picker UI)     |
-| Federated auth         | No            | No              | Optional                    | Optional                    |
+| Feature                  | Public        | Transparent     | Local                           | Remote                          |
+| ------------------------ | ------------- | --------------- | ------------------------------- | ------------------------------- |
+| Token issuance           | Anonymous JWT | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)             |
+| Signing                  | HS256 secret  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)     |
+| Token refresh            | No            | No              | Yes                             | Yes                             |
+| PKCE support             | No            | No              | Yes                             | Yes                             |
+| Token persistence        | n/a           | n/a             | memory / sqlite / redis         | memory / sqlite / redis         |
+| Consent (tool selection) | No            | No              | Optional (screen + enforcement) | Optional (screen + enforcement) |
+| Federated auth           | No            | No              | Optional                        | Optional                        |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to the upstream IdP rather than delegating token signing.
 
 ## Examples
 
-| Example                                                                                        | Level        | Description                                                                                                                             |
-| ---------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| [`local-minimal`](../examples/configure-auth-modes/local-minimal.md)                           | Basic        | Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.  |
-| [`local-self-signed-tokens`](../examples/configure-auth-modes/local-self-signed-tokens.md)     | Intermediate | Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.               |
-| [`local-single-operator`](../examples/configure-auth-modes/local-single-operator.md)           | Basic        | Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.            |
-| [`local-consent-enforcement`](../examples/configure-auth-modes/local-consent-enforcement.md)   | Intermediate | Enable consent in local mode to enforce a per-token authorized-tools claim, keeping essential tools always available via excludedTools. |
-| [`local-behind-tunnel`](../examples/configure-auth-modes/local-behind-tunnel.md)               | Intermediate | Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.       |
-| [`remote-enterprise-oauth`](../examples/configure-auth-modes/remote-enterprise-oauth.md)       | Advanced     | Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.                                              |
-| [`transparent-jwt-validation`](../examples/configure-auth-modes/transparent-jwt-validation.md) | Basic        | Validate externally-issued JWTs without managing token lifecycle on the server.                                                         |
+| Example                                                                                                        | Level        | Description                                                                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`local-minimal`](../examples/configure-auth-modes/local-minimal.md)                                           | Basic        | Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.                                         |
+| [`local-self-signed-tokens`](../examples/configure-auth-modes/local-self-signed-tokens.md)                     | Intermediate | Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.                                                      |
+| [`local-single-operator`](../examples/configure-auth-modes/local-single-operator.md)                           | Basic        | Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.                                                   |
+| [`local-consent-enforcement`](../examples/configure-auth-modes/local-consent-enforcement.md)                   | Intermediate | Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools. |
+| [`local-behind-tunnel`](../examples/configure-auth-modes/local-behind-tunnel.md)                               | Intermediate | Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.                                              |
+| [`local-multi-provider-orchestration`](../examples/configure-auth-modes/local-multi-provider-orchestration.md) | Advanced     | Orchestrate multiple upstream OAuth providers (GitHub + Slack) in local mode, gate the JWT until they are linked, and read downstream tokens in tools via this.orchestration.  |
+| [`remote-enterprise-oauth`](../examples/configure-auth-modes/remote-enterprise-oauth.md)                       | Advanced     | Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.                                                                                     |
+| [`transparent-jwt-validation`](../examples/configure-auth-modes/transparent-jwt-validation.md)                 | Basic        | Validate externally-issued JWTs without managing token lifecycle on the server.                                                                                                |
 
 > See all examples in [`examples/configure-auth-modes/`](../examples/configure-auth-modes/)
