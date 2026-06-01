@@ -6,6 +6,8 @@ import {
   InMemoryFederatedAuthSessionStore,
   InMemoryOrchestratedTokenStore,
   isPersistentTokenStorage,
+  isRedisTokenStorage,
+  isSqliteTokenStorage,
   JwksService,
   StorageAuthorizationStore,
   StorageFederatedAuthSessionStore,
@@ -231,7 +233,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   /**
-   * Derive issuer from options
+   * Derive issuer from options.
+   *
+   * `FRONTMCP_PUBLIC_HOST` overrides only the HOST portion of the boot-time
+   * issuer (see `this.host` in the constructor); the scheme stays `http` and
+   * the port stays `this.port`. To override the scheme and/or port (e.g.
+   * advertise `https://…` with no explicit port behind a TLS proxy), set an
+   * explicit `local.issuer` — that is the supported way to make the boot-time
+   * issuer match what discovery advertises. JWT verification accepts an issuer
+   * array, so tokens minted under a different scheme/port are still tolerated
+   * when running behind a TLS-terminating proxy, but `local.issuer` is the
+   * supported knob for aligning the issuer with discovery.
    */
   private deriveIssuer(options: LocalPrimaryAuthOptions): string {
     const basePath = `http://${this.host}:${this.port}${this.scope.fullPath}`;
@@ -288,10 +300,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         encryptionKey: this.secret,
       });
 
-      const backend =
-        this.tokenStorage && typeof this.tokenStorage === 'object' && 'sqlite' in this.tokenStorage
-          ? 'sqlite'
-          : 'redis';
+      const backend: 'sqlite' | 'redis' | 'unknown' = isSqliteTokenStorage(this.tokenStorage)
+        ? 'sqlite'
+        : isRedisTokenStorage(this.tokenStorage)
+          ? 'redis'
+          : 'unknown';
       this.logger.info(`Token storage initialized with persistent backend: ${backend}`);
     } catch (err) {
       // Persistence was explicitly requested; failing closed (rather than

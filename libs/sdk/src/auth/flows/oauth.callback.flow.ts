@@ -527,7 +527,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('redirectToClient')
   async redirectToClient() {
-    const { redirectUri, authorizationCode, originalState, isIncremental, targetAppId } = this.state.required;
+    // Read from the non-throwing state proxy: redirectUri/authorizationCode are validated
+    // explicitly below; originalState/targetAppId are optional and reading them off
+    // `state.required` throws InvokeStateMissingKeyError when a client omits the OAuth
+    // `state` param or it's a non-incremental login (same bug class as #466).
+    const { redirectUri, authorizationCode, originalState, isIncremental, targetAppId } = this.state;
 
     // Validate required fields for redirect
     if (!redirectUri || !authorizationCode) {

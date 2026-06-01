@@ -138,15 +138,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
   @Stage('collectData')
   async collectData() {
-    const {
-      baseUrl,
-      oauthBaseUrl,
-      scopesSupported,
-      tokenEndpointAuthMethods,
-      dcrEnabled,
-      isOrchestrated,
-      cimdEnabled,
-    } = this.state.required;
+    const { baseUrl, oauthBaseUrl, scopesSupported, tokenEndpointAuthMethods, isOrchestrated, cimdEnabled } =
+      this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
       const baseIssuer = `${baseUrl}`;

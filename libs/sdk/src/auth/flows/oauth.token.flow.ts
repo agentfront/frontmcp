@@ -103,23 +103,28 @@ function coerceTokenRequestBody(request: ServerRequest): Record<string, unknown>
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
 }
 
-/** Parse a raw string body as urlencoded form data, falling back to JSON. */
+/** Parse a raw string body as urlencoded form data, or JSON. */
 function parseRawTokenBody(raw: string): Record<string, unknown> {
-  // Try urlencoded first — OAuth token requests are urlencoded by spec.
-  if (raw.includes('=')) {
+  const trimmed = raw.trim();
+  // JSON bodies can legitimately contain '=' (base64 padding in tokens/codes),
+  // so detect a JSON-shaped body BEFORE applying the urlencoded heuristic —
+  // otherwise URLSearchParams swallows the whole JSON string as one garbage key.
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const json: unknown = JSON.parse(trimmed);
+      if (json && typeof json === 'object' && !Array.isArray(json)) {
+        return json as Record<string, unknown>;
+      }
+    } catch {
+      // not JSON — fall through to urlencoded
+    }
+  }
+  // OAuth token requests are urlencoded by spec.
+  if (raw.includes('=') || raw.includes('&')) {
     const params = new URLSearchParams(raw);
     const out: Record<string, string> = {};
     for (const [k, v] of params) out[k] = v;
     if (Object.keys(out).length > 0) return out;
-  }
-  // Fall back to JSON.
-  try {
-    const json: unknown = JSON.parse(raw);
-    if (json && typeof json === 'object' && !Array.isArray(json)) {
-      return json as Record<string, unknown>;
-    }
-  } catch {
-    // not JSON — fall through
   }
   return {};
 }

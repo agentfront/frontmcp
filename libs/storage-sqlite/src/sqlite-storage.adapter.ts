@@ -27,9 +27,17 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   private readonly kv: SqliteKvStore;
 
+  /**
+   * Whether this adapter created (and therefore owns the lifecycle of) `kv`.
+   * When the store is passed in by the caller, closing it is the caller's
+   * responsibility — `disconnect()` must not pull the rug out from under it.
+   */
+  private readonly ownsKvStore: boolean;
+
   constructor(options: SqliteStorageOptions | SqliteKvStore) {
     super();
     // Accept either raw options (we own the store) or an existing store.
+    this.ownsKvStore = !(options instanceof SqliteKvStore);
     this.kv = options instanceof SqliteKvStore ? options : new SqliteKvStore(options);
   }
 
@@ -45,7 +53,12 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
   async disconnect(): Promise<void> {
     if (!this.connected) return;
     this.connected = false;
-    this.kv.close();
+    // Only close the KV store if we own it. When an external SqliteKvStore was
+    // injected, its owner is responsible for closing it (and may still be using
+    // it via another adapter), so we leave the handle open.
+    if (this.ownsKvStore && this.kv) {
+      this.kv.close();
+    }
   }
 
   async ping(): Promise<boolean> {
@@ -119,7 +132,8 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
   async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
     // Translate glob (`*`/`?`) to SQL LIKE (`%`/`_`). `*` => `%`, `?` => `_`.
-    // Escape existing LIKE metacharacters so they are treated literally.
+    // Existing LIKE metacharacters are escaped as `\%`/`\_`; SqliteKvStore's
+    // LIKE query declares `ESCAPE '\'` so these are matched literally.
     if (pattern === '*' || pattern === undefined) {
       return this.kv.keys();
     }

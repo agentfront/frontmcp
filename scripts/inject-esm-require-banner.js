@@ -49,9 +49,11 @@ function processDir(esmDir) {
     return;
   }
 
+  // Recurse so nested .mjs bundles (e.g. from additionalEntryPoints emitted into
+  // subdirectories) are also processed, not just the top-level files.
   const targets = fs
-    .readdirSync(abs)
-    .filter((f) => f.endsWith('.mjs'))
+    .readdirSync(abs, { recursive: true })
+    .filter((f) => typeof f === 'string' && f.endsWith('.mjs'))
     .map((f) => path.join(abs, f));
 
   let injected = 0;

@@ -88,7 +88,11 @@ export class SqliteKvStore {
       del: this.db.prepare('DELETE FROM kv WHERE key = ?'),
       has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
       keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
-      keysPattern: this.db.prepare('SELECT key FROM kv WHERE key LIKE ? AND (expires_at IS NULL OR expires_at > ?)'),
+      keysPattern: this.db.prepare(
+        // ESCAPE '\' lets callers (e.g. SqliteStorageAdapter.keys) escape literal
+        // `%`/`_` as `\%`/`\_`; without it SQLite treats the backslash literally.
+        "SELECT key FROM kv WHERE key LIKE ? ESCAPE '\\' AND (expires_at IS NULL OR expires_at > ?)",
+      ),
       cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
       ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
       expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?'),

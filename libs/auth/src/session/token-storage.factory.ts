@@ -23,14 +23,16 @@ import { type RedisConfig } from './transport-session.types';
 /**
  * Narrow a {@link TokenStorageConfig} to its Redis variant.
  */
-export function isRedisTokenStorage(config: TokenStorageConfig): config is { redis: RedisConfig } {
+export function isRedisTokenStorage(config: TokenStorageConfig | undefined): config is { redis: RedisConfig } {
   return typeof config === 'object' && config !== null && 'redis' in config && !!config.redis;
 }
 
 /**
  * Narrow a {@link TokenStorageConfig} to its SQLite variant.
  */
-export function isSqliteTokenStorage(config: TokenStorageConfig): config is { sqlite: TokenStorageSqliteConfig } {
+export function isSqliteTokenStorage(
+  config: TokenStorageConfig | undefined,
+): config is { sqlite: TokenStorageSqliteConfig } {
   return typeof config === 'object' && config !== null && 'sqlite' in config && !!config.sqlite;
 }
 
@@ -61,12 +63,12 @@ export async function createTokenStorageAdapter(config: TokenStorageConfig | und
   // sqlite — lazy require to avoid bundling better-sqlite3 when unused.
   if (isSqliteTokenStorage(config)) {
     const { SqliteStorageAdapter } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
-    const adapter = new SqliteStorageAdapter({
+    const adapter: StorageAdapter = new SqliteStorageAdapter({
       path: config.sqlite.path,
       encryption: config.sqlite.encryption,
       ttlCleanupIntervalMs: config.sqlite.ttlCleanupIntervalMs ?? 60000,
       walMode: config.sqlite.walMode ?? true,
-    }) as unknown as StorageAdapter;
+    });
     await adapter.connect();
     return adapter;
   }

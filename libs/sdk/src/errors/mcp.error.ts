@@ -115,10 +115,19 @@ export class PublicMcpError extends McpError {
   readonly statusCode: number;
   readonly code: string;
 
-  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400) {
+  /**
+   * Optional RFC 6750 `WWW-Authenticate` challenge to forward to the client
+   * when the error maps to a 401. Set by callers that attach an auth challenge
+   * (e.g. the local transport adapter when a verified token's session can't be
+   * reconstructed, #471); rendered by the flow runner into a response header.
+   */
+  readonly wwwAuthenticate?: string;
+
+  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400, wwwAuthenticate?: string) {
     super(message);
     this.code = code;
     this.statusCode = statusCode;
+    this.wwwAuthenticate = wwwAuthenticate;
   }
 
   getPublicMessage(): string {
@@ -450,8 +459,8 @@ export class QuotaExceededError extends PublicMcpError {
  * Unauthorized error
  */
 export class UnauthorizedError extends PublicMcpError {
-  constructor(message = 'Unauthorized') {
-    super(message, 'UNAUTHORIZED', 401);
+  constructor(message = 'Unauthorized', wwwAuthenticate?: string) {
+    super(message, 'UNAUTHORIZED', 401, wwwAuthenticate);
   }
 }
 

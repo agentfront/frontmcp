@@ -173,12 +173,22 @@ describe('SqliteKvStore', () => {
 
   describe('constructor error handling', () => {
     it('should throw descriptive error for an unwritable db path', () => {
-      // A root-level directory an unprivileged process cannot create. The store
+      // Privilege-independent failure: nest the db path UNDER a real FILE so the
+      // parent directory cannot be created (ENOTDIR). This fails even as root,
+      // unlike "/nonexistent/..." which a root CI process can create. The store
       // attempts to create the parent dir first, so the descriptive error comes
       // from the directory-creation step.
-      expect(() => {
-        new SqliteKvStore({ path: '/nonexistent/dir/bad/test.sqlite', ttlCleanupIntervalMs: 0 });
-      }).toThrow(/SqliteKvStore: failed to (create directory|open database)/);
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-kv-fail-'));
+      const fileAsParent = path.join(base, 'not-a-dir');
+      fs.writeFileSync(fileAsParent, 'x');
+      const badPath = path.join(fileAsParent, 'test.sqlite');
+      try {
+        expect(() => {
+          new SqliteKvStore({ path: badPath, ttlCleanupIntervalMs: 0 });
+        }).toThrow(/SqliteKvStore: failed to (create directory|open database)/);
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
     });
 
     it('creates missing parent directories for a writable nested path', () => {

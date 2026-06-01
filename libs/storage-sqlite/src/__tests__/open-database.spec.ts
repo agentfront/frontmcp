@@ -48,10 +48,20 @@ describe('openDatabase', () => {
   });
 
   it('wraps directory-creation failures with the store name', () => {
-    // A root-level path an unprivileged test process cannot create.
-    expect(() => openDatabase('/nonexistent/dir/bad/db.sqlite', 'WidenStore')).toThrow(
-      /WidenStore: failed to (create directory|open database)/,
-    );
+    // Privilege-independent failure: put the db path UNDER a real FILE, so the
+    // parent directory cannot be created (ENOTDIR) — this fails even as root,
+    // unlike "/nonexistent/..." which root can happily create.
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'open-db-fail-'));
+    const fileAsParent = path.join(base, 'not-a-dir');
+    fs.writeFileSync(fileAsParent, 'x');
+    const badPath = path.join(fileAsParent, 'db.sqlite');
+    try {
+      expect(() => openDatabase(badPath, 'WidenStore')).toThrow(
+        /WidenStore: failed to (create directory|open database)/,
+      );
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 

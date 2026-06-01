@@ -6,6 +6,7 @@ import {
 } from '../cimd.errors';
 import type { CimdLogger } from '../cimd.logger';
 import { CimdService } from '../cimd.service';
+import type { ClientMetadataDocument } from '../cimd.types';
 
 // Mock logger implementing CimdLogger interface
 const createMockLogger = (): jest.Mocked<CimdLogger> => ({
@@ -17,7 +18,7 @@ const createMockLogger = (): jest.Mocked<CimdLogger> => ({
 });
 
 // Sample valid CIMD document
-const validCimdDocument = {
+const validCimdDocument: ClientMetadataDocument = {
   client_id: 'https://example.com/oauth/client-metadata.json',
   client_name: 'Test Client',
   redirect_uris: ['https://example.com/callback', 'http://localhost:3000/callback'],
@@ -246,11 +247,11 @@ describe('CimdService', () => {
 
   describe('validateRedirectUri', () => {
     it('should pass for registered redirect URI', () => {
-      expect(() => service.validateRedirectUri('https://example.com/callback', validCimdDocument as any)).not.toThrow();
+      expect(() => service.validateRedirectUri('https://example.com/callback', validCimdDocument)).not.toThrow();
     });
 
     it('should throw RedirectUriMismatchError for unregistered URI', () => {
-      expect(() => service.validateRedirectUri('https://unregistered.com/callback', validCimdDocument as any)).toThrow(
+      expect(() => service.validateRedirectUri('https://unregistered.com/callback', validCimdDocument)).toThrow(
         RedirectUriMismatchError,
       );
     });
@@ -261,7 +262,7 @@ describe('CimdService', () => {
         service.validateRedirectUri('https://example.com/callback/', {
           ...validCimdDocument,
           redirect_uris: ['https://example.com/callback'],
-        } as any),
+        } satisfies ClientMetadataDocument),
       ).not.toThrow();
     });
 
@@ -273,7 +274,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('http://127.0.0.1:54321/callback', {
             ...validCimdDocument,
             redirect_uris: ['http://127.0.0.1:8080/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).not.toThrow();
       });
 
@@ -282,7 +283,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('http://localhost:61000/callback', {
             ...validCimdDocument,
             redirect_uris: ['http://localhost:3000/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).not.toThrow();
       });
 
@@ -291,7 +292,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('http://[::1]:55555/callback', {
             ...validCimdDocument,
             redirect_uris: ['http://[::1]:9999/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).not.toThrow();
       });
 
@@ -300,7 +301,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('http://127.0.0.1:54321/evil', {
             ...validCimdDocument,
             redirect_uris: ['http://127.0.0.1:8080/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).toThrow(RedirectUriMismatchError);
       });
 
@@ -309,7 +310,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('https://127.0.0.1:54321/callback', {
             ...validCimdDocument,
             redirect_uris: ['http://127.0.0.1:8080/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).toThrow(RedirectUriMismatchError);
       });
 
@@ -319,7 +320,7 @@ describe('CimdService', () => {
           service.validateRedirectUri('https://example.com:8443/callback', {
             ...validCimdDocument,
             redirect_uris: ['https://example.com/callback'],
-          } as any),
+          } satisfies ClientMetadataDocument),
         ).toThrow(RedirectUriMismatchError);
       });
     });

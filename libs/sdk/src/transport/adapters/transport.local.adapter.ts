@@ -343,12 +343,11 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // runner with their statusCode and any `wwwAuthenticate` challenge.
     // The previous fallback:${Date.now()} was predictable, unencrypted, and could collide.
     if (!session?.id) {
-      const err = new UnauthorizedError(
-        'Session could not be reconstructed for the provided token. Re-authenticate to start a new session.',
-      );
       // RFC 6750 §3 — challenge the client to re-authenticate with a bearer token.
-      (err as { wwwAuthenticate?: string }).wwwAuthenticate = 'Bearer';
-      throw err;
+      throw new UnauthorizedError(
+        'Session could not be reconstructed for the provided token. Re-authenticate to start a new session.',
+        'Bearer',
+      );
     }
     const sessionId = session.id;
     const sessionPayload = session.payload ?? { protocol: 'streamable-http' as const };

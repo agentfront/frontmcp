@@ -117,7 +117,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           // of masking everything as a 500, and forward an RFC 6750
           // `WWW-Authenticate` challenge when the error supplies one.
           if (e instanceof PublicMcpError) {
-            const challenge = (e as { wwwAuthenticate?: unknown }).wwwAuthenticate;
+            const challenge = e.wwwAuthenticate;
             this.logger.warn('Public error in flow', {
               flow: this.name,
               name: e.name,
