@@ -195,6 +195,17 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // A consent round-trip may only COMPLETE federation once every provider has
+    // been linked. A crafted `consent_session` pointing at a session with
+    // providers still queued/in-flight must NOT short-circuit to completion —
+    // otherwise a token could be minted before the upstream exchanges finish.
+    if (!isSessionComplete(session)) {
+      this.respond(
+        httpRespond.html(this.renderErrorPage('invalid_request', 'Authentication is still in progress.'), 400),
+      );
+      return;
+    }
+
     await this.completeFederatedAuth(session, { consentSubmitted, selectedTools });
   }
 

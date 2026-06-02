@@ -434,6 +434,11 @@ export interface LoginRenderContext {
   fields: Record<string, LoginFieldConfig>;
   /** Error message to display when re-rendering after a failed authenticate(). */
   error?: string;
+  /**
+   * Submitted field values to pre-fill on re-render (set when the page is
+   * re-rendered after a failed authenticate()). Keyed by field name.
+   */
+  values?: Record<string, string>;
 }
 
 /**

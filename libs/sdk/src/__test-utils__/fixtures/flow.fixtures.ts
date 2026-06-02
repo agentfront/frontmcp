@@ -125,6 +125,10 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
     consentStore: new InMemoryConsentStore(),
     options: resolved,
     ready: Promise.resolve(),
+    // Stand in for LocalPrimaryAuth.verifyGatewayToken so non-transparent
+    // SessionVerifyFlow paths (which call it on the primary auth) resolve a
+    // valid payload instead of TypeError-ing on an undefined method.
+    verifyGatewayToken: jest.fn(async () => ({ ok: true, payload: { sub: 'user-1', scope: 'openid' } })),
   };
 
   // Remote mode: stand in for LocalPrimaryAuth's single mandatory upstream
@@ -156,6 +160,7 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
       url.searchParams.set('redirect_uri', providerConfig.callbackUrl);
       url.searchParams.set('state', params.state);
       url.searchParams.set('code_challenge', params.codeChallenge);
+      url.searchParams.set('code_challenge_method', params.codeChallengeMethod);
       return url.toString();
     };
   }

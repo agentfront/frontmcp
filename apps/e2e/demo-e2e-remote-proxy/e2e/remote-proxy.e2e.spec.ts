@@ -164,13 +164,13 @@ test.describe('Remote OAuth Proxy E2E', () => {
         authenticated: boolean;
         tokenReceived: boolean;
         providerId?: string;
-        tokenPrefix?: string;
       }>();
       expect(data.authenticated).toBe(true);
-      // The orchestration accessor resolved the REAL upstream token.
+      // The orchestration accessor resolved the REAL upstream token. The tool
+      // never echoes the token (or any token-derived material), so success is
+      // proven by `tokenReceived` rather than a token prefix.
       expect(data.tokenReceived).toBe(true);
       expect(data.providerId).toBe('upstream');
-      expect(data.tokenPrefix && data.tokenPrefix.length).toBeGreaterThan(0);
     } finally {
       await client.disconnect();
     }

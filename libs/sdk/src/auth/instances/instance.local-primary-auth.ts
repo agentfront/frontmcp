@@ -931,10 +931,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       const authorizationEndpoint = p.authorizationEndpoint ?? p.authorizeUrl;
       const tokenEndpoint = p.tokenEndpoint ?? p.tokenUrl;
       if (!authorizationEndpoint || !tokenEndpoint) {
-        // Schema enforces this, but guard defensively rather than register a
-        // half-configured provider that would fail mid-flow.
-        this.logger.warn(`Skipping provider "${p.id}": missing authorization or token endpoint`);
-        continue;
+        // Fail fast: a half-configured provider would silently drop out of the
+        // registry, and `handleFederatedAuth` could then fall through to the
+        // next provider as if this one were never declared. Rejecting in
+        // initialize() (which surfaces via `ready`) forces the config to be
+        // fixed before the server accepts traffic.
+        const missing = !authorizationEndpoint
+          ? !tokenEndpoint
+            ? 'authorization and token endpoints'
+            : 'authorization endpoint (authorizationEndpoint/authorizeUrl)'
+          : 'token endpoint (tokenEndpoint/tokenUrl)';
+        throw new Error(`Provider "${p.id}" is missing its ${missing}.`);
       }
 
       this.registerProvider({

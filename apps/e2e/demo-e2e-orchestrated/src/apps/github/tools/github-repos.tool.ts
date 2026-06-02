@@ -14,7 +14,6 @@ const inputSchema = {
 const outputSchema = z.object({
   success: z.boolean(),
   tokenReceived: z.boolean(),
-  tokenPrefix: z.string().optional().describe('First 10 chars of token (for debugging)'),
   providerId: z.string().optional(),
   repos: z
     .array(
@@ -59,7 +58,8 @@ export class GitHubReposTool extends ToolContext {
     }
 
     // A real tool would call the GitHub API with the token; for the E2E we
-    // confirm the token was retrieved and echo a non-secret prefix.
+    // confirm the token was retrieved (never echoing the token or any
+    // token-derived material).
     const allRepos = [
       { name: 'mock-repo-1', description: 'Mock repository for testing' },
       { name: 'mock-repo-2', description: 'Another mock repository' },
@@ -69,7 +69,6 @@ export class GitHubReposTool extends ToolContext {
     return {
       success: true,
       tokenReceived: true,
-      tokenPrefix: token.slice(0, 10),
       providerId: 'github',
       repos: allRepos.slice(0, input.limit),
     };

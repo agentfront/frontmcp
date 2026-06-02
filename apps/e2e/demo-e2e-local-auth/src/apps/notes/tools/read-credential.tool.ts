@@ -9,8 +9,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
  *   - `this.credentials.requireConnect({ key })` returns a framework-signed
  *     resume URL when the requested credential is NOT present.
  *
- * The tool never returns the raw secret — only a redacted preview + presence —
- * so the e2e can assert behavior without leaking the secret into transcripts.
+ * The tool never returns the raw secret — only a constant `[redacted]` preview
+ * + presence — so the e2e can assert behavior without leaking the secret (or
+ * any secret-derived material) into transcripts.
  */
 
 const inputSchema = {
@@ -20,7 +21,7 @@ const inputSchema = {
 
 const outputSchema = z.object({
   present: z.boolean(),
-  /** Redacted preview (first 3 chars + length) — never the full secret. */
+  /** Constant redaction marker — never the full secret or any secret-derived material. */
   preview: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   /** Credential keys available in the session vault. */
@@ -49,7 +50,7 @@ export default class ReadCredentialTool extends ToolContext {
       }
       return {
         present: true,
-        preview: redact(res.credential.secret),
+        preview: '[redacted]',
         metadata: res.credential.metadata,
         keys,
       };
@@ -59,11 +60,6 @@ export default class ReadCredentialTool extends ToolContext {
     if (!cred) {
       return { present: false, keys };
     }
-    return { present: true, preview: redact(cred.secret), metadata: cred.metadata, keys };
+    return { present: true, preview: '[redacted]', metadata: cred.metadata, keys };
   }
-}
-
-/** Redact a secret to a short, non-reversible preview. */
-function redact(secret: string): string {
-  return `${secret.slice(0, 3)}…(${secret.length})`;
 }

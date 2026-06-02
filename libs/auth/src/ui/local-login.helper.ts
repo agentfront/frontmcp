@@ -49,9 +49,11 @@ export function renderLocalLoginPage(
   ctx: LoginRenderContext,
   values?: Record<string, string>,
 ): string {
-  // 1. Full HTML override.
+  // 1. Full HTML override. Forward any submitted values so a custom renderer
+  // can re-fill its form after a failed authenticate() (same as the built-in
+  // page below), instead of silently dropping them.
   if (login?.render) {
-    return login.render(ctx);
+    return login.render({ ...ctx, values });
   }
 
   // 2. Built-in page, optionally with custom fields.

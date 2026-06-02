@@ -81,7 +81,13 @@ export function verifyCredentialResumeToken(
   const payload = verifyData<CredentialResumePayload>(signedJson, { secret });
   if (!payload) return null;
   // Shape + expiry checks (defense in depth — verifyData only proves integrity).
-  if (typeof payload.sub !== 'string' || typeof payload.key !== 'string' || typeof payload.exp !== 'number') {
+  // `exp` must be a finite number (reject NaN/Infinity, which `typeof === 'number'`
+  // would otherwise admit and make the `now >= exp` comparison meaningless).
+  if (typeof payload.sub !== 'string' || typeof payload.key !== 'string' || !Number.isFinite(payload.exp)) {
+    return null;
+  }
+  // When present, `context` MUST be a string (it is forwarded to authenticate()).
+  if (payload.context !== undefined && typeof payload.context !== 'string') {
     return null;
   }
   if (now >= payload.exp) {

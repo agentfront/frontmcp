@@ -226,3 +226,53 @@ Thrown when a tool requires explicit approval before use within a skill session 
 ```typescript
 import { ToolApprovalRequiredError } from '@frontmcp/sdk';
 ```
+
+---
+
+### ToolNotConsentedError
+
+Thrown when [consent](/frontmcp/authentication/consent) is enabled and the token's authorized-tools claim does not include the requested tool — the runtime enforcement of the consent screen. A user who unchecked a tool during authorization cannot invoke it. Distinguished from a missing tool (`-32601`) so clients can prompt the user to re-authorize and select it.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `TOOL_NOT_CONSENTED` |
+| `mcpErrorCode` | `number` | `-32003` (FORBIDDEN) |
+| `statusCode` | `number` | `403` |
+| `isPublic` | `boolean` | `true` |
+| `toolName` | `string` | The withheld tool name |
+
+```typescript
+import { ToolNotConsentedError } from '@frontmcp/sdk';
+
+throw new ToolNotConsentedError('deploy_app');
+```
+
+The JSON-RPC `data` payload carries `{ tool }`.
+
+---
+
+### ToolCredentialsRequiredError
+
+Thrown by the call-tool flow's credential gate when a tool declares one or more `authProviders` with `required: true` and the credential for at least one of them is not available for the current session. This is the **tool-level** credential gate (distinct from `AuthorizationRequiredError`, which gates at the **app** level): a tool can be reachable yet still miss a per-provider credential. The call aborts before `execute()` runs.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `TOOL_CREDENTIALS_REQUIRED` |
+| `mcpErrorCode` | `number` | `-32001` (UNAUTHORIZED) |
+| `statusCode` | `number` | `401` |
+| `isPublic` | `boolean` | `true` |
+| `toolId` | `string` | Tool that triggered the gate |
+| `providers` | `string[]` | Provider id(s) whose credential is required but missing |
+| `authUrl` | `string \| undefined` | Framework-signed connect/authorize URL, if resolvable |
+
+```typescript
+import { ToolCredentialsRequiredError } from '@frontmcp/sdk';
+
+throw new ToolCredentialsRequiredError({
+  toolId: 'deploy_app',
+  providers: ['github'],
+  authUrl: 'https://.../oauth/connect?token=…',
+});
+```
+
+The JSON-RPC `data` payload carries `{ tool, providers, authUrl?, auth_url? }` (the connect URL is emitted under both the camelCase and snake_case keys).

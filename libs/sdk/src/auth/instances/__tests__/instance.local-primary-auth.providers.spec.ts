@@ -131,6 +131,15 @@ describe('LocalPrimaryAuth — declarative providers bridge', () => {
     expect(auth.getProviderConfig('github')).toBeUndefined();
   });
 
+  it('fails fast (rejects ready) when a declared provider is missing both endpoints', async () => {
+    // A provider with neither authorizationEndpoint/authorizeUrl nor
+    // tokenEndpoint/tokenUrl must reject initialize() rather than register a
+    // half-configured provider the federated flow could fall through.
+    await expect(makeAuth({ mode: 'local', providers: [{ id: 'bad', clientId: 'x' }] })).rejects.toThrow(
+      /bad|endpoint/i,
+    );
+  });
+
   it('registers nothing in public mode even if a providers array leaks in', async () => {
     const auth = await makeAuth({
       mode: 'public',

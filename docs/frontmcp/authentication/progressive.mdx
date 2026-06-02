@@ -159,7 +159,7 @@ When a tool's parent app is not in the token's `authorized_apps` claim, the
 `tools/call` resolves to a **`CallToolResult` with `isError: true`** carrying the
 authorization metadata under `_meta` (so MCP clients/agents can react structurally and
 surface the authorize link). The error class is
-[`AuthorizationRequiredError`](https://docs.agentfront.dev/frontmcp/authentication/progressive)
+[`AuthorizationRequiredError`](/frontmcp/authentication/progressive)
 (code `AUTHORIZATION_REQUIRED`, HTTP 403):
 
 ```json

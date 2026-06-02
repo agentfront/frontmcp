@@ -263,7 +263,11 @@ Access tokens issued by `local`/`remote` mode are JWTs signed with **HS256** (sy
 
 ### Custom Claims
 
-Custom claims are sourced from the upstream identity provider (or the in-tree IdP for `local` mode) — FrontMCP does not mint extra claims. Configure your IdP to include the claims you need (roles, tenant ID, etc.) and then read them via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
+In transparent/remote modes, custom claims are sourced from the upstream identity provider — configure your IdP to include the claims you need (roles, tenant ID, etc.).
+
+In `local` mode, your `authenticate()` handler can return and customize the claims FrontMCP embeds in the issued token: resolve a `{ ok: true, sub?, claims? }` result and the `claims` object is merged into the minted access-token payload (namespaced to avoid clobbering reserved claims like `sub`/`exp`/`iss`).
+
+Either way, read the claims via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
 
 ---
 

@@ -711,6 +711,9 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // No upstream provider registered (e.g. missing clientId / DCR not wired).
     if (!providerId || !localAuth.getProviderConfig(providerId)) {
       this.logger.error('Remote mode: no upstream provider configured for federation');
+      // Drop the pending authorization stored just before this call so it does
+      // not linger until TTL expiry after we abort the flow.
+      await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
       this.respond(
         httpRespond.html(this.renderErrorPage('server_error', 'Upstream identity provider is not configured'), 500),
       );
@@ -748,7 +751,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     if (!redirectUrl) {
       this.logger.error(`Remote mode: failed to build authorize URL for provider: ${providerId}`);
+      // The federated session was created above; tear it down AND drop the
+      // pending authorization so neither lingers until TTL expiry.
       await localAuth.federatedSessionStore.delete(session.id);
+      await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
       this.respond(
         httpRespond.html(
           this.renderErrorPage('server_error', `Failed to initiate authentication with provider: ${providerId}`),

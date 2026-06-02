@@ -76,7 +76,7 @@ Local mode exposes standard OAuth 2.1 endpoints:
 | `/oauth/token`                              | POST     | Exchange code for tokens                                |
 | `/oauth/register`                           | POST     | Dynamic Client Registration                             |
 | `/oauth/userinfo`                           | GET      | Get user profile (verifies the Bearer token; 401 if missing/invalid) |
-| `/oauth/connect`                            | GET/POST | Mid-session add-credential flow for upstream providers  |
+| `/oauth/connect`                            | GET/POST | Mid-session credential-connect flow for `this.credentials` (connect additional credentials to the current identity) |
 | `/.well-known/oauth-authorization-server`   | GET      | Authorization-server metadata (AS)                      |
 | `/.well-known/oauth-protected-resource`     | GET      | Protected-resource metadata (PRM)                       |
 | `/.well-known/jwks.json`                    | GET      | Public signing keys (discovery key; not used to verify HS256 access tokens) |

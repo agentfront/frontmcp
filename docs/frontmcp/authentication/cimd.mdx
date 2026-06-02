@@ -476,7 +476,7 @@ async function handleAuthorization(authUrl: string) {
 
   if (!response.ok) {
     // 400 → invalid client_id URL / redirect_uri mismatch;
-    // 500 → metadata fetch/validation failed server-side.
+    // server-side error (e.g. 500/502) → metadata fetch/validation failed.
     console.error(`Authorization failed (HTTP ${response.status})`, await response.text());
   }
 }

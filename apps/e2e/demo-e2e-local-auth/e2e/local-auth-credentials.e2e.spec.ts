@@ -125,8 +125,9 @@ describe('LOCAL-mode per-session credential vault E2E (Checkpoint 3b)', () => {
       const result = await client.tools.call('read-credential', { key: 'acme' });
       const out = result.json<ReadCredentialOutput>();
       expect(out.present).toBe(true);
-      // Redacted preview of the persisted secret 'acme-token-abcdef123456'.
-      expect(out.preview).toBe('acm…(23)');
+      // Preview is a constant redaction marker — never the secret or any
+      // secret-derived material (length/prefix) leaks into transcripts.
+      expect(out.preview).toBe('[redacted]');
       expect(out.metadata).toEqual({ baseUrl: 'https://acme.example' });
       expect(out.keys).toContain('acme');
     } finally {
