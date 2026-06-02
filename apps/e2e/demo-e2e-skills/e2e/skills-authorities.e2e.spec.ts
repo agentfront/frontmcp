@@ -124,18 +124,15 @@ describe('Skill Authorities E2E', () => {
       await client.disconnect();
     });
 
-    it('denies a non-admin from reading the gated SKILL.md (-32603)', async () => {
+    it('denies a non-admin from reading the gated SKILL.md (-32003)', async () => {
       const client = await connectWithClaims({ sub: 'viewer', roles: ['viewer'] });
       const res = await client.resources.read('skill://admin-gated/SKILL.md');
       expect(res).toBeError();
-      // NOTE: the SEP-2640 `skill://` resource-read path surfaces the authorities
-      // denial as a generic JSON-RPC INTERNAL_ERROR (-32603), NOT the FORBIDDEN
-      // (-32003) that `AuthorityDeniedError.mcpErrorCode` declares (the resource
-      // read serializer only honors `mcpErrorCode` for PublicMcpError/McpError,
-      // and AuthorityDeniedError extends plain Error). The skills/load path above
-      // does return -32003. Asserting the real code keeps this test honest; the
-      // code mismatch is tracked as a separate follow-up.
-      expect(res.error?.code).toBe(-32603);
+      // The `skill://` resource-read path now preserves the FORBIDDEN code:
+      // `AuthorityDeniedError.toJsonRpcError()` (-32003) is surfaced via
+      // `toSdkMcpError` in the read-resource handler, matching the skills/load
+      // path instead of flattening to a generic -32603.
+      expect(res.error?.code).toBe(-32003);
       await client.disconnect();
     });
 
