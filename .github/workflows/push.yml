@@ -164,16 +164,58 @@ jobs:
           echo "Created $CHUNK_COUNT chunks of up to $CHUNK_SIZE projects each"
           echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
 
-  # Unit tests (depends on build)
-  #
-  # Coverage runs on every push and PR — each project's jest.config has its
-  # own coverageThreshold and a failing threshold fails the job. This catches
-  # coverage regressions before merge instead of only after they reach main.
-  unit-tests:
-    name: "Unit Tests"
-    needs: [setup, build]
+  # Discover unit-test projects and split them into 5 chunks so the unit suite
+  # runs as 5 parallel jobs (faster wall-clock, and bounds per-job memory — the
+  # SDK coverage run is heap-heavy). Mirrors the discover-e2e pattern.
+  discover-unit:
+    name: "Discover Unit Projects"
+    needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.discover.outputs.chunks }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Discover unit projects and create 5 chunks
+        id: discover
+        run: |
+          PROJECTS_JSON=$(npx nx show projects --withTarget test --json 2>/dev/null | jq -c '[.[] | select(startswith("demo-e2e-") | not)] | sort' || echo "[]")
+          if [ "$PROJECTS_JSON" = "[]" ] || [ "$PROJECTS_JSON" = "null" ]; then
+            echo "::error::No unit-test projects found"
+            exit 1
+          fi
+          echo "Found $(echo "$PROJECTS_JSON" | jq 'length') unit-test projects"
+          # Round-robin (sorted → deterministic) into 5 balanced chunks; keeps the
+          # two heaviest projects (sdk, auth) in separate chunks.
+          CHUNKS=$(echo "$PROJECTS_JSON" | jq -c 'to_entries | group_by(.key % 5) | to_entries | map({ index: .key, projects: (.value | map(.value)) })')
+          echo "Created $(echo "$CHUNKS" | jq 'length') chunks"
+          echo "chunks=$CHUNKS" >> "$GITHUB_OUTPUT"
+
+  # Unit tests — runs as a 5-way matrix over the discovered chunks. Coverage
+  # runs on every push and PR; each project's jest.config has its own
+  # coverageThreshold and a failing threshold fails its chunk. The per-chunk
+  # coverage artifacts are merged in the `coverage` job below.
+  unit-tests:
+    name: "Unit Tests (chunk ${{ matrix.chunk.index }})"
+    needs: [setup, build, discover-unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: ${{ fromJson(needs.discover-unit.outputs.matrix) }}
     env:
       NX_DAEMON: "false"
     steps:
@@ -202,14 +244,14 @@ jobs:
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v5
 
-      - name: Run unit tests with coverage
-        run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
+      - name: Run unit tests with coverage (chunk ${{ matrix.chunk.index }})
+        run: npx nx run-many -t test --projects="${{ join(matrix.chunk.projects, ',') }}" --coverage
 
       - name: Upload unit coverage artifacts
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: unit-coverage
+          name: unit-coverage-chunk-${{ matrix.chunk.index }}
           path: coverage/unit/
           retention-days: 1
           if-no-files-found: warn
@@ -311,8 +353,9 @@ jobs:
       - name: Download unit coverage artifacts
         uses: actions/download-artifact@v6
         with:
-          name: unit-coverage
+          pattern: unit-coverage-chunk-*
           path: coverage/unit/
+          merge-multiple: true
 
       - name: Download E2E coverage artifacts
         uses: actions/download-artifact@v6
