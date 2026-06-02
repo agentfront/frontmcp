@@ -52,6 +52,7 @@ export class Server {}
 | Option               | Type                                                                  | Default           | Description                                                  |
 | -------------------- | --------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------ |
 | `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }`      | `'memory'`        | Token storage backend (see [Token Storage](#token-storage))  |
+| `secureStore`        | `'memory' \| { sqlite } \| { redis } \| { backend } \| { scope?, ttlMs?, encryption? }` | `'memory'` (user scope) | Backing for the general session secure-secret store `this.secureStore` (see [Secure-Secret Store](#session-secure-secret-store-thissecurestore)) |
 | `requireEmail`       | `boolean`                                                             | `true`            | Require an email at the login callback (see [Single-Operator](#single-operator-mode-requireemail-false)) |
 | `anonymousSubject`   | `string`                                                              | `'local-operator'`| Stable `sub` minted when `requireEmail: false` and no email is provided |
 | `login`              | `LoginConfig`                                                        | _unset_           | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
@@ -492,6 +493,127 @@ authenticate: async (input) => {
 
 If the subject's vault has been rotated away (the session is gone), the connect
 is **refused** — a stale link can never resurrect a dead session.
+
+---
+
+## Session Secure-Secret Store (`this.secureStore`)
+
+`this.credentials` is purpose-built for **OAuth credentials** (resume URLs,
+per-authorize vault rotation). For **arbitrary user-typed secrets** — an API key
+a tool prompts for, a webhook signing secret, a per-session draft token — use
+`this.secureStore`: a general, typed, session-scoped key→secret store whose
+backing is **pluggable per deployment**. You stop re-implementing AES-GCM, HKDF
+key derivation, scoping, and persistence yourself.
+
+Configure the backing with `auth.secureStore`:
+
+```typescript
+@FrontMcp({
+  apps: [MyApp],
+  auth: {
+    mode: 'local',
+    // 'memory' | { sqlite } | { redis } | { backend } | { scope?, ttlMs?, encryption? }
+    secureStore: {
+      sqlite: { path: './.frontmcp/secrets.sqlite' }, // survives restart
+      scope: 'user', // 'user' (default) | 'session' | 'global'
+    },
+  },
+})
+export default class Server {}
+```
+
+Then read/write from any tool (or the auth UI) via `this.secureStore`:
+
+```typescript
+@Tool({ name: 'save_api_key' })
+class SaveApiKeyTool extends ToolContext {
+  async execute(input: { apiKey: string }) {
+    await this.secureStore.set('stg.api-key', input.apiKey); // JSON-serialized
+    const key = await this.secureStore.get<string>('stg.api-key');
+    const all = await this.secureStore.list();
+    // await this.secureStore.delete('stg.api-key');
+    return { saved: key !== undefined, keys: all };
+  }
+}
+```
+
+### Backings
+
+| Backing                | Use case                                | Persistence       | At-rest encryption                                   |
+| ---------------------- | --------------------------------------- | ----------------- | ---------------------------------------------------- |
+| `'memory'` (default)   | Local dev, ephemeral CI, no Redis       | Process lifetime  | AES-256-GCM, HKDF(scope + server pepper)             |
+| `{ sqlite: { path } }` | Single-host persistence, no Redis       | Survives restart  | Same `VaultEncryption` over the SQLite-file adapter  |
+| `{ redis: {...} }`     | Multi-instance / serverless persistence | Survives restart  | Same `VaultEncryption` over the Redis adapter        |
+| `{ backend }`          | OS keychain or any custom store         | Owned by backend  | Owned by backend (OS keychain is OS-encrypted)       |
+
+The object forms also accept `scope`, `ttlMs` (default TTL for writes), and
+`encryption.pepper` (overrides the server `VAULT_SECRET ?? JWT_SECRET`).
+
+### Scope
+
+`scope` controls how the namespace is derived from the request (the identity is
+hashed into the namespace — never stored raw):
+
+- **`user`** (default): keyed by the authenticated `sub`. Survives a reconnect
+  for the same user. Anonymous requests get no namespace (reads return empty,
+  writes are skipped).
+- **`session`**: keyed by the transport `sessionId`. Disappears when the session
+  ends.
+- **`global`**: a single server-wide namespace. Use for operator-level secrets
+  not tied to any one user/session.
+
+### `this.secureStore` API
+
+| Method                    | Returns                  | Description                                                       |
+| ------------------------- | ------------------------ | ----------------------------------------------------------------- |
+| `get<T>(key)`             | `Promise<T \| undefined>`| Read + JSON-parse a secret for the current scope.                 |
+| `set<T>(key, value, opts?)`| `Promise<void>`         | JSON-serialize + store a secret. `opts.ttlMs` bounds its lifetime.|
+| `delete(key)`             | `Promise<boolean>`       | Remove a secret; `true` when one existed.                         |
+| `list()`                  | `Promise<string[]>`      | List secret keys in the current scope.                            |
+
+### OS keychain (pluggable, not bundled)
+
+FrontMCP deliberately **does not bundle a native keychain dependency**
+(`keytar`/`wincred`/`libsecret`) into the framework. Instead the backing is
+**pluggable**: supply an object implementing the four-method `SecureStoreBackend`
+contract and the framework uses it as-is (no framework crypto is applied — an OS
+keychain is encrypted by the OS).
+
+```typescript
+import type { SecureStoreBackend } from '@frontmcp/sdk';
+
+// Thin wrapper around your platform's keychain (peer-dep loaded by YOU).
+const keychainBackend: SecureStoreBackend = {
+  async get(namespace, key) {
+    return (await keychain.getPassword(`frontmcp:${namespace}`, key)) ?? null;
+  },
+  async set(namespace, key, value /*, ttlMs */) {
+    await keychain.setPassword(`frontmcp:${namespace}`, key, value); // ttlMs ignored
+  },
+  async delete(namespace, key) {
+    return keychain.deletePassword(`frontmcp:${namespace}`, key);
+  },
+  async list(/* namespace */) {
+    return keychain.listKeys(); // map to your keychain's enumeration API
+  },
+};
+
+@FrontMcp({
+  apps: [MyApp],
+  auth: { mode: 'local', secureStore: { backend: keychainBackend, scope: 'global' } },
+})
+export default class Server {}
+```
+
+A backend deals only in `(namespace, key) → string`; the accessor resolves the
+namespace from the scope and handles JSON serialization. Backends that cannot
+honor a TTL (an OS keychain) simply ignore the `ttlMs` argument.
+
+<Note>
+  `this.secureStore` and `this.credentials` are independent and can be used
+  together. `this.credentials` remains the right tool for OAuth credentials with
+  mid-session connect; `this.secureStore` is for general user-typed secrets.
+</Note>
 
 ---
 

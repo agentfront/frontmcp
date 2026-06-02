@@ -262,6 +262,55 @@ class CallAcmeTool extends ToolContext {
 
 Security: per-record AES key derived (HKDF) from a fresh per-session `vaultId` + a pepper from `VAULT_SECRET ?? JWT_SECRET` (random per-process fallback, logged with a warning — credentials then do not survive a restart, never plaintext). A disconnect + reconnect rotates the `vaultId`, so the reconnected session sees an **empty vault** and old ciphertext is undecryptable. The vault is backed by the same `auth.tokenStorage` backend (memory / Redis / SQLite). No login PII is stored.
 
+### Session secure-secret store (`this.secureStore`)
+
+`this.credentials` is OAuth-credential-centric (resume URLs, per-authorize vault rotation). For **arbitrary user-typed secrets** (an API key a tool prompts for, a webhook signing secret, a per-session draft token) use `this.secureStore` — a general, typed, session-scoped key→secret store whose backing is **pluggable per deployment**. It is enabled automatically in `local` (and `remote`) modes. Stop re-implementing AES-GCM + HKDF + scope + persistence by hand.
+
+Select the backing with `auth.secureStore` (mirrors `tokenStorage`, plus a namespace `scope`):
+
+```typescript
+@FrontMcp({
+  apps: [MyApp],
+  auth: {
+    mode: 'local',
+    // 'memory' | { sqlite } | { redis } | { backend } | { scope?, ttlMs?, encryption? }
+    secureStore: { sqlite: { path: './.frontmcp/secrets.sqlite' }, scope: 'user' },
+  },
+})
+export default class Server {}
+```
+
+Read/write from any tool (or the auth UI):
+
+```typescript
+@Tool({ name: 'save_api_key' })
+class SaveApiKeyTool extends ToolContext {
+  async execute(input: { apiKey: string }) {
+    await this.secureStore.set('stg.api-key', input.apiKey); // JSON-serialized
+    const key = await this.secureStore.get<string>('stg.api-key');
+    const all = await this.secureStore.list();
+    // await this.secureStore.delete('stg.api-key');
+    return { saved: key !== undefined, keys: all };
+  }
+}
+```
+
+Backings:
+
+- `'memory'` (default) -- in-memory, **AES-256-GCM**-encrypted via `VaultEncryption` (lost on restart).
+- `{ sqlite: { path } }` / `{ redis: { ... } }` -- persistent; same `VaultEncryption` over the shared `StorageAdapter` (reuses `createTokenStorageAdapter`). When the backing matches `tokenStorage`, the same adapter/connection is shared.
+- `{ backend }` -- a **custom** backing implementing the four-method `SecureStoreBackend` (`get`/`set`/`delete`/`list`), e.g. an OS keychain. Used as-is — **no native dependency is bundled** by the framework (see below).
+
+Scope (`scope`, identity is hashed into the namespace, never stored raw):
+
+- `user` (default) -- keyed by the authenticated `sub`; anonymous requests read empty / skip writes.
+- `session` -- keyed by the transport `sessionId`.
+- `global` -- one server-wide namespace.
+
+`this.secureStore` API: `get<T>(key)` -> `Promise<T | undefined>`, `set<T>(key, value, { ttlMs? })`, `delete(key)` -> `Promise<boolean>`, `list()` -> `Promise<string[]>`. Object configs also accept `ttlMs` (default write TTL) and `encryption.pepper` (overrides `VAULT_SECRET ?? JWT_SECRET`).
+
+**OS keychain is pluggable, not bundled.** FrontMCP does not ship `keytar`/`wincred`/`libsecret`. To back the store with an OS keychain, pass `secureStore: { backend: myKeychainBackend }` where `myKeychainBackend` implements `SecureStoreBackend` (you load the native peer-dep). A backend deals only in `(namespace, key) → string`; the accessor resolves the namespace and JSON-serializes values. Backends that cannot honor a TTL (an OS keychain) ignore the `ttlMs` argument; OS keychains rely on the OS for at-rest encryption rather than `VaultEncryption`.
+
 ## Mode 4: Remote
 
 Remote mode runs a local OAuth 2.1 server that **proxies user authentication to a
@@ -434,12 +483,13 @@ If the vault is not configured, accessing `this.authProviders` throws (`AuthProv
 
 ## Examples
 
-| Example                                                                            | Level        | Description                                                                                                                                                          |
-| ---------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.                 |
-| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                                  |
-| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken. |
-| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.                |
+| Example                                                                            | Level        | Description                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.                                        |
+| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                                                         |
+| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.                        |
+| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.                                       |
+| [`local-secure-store`](../examples/configure-auth/local-secure-store.md)           | Intermediate | Configure the general session secure-secret store (this.secureStore) with a pluggable backing (memory / sqlite / redis / custom OS-keychain) and read/write user-typed secrets from a tool. |
 
 > See all examples in [`examples/configure-auth/`](../examples/configure-auth/)
 
