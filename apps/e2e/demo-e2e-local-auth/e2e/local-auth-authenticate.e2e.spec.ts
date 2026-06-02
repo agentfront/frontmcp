@@ -15,7 +15,7 @@
  * The verifier secret + claim are synthetic test values (no PII).
  */
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
-import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.authenticate.ts';
 
@@ -83,7 +83,7 @@ async function exchangeToken(baseUrl: string, params: { code: string; verifier: 
 
 function decodeJwtPayload(jwt: string): Record<string, unknown> {
   const [, payloadB64] = jwt.split('.');
-  const json = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  const json = new TextDecoder().decode(base64urlDecode(payloadB64));
   return JSON.parse(json) as Record<string, unknown>;
 }
 

@@ -246,6 +246,16 @@ export const upstreamProviderSchema = z
   .refine((p) => !!(p.tokenEndpoint ?? p.tokenUrl), {
     message: 'tokenEndpoint (or tokenUrl) is required',
     path: ['tokenEndpoint'],
+  })
+  // Reject setting BOTH the canonical field and its alias — that masks a likely
+  // misconfiguration (which URL wins is non-obvious).
+  .refine((p) => !(p.authorizationEndpoint && p.authorizeUrl), {
+    message: 'provide only one of authorizationEndpoint or authorizeUrl',
+    path: ['authorizationEndpoint'],
+  })
+  .refine((p) => !(p.tokenEndpoint && p.tokenUrl), {
+    message: 'provide only one of tokenEndpoint or tokenUrl',
+    path: ['tokenEndpoint'],
   });
 
 export type UpstreamProviderOptions = z.infer<typeof upstreamProviderSchema>;

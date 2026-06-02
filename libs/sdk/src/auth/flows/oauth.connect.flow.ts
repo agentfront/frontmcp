@@ -139,8 +139,14 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     };
 
     // GET → render the single-field add-credential page.
-    if (method !== 'POST') {
+    if (method === 'GET') {
       this.respond(httpRespond.html(this.renderConnectPage(payload, localOptions.login, token)));
+      return;
+    }
+    // Only GET (render) and POST (submit) are supported — reject other verbs
+    // instead of falling through to the render branch.
+    if (method !== 'POST') {
+      this.respond(httpRespond.html(this.renderError('invalid_request', 'Method not allowed. Use GET or POST.'), 405));
       return;
     }
 
@@ -196,6 +202,21 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
       await vault.store(payload.sub, vaultId, cred.key, { secret: cred.secret, metadata: cred.metadata });
       stored++;
     }
+
+    // `credentials.length > 0` above doesn't guarantee anything was persisted —
+    // every entry may have been malformed and skipped. Don't claim success (or
+    // emit resources/updated) when nothing was actually stored.
+    if (stored === 0) {
+      this.logger.warn('Connect produced no storable credentials (all returned entries were malformed)');
+      this.respond(
+        httpRespond.html(
+          this.renderError('invalid_request', 'No valid credential was returned. Please try again.'),
+          400,
+        ),
+      );
+      return;
+    }
+
     this.logger.info(`Connected ${stored} credential(s) mid-session for key "${payload.key}"`);
 
     // Fire a resources/updated notification when applicable (best-effort). This

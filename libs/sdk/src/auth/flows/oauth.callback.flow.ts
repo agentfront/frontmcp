@@ -952,6 +952,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     'federated',
     'providers',
     'tools',
+    'consent_submitted',
     'csrf',
     'action',
     'app',

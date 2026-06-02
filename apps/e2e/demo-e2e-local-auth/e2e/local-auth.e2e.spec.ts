@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
-import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.ts';
 
@@ -126,7 +126,7 @@ async function exchangeToken(
 /** Decode a JWT payload without verifying the signature (test introspection only). */
 function decodeJwtPayload(jwt: string): Record<string, unknown> {
   const [, payloadB64] = jwt.split('.');
-  const json = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  const json = new TextDecoder().decode(base64urlDecode(payloadB64));
   return JSON.parse(json) as Record<string, unknown>;
 }
 

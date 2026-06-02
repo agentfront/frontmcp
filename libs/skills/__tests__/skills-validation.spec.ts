@@ -986,21 +986,22 @@ describe('skills catalog validation', () => {
       return fs.readFileSync(path.join(CATALOG_DIR, dir, 'SKILL.md'), 'utf-8');
     }
 
-    it('should track migration progress across the catalog', () => {
-      let migrated = 0;
-      const total = skillDirs.length;
-      for (const dir of skillDirs) {
+    it('should have every catalog skill on a new format (no legacy skills)', () => {
+      // A skill is on a "new format" if it is EITHER:
+      //   - component layout (rich auto-trigger frontmatter + Decision Tree /
+      //     Routing Table — the newest layout, e.g. create-tool), OR
+      //   - TEMPLATE layout with the `## When to Use This Skill` + `### Must Use`
+      //     sections.
+      // Anything else is a legacy skill that still needs migrating. This is a
+      // GATE, not a tracker — the catalog must stay fully migrated.
+      const legacy = skillDirs.filter((dir) => {
+        if (isComponentLayout(dir)) return false; // component layout is a valid new format
         const content = getSkillBody(dir);
         const hasNewWhenToUse = content.includes('## When to Use This Skill') && content.includes('### Must Use');
-        if (hasNewWhenToUse) {
-          migrated++;
-        }
-      }
-      // Log migration progress for visibility
+        return !hasNewWhenToUse;
+      });
 
-      console.log(`[migration] ${migrated}/${total} skills migrated to new format`);
-      // This will pass regardless -- it's a progress tracker, not a gate
-      expect(migrated).toBeGreaterThanOrEqual(0);
+      expect(legacy).toEqual([]);
     });
 
     it.each(
