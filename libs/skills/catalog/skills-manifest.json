@@ -639,6 +639,18 @@
                 "Prompting the agent to connect a missing credential mid-session with `this.credentials.requireConnect({ key })` (framework-signed `/oauth/connect` URL)",
                 "Understanding per-session rotation: a reconnect yields an empty vault and old ciphertext is undecryptable"
               ]
+            },
+            {
+              "name": "local-secure-store",
+              "description": "Configure the general session secure-secret store (this.secureStore) with a pluggable backing (memory / sqlite / redis / custom OS-keychain) and read/write user-typed secrets from a tool.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "secure-store", "secrets", "this-secure-store", "keychain"],
+              "features": [
+                "Selecting the secure-store backing via `auth.secureStore` (memory / sqlite / redis / custom backend) plus a namespace `scope`",
+                "Reading/writing arbitrary user-typed secrets from a tool via `this.secureStore.set/get/list/delete` (JSON-serialized, scoped to the session/subject)",
+                "Backing the store with an OS keychain by supplying a `SecureStoreBackend` — no native dependency is bundled by the framework",
+                "Understanding scope: `user` (keyed by sub, default), `session` (keyed by sessionId), `global` (server-wide)"
+              ]
             }
           ]
         },
