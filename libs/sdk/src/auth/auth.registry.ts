@@ -218,8 +218,12 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       if (isOrchestratedLocal(options)) {
         return new LocalPrimaryAuth(scope, providers, options);
       } else {
-        // Orchestrated remote: local auth server proxying to remote provider
-        // TODO: Store remote config for upstream OAuth flows
+        // Remote mode: FrontMCP runs a local OAuth server that proxies user
+        // authentication to a single mandatory upstream IdP. LocalPrimaryAuth
+        // registers the flat remote config as one upstream provider (see
+        // registerRemoteProvider), so /oauth/authorize federates straight to the
+        // upstream IdP, the provider-callback exchanges + stores its tokens, and
+        // the minted FrontMCP session identity derives from the upstream user.
         return new LocalPrimaryAuth(scope, providers, options);
       }
     }

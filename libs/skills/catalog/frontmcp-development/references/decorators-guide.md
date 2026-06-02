@@ -156,21 +156,21 @@ class AnalyticsApp {}
 
 **Key fields:**
 
-| Field                | Description                                                          |
-| -------------------- | -------------------------------------------------------------------- |
-| `name`               | Tool name (used in MCP protocol, snake_case)                         |
-| `description`        | Human-readable description for the LLM                               |
-| `inputSchema`        | Zod raw shape defining input parameters                              |
-| `outputSchema?`      | Output type: Zod schema, `'string'`, `'image'`, `'audio'`, etc.      |
-| `annotations?`       | MCP tool annotations (`readOnlyHint`, `destructiveHint`, etc.)       |
-| `tags?`              | Categorization tags for filtering                                    |
-| `hideFromDiscovery?` | Hide from `tools/list` (still callable directly)                     |
-| `examples?`          | Usage examples: `[{ description, input, output? }]`                  |
-| `authProviders?`     | Per-tool auth providers: `['GitHub']` or `[{ name, scopes, alias }]` |
-| `rateLimit?`         | Rate limiting: `{ maxRequests, windowMs, partitionBy }`              |
-| `concurrency?`       | Concurrency control: `{ maxConcurrent }`                             |
-| `timeout?`           | Execution timeout: `{ executeMs }`                                   |
-| `ui?`                | UI widget configuration for tool rendering                           |
+| Field                | Description                                                                                                                                                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`               | Tool name (used in MCP protocol, snake_case)                                                                                                                                                                                        |
+| `description`        | Human-readable description for the LLM                                                                                                                                                                                              |
+| `inputSchema`        | Zod raw shape defining input parameters                                                                                                                                                                                             |
+| `outputSchema?`      | Output type: Zod schema, `'string'`, `'image'`, `'audio'`, etc.                                                                                                                                                                     |
+| `annotations?`       | MCP tool annotations (`readOnlyHint`, `destructiveHint`, etc.)                                                                                                                                                                      |
+| `tags?`              | Categorization tags for filtering                                                                                                                                                                                                   |
+| `hideFromDiscovery?` | Hide from `tools/list` (still callable directly)                                                                                                                                                                                    |
+| `examples?`          | Usage examples: `[{ description, input, output? }]`                                                                                                                                                                                 |
+| `authProviders?`     | Per-tool auth providers: `['github']` or `[{ name, required?, scopes?, alias? }]` (default `required: true` — a missing required credential aborts the call before `execute()` with `-32001`; `scopes` feed PRM `scopes_supported`) |
+| `rateLimit?`         | Rate limiting: `{ maxRequests, windowMs, partitionBy }`                                                                                                                                                                             |
+| `concurrency?`       | Concurrency control: `{ maxConcurrent }`                                                                                                                                                                                            |
+| `timeout?`           | Execution timeout: `{ executeMs }`                                                                                                                                                                                                  |
+| `ui?`                | UI widget configuration for tool rendering                                                                                                                                                                                          |
 
 ```typescript
 import { Tool, ToolContext, z } from '@frontmcp/sdk';

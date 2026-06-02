@@ -38,6 +38,7 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-orchestrated': { start: 50100, size: 10 },
   'demo-e2e-transparent': { start: 50110, size: 10 },
   'demo-e2e-cimd': { start: 50120, size: 10 },
+  'demo-e2e-remote-proxy': { start: 50130, size: 10 },
 
   // Feature E2E tests (50200-50299)
   'demo-e2e-skills': { start: 50200, size: 10 },

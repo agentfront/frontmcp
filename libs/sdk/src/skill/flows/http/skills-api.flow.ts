@@ -25,6 +25,12 @@ import { extractToolNames } from '../../../common/metadata/skill.metadata';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import type ToolRegistry from '../../../tool/tool.registry';
 import { createSkillHttpAuthValidator } from '../../auth';
+import {
+  assertSkillAuthorized,
+  filterSkillMetadataByAuthorities,
+  filterSkillsByAuthorities,
+  getSkillAuthorities,
+} from '../../skill-authorities.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
 import { formatSkillForLLM } from '../../skill.utils';
@@ -321,6 +327,15 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
         );
         return;
       }
+
+      // Deny direct HTTP loads of authority-gated skills. The skills HTTP auth
+      // validator (api-key / bearer) is a binary gate and surfaces no claims,
+      // so authorities are evaluated fail-closed: a gated skill cannot be
+      // loaded via HTTP. Skills without `authorities` (or servers with no
+      // engine) are unaffected. Use MCP transports for claims-based access.
+      if (this.scope.authoritiesEngine && getSkillAuthorities(skillEntry)) {
+        await assertSkillAuthorized(this.scope, skillEntry, this.httpAuthInfo());
+      }
     }
 
     // Generate formatted content with tool schemas (use fallback if toolRegistry is null)
@@ -437,6 +452,11 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       return visibility !== 'mcp';
     });
 
+    // Hide authority-gated skills from HTTP discovery (fail-closed — see
+    // handleGetSkill). Search-result metadata does not carry `authorities`, so
+    // resolve the live entry to read it. No-op when no engine is configured.
+    filteredResults = await this.filterHttpResultsByAuthorities(filteredResults, skillRegistry);
+
     // Optional new filters — additive, no-op when absent.
     if (options.category) {
       filteredResults = filteredResults.filter((r) => r.metadata.category === options.category);
@@ -510,6 +530,34 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     }
   }
 
+  /**
+   * Best-effort AuthInfo for HTTP authorities evaluation.
+   *
+   * The skills HTTP auth validator (api-key / bearer) is a binary gate and does
+   * not surface claims, so authority-gated skills are evaluated fail-closed on
+   * the HTTP surface. When the server runs in transparent/auth mode the request
+   * MAY carry a verified `authSession` with `user` claims; we forward those so a
+   * JWT bearer with roles/permissions still evaluates correctly. Otherwise an
+   * empty AuthInfo is returned, which denies any role/permission-gated skill.
+   */
+  private httpAuthInfo(): Record<string, unknown> {
+    const request = (this.rawInput as { request?: { authSession?: { user?: unknown } } }).request;
+    const user = request?.authSession?.user;
+    return user ? { user } : {};
+  }
+
+  /**
+   * Filter search results (whose projected metadata lacks `authorities`) down
+   * to skills the caller can discover, by resolving the live skill entry to
+   * read its declared authorities. No-op when no engine is configured.
+   */
+  private async filterHttpResultsByAuthorities<T extends { metadata: { id?: string; name: string } }>(
+    results: T[],
+    skillRegistry: SkillRegistryInterface,
+  ): Promise<T[]> {
+    return filterSkillMetadataByAuthorities(this.scope, skillRegistry, results, this.httpAuthInfo());
+  }
+
   private async handleListSkills(
     options: {
       tags?: string[];
@@ -524,8 +572,9 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     // Get skills visible via HTTP
     const allSkills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
 
-    // Apply tag filter if specified
-    let filteredSkills = allSkills;
+    // Hide authority-gated skills from HTTP discovery (fail-closed — see
+    // handleGetSkill). No-op when no authorities engine is configured.
+    let filteredSkills = await filterSkillsByAuthorities(this.scope, allSkills, this.httpAuthInfo());
     if (options.tags && options.tags.length > 0) {
       filteredSkills = filteredSkills.filter((s) => {
         const skillTags = s.metadata.tags ?? [];

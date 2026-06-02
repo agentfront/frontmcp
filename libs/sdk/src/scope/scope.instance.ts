@@ -1453,6 +1453,15 @@ export class Scope extends ScopeEntry {
       }
     }
 
+    // Check skills (include hidden — a hidden skill with authorities still
+    // requires an engine to enforce its policy on direct load/read).
+    for (const skill of this.scopeSkills.getSkills(true)) {
+      const metadata = skill.metadata as unknown as Record<string, unknown>;
+      if (metadata['authorities']) {
+        entriesWithAuthorities.push(`Skill "${skill.name}"`);
+      }
+    }
+
     if (entriesWithAuthorities.length > 0) {
       const names = entriesWithAuthorities.slice(0, 5).join(', ');
       const suffix = entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';

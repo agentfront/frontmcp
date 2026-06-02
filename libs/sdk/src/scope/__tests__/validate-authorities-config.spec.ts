@@ -1,14 +1,15 @@
 import 'reflect-metadata';
+
 import { Scope } from '../scope.instance';
 
 /**
  * Unit tests for Scope.validateAuthoritiesConfig().
  *
  * This private method enforces a fail-fast check: if any registered entry
- * (tool, resource, prompt) declares 'authorities' metadata but no
- * AuthoritiesEngine is configured on the scope, initialization must throw
+ * (tool, resource, prompt, agent, skill) declares 'authorities' metadata but
+ * no AuthoritiesEngine is configured on the scope, initialization must throw
  * with a clear error message. This prevents a silent security bypass where
- * a tool appears protected but is actually accessible to all users.
+ * an entry appears protected but is actually accessible to all users.
  */
 
 // Extract the private method for direct testing
@@ -28,6 +29,7 @@ interface MockScope {
   scopeResources: { getResources(): MockEntry[] };
   scopePrompts: { getPrompts(): MockEntry[] };
   scopeAgents: { getAgents(): Array<Record<string, unknown>> };
+  scopeSkills: { getSkills(includeHidden: boolean): MockEntry[] };
 }
 
 function createMockScope(overrides: Partial<MockScope> = {}): MockScope {
@@ -38,6 +40,7 @@ function createMockScope(overrides: Partial<MockScope> = {}): MockScope {
     scopeResources: { getResources: () => [] },
     scopePrompts: { getPrompts: () => [] },
     scopeAgents: { getAgents: () => [] },
+    scopeSkills: { getSkills: () => [] },
     ...overrides,
   };
 }
@@ -108,6 +111,56 @@ describe('validateAuthoritiesConfig', () => {
     expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
       /Authorities configuration required.*Prompt "protected-prompt".*but authorities enforcement is not fully configured/,
     );
+  });
+
+  it('should throw when a skill has authorities but no engine is configured', () => {
+    const scope = createMockScope({
+      scopeSkills: {
+        getSkills: () => [
+          {
+            name: 'internal-skill',
+            metadata: { name: 'internal-skill', authorities: { roles: { any: ['admin'] } } },
+          },
+        ],
+      },
+    });
+
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
+      /Authorities configuration required.*Skill "internal-skill".*but authorities enforcement is not fully configured/,
+    );
+  });
+
+  it('should pass getSkills(true) to include hidden skills in the check', () => {
+    const getSkillsSpy = jest
+      .fn()
+      .mockReturnValue([{ name: 'hidden-skill', metadata: { name: 'hidden-skill', authorities: 'admin' } }]);
+
+    const scope = createMockScope({
+      scopeSkills: { getSkills: getSkillsSpy },
+    });
+
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(/Skill "hidden-skill"/);
+    expect(getSkillsSpy).toHaveBeenCalledWith(true);
+  });
+
+  it('should not throw when a skill has authorities and an engine is configured', () => {
+    const scope = createMockScope({
+      _authoritiesEngine: { evaluate: jest.fn() },
+      _authoritiesContextBuilder: { build: jest.fn() },
+      scopeSkills: {
+        getSkills: () => [{ name: 'internal-skill', metadata: { name: 'internal-skill', authorities: 'admin' } }],
+      },
+    });
+    expect(() => validateAuthoritiesConfig.call(scope)).not.toThrow();
+  });
+
+  it('should ignore skills without authorities metadata', () => {
+    const scope = createMockScope({
+      scopeSkills: {
+        getSkills: () => [{ name: 'open-skill', metadata: { name: 'open-skill', description: 'no auth' } }],
+      },
+    });
+    expect(() => validateAuthoritiesConfig.call(scope)).not.toThrow();
   });
 
   it('should list multiple entries in the error message', () => {

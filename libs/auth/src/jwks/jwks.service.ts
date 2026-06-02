@@ -1,17 +1,18 @@
 // auth/jwks/jwks.service.ts
-import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
+import { createLocalJWKSet, decodeProtectedHeader, jwtVerify, type JSONWebKeySet, type JWK } from 'jose';
+
 import {
   bytesToHex,
+  createKeyPersistence,
+  isProduction,
   randomBytes,
   rsaVerify,
-  createKeyPersistence,
-  KeyPersistence,
-  isProduction,
+  type KeyPersistence,
 } from '@frontmcp/utils';
-import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
-import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
-import type { AuthLogger } from '../common/auth-logger.interface';
-import { noopAuthLogger } from '../common/auth-logger.interface';
+
+import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
+import { type JwksServiceOptions, type ProviderVerifyRef, type VerifyResult } from './jwks.types';
+import { decodeJwtPayloadSafe, normalizeIssuer, trimSlash } from './jwks.utils';
 
 // Warning message for weak RSA keys (shown only once per provider)
 const WEAK_KEY_WARNING = `
@@ -85,45 +86,6 @@ export class JwksService {
   // ===========================================================================
   // Scope-aware verification API
   // ===========================================================================
-
-  /** Verify a token issued by the gateway itself (orchestrated mode). */
-  async verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult> {
-    try {
-      // TODO: add support for local/remote proxy mode
-      //       current implementation for anonymous mode only
-
-      // const jwks = this.getPublicJwks();
-      // const JWKS = createLocalJWKSet(jwks);
-      // const {payload, protectedHeader} = await jwtVerify(token, JWKS, {
-      //   issuer: normalizeIssuer(expectedIssuer),
-      // });
-      // return {
-      //   ok: true,
-      //   issuer: payload?.iss as string | undefined,
-      //   sub: payload?.sub as string | undefined,
-      //   header: protectedHeader,
-      //   payload,
-      // };
-
-      const payload = decodeJwtPayloadSafe(token);
-      if (!payload) {
-        return {
-          ok: false,
-          error: 'invalid bearer token',
-        };
-      }
-      return {
-        ok: true,
-        issuer: expectedIssuer,
-        sub: payload['sub'] as string,
-        payload,
-        header: decodeProtectedHeader(token),
-      };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'verification_failed';
-      return { ok: false, error: message };
-    }
-  }
 
   /**
    * Verify a token against candidate transparent providers.

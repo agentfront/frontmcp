@@ -144,19 +144,27 @@ class BadTool extends ToolContext {
   name: 'sensitive_operation',
   inputSchema: { data: z.string() },
   authProviders: [
-    { name: 'github', scopes: ['repo', 'user'] },
+    { name: 'github', scopes: ['repo', 'user'] }, // required by default
   ],
 })
 class SensitiveTool extends ToolContext {
   async execute(input) {
-    // Access is validated before execute() is called.
-    // Prefer the typed identity getter for user/claims:
+    // The credential gate runs before execute(): a required provider with no
+    // connected credential aborts the call with a JSON-RPC -32001 error
+    // (data: { tool, providers, authUrl }) — execute() never runs in that case.
+    // `scopes` are advertised via the server's PRM `scopes_supported`.
     const userId = this.auth.user.sub;
     const token = this.context.authInfo?.token; // raw bearer for outbound calls
     return await callApi(token, input.data, userId);
   }
 }
 ```
+
+`authProviders` entries default to `required: true`. A `required: true` provider
+**gates the call before `execute()`** when its credential isn't connected for the
+session (`-32001` / `data.authUrl`); set `required: false` for optional providers,
+which never gate. The gate is a no-op for tools with no `authProviders` and for
+unauthenticated / public requests.
 
 ### Annotations
 

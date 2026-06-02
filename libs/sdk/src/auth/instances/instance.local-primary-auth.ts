@@ -1,4 +1,4 @@
-import { SignJWT } from 'jose';
+import { jwtVerify, SignJWT } from 'jose';
 
 import {
   createTokenStorageAdapter,
@@ -21,6 +21,7 @@ import {
   type FederatedAuthSessionStore,
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
+  type VerifyResult,
 } from '@frontmcp/auth';
 import {
   base64urlDecode,
@@ -45,6 +46,7 @@ import {
   isOrchestratedLocal,
   isOrchestratedMode,
   isPublicMode,
+  isRemoteMode,
   type LocalAuthOptions,
   type PublicAuthOptions,
   type RemoteAuthOptions,
@@ -104,6 +106,15 @@ export interface ConsentMetadata {
   consentEnabled?: boolean;
   federatedLoginUsed?: boolean;
   /**
+   * Progressive/Incremental authorization: the set of app IDs this token grants
+   * access to. ONLY emitted when `incrementalAuth` is enabled for the scope —
+   * its presence turns on app-level gating in `checkToolAuthorization`, so it is
+   * deliberately omitted for non-incremental setups to preserve the historical
+   * allow-all behavior. Embedded as the `authorized_apps` claim by
+   * {@link LocalPrimaryAuth.signAccessToken}.
+   */
+  authorizedAppIds?: string[];
+  /**
    * Custom claims from a local `authenticate` verifier (Checkpoint 3a). Merged
    * into the access token by {@link LocalPrimaryAuth.signAccessToken} with a
    * reserved-claim guard so they can never clobber sub/iss/exp/etc.
@@ -130,6 +141,7 @@ const RESERVED_JWT_CLAIMS = new Set<string>([
   'roles',
   'consent',
   'federated',
+  'authorized_apps',
 ]);
 
 /**
@@ -246,6 +258,21 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
   /** Provider configurations (indexed by provider ID) */
   private readonly providerConfigs = new Map<string, UpstreamProviderConfig>();
+
+  /**
+   * Remote-mode single upstream provider id (set by {@link registerRemoteProvider}).
+   *
+   * In `mode: 'remote'` FrontMCP federates exactly ONE mandatory upstream IdP.
+   * The authorize flow auto-starts federation against this id (no in-tree login
+   * page, no provider-selection page), and tools read its token via
+   * `this.orchestration.getToken(remoteProviderId)`. Undefined in every other mode.
+   */
+  private remoteProviderIdImpl?: string;
+
+  /** Remote-mode single upstream provider id, or undefined outside remote mode. */
+  get remoteProviderId(): string | undefined {
+    return this.remoteProviderIdImpl;
+  }
 
   /** Default access token TTL (1 hour) */
   private readonly accessTokenTtlSeconds = 3600;
@@ -454,6 +481,38 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   /**
+   * Cryptographically verify a gateway-issued access token (public/local/remote
+   * "gateway" modes). Gateway tokens — both authenticated access tokens
+   * ({@link signAccessToken}) and anonymous tokens ({@link signAnonymousJwt}) —
+   * are HS256-signed with `this.secret`, so this instance is the sole holder of
+   * the verification key.
+   *
+   * Enforces the signature and lifetime claims (`exp`/`nbf`, checked by `jose`
+   * by default). Issuer equality is intentionally NOT enforced: proxy/tunnel
+   * deployments legitimately present an `iss` that differs from the
+   * request-derived base URL (see {@link deriveIssuer}). Algorithm is pinned to
+   * HS256 to block `alg` confusion (e.g. a forged `alg: none` or asymmetric
+   * header). `expectedIssuer` is accepted for parity/logging only.
+   */
+  override async verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult> {
+    try {
+      const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
+        algorithms: ['HS256'],
+      });
+      return {
+        ok: true,
+        issuer: (payload.iss as string | undefined) ?? expectedIssuer,
+        sub: payload.sub,
+        header: protectedHeader,
+        payload,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'verification_failed';
+      return { ok: false, error: message };
+    }
+  }
+
+  /**
    * Sign an access token for an authenticated user
    */
   async signAccessToken(
@@ -486,6 +545,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
           selectedProviders: consentMetadata.selectedProviderIds ?? [],
           skippedProviders: consentMetadata.skippedProviderIds ?? [],
         };
+      }
+
+      // Progressive/Incremental authorization — embed the granted app-id set as
+      // the `authorized_apps` claim. Only present when the caller supplied it
+      // (i.e. `incrementalAuth` is enabled for the scope), which is what turns
+      // on app-level gating in `checkToolAuthorization`. Omitting it for
+      // non-incremental setups preserves the historical allow-all behavior.
+      if (consentMetadata.authorizedAppIds) {
+        claims['authorized_apps'] = consentMetadata.authorizedAppIds;
       }
 
       // Checkpoint 3a — merge custom claims from a local authenticate() verifier.
@@ -586,16 +654,20 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     // Build consent metadata from code record. Includes custom claims from a
     // local authenticate() verifier (Checkpoint 3a) so they are embedded in the
-    // minted access token even when consent/federation are not in play.
+    // minted access token even when consent/federation are not in play. Also
+    // carries the progressive-auth `authorizedAppIds` so the minted token's
+    // `authorized_apps` claim reflects the granted app set.
     const hasCustomClaims = !!codeRecord.customClaims && Object.keys(codeRecord.customClaims).length > 0;
+    const hasAuthorizedApps = Array.isArray(codeRecord.authorizedAppIds);
     const consentMetadata: ConsentMetadata | undefined =
-      codeRecord.consentEnabled || codeRecord.federatedLoginUsed || hasCustomClaims
+      codeRecord.consentEnabled || codeRecord.federatedLoginUsed || hasCustomClaims || hasAuthorizedApps
         ? {
             selectedToolIds: codeRecord.selectedToolIds,
             selectedProviderIds: codeRecord.selectedProviderIds,
             skippedProviderIds: codeRecord.skippedProviderIds,
             consentEnabled: codeRecord.consentEnabled,
             federatedLoginUsed: codeRecord.federatedLoginUsed,
+            authorizedAppIds: codeRecord.authorizedAppIds,
             customClaims: codeRecord.customClaims,
           }
         : undefined;
@@ -709,6 +781,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     federatedLoginUsed?: boolean;
     // Token migration ID (for federated auth)
     pendingAuthId?: string;
+    // Progressive/Incremental authorization: granted app-id set (embedded as the
+    // `authorized_apps` claim). Only set when incrementalAuth is enabled.
+    authorizedAppIds?: string[];
     // Custom claims from a local authenticate() verifier (Checkpoint 3a)
     customClaims?: Record<string, unknown>;
   }): Promise<string> {
@@ -730,6 +805,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       federatedLoginUsed: params.federatedLoginUsed,
       // Token migration ID (for federated auth)
       pendingAuthId: params.pendingAuthId,
+      // Progressive/Incremental authorization: granted app-id set.
+      authorizedAppIds: params.authorizedAppIds,
       // Custom claims from a local authenticate() verifier (Checkpoint 3a)
       customClaims: params.customClaims,
     });
@@ -749,6 +826,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // orchestration) into the upstream-provider registry so the federated
     // /oauth/authorize + /oauth/provider/:id/callback flows can drive them.
     this.registerConfiguredProviders();
+
+    // Remote mode (`mode: 'remote'`): register the flat remote config as the
+    // single MANDATORY upstream provider so /oauth/authorize federates straight
+    // to the upstream IdP (no in-tree login page) and the provider-callback flow
+    // exchanges/stores its tokens + derives the session identity from upstream.
+    this.registerRemoteProvider();
 
     // Build the per-session credential vault and register `this.credentials`
     // (Checkpoint 3b). Runs after initializeStores so it can share the same
@@ -864,6 +947,74 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         scopes: p.scopes ?? [],
         callbackUrl: `${this.issuer}/oauth/provider/${p.id}/callback`,
       });
+    }
+  }
+
+  /**
+   * Remote mode (`mode: 'remote'`): register the flat remote config as the
+   * SINGLE mandatory upstream provider. Runs once during `initialize()`.
+   *
+   * The flat fields (`provider` base URL + `clientId`/`clientSecret`/`scopes`)
+   * and the `providerConfig` endpoint overrides (`authEndpoint`/`tokenEndpoint`/
+   * `userInfoEndpoint`/`jwksUri`) are mapped onto an {@link UpstreamProviderConfig}.
+   * Endpoints not explicitly overridden are derived from the `provider` base URL
+   * using the standard OIDC paths (`/authorize`, `/token`, `/userinfo`,
+   * `/.well-known/jwks.json`) — the same convention `transparent` mode uses for
+   * discovery. The provider id comes from `providerConfig.id` when set, else it
+   * is derived from the provider hostname (mirroring `deriveProviderId`).
+   *
+   * No-op outside remote mode, so local/public/transparent are unaffected.
+   *
+   * Security: only non-PII provider metadata is read here; the client secret is
+   * kept in the provider config and never logged or exposed to the LLM.
+   */
+  private registerRemoteProvider(): void {
+    if (!isRemoteMode(this.options)) {
+      return;
+    }
+
+    const options = this.options;
+    const base = options.provider.replace(/\/+$/, '');
+    const cfg = options.providerConfig;
+
+    const id = cfg?.id ?? this.deriveRemoteProviderId(options.provider);
+    this.remoteProviderIdImpl = id;
+
+    if (!options.clientId) {
+      // The schema marks clientId optional (DCR placeholder), but without it we
+      // cannot drive the upstream authorization-code flow. Skip registration so
+      // the failure is a clear "provider not configured" rather than an upstream
+      // 400 mid-redirect. DCR (deriving clientId at runtime) is not yet wired.
+      this.logger.warn(
+        `Remote mode: no clientId configured for provider "${id}"; upstream OAuth is not available (DCR is not yet wired)`,
+      );
+      return;
+    }
+
+    this.registerProvider({
+      id,
+      name: cfg?.name ?? id,
+      authorizationEndpoint: cfg?.authEndpoint ?? `${base}/authorize`,
+      tokenEndpoint: cfg?.tokenEndpoint ?? `${base}/token`,
+      userInfoEndpoint: cfg?.userInfoEndpoint ?? `${base}/userinfo`,
+      jwksUri: cfg?.jwksUri ?? `${base}/.well-known/jwks.json`,
+      clientId: options.clientId,
+      clientSecret: options.clientSecret,
+      scopes: options.scopes ?? ['openid'],
+      callbackUrl: `${this.issuer}/oauth/provider/${id}/callback`,
+    });
+  }
+
+  /**
+   * Derive a stable provider id from the upstream `provider` base URL, mirroring
+   * the detection layer's `deriveProviderId`/`urlToProviderId` (hostname with
+   * dots replaced by underscores) so the id is consistent across surfaces.
+   */
+  private deriveRemoteProviderId(provider: string): string {
+    try {
+      return new URL(provider).hostname.replace(/\./g, '_');
+    } catch {
+      return provider.replace(/[^a-zA-Z0-9]/g, '_');
     }
   }
 

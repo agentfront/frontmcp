@@ -76,33 +76,59 @@ See `configure-auth.md` → "Multi-provider orchestration" for the full provider
 
 ## Remote Mode
 
-Server delegates to an upstream auth orchestrator for token management.
+FrontMCP runs a local OAuth 2.1 server that **proxies user authentication to one
+mandatory upstream IdP**. `GET /oauth/authorize` redirects **straight to the
+upstream IdP** — there is no FrontMCP login page and no provider-selection page.
+After the IdP returns to `/oauth/provider/{id}/callback`, FrontMCP exchanges the
+code, stores the upstream tokens encrypted (server-side), derives the session
+identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
+HS256 session token. Tools read the upstream token via
+`this.orchestration.getToken('<provider-id>')`.
 
 ```typescript
 auth: {
   mode: 'remote',
   provider: 'https://auth.example.com',
-  clientId: 'my-client-id',
+  clientId: 'my-client-id', // pre-registered (DCR not yet wired)
   clientSecret: process.env.AUTH_SECRET,
+  scopes: ['openid', 'profile', 'email'],
   tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+  // The provider id defaults to the `provider` hostname; pin a stable id (and/or
+  // override non-standard endpoints) with providerConfig:
+  providerConfig: { id: 'idp' },
 }
 ```
 
-**Use when:** Enterprise deployments with centralized identity management.
+Endpoints are derived from `provider` using standard OIDC paths
+(`/authorize`, `/token`, `/userinfo`, `/.well-known/jwks.json`). For
+non-standard IdPs, override them with
+`providerConfig.{authEndpoint,tokenEndpoint,userInfoEndpoint,jwksUri}`.
+
+**Deferred (not yet wired):** upstream **Dynamic Client Registration**
+(`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered
+`clientId` is required; and upstream **token auto-refresh** — once the upstream
+access token expires the user must re-authenticate (FrontMCP's own session token
+still refreshes via the `refresh_token` grant).
+
+**Use when:** Enterprise deployments delegating user authentication to a single
+centralized IdP that may not support DCR, while keeping FrontMCP-issued sessions,
+upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Transparent     | Local                           | Remote                          |
-| ------------------------ | ------------- | --------------- | ------------------------------- | ------------------------------- |
-| Token issuance           | Anonymous JWT | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)             |
-| Signing                  | HS256 secret  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)     |
-| Token refresh            | No            | No              | Yes                             | Yes                             |
-| PKCE support             | No            | No              | Yes                             | Yes                             |
-| Token persistence        | n/a           | n/a             | memory / sqlite / redis         | memory / sqlite / redis         |
-| Consent (tool selection) | No            | No              | Optional (screen + enforcement) | Optional (screen + enforcement) |
-| Federated auth           | No            | No              | Optional                        | Optional                        |
+| Feature                  | Public        | Transparent     | Local                           | Remote                            |
+| ------------------------ | ------------- | --------------- | ------------------------------- | --------------------------------- |
+| Token issuance           | Anonymous JWT | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)               |
+| Signing                  | HS256 secret  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
+| Session-token refresh    | No            | No              | Yes                             | Yes                               |
+| Upstream-token refresh   | n/a           | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
+| Identity source          | Anonymous     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
+| PKCE support             | No            | No              | Yes                             | Yes                               |
+| Token persistence        | n/a           | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
+| Consent (tool selection) | No            | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
+| Upstream OAuth providers | No            | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
 
-> "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to the upstream IdP rather than delegating token signing.
+> "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 
 ## Examples
 
@@ -114,7 +140,7 @@ auth: {
 | [`local-consent-enforcement`](../examples/configure-auth-modes/local-consent-enforcement.md)                   | Intermediate | Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools. |
 | [`local-behind-tunnel`](../examples/configure-auth-modes/local-behind-tunnel.md)                               | Intermediate | Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.                                              |
 | [`local-multi-provider-orchestration`](../examples/configure-auth-modes/local-multi-provider-orchestration.md) | Advanced     | Orchestrate multiple upstream OAuth providers (GitHub + Slack) in local mode, gate the JWT until they are linked, and read downstream tokens in tools via this.orchestration.  |
-| [`remote-enterprise-oauth`](../examples/configure-auth-modes/remote-enterprise-oauth.md)                       | Advanced     | Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.                                                                                     |
+| [`remote-enterprise-oauth`](../examples/configure-auth-modes/remote-enterprise-oauth.md)                       | Advanced     | Proxy authentication to one mandatory upstream IdP, mint a FrontMCP session, and read the upstream token in tools.                                                             |
 | [`transparent-jwt-validation`](../examples/configure-auth-modes/transparent-jwt-validation.md)                 | Basic        | Validate externally-issued JWTs without managing token lifecycle on the server.                                                                                                |
 
 > See all examples in [`examples/configure-auth-modes/`](../examples/configure-auth-modes/)

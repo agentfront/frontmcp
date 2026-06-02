@@ -64,6 +64,13 @@ export interface AuthorizationCodeRecord {
   /** Pending auth ID for token migration (federated login) */
   pendingAuthId?: string;
   /**
+   * Progressive/Incremental authorization: the app IDs this code grants access
+   * to. Embedded as the `authorized_apps` claim in the minted token (which
+   * turns on app-level gating). Only set when `incrementalAuth` is enabled for
+   * the scope; absent for non-incremental setups (preserving allow-all).
+   */
+  authorizedAppIds?: string[];
+  /**
    * Custom claims returned by a local `authenticate` verifier (Checkpoint 3a).
    * Embedded (namespaced) in the minted access token. Reserved claims
    * (sub/iss/exp/…) are stripped when signed.
@@ -198,6 +205,8 @@ export const authorizationCodeRecordSchema = z.object({
   consentEnabled: z.boolean().optional(),
   federatedLoginUsed: z.boolean().optional(),
   pendingAuthId: z.string().optional(),
+  // Progressive/Incremental authorization: granted app-id set.
+  authorizedAppIds: z.array(z.string()).optional(),
   // Custom claims from a local authenticate() verifier (Checkpoint 3a).
   customClaims: z.record(z.string(), z.unknown()).optional(),
 });
@@ -223,6 +232,8 @@ export interface CreateCodeRecordParams {
   federatedLoginUsed?: boolean;
   // Token migration ID (for federated auth)
   pendingAuthId?: string;
+  // Progressive/Incremental authorization: granted app-id set.
+  authorizedAppIds?: string[];
   // Custom claims from a local authenticate() verifier (Checkpoint 3a).
   customClaims?: Record<string, unknown>;
 }
@@ -306,6 +317,7 @@ export function buildCodeRecord(params: CreateCodeRecordParams): AuthorizationCo
     consentEnabled: params.consentEnabled,
     federatedLoginUsed: params.federatedLoginUsed,
     pendingAuthId: params.pendingAuthId,
+    authorizedAppIds: params.authorizedAppIds,
     customClaims: params.customClaims,
   };
 }

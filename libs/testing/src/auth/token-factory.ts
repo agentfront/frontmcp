@@ -3,7 +3,7 @@
  * @description JWT token factory for testing authentication
  */
 
-import { SignJWT, generateKeyPair, exportJWK, type JWTPayload, type JWK } from 'jose';
+import { exportJWK, generateKeyPair, SignJWT, type JWK, type JWTPayload } from 'jose';
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
@@ -29,6 +29,17 @@ export interface TokenFactoryOptions {
   issuer?: string;
   /** Default audience */
   audience?: string;
+  /**
+   * When set, tokens are HS256-signed with this shared secret instead of an
+   * auto-generated RSA key (the default RS256 + JWKS behaviour). Use this for
+   * GATEWAY-mode servers (auth.mode public/local/orchestrated) that verify
+   * tokens against their own `JWT_SECRET` — sign with the same secret so the
+   * minted tokens are genuinely cryptographically valid (not just decodable).
+   *
+   * Leave unset for TRANSPARENT mode, where the server verifies against the
+   * provider's published JWKS (RS256).
+   */
+  hmacSecret?: string;
 }
 
 // Type for crypto key
@@ -63,17 +74,44 @@ export class TestTokenFactory {
   private publicKey: CryptoKeyLike | null = null;
   private jwk: JWK | null = null;
   private keyId: string;
+  /** HS256 shared secret (gateway mode). Null → RS256 + JWKS (default). */
+  private readonly hmacSecret: Uint8Array | null;
 
   constructor(options: TokenFactoryOptions = {}) {
     this.issuer = options.issuer ?? 'https://test.frontmcp.local';
     this.audience = options.audience ?? 'frontmcp-test';
     this.keyId = `test-key-${Date.now()}`;
+    this.hmacSecret = options.hmacSecret ? new TextEncoder().encode(options.hmacSecret) : null;
+  }
+
+  /** True when this factory signs HS256 with a shared secret (gateway mode). */
+  private get isHmac(): boolean {
+    return this.hmacSecret !== null;
+  }
+
+  /** The JWS `alg` this factory signs with. */
+  private get alg(): 'HS256' | 'RS256' {
+    return this.isHmac ? 'HS256' : 'RS256';
   }
 
   /**
-   * Initialize the key pair (called automatically on first use)
+   * The signing key: the shared HMAC secret in gateway mode, otherwise the
+   * generated RSA private key (lazily created via ensureKeys()).
+   */
+  private signingKey(): CryptoKeyLike {
+    if (this.hmacSecret) return this.hmacSecret;
+    if (!this.privateKey) {
+      throw new Error('Private key not initialized');
+    }
+    return this.privateKey;
+  }
+
+  /**
+   * Initialize the key pair (called automatically on first use). No-op in HS256
+   * mode — there is no asymmetric keypair, just the shared secret.
    */
   private async ensureKeys(): Promise<void> {
+    if (this.isHmac) return;
     if (this.privateKey && this.publicKey) return;
 
     // Generate RSA key pair
@@ -110,13 +148,8 @@ export class TestTokenFactory {
       ...options.claims,
     };
 
-    if (!this.privateKey) {
-      throw new Error('Private key not initialized');
-    }
-
-    const token = await new SignJWT(payload)
-      .setProtectedHeader({ alg: 'RS256', kid: this.keyId })
-      .sign(this.privateKey);
+    const header = this.isHmac ? { alg: this.alg, typ: 'JWT' } : { alg: this.alg, kid: this.keyId };
+    const token = await new SignJWT(payload).setProtectedHeader(header).sign(this.signingKey());
 
     return token;
   }
@@ -181,13 +214,8 @@ export class TestTokenFactory {
       exp: now - 3600, // Expired 1 hour ago
     };
 
-    if (!this.privateKey) {
-      throw new Error('Private key not initialized');
-    }
-
-    const token = await new SignJWT(payload)
-      .setProtectedHeader({ alg: 'RS256', kid: this.keyId })
-      .sign(this.privateKey);
+    const header = this.isHmac ? { alg: this.alg, typ: 'JWT' } : { alg: this.alg, kid: this.keyId };
+    const token = await new SignJWT(payload).setProtectedHeader(header).sign(this.signingKey());
 
     return token;
   }
@@ -198,8 +226,10 @@ export class TestTokenFactory {
   createTokenWithInvalidSignature(options: Pick<CreateTokenOptions, 'sub'>): string {
     const now = Math.floor(Date.now() / 1000);
 
-    // Create a fake JWT with an invalid signature
-    const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: this.keyId })).toString('base64url');
+    // Create a fake JWT with an invalid signature. The header alg matches the
+    // factory's signing alg so the only thing wrong is the signature itself.
+    const headerObj = this.isHmac ? { alg: this.alg, typ: 'JWT' } : { alg: this.alg, kid: this.keyId };
+    const header = Buffer.from(JSON.stringify(headerObj)).toString('base64url');
     const payload = Buffer.from(
       JSON.stringify({
         iss: this.issuer,
@@ -217,9 +247,15 @@ export class TestTokenFactory {
   }
 
   /**
-   * Get the public JWKS for verifying tokens
+   * Get the public JWKS for verifying tokens.
+   *
+   * Only meaningful in RS256 mode — HS256 (gateway) tokens are verified against
+   * the shared secret, not a published public key, so there is no JWKS to serve.
    */
   async getPublicJwks(): Promise<{ keys: JWK[] }> {
+    if (this.isHmac) {
+      throw new Error('getPublicJwks() is not available in HS256 mode (gateway tokens use a shared secret)');
+    }
     await this.ensureKeys();
     if (!this.jwk) {
       throw new Error('JWK not initialized');

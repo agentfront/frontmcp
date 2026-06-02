@@ -162,7 +162,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | Example                                                                                       | Level        | Description                                                                                 |
 | --------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
 | [`local-self-signed-tokens`](./examples/configure-auth-modes/local-self-signed-tokens.md)     | Intermediate | Configure a server that signs its own JWT tokens with consent and incremental auth enabled. |
-| [`remote-enterprise-oauth`](./examples/configure-auth-modes/remote-enterprise-oauth.md)       | Advanced     | Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.  |
+| [`remote-enterprise-oauth`](./examples/configure-auth-modes/remote-enterprise-oauth.md)       | Advanced     | Proxy auth to one mandatory upstream IdP, mint a FrontMCP session, read the upstream token. |
 | [`transparent-jwt-validation`](./examples/configure-auth-modes/transparent-jwt-validation.md) | Basic        | Validate externally-issued JWTs without managing token lifecycle on the server.             |
 
 ### `configure-auth`

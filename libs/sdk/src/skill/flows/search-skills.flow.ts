@@ -4,6 +4,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, normalizeToolRef, type FlowPlan, type FlowRunOptions } from '../../common';
 import { DependencyNotFoundError, InvalidInputError } from '../../errors';
+import { filterSkillMetadataByAuthorities } from '../skill-authorities.helper';
 import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
 
 /**
@@ -223,8 +224,14 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
       return visibility === 'mcp' || visibility === 'both';
     });
 
+    // Hide authority-gated skills the caller can't discover (mirrors
+    // `filterByAuthorities` for tools/resources). Evaluated WITHOUT request
+    // input — role/permission/claims-based authorities only; `fromInput`
+    // policies can't be evaluated at search time.
+    const authVisibleResults = await this.filterResultsByAuthorities(mcpVisibleResults);
+
     // Transform results to output format
-    const skills = mcpVisibleResults.map((result) => ({
+    const skills = authVisibleResults.map((result) => ({
       id: result.metadata.id ?? result.metadata.name,
       name: result.metadata.name,
       description: result.metadata.description,
@@ -270,5 +277,25 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     this.state.set({ output });
     this.respond(output);
     this.logger.verbose('finalize:done');
+  }
+
+  /**
+   * Remove search results the caller is not authorized to discover.
+   *
+   * Search-result metadata is projected from `SkillContent` and does NOT carry
+   * the `authorities` field, so we resolve the live skill entry (by id/name)
+   * to read its declared authorities, then evaluate via the scope's engine.
+   * No-op when no authorities engine is configured; results unchanged.
+   *
+   * Evaluated WITHOUT request input — `fromInput`/ReBAC-by-input policies can't
+   * be evaluated at search time and will be treated as a denial. Use
+   * role/permission/claims-based authorities for discoverable skills.
+   */
+  private async filterResultsByAuthorities(results: SkillSearchResult[]): Promise<SkillSearchResult[]> {
+    const registry = this.scope.skills;
+    if (!registry) return results;
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
+    return filterSkillMetadataByAuthorities(this.scope, registry, results, authInfo);
   }
 }

@@ -77,6 +77,18 @@ export function buildPerSkillResourceRecord(
     _meta: meta,
   };
 
+  // Propagate the skill's `authorities` onto the concrete per-skill resource
+  // so the existing resource enforcement (`checkEntryAuthorities` on read,
+  // `filterByAuthorities` on `resources/list`) gates it exactly like a
+  // resource that declared `authorities` directly. Skills without authorities
+  // stay ungated. The per-skill resource handler closes over `scope` and has
+  // no request `authInfo`, so reusing the resource flow is the only uniform
+  // enforcement point for this surface.
+  const skillAuthorities = (skill.metadata as unknown as Record<string, unknown>)['authorities'];
+  if (skillAuthorities !== undefined) {
+    (metadata as unknown as Record<string, unknown>)['authorities'] = skillAuthorities;
+  }
+
   // The handler signature matches what the resource registry expects: a
   // function that returns a `ReadResourceResult`. We close over `scope` so
   // resolution always uses the live SkillRegistry — supporting hot-swap

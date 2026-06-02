@@ -232,8 +232,8 @@
           "features": [
             "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
             "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
-            "Letting the framework reject unauthenticated calls before `execute()` runs (no auth-check boilerplate)",
-            "Trusting the framework to handle token refresh, expiration, and the OAuth start URL"
+            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
+            "Trusting the framework to handle token refresh, expiration, and the connect/authorize URL"
           ]
         },
         {
@@ -243,9 +243,10 @@
           "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
           "features": [
             "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
-            "Requesting specific OAuth scopes so the framework triggers incremental auth when missing",
+            "Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them",
             "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
-            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
+            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing",
+            "The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates"
           ]
         },
         {
@@ -553,14 +554,16 @@
             },
             {
               "name": "remote-enterprise-oauth",
-              "description": "Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.",
+              "description": "Proxy authentication to one mandatory upstream IdP, mint a FrontMCP session, and read the upstream token in tools.",
               "level": "advanced",
               "tags": ["config", "oauth", "auth", "redis", "remote", "auth-modes"],
               "features": [
-                "Using `mode: 'remote'` to delegate to an external OAuth 2.1 authorization server",
+                "Using `mode: 'remote'` to proxy authentication to a single mandatory upstream IdP",
                 "Loading `clientId` and `clientSecret` from environment variables (never hardcoded)",
                 "Configuring Redis-backed token storage for production persistence",
-                "Full OAuth flow: clients are redirected to the provider and return with an authorization code"
+                "`GET /oauth/authorize` redirects straight to the upstream IdP (no in-tree login page)",
+                "Session identity (sub/email/name) is derived from the upstream user",
+                "Tools read the upstream token via `this.orchestration.getToken(providerId)`"
               ]
             },
             {
@@ -3722,7 +3725,7 @@
     {
       "name": "frontmcp-authorities",
       "category": "development",
-      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.",
+      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, prompts, or skills. Covers JWT claims mapping, authority profiles, and policy enforcement.",
       "path": "frontmcp-authorities",
       "targets": ["all"],
       "hasResources": true,

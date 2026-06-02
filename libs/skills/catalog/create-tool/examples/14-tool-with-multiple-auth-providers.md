@@ -5,9 +5,10 @@ description: 'Tool with the full `authProviders` mapping form — one required p
 tags: [auth-providers, oauth, scopes, optional-auth, this.authProviders.headers]
 features:
   - 'Using the object form of `authProviders` to set `required`, `scopes`, and `alias`'
-  - Requesting specific OAuth scopes so the framework triggers incremental auth when missing
+  - Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them
   - "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)"
   - "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
+  - "The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates"
 ---
 
 # Tool With Multiple Auth Providers
@@ -82,18 +83,19 @@ export class DeployAppTool extends ToolContext {
 ## What This Demonstrates
 
 - Using the object form of `authProviders` to set `required`, `scopes`, and `alias`
-- Requesting specific OAuth scopes so the framework triggers incremental auth when missing
+- Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them
 - Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)
 - Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing
+- The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates
 
 ## Field reference (from auth-providers.md)
 
-| Field      | Default  | Meaning                                                                               |
-| ---------- | -------- | ------------------------------------------------------------------------------------- |
-| `name`     | —        | Provider name — must match a registered `@AuthProvider`                               |
-| `required` | `true`   | If `true`, the tool errors before `execute()` runs when creds are missing             |
-| `scopes`   | —        | OAuth scopes — triggers incremental auth if the session lacks them                    |
-| `alias`    | = `name` | Local name for the provider — useful when two tools use the same provider differently |
+| Field      | Default  | Meaning                                                                                      |
+| ---------- | -------- | -------------------------------------------------------------------------------------------- |
+| `name`     | —        | Provider name — must match a registered credential provider                                  |
+| `required` | `true`   | If `true`, the tool errors (`-32001`) before `execute()` runs when the credential is missing |
+| `scopes`   | —        | OAuth scopes — advertised via PRM `scopes_supported` so clients know to request them         |
+| `alias`    | = `name` | Local name for the provider — useful when two tools use the same provider differently        |
 
 ## When to use the object form
 

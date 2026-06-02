@@ -4,6 +4,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { Resource } from '../../../common';
 import { ResourceContext } from '../../../common/interfaces';
+import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { buildResourceTemplateIndexEntry, buildSkillIndex, buildSkillMdIndexEntry } from '../sep-2640.builders';
 import { SKILL_INDEX_MIME_TYPE, SKILL_INDEX_URI } from '../sep-2640.constants';
 import { getSepVisibleSkills } from '../sep-2640.resource-helpers';
@@ -42,7 +43,12 @@ import { getSepVisibleSkills } from '../sep-2640.resource-helpers';
 })
 export class Sep2640SkillIndexResource extends ResourceContext {
   async execute(uri: string): Promise<ReadResourceResult> {
-    const skills = getSepVisibleSkills(this.scope);
+    // Hide skills the caller is not authorized to discover (mirrors
+    // `filterByAuthorities` for tools/resources). Skills without `authorities`
+    // always pass; when no authorities engine is configured the list is
+    // returned unchanged.
+    const visible = getSepVisibleSkills(this.scope);
+    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
 
     const entries = skills.map((skill) =>
       buildSkillMdIndexEntry({

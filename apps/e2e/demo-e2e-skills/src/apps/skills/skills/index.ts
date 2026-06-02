@@ -6,3 +6,4 @@ export { FullPRWorkflowSkill } from './full-pr-workflow.skill';
 export { McpOnlySkill } from './mcp-only.skill';
 export { HttpOnlySkill } from './http-only.skill';
 export { DocsSkill } from './docs.skill';
+export { AdminGatedSkill } from './admin-gated.skill';

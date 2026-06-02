@@ -148,6 +148,94 @@ describe('LocalPrimaryAuth — declarative providers bridge', () => {
   });
 });
 
+describe('LocalPrimaryAuth — remote-mode single upstream provider', () => {
+  it('registers the flat remote config as one upstream provider with derived endpoints', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://auth.example.com',
+      clientId: 'remote-client',
+      clientSecret: 'remote-secret',
+      scopes: ['openid', 'profile', 'email'],
+    });
+
+    // Provider id is derived from the provider hostname (dots → underscores).
+    const id = auth.remoteProviderId;
+    expect(id).toBe('auth_example_com');
+
+    const config = auth.getProviderConfig(id!);
+    expect(config).toBeDefined();
+    // Endpoints derived from the base URL using standard OIDC paths.
+    expect(config?.authorizationEndpoint).toBe('https://auth.example.com/authorize');
+    expect(config?.tokenEndpoint).toBe('https://auth.example.com/token');
+    expect(config?.userInfoEndpoint).toBe('https://auth.example.com/userinfo');
+    expect(config?.jwksUri).toBe('https://auth.example.com/.well-known/jwks.json');
+    expect(config?.clientId).toBe('remote-client');
+    expect(config?.clientSecret).toBe('remote-secret');
+    expect(config?.scopes).toEqual(['openid', 'profile', 'email']);
+    expect(config?.callbackUrl).toBe(`${auth.issuer}/oauth/provider/${id}/callback`);
+  });
+
+  it('honors providerConfig endpoint overrides and explicit id', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://legacy-idp.example.com',
+      clientId: 'legacy-client',
+      providerConfig: {
+        id: 'legacy',
+        name: 'Legacy IdP',
+        authEndpoint: 'https://legacy-idp.example.com/auth',
+        tokenEndpoint: 'https://legacy-idp.example.com/oauth/token',
+        userInfoEndpoint: 'https://legacy-idp.example.com/me',
+        jwksUri: 'https://legacy-idp.example.com/keys',
+      },
+    });
+
+    expect(auth.remoteProviderId).toBe('legacy');
+    const config = auth.getProviderConfig('legacy');
+    expect(config?.name).toBe('Legacy IdP');
+    expect(config?.authorizationEndpoint).toBe('https://legacy-idp.example.com/auth');
+    expect(config?.tokenEndpoint).toBe('https://legacy-idp.example.com/oauth/token');
+    expect(config?.userInfoEndpoint).toBe('https://legacy-idp.example.com/me');
+    expect(config?.jwksUri).toBe('https://legacy-idp.example.com/keys');
+  });
+
+  it('defaults scopes to ["openid"] when none are provided', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://auth.example.com',
+      clientId: 'remote-client',
+    });
+    const config = auth.getProviderConfig(auth.remoteProviderId!);
+    expect(config?.scopes).toEqual(['openid']);
+  });
+
+  it('strips a trailing slash from the provider base URL when deriving endpoints', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://auth.example.com/',
+      clientId: 'remote-client',
+    });
+    const config = auth.getProviderConfig(auth.remoteProviderId!);
+    expect(config?.authorizationEndpoint).toBe('https://auth.example.com/authorize');
+    expect(config?.tokenEndpoint).toBe('https://auth.example.com/token');
+  });
+
+  it('does not register a provider when clientId is missing (DCR not wired)', async () => {
+    const auth = await makeAuth({
+      mode: 'remote',
+      provider: 'https://auth.example.com',
+      // no clientId — registration is skipped, remoteProviderId still derived.
+    });
+    expect(auth.remoteProviderId).toBe('auth_example_com');
+    expect(auth.getProviderConfig('auth_example_com')).toBeUndefined();
+  });
+
+  it('does not register a remote provider in local mode', async () => {
+    const auth = await makeAuth({ mode: 'local' });
+    expect(auth.remoteProviderId).toBeUndefined();
+  });
+});
+
 describe('LocalPrimaryAuth — exchangeProviderCode upstream validation', () => {
   const realFetch = global.fetch;
   afterEach(() => {

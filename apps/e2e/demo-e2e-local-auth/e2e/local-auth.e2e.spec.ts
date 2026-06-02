@@ -592,3 +592,102 @@ describe('#471 verified token with gone session is handled cleanly (no 500)', ()
     expect(res.headers.get('WWW-Authenticate')).toContain('Bearer');
   });
 });
+
+// ===========================================================
+// SECURITY — gateway tokens are cryptographically verified
+//
+// Regression guard: before the gateway-verify fix, the verify path only
+// base64-decoded the payload, so a forged/tampered JWT with the right shape
+// was ACCEPTED. These tests assert that a token whose HS256 signature does not
+// match the server's secret is REJECTED with 401 (a clean client error, never
+// a 5xx), while the matching freshly-minted token is still accepted.
+// ===========================================================
+describe('SECURITY: forged/tampered Bearer token is rejected with 401', () => {
+  let server: TestServer;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    server = await TestServer.start({
+      command: `npx tsx ${SERVER_ENTRY}`,
+      project: 'demo-e2e-local-auth',
+      startupTimeout: 60000,
+      debug: process.env['DEBUG'] === '1',
+    });
+    baseUrl = server.info.baseUrl;
+  }, 90000);
+
+  afterAll(async () => {
+    if (server) await server.stop();
+  });
+
+  async function mintToken(): Promise<string> {
+    const { verifier, challenge } = makePkce();
+    const { pendingAuthId } = await startAuthorization(baseUrl, challenge, { scope: 'read write' });
+    const { code } = await completeLogin(baseUrl, pendingAuthId);
+    const body = (await (await exchangeToken(baseUrl, { code, verifier })).json()) as { access_token: string };
+    return body.access_token;
+  }
+
+  /** POST an MCP initialize with the given bearer token; return the HTTP response. */
+  async function callWithToken(token: string): Promise<Response> {
+    return fetch(`${baseUrl}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { capabilities: {}, clientInfo: { name: 'test', version: '1.0' } },
+      }),
+    });
+  }
+
+  it('a token with a TAMPERED signature is rejected with 401 (not accepted, not 5xx)', async () => {
+    const valid = await mintToken();
+    // Keep header + payload intact (still decodes to a well-formed JWT shape),
+    // but replace the HS256 signature so the MAC no longer matches the secret.
+    const [h, p] = valid.split('.');
+    const tampered = `${h}.${p}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+
+    const res = await callWithToken(tampered);
+
+    expect(res.status).toBeLessThan(500); // never a crash
+    expect(res.status).toBe(401);
+    expect(res.headers.get('WWW-Authenticate')).toContain('Bearer');
+  });
+
+  it('a token with a SWAPPED payload (different sub/scope) is rejected with 401', async () => {
+    const valid = await mintToken();
+    const [h, , sig] = valid.split('.');
+    // Re-encode a payload claiming elevated scope + a different subject. The
+    // header and signature are from the real token, so the signature can no
+    // longer cover this tampered payload.
+    const forgedPayload = Buffer.from(
+      JSON.stringify({ sub: 'attacker', scope: 'admin', exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString('base64url');
+    const forged = `${h}.${forgedPayload}.${sig}`;
+
+    const res = await callWithToken(forged);
+
+    expect(res.status).toBeLessThan(500);
+    expect(res.status).toBe(401);
+  });
+
+  it('the matching freshly-minted token is still ACCEPTED (control)', async () => {
+    const token = await mintToken();
+    const client = await McpTestClient.create({
+      baseUrl,
+      transport: 'streamable-http',
+      auth: { token },
+    }).buildAndConnect();
+    try {
+      expect(client.isConnected()).toBe(true);
+    } finally {
+      await client.disconnect();
+    }
+  });
+});

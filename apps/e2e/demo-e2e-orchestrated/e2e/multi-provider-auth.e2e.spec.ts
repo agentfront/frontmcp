@@ -75,6 +75,11 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-orchestrated/src/main-multi-provider.ts',
     project: 'demo-e2e-orchestrated',
+    // Pin the server's JWT secret so the test token factory signs HS256 with the
+    // SAME secret — the server now cryptographically verifies gateway tokens, so
+    // fixture tokens (auth.createToken) must be genuinely valid. The upstream
+    // provider mock factories keep using RS256 + JWKS (separate trust domain).
+    env: { JWT_SECRET: 'orchestrated-e2e-shared-secret-0123456789' },
   });
 
   test.describe('OAuth Metadata', () => {

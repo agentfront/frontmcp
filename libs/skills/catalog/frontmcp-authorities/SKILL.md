@@ -1,6 +1,6 @@
 ---
 name: frontmcp-authorities
-description: 'Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.'
+description: 'Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, prompts, or skills. Covers JWT claims mapping, authority profiles, and policy enforcement.'
 tags: [authorization, rbac, abac, rebac, security, permissions, roles, access-control, authorities, jwt]
 category: development
 targets: [all]
@@ -20,9 +20,10 @@ Built-in RBAC/ABAC/ReBAC authorization system for FrontMCP entry types. Each flo
 
 ### Must Use
 
-- Adding role-based or permission-based access control to tools, resources, or prompts
+- Adding role-based or permission-based access control to tools, resources, prompts, or skills
 - Restricting MCP entry visibility based on the caller's JWT claims
 - Enforcing tenant isolation (ABAC) or relationship checks (ReBAC) on entries
+- Gating which skills a caller can discover and load (`@Skill({ authorities })`)
 
 ### Recommended
 
@@ -284,23 +285,59 @@ authorities: {
 }
 ```
 
+### Skill Authorities (`@Skill({ authorities })`)
+
+`authorities` on `@Skill` is enforced exactly like the other entry types, across
+**every** surface a skill is served from:
+
+- **Deny on load/read** — loading a gated skill the caller can't access throws
+  `AuthorityDeniedError` (MCP code `-32003`), the same as a denied `tools/call`.
+  Covers `skills/load` (MCP), `skill://<path>/SKILL.md` and `skill://<path>/<file>`
+  reads (SEP-2640), and `GET /skills/{id}` (HTTP).
+- **Filter on discovery** — gated skills the caller can't access are removed from
+  `skills/search` / `skills/list` (MCP), the `skill://index.json` discovery index and
+  skill-path autocomplete (SEP-2640), and `GET /skills` (HTTP).
+
+```typescript
+@Skill({ name: 'review-pr', description: '…', instructions: '…' })            // open to all
+@Skill({ name: 'internal-runbook', description: '…', instructions: '…',
+         authorities: 'admin' })                                              // admins only
+```
+
+Two limitations to design around:
+
+- **List-time filtering is role/permission/claims-only.** Discovery runs without
+  request input, so `{ fromInput: '…' }` ABAC/ReBAC policies can't be evaluated when
+  filtering and will hide the skill from discovery. Use role/permission/claims
+  authorities for discoverable skills; input-dependent policies still enforce at
+  load time. (Same limitation applies to tools/resources/prompts.)
+- **HTTP skills discovery is fail-closed.** The Skills HTTP API uses a binary
+  api-key/bearer gate with no claims, so gated skills are hidden from `GET /skills`
+  and denied on `GET /skills/{id}` regardless of the bearer. Serve gated skills over
+  an MCP transport for claims-based access. Ungated skills are unaffected.
+
+Boot-time fail-fast covers skills too: a `@Skill` with `authorities` but no configured
+authorities engine fails server startup with `AuthConfigurationError`, exactly like a
+tool/resource/prompt/agent.
+
 ## Scenario Routing Table
 
-| Scenario                              | Approach                                                         | Reference                          |
-| ------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- |
-| Simple role gate (admin-only tool)    | `authorities: 'admin'` profile                                   | `references/authority-profiles.md` |
-| Permission-based access               | `authorities: { permissions: { all: ['x'] } }`                   | `references/rbac-abac-rebac.md`    |
-| Tenant isolation                      | ABAC with `{ fromInput: 'tenantId' }`                            | `references/rbac-abac-rebac.md`    |
-| Resource ownership check              | ReBAC with relationship resolver                                 | `references/rbac-abac-rebac.md`    |
-| IP allowlist or custom logic          | Custom evaluator via `custom.*`                                  | `references/custom-evaluators.md`  |
-| Different IdP (Auth0/Keycloak/Okta)   | Configure `claimsMapping`                                        | `references/claims-mapping.md`     |
-| Admin OR (editor AND same-tenant)     | `anyOf` / `allOf` combinators                                    | `references/authority-profiles.md` |
-| Custom pre/post authority logic       | Hook with `Will`/`Did`/`Around` on `checkEntryAuthorities` stage | `references/custom-evaluators.md`  |
-| Replace built-in check with OPA/Cedar | `Around('checkEntryAuthorities')` hook                           | `references/custom-evaluators.md`  |
-| Audit authority decisions             | `Did('checkEntryAuthorities')` hook for logging/metrics          | `references/custom-evaluators.md`  |
-| Tenant allowlist in Redis/DB          | Async custom evaluator with `custom.*` field                     | `references/custom-evaluators.md`  |
-| Subscription check before tool runs   | Async custom evaluator or `Will('checkEntryAuthorities')` hook   | `references/custom-evaluators.md`  |
-| Feature flag gate on a tool           | Async custom evaluator checking flag service                     | `references/custom-evaluators.md`  |
+| Scenario                              | Approach                                                          | Reference                          |
+| ------------------------------------- | ----------------------------------------------------------------- | ---------------------------------- |
+| Simple role gate (admin-only tool)    | `authorities: 'admin'` profile                                    | `references/authority-profiles.md` |
+| Gate skill discovery + load           | `@Skill({ authorities: 'admin' })` (role/permission/claims-based) | `references/authority-profiles.md` |
+| Permission-based access               | `authorities: { permissions: { all: ['x'] } }`                    | `references/rbac-abac-rebac.md`    |
+| Tenant isolation                      | ABAC with `{ fromInput: 'tenantId' }`                             | `references/rbac-abac-rebac.md`    |
+| Resource ownership check              | ReBAC with relationship resolver                                  | `references/rbac-abac-rebac.md`    |
+| IP allowlist or custom logic          | Custom evaluator via `custom.*`                                   | `references/custom-evaluators.md`  |
+| Different IdP (Auth0/Keycloak/Okta)   | Configure `claimsMapping`                                         | `references/claims-mapping.md`     |
+| Admin OR (editor AND same-tenant)     | `anyOf` / `allOf` combinators                                     | `references/authority-profiles.md` |
+| Custom pre/post authority logic       | Hook with `Will`/`Did`/`Around` on `checkEntryAuthorities` stage  | `references/custom-evaluators.md`  |
+| Replace built-in check with OPA/Cedar | `Around('checkEntryAuthorities')` hook                            | `references/custom-evaluators.md`  |
+| Audit authority decisions             | `Did('checkEntryAuthorities')` hook for logging/metrics           | `references/custom-evaluators.md`  |
+| Tenant allowlist in Redis/DB          | Async custom evaluator with `custom.*` field                      | `references/custom-evaluators.md`  |
+| Subscription check before tool runs   | Async custom evaluator or `Will('checkEntryAuthorities')` hook    | `references/custom-evaluators.md`  |
+| Feature flag gate on a tool           | Async custom evaluator checking flag service                      | `references/custom-evaluators.md`  |
 
 ## Common Patterns
 

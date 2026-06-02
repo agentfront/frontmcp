@@ -11,7 +11,11 @@
  */
 import 'reflect-metadata';
 
-import { generatePkceChallenge, InMemoryAuthorizationStore } from '@frontmcp/auth';
+import {
+  generatePkceChallenge,
+  InMemoryAuthorizationStore,
+  type InMemoryFederatedAuthSessionStore,
+} from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
@@ -936,6 +940,81 @@ describe('OAuth Authorize Flow', () => {
       expect(output.body).toContain('jira');
       // No __parent__ placeholder leaks into the configured-provider path.
       expect(output.body).not.toContain('__parent__');
+    });
+  });
+
+  // ----------------------------------------------------------------
+  // Remote mode — single mandatory upstream provider auto-federation
+  // ----------------------------------------------------------------
+
+  describe('Flow Execution - Remote Mode', () => {
+    it('redirects straight to the upstream IdP (no login or provider-selection page)', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'remote',
+          provider: 'https://idp.example.com',
+          providerConfig: { id: 'upstream' },
+        } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      // The authorize flow auto-starts federation and 302s to the upstream IdP.
+      expect(output.kind).toBe('redirect');
+      expect(output.location).toContain('https://idp.example.com/authorize');
+      // The upstream redirect carries the provider-callback redirect_uri + state.
+      expect(output.location).toContain('redirect_uri=');
+      expect(output.location).toContain('state=federated');
+      // It is NOT the in-tree login page or the provider-selection page.
+      expect(output.body ?? '').not.toContain('Select Authorization Providers');
+    });
+
+    it('persists a federated session for the single upstream provider', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'remote',
+          provider: 'https://idp.example.com',
+          providerConfig: { id: 'upstream' },
+        } as never,
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      // The session id is embedded in the upstream `state` (federated:<id>:<nonce>).
+      const stateParam = new URL(output.location).searchParams.get('state');
+      expect(stateParam).toMatch(/^federated:/);
+      const sessionId = stateParam!.split(':')[1];
+
+      const sessionStore = (scope.auth as unknown as { federatedSessionStore: InMemoryFederatedAuthSessionStore })
+        .federatedSessionStore;
+      const session = await sessionStore.get(sessionId);
+      expect(session).not.toBeNull();
+      expect(session!.currentProviderId).toBe('upstream');
+      // No in-tree identity is collected — userInfo is empty (filled from upstream).
+      expect(session!.userInfo.sub).toBeUndefined();
+      expect(session!.userInfo.email).toBeUndefined();
     });
   });
 

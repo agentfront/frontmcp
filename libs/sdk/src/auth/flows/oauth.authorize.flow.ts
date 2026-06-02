@@ -19,8 +19,10 @@
 import {
   buildFederatedLoginPage,
   buildIncrementalAuthPage,
+  createFederatedAuthSession,
   escapeHtml,
   renderLocalLoginPage,
+  startNextProvider,
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
@@ -28,8 +30,10 @@ import {
   type FederatedLoginStateRecord,
   type LoginConfig,
   type ProviderCard,
+  type ProviderPkce,
 } from '@frontmcp/auth';
 import { z, type ZodError } from '@frontmcp/lazy-zod';
+import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 import {
   computeResource,
@@ -41,6 +45,7 @@ import {
   httpRespond,
   HttpTextSchema,
   isOrchestratedMode,
+  isRemoteMode,
   resourceUriMatches,
   StageHookOf,
   type FlowPlan,
@@ -156,6 +161,13 @@ const stateSchema = z.object({
   targetAppId: z.string().optional().describe('Target app ID for incremental authorization'),
   targetToolId: z.string().optional().describe('Target tool ID that triggered the incremental auth'),
   existingSessionId: z.string().optional().describe('Existing session ID for incremental auth'),
+  /**
+   * Apps the client already holds a grant for (the prior `authorized_apps`
+   * claim), carried forward on an incremental authorize so the newly-minted
+   * token is the UNION of prior apps + the target app. Only consulted when
+   * incremental auth is enabled.
+   */
+  priorAuthorizedAppIds: z.array(z.string()).optional().describe('Prior authorized app IDs to carry forward'),
   // Federated Login (multi-provider)
   requiresFederatedLogin: z.boolean().default(false).describe('Whether this auth requires federated login UI'),
   // Consent Flow
@@ -245,6 +257,20 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const existingSessionId = request.query['session_id'] as string | undefined;
     const mode = request.query['mode'] as string | undefined;
     const isIncrementalAuth = mode === 'incremental' || !!targetAppId;
+
+    // Apps the client already holds a grant for. The client carries its current
+    // `authorized_apps` claim forward via `apps=` (comma-separated or repeated)
+    // so an incremental authorize expands rather than replaces the grant.
+    const appsParam = request.query['apps'];
+    let priorAuthorizedAppIds: string[] | undefined;
+    if (appsParam) {
+      const raw = Array.isArray(appsParam) ? appsParam : [appsParam];
+      const ids = raw
+        .flatMap((v) => String(v).split(','))
+        .map((s) => s.trim())
+        .filter(Boolean);
+      priorAuthorizedAppIds = ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+    }
 
     const isDefaultAuthProvider = !metadata.auth;
 
@@ -537,6 +563,16 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // Remote mode (`mode: 'remote'`): a single MANDATORY upstream provider.
+    // Skip BOTH the in-tree login page and the provider-selection page — start
+    // the federated session for that one provider and redirect straight to the
+    // upstream IdP. Incremental auth still renders its own page (handled below).
+    const { metadata } = this.scope;
+    if (metadata.auth && isRemoteMode(metadata.auth) && !isIncrementalAuth) {
+      await this.startRemoteFederation(pendingAuthId, validatedRequest);
+      return;
+    }
+
     // Use CIMD client_name if available, otherwise fall back to client_id
     const clientDisplayName = cimdMetadata?.client_name ?? validatedRequest.client_id;
 
@@ -642,6 +678,85 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     });
 
     this.respond(httpRespond.html(loginHtml));
+  }
+
+  /**
+   * Remote mode (`mode: 'remote'`) auto-federation.
+   *
+   * Builds a federated auth session for the SINGLE mandatory upstream provider
+   * registered by {@link LocalPrimaryAuth.registerRemoteProvider}, starts it
+   * (fresh PKCE + state), persists the session, and redirects straight to the
+   * upstream IdP's authorization endpoint. This reuses the exact federated
+   * machinery the multi-provider local path uses (`/oauth/provider/:id/callback`
+   * then completes the exchange, stores upstream tokens, and mints the FrontMCP
+   * session token whose identity comes from the upstream user) — but skips the
+   * in-tree login page and the provider-selection page entirely.
+   *
+   * No identity is collected in-tree: the federated session is created with an
+   * EMPTY `userInfo` so the minted token's `sub`/`email`/`name` derive solely
+   * from the upstream provider (see the provider-callback flow).
+   */
+  private async startRemoteFederation(pendingAuthId: string, validatedRequest: OAuthAuthorizeRequest): Promise<void> {
+    const auth = this.scope.auth;
+    if (!auth || !('federatedSessionStore' in auth)) {
+      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
+      return;
+    }
+    const localAuth = auth as LocalPrimaryAuth;
+    const providerId = localAuth.remoteProviderId;
+
+    // No upstream provider registered (e.g. missing clientId / DCR not wired).
+    if (!providerId || !localAuth.getProviderConfig(providerId)) {
+      this.logger.error('Remote mode: no upstream provider configured for federation');
+      this.respond(
+        httpRespond.html(this.renderErrorPage('server_error', 'Upstream identity provider is not configured'), 500),
+      );
+      return;
+    }
+
+    // Build a federated session for the single provider. Identity is left empty
+    // on purpose — it is filled from the upstream IdP in the provider callback.
+    const session = createFederatedAuthSession({
+      pendingAuthId,
+      clientId: validatedRequest.client_id,
+      redirectUri: validatedRequest.redirect_uri,
+      scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
+      state: validatedRequest.state,
+      resource: validatedRequest.resource,
+      userInfo: {},
+      frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
+      providerIds: [providerId],
+    });
+
+    // Fresh PKCE + state for the upstream authorization-code exchange.
+    const verifier = generateCodeVerifier();
+    const challenge = sha256Base64url(verifier);
+    const pkce: ProviderPkce = { verifier, challenge, method: 'S256' };
+    const providerState = `federated:${session.id}:${randomUUID()}`;
+    startNextProvider(session, pkce, providerState);
+
+    await localAuth.federatedSessionStore.store(session);
+
+    const redirectUrl = await localAuth.buildProviderAuthorizeUrl(providerId, {
+      state: providerState,
+      codeChallenge: pkce.challenge,
+      codeChallengeMethod: 'S256',
+    });
+
+    if (!redirectUrl) {
+      this.logger.error(`Remote mode: failed to build authorize URL for provider: ${providerId}`);
+      await localAuth.federatedSessionStore.delete(session.id);
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('server_error', `Failed to initiate authentication with provider: ${providerId}`),
+          500,
+        ),
+      );
+      return;
+    }
+
+    this.logger.info(`Remote mode: redirecting to upstream provider: ${providerId}`);
+    this.respond(httpRespond.redirect(redirectUrl));
   }
 
   @Stage('validateOutput')

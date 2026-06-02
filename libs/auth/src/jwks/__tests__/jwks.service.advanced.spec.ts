@@ -3,7 +3,8 @@
  *
  * Tests for edge cases, weak key handling, and private method behavior.
  */
-import { SignJWT, generateKeyPair, exportJWK } from 'jose';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+
 import { JwksService } from '../jwks.service';
 
 describe('JwksService Advanced', () => {
@@ -105,56 +106,6 @@ describe('JwksService Advanced', () => {
       });
 
       expect(result).toBeUndefined();
-    });
-  });
-
-  describe('verifyGatewayToken edge cases', () => {
-    it('should handle token with all JWT fields', async () => {
-      const service = new JwksService();
-      const issuer = 'https://gateway.example.com';
-
-      const header = { alg: 'RS256', typ: 'JWT', kid: 'key-1' };
-      const payload = {
-        sub: 'user123',
-        iss: issuer,
-        aud: 'client-app',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-        iat: Math.floor(Date.now() / 1000),
-        nbf: Math.floor(Date.now() / 1000) - 60,
-        jti: 'unique-token-id',
-        scope: 'openid profile',
-      };
-
-      const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
-      const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-      const token = `${headerB64}.${payloadB64}.signature`;
-
-      const result = await service.verifyGatewayToken(token, issuer);
-
-      expect(result.ok).toBe(true);
-      expect(result.sub).toBe('user123');
-      expect(result.payload).toMatchObject({
-        sub: 'user123',
-        iss: issuer,
-        aud: 'client-app',
-      });
-    });
-
-    it('should return error for malformed token', async () => {
-      const service = new JwksService();
-
-      const result = await service.verifyGatewayToken('not.a.valid.token.format', 'https://issuer.com');
-
-      expect(result.ok).toBe(false);
-    });
-
-    it('should return error for token with invalid base64', async () => {
-      const service = new JwksService();
-
-      const result = await service.verifyGatewayToken('header.!!!invalid!!!.signature', 'https://issuer.com');
-
-      expect(result.ok).toBe(false);
-      expect(result.error).toBeDefined();
     });
   });
 

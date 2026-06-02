@@ -225,21 +225,59 @@ Security: per-record AES key derived (HKDF) from a fresh per-session `vaultId` +
 
 ## Mode 4: Remote
 
-Remote mode performs a full OAuth 2.1 authorization flow with an external provider. Clients are redirected to the provider for authentication and return with an authorization code.
+Remote mode runs a local OAuth 2.1 server that **proxies user authentication to a
+single mandatory upstream IdP**. `GET /oauth/authorize` redirects **straight to
+the upstream IdP** — there is no FrontMCP login page and no provider-selection
+page. The IdP returns to `/oauth/provider/{id}/callback`; FrontMCP exchanges the
+code, stores the upstream tokens encrypted (server-side), derives the session
+identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
+HS256 session token for the MCP client.
 
 ```typescript
-@App({
+@FrontMcp({
+  info: { name: 'srv', version: '1.0.0' },
+  apps: [MyApp],
   auth: {
     mode: 'remote',
     provider: 'https://auth.example.com',
-    clientId: 'xxx',
+    clientId: 'xxx', // pre-registered (DCR not yet wired)
+    clientSecret: process.env['OAUTH_CLIENT_SECRET'],
+    scopes: ['openid', 'profile', 'email'],
+    providerConfig: { id: 'idp' }, // stable provider id (defaults to provider host)
   },
 })
-class MyApp {}
+class Server {}
 ```
 
-- `provider` -- the OAuth 2.1 authorization server URL.
-- `clientId` -- the OAuth client identifier registered with the provider.
+- `provider` -- the upstream OAuth 2.1 authorization server base URL. Endpoints are
+  derived from it (`/authorize`, `/token`, `/userinfo`, `/.well-known/jwks.json`)
+  unless overridden via `providerConfig.{authEndpoint,tokenEndpoint,userInfoEndpoint,jwksUri}`.
+- `clientId` -- the OAuth client identifier **pre-registered** with the provider.
+- `providerConfig.id` -- stable id used by tools: `this.orchestration.getToken('idp')`.
+
+Tools read the upstream IdP token (never exposed to the LLM) via the orchestration
+accessor:
+
+```typescript
+@Tool({ name: 'whoami' })
+class Whoami extends ToolContext {
+  async execute() {
+    const token = await this.orchestration.tryGetToken('idp');
+    if (!token) return { error: 'Re-authenticate' }; // upstream auto-refresh not yet wired
+    return await (
+      await this.fetch('https://auth.example.com/userinfo', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).json();
+  }
+}
+```
+
+**Deferred (not yet wired):** upstream **Dynamic Client Registration**
+(`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
+`clientId`; and upstream **token auto-refresh** — once the upstream access token
+expires the user must re-authenticate (FrontMCP's own session token still
+refreshes via the `refresh_token` grant).
 
 ## OAuth Local Dev Flow
 

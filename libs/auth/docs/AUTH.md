@@ -867,9 +867,6 @@ class JwksService {
   // Get signing key for issuing tokens
   getOrchestratorSigningKey(): { kid: string; key: KeyObject; alg: string };
 
-  // Verify a token issued by the gateway
-  verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult>;
-
   // Verify a token from external providers (transparent mode)
   verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult>;
 
@@ -877,6 +874,12 @@ class JwksService {
   setProviderJwks(providerId: string, jwks: JSONWebKeySet): void;
 }
 ```
+
+> **Gateway tokens** (public/local/orchestrated modes) are HS256-signed by the
+> auth instance with its own secret, so verification lives on the instance
+> (`LocalPrimaryAuth.verifyGatewayToken`, exposed on the `FrontMcpAuth` base),
+> not on `JwksService`. It enforces signature + expiration and pins HS256;
+> issuer equality is intentionally not enforced (proxy/tunnel tolerance).
 
 ### Token Structure
 

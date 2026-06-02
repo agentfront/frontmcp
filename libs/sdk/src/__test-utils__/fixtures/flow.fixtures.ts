@@ -8,7 +8,12 @@
 
 import 'reflect-metadata';
 
-import { InMemoryAuthorizationStore, InMemoryConsentStore, type AuthorizationStore } from '@frontmcp/auth';
+import {
+  InMemoryAuthorizationStore,
+  InMemoryConsentStore,
+  InMemoryFederatedAuthSessionStore,
+  type AuthorizationStore,
+} from '@frontmcp/auth';
 
 import { FlowControl, type FlowMetadata, type FrontMcpAuth, type FrontMcpLogger, type ScopeEntry } from '../../common';
 
@@ -111,15 +116,51 @@ export function createMockAuthorizationStore(): AuthorizationStore {
  */
 export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
   const store = createMockAuthorizationStore();
+  const resolved = options || { mode: 'public' };
 
-  return {
+  const base: Record<string, unknown> = {
     authorizationStore: store,
     // Remembered-consent store (rememberConsent). A fresh in-memory store per
     // mock auth so flow tests can drive skip/prefill/persist behavior.
     consentStore: new InMemoryConsentStore(),
-    options: options || { mode: 'public' },
+    options: resolved,
     ready: Promise.resolve(),
-  } as unknown as FrontMcpAuth;
+  };
+
+  // Remote mode: stand in for LocalPrimaryAuth's single mandatory upstream
+  // provider so the authorize flow's remote auto-federation path can be unit
+  // tested (it builds a federated session and redirects to the upstream IdP).
+  // Only added for `mode: 'remote'`, so public/local mocks are byte-for-byte
+  // identical to before.
+  if (resolved.mode === 'remote') {
+    const remoteProviderId = resolved.providerConfig?.id ?? 'upstream';
+    const providerConfig = {
+      id: remoteProviderId,
+      name: remoteProviderId,
+      authorizationEndpoint: `${resolved.provider ?? 'https://idp.example.com'}/authorize`,
+      tokenEndpoint: `${resolved.provider ?? 'https://idp.example.com'}/token`,
+      clientId: 'mock-remote-client',
+      scopes: ['openid'],
+      callbackUrl: `/oauth/provider/${remoteProviderId}/callback`,
+    };
+    base['remoteProviderId'] = remoteProviderId;
+    base['federatedSessionStore'] = new InMemoryFederatedAuthSessionStore();
+    base['getProviderConfig'] = (id: string) => (id === remoteProviderId ? providerConfig : undefined);
+    base['buildProviderAuthorizeUrl'] = async (
+      id: string,
+      params: { state: string; codeChallenge: string; codeChallengeMethod: string },
+    ) => {
+      if (id !== remoteProviderId) return null;
+      const url = new URL(providerConfig.authorizationEndpoint);
+      url.searchParams.set('client_id', providerConfig.clientId);
+      url.searchParams.set('redirect_uri', providerConfig.callbackUrl);
+      url.searchParams.set('state', params.state);
+      url.searchParams.set('code_challenge', params.codeChallenge);
+      return url.toString();
+    };
+  }
+
+  return base as unknown as FrontMcpAuth;
 }
 
 /**

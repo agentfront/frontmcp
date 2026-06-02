@@ -11,12 +11,16 @@
  * These tests ensure existing orchestrated auth integrations continue to work
  * after the auth package extraction.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Orchestrated Auth Backward Compatibility E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-orchestrated/src/main.ts',
     project: 'demo-e2e-orchestrated',
+    // Pin the server's JWT secret so the test token factory signs HS256 with the
+    // SAME secret — the server now cryptographically verifies gateway tokens, so
+    // fixture tokens must be genuinely valid (not merely well-formed).
+    env: { JWT_SECRET: 'orchestrated-e2e-shared-secret-0123456789' },
   });
 
   test.describe('Stateful Session Compatibility', () => {

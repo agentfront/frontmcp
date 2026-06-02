@@ -420,6 +420,24 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // Complete the current provider in the session
     if (tokens) {
       completeCurrentProvider(session, tokens, userInfo);
+
+      // Propagate the upstream identity onto the session so the minted FrontMCP
+      // token's `sub`/`email`/`name` derive from the IdP user. This is REQUIRED
+      // for remote mode (no in-tree login form supplies an identity) and is a
+      // safe enrichment for the multi-provider local path: only fill fields the
+      // session does not already carry, so a login-form identity is never
+      // overwritten by a later provider. No PII is logged.
+      if (userInfo) {
+        if (!session.userInfo.sub && userInfo.sub) {
+          session.userInfo.sub = userInfo.sub;
+        }
+        if (!session.userInfo.email && userInfo.email) {
+          session.userInfo.email = userInfo.email;
+        }
+        if (!session.userInfo.name && userInfo.name) {
+          session.userInfo.name = userInfo.name;
+        }
+      }
     } else {
       // Provider was skipped/declined - track it
       if (session.currentProviderId) {

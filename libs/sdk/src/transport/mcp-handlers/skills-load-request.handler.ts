@@ -1,6 +1,8 @@
 import { PublicMcpError } from '../../errors';
+import { assertSkillAuthorized } from '../../skill/skill-authorities.helper';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsLoadRequestSchema,
@@ -34,7 +36,7 @@ export default function skillsLoadRequestHandler({
   return {
     requestSchema: SkillsLoadRequestSchema,
     responseSchema: SkillsLoadResultSchema,
-    handler: async (request: SkillsLoadRequest) => {
+    handler: async (request: SkillsLoadRequest, ctx) => {
       const { skillIds, format } = request.params;
       logger.verbose(`skills/load: [${skillIds.join(', ')}]`);
 
@@ -42,6 +44,11 @@ export default function skillsLoadRequestHandler({
       if (!skillRegistry) {
         throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
       }
+
+      // Entry-level authorities: deny direct load of a gated skill the caller
+      // can't access (throws AuthorityDeniedError, MCP code -32003 — same as a
+      // denied tool call). No-op for ungated skills or when no engine exists.
+      const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
 
       const toolRegistry = scope.tools;
 
@@ -64,6 +71,33 @@ export default function skillsLoadRequestHandler({
         if (!loadResult) {
           warnings.push(`Skill "${skillId}" not found`);
           continue;
+        }
+
+        // Resolve the backing entry to evaluate its authorities (only when an
+        // authorities engine is configured — otherwise behaviour is unchanged).
+        // Matches by the requested id, then the resolved content id, then
+        // display name — covering id/name/qualified-name lookups loadSkill
+        // accepts.
+        if (scope.authoritiesEngine) {
+          const entry =
+            skillRegistry.findByName(skillId) ??
+            skillRegistry.findByQualifiedName(skillId) ??
+            skillRegistry.findByName(loadResult.skill.id) ??
+            skillRegistry
+              .getSkills(true)
+              .find(
+                (s) => (s.metadata.id ?? s.name) === loadResult.skill.id || s.metadata.name === loadResult.skill.id,
+              );
+          if (entry) {
+            try {
+              await assertSkillAuthorized(scope, entry, authInfo);
+            } catch (err) {
+              // Surface AuthorityDeniedError as the MCP FORBIDDEN code (-32003)
+              // via its toJsonRpcError(), matching a denied tools/call. Without
+              // this the generic dispatch would flatten it to -32603.
+              throw toSdkMcpError(err);
+            }
+          }
         }
 
         const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
