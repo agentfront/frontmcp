@@ -29,11 +29,15 @@ auth: {
   mode: 'transparent',
   provider: 'https://auth.example.com',
   expectedAudience: 'my-api',
-  clientId: 'my-client-id',
+  // clientId is OPTIONAL and unused for pure JWT validation — transparent mode
+  // never runs an OAuth code exchange, it only verifies tokens against the
+  // provider's JWKS. Omit it unless you have a specific reason to set it.
 }
 ```
 
 **Use when:** Behind an API gateway or reverse proxy that handles auth.
+
+> Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope. `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
 ## Local Mode
 
@@ -49,11 +53,15 @@ auth: {
   // 'memory' (default, lost on restart) | { sqlite: { path } } | { redis: { ... } }
   tokenStorage: { sqlite: { path: './data/auth.sqlite' } },
   consent: { enabled: true }, // tool-selection screen at login + call-time enforcement
-  incrementalAuth: { enabled: true },
+  incrementalAuth: { enabled: true }, // app-level gating + progressive expansion (opt-in)
 }
 ```
 
 Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `JWT_SECRET` or tokens are invalidated on every restart. For a single operator (e.g. Claude Code), add `requireEmail: false` to skip the email prompt (a stable `sub` is derived from `anonymousSubject`, default `'local-operator'`).
+
+Local mode also accepts `allowDefaultPublic` (default `false` — set `true` to admit tokenless requests as anonymous instead of returning 401), `anonymousScopes` (default `['anonymous']` — scopes for those anonymous sessions), and `expectedAudience` (reject tokens minted for a different `aud`).
+
+**Progressive / incremental authorization** (opt-in via `incrementalAuth`): when enabled, the minted token carries an `authorized_apps` claim and a `tools/call` for an app NOT in that claim resolves to a `CallToolResult` with `isError: true` and `_meta.code === 'AUTHORIZATION_REQUIRED'` (fields: `authorization_required: true`, `app`, `tool`, `auth_url`, `required_scopes`, `session_mode`, `supports_incremental`). The client declares the initial grant on `/oauth/authorize?…&apps=crm` (omit `apps` to grant all apps) and expands it later via an incremental authorize `…&mode=incremental&app=slack&apps=crm` — the new token's claim is the **union** of the prior apps plus the target (the user identity and already-granted apps are preserved; upstream tokens stay server-side). Without an `incrementalAuth` block, no claim is minted and there is **no** app-level gating (allow-all preserved). `consent` (tool-level) and `incrementalAuth` (app-level) are independent.
 
 To collect and verify your own credentials, add a declarative `login` (custom page fields / title / subject strategy) and an `authenticate(input, ctx)` verifier that returns `{ ok: true, sub?, claims? }` (custom claims are embedded in the token; reserved claims are stripped) or `{ ok: false, message }` (re-renders the login page; no code issued). Both are optional and default to the built-in email login. See `configure-auth.md` for a full example.
 

@@ -317,6 +317,64 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
   });
 
   // ===========================================================
+  // /oauth/userinfo — advertised by discovery, must serve claims.
+  //
+  // The oauth-authorization-server document advertises a `userinfo_endpoint`;
+  // it must actually verify the Bearer token and return the user's `sub`
+  // (no longer a 404). An invalid/forged token must be rejected with 401.
+  // ===========================================================
+  describe('/oauth/userinfo', () => {
+    async function mintAccessToken(opts?: { email?: string }): Promise<string> {
+      const { verifier, challenge } = makePkce();
+      const { pendingAuthId } = await startAuthorization(baseUrl, challenge, { scope: 'read' });
+      const { code } = await completeLogin(baseUrl, pendingAuthId, opts);
+      const body = (await (await exchangeToken(baseUrl, { code, verifier })).json()) as { access_token: string };
+      return body.access_token;
+    }
+
+    it('is advertised by the discovery document and returns the sub for a valid token', async () => {
+      const meta = (await (
+        await fetch(`${baseUrl}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' } })
+      ).json()) as Record<string, string>;
+      // The discovery document advertises the userinfo endpoint at root.
+      expect(meta['userinfo_endpoint']).toBe(`${baseUrl}/oauth/userinfo`);
+
+      const token = await mintAccessToken({ email: 'userinfo@example.com' });
+      const res = await fetch(meta['userinfo_endpoint'], {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      expect(res.status).toBe(200);
+      const claims = (await res.json()) as { sub?: string; email?: string };
+      // The token's subject must be echoed back (proves it was verified, not 404).
+      expect(claims.sub).toBeTruthy();
+      // The email supplied at login should round-trip as a userinfo claim.
+      expect(claims.email).toBe('userinfo@example.com');
+    });
+
+    it('rejects a request with NO bearer token with 401', async () => {
+      const res = await fetch(`${baseUrl}/oauth/userinfo`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects a forged/tampered token with 401 (not 200, not 5xx)', async () => {
+      const valid = await mintAccessToken();
+      // Replace the HS256 signature so the MAC no longer matches the secret.
+      const [h, p] = valid.split('.');
+      const tampered = `${h}.${p}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+      const res = await fetch(`${baseUrl}/oauth/userinfo`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${tampered}`, Accept: 'application/json' },
+      });
+      expect(res.status).toBeLessThan(500);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  // ===========================================================
   // #473 — /oauth/token accepts urlencoded and tolerates hybrid
   //        Content-Type.
   // ===========================================================

@@ -204,14 +204,14 @@ FrontMCP uses default token lifetimes:
 auth: {
   mode: 'local',
   refresh: {
-    enabled: true,      // Enable automatic token refresh
-    skewSeconds: 60,    // Refresh 60s before expiry
+    enabled: true,      // Proactively refresh upstream/downstream provider creds
+    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire
   },
 }
 ```
 
 <Info>
-  Token lifetimes are currently set at the server level. Refresh tokens are rotated on each use per OAuth 2.1 best practices.
+  The `refresh` block governs proactive refresh of **upstream/downstream provider credentials** (the tokens read via `this.authProviders` / `this.orchestration.getToken`), not the server's own session token. There is no background refresher for FrontMCP's own access token: the **client** refreshes its session token explicitly by calling `POST /oauth/token` with `grant_type=refresh_token` (see [Token Refresh Flow](#token-refresh-flow)). Server-issued token lifetimes are fixed at the server level, and refresh tokens are rotated on each use per OAuth 2.1 best practices.
 </Info>
 
 ---
@@ -323,7 +323,7 @@ JWT_SECRET=$(openssl rand -hex 32)
 Rotating `JWT_SECRET` immediately invalidates every token signed with the old value — connected clients must re-authenticate. There is no built-in dual-secret overlap window; schedule rotations during a maintenance window or rely on short access-token lifetimes plus refresh.
 
 <Info>
-  `transparent` mode is the asymmetric path: tokens are verified against the **upstream IdP's** JWKS (`providerConfig.jwksUri` / `jwks`), not a local key. `/.well-known/jwks.json` is served by `local`/`remote` mode for OAuth-discovery compatibility but does not publish asymmetric public keys.
+  `transparent` mode is the asymmetric path: tokens are verified against the **upstream IdP's** JWKS (`providerConfig.jwksUri` / `jwks`), not a local key. In `local`/`remote` mode, `/.well-known/jwks.json` **does** publish an auto-generated asymmetric (RS256 by default) public key for OAuth-discovery compatibility — but that key is **not** used to verify the FrontMCP-issued access tokens, which are HS256 and always verified with `JWT_SECRET`.
 </Info>
 
 ---

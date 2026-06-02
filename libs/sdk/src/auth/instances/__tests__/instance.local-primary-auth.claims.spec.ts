@@ -149,3 +149,84 @@ describe('LocalPrimaryAuth.signAccessToken — custom claims (Checkpoint 3a)', (
     expect(payload['org']).toBeUndefined();
   });
 });
+
+describe('LocalPrimaryAuth.signAccessToken — progressive/incremental authorized_apps claim', () => {
+  it('embeds the authorized_apps claim when authorizedAppIds is supplied', async () => {
+    const auth = await makeAuth();
+    const token = await auth.signAccessToken({ sub: 'user-1' }, FIXED_SCOPES, undefined, {
+      authorizedAppIds: ['notes', 'tasks'],
+    });
+    const payload = decodeJwt(token);
+    expect(payload['authorized_apps']).toEqual(['notes', 'tasks']);
+  });
+
+  it('omits the authorized_apps claim when no app set is supplied (default preserved)', async () => {
+    const auth = await makeAuth();
+    const token = await auth.signAccessToken({ sub: 'user-2' }, FIXED_SCOPES);
+    const payload = decodeJwt(token);
+    expect(Object.keys(payload)).not.toContain('authorized_apps');
+  });
+
+  it('drops a forged authorized_apps from customClaims (reserved-claim guard)', async () => {
+    const auth = await makeAuth();
+    const token = await auth.signAccessToken({ sub: 'user-3' }, FIXED_SCOPES, undefined, {
+      authorizedAppIds: ['notes'],
+      customClaims: { authorized_apps: ['notes', 'tasks', 'admin'] },
+    });
+    const payload = decodeJwt(token);
+    // The legitimate (caller-computed) claim wins; the forged one is dropped.
+    expect(payload['authorized_apps']).toEqual(['notes']);
+  });
+
+  it('threads authorizedAppIds through createAuthorizationCode → exchangeCode into the token', async () => {
+    const auth = await makeAuth();
+    const verifier = generateCodeVerifier();
+    const challenge = sha256Base64url(verifier);
+    const redirectUri = 'http://127.0.0.1:9999/cb';
+    const clientId = 'client-inc';
+
+    const code = await auth.createAuthorizationCode({
+      clientId,
+      redirectUri,
+      scopes: FIXED_SCOPES,
+      codeChallenge: challenge,
+      userSub: 'sub-inc',
+      authorizedAppIds: ['notes', 'tasks'],
+    });
+
+    const result = await auth.exchangeCode(code, clientId, redirectUri, verifier);
+    if (!('access_token' in result)) throw new Error('expected token');
+    const payload = decodeJwt(result.access_token);
+    expect(payload['authorized_apps']).toEqual(['notes', 'tasks']);
+    expect(payload['sub']).toBe('sub-inc');
+  });
+
+  it('mints NO authorized_apps claim through the code exchange when none was stored (default preserved)', async () => {
+    const auth = await makeAuth();
+    const verifier = generateCodeVerifier();
+    const challenge = sha256Base64url(verifier);
+    const redirectUri = 'http://127.0.0.1:9999/cb';
+    const clientId = 'client-plain-apps';
+
+    const code = await auth.createAuthorizationCode({
+      clientId,
+      redirectUri,
+      scopes: FIXED_SCOPES,
+      codeChallenge: challenge,
+      userSub: 'sub-plain-apps',
+    });
+    const result = await auth.exchangeCode(code, clientId, redirectUri, verifier);
+    if (!('access_token' in result)) throw new Error('expected token');
+    const payload = decodeJwt(result.access_token);
+    expect(Object.keys(payload)).not.toContain('authorized_apps');
+  });
+
+  it('emits an EMPTY authorized_apps grant when explicitly set to [] (revokes all apps)', async () => {
+    const auth = await makeAuth();
+    const token = await auth.signAccessToken({ sub: 'user-empty' }, FIXED_SCOPES, undefined, {
+      authorizedAppIds: [],
+    });
+    const payload = decodeJwt(token);
+    expect(payload['authorized_apps']).toEqual([]);
+  });
+});

@@ -105,7 +105,7 @@ import {
   SkillAuditWriterToken,
   StorageAdapterAuditStore,
 } from '@frontmcp/adapters/skills';
-import { createStorageAdapter } from '@frontmcp/utils';
+import { createStorage } from '@frontmcp/utils';
 
 // 1. Audit subsystem
 //
@@ -127,8 +127,9 @@ export const auditSigner = new Rs256AuditSigner(
   'bundle-signing-2026-01',
 );
 
+// createStorage() returns a RootStorage, which is a StorageAdapter.
 export const auditStore = new StorageAdapterAuditStore(
-  await createStorageAdapter({ provider: 'redis', host: process.env.REDIS_HOST!, port: 6379 }),
+  await createStorage({ type: 'redis', redis: { config: { host: process.env.REDIS_HOST!, port: 6379 } } }),
 );
 
 // 2. Meter provider — exports framework counters (bundle pulls, signature failures, ...)

@@ -13,12 +13,12 @@ FrontMCP bundles three ready-to-serve authentication demos under `apps/e2e/**`. 
 
 | Project                 | Mode                   | Default port | Highlights                                                                      | Serve command                                     |
 | ----------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `demo-e2e-public`       | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `yarn nx serve demo-e2e-public --port 3003`       |
-| `demo-e2e-orchestrated` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `yarn nx serve demo-e2e-orchestrated --port 3005` |
-| `demo-e2e-transparent`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `yarn nx serve demo-e2e-transparent --port 3004`  |
+| `demo-e2e-public`       | `public`               | `3100`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `PORT=3100 yarn nx serve demo-e2e-public`         |
+| `demo-e2e-orchestrated` | `orchestrated` (local) | `3121`       | Stateful sessions, consent UI, incremental auth controls                        | `PORT=3121 yarn nx serve demo-e2e-orchestrated`   |
+| `demo-e2e-transparent`  | `transparent`          | `3109`       | Proxies tokens to a remote IdP while keeping local transport policies           | `PORT=3109 yarn nx serve demo-e2e-transparent`    |
 
 <Note>
-All commands assume `yarn install` has already been run at the repo root. Replace the port if it conflicts with another service.
+All commands assume `yarn install` has already been run at the repo root. The serve target runs the prebuilt `dist/.../main.js`, so it does **not** forward an `--port` flag — set the port via the `PORT` environment variable (`PORT=<n> yarn nx serve <project>`).
 </Note>
 
 ## Run a demo locally
@@ -37,10 +37,10 @@ export IDP_EXPECTED_AUDIENCE="https://api.example.com"
 
 </Step>
 <Step title="Serve the project">
-Run `yarn nx serve <project> --port <port>` and wait for the `Listening on` log. Requests are available at `http://localhost:<port>`.
+Run `PORT=<port> yarn nx serve <project>` and wait for the `Listening on` log. Requests are available at `http://localhost:<port>`. The serve target runs the prebuilt bundle and does not accept a `--port` flag, so the port must come from the `PORT` environment variable.
 
 <Check>
-`curl http://localhost:<port>/health` returns `ok` when the server is ready.
+`curl http://localhost:<port>/health` returns a JSON body like `{ "status": "ok", "server": { ... }, "uptime": ... }` when the server is ready.
 </Check>
 </Step>
 </Steps>
@@ -129,7 +129,7 @@ The demo login accepts any email address. Replace it with a real IdP before expo
 });
 ```
 
-- Validates upstream JWTs while reusing the same consent UI and transport policies.
+- Validates upstream JWTs while reusing the same transport policies. (Transparent mode has no `consent` option — the consent UI is a `local`/`remote`-mode feature.)
 - Demonstrates how to forward-declare an IdP without shipping secrets—set `IDP_PROVIDER_URL`/`IDP_EXPECTED_AUDIENCE` per environment.
 - Keeps anonymous access off so every tool call requires a verified token.
 

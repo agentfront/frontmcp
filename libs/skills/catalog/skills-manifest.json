@@ -607,13 +607,13 @@
             },
             {
               "name": "remote-oauth-with-vault",
-              "description": "Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user.",
+              "description": "Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.",
               "level": "intermediate",
-              "tags": ["config", "oauth", "auth", "remote", "vault"],
+              "tags": ["config", "oauth", "auth", "orchestration", "providers"],
               "features": [
-                "Configuring `mode: 'remote'` for full OAuth 2.1 authorization flow",
-                "Loading `clientId` from environment variables instead of hardcoding",
-                "Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls"
+                "Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow",
+                "Loading `clientId`/`clientSecret` from environment variables instead of hardcoding",
+                "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
               ]
             },
             {

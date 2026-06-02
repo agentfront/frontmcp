@@ -2,17 +2,26 @@
 name: remote-oauth-with-vault
 reference: configure-auth
 level: intermediate
-description: 'Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user.'
-tags: [config, oauth, auth, remote, vault]
+description: 'Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.'
+tags: [config, oauth, auth, orchestration, providers]
 features:
-  - "Configuring `mode: 'remote'` for full OAuth 2.1 authorization flow"
-  - 'Loading `clientId` from environment variables instead of hardcoding'
-  - "Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls"
+  - 'Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow'
+  - 'Loading `clientId`/`clientSecret` from environment variables instead of hardcoding'
+  - "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
 ---
 
-# Remote OAuth Mode with Credential Vault
+# Local OAuth Orchestration with a Downstream Provider Token
 
-Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user.
+Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.
+
+> **Two distinct subsystems — do not conflate them.** `this.orchestration` reads
+> tokens for providers declared in top-level `auth.providers` (the local-mode
+> multi-provider OAuth orchestrator). `this.authProviders` is a _separate_
+> downstream-OAuth-provider accessor whose providers are registered via
+> `@App`/`@Tool({ authProviders: [...] })`. Neither is the per-session credential
+> vault — that is `this.credentials` (see `local-credential-vault`). This example
+> uses the orchestrator, so the provider MUST be declared in `auth.providers` or
+> `getToken('github')` has nothing to return.
 
 ## Code
 
@@ -32,12 +41,14 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 })
 class CreateGithubIssueTool extends ToolContext {
   async execute(input: { repo: string; title: string; body: string }) {
-    // Access downstream credentials via the authProviders context extension
-    const headers = await this.authProviders.headers('github');
+    // Read the orchestrated GitHub token (declared in auth.providers below).
+    // Throws if GitHub is not linked for this session; use tryGetToken() for a
+    // null-on-missing variant. The raw token is never exposed to the LLM.
+    const token = await this.orchestration.getToken('github');
 
     const response = await fetch(`https://api.github.com/repos/${input.repo}/issues`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: input.title, body: input.body }),
     });
     const issue = await response.json();
@@ -45,31 +56,42 @@ class CreateGithubIssueTool extends ToolContext {
   }
 }
 
-@App({
-  name: 'dev-tools',
-  auth: {
-    mode: 'remote',
-    provider: 'https://auth.example.com',
-    clientId: process.env['OAUTH_CLIENT_ID'] ?? 'mcp-client-id',
-  },
-  tools: [CreateGithubIssueTool],
-})
+@App({ name: 'dev-tools', tools: [CreateGithubIssueTool] })
 class DevToolsApp {}
 
 @FrontMcp({
   info: { name: 'dev-tools-server', version: '1.0.0' },
   apps: [DevToolsApp],
+  // Server-level auth so it applies to every app (no `splitByApp` needed).
+  auth: {
+    mode: 'local',
+    // Declare the upstream provider FrontMCP should orchestrate. FrontMCP
+    // federates it at /oauth/authorize, stores its tokens encrypted
+    // server-side, and exposes them via this.orchestration.getToken('github').
+    providers: [
+      {
+        id: 'github',
+        authorizeUrl: 'https://github.com/login/oauth/authorize',
+        tokenUrl: 'https://github.com/login/oauth/access_token',
+        clientId: process.env['GITHUB_CLIENT_ID']!,
+        clientSecret: process.env['GITHUB_CLIENT_SECRET'],
+        scopes: ['repo'],
+      },
+    ],
+    federatedAuth: { minProviders: 1, requiredProviders: ['github'] },
+  },
 })
 class Server {}
 ```
 
 ## What This Demonstrates
 
-- Configuring `mode: 'remote'` for full OAuth 2.1 authorization flow
-- Loading `clientId` from environment variables instead of hardcoding
-- Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls
+- Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow
+- Loading `clientId`/`clientSecret` from environment variables instead of hardcoding
+- Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`
 
 ## Related
 
-- See `configure-auth` for credential vault API (`get`, `headers`, `has`, `refresh`)
+- See `configure-auth` for the multi-provider orchestration config and the `this.orchestration` API (`getToken`, `tryGetToken`, `isAuthenticated`)
+- See `local-credential-vault` for the separate per-session vault (`this.credentials`)
 - See `configure-session` for setting up Redis-based session storage in production

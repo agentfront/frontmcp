@@ -71,7 +71,8 @@ class MyApp {}
 ```
 
 - `provider` -- the authorization server URL. FrontMCP fetches JWKS from `{provider}/.well-known/jwks.json`.
-- `expectedAudience` -- the `aud` claim value that tokens must contain.
+- `expectedAudience` -- the `aud` claim value that tokens must contain. Supported in **transparent, local, AND remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens — not transparent-only.
+- `allowAnonymous` (default `false`) -- when `true`, requests without a token get an anonymous session (scoped by `anonymousScopes`, default `['anonymous']`) instead of a 401.
 
 Use transparent mode when clients already have tokens from your identity provider and the server only needs to verify them.
 
@@ -105,6 +106,9 @@ Key local-mode options:
 - `authenticate(input, ctx)` -- custom verification run at the login callback **before** a token is minted. `input.fields` carries the submitted login fields (reserved OAuth params excluded); `ctx` is `{ get, fetch, logger, clientId?, clientName? }`. Return `{ ok: true, sub?, claims? }` to mint a token (custom `claims` are embedded in the JWT; reserved claims like `sub`/`iss`/`exp`/`scope` are stripped) or `{ ok: false, message, retryField? }` to re-render the login page with the error (no code issued). When set, the email requirement no longer applies.
 - `providers` -- declarative upstream OAuth providers (GitHub, Slack, Jira, …) to orchestrate. When set, FrontMCP federates them at `/oauth/authorize`, stores each provider's tokens **encrypted server-side**, and exposes them to tools via `this.orchestration.getToken(id)`. See [Multi-provider orchestration](#multi-provider-orchestration-providers--federatedauth) below.
 - `federatedAuth` -- gates JWT issuance during federated login: `minProviders` (default `1` when `providers` are set — "no JWT until ≥1 linked"), `requiredProviders` (ids that must all be linked), and `stateValidation` (`'strict'` default).
+- `anonymousScopes` (default `['anonymous']`) -- scopes assigned to anonymous sessions (used when `allowDefaultPublic` lets an unauthenticated request through).
+- `allowDefaultPublic` (default `false`) -- when `true`, requests without a token are allowed through as anonymous instead of being rejected with a 401. Keep `false` to require auth on every request.
+- `expectedAudience` -- the `aud` claim value tokens must carry. Also valid in local/remote mode (not just transparent); set it when FrontMCP must reject tokens minted for a different audience.
 
 ### Multi-provider orchestration (`providers` + `federatedAuth`)
 
@@ -395,12 +399,12 @@ If the vault is not configured, accessing `this.authProviders` throws (`AuthProv
 
 ## Examples
 
-| Example                                                                            | Level        | Description                                                                                                                                                |
-| ---------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.       |
-| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                        |
-| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user. |
-| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.      |
+| Example                                                                            | Level        | Description                                                                                                                                                          |
+| ---------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.                 |
+| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                                  |
+| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken. |
+| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.                |
 
 > See all examples in [`examples/configure-auth/`](../examples/configure-auth/)
 

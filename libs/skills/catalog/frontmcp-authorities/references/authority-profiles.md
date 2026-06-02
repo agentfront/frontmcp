@@ -15,7 +15,7 @@ Profiles are registered in the `profiles` field of the `authorities` config. Eac
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-server',
+  info: { name: 'my-server', version: '1.0.0' },
   authorities: {
     claimsMapping: {
       roles: 'realm_access.roles',

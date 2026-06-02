@@ -135,6 +135,30 @@ describe('Mock OAuth server', () => {
 
 To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set.
 
+## Mock CIMD server
+
+For end-to-end testing of **CIMD** (Client ID Metadata Documents — `client_id` is an
+HTTPS URL the server fetches), use `MockCimdServer` from `@frontmcp/testing`. It serves
+hosted client-metadata documents on a real port so your server's CIMD resolution +
+`redirect_uri` validation run against a live document:
+
+```typescript
+import { MockCimdServer } from '@frontmcp/testing';
+
+const cimdServer = new MockCimdServer();
+const info = await cimdServer.start();
+
+// Register a client; the returned client_id is the metadata-document URL.
+const clientId = cimdServer.registerClient({
+  name: 'Test Client',
+  redirectUris: ['http://localhost:3000/callback'],
+});
+
+// Pass clientId as the OAuth client_id in your /oauth/authorize requests.
+// …
+await cimdServer.stop();
+```
+
 ## Examples
 
 | Example                                                                     | Level        | Description                                                                                                                                                                                                    |

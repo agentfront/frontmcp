@@ -267,7 +267,12 @@ export class Server {}
 ```
 
 <Info>
-  Each app maintains its own upstream token in the vault. Users authenticate once per app via progressive authorization.
+  Each app's upstream token is stored server-side (encrypted). With
+  [progressive authorization](/frontmcp/authentication/progressive) enabled
+  (`auth.incrementalAuth`), users authorize apps one at a time: the minted token's
+  `authorized_apps` claim gates which apps a call may reach, and an incremental authorize
+  expands that claim (a fresh token with the union of granted apps) without re-authorizing
+  the apps already granted.
 </Info>
 
 ---

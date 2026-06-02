@@ -305,6 +305,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       // Federated Login
       requiresFederatedLogin,
       // Consent Flow
@@ -440,6 +441,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       requiresFederatedLogin,
       requiresConsent,
     } = this.state;
@@ -530,6 +532,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       // Federated Login State
       federatedLogin,
       // Consent State

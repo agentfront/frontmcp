@@ -93,10 +93,15 @@ const signer = new Rs256AuditSigner({
 
 ```typescript
 import { StorageAdapterAuditStore } from '@frontmcp/adapters/skills';
-import { createStorageAdapter } from '@frontmcp/utils';
+import { createStorage } from '@frontmcp/utils';
 
-const storage = await createStorageAdapter({ provider: 'redis', host: 'localhost', port: 6379 });
+// createStorage() returns a RootStorage, which is a StorageAdapter.
+const storage = await createStorage({ type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } });
 const store = new StorageAdapterAuditStore(storage);
+
+// Or construct a concrete adapter directly:
+// import { RedisStorageAdapter } from '@frontmcp/utils';
+// const store = new StorageAdapterAuditStore(new RedisStorageAdapter({ config: { host: 'localhost', port: 6379 } }));
 ```
 
 ## Custom stores

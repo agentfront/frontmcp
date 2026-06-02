@@ -404,6 +404,10 @@ Condition values can reference runtime data instead of using static literals.
 | `{ fromInput: 'fieldName' }` | Resolves to the value of the named tool input argument |
 | `{ fromClaims: 'dot.path' }` | Resolves to a value from the user's JWT claims via dot-path |
 
+<Note>
+  `fromInput` is only meaningful for entries that receive request input at call time — **tools and agents**. `@Resource` and `@Prompt` do not pass tool-style input into the authorities evaluation, so a `fromInput` reference (in an ABAC condition or a ReBAC `resourceId`) has nothing to resolve against on those entries. Gate resources and prompts with role / permission / claims (`fromClaims`) policies instead.
+</Note>
+
 ## ReBAC
 
 Relationship-based access control delegates checks to an external authorization backend (e.g., SpiceDB, OpenFGA, or a custom database query).
@@ -671,6 +675,10 @@ List and discovery flows automatically filter entries based on the caller's auth
 ```
 
 This ensures AI agents only see tools they can actually call, preventing wasted context and failed invocations.
+
+<Warning>
+  **Discovery filtering runs without request input.** `filterByAuthorities` evaluates each entry's policy against the caller's identity (roles / permissions / claims) only — there is no tool input at list time. As a result, a policy that depends on `fromInput` (an ABAC condition or a ReBAC `resourceId` resolved from input) **cannot be satisfied at discovery time and is treated as denied for everyone**, so the entry is filtered out of `tools/list` (and the skill/resource/prompt discovery surfaces) for all callers — even users who would pass the check at call time. Gate **discovery visibility** with role / permission / claims-only policies; reserve `fromInput`/ReBAC-by-input policies for **call-time** enforcement (`checkEntryAuthorities`), where the input is available.
+</Warning>
 
 ### Skill Discovery Filtering
 

@@ -142,6 +142,12 @@ export interface PendingAuthorizationRecord {
   existingSessionId?: string;
   /** Existing authorization ID to expand */
   existingAuthorizationId?: string;
+  /**
+   * App IDs the client already holds a grant for (its prior `authorized_apps`
+   * claim), carried forward on an incremental authorize so the minted token's
+   * grant is the UNION of these plus `targetAppId`.
+   */
+  priorAuthorizedAppIds?: string[];
 
   // Federated Login State
   /** Federated login state for multi-provider auth */
@@ -254,6 +260,8 @@ export interface CreatePendingRecordParams {
   targetToolId?: string;
   existingSessionId?: string;
   existingAuthorizationId?: string;
+  // Prior authorized app IDs to carry forward on an incremental authorize.
+  priorAuthorizedAppIds?: string[];
   // Federated Login State
   federatedLogin?: FederatedLoginStateRecord;
   // Consent State
@@ -342,6 +350,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     targetToolId: params.targetToolId,
     existingSessionId: params.existingSessionId,
     existingAuthorizationId: params.existingAuthorizationId,
+    priorAuthorizedAppIds: params.priorAuthorizedAppIds,
     federatedLogin: params.federatedLogin,
     consent: params.consent,
   };

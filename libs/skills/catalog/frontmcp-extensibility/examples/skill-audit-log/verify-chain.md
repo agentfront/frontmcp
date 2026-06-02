@@ -20,14 +20,16 @@ Verify a stored chain offline using verifyChain and the bundle-signing key regis
 ```typescript
 // scripts/verify-audit-chain.ts
 import { defaultAuditSignatureVerifier, StorageAdapterAuditStore, verifyChain } from '@frontmcp/adapters/skills';
-import { createStorageAdapter } from '@frontmcp/utils';
+import { createStorage } from '@frontmcp/utils';
 
 async function main() {
-  const storage = await createStorageAdapter({
-    provider: 'redis',
-    host: process.env.REDIS_HOST!,
-    port: 6379,
-    keyPrefix: 'mcp:skill-audit:',
+  // createStorage() returns a RootStorage, which is a StorageAdapter.
+  const storage = await createStorage({
+    type: 'redis',
+    redis: {
+      config: { host: process.env.REDIS_HOST!, port: 6379 },
+      keyPrefix: 'mcp:skill-audit:',
+    },
   });
 
   const store = new StorageAdapterAuditStore(storage);

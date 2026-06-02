@@ -33,7 +33,7 @@ export class Server {}
   If `JWT_SECRET` is unset, FrontMCP logs a warning and falls back to a **random per-process secret**. Every restart then invalidates all previously issued tokens. Set a stable `JWT_SECRET` for any deployment where tokens must survive a restart.
 </Warning>
 
-Because signing is symmetric, the same secret both signs and verifies tokens. Local mode does **not** generate an RSA/EC key pair, and there is no private signing key to manage. The `/.well-known/jwks.json` endpoint is served for OAuth-discovery compatibility but local mode does not publish asymmetric public keys there.
+Because the **access tokens** are signed symmetrically, the same `JWT_SECRET` both signs and verifies them. Separately, local mode **does** auto-generate an asymmetric (RS256 by default) key pair and publishes its public half at `/.well-known/jwks.json` for OAuth-discovery compatibility. That published key is **not** used to verify the HS256 access tokens — those are always verified with `JWT_SECRET`. The asymmetric key exists only so discovery-driven clients find a non-empty JWKS document.
 
 ## Basic Configuration
 
@@ -56,13 +56,13 @@ export class Server {}
 | `anonymousSubject`   | `string`                                                              | `'local-operator'`| Stable `sub` minted when `requireEmail: false` and no email is provided |
 | `login`              | `LoginConfig`                                                        | _unset_           | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
 | `authenticate`       | `(input, ctx) => Promise<AuthenticateResult>`                        | _unset_           | Custom verification step run at the login callback before a token is minted — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
-| `consent`            | `ConsentConfig`                                                       | `{ enabled: false }` | Consent / tool-authorization config (see [Consent](#consent-and-tool-authorization)) |
+| `consent`            | `ConsentConfig`                                                       | _unset_           | Consent / tool-authorization config — the block is optional; when present, inner `enabled` defaults to `false` (see [Consent](#consent-and-tool-authorization)) |
 | `providers`          | `UpstreamProviderOptions[]`                                          | _unset_           | Upstream OAuth providers to orchestrate (see [Multi-Provider Orchestration](#multi-provider-orchestration-providers)) |
 | `federatedAuth`      | `FederatedAuthConfig`                                                | _unset_           | Federated-login gating: `minProviders`, `requiredProviders`, `stateValidation` |
 | `allowDefaultPublic` | `boolean`                                                             | `false`           | Allow unauthenticated access                                 |
 | `anonymousScopes`    | `string[]`                                                            | `['anonymous']`   | Scopes for anonymous sessions                                |
 | `local.issuer`       | `string`                                                             | auto-derived      | Override the issuer (see [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy)) |
-| `incrementalAuth`    | `IncrementalAuthConfig`                                               | `{ enabled: true }` | Progressive authorization config                           |
+| `incrementalAuth`    | `IncrementalAuthConfig`                                               | _unset_           | Progressive authorization config — the block is optional; when present, inner `enabled` defaults to `true` |
 
 ---
 
@@ -70,14 +70,16 @@ export class Server {}
 
 Local mode exposes standard OAuth 2.1 endpoints:
 
-| Endpoint                                  | Method | Description                 |
-| ----------------------------------------- | ------ | --------------------------- |
-| `/oauth/authorize`                        | GET    | Start authorization flow    |
-| `/oauth/token`                            | POST   | Exchange code for tokens    |
-| `/oauth/register`                         | POST   | Dynamic Client Registration |
-| `/oauth/userinfo`                         | GET    | Get user profile            |
-| `/.well-known/oauth-authorization-server` | GET    | Server metadata             |
-| `/.well-known/jwks.json`                  | GET    | Public signing keys         |
+| Endpoint                                    | Method   | Description                                              |
+| ------------------------------------------- | -------- | ------------------------------------------------------- |
+| `/oauth/authorize`                          | GET      | Start authorization flow                                |
+| `/oauth/token`                              | POST     | Exchange code for tokens                                |
+| `/oauth/register`                           | POST     | Dynamic Client Registration                             |
+| `/oauth/userinfo`                           | GET      | Get user profile (verifies the Bearer token; 401 if missing/invalid) |
+| `/oauth/connect`                            | GET/POST | Mid-session add-credential flow for upstream providers  |
+| `/.well-known/oauth-authorization-server`   | GET      | Authorization-server metadata (AS)                      |
+| `/.well-known/oauth-protected-resource`     | GET      | Protected-resource metadata (PRM)                       |
+| `/.well-known/jwks.json`                    | GET      | Public signing keys (discovery key; not used to verify HS256 access tokens) |
 
 ### Authorization Request
 
@@ -420,17 +422,21 @@ auth: {
 Read credentials from any tool via `this.credentials`:
 
 ```typescript
-@Tool({ name: 'call_acme' })
+@Tool({
+  name: 'call_acme',
+  inputSchema: {},
+  outputSchema: { connected: z.boolean(), connectUrl: z.string().optional() },
+})
 class CallAcmeTool extends ToolContext {
-  async execute(input: Input): Promise<Output> {
+  async execute() {
     const cred = await this.credentials.get('acme'); // { secret, metadata } | undefined
     if (!cred) {
       // Ask the agent to connect it mid-session via a framework-signed URL:
       const res = await this.credentials.requireConnect({ key: 'acme' });
-      if (!res.connected) return { connectUrl: res.resumeUrl };
+      if (!res.connected) return { connected: false, connectUrl: res.resumeUrl };
     }
-    const keys = await this.credentials.list(); // ['acme', …]
-    // use cred.secret / cred.metadata …
+    // use cred!.secret / cred!.metadata … (e.g. call Acme with the secret)
+    return { connected: true };
   }
 }
 ```
@@ -523,7 +529,7 @@ Content-Type: application/json
 ```
 
 <Warning>
-  DCR is for development only and is disabled in production (`NODE_ENV=production`). It accepts only `localhost`/loopback-IP `redirect_uris`, and only the `none`, `client_secret_post`, and `client_secret_basic` auth methods. Pre-register clients for production.
+  DCR is for development only and is disabled in production (`NODE_ENV=production`). It accepts `redirect_uris` whose host is `localhost` or any IPv4 address (any dotted-quad, not just loopback), over `http` **or** `https`, and only the `none`, `client_secret_post`, and `client_secret_basic` auth methods. Pre-register clients for production.
 </Warning>
 
 ---
@@ -705,6 +711,9 @@ import { FrontMcp } from '@frontmcp/sdk';
         encryption: { secret: process.env.AUTH_DB_SECRET! },
       },
     },
+    // `refresh` governs proactive refresh of UPSTREAM/DOWNSTREAM provider
+    // credentials (per-provider, refreshed `skewSeconds` before they expire).
+    // It does NOT control this server's own access/refresh token lifetime.
     refresh: {
       enabled: true,
       skewSeconds: 60,

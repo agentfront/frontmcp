@@ -62,6 +62,7 @@ import OauthConnectFlow from '../flows/oauth.connect.flow';
 import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
+import OauthUserInfoFlow from '../flows/oauth.userinfo.flow';
 import SessionVerifyFlow from '../flows/session.verify.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
@@ -884,6 +885,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
       OauthAuthorizeFlow /** GET /oauth/authorize */,
       OauthTokenFlow /** POST /oauth/token */,
+      OauthUserInfoFlow /** GET /oauth/userinfo - OIDC userinfo */,
       OauthCallbackFlow /** GET /oauth/callback - login callback */,
       OauthConnectFlow /** GET|POST /oauth/connect - mid-session add-credential (Checkpoint 3b) */,
       OauthRegisterFlow /** POST /oauth/register */,

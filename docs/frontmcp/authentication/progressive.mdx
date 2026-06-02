@@ -22,25 +22,25 @@ sequenceDiagram
     Note over User,FrontMCP: Initial: User only authorized CRM
 
     Agent->>FrontMCP: Call tool: crm:get_contacts
-    FrontMCP->>FrontMCP: Check vault: CRM authorized
+    FrontMCP->>FrontMCP: Token claim: CRM in authorized_apps
     FrontMCP->>CRM: Execute with CRM token
     CRM-->>FrontMCP: Contacts data
     FrontMCP-->>Agent: Success
 
     Agent->>FrontMCP: Call tool: slack:send_message
-    FrontMCP->>FrontMCP: Check vault: Slack NOT authorized
+    FrontMCP->>FrontMCP: Token claim: Slack NOT in authorized_apps
 
-    FrontMCP-->>Agent: 403 Authorization Required
+    FrontMCP-->>Agent: AUTHORIZATION_REQUIRED (isError + _meta.auth_url)
 
     Agent-->>User: "I need Slack access"
 
-    User->>FrontMCP: Click auth link
+    User->>FrontMCP: Incremental authorize (auth_url, apps=crm carried forward)
     FrontMCP->>Slack: OAuth flow
-    Slack-->>FrontMCP: Token
-    FrontMCP->>FrontMCP: Update vault
+    Slack-->>FrontMCP: Token (stored server-side)
+    FrontMCP-->>Agent: New access token (authorized_apps: [crm, slack])
 
-    Agent->>FrontMCP: Retry: slack:send_message
-    FrontMCP->>FrontMCP: Check vault: Slack authorized
+    Agent->>FrontMCP: Retry: slack:send_message (new token)
+    FrontMCP->>FrontMCP: Token claim: Slack now in authorized_apps
     FrontMCP->>Slack: Execute with Slack token
     FrontMCP-->>Agent: Success
 ```
@@ -49,19 +49,36 @@ sequenceDiagram
 
 ## Configuration
 
-Enable progressive auth with local mode:
+Progressive (incremental) authorization is **opt-in** under `auth` in `local`/`remote`
+(orchestrated) mode. Setting an `incrementalAuth` block turns on **app-level gating**:
+the minted access token carries an `authorized_apps` claim, and a `tools/call` for an
+app NOT in that claim is rejected with `AUTHORIZATION_REQUIRED`. A server with **no**
+`incrementalAuth` block mints no such claim and performs no app-level gating (the
+historical allow‑all behavior is preserved).
 
 ```typescript
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
     mode: 'local',
-    consent: { enabled: true }, // Enable consent UI
+    incrementalAuth: {
+      enabled: true, // turn on app-level gating + incremental expansion
+      skippedAppBehavior: 'require-auth', // 'anonymous' (default) | 'require-auth'
+      allowSkip: true, // allow skipping apps during initial auth (default true)
+      showAllAppsAtOnce: true, // single page vs step-by-step (default true)
+    },
+    consent: { enabled: true }, // optional: per-tool consent UI (orthogonal)
   },
   apps: [SlackApp, GitHubApp, CrmApp],
 })
 export class Server {}
 ```
+
+<Note>
+  `incrementalAuth` and `consent` are **independent** features. `consent` gates which
+  **tools** a token may call (the `consent` claim); `incrementalAuth` gates which **apps**
+  a token may call (the `authorized_apps` claim). You can enable either or both.
+</Note>
 
 ---
 
@@ -98,70 +115,91 @@ graph TB
 
 ---
 
-## Token Vault
+## Authorized-app set (`authorized_apps` claim)
 
-The token vault stores per-app credentials and expands as users authorize more apps:
+The granted app set is carried in the minted access token's **`authorized_apps` claim**
+and expands as the user authorizes more apps. Each incremental authorize mints a **new**
+access token whose claim is the **union** of the apps already granted plus the newly
+authorized one:
 
 <CardGroup cols={3}>
   <Card title="Initial State" icon="1">
-    Session Token: `user-123`
+    Token claim:
 
-    **Vault:**
-    - CRM: Authorized
+    `authorized_apps: ["crm"]`
 
   </Card>
   <Card title="After Slack Auth" icon="2">
-    Session Token: `user-123` (same)
+    New token claim:
 
-    **Vault:**
-    - CRM: Authorized
-    - Slack: Authorized
+    `authorized_apps: ["crm", "slack"]`
 
   </Card>
   <Card title="After GitHub Auth" icon="3">
-    Session Token: `user-123` (same)
+    New token claim:
 
-    **Vault:**
-    - CRM: Authorized
-    - Slack: Authorized
-    - GitHub: Authorized
+    `authorized_apps: ["crm", "slack", "github"]`
 
   </Card>
 </CardGroup>
 
 <Info>
-  The session token remains the same. Only the token vault expands with new app credentials.
+  An incremental authorize mints a **fresh** access token (via the standard OAuth code
+  exchange) whose `authorized_apps` claim is expanded — the client swaps in the new token.
+  The user's identity (`sub`) is preserved, and apps already granted are **not**
+  re-authorized. Upstream provider tokens themselves stay server-side and encrypted at rest
+  (orchestrated mode); they are never embedded in the JWT.
 </Info>
 
 ---
 
 ## Authorization Response
 
-When a tool requires unauthorized access, FrontMCP returns:
+When a tool's parent app is not in the token's `authorized_apps` claim, the
+`tools/call` resolves to a **`CallToolResult` with `isError: true`** carrying the
+authorization metadata under `_meta` (so MCP clients/agents can react structurally and
+surface the authorize link). The error class is
+[`AuthorizationRequiredError`](https://docs.agentfront.dev/frontmcp/authentication/progressive)
+(code `AUTHORIZATION_REQUIRED`, HTTP 403):
 
 ```json
 {
-  "error": "authorization_required",
-  "code": "AUTH_REQUIRED",
-  "app": "slack",
-  "tool": "slack:send_message",
-  "required_scopes": ["chat:write"],
-  "auth_url": "https://my-server/oauth/authorize?app=slack&scope=chat:write",
-  "message": "Slack authorization required",
-  "hint": "Click the authorization link to grant access to Slack"
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "Authorization required for slack. Please authorize to use slack:send_message.\n\nTo authorize, click: https://my-server/oauth/authorize?app=slack"
+    }
+  ],
+  "_meta": {
+    "code": "AUTHORIZATION_REQUIRED",
+    "errorId": "…",
+    "timestamp": "2026-01-01T00:00:00.000Z",
+    "authorization_required": true,
+    "app": "slack",
+    "tool": "slack:send_message",
+    "auth_url": "https://my-server/oauth/authorize?app=slack",
+    "required_scopes": ["chat:write"],
+    "session_mode": "stateful",
+    "supports_incremental": true
+  }
 }
 ```
+
+<Note>
+  In **stateless** session mode there is no `auth_url` and `supports_incremental` is
+  `false` (the grant lives entirely in the JWT and cannot be extended in place — the user
+  must re-authenticate). In **stateful** mode the `auth_url` drives the incremental
+  authorize below.
+</Note>
 
 ### Handling in Clients
 
 ```typescript
-try {
-  const result = await mcpClient.callTool('slack:send_message', { message: 'Hello' });
-} catch (error) {
-  if (error.code === 'AUTH_REQUIRED') {
-    // Show auth link to user
-    console.log(`Please authorize: ${error.auth_url}`);
-  }
+const result = await mcpClient.callTool('slack:send_message', { message: 'Hello' });
+if (result.isError && result._meta?.authorization_required) {
+  // Show the authorize link to the user, then retry after they authorize.
+  console.log(`Please authorize: ${result._meta.auth_url}`);
 }
 ```
 
@@ -286,26 +324,49 @@ export class SlackApp {}
 
 ## Skip and Authorize Later
 
-Users can skip apps during initial consent and authorize later:
+Users grant a subset of apps initially and authorize more later.
 
-### Skipping
+### Initial grant
 
-```typescript
-// User skips Slack during initial auth
-// Session created with: authorized_apps: ['crm'], skipped_apps: ['slack']
-```
-
-### Later Authorization
+The client declares the apps to grant on the first authorize via the `apps` query
+parameter (comma-separated). If omitted, **all** registered apps are granted (a plain
+login keeps working everywhere):
 
 ```
-GET /oauth/authorize?app=slack&prompt=consent
+GET /oauth/authorize?response_type=code&client_id=…&redirect_uri=…
+    &code_challenge=…&code_challenge_method=S256
+    &apps=crm
 ```
 
-This triggers a targeted authorization flow for just the skipped app.
+The minted token carries `authorized_apps: ["crm"]`; calling a `slack:*` tool then
+returns `AUTHORIZATION_REQUIRED` with an `auth_url`.
+
+### Incremental authorization (expand the grant)
+
+To add a skipped app, start an **incremental** authorize. The client carries its current
+grant forward via `apps=` so the new token is the **union** of the prior apps plus the
+target app:
+
+```
+GET /oauth/authorize?response_type=code&client_id=…&redirect_uri=…
+    &code_challenge=…&code_challenge_method=S256
+    &mode=incremental&app=slack&apps=crm
+```
+
+This renders a single-app authorization page; on submit, `/oauth/callback` mints a fresh
+code → the client exchanges it for a token with `authorized_apps: ["crm", "slack"]`. The
+`auth_url` returned in the 403 `_meta` points the agent straight at this flow.
+
+<Note>
+  Unknown app ids passed via `apps=`/`app=` are dropped — a client can never forge a grant
+  to a non-existent app. Gating is per real app, so a bogus id is harmless.
+</Note>
 
 ---
 
 ## Session Token Structure
+
+A token minted with incremental auth enabled carries the granted set in `authorized_apps`:
 
 ```json
 {
@@ -313,15 +374,15 @@ This triggers a targeted authorization flow for just the skipped app.
   "iss": "https://my-server",
   "iat": 1234567890,
   "exp": 1234571490,
-  "session_id": "sess_abc123",
-  "authorized_apps": ["crm", "billing"],
-  "pending_apps": ["slack", "github"],
-  "scopes": ["crm:read", "crm:write", "billing:read"]
+  "scope": "crm:read crm:write",
+  "authorized_apps": ["crm", "billing"]
 }
 ```
 
 <Warning>
-  Child tokens are stored in the Token Vault (server-side), not embedded in the JWT.
+  Upstream provider access/refresh tokens are stored server-side and encrypted at rest
+  (orchestrated mode), **never** embedded in the JWT. Only the non-sensitive
+  `authorized_apps` id list is carried as a claim.
 </Warning>
 
 ---
@@ -419,30 +480,35 @@ For multi-provider consent where users select which IdPs to authenticate with:
 
 ## Best Practices
 
-<Check>**Request minimal scopes** - Only ask for what each tool needs</Check>
+<Check>**Request minimal apps** - Pass `apps=` to grant only what the agent needs up front</Check>
 <Check>**Provide clear descriptions** - Users should understand why each app is needed</Check>
-<Check>**Handle auth errors gracefully** - Show friendly messages with auth links</Check>
-<Check>**Use stateful sessions** - Required for token vault to work</Check>
-<Check>**Test the skip flow** - Ensure skipped apps can be authorized later</Check>
+<Check>**Handle the 403 structurally** - Read `result._meta.auth_url` and surface it to the user</Check>
+<Check>**Use stateful sessions** - Required for the incremental `auth_url` (stateless omits it)</Check>
+<Check>**Carry `apps=` forward** - On an incremental authorize, include the prior grant so it isn't lost</Check>
 
 ---
 
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="Token vault not updating">
-    - Ensure stateful token storage is configured (Redis for multi-instance)
-    - Check Redis connectivity if using Redis storage
-    - Verify the session ID matches across requests
+  <Accordion title="Every tool call returns AUTHORIZATION_REQUIRED">
+    - Confirm the client sent `apps=` on the initial authorize (or omit it to grant all apps).
+    - The `authorized_apps` claim only appears when `incrementalAuth` is enabled — verify the
+      `auth` block has an `incrementalAuth` object (an empty `{}` enables it with defaults).
+    - App ids in `apps=`/`app=` must match the app's id (`metadata.id`, else the slug of
+      `name`); unknown ids are dropped.
   </Accordion>
-  <Accordion title="Auth link not working">
-    - Check the `auth_url` includes correct app and scope parameters
-    - Verify the app is registered with the server
-    - Ensure redirect URIs are configured correctly
+  <Accordion title="Incremental authorize didn't expand the grant">
+    - The client must carry its current grant forward via `apps=` on the incremental
+      authorize; otherwise only the target app (plus nothing) is granted.
+    - The new token from the code exchange replaces the old one — make sure the client swaps
+      it in before retrying the call.
+    - Confirm `incrementalAuth.enabled` is not `false`.
   </Accordion>
-  <Accordion title="Skipped apps won't authorize">
-    - Use `prompt=consent` to force the consent screen
-    - Check that the app wasn't excluded via `excludeFromParent`
+  <Accordion title="Auth link (auth_url) not working">
+    - The `auth_url` is in the failed call's `result._meta.auth_url` (only in **stateful**
+      session mode; stateless mode omits it).
+    - Verify the target app is registered with the server and redirect URIs are configured.
   </Accordion>
 </AccordionGroup>
 

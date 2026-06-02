@@ -74,7 +74,7 @@ Add the `authorities` field to your `@FrontMcp` decorator. No plugin import need
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-server',
+  info: { name: 'my-server', version: '1.0.0' },
   authorities: {
     // configured in next steps
   },

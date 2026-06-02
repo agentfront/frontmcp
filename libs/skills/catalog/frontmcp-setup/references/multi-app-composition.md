@@ -51,7 +51,7 @@ import { App } from '@frontmcp/sdk';
   agents: [BillingAgent],
   jobs: [ReconcileJob],
   workflows: [MonthlyBillingWorkflow],
-  auth: { mode: 'remote', idpProviderUrl: 'https://auth.billing.com' },
+  auth: { mode: 'remote', provider: 'https://auth.billing.com', clientId: process.env['BILLING_OAUTH_CLIENT_ID']! },
   standalone: false, // default - included in multi-app server
 })
 export class BillingApp {}
@@ -270,8 +270,9 @@ class PublicApp {}
   tools: [UserManagementTool, AuditLogTool],
   auth: {
     mode: 'remote',
-    idpProviderUrl: 'https://auth.example.com',
-    idpExpectedAudience: 'admin-api',
+    provider: 'https://auth.example.com',
+    clientId: process.env['ADMIN_OAUTH_CLIENT_ID']!,
+    expectedAudience: 'admin-api',
   },
 })
 class AdminApp {}
@@ -321,7 +322,7 @@ import { App, app, FrontMcp } from '@frontmcp/sdk';
   name: 'Billing',
   tools: [ChargeTool, RefundTool],
   plugins: [BillingAuditPlugin],
-  auth: { mode: 'remote', idpProviderUrl: 'https://auth.billing.com' },
+  auth: { mode: 'remote', provider: 'https://auth.billing.com', clientId: process.env['BILLING_OAUTH_CLIENT_ID']! },
 })
 class BillingApp {}
 
@@ -365,7 +366,7 @@ export default class Server {}
 | App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                 | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur |
 | Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }` | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                     |
 | Standalone isolation | `standalone: true` for fully isolated apps                                      | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                 |
-| Per-app auth         | `auth: { mode: 'remote', idpProviderUrl: '...' }` on `@App`                     | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes     |
+| Per-app auth         | `auth: { mode: 'remote', provider: '...', clientId: '...' }` on `@App`          | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes     |
 
 ## Verification Checklist
 
