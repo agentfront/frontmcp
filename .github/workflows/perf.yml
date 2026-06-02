@@ -105,7 +105,7 @@ jobs:
           REDIS_PORT: 6379
 
       - name: Upload performance report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: perf-report-chunk-${{ matrix.chunk.index }}
           path: perf-results/
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: perf-results
           pattern: perf-report-chunk-*

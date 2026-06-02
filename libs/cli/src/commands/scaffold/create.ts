@@ -685,7 +685,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: '${cfg.ghCache}'
@@ -695,7 +695,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
   }
   return `
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: '${cfg.ghCache}'
@@ -720,7 +720,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${generatePmSetupSteps(pm)}
 
       - name: Type check
@@ -747,7 +747,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${generatePmSetupSteps(pm)}
 
       - name: Build
@@ -778,7 +778,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -817,7 +817,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${generatePmSetupSteps(pm)}
 
       - name: Build
@@ -847,7 +847,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${generatePmSetupSteps(pm)}
 
       - name: Build
@@ -885,7 +885,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${generatePmSetupSteps(pm)}
 
       - name: Build

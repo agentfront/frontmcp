@@ -363,7 +363,7 @@ jobs:
           echo "${{ env.NGROK_URL }}" > /tmp/registry-info/registry-url.txt
 
       - name: Upload registry info
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pr-testing-registry-info
           path: /tmp/registry-info/

@@ -246,10 +246,10 @@ jobs:
             key: win32-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: yarn install --frozen-lockfile
       - run: npx frontmcp build --target mcpb --sea --stage-only
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sea-${{ matrix.key }}
           path: dist/mcpb/__stage/bin/${{ matrix.key }}/*
@@ -258,8 +258,8 @@ jobs:
     needs: build-sea
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
         with: { path: ci-bins }
       - run: npx frontmcp build --target mcpb --merge-from ci-bins
       - uses: softprops/action-gh-release@v2

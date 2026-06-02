@@ -83,7 +83,7 @@ jobs:
           REDIS_PORT: 6379
 
       - name: Upload performance report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: perf-report-${{ matrix.project }}
           path: perf-results/
@@ -110,7 +110,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: perf-results
           pattern: perf-report-*
@@ -131,7 +131,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload consolidated baseline artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: perf-baseline-${{ steps.tag.outputs.TAG }}
           path: perf-results/

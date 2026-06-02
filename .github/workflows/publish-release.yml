@@ -271,7 +271,7 @@ jobs:
           npx nx run-many -t test --projects='demo-e2e-*' --parallel=3
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dist-packages
           path: |
@@ -321,7 +321,7 @@ jobs:
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: dist-packages
 
