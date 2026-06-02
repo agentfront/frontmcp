@@ -22,6 +22,7 @@ import {
   providerConfigSchema,
   publicAccessConfigSchema,
   remoteProviderConfigSchema,
+  secureStoreConfigSchema,
   skippedAppBehaviorSchema,
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
@@ -292,6 +293,69 @@ describe('tokenStorageConfigSchema', () => {
 
   it('should reject a number', () => {
     const result = tokenStorageConfigSchema.safeParse(42);
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================
+// secureStoreConfigSchema (#470)
+// ============================================
+
+describe('secureStoreConfigSchema', () => {
+  it('accepts the literal "memory"', () => {
+    const result = secureStoreConfigSchema.safeParse('memory');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe('memory');
+  });
+
+  it('accepts a bare object form with scope/ttl', () => {
+    const result = secureStoreConfigSchema.safeParse({ scope: 'session', ttlMs: 5000 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ scope: 'session', ttlMs: 5000 });
+    }
+  });
+
+  it('PRESERVES the sqlite backing (does not strip it to a bare object)', () => {
+    // Regression: a non-strict bare-object union member would otherwise match
+    // first and silently drop `sqlite`. The backing must round-trip intact.
+    const result = secureStoreConfigSchema.safeParse({ sqlite: { path: '/tmp/s.sqlite' }, scope: 'user' });
+    expect(result.success).toBe(true);
+    const data = result.success ? (result.data as Record<string, unknown>) : {};
+    expect(data['sqlite']).toEqual(expect.objectContaining({ path: '/tmp/s.sqlite' }));
+    expect(data['scope']).toBe('user');
+  });
+
+  it('PRESERVES the redis backing', () => {
+    const result = secureStoreConfigSchema.safeParse({ redis: { host: 'localhost', port: 6379 } });
+    expect(result.success).toBe(true);
+    const data = result.success ? (result.data as Record<string, unknown>) : {};
+    expect(data['redis']).toEqual(expect.objectContaining({ host: 'localhost', port: 6379 }));
+  });
+
+  it('accepts a custom backend implementing get/set/delete/list', () => {
+    const backend = {
+      get: async () => null,
+      set: async () => undefined,
+      delete: async () => false,
+      list: async () => [],
+    };
+    const result = secureStoreConfigSchema.safeParse({ backend, scope: 'global' });
+    expect(result.success).toBe(true);
+    const data = result.success ? (result.data as Record<string, unknown>) : {};
+    expect(data['backend']).toBe(backend);
+  });
+
+  it('does not preserve an incomplete custom backend', () => {
+    const result = secureStoreConfigSchema.safeParse({ backend: { get: async () => null } });
+    // The incomplete backend fails the custom check; it must NOT round-trip as a
+    // backing (the bare-object member strips the unknown `backend` key).
+    const data = result.success ? (result.data as Record<string, unknown>) : {};
+    expect(data['backend']).toBeUndefined();
+  });
+
+  it('rejects an invalid scope value', () => {
+    const result = secureStoreConfigSchema.safeParse({ scope: 'tenant' });
     expect(result.success).toBe(false);
   });
 });
@@ -933,6 +997,55 @@ describe('localAuthSchema', () => {
     if (result.success) {
       expect(result.data.expectedAudience).toEqual(['aud1', 'aud2']);
     }
+  });
+
+  // ----------------------------------------------------------------
+  // #462 — local-AS DCR control surface (auth.dcr)
+  // ----------------------------------------------------------------
+
+  it('leaves dcr undefined when omitted (default behavior preserved)', () => {
+    const result = localAuthSchema.safeParse({ mode: 'local' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dcr).toBeUndefined();
+    }
+  });
+
+  it('accepts a full dcr config (enabled flag, allowlists, IAT, pre-registered clients)', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      dcr: {
+        enabled: false,
+        allowedRedirectUris: ['https://app.example.com/cb', 'http://localhost:*/callback'],
+        allowedClientIds: ['dashboard'],
+        initialAccessToken: 'iat-token',
+        clients: [{ clientId: 'dashboard', redirectUris: ['https://app.example.com/cb'], clientName: 'Dashboard' }],
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dcr?.enabled).toBe(false);
+      expect(result.data.dcr?.allowedRedirectUris).toEqual([
+        'https://app.example.com/cb',
+        'http://localhost:*/callback',
+      ]);
+      expect(result.data.dcr?.allowedClientIds).toEqual(['dashboard']);
+      expect(result.data.dcr?.initialAccessToken).toBe('iat-token');
+      // Pre-registered client defaults are applied.
+      const client = result.data.dcr?.clients?.[0];
+      expect(client?.clientId).toBe('dashboard');
+      expect(client?.tokenEndpointAuthMethod).toBe('none');
+      expect(client?.grantTypes).toEqual(['authorization_code']);
+      expect(client?.responseTypes).toEqual(['code']);
+    }
+  });
+
+  it('rejects a pre-registered client with no redirect_uris', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      dcr: { clients: [{ clientId: 'x', redirectUris: [] }] },
+    });
+    expect(result.success).toBe(false);
   });
 
   // ----------------------------------------------------------------

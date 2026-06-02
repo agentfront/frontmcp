@@ -11,12 +11,20 @@ export type {
   RemoteProviderConfig,
   TokenStorageConfig,
   TokenStorageSqliteConfig,
+  // Secure store config (#470)
+  SecureStoreConfig,
+  SecureStoreScopeType,
+  SecureStoreEncryptionConfig,
+  SecureStoreCustomBackend,
   TokenRefreshConfig,
   SkippedAppBehavior,
   ConsentConfig,
   FederatedAuthConfig,
   IncrementalAuthConfig,
   UpstreamProviderOptions,
+  // Local-AS Dynamic Client Registration config (#462)
+  LocalDcrConfig,
+  LocalDcrClient,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
@@ -54,12 +62,19 @@ export {
   flatRemoteProviderFields,
   tokenStorageConfigSchema,
   tokenStorageSqliteSchema,
+  // Secure store schemas (#470)
+  secureStoreConfigSchema,
+  secureStoreScopeSchema,
+  secureStoreEncryptionSchema,
+  secureStoreCustomBackendSchema,
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
   upstreamProviderSchema,
+  localDcrClientSchema,
+  localDcrConfigSchema,
 } from '@frontmcp/auth';
 
 export type {
@@ -73,6 +88,11 @@ export type {
   RemoteProviderConfigInput,
   TokenStorageConfigZod,
   TokenStorageConfigInput,
+  // Secure store schema-inferred types (#470)
+  SecureStoreConfigZod,
+  SecureStoreConfigInput,
+  SecureStoreScopeZod,
+  SecureStoreEncryptionConfigZod,
   TokenRefreshConfigZod,
   TokenRefreshConfigInput,
   SkippedAppBehaviorZod,
@@ -84,6 +104,10 @@ export type {
   IncrementalAuthConfigInput,
   UpstreamProviderOptionsZod,
   UpstreamProviderOptionsInput,
+  LocalDcrClientConfigZod,
+  LocalDcrClientConfigInput,
+  LocalDcrConfigZod,
+  LocalDcrConfigInput,
   RedisConfig,
 } from '@frontmcp/auth';
 

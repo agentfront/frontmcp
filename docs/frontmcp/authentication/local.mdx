@@ -495,15 +495,69 @@ is **refused** — a stale link can never resurrect a dead session.
 
 ---
 
-## Dynamic Client Registration
+## Dynamic Client Registration (`dcr`)
 
-DCR lets clients register programmatically. The `/oauth/register` endpoint is **development-only**: when `NODE_ENV=production` it behaves as if it does not exist (the registration is short-circuited). Registered clients are held in an in-memory map — there is no persistent client store and no client allowlist.
+DCR lets clients register programmatically at `POST /oauth/register` (RFC 7591). By
+default the endpoint is **enabled in development and disabled in production**
+(`NODE_ENV=production` short-circuits it as if it did not exist), registered clients
+are held in an in-memory map, and there is no allowlist.
+
+The optional `dcr` block on `auth` (local mode) is a declarative control surface for
+that endpoint and for the client allowlist enforced at `/oauth/authorize`. **Omitting
+`dcr` preserves the default behavior exactly** — it only changes behavior for the
+fields you set.
+
+```typescript
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    dcr: {
+      // Turn DCR off explicitly (regardless of NODE_ENV). The endpoint then
+      // responds 404 and `registration_endpoint` is dropped from AS metadata.
+      enabled: false,
+      // Only these redirect URIs are accepted — at /oauth/register AND
+      // /oauth/authorize. Entries are exact or a simple `*` glob.
+      allowedRedirectUris: ['https://app.example.com/callback', 'http://localhost:*/callback'],
+      // Only these client_ids may be used at /oauth/authorize.
+      allowedClientIds: ['dashboard'],
+      // Require `Authorization: Bearer <token>` on /oauth/register (RFC 7591 §3).
+      initialAccessToken: process.env.DCR_INITIAL_ACCESS_TOKEN,
+      // Trusted clients seeded at startup — accepted WITHOUT a DCR round-trip,
+      // so you can disable DCR and still ship known clients.
+      clients: [
+        {
+          clientId: 'dashboard',
+          redirectUris: ['https://app.example.com/callback'],
+          clientName: 'Internal Dashboard',
+        },
+      ],
+    },
+  },
+})
+export class Server {}
+```
+
+| `dcr` field           | Type                       | Default               | Effect                                                                                                                       |
+| --------------------- | -------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`             | `boolean`                  | dev: on, prod: off    | When `false`, `/oauth/register` returns `404` and `registration_endpoint` is omitted from AS metadata.                       |
+| `allowedRedirectUris` | `string[]`                 | _(none)_              | Exact or `*`-glob allowlist. A `redirect_uri` not on it is rejected at **register** (`400 invalid_redirect_uri`) and **authorize** (error page — never redirected). |
+| `allowedClientIds`    | `string[]`                 | _(none)_              | Only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by CIMD instead and are exempt. |
+| `initialAccessToken`  | `string`                   | _(none)_              | When set, `/oauth/register` requires a matching `Authorization: Bearer <token>` (constant-time compared) → `401` otherwise.  |
+| `clients`             | `LocalDcrClient[]`         | _(none)_              | Pre-registered trusted clients seeded at startup; accepted by authorize/token **without** a DCR round-trip.                  |
+
+<Note>
+  This `dcr` block governs the **local Authorization Server**. It is unrelated to the
+  upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields, which
+  control registering THIS server as a client against an upstream IdP.
+</Note>
 
 ### Registration Request
 
 ```bash
 POST /oauth/register
 Content-Type: application/json
+# Authorization: Bearer <token>   # required only when dcr.initialAccessToken is set
 
 {
   "redirect_uris": ["http://localhost:3000/callback"],
@@ -516,10 +570,13 @@ Content-Type: application/json
 
 ### Registration Response
 
+A successful registration responds `201 Created`:
+
 ```json
 {
   "client_id": "generated-uuid",
   "client_id_issued_at": 1234567890,
+  "client_secret_expires_at": 0,
   "redirect_uris": ["http://localhost:3000/callback"],
   "client_name": "My Application",
   "token_endpoint_auth_method": "none",
@@ -529,7 +586,12 @@ Content-Type: application/json
 ```
 
 <Warning>
-  DCR is for development only and is disabled in production (`NODE_ENV=production`). It accepts `redirect_uris` whose host is `localhost` or any IPv4 address (any dotted-quad, not just loopback), over `http` **or** `https`, and only the `none`, `client_secret_post`, and `client_secret_basic` auth methods. Pre-register clients for production.
+  Without a `dcr` block, DCR is disabled in production (`NODE_ENV=production`) and in
+  development accepts `redirect_uris` whose host is `localhost` or any IPv4 address (any
+  dotted-quad, not just loopback), over `http` **or** `https`, with only the `none`,
+  `client_secret_post`, and `client_secret_basic` auth methods. For production, set
+  `dcr` explicitly: disable DCR (or require an `initialAccessToken`), constrain
+  `allowedRedirectUris` / `allowedClientIds`, and seed trusted `clients`.
 </Warning>
 
 ---

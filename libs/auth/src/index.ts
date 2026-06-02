@@ -217,6 +217,11 @@ export {
   // Credentials accessor (`this.credentials`)
   CREDENTIALS_ACCESSOR,
   CredentialsAccessorImpl,
+  // Secure-store primitive (#470)
+  EncryptedStorageSecureStoreBackend,
+  SECURE_STORE_ACCESSOR,
+  SecureStoreAccessorImpl,
+  createSecureStore,
 } from './session';
 export type {
   // OAuth Authorization Store types
@@ -346,6 +351,17 @@ export type {
   RequireConnectResult,
   RequireConnectOptions,
   CredentialsAccessorDeps,
+  // Secure-store primitive types (#470)
+  SecureStoreBackend,
+  SecureStoreScope,
+  SecureStoreScopeRef,
+  EncryptedStorageSecureStoreBackendOptions,
+  SecureStoreAccessor,
+  SecureStoreSetOptions,
+  SecureStoreAccessorDeps,
+  CreateSecureStoreOptions,
+  ResolvedSecureStore,
+  SecureStoreBackendKind,
 } from './session';
 
 // ============================================
@@ -391,6 +407,11 @@ export {
   OrchestratedAuthAccessorAdapter,
   NullOrchestratedAuthAccessor,
   ORCHESTRATED_AUTH_ACCESSOR,
+  // Local-AS Dynamic Client Registration registry (#462)
+  DcrClientRegistry,
+  type RegisteredClient,
+  type PreRegisteredClientInput,
+  type DcrRegistryConfig,
 } from './authorization';
 
 // ============================================

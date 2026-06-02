@@ -16,8 +16,10 @@ import {
   federatedAuthConfigSchema,
   flatRemoteProviderFields,
   incrementalAuthConfigSchema,
+  localDcrConfigSchema,
   localSigningConfigSchema,
   publicAccessConfigSchema,
+  secureStoreConfigSchema,
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
   upstreamProviderSchema,
@@ -31,6 +33,10 @@ import {
 const sharedAuthFields = {
   local: localSigningConfigSchema.optional(),
   tokenStorage: tokenStorageConfigSchema.default('memory'),
+  // #470 — backing for the general session secure-secret store (`this.secureStore`).
+  // Optional (no default) so an unset value resolves to the in-memory encrypted
+  // default at runtime; existing configs are unaffected.
+  secureStore: secureStoreConfigSchema.optional(),
   allowDefaultPublic: z.boolean().default(false),
   anonymousScopes: z.array(z.string()).default(['anonymous']),
   publicAccess: publicAccessConfigSchema.optional(),
@@ -112,6 +118,12 @@ export const localAuthSchema = z.object({
   // Slack, Jira, …) to federate at /oauth/authorize. Optional; omitting it
   // preserves the default single-operator local login exactly.
   providers: z.array(upstreamProviderSchema).optional(),
+  // Local-AS Dynamic Client Registration control surface (#462) — gate
+  // `POST /oauth/register`, allowlist redirect_uris/client_ids, require an
+  // initial access token, and seed pre-registered trusted clients. Optional;
+  // omitting it preserves today's behavior exactly (DCR on in dev, off in prod;
+  // no allowlist; no initial access token).
+  dcr: localDcrConfigSchema.optional(),
 } satisfies RawZodShape<LocalAuthOptionsInterface>);
 
 // ============================================

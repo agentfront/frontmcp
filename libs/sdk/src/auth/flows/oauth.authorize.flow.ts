@@ -396,6 +396,24 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const { client_id, redirect_uri } = result.data;
     const cimdService = this.get(CimdService);
 
+    // Local-AS DCR allowlist enforcement (#462). When `auth.dcr` declares a
+    // redirect_uri and/or client_id allowlist, reject requests that fall
+    // outside it BEFORE a pending authorization is created. CIMD client ids
+    // (URLs) are validated by the CIMD layer below and are exempt from the
+    // client_id allowlist, but the redirect_uri allowlist still applies to
+    // everyone as defense in depth. No-op when no allowlist is configured, so
+    // the default behavior is unchanged.
+    const isCimdClientId = !!cimdService?.enabled && cimdService.isCimdClientId(client_id);
+    const dcrError = this.checkDcrAllowlist(client_id, redirect_uri, isCimdClientId);
+    if (dcrError) {
+      this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${dcrError}`);
+      // Do NOT redirect an unlisted redirect_uri (open-redirect guard): show an
+      // error page when the redirect_uri itself is the problem, otherwise it is
+      // safe to redirect the (allowed) redirect_uri with an OAuth error.
+      this.respondWithError([dcrError], dcrError.includes('redirect_uri') ? undefined : redirect_uri, rawState);
+      return;
+    }
+
     if (cimdService?.enabled && cimdService.isCimdClientId(client_id)) {
       try {
         this.logger.debug(`Processing CIMD client_id: ${client_id}`);
@@ -771,6 +789,35 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     // Output validation is handled by schema
+  }
+
+  /**
+   * Enforce the local-AS DCR allowlists (#462) at authorize time. Returns a
+   * human-readable rejection reason, or `undefined` when the request is allowed
+   * (including when no allowlist is configured, or the auth instance does not
+   * expose a DCR registry — e.g. non-local modes).
+   *
+   * - `allowedRedirectUris`: applies to ALL clients (CIMD or not) as an
+   *   open-redirect / lateral-movement guard.
+   * - `allowedClientIds`: applies only to non-CIMD client ids; CIMD URLs are
+   *   validated by the CIMD layer instead.
+   */
+  private checkDcrAllowlist(clientId: string, redirectUri: string, isCimdClientId: boolean): string | undefined {
+    const auth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
+    const registry = auth?.dcrClientRegistry;
+    if (!registry) {
+      return undefined;
+    }
+
+    if (registry.hasRedirectAllowlist() && !registry.isRedirectUriAllowed(redirectUri)) {
+      return `redirect_uri "${redirectUri}" is not in the configured allowlist`;
+    }
+
+    if (!isCimdClientId && registry.hasClientIdAllowlist() && !registry.isClientIdAllowed(clientId)) {
+      return `client_id "${clientId}" is not in the configured allowlist`;
+    }
+
+    return undefined;
   }
 
   /**

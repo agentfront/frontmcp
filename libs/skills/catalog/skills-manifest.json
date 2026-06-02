@@ -553,6 +553,18 @@
               ]
             },
             {
+              "name": "local-dcr-control",
+              "description": "Lock down the built-in Dynamic Client Registration endpoint with the auth.dcr control surface: disable open registration, allowlist redirect URIs and client ids, and seed a pre-registered trusted client.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "dcr", "dynamic-client-registration", "security", "auth-modes"],
+              "features": [
+                "Setting `dcr.enabled: false` so `POST /oauth/register` returns 404 and `registration_endpoint` is dropped from AS metadata",
+                "Constraining `dcr.allowedRedirectUris` (exact or `*` glob) so unlisted redirect URIs are rejected at both register and authorize",
+                "Constraining `dcr.allowedClientIds` so only known client ids may use `/oauth/authorize`",
+                "Seeding `dcr.clients` so a trusted client is accepted without any DCR round-trip"
+              ]
+            },
+            {
               "name": "remote-enterprise-oauth",
               "description": "Proxy authentication to one mandatory upstream IdP, mint a FrontMCP session, and read the upstream token in tools.",
               "level": "advanced",

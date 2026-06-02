@@ -186,6 +186,70 @@ export interface TokenStorageSqliteConfig {
  */
 export type TokenStorageConfig = 'memory' | { redis: RedisConfig } | { sqlite: TokenStorageSqliteConfig };
 
+// ============================================
+// SECURE STORE CONFIG (#470)
+// ============================================
+
+/**
+ * How a secure-store namespace is derived from the request:
+ * - `user` (default): keyed by the authenticated subject (`sub`).
+ * - `session`: keyed by the transport `sessionId`.
+ * - `global`: a single server-wide namespace.
+ */
+export type SecureStoreScope = 'user' | 'session' | 'global';
+
+/**
+ * At-rest encryption settings for the built-in secure-store backings. Ignored
+ * for a custom `{ backend }` backing.
+ */
+export interface SecureStoreEncryptionConfig {
+  /** Server pepper mixed into HKDF key derivation. Defaults to `VAULT_SECRET ?? JWT_SECRET`. */
+  pepper?: string;
+}
+
+/**
+ * A custom secure-store backing — an object implementing the four-method
+ * `SecureStoreBackend` contract (e.g. an OS-keychain backend). Typed loosely
+ * here (the strict `SecureStoreBackend` interface lives in `session/`) so the
+ * options module stays free of session imports.
+ */
+export interface SecureStoreCustomBackend {
+  get(namespace: string, key: string): Promise<string | null>;
+  set(namespace: string, key: string, value: string, ttlMs?: number): Promise<void>;
+  delete(namespace: string, key: string): Promise<boolean>;
+  list(namespace: string): Promise<string[]>;
+  dispose?(): Promise<void>;
+}
+
+/** Fields shared by the object-form secure-store configs. */
+interface SecureStoreCommonConfig {
+  /** Namespace scope. @default 'user' */
+  scope?: SecureStoreScope;
+  /** Default TTL (ms) for stored secrets. @default undefined (no expiry) */
+  ttlMs?: number;
+  /** At-rest encryption settings (built-in backings only). */
+  encryption?: SecureStoreEncryptionConfig;
+}
+
+/**
+ * Secure-store configuration (#470) — the general session-scoped secure-secret
+ * store backing for `this.secureStore`.
+ *
+ * - `'memory'` — in-memory, AES-256-GCM-encrypted (default; lost on restart).
+ * - `{ sqlite }` — local SQLite-file persistence (survives restart).
+ * - `{ redis }` — Redis-backed persistence.
+ * - `{ backend }` — a custom backing (e.g. an OS keychain). No native dependency
+ *   is bundled by the framework.
+ *
+ * The object forms also accept `scope`, `ttlMs`, and (for built-ins) `encryption`.
+ */
+export type SecureStoreConfig =
+  | 'memory'
+  | (SecureStoreCommonConfig & { sqlite?: never; redis?: never; backend?: never })
+  | (SecureStoreCommonConfig & { sqlite: TokenStorageSqliteConfig })
+  | (SecureStoreCommonConfig & { redis: RedisConfig })
+  | (SecureStoreCommonConfig & { backend: SecureStoreCustomBackend });
+
 /**
  * Token refresh configuration
  */
@@ -308,6 +372,83 @@ export interface UpstreamProviderOptions {
   userInfoEndpoint?: string;
   /** JWKS URI for upstream id_token validation (optional). */
   jwksUri?: string;
+}
+
+/**
+ * A pre-registered (trusted) OAuth client for the LOCAL Authorization Server.
+ * Seeded into the client registry at startup so the authorize/token flows
+ * accept it without a Dynamic Client Registration round-trip. See
+ * {@link LocalDcrConfig.clients}. No PII is stored — only OAuth client metadata.
+ */
+export interface LocalDcrClient {
+  /** Stable, pre-assigned client identifier. */
+  clientId: string;
+  /** Confidential-client secret. Omit for public (PKCE) clients. */
+  clientSecret?: string;
+  /** Exact redirect URIs this client may use (at least one). */
+  redirectUris: string[];
+  /** Human-readable client name for consent/login screens. */
+  clientName?: string;
+  /**
+   * Token-endpoint auth method.
+   * @default 'none'
+   */
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post';
+  /**
+   * Allowed grant types.
+   * @default ['authorization_code']
+   */
+  grantTypes?: Array<'authorization_code' | 'refresh_token'>;
+  /**
+   * Allowed response types.
+   * @default ['code']
+   */
+  responseTypes?: Array<'code'>;
+  /** Optional space-delimited default scope string. */
+  scope?: string;
+}
+
+/**
+ * Declarative control surface for the LOCAL Authorization Server's Dynamic
+ * Client Registration endpoint (`POST /oauth/register`) and client allowlist.
+ *
+ * IMPORTANT: distinct from the upstream-provider `dcrEnabled`/
+ * `registrationEndpoint` fields on {@link ProviderConfig}/
+ * {@link RemoteProviderConfig} (those register THIS server against an upstream
+ * IdP and are not read by the local AS). Every field is optional; omitting the
+ * whole `dcr` block preserves the historical behavior exactly (DCR enabled in
+ * dev, disabled in production; no allowlist; no initial access token).
+ */
+export interface LocalDcrConfig {
+  /**
+   * Whether `POST /oauth/register` is active and `registration_endpoint` is
+   * advertised. When unset, the historical guard applies (on in dev, off in
+   * production).
+   */
+  enabled?: boolean;
+  /**
+   * Redirect-URI allowlist (exact match or simple `*` glob). When set, both DCR
+   * registrations and `/oauth/authorize` reject a `redirect_uri` not on the
+   * list. When unset, no redirect_uri allowlist is enforced.
+   */
+  allowedRedirectUris?: string[];
+  /**
+   * Client-id allowlist. When set, only these ids may register or be used at
+   * `/oauth/authorize` (CIMD URL client ids are exempt). When unset, any id is
+   * accepted subject to the other checks.
+   */
+  allowedClientIds?: string[];
+  /**
+   * Initial Access Token (RFC 7591 §3). When set, `POST /oauth/register`
+   * requires a matching `Authorization: Bearer <token>` header. When unset,
+   * registration is unauthenticated (historical behavior).
+   */
+  initialAccessToken?: string;
+  /**
+   * Pre-registered trusted clients seeded at startup. Accepted by the
+   * authorize/token flows without a DCR round-trip.
+   */
+  clients?: LocalDcrClient[];
 }
 
 /**
@@ -578,6 +719,15 @@ export interface LocalAuthOptionsInterface {
   mode: 'local';
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
+  /**
+   * Backing for the general session-scoped secure-secret store (`this.secureStore`,
+   * #470). Selects memory / sqlite / redis / a custom (e.g. OS-keychain) backend,
+   * plus the namespace `scope`. Optional — omitting it defaults to an in-memory,
+   * AES-256-GCM-encrypted, `user`-scoped store.
+   *
+   * @see SecureStoreConfig
+   */
+  secureStore?: SecureStoreConfig;
   allowDefaultPublic?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
@@ -640,6 +790,16 @@ export interface LocalAuthOptionsInterface {
    * @see UpstreamProviderOptions
    */
   providers?: UpstreamProviderOptions[];
+  /**
+   * Local Authorization Server Dynamic Client Registration control surface
+   * (#462): gate `POST /oauth/register`, allowlist redirect URIs / client ids,
+   * require an initial access token, and seed pre-registered trusted clients.
+   * Optional — omitting it preserves today's behavior exactly (DCR on in dev,
+   * off in production; no allowlist; no initial access token).
+   *
+   * @see LocalDcrConfig
+   */
+  dcr?: LocalDcrConfig;
 }
 
 export interface RemoteAuthOptionsInterface {
@@ -651,6 +811,12 @@ export interface RemoteAuthOptionsInterface {
   providerConfig?: ProviderConfig;
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
+  /**
+   * Backing for the general session-scoped secure-secret store (`this.secureStore`,
+   * #470). See {@link SecureStoreConfig}. Optional — defaults to an in-memory,
+   * AES-256-GCM-encrypted, `user`-scoped store.
+   */
+  secureStore?: SecureStoreConfig;
   allowDefaultPublic?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;

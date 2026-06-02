@@ -151,4 +151,42 @@ describe('Well-known AS metadata — oauth endpoints at root (#467c)', () => {
     expect(parsed.oauthBaseUrl).toBe('http://host');
     expect(parsed.baseUrl).toBe('http://host/mcp');
   });
+
+  // #462 — registration_endpoint is gated on DCR being active.
+  it('omits registration_endpoint when auth.dcr.enabled === false', async () => {
+    const auth = { mode: 'local', dcr: { enabled: false } } as never;
+    const scope = createMockScopeEntry({ auth });
+    (scope as { metadata: unknown }).metadata = { ...(scope as { metadata: object }).metadata, auth };
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/.well-known/oauth-authorization-server',
+      headers: { host: 'mcp.example.com' },
+    });
+
+    const flow = new WellKnownAsFlow(createAsMetadata(), input as never, scope, jest.fn(), new Map());
+    const output = await runStageCaptureRespond(flow, ['parseInput', 'collectData']);
+
+    expect(output?.kind).toBe('json');
+    expect(output.body.authorization_endpoint).toBe('http://mcp.example.com/oauth/authorize');
+    // DCR disabled → no registration_endpoint advertised.
+    expect(output.body.registration_endpoint).toBeUndefined();
+  });
+
+  it('advertises registration_endpoint when auth.dcr.enabled === true', async () => {
+    const auth = { mode: 'local', dcr: { enabled: true } } as never;
+    const scope = createMockScopeEntry({ auth });
+    (scope as { metadata: unknown }).metadata = { ...(scope as { metadata: object }).metadata, auth };
+
+    const input = createMockHttpRequest({
+      method: 'GET',
+      path: '/.well-known/oauth-authorization-server',
+      headers: { host: 'mcp.example.com' },
+    });
+
+    const flow = new WellKnownAsFlow(createAsMetadata(), input as never, scope, jest.fn(), new Map());
+    const output = await runStageCaptureRespond(flow, ['parseInput', 'collectData']);
+
+    expect(output.body.registration_endpoint).toBe('http://mcp.example.com/oauth/register');
+  });
 });

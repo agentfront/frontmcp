@@ -4,6 +4,18 @@
  * Who calls: Developers/automation.
  *
  * Purpose: Let clients register programmatically (redirect URIs, grant types, etc.).
+ *
+ * Control surface (#462): the LOCAL Authorization Server's DCR is governed by
+ * the declarative `auth.dcr` block. When `dcr` is omitted the historical
+ * behavior is preserved exactly — registration is enabled in development and
+ * disabled in production (via `isProduction()`), with no allowlist and no
+ * initial access token. When configured, this flow enforces:
+ *   - `dcr.enabled === false` → 404 (behave as if the endpoint does not exist)
+ *   - `dcr.initialAccessToken` → require `Authorization: Bearer <token>` (401)
+ *   - `dcr.allowedClientIds` → registrations are pinned to an allowed id (400)
+ *   - `dcr.allowedRedirectUris` → reject unlisted redirect_uris (400)
+ * Registered clients are stored on the per-instance {@link DcrClientRegistry}
+ * (LocalPrimaryAuth), so the authorize/token flows can validate them.
  */
 
 /**
@@ -19,8 +31,9 @@
  * - Decide JWT vs opaque access tokens; provide introspection if opaque.
  */
 
+import { type RegisteredClient } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { base64urlEncode, isProduction, randomBytes, randomUUID } from '@frontmcp/utils';
+import { base64urlEncode, randomBytes, randomUUID } from '@frontmcp/utils';
 
 import {
   Flow,
@@ -32,37 +45,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
-
-/** Simple in-memory registry (dev only) */
-type RegisteredClient = {
-  client_id: string;
-  client_secret?: string;
-  token_endpoint_auth_method:
-    | 'none'
-    | 'client_secret_basic'
-    | 'client_secret_post'
-    | 'private_key_jwt'
-    | 'tls_client_auth';
-  grant_types: string[];
-  response_types: string[];
-  redirect_uris: string[];
-  client_name?: string;
-  scope?: string;
-  created_at: number; // seconds since epoch
-  dev: boolean;
-};
-
-const CLIENTS = new Map<string, RegisteredClient>();
-
-/** Optional: export getters so other flows can validate client_id */
-export const DevClientRegistry = {
-  get(client_id: string) {
-    return CLIENTS.get(client_id);
-  },
-  has(client_id: string) {
-    return CLIENTS.has(client_id);
-  },
-};
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 const outputSchema = HttpJsonSchema;
@@ -85,7 +68,8 @@ const registrationRequestSchema = z
 
 const stateSchema = z.object({
   body: registrationRequestSchema,
-  isDev: z.boolean(),
+  /** Whether DCR is active (explicit `dcr.enabled` or the dev/prod default). */
+  dcrEnabled: z.boolean(),
 });
 
 const plan = {
@@ -109,6 +93,14 @@ declare global {
 const name = 'oauth:register' as const;
 const Stage = StageHookOf(name);
 
+/** Read the `Authorization: Bearer <token>` header, if present. */
+function extractBearer(headers: Record<string, string> | undefined): string | undefined {
+  const raw = headers?.['authorization'] ?? headers?.['Authorization'];
+  if (typeof raw !== 'string') return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(raw.trim());
+  return match ? match[1].trim() : undefined;
+}
+
 @Flow({
   name,
   plan,
@@ -123,37 +115,73 @@ const Stage = StageHookOf(name);
 export default class OauthRegisterFlow extends FlowBase<typeof name> {
   private registered?: RegisteredClient;
 
+  /** The local AS primary auth, which owns the DCR client registry (#462). */
+  private get localAuth(): LocalPrimaryAuth {
+    return this.scope.auth as LocalPrimaryAuth;
+  }
+
   @Stage('parseInput')
   async parseInput() {
-    // Dev-only guard: hide the endpoint in production
-    const isDev = !isProduction();
+    // DCR activation: honor an explicit `dcr.enabled`, else the historical
+    // dev/prod guard. Centralized on LocalPrimaryAuth so the register flow and
+    // the AS-metadata flow agree.
+    const dcrEnabled = this.localAuth.isDcrEnabled?.() ?? true;
 
     const { request } = this.rawInput;
     const parsed = registrationRequestSchema.parse(request.body || {});
     this.state.set({
       body: parsed,
-      isDev,
+      dcrEnabled,
     });
   }
 
   @Stage('validateInput')
   async validateInput() {
-    if (!this.state.isDev) {
-      // Behave like the endpoint doesn't exist in prod
-      this.next();
+    const { request } = this.rawInput;
+    const dcr = this.localAuth.getDcrConfig?.();
+    const registry = this.localAuth.dcrClientRegistry;
+
+    // (1) Disabled — behave like the endpoint does not exist.
+    if (!this.state.dcrEnabled) {
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'access_denied',
+            error_description: 'Dynamic Client Registration is disabled.',
+          },
+          { status: 404 },
+        ),
+      );
       return;
     }
 
-    // Minimal sanity checks for common mistakes in dev
+    // (2) Initial Access Token (RFC 7591 §3) — when configured, require a
+    // matching Authorization: Bearer header.
+    if (registry?.requiresInitialAccessToken?.()) {
+      const presented = extractBearer(request.headers as Record<string, string> | undefined);
+      if (!registry.verifyInitialAccessToken(presented)) {
+        this.respond(
+          httpRespond.json(
+            {
+              error: 'invalid_token',
+              error_description: 'A valid initial access token is required to register a client.',
+            },
+            { status: 401 },
+          ),
+        );
+        return;
+      }
+    }
+
     const { redirect_uris, token_endpoint_auth_method, grant_types, response_types } = this.state.required.body;
 
-    // Keep only supported combinations for the dummy server
+    // Keep only supported combinations for the local server.
     if (!response_types.includes('code')) {
       this.respond(
         httpRespond.json(
           {
             error: 'invalid_client_metadata',
-            error_description: 'Only response_types=["code"] is supported in dev.',
+            error_description: 'Only response_types=["code"] is supported.',
           },
           { status: 400 },
         ),
@@ -166,7 +194,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
         httpRespond.json(
           {
             error: 'invalid_client_metadata',
-            error_description: 'grant_types must include "authorization_code" in dev.',
+            error_description: 'grant_types must include "authorization_code".',
           },
           { status: 400 },
         ),
@@ -174,7 +202,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Warn (soft) if confidential but no TLS/jwt (still allowed for local only)
+    // Confidential-client auth methods are limited to what the local AS supports.
     if (
       token_endpoint_auth_method !== 'none' &&
       token_endpoint_auth_method !== 'client_secret_post' &&
@@ -184,7 +212,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
         httpRespond.json(
           {
             error: 'invalid_client_metadata',
-            error_description: 'This dev server only supports "none", "client_secret_post", or "client_secret_basic".',
+            error_description: 'This server only supports "none", "client_secret_post", or "client_secret_basic".',
           },
           { status: 400 },
         ),
@@ -192,14 +220,50 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Ensure localhost/https-ish redirects for dev
-    const bad = redirect_uris.find((u) => !/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+|127\.0\.0\.1)/.test(u));
-    if (bad) {
+    // (3) redirect_uri allowlist. When `dcr.allowedRedirectUris` is configured,
+    // every requested redirect_uri must match it. Otherwise keep the historical
+    // localhost-style guard so the default dev behavior is unchanged.
+    if (registry?.hasRedirectAllowlist?.()) {
+      const bad = redirect_uris.find((u) => !registry.isRedirectUriAllowed(u));
+      if (bad) {
+        this.respond(
+          httpRespond.json(
+            {
+              error: 'invalid_redirect_uri',
+              error_description: `redirect_uri "${bad}" is not in the configured allowlist.`,
+            },
+            { status: 400 },
+          ),
+        );
+        return;
+      }
+    } else {
+      const bad = redirect_uris.find((u) => !/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+|127\.0\.0\.1)/.test(u));
+      if (bad) {
+        this.respond(
+          httpRespond.json(
+            {
+              error: 'invalid_redirect_uri',
+              error_description: `Registration allows only localhost-style redirect_uris; got ${bad}`,
+            },
+            { status: 400 },
+          ),
+        );
+        return;
+      }
+    }
+
+    // (4) client_id allowlist sanity. DCR mints a server-side client_id, so we
+    // cannot honor a client-supplied id, but if an allowlist is configured a
+    // freshly-minted random id can never satisfy it — surface that as a clear
+    // configuration error rather than issuing an unusable client.
+    if (registry?.hasClientIdAllowlist?.() && !dcr?.clients?.length) {
       this.respond(
         httpRespond.json(
           {
-            error: 'invalid_redirect_uri',
-            error_description: `Dev registration allows only localhost-style redirect_uris; got ${bad}`,
+            error: 'access_denied',
+            error_description:
+              'Client-id allowlist is enforced; register clients declaratively via auth.dcr.clients instead of DCR.',
           },
           { status: 400 },
         ),
@@ -218,7 +282,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     let client_secret: string | undefined;
 
     if (token_endpoint_auth_method === 'client_secret_post' || token_endpoint_auth_method === 'client_secret_basic') {
-      client_secret = base64urlEncode(randomBytes(24)); // short-lived dev secret
+      client_secret = base64urlEncode(randomBytes(24));
     }
 
     this.registered = {
@@ -234,27 +298,36 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
       dev: true,
     };
 
-    CLIENTS.set(client_id, this.registered);
+    this.localAuth.dcrClientRegistry.register(this.registered);
   }
 
   @Stage('respondRegistration')
   async respondRegistration() {
-    const c = this.registered!;
+    const c = this.registered;
+    if (!c) {
+      this.respond(
+        httpRespond.json({ error: 'server_error', error_description: 'Client registration failed.' }, { status: 500 }),
+      );
+      return;
+    }
     // Minimal RFC 7591-ish response
-    // (intentionally omitting registration_access_token/registration_client_uri for simplicity in dev)
+    // (intentionally omitting registration_access_token/registration_client_uri for simplicity)
     this.respond(
-      httpRespond.json({
-        client_id: c.client_id,
-        ...(c.client_secret ? { client_secret: c.client_secret } : {}),
-        client_id_issued_at: c.created_at,
-        client_secret_expires_at: c.client_secret ? 0 : 0, // 0 = does not expire (dev)
-        token_endpoint_auth_method: c.token_endpoint_auth_method,
-        grant_types: c.grant_types,
-        response_types: c.response_types,
-        redirect_uris: c.redirect_uris,
-        ...(c.client_name ? { client_name: c.client_name } : {}),
-        ...(c.scope ? { scope: c.scope } : {}),
-      }),
+      httpRespond.json(
+        {
+          client_id: c.client_id,
+          ...(c.client_secret ? { client_secret: c.client_secret } : {}),
+          client_id_issued_at: c.created_at,
+          client_secret_expires_at: 0, // 0 = does not expire
+          token_endpoint_auth_method: c.token_endpoint_auth_method,
+          grant_types: c.grant_types,
+          response_types: c.response_types,
+          redirect_uris: c.redirect_uris,
+          ...(c.client_name ? { client_name: c.client_name } : {}),
+          ...(c.scope ? { scope: c.scope } : {}),
+        },
+        { status: 201 },
+      ),
     );
   }
 

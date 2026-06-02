@@ -106,6 +106,7 @@ Key local-mode options:
 - `authenticate(input, ctx)` -- custom verification run at the login callback **before** a token is minted. `input.fields` carries the submitted login fields (reserved OAuth params excluded); `ctx` is `{ get, fetch, logger, clientId?, clientName? }`. Return `{ ok: true, sub?, claims? }` to mint a token (custom `claims` are embedded in the JWT; reserved claims like `sub`/`iss`/`exp`/`scope` are stripped) or `{ ok: false, message, retryField? }` to re-render the login page with the error (no code issued). When set, the email requirement no longer applies.
 - `providers` -- declarative upstream OAuth providers (GitHub, Slack, Jira, …) to orchestrate. When set, FrontMCP federates them at `/oauth/authorize`, stores each provider's tokens **encrypted server-side**, and exposes them to tools via `this.orchestration.getToken(id)`. See [Multi-provider orchestration](#multi-provider-orchestration-providers--federatedauth) below.
 - `federatedAuth` -- gates JWT issuance during federated login: `minProviders` (default `1` when `providers` are set — "no JWT until ≥1 linked"), `requiredProviders` (ids that must all be linked), and `stateValidation` (`'strict'` default).
+- `dcr` -- declarative control surface for the built-in Dynamic Client Registration endpoint (`POST /oauth/register`) and the `/oauth/authorize` client allowlist. All fields optional; omitting `dcr` preserves today's behavior (DCR on in dev, off in prod). See [Dynamic Client Registration](#dynamic-client-registration-dcr) below.
 - `anonymousScopes` (default `['anonymous']`) -- scopes assigned to anonymous sessions (used when `allowDefaultPublic` lets an unauthenticated request through).
 - `allowDefaultPublic` (default `false`) -- when `true`, requests without a token are allowed through as anonymous instead of being rejected with a 401. Keep `false` to require auth on every request.
 - `expectedAudience` -- the `aud` claim value tokens must carry. Also valid in local/remote mode (not just transparent); set it when FrontMCP must reject tokens minted for a different audience.
@@ -158,6 +159,40 @@ class GitHubReposTool extends ToolContext {
 ```
 
 Tokens stay server-side and AES-256-GCM-encrypted at rest — never placed in the JWT or exposed to the model. No login PII is stored (only provider tokens + non-PII provider ids).
+
+### Dynamic Client Registration (`dcr`)
+
+The built-in `POST /oauth/register` (RFC 7591) endpoint lets clients self-register. By default it is **enabled in development and disabled in production** (`NODE_ENV=production` short-circuits it), holds clients in an in-memory map, and enforces no allowlist. The optional `dcr` block makes that a declarative control surface. **Omitting `dcr` preserves the default behavior exactly.**
+
+```typescript
+@FrontMcp({
+  info: { name: 'internal-api', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    dcr: {
+      enabled: false, // force off regardless of NODE_ENV (register → 404; metadata omits registration_endpoint)
+      allowedRedirectUris: ['https://app.example.com/callback', 'http://localhost:*/callback'], // exact or `*` glob
+      allowedClientIds: ['dashboard'], // only these client_ids may use /oauth/authorize
+      initialAccessToken: process.env.DCR_INITIAL_ACCESS_TOKEN, // require `Authorization: Bearer <token>` on register
+      clients: [
+        // pre-registered trusted clients — accepted WITHOUT a DCR round-trip
+        { clientId: 'dashboard', redirectUris: ['https://app.example.com/callback'], clientName: 'Internal Dashboard' },
+      ],
+    },
+  },
+})
+class Server {}
+```
+
+`LocalDcrConfig` fields:
+
+- `enabled` -- when `false`, `/oauth/register` responds `404` and `registration_endpoint` is omitted from `/.well-known/oauth-authorization-server`. When unset, defaults to on in dev / off in prod.
+- `allowedRedirectUris` -- exact or simple-`*`-glob allowlist. A `redirect_uri` not on it is rejected at **register** (`400 invalid_redirect_uri`) and at **authorize** (error page — the unlisted URI is never redirected to, an open-redirect guard).
+- `allowedClientIds` -- only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by the CIMD layer and are exempt.
+- `initialAccessToken` -- when set, `/oauth/register` requires a matching `Authorization: Bearer <token>` (constant-time compared); otherwise `401 invalid_token`.
+- `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients.
+
+A successful registration responds `201 Created`. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
 
 ### Custom login + verification (`login` / `authenticate`)
 

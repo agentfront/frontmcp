@@ -114,6 +114,17 @@ export type {
 export { CredentialsAccessorImpl } from './credentials-accessor.impl';
 export type { CredentialsAccessorDeps } from './credentials-accessor.impl';
 
+// Secure-store primitive (#470) — general session-scoped secure-secret store
+export type { SecureStoreBackend, SecureStoreScope, SecureStoreScopeRef } from './secure-store';
+export { EncryptedStorageSecureStoreBackend } from './secure-store-backends';
+export type { EncryptedStorageSecureStoreBackendOptions } from './secure-store-backends';
+export { SECURE_STORE_ACCESSOR } from './secure-store-accessor';
+export type { SecureStoreAccessor, SecureStoreSetOptions } from './secure-store-accessor';
+export { SecureStoreAccessorImpl } from './secure-store-accessor.impl';
+export type { SecureStoreAccessorDeps } from './secure-store-accessor.impl';
+export { createSecureStore } from './secure-store.factory';
+export type { CreateSecureStoreOptions, ResolvedSecureStore, SecureStoreBackendKind } from './secure-store.factory';
+
 // Vault Encryption
 export { encryptedDataSchema, encryptedVaultEntrySchema, VaultEncryption } from './vault-encryption';
 export type {
