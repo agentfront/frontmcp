@@ -12,6 +12,15 @@ export {
   // Functions
   verifyPkce,
   generatePkceChallenge,
+  // Record builders (pure, backend-agnostic)
+  generateAuthorizationCode,
+  generateRefreshTokenValue,
+  buildCodeRecord,
+  buildPendingRecord,
+  buildRefreshTokenRecord,
+  AUTH_CODE_TTL_MS,
+  PENDING_AUTH_TTL_MS,
+  REFRESH_TOKEN_TTL_MS,
   // Schemas
   pkceChallengeSchema,
   authorizationCodeRecordSchema,
@@ -25,7 +34,14 @@ export type {
   RefreshTokenRecord,
   ConsentStateRecord,
   FederatedLoginStateRecord,
+  CreateCodeRecordParams,
+  CreatePendingRecordParams,
+  CreateRefreshTokenRecordParams,
 } from './authorization.store';
+
+// Storage-backed Authorization Store (memory / Redis / SQLite via StorageAdapter)
+export { StorageAuthorizationStore } from './storage-authorization.store';
+export type { StorageAuthorizationStoreOptions } from './storage-authorization.store';
 
 // Authorization Vault
 export {
@@ -69,6 +85,34 @@ export type {
   AuthorizationVaultEntry,
   AuthorizationVault,
 } from './authorization-vault';
+
+// Session Credential Vault (Checkpoint 3b) — per-session encrypted credential store
+export { SessionCredentialVault } from './session-credential-vault';
+export type { StoredCredential, SessionCredentialVaultOptions } from './session-credential-vault';
+export { createSessionCredentialVault } from './session-credential-vault.factory';
+export type { CreateSessionCredentialVaultOptions } from './session-credential-vault.factory';
+
+// Credential resume-link signing (framework-signed mid-session connect URL)
+export {
+  signCredentialResumeToken,
+  verifyCredentialResumeToken,
+  buildCredentialResumeUrl,
+  DEFAULT_RESUME_TTL_MS,
+} from './credential-resume-link';
+export type { CredentialResumePayload } from './credential-resume-link';
+
+// Credentials accessor (`this.credentials` ToolContext API)
+export { CREDENTIALS_ACCESSOR } from './credentials-accessor';
+export type {
+  CredentialsAccessor,
+  CredentialValue,
+  CredentialNotConnected,
+  CredentialConnected,
+  RequireConnectResult,
+  RequireConnectOptions,
+} from './credentials-accessor';
+export { CredentialsAccessorImpl } from './credentials-accessor.impl';
+export type { CredentialsAccessorDeps } from './credentials-accessor.impl';
 
 // Vault Encryption
 export { encryptedDataSchema, encryptedVaultEntrySchema, VaultEncryption } from './vault-encryption';
@@ -202,6 +246,10 @@ export type { VercelKvSessionConfig } from './vercel-kv-session.store';
 export { InMemoryOrchestratedTokenStore } from './orchestrated-token.store';
 export type { InMemoryOrchestratedTokenStoreOptions } from './orchestrated-token.store';
 
+// Storage-backed Orchestrated Token Store (memory / Redis / SQLite)
+export { StorageOrchestratedTokenStore } from './storage-orchestrated-token.store';
+export type { StorageOrchestratedTokenStoreOptions } from './storage-orchestrated-token.store';
+
 // Federated Auth Session
 export {
   InMemoryFederatedAuthSessionStore,
@@ -223,6 +271,26 @@ export type {
   FederatedAuthSessionStore,
   FederatedAuthSessionCreateParams,
 } from './federated-auth.session';
+
+// Storage-backed Federated Auth Session Store (memory / Redis / SQLite)
+export { StorageFederatedAuthSessionStore } from './storage-federated-auth.session';
+export type { StorageFederatedAuthSessionStoreOptions } from './storage-federated-auth.session';
+
+// Remembered Consent Store (per-(user, client) tool selection)
+export { InMemoryConsentStore, consentRecordKey } from './consent.store';
+export type { ConsentStore, RememberedConsentRecord } from './consent.store';
+
+// Storage-backed Remembered Consent Store (memory / Redis / SQLite)
+export { StorageConsentStore } from './storage-consent.store';
+export type { StorageConsentStoreOptions } from './storage-consent.store';
+
+// Token-storage adapter factory (memory / Redis / SQLite)
+export {
+  createTokenStorageAdapter,
+  isRedisTokenStorage,
+  isSqliteTokenStorage,
+  isPersistentTokenStorage,
+} from './token-storage.factory';
 
 // Encrypted Authorization Vault
 export { redisVaultEntrySchema, EncryptedRedisVault, createEncryptedVault } from './encrypted-authorization-vault';

@@ -2,24 +2,26 @@
 name: local-self-signed-tokens
 reference: configure-auth-modes
 level: intermediate
-description: 'Configure a server that signs its own JWT tokens with consent and incremental auth enabled.'
-tags: [config, auth, redis, local, auth-modes, modes]
+description: 'Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.'
+tags: [config, auth, local, sqlite, redis, auth-modes, modes]
 features:
-  - "Using `mode: 'local'` so the server signs its own JWTs"
+  - "Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)"
   - 'Setting `local.issuer` and `expectedAudience` to control token claims'
-  - 'Enabling `consent` for explicit user authorization flow'
-  - 'Enabling `incrementalAuth` to request additional scopes progressively'
-  - 'Using Redis for token storage in production'
+  - 'Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart'
+  - 'Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments'
+  - 'Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time'
 ---
 
 # Local Self-Signed Tokens
 
-Configure a server that signs its own JWT tokens with consent and incremental auth enabled.
+Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.
 
 ## Code
 
 ```typescript
 // src/server.ts
+// Set a stable JWT_SECRET (e.g. `openssl rand -hex 32`) so HS256-signed
+// tokens survive restart. If unset, a random per-process secret is used.
 import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
@@ -39,12 +41,13 @@ class ManageUsersTool extends ToolContext {
   auth: {
     mode: 'local',
     local: {
-      issuer: 'my-internal-server',
+      issuer: 'https://mcp.internal.example.com',
     },
     expectedAudience: 'internal-api',
-    tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+    // Single-node persistence (survives restart, no Redis required).
+    // For multiple instances, swap for: { redis: { host: ..., port: 6379 } }
+    tokenStorage: { sqlite: { path: './data/auth.sqlite' } },
     consent: { enabled: true },
-    incrementalAuth: { enabled: true },
   },
   tools: [ManageUsersTool],
 })
@@ -53,24 +56,19 @@ class InternalApi {}
 @FrontMcp({
   info: { name: 'local-auth-server', version: '1.0.0' },
   apps: [InternalApi],
-  redis: {
-    provider: 'redis',
-    host: process.env['REDIS_HOST'] ?? 'localhost',
-    port: 6379,
-  },
 })
 class Server {}
 ```
 
 ## What This Demonstrates
 
-- Using `mode: 'local'` so the server signs its own JWTs
+- Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)
 - Setting `local.issuer` and `expectedAudience` to control token claims
-- Enabling `consent` for explicit user authorization flow
-- Enabling `incrementalAuth` to request additional scopes progressively
-- Using Redis for token storage in production
+- Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart
+- Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments
+- Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time
 
 ## Related
 
 - See `configure-auth-modes` for a comparison of all auth modes
-- See `configure-session` for session storage configuration
+- See `configure-session` for transport/session storage configuration

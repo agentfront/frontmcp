@@ -21,13 +21,27 @@
  */
 
 import {
-  describe as _describe,
+  afterAll as _afterAll,
+  afterEach as _afterEach,
   beforeAll as _beforeAll,
   beforeEach as _beforeEach,
-  afterEach as _afterEach,
-  afterAll as _afterAll,
+  describe as _describe,
   it as _it,
 } from '@jest/globals';
+
+import { TestTokenFactory } from '../auth/token-factory';
+import { McpTestClient } from '../client/mcp-test-client';
+import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
+import { TestServer } from '../server/test-server';
+import type {
+  AuthFixture,
+  ServerFixture,
+  TestConfig,
+  TestFixtures,
+  TestFn,
+  TestUser,
+  TestWithFixtures,
+} from './fixture-types';
 
 // Re-export with compatible types (Jest globals may differ in type signatures
 // between @jest/globals and the global declarations used by our TestWithFixtures)
@@ -37,20 +51,6 @@ const beforeEach = _beforeEach as unknown as jest.Lifecycle;
 const afterEach = _afterEach as unknown as jest.Lifecycle;
 const afterAll = _afterAll as unknown as jest.Lifecycle;
 const it = _it as unknown as jest.It;
-
-import { McpTestClient } from '../client/mcp-test-client';
-import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
-import { TestTokenFactory } from '../auth/token-factory';
-import { TestServer } from '../server/test-server';
-import type {
-  TestConfig,
-  TestFixtures,
-  AuthFixture,
-  ServerFixture,
-  TestFn,
-  TestWithFixtures,
-  TestUser,
-} from './fixture-types';
 
 // ═══════════════════════════════════════════════════════════════════
 // GLOBAL STATE
@@ -76,9 +76,17 @@ let serverStartedByUs = false;
  * Initialize shared resources (server, token factory) once per test file
  */
 async function initializeSharedResources(): Promise<void> {
-  // Create token factory if not exists
+  // Create token factory if not exists.
+  //
+  // When the test config passes a JWT_SECRET to the server (gateway modes —
+  // auth.mode public/local/orchestrated verify tokens against their own HS256
+  // secret), sign fixture tokens with that SAME secret so `auth.createToken`
+  // mints genuinely-valid tokens (the server now cryptographically verifies
+  // the signature). Without a shared secret the factory stays RS256 + JWKS for
+  // transparent mode.
   if (!tokenFactory) {
-    tokenFactory = new TestTokenFactory();
+    const sharedSecret = currentConfig.env?.['JWT_SECRET'];
+    tokenFactory = new TestTokenFactory(sharedSecret ? { hmacSecret: sharedSecret } : {});
   }
 
   // Start or connect to server if not exists

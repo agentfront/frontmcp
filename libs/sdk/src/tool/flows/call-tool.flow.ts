@@ -18,6 +18,8 @@ import {
   randomUUID,
 } from '@frontmcp/utils';
 
+import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
+import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import {
   Flow,
   FlowBase,
@@ -29,7 +31,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
-import { resolveToolVisibility } from '../../common/metadata/tool.metadata';
+import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import {
   AuthorizationRequiredError,
@@ -43,7 +45,9 @@ import {
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
   TaskStoreNotInitializedError,
+  ToolCredentialsRequiredError,
   ToolExecutionError,
+  ToolNotConsentedError,
   ToolNotFoundError,
 } from '../../errors';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
@@ -52,6 +56,7 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hasUIConfig } from '../ui';
+import { evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
  * Type for transport extension on AuthInfo.
@@ -150,6 +155,11 @@ const plan = {
     'checkEntryAuthorities',
     'createTaskIfRequested',
     'createToolCallContext',
+    // Credential gate runs AFTER the tool context is built (so the
+    // CONTEXT-scoped credential accessors — this.authProviders /
+    // this.credentials — are resolvable) but BEFORE quota/semaphore and the
+    // execute stage, so a missing required credential aborts before execute().
+    'checkToolCredentials',
     'acquireQuota',
     'acquireSemaphore',
   ],
@@ -569,16 +579,46 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('checkToolAuthorization:start');
     const { tool, authInfo } = this.state;
 
-    // Get authorization from authInfo.extra if available
-    const authorization = authInfo?.extra?.['authorization'] as
+    // ----- Consent enforcement (per-client tool selection) -----
+    // When the verified token carries an ENABLED `consent` claim, the caller
+    // may only invoke tools they selected on the consent screen. A token with
+    // NO consent metadata (consent disabled) returns `undefined` here and the
+    // check is skipped entirely — preserving the default allow-all behavior.
+    //
+    // Trusted internal dispatch (`internalCall: true`, e.g. a tool/agent
+    // invoking another tool) bypasses consent: the user consented to the entry
+    // tool, and inner composition is an implementation detail — mirroring the
+    // internal-visibility bypass in `findTool`.
+    const consentCtx = this.input.ctx as { internalCall?: boolean } | undefined;
+    if (!consentCtx?.internalCall) {
+      const consentedToolIds = getConsentedToolIds(authInfo);
+      if (consentedToolIds && tool && !isToolConsented(consentedToolIds, tool.name, tool.fullName)) {
+        this.logger.info(
+          `checkToolAuthorization: tool "${tool.fullName || tool.name}" not in consented set — rejecting`,
+        );
+        throw new ToolNotConsentedError(tool.fullName || tool.name);
+      }
+    }
+
+    // Resolve the authorized-app set this request may use. Two sources, both
+    // optional — their ABSENCE means "no app-level gating" (default allow-all):
+    //  1. Progressive/Incremental auth: the verified token's `authorized_apps`
+    //     claim, surfaced by `getAuthorizedAppIds`. This claim is ONLY minted
+    //     when `incrementalAuth` is enabled for the scope, so non-incremental
+    //     setups never see it and behave exactly as before.
+    //  2. Legacy `authInfo.extra.authorization` projection (e.g. direct mode or
+    //     a host that pre-builds a session-shaped authorization). Preserved for
+    //     back-compat.
+    const claimAuthorizedApps = getAuthorizedAppIds(authInfo);
+    const legacyAuthorization = authInfo?.extra?.['authorization'] as
       | {
           authorizedAppIds?: string[];
           authorizedApps?: Record<string, unknown>;
         }
       | undefined;
 
-    // No auth context = public mode, skip authorization check
-    if (!authorization) {
+    // No app set from either source = no app-level gating, skip the check.
+    if (!claimAuthorizedApps && !legacyAuthorization) {
       this.logger.verbose('checkToolAuthorization:skip (no auth context)');
       return;
     }
@@ -591,9 +631,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check if app is authorized using existing session structure
+    // Check if app is authorized in EITHER source (a grant in either suffices).
     const isAppAuthorized =
-      authorization.authorizedAppIds?.includes(appId) || appId in (authorization.authorizedApps || {});
+      (claimAuthorizedApps?.has(appId) ?? false) ||
+      (legacyAuthorization?.authorizedAppIds?.includes(appId) ?? false) ||
+      appId in (legacyAuthorization?.authorizedApps || {});
 
     if (!isAppAuthorized) {
       // Get incremental auth configuration from scope's auth options
@@ -776,6 +818,89 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.error('createToolCallContext: failed to create context', error);
       throw new ToolExecutionError(tool.metadata.name, error instanceof Error ? error : undefined);
     }
+  }
+
+  /**
+   * TOOL-LEVEL credential gate.
+   *
+   * Reads the tool's `authProviders` and, for every provider declared
+   * `required: true` (the default per the metadata), verifies a credential is
+   * available for the current session BEFORE `execute()` runs. A missing
+   * required credential aborts the call with {@link ToolCredentialsRequiredError}
+   * (JSON-RPC -32001 / MCP UNAUTHORIZED) carrying the provider id(s) and a
+   * connect/authorize `authUrl`.
+   *
+   * Runs after `createToolCallContext` so the CONTEXT-scoped credential
+   * accessors (`this.authProviders` / `this.credentials`) are resolvable via the
+   * built tool context, and before `acquireQuota`/`acquireSemaphore`/`execute`.
+   *
+   * Behavior is intentionally a no-op — preserving the pre-existing call-tool
+   * path exactly — when:
+   *  - the tool declares no `authProviders`, or
+   *  - all declared providers are `required: false`, or
+   *  - NO credential accessor is configured in the running scope (public mode,
+   *    no auth, vault disabled), or
+   *  - the call is trusted internal dispatch / a background task re-dispatch.
+   *
+   * Hookable: developers may use Will/Did/Around on 'checkToolCredentials'.
+   */
+  @Stage('checkToolCredentials')
+  async checkToolCredentials() {
+    this.logger.verbose('checkToolCredentials:start');
+    const { tool } = this.state.required;
+
+    // Trusted internal dispatch (tool/agent invoking another tool, or the task
+    // re-dispatch) is exempt — the entry tool already passed its own gate and
+    // inner composition is an implementation detail. Mirrors the consent/
+    // internal-visibility bypass in findTool/checkToolAuthorization.
+    const ctxObj = this.input.ctx as { internalCall?: boolean; taskId?: string } | undefined;
+    if (ctxObj?.internalCall || ctxObj?.taskId) {
+      this.logger.verbose('checkToolCredentials:skip (internal call)');
+      return;
+    }
+
+    const providers = normalizeToolAuthProviders(
+      (tool.metadata as unknown as Record<string, unknown>)['authProviders'],
+    );
+    if (providers.length === 0) {
+      this.logger.verbose('checkToolCredentials:skip (no authProviders)');
+      return;
+    }
+
+    // Resolve credential availability through the built tool context so the
+    // CONTEXT-scoped accessors are in scope. `tryGet` returns undefined (never
+    // throws) when an accessor isn't wired, letting the gate skip cleanly.
+    const toolContext = this.state.toolContext;
+    if (!toolContext) {
+      // Defensive: context build was skipped/failed — don't introduce gating.
+      this.logger.verbose('checkToolCredentials:skip (no tool context)');
+      return;
+    }
+    toolContext.mark('checkToolCredentials');
+
+    const result = await evaluateToolCredentialGate(providers, (token) => toolContext.tryGet(token));
+
+    if (!result.evaluated) {
+      // No credential accessor wired — cannot gate. Preserve legacy behavior.
+      this.logger.verbose('checkToolCredentials:skip (no credential accessor configured)');
+      return;
+    }
+
+    if (result.missing.length === 0) {
+      this.logger.verbose('checkToolCredentials:done (all required credentials present)');
+      return;
+    }
+
+    const toolId = tool.fullName || tool.metadata.name;
+    const missingNames = result.missing.map((m) => m.name);
+    // Surface the first resolvable connect/authorize URL (callers re-auth one
+    // provider at a time; the data also lists every missing provider id).
+    const authUrl = result.missing.find((m) => m.authUrl)?.authUrl;
+
+    this.logger.info(
+      `checkToolCredentials: tool "${toolId}" missing required credential(s): ${missingNames.join(', ')}`,
+    );
+    throw new ToolCredentialsRequiredError({ toolId, providers: missingNames, authUrl });
   }
 
   @Stage('acquireQuota')

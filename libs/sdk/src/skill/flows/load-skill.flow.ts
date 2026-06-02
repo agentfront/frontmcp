@@ -6,6 +6,7 @@ import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from 
 import { InternalMcpError, InvalidInputError } from '../../errors';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
+import { assertSkillAuthorized } from '../skill-authorities.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
@@ -182,6 +183,11 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       throw new InternalMcpError('Skill registry not configured');
     }
 
+    // AuthInfo for entry-level authorities checks (RBAC/ABAC/ReBAC). MCP flows
+    // carry it under rawInput.ctx — same source the resource list flow uses.
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
+
     const loadResults: LoadResultWithActivation[] = [];
 
     for (const skillId of skillIds) {
@@ -192,11 +198,36 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         continue;
       }
 
+      // Deny direct load of an authority-gated skill the caller can't access
+      // (throws AuthorityDeniedError, MCP code -32003 — same as a denied tool).
+      // No-op when the skill has no `authorities` or no engine is configured.
+      const entry = this.findSkillEntry(skillId, result.skill.id);
+      if (entry) {
+        await assertSkillAuthorized(this.scope, entry, authInfo);
+      }
+
       loadResults.push({ loadResult: result });
     }
 
     this.state.set({ loadResults, warnings });
     this.logger.verbose('loadSkills:done', { loaded: loadResults.length, notFound: warnings.length });
+  }
+
+  /**
+   * Resolve the registered skill entry that backs a loaded skill, so its
+   * `authorities` metadata can be evaluated. Matches by the requested id, the
+   * resolved content id, and finally by display name — covering id/name/
+   * qualified-name lookups the registry's `loadSkill` accepts.
+   */
+  private findSkillEntry(requestedId: string, resolvedId: string) {
+    const registry = this.scope.skills;
+    if (!registry) return undefined;
+    return (
+      registry.findByName(requestedId) ??
+      registry.findByQualifiedName(requestedId) ??
+      registry.findByName(resolvedId) ??
+      registry.getSkills(true).find((s) => (s.metadata.id ?? s.name) === resolvedId || s.metadata.name === resolvedId)
+    );
   }
 
   /**

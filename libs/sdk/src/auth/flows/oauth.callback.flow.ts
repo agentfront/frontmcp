@@ -11,7 +11,20 @@
  * with a real identity provider or user database.
  */
 
-import { createFederatedAuthSession, escapeHtml, startNextProvider, type ProviderPkce } from '@frontmcp/auth';
+import {
+  buildToolConsentPage,
+  createFederatedAuthSession,
+  escapeHtml,
+  renderLocalLoginPage,
+  startNextProvider,
+  type AuthenticateContext,
+  type AuthenticateResult,
+  type ConsentConfig,
+  type ConsentHiddenField,
+  type LoginConfig,
+  type LoginRenderContext,
+  type ProviderPkce,
+} from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
 
@@ -22,10 +35,12 @@ import {
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
+  isOrchestratedMode,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
@@ -45,12 +60,37 @@ const stateSchema = z.object({
   // Generated
   authorizationCode: z.string().optional(),
   userSub: z.string().optional(),
+  // Checkpoint 3a — custom verification (authenticate()) results.
+  // Submitted login fields (built-in email/name + any custom `login.fields`).
+  loginFields: z.record(z.string(), z.string()).optional(),
+  // Custom claims returned by authenticate(), embedded (namespaced) in the token.
+  customClaims: z.record(z.string(), z.unknown()).optional(),
+  // Checkpoint 3b — credentials returned by authenticate(), persisted into the
+  // per-session credential vault keyed by the minted userSub at code-mint time.
+  credentials: z
+    .array(
+      z.object({
+        key: z.string(),
+        secret: z.string(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional(),
   // Progressive/Incremental Authorization
   isIncremental: z.boolean().default(false),
   targetAppId: z.string().optional(),
   targetToolId: z.string().optional(),
   existingSessionId: z.string().optional(),
   existingAuthorizationId: z.string().optional(),
+  /** Prior `authorized_apps` claim carried forward on an incremental authorize. */
+  priorAuthorizedAppIds: z.array(z.string()).optional(),
+  /**
+   * The final app-id grant to embed as the minted token's `authorized_apps`
+   * claim. Computed by `handleIncrementalAuth` ONLY when incremental auth is
+   * enabled; left undefined otherwise so no claim is emitted (preserving the
+   * historical allow-all behavior).
+   */
+  authorizedAppIds: z.array(z.string()).optional(),
   // Federated Login
   isFederated: z.boolean().default(false),
   selectedProviders: z.array(z.string()).optional(),
@@ -58,6 +98,9 @@ const stateSchema = z.object({
   // Consent
   consentEnabled: z.boolean().default(false),
   selectedTools: z.array(z.string()).optional(),
+  // True when the consent form was submitted (distinguishes an empty selection
+  // from a first visit so an empty `requireSelection` submit doesn't loop).
+  consentSubmitted: z.boolean().default(false),
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
@@ -105,6 +148,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const email = request.query['email'] as string | undefined;
     const name = request.query['name'] as string | undefined;
 
+    // Checkpoint 3a — gather all submitted login fields (email/name + any custom
+    // `login.fields`) for a configured authenticate() verifier. Values come from
+    // the GET query and, defensively, a urlencoded POST body. Reserved OAuth
+    // control params are excluded so they can't masquerade as login fields.
+    const loginFields = this.collectLoginFields(request);
+
     // Progressive/Incremental Authorization Parameters
     const isIncremental = request.query['incremental'] === 'true';
     const targetAppId = request.query['app_id'] as string | undefined;
@@ -119,12 +168,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Consent Parameters (from POST body or query)
-    // Note: For consent, we might use POST, but GET is also supported
-    const toolsParam = request.query['tools'];
+    // Tools can be read from either the query (GET) or a urlencoded POST body
+    // (the consent form POSTs back here). `selectedTools` stays `undefined`
+    // until the consent form is submitted.
+    const toolsParam = request.query['tools'] ?? this.readBodyParam(request, 'tools');
     let selectedTools: string[] | undefined;
     if (toolsParam) {
       selectedTools = Array.isArray(toolsParam) ? toolsParam : [toolsParam];
     }
+
+    // `consent_submitted` distinguishes "the user submitted the consent form
+    // with zero tools checked" (marker present, `selectedTools` empty) from
+    // "consent screen not yet shown" (marker absent). Without it an empty
+    // submit is indistinguishable from a first visit and would loop.
+    const consentSubmitted =
+      request.query['consent_submitted'] === '1' || this.readBodyParam(request, 'consent_submitted') === '1';
 
     this.state.set({
       pendingAuthId,
@@ -135,6 +193,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       selectedTools,
+      consentSubmitted,
+      loginFields,
     });
 
     if (isIncremental) {
@@ -152,7 +212,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, email, isIncremental, isFederated, selectedProviders, selectedTools } = this.state;
+    const {
+      pendingAuthId,
+      email,
+      name,
+      isIncremental,
+      isFederated,
+      selectedProviders,
+      selectedTools,
+      consentSubmitted,
+      loginFields,
+    } = this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -160,15 +230,38 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // For incremental auth, email is not required (user already authenticated)
-    if (!isIncremental && !email) {
+    // Retrieve the pending authorization
+    const localAuth = this.scope.auth as LocalPrimaryAuth;
+
+    // Checkpoint 3a — a configured custom `authenticate` verifier takes over the
+    // login-completion decision. When it is set, the built-in email requirement
+    // no longer applies (the verifier owns required-field semantics via
+    // `login.fields`).
+    const localOptions = localAuth.options as {
+      requireEmail?: boolean;
+      anonymousSubject?: string;
+      login?: LoginConfig;
+      consent?: ConsentConfig;
+      authenticate?: (
+        input: { fields: Record<string, string> },
+        ctx: AuthenticateContext,
+      ) => Promise<AuthenticateResult>;
+    };
+    const authenticateFn = typeof localOptions.authenticate === 'function' ? localOptions.authenticate : undefined;
+
+    // #468 — email opt-out for single-operator local setups.
+    // `requireEmail` defaults to true (historical behavior). When explicitly
+    // false, a non-incremental login without an email is allowed and the code
+    // is minted against a stable anonymous subject (see createAuthorizationCode
+    // below). For incremental auth email was never required. A custom
+    // `authenticate` verifier bypasses this check entirely.
+    const requireEmail = localOptions.requireEmail ?? true;
+    if (!authenticateFn && !isIncremental && !email && requireEmail) {
       this.logger.warn('Missing email in callback');
       this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Email is required'), 400));
       return;
     }
 
-    // Retrieve the pending authorization
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
     const pendingAuth = await localAuth.authorizationStore.getPendingAuthorization(pendingAuthId);
 
     if (!pendingAuth) {
@@ -183,8 +276,62 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Generate a user sub from email (in production, this would come from a user database)
-    // For incremental auth, we might need to use existing session's user sub
-    const userSub = email ? this.generateUserSub(email) : undefined;
+    // For incremental auth, we might need to use existing session's user sub.
+    // #468 — when email is opted out (requireEmail=false) and none was provided
+    // for a non-incremental login, derive a STABLE anonymous sub from the
+    // configured subject so the single operator keeps a consistent identity and
+    // a code can still be minted (createAuthorizationCode requires userSub).
+    //
+    // Progressive/Incremental authorization: an incremental authorize is for an
+    // ALREADY-authenticated user, so it must reuse that stable identity rather
+    // than re-running login. With the single-operator local model the identity
+    // is the configured anonymous subject (the same value the operator's initial
+    // login derived), so we derive it here too when no email is supplied. This
+    // keeps the expanded token's `sub` identical to the original session's.
+    let userSub: string | undefined;
+    if (email) {
+      userSub = this.generateUserSub(email);
+    } else if (!requireEmail || isIncremental) {
+      const anonymousSubject = localOptions.anonymousSubject ?? 'local-operator';
+      userSub = this.generateUserSub(anonymousSubject);
+    } else {
+      userSub = undefined;
+    }
+
+    // Checkpoint 3a — run the custom verifier (non-incremental logins only).
+    // On success, derive the subject (explicit `sub` → subject strategy → the
+    // anonymous fallback) and stash custom claims for the minted token. On
+    // failure, re-render the login page with the error instead of proceeding.
+    if (authenticateFn && !isIncremental) {
+      const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
+      if (!result.ok) {
+        // Keep the pending auth alive so the user can retry on the re-rendered page.
+        this.respond(
+          httpRespond.html(this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result)),
+        );
+        return;
+      }
+      userSub =
+        result.sub ??
+        this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {}) ??
+        this.generateUserSub(localOptions.anonymousSubject ?? 'local-operator');
+      if (result.claims) {
+        this.state.set('customClaims', result.claims);
+      }
+      // Checkpoint 3b — stash credentials returned by authenticate() so they can
+      // be persisted into the per-session vault keyed by the minted userSub at
+      // code-mint time (createAuthorizationCode). Each credential is validated to
+      // have a string key + secret; malformed entries are dropped.
+      if (Array.isArray(result.credentials) && result.credentials.length > 0) {
+        const creds = result.credentials.filter(
+          (c): c is { key: string; secret: string; metadata?: Record<string, unknown> } =>
+            !!c && typeof c.key === 'string' && typeof c.secret === 'string',
+        );
+        if (creds.length > 0) {
+          this.state.set('credentials', creds);
+        }
+      }
+    }
 
     // Validate federated login is enabled for this authorization request
     if (isFederated && !pendingAuth.federatedLogin) {
@@ -196,15 +343,36 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // Calculate skipped providers from federated login
     let skippedProviders: string[] | undefined;
     if (isFederated && pendingAuth.federatedLogin) {
-      // Require at least one provider to be selected
-      if (!selectedProviders || selectedProviders.length === 0) {
-        this.logger.warn('No federated providers selected');
-        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'No federated providers selected'), 400));
+      // Gate JWT issuance on the configured threshold. When top-level
+      // `auth.providers` are declared, the default minimum is 1 ("no JWT until
+      // ≥1 linked"); `federatedAuth.minProviders` raises it. The app-level
+      // federation path (no configured providers) keeps the historical ≥1 rule.
+      const federatedConfig = (
+        localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
+      ).federatedAuth;
+      // Default minimum is 1 in both the configured-providers and the legacy
+      // app-level federation paths (historical "≥1 selected" behavior).
+      const minProviders = federatedConfig?.minProviders ?? 1;
+      const requiredProviders = federatedConfig?.requiredProviders ?? [];
+
+      const selected = selectedProviders ?? [];
+
+      // Refuse to mint a token until the minimum number of providers is linked.
+      if (selected.length < minProviders) {
+        this.logger.warn(`Insufficient federated providers selected: ${selected.length} < ${minProviders}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage(
+              'invalid_request',
+              `At least ${minProviders} provider${minProviders === 1 ? '' : 's'} must be linked`,
+            ),
+            400,
+          ),
+        );
         return;
       }
 
       const allProviders = pendingAuth.federatedLogin.providerIds;
-      const selected = selectedProviders;
 
       // Validate selectedProviders against allowed providerIds
       const invalidProviders = selected.filter((id) => !allProviders.includes(id));
@@ -214,15 +382,105 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         return;
       }
 
+      // Require every explicitly-required provider to be among the selected set.
+      const missingRequired = requiredProviders.filter((id) => !selected.includes(id));
+      if (missingRequired.length > 0) {
+        this.logger.warn(`Missing required providers: ${missingRequired.join(', ')}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('invalid_request', `Required provider(s) not linked: ${missingRequired.join(', ')}`),
+            400,
+          ),
+        );
+        return;
+      }
+
       skippedProviders = allProviders.filter((id) => !selected.includes(id));
     }
 
-    // Get consent state
+    // ----- Consent gate -----
+    // Get consent state from the pending record (set by the authorize flow) and
+    // the consent config (flags) from the local auth options.
     const consentEnabled = pendingAuth.consent?.enabled ?? false;
+    const consentConfig = localOptions.consent;
+    const excludedTools = consentConfig?.excludedTools ?? [];
+    // The offerable set = what the authorize flow stored (already excludes
+    // `excludedTools`). Excluded tools are always available and never required.
     const availableToolIds = pendingAuth.consent?.availableToolIds ?? [];
 
-    if (consentEnabled && selectedTools) {
-      const invalidToolIds = selectedTools.filter((toolId) => !availableToolIds.includes(toolId));
+    // Federated logins mint in the provider-callback flow AFTER all providers
+    // are linked; consent for federated is shown there (or routed back here with
+    // a selection). So the callback only runs the consent gate for the
+    // non-federated, non-incremental local login path.
+    const effectiveFederated = isFederated || !!pendingAuth.federatedLogin;
+    const consentGateApplies = consentEnabled && !effectiveFederated && !isIncremental;
+
+    // `rememberConsent` (default true): reuse a prior per-(user, client) tool
+    // selection so a returning user is not re-prompted unless a NEW tool appeared.
+    const rememberConsent = consentConfig?.rememberConsent ?? true;
+
+    let finalSelectedTools = availableToolIds;
+    // True when a remembered selection lets us skip the consent screen entirely
+    // (it is already reconciled against the current available set, so Step 2
+    // validation/requireSelection is bypassed for this minting pass).
+    let rememberSkip = false;
+
+    // Step 0 (rememberConsent): on a first visit (no submission yet), consult the
+    // remembered record for this (user, client).
+    if (consentGateApplies && rememberConsent && userSub && !consentSubmitted && selectedTools === undefined) {
+      const remembered = await localAuth.consentStore.get(userSub, pendingAuth.clientId);
+      if (remembered) {
+        const seen = new Set(remembered.seenToolIds);
+        const hasNewTool = availableToolIds.some((id) => !seen.has(id));
+        if (!hasNewTool) {
+          // No new tools since the last consent → SKIP the screen and mint with
+          // the remembered selection narrowed to what is still available (+ the
+          // always-available excludedTools, merged below).
+          const stillSelected = remembered.selectedToolIds.filter((id) => availableToolIds.includes(id));
+          this.logger.info('rememberConsent: prior selection reused — skipping consent screen');
+          // The reconciled selection (+ always-available excludedTools) is what
+          // gets written into state.selectedTools by the final state.set below.
+          finalSelectedTools = [...new Set([...stillSelected, ...excludedTools])];
+          rememberSkip = true;
+        } else {
+          // A new tool appeared → re-render the screen PRE-FILLED with the
+          // remembered selection so the user decides about the new one (a newly
+          // added tool is never silently granted).
+          this.logger.info('rememberConsent: new tool detected — re-prompting pre-filled with prior selection');
+          this.respond(
+            httpRespond.html(
+              this.renderConsentScreen(
+                pendingAuth,
+                consentConfig,
+                { email, name, loginFields },
+                undefined,
+                remembered.selectedToolIds,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    // Step 1: consent enabled but the user has not yet submitted a selection →
+    // render the consent screen. Do NOT delete the pending authorization; the
+    // consent form GETs back to this same endpoint with the identity + `tools=`.
+    if (consentGateApplies && !rememberSkip && !consentSubmitted && selectedTools === undefined) {
+      this.logger.info('Consent enabled and not yet submitted — rendering consent screen');
+      this.respond(
+        httpRespond.html(this.renderConsentScreen(pendingAuth, consentConfig, { email, name, loginFields })),
+      );
+      return;
+    }
+
+    // Step 2: a selection was submitted (or consent is disabled / auto).
+    if (consentGateApplies && !rememberSkip) {
+      const submitted = selectedTools ?? [];
+
+      // Reject any tool id that was not offered (excluded tools are never valid
+      // selections — they are always available without being selected).
+      const invalidToolIds = submitted.filter((toolId) => !availableToolIds.includes(toolId));
       if (invalidToolIds.length > 0) {
         this.logger.warn(`Invalid consent tool selection: ${invalidToolIds.join(', ')}`);
         this.respond(
@@ -236,10 +494,49 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         );
         return;
       }
-    }
 
-    // If consent was enabled and user submitted selection, use it; otherwise use all available
-    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : availableToolIds;
+      // `requireSelection` (default true): an empty submit is rejected by
+      // re-rendering the consent screen with an error instead of minting a
+      // token with zero tools. The pending authorization is kept alive.
+      const requireSelection = consentConfig?.requireSelection ?? true;
+      if (requireSelection && submitted.length === 0) {
+        this.logger.info('Consent submitted with no tools selected — re-rendering with requireSelection error');
+        this.respond(
+          httpRespond.html(
+            this.renderConsentScreen(
+              pendingAuth,
+              consentConfig,
+              { email, name, loginFields },
+              'Please select at least one tool to continue.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      // Persist the selection so a later login for the same (user, client) can
+      // reuse it (rememberConsent). `seenToolIds` records the full offered set so
+      // a newly-added tool re-prompts instead of being silently granted. No PII
+      // is stored — only the opaque subject, client id, and tool ids.
+      if (rememberConsent && userSub) {
+        try {
+          await localAuth.consentStore.set({
+            userSub,
+            clientId: pendingAuth.clientId,
+            selectedToolIds: submitted,
+            seenToolIds: availableToolIds,
+            updatedAt: Date.now(),
+          });
+        } catch (err) {
+          // Remembering is best-effort: a store failure must not block minting.
+          this.logger.warn('rememberConsent: failed to persist selection', err);
+        }
+      }
+
+      // The minted token's consent set is the user's selection PLUS the always
+      // available `excludedTools` (which are enforced as allowed at call time).
+      finalSelectedTools = [...new Set([...submitted, ...excludedTools])];
+    }
 
     this.state.set({
       clientId: pendingAuth.clientId,
@@ -255,8 +552,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       targetToolId: pendingAuth.targetToolId,
       existingSessionId: pendingAuth.existingSessionId,
       existingAuthorizationId: pendingAuth.existingAuthorizationId,
+      priorAuthorizedAppIds: pendingAuth.priorAuthorizedAppIds,
       // Federated Login
-      isFederated: isFederated || !!pendingAuth.federatedLogin,
+      isFederated: effectiveFederated,
       selectedProviders: selectedProviders,
       skippedProviders: skippedProviders,
       // Consent
@@ -264,39 +562,98 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       selectedTools: finalSelectedTools,
     });
 
-    // Clean up the pending authorization
+    // Clean up the pending authorization (only now that we are proceeding to
+    // mint — the consent-render branches above return WITHOUT deleting it).
     await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
   }
 
   /**
-   * Handle incremental authorization - expand existing session's token vault
-   * For incremental auth, we add the app to the existing authorization without
-   * requiring full re-authentication
+   * Compute the progressive/incremental authorization grant for the minted
+   * token (the `authorized_apps` claim).
+   *
+   * EXPANSION model (claim-based, enforceable — mirrors how consent/federated
+   * grants already work in this codebase): the authorized-app set lives in the
+   * minted token's `authorized_apps` claim, which `checkToolAuthorization`
+   * enforces. Both the initial login and an incremental authorize mint a token
+   * via the normal code exchange; the difference is the computed grant:
+   *
+   *  - INITIAL login: grant = the apps the client requested via `apps=`
+   *    (`priorAuthorizedAppIds`); if none requested, grant ALL scope apps (a
+   *    plain login keeps working for everything).
+   *  - INCREMENTAL authorize (`mode=incremental&app=B`): grant = the prior apps
+   *    (carried forward via `apps=`) UNION the newly-authorized `targetAppId`.
+   *    So after authorizing app B, a `tools/call` on B's tool succeeds while app
+   *    A keeps working — WITHOUT re-authorizing A.
+   *
+   * This stage ONLY emits a grant when `incrementalAuth.enabled` is true for an
+   * orchestrated scope. When incremental auth is disabled or the scope is not
+   * orchestrated, it leaves `authorizedAppIds` undefined → NO `authorized_apps`
+   * claim is minted → NO app-level gating (the historical allow-all behavior is
+   * preserved exactly). Federated logins mint their token in the provider
+   * callback flow, so this stage is a no-op for them.
+   *
+   * Unknown app ids (not present in the scope) are dropped so a client can never
+   * forge a grant to a non-existent app; app-level gating is per-real-app, so a
+   * bogus id is harmless anyway.
    */
   @Stage('handleIncrementalAuth')
   async handleIncrementalAuth() {
-    const { isIncremental, targetAppId, existingAuthorizationId, redirectUri } = this.state;
+    const { isIncremental, isFederated, targetAppId, existingAuthorizationId, priorAuthorizedAppIds } = this.state;
 
-    // Skip if not incremental auth
-    if (!isIncremental || !targetAppId) {
+    // Federated logins mint elsewhere (provider-callback flow) — nothing to do.
+    if (isFederated) {
       return;
     }
 
-    this.logger.info(`Processing incremental authorization for app: ${targetAppId}`);
+    // App-level grants are an orchestrated-mode feature gated by
+    // `incrementalAuth.enabled`. When the scope is not orchestrated, or the flag
+    // is explicitly disabled, emit NO grant (no claim → no gating, as before).
+    const authOptions = this.scope.auth?.options;
+    if (!authOptions || !isOrchestratedMode(authOptions)) {
+      return;
+    }
+    const incrementalConfig = (authOptions as { incrementalAuth?: { enabled?: boolean } }).incrementalAuth;
+    // Incremental auth is OPT-IN: only emit a grant when explicitly enabled.
+    // (The schema default is `enabled: true`, but that default only applies once
+    // an `incrementalAuth` block is present; a scope with no block at all stays
+    // allow-all so existing orchestrated servers are unaffected.)
+    if (!incrementalConfig || incrementalConfig.enabled === false) {
+      return;
+    }
 
-    // For incremental auth, we need to:
-    // 1. Validate the existing session (if provided)
-    // 2. Generate a special incremental auth code that includes the app ID
-    // 3. The token endpoint will then expand the authorization
-
-    // For now, we pass the incremental auth info through the authorization code
-    // The token exchange will handle expanding the authorization
-
-    // Store incremental auth metadata for the token exchange
-    // This will be encoded in the authorization code or stored separately
-    this.logger.info(
-      `Incremental auth prepared for app: ${targetAppId}, existing auth: ${existingAuthorizationId || 'none'}`,
+    // Validate ids against the REAL scope app ids. The tool-owner id used by
+    // `checkToolAuthorization` is `app.id`, so the claim must carry `app.id`
+    // values (falling back to metadata.id for parity).
+    const knownAppIds = new Set(
+      this.scope.apps.getApps().map((a) => {
+        const app = a as { id?: string; metadata?: { id?: string } };
+        return app.id ?? app.metadata?.id ?? '';
+      }),
     );
+
+    const prior = (priorAuthorizedAppIds ?? []).filter((id) => knownAppIds.has(id));
+
+    let grant: string[];
+    if (isIncremental && targetAppId) {
+      if (!knownAppIds.has(targetAppId)) {
+        this.logger.warn(`Incremental auth: target app "${targetAppId}" is not a known app — ignoring expansion`);
+        // Fall back to the prior grant (still a valid, enforceable set).
+        grant = prior;
+      } else {
+        grant = Array.from(new Set([...prior, targetAppId]));
+      }
+      this.logger.info(
+        `Incremental auth: granting [${grant.join(', ')}] (target "${targetAppId}")` +
+          `${existingAuthorizationId ? ` (existing auth: ${existingAuthorizationId})` : ''}`,
+      );
+    } else {
+      // Initial login: grant the requested apps, or ALL scope apps when the
+      // client did not narrow the set (a plain login keeps working everywhere).
+      grant = priorAuthorizedAppIds ? prior : Array.from(knownAppIds).filter(Boolean);
+      this.logger.info(`Incremental auth enabled: initial grant [${grant.join(', ')}]`);
+    }
+
+    this.state.set('authorizedAppIds', grant);
   }
 
   /**
@@ -437,6 +794,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('createAuthorizationCode')
   async createAuthorizationCode() {
+    // Read from the non-throwing state proxy: only clientId/redirectUri/codeChallenge/userSub
+    // are truly required (validated explicitly below). The rest are optional, and reading an
+    // undefined optional field off `state.required` throws InvokeStateMissingKeyError → a 500
+    // on every non-federated local login (no `resource`/`name`/`selectedProviders`/…).
     const {
       clientId,
       redirectUri,
@@ -453,7 +814,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       isFederated,
       selectedProviders,
       skippedProviders,
-    } = this.state.required;
+      // Progressive/Incremental authorization grant (computed in handleIncrementalAuth)
+      authorizedAppIds,
+      // Checkpoint 3a — custom claims from authenticate()
+      customClaims,
+      // Checkpoint 3b — credentials from authenticate()
+      credentials,
+    } = this.state;
 
     // Validate required fields before creating authorization code
     if (!clientId || !redirectUri || !codeChallenge || !userSub) {
@@ -492,6 +859,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       skippedProviderIds: skippedProviders,
       consentEnabled: consentEnabled,
       federatedLoginUsed: isFederated,
+      // Progressive/Incremental authorization: granted app-id set → minted as
+      // the token's `authorized_apps` claim. Only set when incremental auth is
+      // enabled (see handleIncrementalAuth); undefined otherwise (no claim).
+      authorizedAppIds,
+      // Checkpoint 3a — custom claims to embed (namespaced) in the access token.
+      customClaims,
     });
 
     this.logger.info(
@@ -500,11 +873,39 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }${isFederated ? ` (federated with ${selectedProviders?.length || 0} providers)` : ''}`,
     );
     this.state.set('authorizationCode', code);
+
+    // Checkpoint 3b — persist authenticate() credentials into the per-session
+    // credential vault, keyed by the SAME userSub baked into the minted token.
+    // rotateVault() mints a fresh vaultId first so a reconnect starts EMPTY
+    // (prior ciphertext becomes undecryptable). Best-effort: a vault failure
+    // must not break the login (the code is already minted).
+    if (credentials && credentials.length > 0) {
+      const vault = localAuth.credentialVault;
+      if (vault) {
+        try {
+          const vaultId = await vault.rotateVault(userSub);
+          for (const cred of credentials) {
+            await vault.store(userSub, vaultId, cred.key, { secret: cred.secret, metadata: cred.metadata });
+          }
+          this.logger.info(`Persisted ${credentials.length} credential(s) to the session vault`);
+        } catch (err) {
+          this.logger.error(
+            `Failed to persist authenticate() credentials: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } else {
+        this.logger.warn('authenticate() returned credentials but no credential vault is configured; ignoring');
+      }
+    }
   }
 
   @Stage('redirectToClient')
   async redirectToClient() {
-    const { redirectUri, authorizationCode, originalState, isIncremental, targetAppId } = this.state.required;
+    // Read from the non-throwing state proxy: redirectUri/authorizationCode are validated
+    // explicitly below; originalState/targetAppId are optional and reading them off
+    // `state.required` throws InvokeStateMissingKeyError when a client omits the OAuth
+    // `state` param or it's a non-incremental login (same bug class as #466).
+    const { redirectUri, authorizationCode, originalState, isIncremental, targetAppId } = this.state;
 
     // Validate required fields for redirect
     if (!redirectUri || !authorizationCode) {
@@ -538,6 +939,268 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }`,
     );
     this.respond(httpRespond.redirect(url.toString()));
+  }
+
+  /**
+   * Reserved OAuth/flow control params that must never be treated as custom
+   * login fields when collecting input for a custom `authenticate` verifier.
+   */
+  private static readonly RESERVED_LOGIN_PARAMS = new Set<string>([
+    'pending_auth_id',
+    'incremental',
+    'app_id',
+    'federated',
+    'providers',
+    'tools',
+    'consent_submitted',
+    'csrf',
+    'action',
+    'app',
+    'state',
+    'code',
+    'redirect_uri',
+    'client_id',
+    'response_type',
+    'code_challenge',
+    'code_challenge_method',
+    'scope',
+    'resource',
+  ]);
+
+  /**
+   * Collect submitted login-field values (built-in `email`/`name` plus any
+   * custom `login.fields`) from the GET query and a urlencoded POST body.
+   * Reserved OAuth/flow control params are excluded so they cannot be forwarded
+   * to the verifier as if they were login fields. Only string values are kept.
+   */
+  /**
+   * Defensively read a single param from a urlencoded POST body (some adapters
+   * parse the body into `request.body`). The consent form uses a GET round-trip
+   * (mirroring the federated page) so query params are the primary source; this
+   * is a fallback for adapters that route a POST body instead. Multi-valued
+   * keys keep all values so checkbox groups (`tools`) survive a POST.
+   */
+  private readBodyParam(request: { body?: unknown }, key: string): string | string[] | undefined {
+    const body = request.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+    const value = (body as Record<string, unknown>)[key];
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      const strings = value.filter((v): v is string => typeof v === 'string');
+      return strings.length > 0 ? strings : undefined;
+    }
+    return undefined;
+  }
+
+  private collectLoginFields(request: { query?: Record<string, unknown>; body?: unknown }): Record<string, string> {
+    const fields: Record<string, string> = {};
+    const absorb = (source: Record<string, unknown> | undefined) => {
+      if (!source || typeof source !== 'object') return;
+      for (const [key, value] of Object.entries(source)) {
+        if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
+        if (typeof value === 'string') {
+          fields[key] = value;
+        } else if (Array.isArray(value) && typeof value[0] === 'string') {
+          // Multi-valued field (e.g. duplicate query keys) — keep the first.
+          fields[key] = value[0];
+        }
+      }
+    };
+    absorb(request.query as Record<string, unknown> | undefined);
+    // Defensive: some adapters parse a urlencoded POST body into request.body.
+    if (request.body && typeof request.body === 'object' && !Array.isArray(request.body)) {
+      absorb(request.body as Record<string, unknown>);
+    }
+    return fields;
+  }
+
+  /**
+   * Build the {@link AuthenticateContext} from the flow scope and invoke the
+   * configured verifier. Verifier exceptions are caught and converted to a
+   * generic failure so a throwing verifier never produces a 500.
+   */
+  private async runAuthenticate(
+    authenticateFn: (
+      input: { fields: Record<string, string> },
+      ctx: AuthenticateContext,
+    ) => Promise<AuthenticateResult>,
+    fields: Record<string, string>,
+    pendingAuth: { clientId: string },
+  ): Promise<AuthenticateResult> {
+    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    const ctx: AuthenticateContext = {
+      get: <T>(token: unknown): T => this.get(token as Parameters<typeof this.get>[0]) as T,
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => this.contextFetch(input, init),
+      logger: this.scope.logger.child('authenticate'),
+      clientId: pendingAuth.clientId,
+      clientName,
+    };
+
+    try {
+      const result = await authenticateFn({ fields }, ctx);
+      if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
+        this.logger.error('authenticate() returned a malformed result');
+        return { ok: false, message: 'Authentication failed. Please try again.' };
+      }
+      return result;
+    } catch (err) {
+      // A throwing verifier must not crash the flow — reject cleanly and let the
+      // user retry. The detailed error is logged server-side only.
+      this.logger.error(`authenticate() threw: ${err instanceof Error ? err.message : String(err)}`);
+      return { ok: false, message: 'Authentication failed. Please try again.' };
+    }
+  }
+
+  /**
+   * Outbound fetch handed to the verifier. Routes through the auth instance's
+   * `fetch` when available (so tests / adapters can intercept it), else the
+   * global fetch.
+   */
+  private contextFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const auth = this.scope.auth as { fetch?: (i: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+    if (typeof auth?.fetch === 'function') {
+      return auth.fetch(input, init);
+    }
+    return fetch(input, init);
+  }
+
+  /**
+   * Resolve a human-readable client name for the verifier context. Uses the
+   * CIMD `client_name` when the client_id is a CIMD URL and resolvable; falls
+   * back to the raw client_id.
+   */
+  private async resolveClientName(clientId: string): Promise<string> {
+    try {
+      const localAuth = this.scope.auth as {
+        cimdService?: {
+          enabled?: boolean;
+          isCimdClientId?: (id: string) => boolean;
+          resolveClientMetadata?: (id: string) => Promise<{ metadata?: { client_name?: string } }>;
+        };
+      };
+      const cimd = localAuth.cimdService;
+      if (cimd?.enabled && cimd.isCimdClientId?.(clientId) && cimd.resolveClientMetadata) {
+        const resolution = await cimd.resolveClientMetadata(clientId);
+        if (resolution?.metadata?.client_name) return resolution.metadata.client_name;
+      }
+    } catch {
+      // Best-effort only; fall back to the client_id.
+    }
+    return clientId;
+  }
+
+  /**
+   * Derive a subject from the configured login subject strategy.
+   *
+   * - `per-account`: hash the value of `login.subject.fromField` into a stable
+   *   subject (same account → same `sub`).
+   * - otherwise (`per-session` / unset): return undefined so the caller falls
+   *   back to the anonymous subject.
+   */
+  private deriveSubjectFromStrategy(
+    login: LoginConfig | undefined,
+    fields: Record<string, string>,
+  ): string | undefined {
+    const subject = login?.subject;
+    if (subject?.strategy === 'per-account' && subject.fromField) {
+      const seed = fields[subject.fromField];
+      if (seed) return this.generateUserSub(seed);
+    }
+    return undefined;
+  }
+
+  /**
+   * Re-render the local login page after a failed authenticate(), surfacing the
+   * verifier's message (and pre-selecting `retryField`). Submitted values are
+   * preserved on the form so the user does not have to re-enter everything.
+   */
+  private renderLoginRetryPage(
+    pendingAuth: { clientId: string; scopes: string[] },
+    login: LoginConfig | undefined,
+    fields: Record<string, string>,
+    failure: { message: string; retryField?: string },
+  ): string {
+    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const ctx: LoginRenderContext = {
+      clientId: pendingAuth.clientId,
+      clientName: pendingAuth.clientId,
+      scopes: pendingAuth.scopes ?? [],
+      pendingAuthId: this.state.required.pendingAuthId,
+      callbackPath,
+      fields: login?.fields ?? {},
+      error: failure.message,
+    };
+    return renderLocalLoginPage(login, ctx, fields);
+  }
+
+  /**
+   * Render the tool-consent screen.
+   *
+   * The form GETs back to `/oauth/callback` carrying `pending_auth_id`,
+   * `consent_submitted=1`, the resolved identity (`email`/`name` + any custom
+   * `login.fields`), and the chosen `tools=` checkboxes — so the resubmit
+   * re-derives the SAME subject and proceeds to mint.
+   *
+   * Honors the `auth.consent` flags: `groupByApp`, `showDescriptions`,
+   * `customMessage`, `allowSelectAll`, `requireSelection`, `defaultSelectedTools`
+   * (pre-checked), and `excludedTools` (filtered out of the offered set by
+   * {@link projectConsentTools}). `error` re-renders the screen with a banner
+   * (used for an empty `requireSelection` submit).
+   */
+  private renderConsentScreen(
+    pendingAuth: { id: string; clientId: string },
+    consentConfig: ConsentConfig | undefined,
+    identity: { email?: string; name?: string; loginFields?: Record<string, string> },
+    error?: string,
+    /**
+     * When supplied (rememberConsent prefill on a new-tool re-prompt), these tool
+     * ids are pre-checked INSTEAD of `consentConfig.defaultSelectedTools`, so the
+     * user revisits their remembered selection and only has to decide about the
+     * newly-added tool(s).
+     */
+    preSelectedTools?: string[],
+  ): string {
+    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+
+    // Derive the offered tool cards from the scope via the shared projection so
+    // the screen, the validation set, and call-time enforcement agree (and
+    // `excludedTools` are removed here too).
+    const { toolCards } = projectConsentTools(this.scope, consentConfig?.excludedTools);
+
+    // Round-trip the identity (and any custom login fields) so the resubmit
+    // re-derives the same subject. Reserved control params are never re-emitted
+    // as login fields. Only string values are carried; nothing sensitive is
+    // added by the framework — what the user submitted on the login form is
+    // round-tripped, mirroring `renderLoginRetryPage`.
+    const hiddenFields: ConsentHiddenField[] = [];
+    if (identity.email) hiddenFields.push({ name: 'email', value: identity.email });
+    if (identity.name) hiddenFields.push({ name: 'name', value: identity.name });
+    for (const [key, value] of Object.entries(identity.loginFields ?? {})) {
+      if (key === 'email' || key === 'name') continue; // already added above
+      if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
+      hiddenFields.push({ name: key, value });
+    }
+
+    return buildToolConsentPage({
+      tools: toolCards,
+      clientName: pendingAuth.clientId,
+      pendingAuthId: pendingAuth.id,
+      csrfToken: '',
+      callbackPath,
+      userName: identity.name,
+      userEmail: identity.email,
+      groupByApp: consentConfig?.groupByApp ?? true,
+      showDescriptions: consentConfig?.showDescriptions ?? true,
+      customMessage: consentConfig?.customMessage,
+      allowSelectAll: consentConfig?.allowSelectAll ?? true,
+      requireSelection: consentConfig?.requireSelection ?? true,
+      // A remembered selection (rememberConsent re-prompt) overrides the static
+      // `defaultSelectedTools` pre-check so the user revisits exactly what they
+      // previously consented to.
+      defaultSelectedTools: preSelectedTools ?? consentConfig?.defaultSelectedTools,
+      error,
+      hiddenFields,
+    });
   }
 
   /**

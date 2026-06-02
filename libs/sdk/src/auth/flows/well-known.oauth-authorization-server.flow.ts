@@ -53,6 +53,12 @@ export const outputSchema = z.union([AuthServerMetadataSchema, HttpRedirectSchem
 
 export const wellKnownAsStateSchema = z.object({
   baseUrl: z.string().min(1), // baseUrl + entryPrefix (unsuffixed)
+  // Root origin (proto://host WITHOUT the entryPath prefix). The OAuth
+  // endpoints (/oauth/authorize, /oauth/token, /oauth/register, …) are
+  // registered at literal root paths by their flows, NOT under entryPath, so
+  // they must be advertised relative to this root rather than `baseUrl`
+  // (which carries the entryPath) — see #467.
+  oauthBaseUrl: z.string().min(1),
   scopesSupported: z.array(z.string()).default(['openid', 'profile', 'email']),
   tokenEndpointAuthMethods: z
     .array(z.enum(['client_secret_basic', 'client_secret_post', 'private_key_jwt']))
@@ -108,6 +114,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
     const { metadata } = this.scope;
     const baseUrl = getRequestBaseUrl(request, this.scope.entryPath);
+    // Root origin (no entryPath) — OAuth endpoints are mounted at root.
+    const oauthBaseUrl = getRequestBaseUrl(request);
 
     // Check if CIMD is enabled (default true if auth is orchestrated)
     let cimdEnabled = true;
@@ -118,6 +126,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     this.state.set(
       wellKnownAsStateSchema.parse({
         baseUrl,
+        oauthBaseUrl,
         scopesSupported: [],
         tokenEndpointAuthMethods: [],
         dcrEnabled: false, //scope.oauth.dcrEnabled,
@@ -129,22 +138,26 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
   @Stage('collectData')
   async collectData() {
-    const { baseUrl, scopesSupported, tokenEndpointAuthMethods, dcrEnabled, isOrchestrated, cimdEnabled } =
+    const { baseUrl, oauthBaseUrl, scopesSupported, tokenEndpointAuthMethods, isOrchestrated, cimdEnabled } =
       this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
       const baseIssuer = `${baseUrl}`;
+      // OAuth endpoints live at the ROOT origin (oauthBaseUrl), not under the
+      // entryPath-carrying issuer base — their flows register literal
+      // `/oauth/*` paths at root (#467). The issuer + jwks_uri stay on
+      // baseUrl: jwks.json is matched under the entryPath variant too.
       this.respond({
         kind: 'json',
         contentType: 'application/json; charset=utf-8',
         status: 200,
         body: {
           issuer: baseIssuer,
-          authorization_endpoint: `${baseIssuer}/oauth/authorize`,
-          token_endpoint: `${baseIssuer}/oauth/token`,
-          userinfo_endpoint: `${baseIssuer}/oauth/userinfo`,
+          authorization_endpoint: `${oauthBaseUrl}/oauth/authorize`,
+          token_endpoint: `${oauthBaseUrl}/oauth/token`,
+          userinfo_endpoint: `${oauthBaseUrl}/oauth/userinfo`,
           jwks_uri: `${baseIssuer}/.well-known/jwks.json`,
-          registration_endpoint: `${baseIssuer}/oauth/register`,
+          registration_endpoint: `${oauthBaseUrl}/oauth/register`,
           token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],

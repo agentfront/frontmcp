@@ -203,6 +203,9 @@ export {
   getSepVisibleSkills,
   readSkillFileByPath,
 } from './sep-2640/sep-2640.resource-helpers';
+
+// Authorities enforcement helpers (deny on load/read, filter on discovery)
+export { assertSkillAuthorized, filterSkillsByAuthorities, getSkillAuthorities } from './skill-authorities.helper';
 export { findNestedSkillMd } from './skill-directory-loader';
 
 // Session Management

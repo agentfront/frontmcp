@@ -5,7 +5,8 @@
  * Configured at server/app level via @FrontMcp({ authorities: { ... } })
  */
 
-import type { AuthoritiesPolicyMetadata } from './authorities.types';
+import type { ClaimsResolverFn } from './authorities.context';
+import type { AuthoritiesEvaluator, AuthoritiesPolicyMetadata, RelationshipResolver } from './authorities.types';
 
 // ============================================
 // JWT Claims Mapping
@@ -72,8 +73,20 @@ export interface AuthoritiesScopeMapping {
 export interface AuthoritiesConfig {
   /** JWT claims mapping for your IdP */
   claimsMapping?: AuthoritiesClaimsMapping;
+  /**
+   * Custom function to extract roles/permissions/claims from AuthInfo.
+   * Takes precedence over `claimsMapping` when provided.
+   */
+  claimsResolver?: ClaimsResolverFn;
   /** Pre-registered named authority profiles */
   profiles?: Record<string, AuthoritiesPolicyMetadata>;
+  /**
+   * Relationship resolver for ReBAC checks.
+   * Required when using `relationships` in policies.
+   */
+  relationshipResolver?: RelationshipResolver;
+  /** Custom evaluators for the `custom.*` field in policies (key = evaluator name). */
+  evaluators?: Record<string, AuthoritiesEvaluator>;
   /** Map authority denials to OAuth scope challenges */
   scopeMapping?: AuthoritiesScopeMapping;
   /**

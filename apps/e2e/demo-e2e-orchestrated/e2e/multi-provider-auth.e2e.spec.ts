@@ -75,6 +75,11 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-orchestrated/src/main-multi-provider.ts',
     project: 'demo-e2e-orchestrated',
+    // Pin the server's JWT secret so the test token factory signs HS256 with the
+    // SAME secret — the server now cryptographically verifies gateway tokens, so
+    // fixture tokens (auth.createToken) must be genuinely valid. The upstream
+    // provider mock factories keep using RS256 + JWKS (separate trust domain).
+    env: { JWT_SECRET: 'orchestrated-e2e-shared-secret-0123456789' },
   });
 
   test.describe('OAuth Metadata', () => {
@@ -97,6 +102,155 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       });
 
       expect([200, 301, 302, 307, 308, 404]).toContain(response.status);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Declarative `auth.providers` federation (turnkey multi-provider)
+  // ════════════════════════════════════════════════════════════════════
+
+  test.describe('Declarative provider federation', () => {
+    /**
+     * GET /oauth/authorize with a valid PKCE challenge. Returns the federated
+     * provider-selection page (HTML) and the pending_auth_id parsed from it.
+     */
+    async function fetchFederatedPage(baseUrl: string, codeChallenge: string) {
+      const authorizeUrl = new URL(`${baseUrl}/oauth/authorize`);
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('client_id', 'e2e-client');
+      authorizeUrl.searchParams.set('redirect_uri', 'http://127.0.0.1:65000/callback');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
+      authorizeUrl.searchParams.set('scope', 'openid');
+      authorizeUrl.searchParams.set('state', 'e2e-state');
+
+      const res = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
+      const html = await res.text();
+      const match = html.match(/name="pending_auth_id" value="([^"]+)"/);
+      return { status: res.status, html, pendingAuthId: match?.[1] };
+    }
+
+    test('federated page lists the configured providers (github + slack)', async ({ server }) => {
+      const { generatePkcePair } = await import('@frontmcp/utils');
+      const { codeChallenge } = await generatePkcePair();
+
+      const { status, html } = await fetchFederatedPage(server.info.baseUrl, codeChallenge);
+
+      expect(status).toBe(200);
+      expect(html).toContain('Select Authorization Providers');
+      // The declared upstream provider ids are listed as selectable checkboxes.
+      expect(html).toContain('value="github"');
+      expect(html).toContain('value="slack"');
+      // No __parent__ placeholder leaks into the configured-provider path.
+      expect(html).not.toContain('__parent__');
+    });
+
+    test('refuses to mint a JWT until ≥1 provider is linked (Skip All)', async ({ server }) => {
+      const { generatePkcePair } = await import('@frontmcp/utils');
+      const { codeChallenge } = await generatePkcePair();
+
+      const { pendingAuthId } = await fetchFederatedPage(server.info.baseUrl, codeChallenge);
+      expect(pendingAuthId).toBeDefined();
+
+      // Simulate "Skip All" — federated callback with no providers selected.
+      const callbackUrl = new URL(`${server.info.baseUrl}/oauth/callback`);
+      callbackUrl.searchParams.set('pending_auth_id', pendingAuthId!);
+      callbackUrl.searchParams.set('federated', 'true');
+      callbackUrl.searchParams.set('email', 'user@example.com');
+
+      const res = await fetch(callbackUrl.toString(), { redirect: 'manual' });
+      const body = await res.text();
+
+      // No authorization code is issued; the gate rejects with a 400.
+      expect(res.status).toBe(400);
+      expect(body).toContain('At least 1 provider');
+    });
+
+    test('links one provider end-to-end, mints a JWT, and a tool reads the downstream token', async ({ server }) => {
+      const { generateCodeVerifier, sha256Base64url } = await import('@frontmcp/utils');
+
+      // FrontMCP-side PKCE for the authorization-code → token exchange.
+      const verifier = generateCodeVerifier();
+      const challenge = sha256Base64url(verifier);
+
+      const { pendingAuthId, status } = await fetchFederatedPage(server.info.baseUrl, challenge);
+      expect(status).toBe(200);
+      expect(pendingAuthId).toBeDefined();
+
+      // Drive the multi-hop federated flow with manual redirect following.
+      // 1) Submit the federated form selecting github.
+      const callbackUrl = new URL(`${server.info.baseUrl}/oauth/callback`);
+      callbackUrl.searchParams.set('pending_auth_id', pendingAuthId!);
+      callbackUrl.searchParams.set('federated', 'true');
+      callbackUrl.searchParams.set('email', 'user@example.com');
+      callbackUrl.searchParams.set('providers', 'github');
+
+      let current = callbackUrl.toString();
+      let clientCode: string | undefined;
+
+      // Follow the redirect chain: callback → github mock → /oauth/provider/github/callback
+      // → (consent screen) → client redirect_uri (carrying the FrontMCP authorization code).
+      // Consent mode is enabled on this server, so after the last provider is
+      // linked the provider-callback renders the tool-consent screen (200 HTML)
+      // which GETs back to /oauth/provider/_consent/callback with the selection.
+      for (let hop = 0; hop < 10; hop++) {
+        const res = await fetch(current, { redirect: 'manual' });
+        const location = res.headers.get('location');
+        if (!location) {
+          // No redirect: this should be the consent screen. Submit a selection
+          // (consent_session is round-tripped as a hidden field).
+          const html = await res.text();
+          expect(res.status).toBe(200);
+          expect(html).toContain('Select Tools to Enable');
+          const sessionMatch = html.match(/name="consent_session"\s+value="([^"]+)"/);
+          expect(sessionMatch).toBeTruthy();
+
+          const consentUrl = new URL(`${server.info.baseUrl}/oauth/provider/_consent/callback`);
+          consentUrl.searchParams.set('consent_session', sessionMatch![1]);
+          consentUrl.searchParams.set('consent_submitted', '1');
+          // Select the github tool so the downstream-token tool call is consented.
+          consentUrl.searchParams.set('tools', 'github-repos');
+          current = consentUrl.toString();
+          continue;
+        }
+        const next = new URL(location, current);
+        if (next.origin === 'http://127.0.0.1:65000' && next.pathname === '/callback') {
+          clientCode = next.searchParams.get('code') ?? undefined;
+          break;
+        }
+        current = next.toString();
+      }
+
+      expect(clientCode).toBeDefined();
+
+      // 2) Exchange the FrontMCP authorization code for a JWT.
+      const tokenRes = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: clientCode!,
+          redirect_uri: 'http://127.0.0.1:65000/callback',
+          client_id: 'e2e-client',
+          code_verifier: verifier,
+        }).toString(),
+      });
+      expect(tokenRes.status).toBe(200);
+      const tokenJson = (await tokenRes.json()) as { access_token?: string };
+      expect(tokenJson.access_token).toBeDefined();
+
+      // 3) Use the JWT to call a tool that reads the downstream github token.
+      const client = await server.createClient({ token: tokenJson.access_token! });
+      try {
+        const result = await client.tools.call('github-repos', { limit: 2 });
+        expect(result).toBeSuccessful();
+        const data = result.json<{ success: boolean; tokenReceived: boolean; providerId?: string }>();
+        // The orchestration accessor resolved a REAL downstream github token.
+        expect(data.tokenReceived).toBe(true);
+        expect(data.providerId).toBe('github');
+      } finally {
+        await client.disconnect();
+      }
     });
   });
 

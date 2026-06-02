@@ -287,6 +287,14 @@ export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');
 
+// OAuth flow hooks (local-mode authorization server). Exported so the OAuth AS
+// flow augmentations land in the public type graph and `FlowHooksOf('oauth:*')`
+// typechecks for consumers — no more `as any` to hook login/callback/token (#460).
+export const OAuthAuthorizeHook = FlowHooksOf('oauth:authorize');
+export const OAuthCallbackHook = FlowHooksOf('oauth:callback');
+export const OAuthTokenHook = FlowHooksOf('oauth:token');
+export const OAuthRegisterHook = FlowHooksOf('oauth:register');
+
 // Resource hooks
 export const ResourceHook = FlowHooksOf('resources:read-resource');
 export const ListResourcesHook = FlowHooksOf('resources:list-resources');

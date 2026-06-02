@@ -4,6 +4,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { ResourceTemplate } from '../../../common';
 import { ResourceContext, type ResourceCompletionResult } from '../../../common/interfaces';
+import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { serializeSkillMd } from '../sep-2640.builders';
 import { SKILL_MD_MIME_TYPE } from '../sep-2640.constants';
 import { findAndLoadSkillByPath, getSepVisibleSkills } from '../sep-2640.resource-helpers';
@@ -32,14 +33,19 @@ type Params = { skillPath: string };
 })
 export class Sep2640SkillMdResource extends ResourceContext<Params> {
   async skillPathCompleter(partial: string): Promise<ResourceCompletionResult> {
-    const skills = getSepVisibleSkills(this.scope);
+    const visible = getSepVisibleSkills(this.scope);
+    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
     const paths = skills.map((s) => s.getSkillPath());
     const filtered = partial ? paths.filter((p) => p.toLowerCase().startsWith(partial.toLowerCase())) : paths;
     return { values: filtered, total: filtered.length };
   }
 
   async execute(uri: string, params: Params): Promise<ReadResourceResult> {
-    const { loadResult } = await findAndLoadSkillByPath(this.scope, params.skillPath);
+    const { loadResult, instance } = await findAndLoadSkillByPath(this.scope, params.skillPath);
+    // Deny direct reads of authority-gated skills (mirrors a denied tool call:
+    // AuthorityDeniedError, MCP code -32003). No-op when the skill has no
+    // `authorities` or no engine is configured.
+    await assertSkillAuthorized(this.scope, instance, this.getAuthInfo() as Record<string, unknown>);
     const raw = serializeSkillMd(loadResult.skill);
 
     return {

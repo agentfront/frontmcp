@@ -6,6 +6,9 @@
  */
 
 export { SqliteKvStore } from './sqlite-kv.store';
+export { SqliteStorageAdapter } from './sqlite-storage.adapter';
+export { openDatabase } from './open-database';
+export { loadBetterSqlite3 } from './better-sqlite3-loader';
 export { SqliteSessionStore } from './sqlite-session.store';
 export type { SqliteSessionStoreOptions, SessionStoreInterface, StoredSessionData } from './sqlite-session.store';
 export { SqliteElicitationStore } from './sqlite-elicitation.store';

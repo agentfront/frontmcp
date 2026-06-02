@@ -71,7 +71,7 @@ Authentication can be configured at two levels:
 
   </Tab>
   <Tab title="App Level">
-    Each app defines its own auth provider (required when `splitByApp: true`):
+    Each app defines its own full auth config — mode + options (required when `splitByApp: true`):
 
     ```typescript
     @App({
@@ -107,7 +107,7 @@ The guarantees below apply to FrontMCP's own implementation:
 <Check>**PKCE Required** - Only S256 code challenge method supported (downstream)</Check>
 <Check>**Authorization Code Flow** - No implicit or password grants</Check>
 <Check>**Refresh Token Rotation** - FrontMCP-issued refresh tokens rotate on each use (`local` mode; `remote` mode mirrors upstream behavior)</Check>
-<Check>**JWT Access Tokens** - Signed with RS256 or ES256</Check>
+<Check>**JWT Access Tokens** - FrontMCP-issued access tokens are signed with **HS256** using your `JWT_SECRET` (RS256/ES256 apply only to the JWKS-published discovery key and to verifying transparent upstream-issued tokens)</Check>
 
 ## Session Management
 

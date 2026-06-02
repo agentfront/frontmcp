@@ -19,17 +19,21 @@
 import {
   buildFederatedLoginPage,
   buildIncrementalAuthPage,
-  buildLoginPage,
+  createFederatedAuthSession,
   escapeHtml,
+  renderLocalLoginPage,
+  startNextProvider,
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
   type DetectedAuthProvider,
   type FederatedLoginStateRecord,
-  type InMemoryAuthorizationStore,
+  type LoginConfig,
   type ProviderCard,
+  type ProviderPkce,
 } from '@frontmcp/auth';
 import { z, type ZodError } from '@frontmcp/lazy-zod';
+import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 import {
   computeResource,
@@ -41,12 +45,14 @@ import {
   httpRespond,
   HttpTextSchema,
   isOrchestratedMode,
+  isRemoteMode,
   resourceUriMatches,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
 import { CimdService, clientMetadataDocumentSchema } from '../cimd';
+import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 /**
@@ -155,6 +161,13 @@ const stateSchema = z.object({
   targetAppId: z.string().optional().describe('Target app ID for incremental authorization'),
   targetToolId: z.string().optional().describe('Target tool ID that triggered the incremental auth'),
   existingSessionId: z.string().optional().describe('Existing session ID for incremental auth'),
+  /**
+   * Apps the client already holds a grant for (the prior `authorized_apps`
+   * claim), carried forward on an incremental authorize so the newly-minted
+   * token is the UNION of prior apps + the target app. Only consulted when
+   * incremental auth is enabled.
+   */
+  priorAuthorizedAppIds: z.array(z.string()).optional().describe('Prior authorized app IDs to carry forward'),
   // Federated Login (multi-provider)
   requiresFederatedLogin: z.boolean().default(false).describe('Whether this auth requires federated login UI'),
   // Consent Flow
@@ -195,6 +208,26 @@ declare global {
 const name = 'oauth:authorize' as const;
 const Stage = StageHookOf(name);
 
+/**
+ * Top-level `auth.providers` declared for local-mode multi-provider
+ * orchestration. Only `local` mode carries `providers`; everything else
+ * returns an empty list so the app-level federation path is unchanged.
+ */
+function getConfiguredProviders(auth: unknown): Array<{ id: string; scopes?: string[] }> {
+  const providers = (auth as { providers?: unknown } | undefined)?.providers;
+  if (!Array.isArray(providers)) {
+    return [];
+  }
+  return providers.filter(
+    (p): p is { id: string; scopes?: string[] } => !!p && typeof (p as { id?: unknown }).id === 'string',
+  );
+}
+
+/** Provider ids declared via top-level `auth.providers` (local-mode federation). */
+function getConfiguredProviderIds(auth: unknown): string[] {
+  return getConfiguredProviders(auth).map((p) => p.id);
+}
+
 @Flow({
   name,
   plan,
@@ -225,16 +258,33 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const mode = request.query['mode'] as string | undefined;
     const isIncrementalAuth = mode === 'incremental' || !!targetAppId;
 
+    // Apps the client already holds a grant for. The client carries its current
+    // `authorized_apps` claim forward via `apps=` (comma-separated or repeated)
+    // so an incremental authorize expands rather than replaces the grant.
+    const appsParam = request.query['apps'];
+    let priorAuthorizedAppIds: string[] | undefined;
+    if (appsParam) {
+      const raw = Array.isArray(appsParam) ? appsParam : [appsParam];
+      const ids = raw
+        .flatMap((v) => String(v).split(','))
+        .map((s) => s.trim())
+        .filter(Boolean);
+      priorAuthorizedAppIds = ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+    }
+
     const isDefaultAuthProvider = !metadata.auth;
 
-    // Check if orchestrated mode with multiple providers (requires federated login)
-    // This is determined by checking if there are multiple apps with different auth providers
+    // Check if orchestrated mode requires federated login. Two triggers:
+    // 1. Top-level `auth.providers` declared (local-mode multi-provider
+    //    orchestration — GitHub/Slack/Jira as a turnkey local default).
+    // 2. Apps with their own auth providers (app-level federation).
     let requiresFederatedLogin = false;
     if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+      const configProviders = getConfiguredProviderIds(metadata.auth);
       // Check if scope has apps with different auth providers
       const apps = this.scope.apps.getApps();
       const appsWithAuth = apps.filter((app) => app.metadata.auth);
-      requiresFederatedLogin = appsWithAuth.length > 0;
+      requiresFederatedLogin = configProviders.length > 0 || appsWithAuth.length > 0;
     }
 
     // Check if consent flow is enabled
@@ -255,6 +305,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       // Federated Login
       requiresFederatedLogin,
       // Consent Flow
@@ -390,6 +441,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       requiresFederatedLogin,
       requiresConsent,
     } = this.state;
@@ -407,7 +459,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
     const localAuth = auth as LocalPrimaryAuth;
-    const store = localAuth.authorizationStore as InMemoryAuthorizationStore;
+    const store = localAuth.authorizationStore;
 
     // Build federated login state if multiple providers
     let federatedLogin: FederatedLoginStateRecord | undefined;
@@ -416,15 +468,27 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const apps = this.scope.apps.getApps();
       const providerIds: string[] = [];
 
-      // Add parent provider
-      if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+      // Add top-level configured providers (local-mode multi-provider
+      // orchestration — these have real registered provider configs).
+      for (const id of getConfiguredProviderIds(metadata.auth)) {
+        if (!providerIds.includes(id)) {
+          providerIds.push(id);
+        }
+      }
+
+      // Add parent provider only when there are no top-level configured
+      // providers (the legacy app-level federation path).
+      if (providerIds.length === 0 && metadata.auth && isOrchestratedMode(metadata.auth)) {
         providerIds.push('__parent__');
       }
 
       // Add app-level providers
       for (const app of apps) {
         if (app.metadata.auth) {
-          providerIds.push(app.metadata.id || app.metadata.name);
+          const appId = app.metadata.id || app.metadata.name;
+          if (!providerIds.includes(appId)) {
+            providerIds.push(appId);
+          }
         }
       }
 
@@ -438,9 +502,12 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // Build consent state if enabled
     let consent: ConsentStateRecord | undefined;
     if (requiresConsent) {
-      // Get all available tools from the scope
-      const tools = this.scope.tools.getTools();
-      const availableToolIds = tools.map((t) => t.metadata.id).filter((id): id is string => id !== undefined);
+      // Derive the offerable tool ids from the scope via the SHARED projection
+      // (effective runtime ids, `excludedTools` removed) so the authorize-time
+      // available set, the consent screen, and the call-time enforcement all
+      // agree on the same identifiers.
+      const consentConfig = metadata.auth && isOrchestratedMode(metadata.auth) ? metadata.auth.consent : undefined;
+      const { availableToolIds } = projectConsentTools(this.scope, consentConfig?.excludedTools);
 
       consent = {
         enabled: true,
@@ -465,6 +532,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId,
       targetToolId,
       existingSessionId,
+      priorAuthorizedAppIds,
       // Federated Login State
       federatedLogin,
       // Consent State
@@ -498,6 +566,16 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // Remote mode (`mode: 'remote'`): a single MANDATORY upstream provider.
+    // Skip BOTH the in-tree login page and the provider-selection page — start
+    // the federated session for that one provider and redirect straight to the
+    // upstream IdP. Incremental auth still renders its own page (handled below).
+    const { metadata } = this.scope;
+    if (metadata.auth && isRemoteMode(metadata.auth) && !isIncrementalAuth) {
+      await this.startRemoteFederation(pendingAuthId, validatedRequest);
+      return;
+    }
+
     // Use CIMD client_name if available, otherwise fall back to client_id
     const clientDisplayName = cimdMetadata?.client_name ?? validatedRequest.client_id;
 
@@ -525,10 +603,25 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     if (requiresFederatedLogin) {
       const apps = this.scope.apps.getApps();
       const providers: DetectedAuthProvider[] = [];
-
-      // Add parent provider
       const { metadata } = this.scope;
-      if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+
+      // Add top-level configured providers (local-mode multi-provider
+      // orchestration). These are real upstream providers the user links.
+      const configuredProviders = getConfiguredProviders(metadata.auth);
+      const hasConfiguredProviders = configuredProviders.length > 0;
+      for (const p of configuredProviders) {
+        providers.push({
+          id: p.id,
+          mode: 'local',
+          appIds: [p.id],
+          scopes: p.scopes ?? [],
+          isParentProvider: false,
+        });
+      }
+
+      // Add parent provider only on the legacy app-level federation path
+      // (no top-level configured providers).
+      if (!hasConfiguredProviders && metadata.auth && isOrchestratedMode(metadata.auth)) {
         providers.push({
           id: '__parent__',
           mode: metadata.auth.mode,
@@ -541,21 +634,24 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // Add app-level providers
       for (const app of apps) {
         if (app.metadata.auth) {
-          providers.push({
-            id: app.metadata.id || app.metadata.name,
-            providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
-            mode: app.metadata.auth.mode,
-            appIds: [app.metadata.id || app.metadata.name],
-            scopes: [],
-            isParentProvider: false,
-          });
+          const appId = app.metadata.id || app.metadata.name;
+          if (!providers.some((p) => p.id === appId)) {
+            providers.push({
+              id: appId,
+              providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
+              mode: app.metadata.auth.mode,
+              appIds: [appId],
+              scopes: [],
+              isParentProvider: false,
+            });
+          }
         }
       }
 
       const detection: AuthProviderDetectionResult = {
         providers: new Map(providers.map((p) => [p.id, p])),
         requiresOrchestration: true,
-        parentProviderId: '__parent__',
+        parentProviderId: hasConfiguredProviders ? undefined : '__parent__',
         childProviderIds: providers.filter((p) => !p.isParentProvider).map((p) => p.id),
         uniqueProviderCount: providers.length,
         validationErrors: [],
@@ -585,6 +681,91 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     });
 
     this.respond(httpRespond.html(loginHtml));
+  }
+
+  /**
+   * Remote mode (`mode: 'remote'`) auto-federation.
+   *
+   * Builds a federated auth session for the SINGLE mandatory upstream provider
+   * registered by {@link LocalPrimaryAuth.registerRemoteProvider}, starts it
+   * (fresh PKCE + state), persists the session, and redirects straight to the
+   * upstream IdP's authorization endpoint. This reuses the exact federated
+   * machinery the multi-provider local path uses (`/oauth/provider/:id/callback`
+   * then completes the exchange, stores upstream tokens, and mints the FrontMCP
+   * session token whose identity comes from the upstream user) — but skips the
+   * in-tree login page and the provider-selection page entirely.
+   *
+   * No identity is collected in-tree: the federated session is created with an
+   * EMPTY `userInfo` so the minted token's `sub`/`email`/`name` derive solely
+   * from the upstream provider (see the provider-callback flow).
+   */
+  private async startRemoteFederation(pendingAuthId: string, validatedRequest: OAuthAuthorizeRequest): Promise<void> {
+    const auth = this.scope.auth;
+    if (!auth || !('federatedSessionStore' in auth)) {
+      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
+      return;
+    }
+    const localAuth = auth as LocalPrimaryAuth;
+    const providerId = localAuth.remoteProviderId;
+
+    // No upstream provider registered (e.g. missing clientId / DCR not wired).
+    if (!providerId || !localAuth.getProviderConfig(providerId)) {
+      this.logger.error('Remote mode: no upstream provider configured for federation');
+      // Drop the pending authorization stored just before this call so it does
+      // not linger until TTL expiry after we abort the flow.
+      await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
+      this.respond(
+        httpRespond.html(this.renderErrorPage('server_error', 'Upstream identity provider is not configured'), 500),
+      );
+      return;
+    }
+
+    // Build a federated session for the single provider. Identity is left empty
+    // on purpose — it is filled from the upstream IdP in the provider callback.
+    const session = createFederatedAuthSession({
+      pendingAuthId,
+      clientId: validatedRequest.client_id,
+      redirectUri: validatedRequest.redirect_uri,
+      scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
+      state: validatedRequest.state,
+      resource: validatedRequest.resource,
+      userInfo: {},
+      frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
+      providerIds: [providerId],
+    });
+
+    // Fresh PKCE + state for the upstream authorization-code exchange.
+    const verifier = generateCodeVerifier();
+    const challenge = sha256Base64url(verifier);
+    const pkce: ProviderPkce = { verifier, challenge, method: 'S256' };
+    const providerState = `federated:${session.id}:${randomUUID()}`;
+    startNextProvider(session, pkce, providerState);
+
+    await localAuth.federatedSessionStore.store(session);
+
+    const redirectUrl = await localAuth.buildProviderAuthorizeUrl(providerId, {
+      state: providerState,
+      codeChallenge: pkce.challenge,
+      codeChallengeMethod: 'S256',
+    });
+
+    if (!redirectUrl) {
+      this.logger.error(`Remote mode: failed to build authorize URL for provider: ${providerId}`);
+      // The federated session was created above; tear it down AND drop the
+      // pending authorization so neither lingers until TTL expiry.
+      await localAuth.federatedSessionStore.delete(session.id);
+      await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('server_error', `Failed to initiate authentication with provider: ${providerId}`),
+          500,
+        ),
+      );
+      return;
+    }
+
+    this.logger.info(`Remote mode: redirecting to upstream provider: ${providerId}`);
+    this.respond(httpRespond.redirect(redirectUrl));
   }
 
   @Stage('validateOutput')
@@ -629,7 +810,13 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Render a simple login page using HTMX templates
+   * Render the local login page.
+   *
+   * Honors `auth.login` (Checkpoint 3a): a `login.render` override yields full
+   * custom HTML, `login.fields` extends the built-in form, and otherwise the
+   * unchanged default email/name page is rendered. Rendering is delegated to
+   * the shared `renderLocalLoginPage` helper so the authorize flow and the
+   * callback error re-render stay in sync.
    */
   private renderLoginPage(params: {
     pendingAuthId: string;
@@ -637,17 +824,29 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     clientName?: string;
     scope: string;
     redirectUri: string;
-    logoUri?: string; // TODO: Add logo support to buildLoginPage template
+    logoUri?: string;
   }): string {
-    const { pendingAuthId, clientId, clientName, scope } = params;
+    const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
     const callbackPath = `${this.scope.fullPath}/oauth/callback`;
 
-    return buildLoginPage({
+    // Read the optional login customization from the local auth options.
+    // Only local mode carries `login`; any other mode leaves it undefined,
+    // preserving the default page exactly.
+    const auth = this.scope.metadata.auth;
+    const login: LoginConfig | undefined =
+      auth && auth.mode === 'local' ? (auth as { login?: LoginConfig }).login : undefined;
+
+    const ctx = {
+      clientId,
       clientName: clientName ?? clientId,
-      scope,
+      logoUri,
+      scopes: scope ? scope.split(' ').filter(Boolean) : [],
       pendingAuthId,
       callbackPath,
-    });
+      fields: login?.fields ?? {},
+    };
+
+    return renderLocalLoginPage(login, ctx);
   }
 
   /**
@@ -706,284 +905,6 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       pendingAuthId,
       callbackPath,
     });
-  }
-
-  /**
-   * Render consent page for tool selection
-   * This is a placeholder - in production, use Juris/Svelte for the UI
-   */
-  private renderConsentPage(params: {
-    pendingAuthId: string;
-    tools: Array<{ id: string; name: string; description?: string; appId: string; appName: string }>;
-    userEmail?: string;
-    userName?: string;
-  }): string {
-    const { pendingAuthId, tools, userEmail, userName } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/consent`;
-
-    // Group tools by app
-    const toolsByApp = tools.reduce(
-      (acc, tool) => {
-        if (!acc[tool.appId]) {
-          acc[tool.appId] = { appName: tool.appName, tools: [] };
-        }
-        acc[tool.appId].tools.push(tool);
-        return acc;
-      },
-      {} as Record<string, { appName: string; tools: typeof tools }>,
-    );
-
-    // Build tool cards HTML grouped by app
-    const appGroupsHtml = Object.entries(toolsByApp)
-      .map(([appId, { appName, tools: appTools }]) => {
-        const toolCardsHtml = appTools
-          .map(
-            (tool) => `
-        <label class="tool-card">
-          <input type="checkbox" name="tools" value="${escapeHtml(tool.id)}" checked>
-          <div class="tool-content">
-            <div class="tool-name">${escapeHtml(tool.name)}</div>
-            ${tool.description ? `<div class="tool-description">${escapeHtml(tool.description)}</div>` : ''}
-          </div>
-        </label>
-      `,
-          )
-          .join('');
-
-        return `
-        <div class="app-group">
-          <div class="app-group-header">
-            <span class="app-group-icon">${escapeHtml(appName.charAt(0).toUpperCase())}</span>
-            <span class="app-group-name">${escapeHtml(appName)}</span>
-            <button type="button" class="toggle-app" data-app-id="${escapeHtml(
-              appId,
-            )}" onclick="toggleAppTools(this.dataset.appId)">Toggle All</button>
-          </div>
-          <div class="app-tools" data-app="${escapeHtml(appId)}">
-            ${toolCardsHtml}
-          </div>
-        </div>
-      `;
-      })
-      .join('');
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Select Tools - FrontMCP</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .consent-container {
-      background: white;
-      padding: 40px;
-      border-radius: 12px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-      width: 100%;
-      max-width: 700px;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    h1 { color: #333; margin-bottom: 10px; font-size: 24px; }
-    .subtitle { color: #666; margin-bottom: 20px; font-size: 14px; line-height: 1.5; }
-    .user-info {
-      background: #f8f9fa;
-      padding: 12px 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-      font-size: 14px;
-    }
-    .user-info strong { color: #333; }
-    .select-controls {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 16px;
-      align-items: center;
-    }
-    .select-controls label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      color: #666;
-      cursor: pointer;
-    }
-    .app-group {
-      background: #f8f9fa;
-      border-radius: 12px;
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-    .app-group-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background: #e9ecef;
-    }
-    .app-group-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: 600;
-    }
-    .app-group-name { font-weight: 600; color: #333; flex: 1; }
-    .toggle-app {
-      padding: 6px 12px;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .toggle-app:hover { background: #f0f0f0; }
-    .app-tools { padding: 12px; }
-    .tool-card {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 12px;
-      background: white;
-      border-radius: 8px;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .tool-card:hover { background: #f0f4ff; }
-    .tool-card:last-child { margin-bottom: 0; }
-    .tool-card input { margin-top: 2px; }
-    .tool-content { flex: 1; }
-    .tool-name { font-weight: 500; color: #333; font-size: 14px; }
-    .tool-description { font-size: 12px; color: #666; margin-top: 4px; }
-    .button-group { display: flex; gap: 12px; margin-top: 24px; }
-    button {
-      flex: 1;
-      padding: 14px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .btn-confirm {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    .btn-confirm:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
-    .btn-cancel {
-      background: #e5e7eb;
-      color: #374151;
-    }
-    .btn-cancel:hover { background: #d1d5db; }
-    .selection-summary {
-      background: #f0f9ff;
-      border: 1px solid #bae6fd;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-top: 16px;
-      font-size: 13px;
-      color: #0369a1;
-    }
-  </style>
-</head>
-<body>
-  <div class="consent-container">
-    <h1>Select Tools to Enable</h1>
-    <p class="subtitle">
-      Choose which tools you want to make available to the AI assistant.
-      You can enable or disable tools at any time.
-    </p>
-
-    ${
-      userEmail || userName
-        ? `
-    <div class="user-info">
-      Logged in as: <strong>${escapeHtml(userName || userEmail || '')}</strong>
-    </div>
-    `
-        : ''
-    }
-
-    <form action="${escapeHtml(callbackPath)}" method="POST" id="consent-form">
-      <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
-
-      <div class="select-controls">
-        <label>
-          <input type="checkbox" id="select-all" onchange="toggleAllTools(this)" checked>
-          Select all tools
-        </label>
-        <span style="color: #999; font-size: 12px;" id="selection-count">${tools.length} of ${
-          tools.length
-        } selected</span>
-      </div>
-
-      ${appGroupsHtml}
-
-      <div class="selection-summary" id="selection-summary">
-        Selected tools will be available to the AI assistant.
-      </div>
-
-      <div class="button-group">
-        <button type="button" class="btn-cancel" onclick="history.back()">Cancel</button>
-        <button type="submit" class="btn-confirm">Confirm Selection</button>
-      </div>
-    </form>
-  </div>
-
-  <script>
-    function toggleAllTools(checkbox) {
-      const checkboxes = document.querySelectorAll('input[name="tools"]');
-      checkboxes.forEach(cb => cb.checked = checkbox.checked);
-      updateCount();
-    }
-
-    function toggleAppTools(appId) {
-      const container = document.querySelector(\`.app-tools[data-app="\${appId}"]\`);
-      const checkboxes = container.querySelectorAll('input[name="tools"]');
-      const allChecked = [...checkboxes].every(cb => cb.checked);
-      checkboxes.forEach(cb => cb.checked = !allChecked);
-      updateSelectAll();
-      updateCount();
-    }
-
-    function updateSelectAll() {
-      const all = document.querySelectorAll('input[name="tools"]');
-      const checked = document.querySelectorAll('input[name="tools"]:checked');
-      document.getElementById('select-all').checked = all.length === checked.length;
-    }
-
-    function updateCount() {
-      const all = document.querySelectorAll('input[name="tools"]');
-      const checked = document.querySelectorAll('input[name="tools"]:checked');
-      document.getElementById('selection-count').textContent = \`\${checked.length} of \${all.length} selected\`;
-    }
-
-    // Add change listeners to all tool checkboxes
-    document.querySelectorAll('input[name="tools"]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        updateSelectAll();
-        updateCount();
-      });
-    });
-  </script>
-</body>
-</html>`;
   }
 
   /**

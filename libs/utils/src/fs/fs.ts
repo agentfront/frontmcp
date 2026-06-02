@@ -141,6 +141,25 @@ export async function mkdir(p: string, options?: { recursive?: boolean; mode?: n
 }
 
 /**
+ * Ensure a directory exists, creating it recursively if needed (synchronous).
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * Use this only when async operations are not possible (e.g., a synchronous
+ * constructor that must open a file path before the first I/O). Prefer the
+ * async `ensureDir` in most cases.
+ *
+ * @param p - Path to directory
+ *
+ * @example
+ * ensureDirSync('/path/to/new/directory');
+ */
+export function ensureDirSync(p: string): void {
+  const fs = getFs();
+  fs.mkdirSync(p, { recursive: true });
+}
+
+/**
  * Rename/move a file or directory.
  *
  * **Node.js only** - throws an error if called in browser.

@@ -93,17 +93,34 @@ export class Server {}
 
 ## Token Storage
 
+`tokenStorage` (on `local`/`remote` auth) persists authorization codes, refresh tokens, and federated-auth sessions. Three backends are supported.
+
 ### In-Memory (Development)
 
 ```typescript
-tokenStorage: 'memory'
+tokenStorage: 'memory' // default
 ```
 
 <Info>
   In-memory storage loses all data on restart. Use only for development.
 </Info>
 
-### Redis (Production)
+### SQLite (Single-Node Persistence)
+
+```typescript
+tokenStorage: {
+  sqlite: {
+    path: './data/auth.sqlite',          // required
+    encryption: { secret: process.env.AUTH_DB_SECRET! }, // optional at-rest encryption
+    walMode: true,                       // default true
+    ttlCleanupIntervalMs: 60000,         // default 60000
+  },
+}
+```
+
+Requires `@frontmcp/storage-sqlite` (lazy-loaded).
+
+### Redis (Multi-Instance Persistence)
 
 ```typescript
 tokenStorage: {
@@ -187,14 +204,14 @@ FrontMCP uses default token lifetimes:
 auth: {
   mode: 'local',
   refresh: {
-    enabled: true,      // Enable automatic token refresh
-    skewSeconds: 60,    // Refresh 60s before expiry
+    enabled: true,      // Proactively refresh upstream/downstream provider creds
+    skewSeconds: 60,    // …this many seconds before THOSE provider tokens expire
   },
 }
 ```
 
 <Info>
-  Token lifetimes are currently set at the server level. Refresh tokens are rotated on each use per OAuth 2.1 best practices.
+  The `refresh` block governs proactive refresh of **upstream/downstream provider credentials** (the tokens read via `this.authProviders` / `this.orchestration.getToken`), not the server's own session token. There is no background refresher for FrontMCP's own access token: the **client** refreshes its session token explicitly by calling `POST /oauth/token` with `grant_type=refresh_token` (see [Token Refresh Flow](#token-refresh-flow)). Server-issued token lifetimes are fixed at the server level, and refresh tokens are rotated on each use per OAuth 2.1 best practices.
 </Info>
 
 ---
@@ -223,18 +240,17 @@ sequenceDiagram
 
 ## JWT Structure
 
-Access tokens are JWTs with standard claims:
+Access tokens issued by `local`/`remote` mode are JWTs signed with **HS256** (symmetric, `JWT_SECRET`). There is no `kid` because there is no key set to select from:
 
 ```json
 {
   "header": {
-    "alg": "RS256",
-    "typ": "JWT",
-    "kid": "key-id-123"
+    "alg": "HS256",
+    "typ": "JWT"
   },
   "payload": {
     "sub": "user-uuid",
-    "iss": "https://api.myservice.com",
+    "iss": "http://localhost:3001",
     "aud": "https://api.myservice.com",
     "exp": 1234567890,
     "iat": 1234567800,
@@ -247,13 +263,17 @@ Access tokens are JWTs with standard claims:
 
 ### Custom Claims
 
-Custom claims are sourced from the upstream identity provider (or the in-tree IdP for `local` mode) — FrontMCP does not mint extra claims. Configure your IdP to include the claims you need (roles, tenant ID, etc.) and then read them via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
+In transparent/remote modes, custom claims are sourced from the upstream identity provider — configure your IdP to include the claims you need (roles, tenant ID, etc.).
+
+In `local` mode, your `authenticate()` handler can return and customize the claims FrontMCP embeds in the issued token: resolve a `{ ok: true, sub?, claims? }` result and the `claims` object is merged into the minted access-token payload (namespaced to avoid clobbering reserved claims like `sub`/`exp`/`iss`).
+
+Either way, read the claims via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
 
 ---
 
-## Consent & Scopes
+## Consent & Tool Authorization
 
-Enable consent to let users select granted permissions:
+Enable `consent` to enforce a per-token authorized-tools claim:
 
 ```typescript
 auth: {
@@ -262,12 +282,15 @@ auth: {
 }
 ```
 
-### How Consent Works
+### How Consent Works Today
 
-1. User authenticates
-2. FrontMCP displays available tools/resources/prompts
-3. User selects which to grant
-4. Access token includes only selected scopes
+1. User authenticates via the built-in login page.
+2. `/oauth/callback` renders an **interactive tool-selection screen** listing the available tools (honoring `groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `customMessage`, `excludedTools`, `defaultSelectedTools`).
+3. The user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent.selectedTools` claim, and **enforced on every `tools/call`** — an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`).
+
+<Note>
+  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and stay all-tools-allowed. `excludedTools` are always available. `rememberConsent` (default `true`) persists each user's per-client selection and reuses it on the next login, re-prompting only when a NEW tool appears; set it `false` to always re-show the screen.
+</Note>
 
 ### Tool-Level Scopes
 
@@ -286,62 +309,26 @@ export class SendMessageTool {
 
 ---
 
-## JWKS Management
+## Signing Secret (HS256)
 
-FrontMCP manages cryptographic keys for token signing:
+`local` and `remote` modes sign the tokens they issue with **HS256** — a single symmetric secret read from the `JWT_SECRET` environment variable. The same secret signs and verifies tokens; there is no RSA/EC key pair and no private key to manage.
 
-### Auto-Generated Keys
-
-By default, keys are auto-generated at startup:
-
-```typescript
-auth: {
-  mode: 'local',
-  // Keys auto-generated
-}
+```bash
+# Generate a strong secret once and keep it stable.
+JWT_SECRET=$(openssl rand -hex 32)
 ```
 
 <Warning>
-  Auto-generated keys are lost on restart. Tokens signed with old keys become invalid.
+  If `JWT_SECRET` is unset, FrontMCP logs a warning and uses a **random per-process secret**, so every restart invalidates previously issued tokens. Set a stable `JWT_SECRET` for any deployment where tokens must survive a restart.
 </Warning>
 
-### Persistent Keys
+### Rotating the secret
 
-Provide keys for stable token validation across restarts:
+Rotating `JWT_SECRET` immediately invalidates every token signed with the old value — connected clients must re-authenticate. There is no built-in dual-secret overlap window; schedule rotations during a maintenance window or rely on short access-token lifetimes plus refresh.
 
-```typescript
-auth: {
-  mode: 'local',
-  local: {
-    signKey: {
-      kty: 'RSA',
-      // ... full JWK
-    },
-    jwks: {
-      keys: [/* public keys */],
-    },
-  },
-}
-```
-
-### Key Rotation
-
-For production, perform key rotation by deploying a new build with an updated `signKey` while keeping the previous keys in `jwks` until in-flight tokens have expired:
-
-```typescript
-auth: {
-  mode: 'local',
-  local: {
-    signKey: currentPrivateKey,
-    jwks: { keys: [currentPublicKey, previousPublicKey] }, // publish ONLY public keys for verification
-    issuer: 'https://your-server.example.com',
-  },
-}
-```
-
-<Warning>
-`signKey` holds the private signing material; `jwks` is the **public** key set published at `/.well-known/jwks.json` for clients to verify tokens. Never put private JWKs into `jwks` — doing so exposes the private key.
-</Warning>
+<Info>
+  `transparent` mode is the asymmetric path: tokens are verified against the **upstream IdP's** JWKS (`providerConfig.jwksUri` / `jwks`), not a local key. In `local`/`remote` mode, `/.well-known/jwks.json` **does** publish an auto-generated asymmetric (RS256 by default) public key for OAuth-discovery compatibility — but that key is **not** used to verify the FrontMCP-issued access tokens, which are HS256 and always verified with `JWT_SECRET`.
+</Info>
 
 ---
 
@@ -357,8 +344,8 @@ sequenceDiagram
 
     Client->>FrontMCP: Request + Bearer token
 
-    alt Orchestrated/Public Mode
-        FrontMCP->>JWKS: Get local JWKS
+    alt Local/Remote/Public Mode
+        Note over FrontMCP: HS256 symmetric secret (JWT_SECRET)
     else Transparent Mode
         FrontMCP->>JWKS: Fetch provider JWKS (cached)
     end

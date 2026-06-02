@@ -299,8 +299,20 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     let verifyResult: VerifyResult;
 
     if (authMode === 'orchestrated') {
-      // Orchestrated: verify against local keys
-      verifyResult = await jwks.verifyGatewayToken(token, baseUrl);
+      // Orchestrated (gateway) mode — verify the token's HS256 signature +
+      // expiration via the auth instance's own secret. The instance is the sole
+      // holder of the signing key (LocalPrimaryAuth.verifyGatewayToken).
+      const auth = this.scope.auth;
+      if (!auth) {
+        this.logger.warn('No auth instance available for orchestrated verification');
+        this.respond({
+          kind: 'unauthorized',
+          wwwAuthenticateHeader: buildInvalidTokenHeader(prmUrl, 'Server misconfiguration'),
+          reason: 'No auth instance available',
+        });
+        return;
+      }
+      verifyResult = await auth.verifyGatewayToken(token, baseUrl);
     } else {
       // Transparent: verify against upstream provider
       const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;

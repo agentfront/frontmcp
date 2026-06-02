@@ -24,7 +24,7 @@
           "outExtension": {
             ".js": ".js"
           },
-          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/storage-sqlite", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },
@@ -46,7 +46,7 @@
           "outExtension": {
             ".js": ".mjs"
           },
-          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/storage-sqlite", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },
@@ -54,7 +54,11 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json"
+        "commands": [
+          "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json",
+          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm"
+        ],
+        "parallel": false
       }
     },
     "test": {

@@ -21,7 +21,8 @@ Configure mixed authentication modes and scope isolation for different apps in a
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
-import { FrontMcp, App } from '@frontmcp/sdk';
+
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 // Public app - no auth required
 @App({
@@ -39,8 +40,9 @@ class PublicApp {}
   plugins: [BillingAuditPlugin],
   auth: {
     mode: 'remote',
-    idpProviderUrl: 'https://auth.billing.com',
-    idpExpectedAudience: 'billing-api',
+    provider: 'https://auth.billing.com',
+    clientId: process.env['BILLING_OAUTH_CLIENT_ID']!,
+    expectedAudience: 'billing-api',
   },
 })
 class BillingApp {}
@@ -52,7 +54,8 @@ class BillingApp {}
   standalone: true,
   auth: {
     mode: 'remote',
-    idpProviderUrl: 'https://auth.admin.com',
+    provider: 'https://auth.admin.com',
+    clientId: process.env['ADMIN_OAUTH_CLIENT_ID']!,
   },
 })
 class AdminApp {}

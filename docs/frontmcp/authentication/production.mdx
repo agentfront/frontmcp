@@ -13,9 +13,10 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
 <Steps>
   <Step title="Configure Persistent Token Storage">
-    Replace in-memory storage with Redis or another persistent store.
+    Replace in-memory storage with a persistent store. Use **Redis** for multi-instance deployments, or **SQLite** for a single-instance/single-node deployment that needs tokens to survive a restart.
 
     ```typescript
+    // Redis — shared across instances
     auth: {
       mode: 'local',
       tokenStorage: {
@@ -28,6 +29,23 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
       },
     }
     ```
+
+    ```typescript
+    // SQLite — single-instance persistence (not shared across nodes)
+    auth: {
+      mode: 'local',
+      tokenStorage: {
+        sqlite: {
+          path: process.env.AUTH_DB_PATH ?? './data/auth.sqlite',
+          encryption: { secret: process.env.AUTH_DB_SECRET! },
+        },
+      },
+    }
+    ```
+
+    <Note>
+      SQLite persists tokens on the local disk of one node — it is **not** a shared store. For more than one instance behind a load balancer, use Redis so every instance reads the same authorization/refresh/session state.
+    </Note>
 
   </Step>
 
@@ -65,11 +83,11 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
   </Step>
 
   <Step title="Set Expected Audience">
-    For transparent mode, always validate the audience claim.
+    Validate the audience (`aud`) claim. `expectedAudience` is supported in **transparent**, **local**, and **remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens.
 
     ```typescript
     auth: {
-      mode: 'transparent',
+      mode: 'transparent', // also valid for mode: 'local' | 'remote'
       expectedAudience: 'https://api.yourservice.com',
     }
     ```
@@ -88,7 +106,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**Stable signing keys** - Provide keys via environment or secrets manager</Check>
 <Check>**PKCE enforcement** - OAuth 2.1 requires PKCE (S256 only)</Check>
 <Check>**Refresh token rotation** - Always rotate refresh tokens on use</Check>
-<Check>**Audience validation** - Validate `aud` claim in transparent mode</Check>
+<Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` (supported in transparent, local, and remote modes)</Check>
 
 ### Recommended
 
@@ -270,9 +288,15 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'Server', version: '1.0.0' },
   logging: {
-    level: LogLevel.INFO,
-    // Don't log tokens or secrets
-    redact: ['access_token', 'refresh_token', 'client_secret'],
+    level: LogLevel.Info,
+  },
+  // Redaction is an OBSERVABILITY concern — `logging` has no `redact` field.
+  // Configure `redactFields` under observability.logging to strip secrets from
+  // structured logs (requires the @frontmcp/observability integration).
+  observability: {
+    logging: {
+      redactFields: ['access_token', 'refresh_token', 'client_secret'],
+    },
   },
 })
 export class Server {}
@@ -383,9 +407,9 @@ FrontMCP includes a built-in **session rate limiter** with a sliding window algo
 
 | Setting | Default | Description |
 | ------- | ------- | ----------- |
-| Window | 60 seconds | Sliding window duration |
-| Max requests | 100 | Maximum requests per window per key |
-| Cleanup interval | Configurable | Auto-cleanup of expired entries |
+| Window | 60 seconds (`windowMs: 60000`) | Sliding window duration |
+| Max requests | 100 (`maxRequests`) | Maximum requests per window per key |
+| Cleanup interval | 60000 ms (`cleanupIntervalMs`, set `0` to disable) | Auto-cleanup of expired entries |
 
 The rate limiter tracks requests per key (typically client IP) and provides:
 - `wouldAllow(key)` — pre-check without consuming quota

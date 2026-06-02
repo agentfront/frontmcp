@@ -198,6 +198,70 @@ export type RemoteProviderConfig = z.infer<typeof remoteProviderConfigSchema>;
 export type RemoteProviderConfigInput = z.input<typeof remoteProviderConfigSchema>;
 
 // ============================================
+// UPSTREAM PROVIDER CONFIG (local-mode federation)
+// ============================================
+
+/**
+ * Declarative configuration for an upstream OAuth provider that the local-mode
+ * MCP server orchestrates (e.g. GitHub, Slack, Jira). When `providers` are
+ * declared on `mode: 'local'`, FrontMCP federates them at `/oauth/authorize`,
+ * exchanges each provider's code at `/oauth/provider/{id}/callback`, stores the
+ * tokens encrypted, and exposes them to tools via `this.orchestration.getToken(id)`.
+ *
+ * This mirrors the internal `UpstreamProviderConfig` consumed by
+ * `LocalPrimaryAuth.registerProvider`. The endpoint fields accept the canonical
+ * `authorizationEndpoint`/`tokenEndpoint` names as well as the shorter
+ * `authorizeUrl`/`tokenUrl` aliases for ergonomics — at least one of each pair
+ * must be provided. No PII is stored: only provider tokens (encrypted at rest).
+ */
+export const upstreamProviderSchema = z
+  .object({
+    /** Stable provider id (e.g. `'github'`). Used in `this.orchestration.getToken(id)`. */
+    id: z.string().min(1),
+    /** Human-readable display name. Defaults to `id` when omitted. */
+    name: z.string().optional(),
+    /** Authorization endpoint (canonical name). */
+    authorizationEndpoint: z.string().url().optional(),
+    /** Authorization endpoint (alias for {@link authorizationEndpoint}). */
+    authorizeUrl: z.string().url().optional(),
+    /** Token endpoint (canonical name). */
+    tokenEndpoint: z.string().url().optional(),
+    /** Token endpoint (alias for {@link tokenEndpoint}). */
+    tokenUrl: z.string().url().optional(),
+    /** OAuth client id issued by the upstream provider. */
+    clientId: z.string().min(1),
+    /** OAuth client secret (confidential clients). */
+    clientSecret: z.string().optional(),
+    /** Scopes to request from the upstream provider. */
+    scopes: z.array(z.string()).optional(),
+    /** User info endpoint (optional, used to enrich the session identity). */
+    userInfoEndpoint: z.string().url().optional(),
+    /** JWKS URI for upstream id_token validation (optional). */
+    jwksUri: z.string().url().optional(),
+  })
+  .refine((p) => !!(p.authorizationEndpoint ?? p.authorizeUrl), {
+    message: 'authorizationEndpoint (or authorizeUrl) is required',
+    path: ['authorizationEndpoint'],
+  })
+  .refine((p) => !!(p.tokenEndpoint ?? p.tokenUrl), {
+    message: 'tokenEndpoint (or tokenUrl) is required',
+    path: ['tokenEndpoint'],
+  })
+  // Reject setting BOTH the canonical field and its alias — that masks a likely
+  // misconfiguration (which URL wins is non-obvious).
+  .refine((p) => !(p.authorizationEndpoint && p.authorizeUrl), {
+    message: 'provide only one of authorizationEndpoint or authorizeUrl',
+    path: ['authorizationEndpoint'],
+  })
+  .refine((p) => !(p.tokenEndpoint && p.tokenUrl), {
+    message: 'provide only one of tokenEndpoint or tokenUrl',
+    path: ['tokenEndpoint'],
+  });
+
+export type UpstreamProviderOptions = z.infer<typeof upstreamProviderSchema>;
+export type UpstreamProviderOptionsInput = z.input<typeof upstreamProviderSchema>;
+
+// ============================================
 // FLATTENED REMOTE FIELDS
 // Shared between transparent and remote modes
 // ============================================
@@ -232,12 +296,54 @@ export const flatRemoteProviderFields = {
 // ============================================
 
 /**
+ * SQLite configuration for token storage.
+ *
+ * Mirrors the SQLite options consumed by `@frontmcp/storage-sqlite`. Unlike the
+ * SDK's transport/session SQLite config, `path` is REQUIRED here: the auth layer
+ * has no default-path resolver, so persistence is opt-in and explicit.
+ */
+export const tokenStorageSqliteSchema = z.object({
+  /** Path to the `.sqlite` database file used for auth persistence. */
+  path: z.string().min(1),
+
+  /**
+   * Encryption configuration for at-rest encryption of stored values.
+   * Independent of the AES-GCM blob encryption already applied to upstream
+   * provider tokens by the orchestrated-token store.
+   */
+  encryption: z
+    .object({
+      secret: z.string().min(1),
+    })
+    .optional(),
+
+  /**
+   * Interval in milliseconds for purging expired keys.
+   * @default 60000
+   */
+  ttlCleanupIntervalMs: z.number().int().nonnegative().optional(),
+
+  /**
+   * Enable WAL mode for better read concurrency.
+   * @default true
+   */
+  walMode: z.boolean().optional(),
+});
+
+export type TokenStorageSqliteConfig = z.infer<typeof tokenStorageSqliteSchema>;
+
+/**
  * Token storage configuration for local/remote modes.
  *
- * Simple string 'memory' for in-memory storage,
- * or an object with redis config for Redis storage.
+ * - `'memory'` — in-memory storage (default; lost on restart).
+ * - `{ redis }` — Redis-backed persistence.
+ * - `{ sqlite }` — local SQLite-file persistence (survives restart, no Redis).
  */
-export const tokenStorageConfigSchema = z.union([z.literal('memory'), z.object({ redis: redisConfigSchema })]);
+export const tokenStorageConfigSchema = z.union([
+  z.literal('memory'),
+  z.object({ redis: redisConfigSchema }),
+  z.object({ sqlite: tokenStorageSqliteSchema }),
+]);
 
 export type TokenStorageConfig = z.infer<typeof tokenStorageConfigSchema>;
 export type TokenStorageConfigInput = z.input<typeof tokenStorageConfigSchema>;
@@ -358,6 +464,23 @@ export const federatedAuthConfigSchema = z.object({
    * @default 'strict'
    */
   stateValidation: z.enum(['strict', 'format']).default('strict'),
+
+  /**
+   * Minimum number of upstream providers a user must link before a FrontMCP JWT
+   * is minted. The federated callback refuses to issue a token until at least
+   * this many providers have been authorized. Defaults to `1` at runtime when
+   * `providers` are configured (i.e. "no JWT until ≥1 linked"). Left optional
+   * here so existing configs without `providers` are completely unaffected.
+   */
+  minProviders: z.number().int().positive().optional(),
+
+  /**
+   * Provider ids that MUST be among the linked providers before a JWT is minted.
+   * The federated callback rejects the login unless every id listed here is in
+   * the user's selected providers. Optional — omit to allow any combination that
+   * satisfies {@link minProviders}.
+   */
+  requiredProviders: z.array(z.string()).optional(),
 });
 
 export type FederatedAuthConfig = z.infer<typeof federatedAuthConfigSchema>;

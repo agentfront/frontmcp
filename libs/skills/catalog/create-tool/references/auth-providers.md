@@ -61,23 +61,49 @@ class DeployAppTool extends ToolContext {
 
 ### Fields
 
-| Field      | Type       | Default  | Meaning                                                                                                                                                                                                                                              |
-| ---------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`     | `string`   | —        | Must match a registered `@AuthProvider` on the server                                                                                                                                                                                                |
-| `required` | `boolean`  | `true`   | If `true`, the tool fails before `execute()` runs when no credentials are available. If `false`, the call proceeds; `this.authProviders.headers(name)` returns `{}` (empty) when the credential is absent — check with `Object.keys(...).length > 0` |
-| `scopes`   | `string[]` | —        | Required OAuth scopes. The framework triggers incremental auth if the session lacks them                                                                                                                                                             |
-| `alias`    | `string`   | = `name` | Local name for the provider — useful when two tools want the same provider under different labels                                                                                                                                                    |
+| Field      | Type       | Default  | Meaning                                                                                                                                                                                                                                             |
+| ---------- | ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | `string`   | —        | Must match a registered credential provider on the server                                                                                                                                                                                           |
+| `required` | `boolean`  | `true`   | If `true`, the tool fails before `execute()` runs when no credentials are available (call-time gate). If `false`, the call proceeds; `this.authProviders.headers(name)` returns `{}` (empty) when absent — check with `Object.keys(...).length > 0` |
+| `scopes`   | `string[]` | —        | Required OAuth scopes. Advertised in the server's Protected Resource Metadata (`scopes_supported`, RFC 9728) so clients know to request them                                                                                                        |
+| `alias`    | `string`   | = `name` | Local name for the provider — useful when two tools want the same provider under different labels                                                                                                                                                   |
+
+`required` and `scopes` are independent axes: **`required` gates at call time** (a missing credential aborts the call before `execute()`), while **`scopes` feed PRM advertising** so the OAuth client knows which scopes the server's tools need.
 
 ## When auth is missing
 
-For a `required: true` provider with no credentials:
+For a `required: true` provider with no credentials, the framework's call-tool
+flow runs a credential gate **before** `execute()`:
 
 1. The framework aborts the call BEFORE `execute()` runs.
-2. The client receives an MCP UNAUTHORIZED error (code `-32001`) with `data.authUrl` pointing at the OAuth start URL.
-3. The user completes the OAuth flow.
-4. The client retries the tool call.
+2. The client receives a JSON-RPC error with **code `-32001`** (MCP `UNAUTHORIZED`)
+   and this `data` payload:
+
+   ```json
+   {
+     "tool": "deploy_app",
+     "providers": ["github"],
+     "authUrl": "https://your-server/oauth/connect?token=…",
+     "auth_url": "https://your-server/oauth/connect?token=…"
+   }
+   ```
+
+   - `tool` — the tool that was gated.
+   - `providers` — every required provider whose credential is missing.
+   - `authUrl` / `auth_url` — the same connect/authorize URL under both the
+     camelCase key (primary) and the snake_case key (matching the app-level
+     `authorization_required` error), so either convention resolves. Present
+     when the framework can mint a connect URL for the session.
+
+3. The user opens the URL and connects the credential.
+4. The client retries the tool call — the gate now passes and `execute()` runs.
 
 This is handled by the framework — you don't write any of this in `execute()`.
+
+> The gate is a no-op (no new errors) for tools with no `authProviders`, for
+> `required: false` providers, and for unauthenticated / public / no-credential-vault
+> requests — so adding `authProviders` never changes behavior unless a credential
+> vault is actually configured and a required credential is genuinely missing.
 
 ## Reading auth in execute()
 

@@ -57,8 +57,13 @@ export {
   buildFederatedLoginPage,
   buildToolConsentPage,
   buildLoginPage,
+  buildConnectPage,
+  buildConnectSuccessPage,
   buildErrorPage,
   renderToHtml,
+  // Local-login rendering helper (Checkpoint 3a)
+  renderLocalLoginPage,
+  toLoginExtraFields,
 } from './ui';
 export type {
   ThemeColors,
@@ -68,6 +73,8 @@ export type {
   AppAuthCard,
   ProviderCard,
   ToolCard,
+  LoginExtraField,
+  ConsentHiddenField,
 } from './ui';
 
 // ============================================
@@ -77,8 +84,14 @@ export {
   // OAuth Authorization Store
   InMemoryAuthorizationStore,
   RedisAuthorizationStore,
+  StorageAuthorizationStore,
   verifyPkce,
   generatePkceChallenge,
+  generateAuthorizationCode,
+  generateRefreshTokenValue,
+  buildCodeRecord,
+  buildPendingRecord,
+  buildRefreshTokenRecord,
   pkceChallengeSchema,
   authorizationCodeRecordSchema,
   // Credential schemas
@@ -164,8 +177,10 @@ export {
   VercelKvSessionStore,
   // Orchestrated Token Store
   InMemoryOrchestratedTokenStore,
+  StorageOrchestratedTokenStore,
   // Federated Auth Session
   InMemoryFederatedAuthSessionStore,
+  StorageFederatedAuthSessionStore,
   toSessionRecord,
   fromSessionRecord,
   createFederatedAuthSession,
@@ -173,6 +188,15 @@ export {
   getNextProvider,
   completeCurrentProvider,
   startNextProvider,
+  // Remembered Consent Store
+  InMemoryConsentStore,
+  StorageConsentStore,
+  consentRecordKey,
+  // Token-storage adapter factory
+  createTokenStorageAdapter,
+  isRedisTokenStorage,
+  isSqliteTokenStorage,
+  isPersistentTokenStorage,
   // Encrypted Authorization Vault
   redisVaultEntrySchema,
   EncryptedRedisVault,
@@ -182,6 +206,17 @@ export {
   isSoonExpiring,
   isSoonExpiringProvider,
   tryJwtExp,
+  // Session Credential Vault (Checkpoint 3b)
+  SessionCredentialVault,
+  createSessionCredentialVault,
+  // Credential resume-link signing
+  signCredentialResumeToken,
+  verifyCredentialResumeToken,
+  buildCredentialResumeUrl,
+  DEFAULT_RESUME_TTL_MS,
+  // Credentials accessor (`this.credentials`)
+  CREDENTIALS_ACCESSOR,
+  CredentialsAccessorImpl,
 } from './session';
 export type {
   // OAuth Authorization Store types
@@ -192,6 +227,10 @@ export type {
   RefreshTokenRecord,
   ConsentStateRecord,
   FederatedLoginStateRecord,
+  CreateCodeRecordParams,
+  CreatePendingRecordParams,
+  CreateRefreshTokenRecordParams,
+  StorageAuthorizationStoreOptions,
   // Credential types
   CredentialType,
   OAuthCredential,
@@ -271,6 +310,8 @@ export type {
   VercelKvSessionConfig,
   // Orchestrated Token Store types
   InMemoryOrchestratedTokenStoreOptions,
+  StorageOrchestratedTokenStoreOptions,
+  StorageFederatedAuthSessionStoreOptions,
   // Federated Auth Session types
   ProviderPkce,
   ProviderTokens,
@@ -280,6 +321,10 @@ export type {
   FederatedAuthSessionRecord,
   FederatedAuthSessionStore,
   FederatedAuthSessionCreateParams,
+  // Remembered Consent Store types
+  ConsentStore,
+  RememberedConsentRecord,
+  StorageConsentStoreOptions,
   // Encrypted Authorization Vault types
   RedisVaultEntry,
   EncryptionContext,
@@ -287,6 +332,20 @@ export type {
   TokenRefreshCtx,
   TokenRefreshResult,
   TokenRefresher,
+  // Session Credential Vault types (Checkpoint 3b)
+  StoredCredential,
+  SessionCredentialVaultOptions,
+  CreateSessionCredentialVaultOptions,
+  // Credential resume-link types
+  CredentialResumePayload,
+  // Credentials accessor types
+  CredentialsAccessor,
+  CredentialValue,
+  CredentialNotConnected,
+  CredentialConnected,
+  RequireConnectResult,
+  RequireConnectOptions,
+  CredentialsAccessorDeps,
 } from './session';
 
 // ============================================

@@ -25,15 +25,15 @@ graph TB
 
 ## Mode Comparison
 
-| Feature            | Public         | Transparent       | Local                 | Remote                 |
-| ------------------ | -------------- | ----------------- | --------------------- | ---------------------- |
-| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued) | Yes (FrontMCP-issued)  |
-| User Identity      | Anonymous      | From upstream IdP | From login form       | From upstream IdP      |
-| JWKS Source        | Self-generated | Upstream IdP      | Self-generated        | Self-generated         |
-| Session Management | Minimal        | Pass-through      | Full control          | Full control           |
-| Multi-provider     | No             | Single provider   | Multiple via apps     | Multiple via apps      |
-| Progressive Auth   | No             | No                | Yes                   | Yes                    |
-| Consent UI         | No             | No                | Optional              | Optional               |
+| Feature              | Public         | Transparent       | Local                       | Remote                 |
+| -------------------- | -------------- | ----------------- | --------------------------- | ---------------------- |
+| Token Required       | No             | Yes (external)    | Yes (FrontMCP-issued)       | Yes (FrontMCP-issued)  |
+| User Identity        | Anonymous      | From upstream IdP | From login form             | From upstream IdP      |
+| Token Signing        | HS256 (symmetric) | Upstream IdP   | HS256 (symmetric, `JWT_SECRET`) | HS256 (symmetric, `JWT_SECRET`) |
+| Session Management   | Minimal        | Pass-through      | Full control                | Full control           |
+| Multi-provider       | No             | Single provider   | Multiple via apps           | Multiple via apps      |
+| Progressive Auth     | No             | No                | Yes                         | Yes                    |
+| Tool-authz enforcement | No           | No                | Optional                    | Optional               |
 
 ---
 
@@ -201,13 +201,31 @@ FrontMCP acts as a full OAuth 2.1 authorization server with a built-in login for
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'local',
-  consent: { enabled: true },
-  tokenStorage: 'memory', // Use { redis: ... } in production
+  // 'memory' (default) is lost on restart. Use { sqlite: { path } } for
+  // single-node persistence or { redis: ... } for multi-instance.
+  tokenStorage: 'memory',
 };
 ```
 
+Local mode signs the tokens it issues with **HS256** using the `JWT_SECRET` environment variable (no RSA/EC key pair). See [Local OAuth](/frontmcp/authentication/local) for token signing, persistent `tokenStorage` (memory / sqlite / redis), the `requireEmail` / `anonymousSubject` single-operator options, and tunnel/issuer configuration.
+
+Local mode also orchestrates **multiple upstream OAuth providers** out of the box. Declare a `providers` array (GitHub, Slack, Jira, …) and FrontMCP federates them at `/oauth/authorize`, refuses to mint a JWT until `federatedAuth.minProviders` (default `1`) are linked, stores each provider's tokens encrypted server-side, and exposes them to tools via `this.orchestration.getToken(id)`:
+
+```typescript
+const auth: AuthOptionsInput = {
+  mode: 'local',
+  providers: [
+    { id: 'github', authorizeUrl: '…', tokenUrl: '…', clientId: '…', scopes: ['repo'] },
+    { id: 'slack', authorizeUrl: '…', tokenUrl: '…', clientId: '…' },
+  ],
+  federatedAuth: { minProviders: 1 }, // no JWT until ≥1 linked
+};
+```
+
+See [Multi-Provider Orchestration](/frontmcp/authentication/local#multi-provider-orchestration-providers) for the full provider schema, the `minProviders` / `requiredProviders` gate, and the `this.orchestration` tool API.
+
 <Warning>
-  The built-in login page accepts any email format without validation. Replace with a real identity provider for production use.
+  The built-in login page accepts any email format without validation and is intended for development. Replace with a real identity provider for production use.
 </Warning>
 
 ## Remote Mode
@@ -262,27 +280,33 @@ sequenceDiagram
 
 ### Configuration Options
 
-| Option               | Type                                 | Default              | Description                     |
-| -------------------- | ------------------------------------ | -------------------- | ------------------------------- |
-| `consent`            | `ConsentConfig`                      | `{ enabled: false }` | Consent UI configuration        |
-| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`           | Storage backend                 |
-| `allowDefaultPublic` | `boolean`                            | `false`              | Allow unauthenticated requests  |
-| `federatedAuth`      | `FederatedAuthConfig`                | -                    | Federated auth state validation |
-| `incrementalAuth`    | `IncrementalAuthConfig`              | `{ enabled: true }`  | Progressive authorization       |
+| Option               | Type                                                              | Default              | Description                     |
+| -------------------- | ----------------------------------------------------------------- | -------------------- | ------------------------------- |
+| `consent`            | `ConsentConfig`                                                   | `undefined` (block optional) | Tool-selection consent screen + call-time enforcement (see Local docs). When the block is present, inner `enabled` defaults to `false`. |
+| `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }` | `'memory'`           | Storage backend (memory / sqlite / redis) |
+| `allowDefaultPublic` | `boolean`                                                         | `false`              | Allow unauthenticated requests  |
+| `federatedAuth`      | `FederatedAuthConfig`                                            | -                    | Federated auth state validation |
+| `incrementalAuth`    | `IncrementalAuthConfig`                                          | `undefined` (block optional) | Progressive authorization. When the block is present, inner `enabled` defaults to `true`. |
 
 ### Consent Configuration
 
 ```typescript
 consent: {
   enabled: true,
-  groupByApp: true,           // Group tools by app in UI
-  showDescriptions: true,     // Show tool descriptions
-  allowSelectAll: true,       // Allow selecting all tools
-  requireSelection: true,     // Require at least one tool
-  rememberConsent: true,      // Remember for future sessions
-  excludedTools: ['health'],  // Always available tools
+  groupByApp: true,
+  showDescriptions: true,
+  allowSelectAll: true,
+  requireSelection: true,
+  excludedTools: ['ping'],          // always available, never gated
+  defaultSelectedTools: ['create-note'], // pre-checked on the screen
 }
 ```
+
+When `consent.enabled` is `true`, the local flow renders an **interactive tool-selection screen** after login and **enforces the selection at call time**: the chosen tool ids are embedded in the token's `consent` claim and a `tools/call` to an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`). The flags `groupByApp`, `showDescriptions`, `allowSelectAll`, `requireSelection`, `customMessage`, `excludedTools`, and `defaultSelectedTools` are all honored. See [Local OAuth → Consent](/frontmcp/authentication/local#consent-and-tool-authorization) for the full table.
+
+<Note>
+  Tokens minted without consent (consent disabled, or created via the test/programmatic factory) carry no `consent` claim and are unaffected — all tools remain callable. `rememberConsent` (default `true`) persists each user's per-client selection and reuses it on the next login, re-prompting only when a NEW tool appears; set it `false` to always re-show the screen.
+</Note>
 
 ### Incremental Authorization
 
@@ -297,17 +321,21 @@ incrementalAuth: {
 
 ### Federated Authentication Configuration
 
-Configure how state parameters are validated during federated (multi-provider) authentication flows.
+Configure how multi-provider (federated) authentication is gated and validated.
 
 ```typescript
 federatedAuth: {
-  stateValidation: 'strict',  // 'strict' (recommended) or 'format'
+  stateValidation: 'strict',     // 'strict' (recommended) or 'format'
+  minProviders: 1,               // no JWT until ≥1 provider linked
+  requiredProviders: ['github'], // these ids must all be linked
 }
 ```
 
-| Option            | Values                 | Description                                                                         |
-| ----------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| `stateValidation` | `'strict' \| 'format'` | `'strict'`: Full state match (recommended). `'format'`: Only validates state format |
+| Option              | Values                 | Description                                                                         |
+| ------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
+| `stateValidation`   | `'strict' \| 'format'` | `'strict'`: Full state match (recommended). `'format'`: Only validates state format |
+| `minProviders`      | `number`               | Minimum providers that must be linked before a JWT is minted (default `1` when `providers` are configured) |
+| `requiredProviders` | `string[]`             | Provider ids that must all be linked before a JWT is minted                         |
 
 ### OAuth Endpoints
 
@@ -334,8 +362,8 @@ Local and remote modes expose standard OAuth endpoints:
   <Card title="Full Token Control" icon="sliders">
     Custom token lifetimes, scopes, and refresh behavior
   </Card>
-  <Card title="Built-in Consent UI" icon="list-check">
-    Let users choose which tools/resources to grant
+  <Card title="Tool-Authorization Enforcement" icon="list-check">
+    Gate tools via the interactive consent picker (shipped) and enforce the selection at call time
   </Card>
 </CardGroup>
 
@@ -368,14 +396,14 @@ graph TD
 
 ## Security Comparison
 
-| Security Aspect        | Public         | Transparent           | Local              | Remote                                         |
-| ---------------------- | -------------- | --------------------- | ------------------ | ---------------------------------------------- |
-| Token Verification     | None           | Against upstream JWKS | Against local JWKS | Against local JWKS (FrontMCP-issued session)   |
-| PKCE Support           | N/A            | Depends on IdP        | Always S256        | Always S256 (downstream); upstream depends on IdP |
-| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     | Depends on upstream IdP                        |
-| Key Management         | Auto-generated | Upstream-managed      | Self-managed       | Self-managed (session JWKS) + upstream JWKS    |
-| Consent UI             | No             | No                    | Optional           | Optional                                       |
-| Session Revocation     | N/A            | N/A                   | Supported          | Supported                                      |
+| Security Aspect        | Public         | Transparent           | Local                         | Remote                                         |
+| ---------------------- | -------------- | --------------------- | ----------------------------- | ---------------------------------------------- |
+| Token Verification     | None           | Against upstream JWKS | HS256 symmetric secret        | HS256 symmetric secret (FrontMCP-issued session) |
+| PKCE Support           | N/A            | Depends on IdP        | Always S256                   | Always S256 (downstream); upstream depends on IdP |
+| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated                | Depends on upstream IdP                        |
+| Signing Key            | `JWT_SECRET` (symmetric) | Upstream-managed | `JWT_SECRET` (symmetric)  | `JWT_SECRET` (symmetric) + upstream JWKS       |
+| Tool-authz enforcement | No             | No                    | Optional                      | Optional                                       |
+| Session Revocation     | N/A            | N/A                   | Supported                     | Supported                                      |
 
 ---
 
@@ -390,7 +418,7 @@ sequenceDiagram
     Client->>FrontMCP: Request + Bearer token
 
     alt Public/Local/Remote Mode
-        FrontMCP->>JwksService: Get gateway JWKS
+        Note over FrontMCP: Verify HS256 signature<br/>with JWT_SECRET (symmetric)
         FrontMCP->>FrontMCP: Verify JWT locally
     else Transparent Mode
         FrontMCP->>JwksService: Get provider JWKS (cached)

@@ -2,6 +2,7 @@
 
 import { ReadResourceRequestSchema, type ReadResourceRequest, type ReadResourceResult } from '@frontmcp/protocol';
 
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function readResourceRequestHandler({
@@ -24,7 +25,10 @@ export default function readResourceRequestHandler({
           uri,
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
         });
-        throw e;
+        // Preserve structured JSON-RPC codes (e.g. AuthorityDeniedError -32003,
+        // ResourceNotFoundError -32002) instead of letting the generic dispatch
+        // flatten them to -32603 — mirrors the skills/load handler.
+        throw toSdkMcpError(e);
       }
     },
   };

@@ -6,8 +6,8 @@ tags: [auth-providers, oauth, github, this.authProviders]
 features:
   - "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand"
   - "Reading pre-formatted credentials via `await this.authProviders.headers('github')`"
-  - 'Letting the framework reject unauthenticated calls before `execute()` runs (no auth-check boilerplate)'
-  - 'Trusting the framework to handle token refresh, expiration, and the OAuth start URL'
+  - "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)"
+  - 'Trusting the framework to handle token refresh, expiration, and the connect/authorize URL'
 ---
 
 # Tool With Single Auth Provider
@@ -64,8 +64,8 @@ export class ListReposTool extends ToolContext {
 
 - Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand
 - Reading pre-formatted credentials via `await this.authProviders.headers('github')`
-- Letting the framework reject unauthenticated calls before `execute()` runs (no auth-check boilerplate)
-- Trusting the framework to handle token refresh, expiration, and the OAuth start URL
+- Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)
+- Trusting the framework to handle token refresh, expiration, and the connect/authorize URL
 
 ## What you don't have to write
 

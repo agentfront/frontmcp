@@ -11,6 +11,7 @@ import {
   InternalMcpError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
+  ToolCredentialsRequiredError,
 } from '../../errors';
 import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
@@ -70,6 +71,14 @@ export default function callToolRequestHandler({
         // Task augmentation rejections are protocol-level errors per MCP spec §Tool-Level
         // Negotiation — emit them as JSON-RPC errors (not CallToolResult with isError).
         if (e instanceof TaskAugmentationNotSupportedError || e instanceof TaskAugmentationRequiredError) {
+          throw toSdkMcpError(e);
+        }
+
+        // The tool-level credential gate is an authorization failure: emit it as a
+        // JSON-RPC -32001 (MCP UNAUTHORIZED) error carrying { tool, providers,
+        // authUrl } in `data` (not a CallToolResult with isError), so clients can
+        // react structurally and surface the connect/authorize URL.
+        if (e instanceof ToolCredentialsRequiredError) {
           throw toSdkMcpError(e);
         }
 

@@ -6,6 +6,7 @@ export {
   InternalMcpError,
   // Tool errors
   ToolNotFoundError,
+  ToolNotConsentedError,
   ToolExecutionError,
   // Availability errors
   EntryUnavailableError,
@@ -62,6 +63,10 @@ export type {
   AuthorizationRequiredParams,
   AuthorizationRequiredMeta,
 } from './authorization-required.error';
+
+// Export tool-level credential gate error (checkToolCredentials stage)
+export { ToolCredentialsRequiredError } from './tool-credentials-required.error';
+export type { ToolCredentialsRequiredData } from './tool-credentials-required.error';
 
 // Export error handler utilities
 export { ErrorHandler, createErrorHandler, shouldStopExecution } from './error-handler';

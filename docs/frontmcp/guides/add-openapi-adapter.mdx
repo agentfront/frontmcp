@@ -131,7 +131,7 @@ import ExpenseApp from './apps/expense.app';
   info: { name: 'Expense Server', version: '1.0.0' },
   apps: [ExpenseApp],
   http: { port: 3000 },
-  logging: { level: LogLevel.INFO },
+  logging: { level: LogLevel.Info },
 })
 export default class Server {}
 ```
@@ -516,7 +516,7 @@ class ExpenseApp {}
   info: { name: 'Expense Server', version: '1.0.0' },
   apps: [ExpenseApp],
   http: { port: 3000 },
-  logging: { level: LogLevel.INFO },
+  logging: { level: LogLevel.Info },
   auth: {
     type: 'remote',
     name: 'auth-provider',

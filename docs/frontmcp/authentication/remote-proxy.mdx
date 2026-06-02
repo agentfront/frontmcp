@@ -9,6 +9,16 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'authentication', 'auth'
 
 Some identity providers don't support Dynamic Client Registration (DCR). FrontMCP's OAuth proxy bridges this gap by acting as a local OAuth server while delegating user authentication to the upstream IdP.
 
+<Info>
+  `mode: 'remote'` proxies to **one mandatory** upstream IdP. `GET /oauth/authorize`
+  redirects straight to that IdP (no FrontMCP login page, no provider-selection
+  page). FrontMCP exchanges the returned code, stores the upstream tokens
+  (encrypted), derives the session identity from the **upstream** user, mints its
+  own HS256 session token, and exposes the upstream token to tools via
+  `this.orchestration.getToken('<provider-id>')`. A **pre-registered** `clientId`
+  is required today (DCR is not yet wired — see below).
+</Info>
+
 ## When to Use OAuth Proxy
 
 <CardGroup cols={2}>
@@ -166,21 +176,51 @@ The proxy stores upstream IdP tokens in the token vault:
 
 ### Automatic Refresh
 
-When upstream tokens expire, the proxy handles refresh:
+<Warning>
+  **Not yet wired.** On-demand refresh of the **upstream** token is not currently
+  performed. The encrypted token store evicts a provider record (including its
+  refresh token) as soon as the upstream access token expires, so once the
+  upstream token lapses `this.orchestration.getToken()` returns `null`/throws and
+  the user must re-authenticate (revisit `/oauth/authorize`). The `refresh`
+  option below is accepted by the schema but does not yet drive upstream refresh.
+  (FrontMCP's **own** session token still refreshes normally via the standard
+  `refresh_token` grant at `/oauth/token`.)
+</Warning>
 
 ```typescript
 auth: {
   mode: 'remote',
   provider: 'https://legacy-idp.example.com',
   clientId: 'my-client',
+  // Accepted but does not yet refresh the UPSTREAM token (see warning above).
   refresh: {
     enabled: true,
-    skewSeconds: 60, // refresh upstream tokens this many seconds before expiry
+    skewSeconds: 60,
   },
 }
 ```
 
 ---
+
+## Reading the Upstream Token
+
+The upstream IdP token is stored server-side (encrypted) and read by tools via
+the orchestration accessor — it is never exposed to the LLM:
+
+```typescript
+@Tool({ name: 'whoami' })
+class Whoami extends ToolContext {
+  async execute() {
+    // 'upstream' is providerConfig.id (or the derived provider-host id).
+    const token = await this.orchestration.tryGetToken('upstream');
+    if (!token) return { error: 'Upstream token not available — re-authenticate' };
+    const res = await this.fetch('https://legacy-idp.example.com/api/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await res.json();
+  }
+}
+```
 
 ## Custom Claims
 
@@ -227,7 +267,12 @@ export class Server {}
 ```
 
 <Info>
-  Each app maintains its own upstream token in the vault. Users authenticate once per app via progressive authorization.
+  Each app's upstream token is stored server-side (encrypted). With
+  [progressive authorization](/frontmcp/authentication/progressive) enabled
+  (`auth.incrementalAuth`), users authorize apps one at a time: the minted token's
+  `authorized_apps` claim gates which apps a call may reach, and an incremental authorize
+  expands that claim (a fresh token with the union of granted apps) without re-authorizing
+  the apps already granted.
 </Info>
 
 ---

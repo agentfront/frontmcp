@@ -1,3 +1,5 @@
+import { type VerifyResult } from '@frontmcp/auth';
+
 import {
   isOrchestratedMode,
   isOrchestratedRemote,
@@ -73,6 +75,29 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   abstract validate(request: ServerRequest): Promise<void>;
 
   abstract get issuer(): string;
+
+  /**
+   * Cryptographically verify a gateway-issued access token (public/local/remote
+   * "gateway" modes — i.e. NOT transparent). Gateway tokens are signed by this
+   * instance, so the instance is the only place that holds the verification key.
+   *
+   * The base implementation rejects everything: only auth instances that
+   * actually mint gateway tokens (i.e. {@link LocalPrimaryAuth}) override this
+   * with a real signature + expiration check. Transparent mode never calls this
+   * — it verifies against the upstream provider's JWKS instead.
+   *
+   * @param _token          The raw bearer token (already confirmed to be a JWT).
+   * @param _expectedIssuer The request-derived base URL. Provided for context /
+   *                        logging; issuer equality is intentionally NOT enforced
+   *                        (proxy/tunnel setups legitimately present `iss` ≠
+   *                        baseUrl). Signature + expiration are the security core.
+   */
+  verifyGatewayToken(_token: string, _expectedIssuer: string): Promise<VerifyResult> {
+    return Promise.resolve({
+      ok: false,
+      error: 'gateway token verification is not supported by this auth mode',
+    });
+  }
 }
 
 export { FrontMcpAuth as Auth };

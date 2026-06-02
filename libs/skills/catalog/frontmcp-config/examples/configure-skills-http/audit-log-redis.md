@@ -19,7 +19,7 @@ Production-grade audit log with the Redis-backed StorageAdapterAuditStore and th
 
 ```typescript
 // src/server.ts — must be an ES module (`"type": "module"` in package.json,
-// or `.mts` extension) so the top-level `await createStorageAdapter(...)`
+// or `.mts` extension) so the top-level `await createStorage(...)`
 // below is allowed. CommonJS consumers should wrap the bootstrap inside an
 // `async function init() { ... }` and await it before constructing the
 // FrontMcp class.
@@ -33,7 +33,7 @@ import {
   StorageAdapterAuditStore,
 } from '@frontmcp/adapters/skills';
 import { FrontMcp } from '@frontmcp/sdk';
-import { createStorageAdapter } from '@frontmcp/utils';
+import { createStorage } from '@frontmcp/utils';
 
 import { MainApp } from './main.app';
 
@@ -48,11 +48,16 @@ setSkillAuditFactory(() => ({
   MemoryAuditStore,
 }));
 
-const auditStorage = await createStorageAdapter({
-  provider: 'redis',
-  host: process.env.REDIS_HOST!,
-  port: 6379,
-  keyPrefix: 'mcp:skill-audit:',
+// createStorage() returns a RootStorage, which is a StorageAdapter. Note this
+// is the @frontmcp/utils storage-adapter config shape (`redis.config`), which
+// is distinct from the SDK `RedisOptions` (`{ provider, host, port }`) used by
+// `@FrontMcp({ redis })` and `skillsConfig.cache.redis` below.
+const auditStorage = await createStorage({
+  type: 'redis',
+  redis: {
+    config: { host: process.env.REDIS_HOST!, port: 6379 },
+    keyPrefix: 'mcp:skill-audit:',
+  },
 });
 
 // Constructor signature: new Rs256AuditSigner(privateJwk, keyId).
@@ -86,9 +91,12 @@ export default class ProductionServer {}
 ```typescript
 // scripts/verify-audit-chain.ts — run in CI
 import { defaultAuditSignatureVerifier, StorageAdapterAuditStore, verifyChain } from '@frontmcp/adapters/skills';
-import { createStorageAdapter } from '@frontmcp/utils';
+import { createStorage } from '@frontmcp/utils';
 
-const storage = await createStorageAdapter({ provider: 'redis', host: process.env.REDIS_HOST!, port: 6379 });
+const storage = await createStorage({
+  type: 'redis',
+  redis: { config: { host: process.env.REDIS_HOST!, port: 6379 } },
+});
 const store = new StorageAdapterAuditStore(storage);
 const records = await store.iterate();
 

@@ -115,10 +115,19 @@ export class PublicMcpError extends McpError {
   readonly statusCode: number;
   readonly code: string;
 
-  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400) {
+  /**
+   * Optional RFC 6750 `WWW-Authenticate` challenge to forward to the client
+   * when the error maps to a 401. Set by callers that attach an auth challenge
+   * (e.g. the local transport adapter when a verified token's session can't be
+   * reconstructed, #471); rendered by the flow runner into a response header.
+   */
+  readonly wwwAuthenticate?: string;
+
+  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400, wwwAuthenticate?: string) {
     super(message);
     this.code = code;
     this.statusCode = statusCode;
+    this.wwwAuthenticate = wwwAuthenticate;
   }
 
   getPublicMessage(): string {
@@ -155,6 +164,47 @@ export class InternalMcpError extends McpError {
 export class ToolNotFoundError extends PublicMcpError {
   constructor(toolName: string) {
     super(`Tool "${toolName}" not found`, 'TOOL_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Tool not consented error.
+ *
+ * Thrown at `tools/call` time when consent mode is enabled and the caller's
+ * verified token carries a `consent` claim whose selected-tool set does NOT
+ * include the requested tool. This is the runtime enforcement of the consent
+ * screen: a user who unchecked a tool during authorization cannot invoke it.
+ *
+ * Tokens with NO consent metadata (consent disabled) never reach this error —
+ * the call-tool flow skips the check entirely so the default (allow-all)
+ * behavior is preserved.
+ *
+ * Mapped to JSON-RPC -32003 (FORBIDDEN) so clients can distinguish a
+ * deliberately-withheld tool from a missing one (-32601 / 404).
+ */
+export class ToolNotConsentedError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+  readonly toolName: string;
+
+  constructor(toolName: string) {
+    super(
+      `Tool "${toolName}" was not consented for this session. Re-authorize and select it to enable access.`,
+      'TOOL_NOT_CONSENTED',
+      403,
+    );
+    this.toolName = toolName;
+  }
+
+  toJsonRpcError(): {
+    code: number;
+    message: string;
+    data: { tool: string };
+  } {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { tool: this.toolName },
+    };
   }
 }
 
@@ -450,8 +500,8 @@ export class QuotaExceededError extends PublicMcpError {
  * Unauthorized error
  */
 export class UnauthorizedError extends PublicMcpError {
-  constructor(message = 'Unauthorized') {
-    super(message, 'UNAUTHORIZED', 401);
+  constructor(message = 'Unauthorized', wwwAuthenticate?: string) {
+    super(message, 'UNAUTHORIZED', 401, wwwAuthenticate);
   }
 }
 

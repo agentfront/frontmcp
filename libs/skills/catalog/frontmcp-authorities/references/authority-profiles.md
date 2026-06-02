@@ -15,7 +15,7 @@ Profiles are registered in the `profiles` field of the `authorities` config. Eac
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-server',
+  info: { name: 'my-server', version: '1.0.0' },
   authorities: {
     claimsMapping: {
       roles: 'realm_access.roles',
@@ -95,6 +95,15 @@ export default class AdminReportPrompt extends PromptContext {
     // only admin can use this prompt
   }
 }
+
+// Skills are gated the same way. Non-admins can neither discover nor load this:
+@Skill({
+  name: 'internal-runbook',
+  description: 'Restricted operational runbook',
+  instructions: { file: './internal-runbook.md' },
+  authorities: 'admin',
+})
+export class InternalRunbookSkill {}
 ```
 
 ### Multiple Profiles (String Array)
@@ -244,8 +253,23 @@ The authorities system does not only enforce on execution. The built-in `filterB
 - `tools/list` only returns tools the current user is authorized to call
 - `resources/list` only returns resources the current user can read
 - `prompts/list` only returns prompts the current user can get
+- Skills are filtered on every discovery surface: `skills/search` / `skills/list`, the SEP-2640 `skill://index.json` index + skill-path autocomplete, and `GET /skills`. Loading a gated skill the caller can't access (via `skills/load`, a `skill://…` read, or `GET /skills/{id}`) is denied with `AuthorityDeniedError` (`-32003`).
 
 This filtering happens automatically. No additional configuration is needed. Entries without an `authorities` field are always visible.
+
+**List-time evaluation has no request input.** Because discovery runs before any
+arguments exist, input-dependent policies — ABAC conditions using `{ fromInput: '…' }`
+or ReBAC `resourceId: { fromInput: '…' }` — cannot be evaluated when filtering and
+will exclude the entry from the list (it is still enforced correctly at execution/load
+time, where input is available). For entries (especially **skills**) that must remain
+discoverable, gate them with role/permission/claims-based authorities such as
+`authorities: 'admin'` or `{ roles: { any: ['admin'] } }`.
+
+**HTTP skills discovery is fail-closed.** The Skills HTTP API authenticates with a
+binary api-key/bearer gate that surfaces no JWT claims, so authority-gated skills are
+hidden from `GET /skills` and denied on `GET /skills/{id}` regardless of the bearer.
+Serve gated skills over an MCP transport (full claims context) for claims-based access;
+skills without `authorities` are served over HTTP unchanged.
 
 ## Profile Design Guidelines
 

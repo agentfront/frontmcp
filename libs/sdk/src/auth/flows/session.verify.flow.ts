@@ -397,8 +397,11 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       ];
       verify = jwks.verifyTransparentToken(token, providerRefs);
     } else {
-      // Public or orchestrated mode - verify against local gateway keys
-      verify = jwks.verifyGatewayToken(token, this.state.required.baseUrl);
+      // Public or orchestrated (gateway) mode — verify the token's HS256
+      // signature + expiration using the auth instance's own secret. The
+      // instance is the sole holder of the signing key, so verification lives
+      // there (LocalPrimaryAuth.verifyGatewayToken) rather than in JwksService.
+      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl);
     }
 
     const result = await verify;

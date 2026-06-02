@@ -232,8 +232,8 @@
           "features": [
             "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
             "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
-            "Letting the framework reject unauthenticated calls before `execute()` runs (no auth-check boilerplate)",
-            "Trusting the framework to handle token refresh, expiration, and the OAuth start URL"
+            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
+            "Trusting the framework to handle token refresh, expiration, and the connect/authorize URL"
           ]
         },
         {
@@ -243,9 +243,10 @@
           "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
           "features": [
             "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
-            "Requesting specific OAuth scopes so the framework triggers incremental auth when missing",
+            "Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them",
             "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
-            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing"
+            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing",
+            "The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates"
           ]
         },
         {
@@ -473,28 +474,96 @@
           "description": "Detailed comparison of public, transparent, local, and remote auth modes",
           "examples": [
             {
-              "name": "local-self-signed-tokens",
-              "description": "Configure a server that signs its own JWT tokens with consent and incremental auth enabled.",
-              "level": "intermediate",
-              "tags": ["config", "auth", "redis", "local", "auth-modes", "modes"],
+              "name": "local-minimal",
+              "description": "Stand up the built-in local OAuth 2.1 server with the minimum configuration: HS256 signing via JWT_SECRET and in-memory token storage.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "hs256", "auth-modes", "modes"],
               "features": [
-                "Using `mode: 'local'` so the server signs its own JWTs",
+                "Using `mode: 'local'` with no other auth options to run the built-in OAuth 2.1 server",
+                "Relying on `JWT_SECRET` for HS256 token signing (symmetric secret, no key pair)",
+                "Accepting the default in-memory `tokenStorage` for local development (state is lost on restart)"
+              ]
+            },
+            {
+              "name": "local-self-signed-tokens",
+              "description": "Configure a local-mode server that signs its own HS256 JWTs and persists auth state across restarts with SQLite or Redis.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "sqlite", "redis", "auth-modes", "modes"],
+              "features": [
+                "Using `mode: 'local'` so the server signs its own HS256 JWTs (symmetric `JWT_SECRET`, no key pair)",
                 "Setting `local.issuer` and `expectedAudience` to control token claims",
-                "Enabling `consent` for explicit user authorization flow",
-                "Enabling `incrementalAuth` to request additional scopes progressively",
-                "Using Redis for token storage in production"
+                "Persisting authorization codes and refresh tokens with `tokenStorage: { sqlite: { path } }` so they survive restart",
+                "Switching the same `tokenStorage` to `{ redis }` for multi-instance deployments",
+                "Enabling `consent` so login renders a tool-selection screen and the chosen tools are enforced at call time"
+              ]
+            },
+            {
+              "name": "local-single-operator",
+              "description": "Run local mode for a single operator (e.g. Claude Code) by skipping the email prompt and minting a stable anonymous subject.",
+              "level": "basic",
+              "tags": ["config", "auth", "local", "single-operator", "claude-code", "auth-modes"],
+              "features": [
+                "Setting `requireEmail: false` so the login callback mints a code without prompting for an email",
+                "Setting `anonymousSubject` so the single operator gets a stable `sub` across logins",
+                "Persisting tokens with SQLite so the operator stays logged in across restarts"
+              ]
+            },
+            {
+              "name": "local-consent-enforcement",
+              "description": "Enable consent in local mode to render a tool-selection screen at login and enforce the chosen tools at call time, keeping essential tools always available via excludedTools.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "consent", "tool-authorization", "auth-modes"],
+              "features": [
+                "Setting `consent.enabled` so login renders a tool-selection screen and the chosen tools are enforced on every tools/call",
+                "Listing `excludedTools` so essential tools are never offered and are always available",
+                "Honoring `requireSelection` / `defaultSelectedTools` to require a non-empty selection and pre-check tools",
+                "Pinning `rememberConsent: false` to re-show the screen on every login (the default `true` reuses a prior per-(user, client) selection and only re-prompts when a NEW tool appears)"
+              ]
+            },
+            {
+              "name": "local-behind-tunnel",
+              "description": "Expose a local-mode server through a tunnel or TLS proxy by aligning the token issuer with the public URL clients actually reach.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "tunnel", "proxy", "issuer", "auth-modes"],
+              "features": [
+                "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
+                "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
+                "Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)"
+              ]
+            },
+            {
+              "name": "local-multi-provider-orchestration",
+              "description": "Orchestrate multiple upstream OAuth providers (GitHub + Slack) in local mode, gate the JWT until they are linked, and read downstream tokens in tools via this.orchestration.",
+              "level": "advanced",
+              "tags": [
+                "config",
+                "auth",
+                "local",
+                "orchestration",
+                "federated",
+                "providers",
+                "multi-provider",
+                "auth-modes"
+              ],
+              "features": [
+                "Declaring an `auth.providers` array so FrontMCP federates GitHub + Slack at /oauth/authorize and stores their tokens encrypted server-side",
+                "Using `authorizeUrl`/`tokenUrl` aliases and letting the per-provider callback URL be auto-computed as ${issuer}/oauth/provider/${id}/callback",
+                "Gating JWT issuance with `federatedAuth.minProviders` / `requiredProviders` so no token is minted until the linked-provider threshold is met",
+                "Reading downstream provider tokens in a tool via `this.orchestration.getToken(id)` / `tryGetToken(id)` without exposing them to the LLM"
               ]
             },
             {
               "name": "remote-enterprise-oauth",
-              "description": "Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.",
+              "description": "Proxy authentication to one mandatory upstream IdP, mint a FrontMCP session, and read the upstream token in tools.",
               "level": "advanced",
               "tags": ["config", "oauth", "auth", "redis", "remote", "auth-modes"],
               "features": [
-                "Using `mode: 'remote'` to delegate to an external OAuth 2.1 authorization server",
+                "Using `mode: 'remote'` to proxy authentication to a single mandatory upstream IdP",
                 "Loading `clientId` and `clientSecret` from environment variables (never hardcoded)",
                 "Configuring Redis-backed token storage for production persistence",
-                "Full OAuth flow: clients are redirected to the provider and return with an authorization code"
+                "`GET /oauth/authorize` redirects straight to the upstream IdP (no in-tree login page)",
+                "Session identity (sub/email/name) is derived from the upstream user",
+                "Tools read the upstream token via `this.orchestration.getToken(providerId)`"
               ]
             },
             {
@@ -538,13 +607,25 @@
             },
             {
               "name": "remote-oauth-with-vault",
-              "description": "Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user.",
+              "description": "Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.",
               "level": "intermediate",
-              "tags": ["config", "oauth", "auth", "remote", "vault"],
+              "tags": ["config", "oauth", "auth", "orchestration", "providers"],
               "features": [
-                "Configuring `mode: 'remote'` for full OAuth 2.1 authorization flow",
-                "Loading `clientId` from environment variables instead of hardcoding",
-                "Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls"
+                "Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow",
+                "Loading `clientId`/`clientSecret` from environment variables instead of hardcoding",
+                "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
+              ]
+            },
+            {
+              "name": "local-credential-vault",
+              "description": "Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "local", "vault", "credentials", "this-credentials"],
+              "features": [
+                "Returning `credentials: [{ key, secret, metadata? }]` from `authenticate()` so FrontMCP persists them encrypted, keyed by the minted `sub`",
+                "Reading a per-session credential from a tool via `this.credentials.get(key)` (no `this.authProviders` wiring needed)",
+                "Prompting the agent to connect a missing credential mid-session with `this.credentials.requireConnect({ key })` (framework-signed `/oauth/connect` URL)",
+                "Understanding per-session rotation: a reconnect yields an empty vault and old ciphertext is undecryptable"
               ]
             }
           ]
@@ -3644,7 +3725,7 @@
     {
       "name": "frontmcp-authorities",
       "category": "development",
-      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.",
+      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, prompts, or skills. Covers JWT claims mapping, authority profiles, and policy enforcement.",
       "path": "frontmcp-authorities",
       "targets": ["all"],
       "hasResources": true,

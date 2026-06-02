@@ -137,7 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { contents: read }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: frontmcp/deploy-action@v1
         with:
           environment: production

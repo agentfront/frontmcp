@@ -10,8 +10,15 @@ module.exports = {
   displayName: '@frontmcp/sdk',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  // Limit workers to avoid SIGSEGV crashes on Node.js 24+
+  // Limit workers to avoid SIGSEGV crashes on Node.js 24+.
   maxWorkers: '50%',
+  // Recycle a worker once its heap grows past this limit. Coverage instrumentation
+  // over the full suite otherwise accumulates until a worker hits the default
+  // ~2GB old-space ceiling and dies with "JavaScript heap out of memory" — which
+  // is what fails `sdk:test --coverage` on lower-RAM / low-core CI runners (where
+  // `'50%'` collapses toward a single worker that must hold the whole suite).
+  // Recycling caps per-worker memory so the run completes regardless of core count.
+  workerIdleMemoryLimit: '512MB',
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },

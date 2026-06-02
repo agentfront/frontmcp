@@ -140,7 +140,8 @@ sequenceDiagram
 
 ## Orchestrated Remote Mode
 
-FrontMCP acts as an OAuth server while proxying user authentication to upstream IdP.
+FrontMCP acts as an OAuth server while proxying user authentication to a single
+**mandatory** upstream IdP.
 
 ```typescript
 @FrontMcp({
@@ -156,6 +157,17 @@ FrontMCP acts as an OAuth server while proxying user authentication to upstream 
 })
 export class Server {}
 ```
+
+<Info>
+  In `mode: 'remote'`, `GET /oauth/authorize` redirects **straight to the upstream
+  IdP** — FrontMCP never shows its own login page or a provider-selection page.
+  After the IdP returns to `/oauth/provider/{id}/callback`, FrontMCP exchanges the
+  code, stores the upstream tokens (encrypted, server-side), derives the session
+  identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
+  HS256-signed session token. Tools read the upstream token with
+  `this.orchestration.getToken('<provider-id>')` — the provider id is taken from
+  `providerConfig.id` (or derived from the `provider` hostname).
+</Info>
 
 ### Configuration Options
 
@@ -205,22 +217,23 @@ sequenceDiagram
 
 ## Dynamic Client Registration
 
-When the IdP supports DCR, FrontMCP can register clients automatically:
+<Warning>
+  **Not yet wired.** `providerConfig.dcrEnabled` / `providerConfig.registrationEndpoint`
+  are accepted by the schema but FrontMCP does not yet perform upstream Dynamic
+  Client Registration. In `mode: 'remote'` you must provide a **pre-registered**
+  `clientId` (and `clientSecret` for confidential clients) — without a `clientId`
+  the upstream provider is not registered and `/oauth/authorize` returns a
+  configuration error. DCR support is planned; track it before relying on it.
+</Warning>
 
 ```typescript
 auth: {
   mode: 'remote',
   provider: 'https://auth.example.com',
-  providerConfig: {
-    dcrEnabled: true, // Enable DCR
-  },
-  // clientId/clientSecret derived from registration
+  clientId: 'pre-registered-client-id', // required today (DCR not yet wired)
+  clientSecret: process.env.IDP_CLIENT_SECRET,
 }
 ```
-
-<Info>
-  Not all providers support DCR. Check your IdP documentation.
-</Info>
 
 ---
 

@@ -1,11 +1,12 @@
-import { CimdService } from '../cimd.service';
 import {
+  CimdClientIdMismatchError,
   CimdFetchError,
   CimdValidationError,
-  CimdClientIdMismatchError,
   RedirectUriMismatchError,
 } from '../cimd.errors';
 import type { CimdLogger } from '../cimd.logger';
+import { CimdService } from '../cimd.service';
+import type { ClientMetadataDocument } from '../cimd.types';
 
 // Mock logger implementing CimdLogger interface
 const createMockLogger = (): jest.Mocked<CimdLogger> => ({
@@ -17,7 +18,7 @@ const createMockLogger = (): jest.Mocked<CimdLogger> => ({
 });
 
 // Sample valid CIMD document
-const validCimdDocument = {
+const validCimdDocument: ClientMetadataDocument = {
   client_id: 'https://example.com/oauth/client-metadata.json',
   client_name: 'Test Client',
   redirect_uris: ['https://example.com/callback', 'http://localhost:3000/callback'],
@@ -246,11 +247,11 @@ describe('CimdService', () => {
 
   describe('validateRedirectUri', () => {
     it('should pass for registered redirect URI', () => {
-      expect(() => service.validateRedirectUri('https://example.com/callback', validCimdDocument as any)).not.toThrow();
+      expect(() => service.validateRedirectUri('https://example.com/callback', validCimdDocument)).not.toThrow();
     });
 
     it('should throw RedirectUriMismatchError for unregistered URI', () => {
-      expect(() => service.validateRedirectUri('https://unregistered.com/callback', validCimdDocument as any)).toThrow(
+      expect(() => service.validateRedirectUri('https://unregistered.com/callback', validCimdDocument)).toThrow(
         RedirectUriMismatchError,
       );
     });
@@ -261,8 +262,67 @@ describe('CimdService', () => {
         service.validateRedirectUri('https://example.com/callback/', {
           ...validCimdDocument,
           redirect_uris: ['https://example.com/callback'],
-        } as any),
+        } satisfies ClientMetadataDocument),
       ).not.toThrow();
+    });
+
+    // #42 — RFC 8252 §7.3: loopback redirects use an ephemeral OS-assigned
+    // port, so the port MUST be ignored when matching a loopback redirect_uri.
+    describe('loopback redirect_uri (RFC 8252 §7.3)', () => {
+      it('should accept a different port on 127.0.0.1 loopback', () => {
+        expect(() =>
+          service.validateRedirectUri('http://127.0.0.1:54321/callback', {
+            ...validCimdDocument,
+            redirect_uris: ['http://127.0.0.1:8080/callback'],
+          } satisfies ClientMetadataDocument),
+        ).not.toThrow();
+      });
+
+      it('should accept a different port on localhost loopback', () => {
+        expect(() =>
+          service.validateRedirectUri('http://localhost:61000/callback', {
+            ...validCimdDocument,
+            redirect_uris: ['http://localhost:3000/callback'],
+          } satisfies ClientMetadataDocument),
+        ).not.toThrow();
+      });
+
+      it('should accept a different port on [::1] IPv6 loopback', () => {
+        expect(() =>
+          service.validateRedirectUri('http://[::1]:55555/callback', {
+            ...validCimdDocument,
+            redirect_uris: ['http://[::1]:9999/callback'],
+          } satisfies ClientMetadataDocument),
+        ).not.toThrow();
+      });
+
+      it('should still reject a loopback redirect with a mismatched path', () => {
+        expect(() =>
+          service.validateRedirectUri('http://127.0.0.1:54321/evil', {
+            ...validCimdDocument,
+            redirect_uris: ['http://127.0.0.1:8080/callback'],
+          } satisfies ClientMetadataDocument),
+        ).toThrow(RedirectUriMismatchError);
+      });
+
+      it('should still reject a loopback redirect with a mismatched scheme', () => {
+        expect(() =>
+          service.validateRedirectUri('https://127.0.0.1:54321/callback', {
+            ...validCimdDocument,
+            redirect_uris: ['http://127.0.0.1:8080/callback'],
+          } satisfies ClientMetadataDocument),
+        ).toThrow(RedirectUriMismatchError);
+      });
+
+      it('should keep exact (port-sensitive) matching for non-loopback hosts', () => {
+        // A public host with a differing port must NOT match.
+        expect(() =>
+          service.validateRedirectUri('https://example.com:8443/callback', {
+            ...validCimdDocument,
+            redirect_uris: ['https://example.com/callback'],
+          } satisfies ClientMetadataDocument),
+        ).toThrow(RedirectUriMismatchError);
+      });
     });
   });
 

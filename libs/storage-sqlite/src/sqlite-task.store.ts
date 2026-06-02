@@ -29,6 +29,7 @@ import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
+import { openDatabase } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 // ───────────────────────────────────────────────────────────────
@@ -165,13 +166,8 @@ export class SqliteTaskStore implements TaskStoreInterface {
   private stmts: Prepared | null = null;
 
   constructor(options: SqliteTaskStoreOptions) {
-    const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    try {
-      this.db = new BetterSqlite3(options.path);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`SqliteTaskStore: failed to open database at "${options.path}": ${message}`);
-    }
+    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
+    this.db = openDatabase(options.path, 'SqliteTaskStore');
 
     if (options.walMode !== false) {
       this.db.pragma('journal_mode = WAL');

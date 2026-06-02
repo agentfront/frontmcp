@@ -65,8 +65,10 @@ Errors safe to expose to clients (validation errors, not found, etc.).
 ```typescript
 class PublicMcpError extends McpError {
   readonly isPublic = true;
+  /** Optional `WWW-Authenticate` response header value (e.g. `'Bearer'`) for 401 challenges. */
+  readonly wwwAuthenticate?: string;
 
-  constructor(message: string, code?: string, statusCode?: number);
+  constructor(message: string, code?: string, statusCode?: number, wwwAuthenticate?: string);
 }
 ```
 
@@ -208,6 +210,7 @@ class ResourceNotFoundError extends PublicMcpError {
 | `errorId`      | `string`  | Unique ID for tracking (auto-generated) |
 | `isPublic`     | `boolean` | Whether to expose message to clients    |
 | `statusCode`   | `number`  | HTTP status code equivalent             |
+| `wwwAuthenticate` | `string?` | Optional `WWW-Authenticate` header value (e.g. `'Bearer'`) for 401 challenges |
 | `code`         | `string`  | Error code for categorization           |
 | `mcpErrorCode` | `number`  | JSON-RPC error code (optional)          |
 

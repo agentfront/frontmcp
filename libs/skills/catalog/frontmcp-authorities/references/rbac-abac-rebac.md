@@ -173,6 +173,15 @@ Instead of hardcoding values, reference runtime data from tool input or JWT clai
 { path: 'claims.department', op: 'eq', value: { fromClaims: 'manager.department' } }
 ```
 
+> **`fromInput` is for tools and agents only.** Only **tools** and **agents**
+> pass request input into the authorities evaluation. `@Resource` and `@Prompt`
+> do not receive tool-style input, so a `fromInput` reference (in an ABAC
+> condition or a ReBAC `resourceId`) has nothing to resolve against on those
+> entries — gate resources and prompts with role / permission / `fromClaims`
+> policies instead. (Separately, list-time discovery filtering runs without any
+> input at all, so `fromInput` policies are also excluded from list results for
+> everyone — reserve them for call-time enforcement.)
+
 ### ABAC Examples
 
 **Tenant isolation:**

@@ -1,7 +1,8 @@
 /**
  * JwksService Tests
  */
-import { SignJWT, generateKeyPair, exportJWK } from 'jose';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+
 import { JwksService } from '../jwks.service';
 
 describe('JwksService', () => {
@@ -177,35 +178,6 @@ describe('JwksService', () => {
       });
 
       expect(result).toBeUndefined();
-    });
-  });
-
-  describe('verifyGatewayToken', () => {
-    it('should verify a valid gateway token', async () => {
-      const service = new JwksService();
-      const expectedIssuer = 'https://gateway.example.com';
-
-      // Create a simple test token
-      const header = { alg: 'RS256', typ: 'JWT' };
-      const payload = { sub: 'user123', iss: expectedIssuer, exp: Math.floor(Date.now() / 1000) + 3600 };
-      const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
-      const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-      const token = `${headerB64}.${payloadB64}.fake-signature`;
-
-      const result = await service.verifyGatewayToken(token, expectedIssuer);
-
-      expect(result.ok).toBe(true);
-      expect(result.issuer).toBe(expectedIssuer);
-      expect(result.sub).toBe('user123');
-    });
-
-    it('should return error for invalid token', async () => {
-      const service = new JwksService();
-
-      const result = await service.verifyGatewayToken('invalid-token', 'https://issuer.com');
-
-      expect(result.ok).toBe(false);
-      expect(result.error).toBeDefined();
     });
   });
 

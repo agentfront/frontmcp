@@ -158,17 +158,17 @@ CIMD is configured through the `auth.cimd` option when creating a FrontMCP serve
 import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
-name: 'my-mcp-server',
-auth: {
-mode: 'local',
-cimd: {
-enabled: true,
-security: {
-blockPrivateIPs: true,
-allowedDomains: ['*.verified-clients.mcp']
-}
-}
-}
+  info: { name: 'my-mcp-server', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    cimd: {
+      enabled: true,
+      security: {
+        blockPrivateIPs: true,
+        allowedDomains: ['*.verified-clients.mcp'],
+      },
+    },
+  },
 })
 class MyServer {}
 
@@ -207,15 +207,17 @@ const client = await connect({
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-name: 'my-mcp-server',
-auth: {
-mode: 'local',
-cimd: {
-// Enable/disable CIMD support
-enabled: true,
+  info: { name: 'my-mcp-server', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    cimd: {
+      // Enable/disable CIMD support
+      enabled: true,
 
       // Cache settings
       cache: {
+        type: 'memory',          // 'memory' (default) | 'redis'
+        // redis: { provider: 'redis', host: 'localhost', port: 6379 }, // required when type: 'redis'
         defaultTtlMs: 3600_000,   // 1 hour default
         maxTtlMs: 86400_000,      // 24 hours max
         minTtlMs: 60_000,         // 1 minute min
@@ -227,16 +229,18 @@ enabled: true,
         allowedDomains: ['trusted.com'],
         blockedDomains: ['blocked.com'],
         warnOnLocalhostRedirects: true,
+        // allowInsecureForTesting: false, // TEST ONLY — permits http:// CIMD URLs
       },
 
       // Network settings
       network: {
         timeoutMs: 5000,
         maxResponseSizeBytes: 65536,
+        redirectPolicy: 'deny',  // 'deny' (default) | 'same-origin' | 'allow'
+        maxRedirects: 5,
       },
-    }
-
-}
+    },
+  },
 })
 class MyServer {}
 
@@ -247,7 +251,7 @@ class MyServer {}
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-mcp-server',
+  info: { name: 'my-mcp-server', version: '1.0.0' },
   auth: {
     mode: 'local',
     // CIMD is enabled by default with secure settings
@@ -274,21 +278,26 @@ CIMD is **enabled by default** when using orchestrated auth mode. The framework 
 | `allowedDomains`           | `undefined` | If set, only these domains can host CIMD documents    |
 | `blockedDomains`           | `undefined` | These domains cannot host CIMD documents              |
 | `warnOnLocalhostRedirects` | `true`      | Log warning for localhost-only redirect URIs          |
+| `allowInsecureForTesting`  | `false`     | **Test only.** Permit `http://` (non-TLS) CIMD URLs. Never enable in production. |
 
 ### Cache Settings
 
-| Option         | Default               | Description                                 |
-| -------------- | --------------------- | ------------------------------------------- |
-| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present   |
-| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer  |
-| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter |
+| Option         | Default               | Description                                                            |
+| -------------- | --------------------- | --------------------------------------------------------------------- |
+| `type`         | `'memory'`            | Cache backend: `'memory'` (dev/single-instance) or `'redis'` (distributed) |
+| `redis`        | `undefined`           | Redis connection (e.g. `{ provider: 'redis', host, port }`). **Required** when `type: 'redis'` |
+| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present                             |
+| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer                            |
+| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter                           |
 
 ### Network Settings
 
-| Option                 | Default        | Description                |
-| ---------------------- | -------------- | -------------------------- |
-| `timeoutMs`            | `5000` (5s)    | Request timeout            |
-| `maxResponseSizeBytes` | `65536` (64KB) | Maximum response body size |
+| Option                 | Default        | Description                                                                 |
+| ---------------------- | -------------- | --------------------------------------------------------------------------- |
+| `timeoutMs`            | `5000` (5s)    | Request timeout                                                             |
+| `maxResponseSizeBytes` | `65536` (64KB) | Maximum response body size                                                 |
+| `redirectPolicy`       | `'deny'`       | How to handle redirects when fetching the CIMD document: `'deny'` (reject any redirect), `'same-origin'` (only same-origin), or `'allow'` (follow up to `maxRedirects`) |
+| `maxRedirects`         | `5`            | Maximum redirects to follow (only relevant when `redirectPolicy` allows redirects) |
 
 ## Client Metadata Document Format
 
@@ -321,6 +330,10 @@ The metadata document is a JSON file hosted at the client's URL:
 | `client_id`     | `string`   | **MUST** match the URL from which this document was fetched |
 | `client_name`   | `string`   | Human-readable name of the client                           |
 | `redirect_uris` | `string[]` | Array of allowed redirect URIs (at least one required)      |
+
+<Note>
+  `redirect_uri` matching is exact, with one exception: for **loopback** redirect URIs (host `127.0.0.1`, `[::1]`, or `localhost`) the **port is ignored** when comparing the request's `redirect_uri` against the registered ones (RFC 8252 §7.3) — scheme + loopback host + path must match, but a native client's ephemeral callback port may differ. Non-loopback hosts must match exactly, port included.
+</Note>
 
 ### Optional Fields
 
@@ -450,32 +463,21 @@ finalTtl = Math.max(minTtlMs, Math.min(maxTtlMs, serverSuggestedTtl))
 
 ### Understanding Error Responses
 
-When CIMD validation fails during the OAuth flow, the authorization endpoint returns an error response. Here's how to interpret and handle these errors on the client side:
+<Warning>
+  When CIMD validation fails at `/oauth/authorize`, FrontMCP does **not** emit an OAuth `error=`/`error_description=` redirect back to the (still-unvalidated) `redirect_uri` — doing so would be an open-redirect vector. Instead it serves a **server-rendered HTML error page** (HTTP `400` for `invalid_request`, `500` for `server_error`) at the authorization endpoint itself. There is no machine-parsable JSON OAuth error envelope for the CIMD-validation failure case; the client sees an HTML page and a non-2xx status. The error-class table above describes how the failures map to HTTP statuses and how to handle them in your **own** server-side hooks/flows (below) — not a JSON body the MCP client should parse.
+</Warning>
 
 ```typescript
-// MCP client handling authorization errors
+// MCP client handling a failed authorization request.
+// On CIMD-validation failure the body is an HTML error page (not JSON),
+// so branch on the HTTP status rather than attempting to parse `error.error`.
 async function handleAuthorization(authUrl: string) {
   const response = await fetch(authUrl);
 
   if (!response.ok) {
-    const error = await response.json();
-
-    switch (error.error) {
-      case 'invalid_request':
-        // Invalid client_id URL format
-        console.error('Invalid client_id:', error.error_description);
-        break;
-      case 'access_denied':
-        // URL blocked by security policy
-        console.error('Client blocked:', error.error_description);
-        break;
-      case 'server_error':
-        // Failed to fetch metadata document
-        console.error('Metadata fetch failed:', error.error_description);
-        break;
-      default:
-        console.error('Authorization error:', error.error_description);
-    }
+    // 400 → invalid client_id URL / redirect_uri mismatch;
+    // server-side error (e.g. 500/502) → metadata fetch/validation failed.
+    console.error(`Authorization failed (HTTP ${response.status})`, await response.text());
   }
 }
 ```

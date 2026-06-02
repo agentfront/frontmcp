@@ -22,6 +22,7 @@ export {
   readJSON,
   writeJSON,
   ensureDir,
+  ensureDirSync,
   isDirEmpty,
   runCmd,
   watchFile,

@@ -51,6 +51,57 @@ const toolAuthProviderMappingSchema = z.union([
     .strict(),
 ]);
 
+/**
+ * Auth provider ref with all defaults applied — the shape the call-tool
+ * credential gate and PRM scope advertising consume.
+ */
+export interface NormalizedToolAuthProvider {
+  /** Provider name (must match a registered credential provider). */
+  name: string;
+  /** Whether the credential is required to run the tool (default: true). */
+  required: boolean;
+  /** Required OAuth scopes (advertised via PRM `scopes_supported`). */
+  scopes?: string[];
+  /** Local alias used when injecting (defaults to `name`). */
+  alias: string;
+}
+
+/**
+ * Normalize the raw `authProviders` metadata (a mix of string shorthand and
+ * `{ name, required?, scopes?, alias? }` objects) into a uniform list with
+ * defaults applied:
+ *  - string `'github'` → `{ name: 'github', required: true, alias: 'github' }`
+ *  - object → `required` defaults to `true`, `alias` defaults to `name`.
+ *
+ * Centralizes the "default required = true" contract so the call-tool gate and
+ * PRM advertising agree on what each ref means. Unknown/invalid entries are
+ * skipped defensively (metadata is validated at decoration time, but this is
+ * also called against `unknown` metadata in the flow).
+ */
+export function normalizeToolAuthProviders(refs: unknown): NormalizedToolAuthProvider[] {
+  if (!Array.isArray(refs)) return [];
+  const out: NormalizedToolAuthProvider[] = [];
+  for (const ref of refs) {
+    if (typeof ref === 'string') {
+      if (ref.length === 0) continue;
+      out.push({ name: ref, required: true, alias: ref });
+      continue;
+    }
+    if (typeof ref === 'object' && ref !== null) {
+      const obj = ref as Record<string, unknown>;
+      const name = obj['name'];
+      if (typeof name !== 'string' || name.length === 0) continue;
+      const required = typeof obj['required'] === 'boolean' ? (obj['required'] as boolean) : true;
+      const scopes = Array.isArray(obj['scopes'])
+        ? (obj['scopes'] as unknown[]).filter((s): s is string => typeof s === 'string')
+        : undefined;
+      const alias = typeof obj['alias'] === 'string' && obj['alias'].length > 0 ? (obj['alias'] as string) : name;
+      out.push({ name, required, alias, ...(scopes && scopes.length > 0 ? { scopes } : {}) });
+    }
+  }
+  return out;
+}
+
 declare global {
   /**
    * Declarative metadata extends to the an McpTool decorator.

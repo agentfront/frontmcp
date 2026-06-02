@@ -66,7 +66,7 @@ import { ipAllowListEvaluator } from './evaluators/ip-allow-list';
 import { timeWindowEvaluator } from './evaluators/time-window';
 
 @FrontMcp({
-  name: 'my-server',
+  info: { name: 'my-server', version: '1.0.0' },
   authorities: {
     claimsMapping: { roles: 'roles', permissions: 'permissions' },
     profiles: { admin: { roles: { any: ['admin'] } } },

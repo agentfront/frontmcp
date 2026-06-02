@@ -71,4 +71,22 @@ describe('buildPerSkillResourceRecord', () => {
     expect(rec.metadata.uri).toBe('skill://acme/billing/refunds/SKILL.md');
     expect(rec.metadata._meta?.[`${SEP_2640_META_NAMESPACE}path`]).toBe('acme/billing/refunds');
   });
+
+  it('propagates the skill authorities onto the resource metadata so the resource flow enforces it', () => {
+    const skill = makeSkill({
+      name: 'admin-skill',
+      description: 'Admin-only',
+      metadata: { authorities: { roles: { any: ['admin'] } } },
+    } as never);
+    const rec = buildPerSkillResourceRecord(fakeScope, skill);
+    expect((rec.metadata as unknown as Record<string, unknown>)['authorities']).toEqual({
+      roles: { any: ['admin'] },
+    });
+  });
+
+  it('does not add an authorities key for a skill without authorities (default preserved)', () => {
+    const skill = makeSkill({ name: 'public-skill', description: 'Open' });
+    const rec = buildPerSkillResourceRecord(fakeScope, skill);
+    expect('authorities' in (rec.metadata as object)).toBe(false);
+  });
 });

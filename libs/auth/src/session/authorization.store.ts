@@ -63,6 +63,19 @@ export interface AuthorizationCodeRecord {
   federatedLoginUsed?: boolean;
   /** Pending auth ID for token migration (federated login) */
   pendingAuthId?: string;
+  /**
+   * Progressive/Incremental authorization: the app IDs this code grants access
+   * to. Embedded as the `authorized_apps` claim in the minted token (which
+   * turns on app-level gating). Only set when `incrementalAuth` is enabled for
+   * the scope; absent for non-incremental setups (preserving allow-all).
+   */
+  authorizedAppIds?: string[];
+  /**
+   * Custom claims returned by a local `authenticate` verifier (Checkpoint 3a).
+   * Embedded (namespaced) in the minted access token. Reserved claims
+   * (sub/iss/exp/…) are stripped when signed.
+   */
+  customClaims?: Record<string, unknown>;
 }
 
 /**
@@ -129,6 +142,12 @@ export interface PendingAuthorizationRecord {
   existingSessionId?: string;
   /** Existing authorization ID to expand */
   existingAuthorizationId?: string;
+  /**
+   * App IDs the client already holds a grant for (its prior `authorized_apps`
+   * claim), carried forward on an incremental authorize so the minted token's
+   * grant is the UNION of these plus `targetAppId`.
+   */
+  priorAuthorizedAppIds?: string[];
 
   // Federated Login State
   /** Federated login state for multi-provider auth */
@@ -192,7 +211,167 @@ export const authorizationCodeRecordSchema = z.object({
   consentEnabled: z.boolean().optional(),
   federatedLoginUsed: z.boolean().optional(),
   pendingAuthId: z.string().optional(),
+  // Progressive/Incremental authorization: granted app-id set.
+  authorizedAppIds: z.array(z.string()).optional(),
+  // Custom claims from a local authenticate() verifier (Checkpoint 3a).
+  customClaims: z.record(z.string(), z.unknown()).optional(),
 });
+
+/**
+ * Parameters for building an authorization code record.
+ */
+export interface CreateCodeRecordParams {
+  clientId: string;
+  redirectUri: string;
+  scopes: string[];
+  pkce: PkceChallenge;
+  userSub: string;
+  userEmail?: string;
+  userName?: string;
+  state?: string;
+  resource?: string;
+  // Consent and Federated Login Data
+  selectedToolIds?: string[];
+  selectedProviderIds?: string[];
+  skippedProviderIds?: string[];
+  consentEnabled?: boolean;
+  federatedLoginUsed?: boolean;
+  // Token migration ID (for federated auth)
+  pendingAuthId?: string;
+  // Progressive/Incremental authorization: granted app-id set.
+  authorizedAppIds?: string[];
+  // Custom claims from a local authenticate() verifier (Checkpoint 3a).
+  customClaims?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for building a pending authorization record.
+ */
+export interface CreatePendingRecordParams {
+  clientId: string;
+  redirectUri: string;
+  scopes: string[];
+  pkce: PkceChallenge;
+  state?: string;
+  resource?: string;
+  // Progressive/Incremental Authorization Fields
+  isIncremental?: boolean;
+  targetAppId?: string;
+  targetToolId?: string;
+  existingSessionId?: string;
+  existingAuthorizationId?: string;
+  // Prior authorized app IDs to carry forward on an incremental authorize.
+  priorAuthorizedAppIds?: string[];
+  // Federated Login State
+  federatedLogin?: FederatedLoginStateRecord;
+  // Consent State
+  consent?: ConsentStateRecord;
+}
+
+/**
+ * Parameters for building a refresh token record.
+ */
+export interface CreateRefreshTokenRecordParams {
+  clientId: string;
+  userSub: string;
+  scopes: string[];
+  resource?: string;
+}
+
+/** Default TTL for authorization codes (60 seconds). */
+export const AUTH_CODE_TTL_MS = 60 * 1000;
+/** Default TTL for pending authorizations (10 minutes). */
+export const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
+/** Default TTL for refresh tokens (30 days). */
+export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Generate a cryptographically secure authorization code.
+ */
+export function generateAuthorizationCode(): string {
+  return randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+}
+
+/**
+ * Generate a refresh token string.
+ */
+export function generateRefreshTokenValue(): string {
+  return randomUUID() + '-' + randomUUID();
+}
+
+/**
+ * Build an authorization code record with defaults. Pure (no storage I/O), so
+ * it is shared by every {@link AuthorizationStore} implementation.
+ */
+export function buildCodeRecord(params: CreateCodeRecordParams): AuthorizationCodeRecord {
+  const now = Date.now();
+  return {
+    code: generateAuthorizationCode(),
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    scopes: params.scopes,
+    pkce: params.pkce,
+    userSub: params.userSub,
+    userEmail: params.userEmail,
+    userName: params.userName,
+    state: params.state,
+    resource: params.resource,
+    createdAt: now,
+    expiresAt: now + AUTH_CODE_TTL_MS,
+    used: false,
+    selectedToolIds: params.selectedToolIds,
+    selectedProviderIds: params.selectedProviderIds,
+    skippedProviderIds: params.skippedProviderIds,
+    consentEnabled: params.consentEnabled,
+    federatedLoginUsed: params.federatedLoginUsed,
+    pendingAuthId: params.pendingAuthId,
+    authorizedAppIds: params.authorizedAppIds,
+    customClaims: params.customClaims,
+  };
+}
+
+/**
+ * Build a pending authorization record with defaults.
+ */
+export function buildPendingRecord(params: CreatePendingRecordParams): PendingAuthorizationRecord {
+  const now = Date.now();
+  return {
+    id: randomUUID(),
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    scopes: params.scopes,
+    pkce: params.pkce,
+    state: params.state,
+    resource: params.resource,
+    createdAt: now,
+    expiresAt: now + PENDING_AUTH_TTL_MS,
+    isIncremental: params.isIncremental,
+    targetAppId: params.targetAppId,
+    targetToolId: params.targetToolId,
+    existingSessionId: params.existingSessionId,
+    existingAuthorizationId: params.existingAuthorizationId,
+    priorAuthorizedAppIds: params.priorAuthorizedAppIds,
+    federatedLogin: params.federatedLogin,
+    consent: params.consent,
+  };
+}
+
+/**
+ * Build a refresh token record with defaults.
+ */
+export function buildRefreshTokenRecord(params: CreateRefreshTokenRecordParams): RefreshTokenRecord {
+  const now = Date.now();
+  return {
+    token: generateRefreshTokenValue(),
+    clientId: params.clientId,
+    userSub: params.userSub,
+    scopes: params.scopes,
+    resource: params.resource,
+    createdAt: now,
+    expiresAt: now + REFRESH_TOKEN_TTL_MS,
+    revoked: false,
+  };
+}
 
 /**
  * Authorization Store Interface
@@ -215,9 +394,15 @@ export interface AuthorizationStore {
   revokeRefreshToken(token: string): Promise<void>;
   rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void>;
 
-  // Utility
+  // Record builders (pure; backend-agnostic) — part of the interface so callers
+  // never need to downcast to a concrete store to mint records.
   generateCode(): string;
   generateRefreshToken(): string;
+  createCodeRecord(params: CreateCodeRecordParams): AuthorizationCodeRecord;
+  createPendingRecord(params: CreatePendingRecordParams): PendingAuthorizationRecord;
+  createRefreshTokenRecord(params: CreateRefreshTokenRecordParams): RefreshTokenRecord;
+
+  // Utility
   cleanup(): Promise<void>;
 }
 
@@ -250,20 +435,12 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
   private pending = new Map<string, PendingAuthorizationRecord>();
   private refreshTokens = new Map<string, RefreshTokenRecord>();
 
-  /** Default TTL for authorization codes (60 seconds) */
-  private readonly codeTtlMs = 60 * 1000;
-  /** Default TTL for pending authorizations (10 minutes) */
-  private readonly pendingTtlMs = 10 * 60 * 1000;
-  /** Default TTL for refresh tokens (30 days) */
-  private readonly refreshTtlMs = 30 * 24 * 60 * 60 * 1000;
-
   generateCode(): string {
-    // Generate a cryptographically secure authorization code
-    return randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+    return generateAuthorizationCode();
   }
 
   generateRefreshToken(): string {
-    return randomUUID() + '-' + randomUUID();
+    return generateRefreshTokenValue();
   }
 
   async storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void> {
@@ -373,118 +550,24 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
   }
 
   /**
-   * Create an authorization code record with defaults
+   * Create an authorization code record with defaults.
    */
-  createCodeRecord(params: {
-    clientId: string;
-    redirectUri: string;
-    scopes: string[];
-    pkce: PkceChallenge;
-    userSub: string;
-    userEmail?: string;
-    userName?: string;
-    state?: string;
-    resource?: string;
-    // Consent and Federated Login Data
-    selectedToolIds?: string[];
-    selectedProviderIds?: string[];
-    skippedProviderIds?: string[];
-    consentEnabled?: boolean;
-    federatedLoginUsed?: boolean;
-    // Token migration ID (for federated auth)
-    pendingAuthId?: string;
-  }): AuthorizationCodeRecord {
-    const now = Date.now();
-    return {
-      code: this.generateCode(),
-      clientId: params.clientId,
-      redirectUri: params.redirectUri,
-      scopes: params.scopes,
-      pkce: params.pkce,
-      userSub: params.userSub,
-      userEmail: params.userEmail,
-      userName: params.userName,
-      state: params.state,
-      resource: params.resource,
-      createdAt: now,
-      expiresAt: now + this.codeTtlMs,
-      used: false,
-      // Consent and Federated Login Data
-      selectedToolIds: params.selectedToolIds,
-      selectedProviderIds: params.selectedProviderIds,
-      skippedProviderIds: params.skippedProviderIds,
-      consentEnabled: params.consentEnabled,
-      federatedLoginUsed: params.federatedLoginUsed,
-      // Token migration ID (for federated auth)
-      pendingAuthId: params.pendingAuthId,
-    };
+  createCodeRecord(params: CreateCodeRecordParams): AuthorizationCodeRecord {
+    return buildCodeRecord(params);
   }
 
   /**
-   * Create a pending authorization record with defaults
+   * Create a pending authorization record with defaults.
    */
-  createPendingRecord(params: {
-    clientId: string;
-    redirectUri: string;
-    scopes: string[];
-    pkce: PkceChallenge;
-    state?: string;
-    resource?: string;
-    // Progressive/Incremental Authorization Fields
-    isIncremental?: boolean;
-    targetAppId?: string;
-    targetToolId?: string;
-    existingSessionId?: string;
-    existingAuthorizationId?: string;
-    // Federated Login State
-    federatedLogin?: FederatedLoginStateRecord;
-    // Consent State
-    consent?: ConsentStateRecord;
-  }): PendingAuthorizationRecord {
-    const now = Date.now();
-    return {
-      id: randomUUID(),
-      clientId: params.clientId,
-      redirectUri: params.redirectUri,
-      scopes: params.scopes,
-      pkce: params.pkce,
-      state: params.state,
-      resource: params.resource,
-      createdAt: now,
-      expiresAt: now + this.pendingTtlMs,
-      // Progressive/Incremental Authorization Fields
-      isIncremental: params.isIncremental,
-      targetAppId: params.targetAppId,
-      targetToolId: params.targetToolId,
-      existingSessionId: params.existingSessionId,
-      existingAuthorizationId: params.existingAuthorizationId,
-      // Federated Login State
-      federatedLogin: params.federatedLogin,
-      // Consent State
-      consent: params.consent,
-    };
+  createPendingRecord(params: CreatePendingRecordParams): PendingAuthorizationRecord {
+    return buildPendingRecord(params);
   }
 
   /**
-   * Create a refresh token record with defaults
+   * Create a refresh token record with defaults.
    */
-  createRefreshTokenRecord(params: {
-    clientId: string;
-    userSub: string;
-    scopes: string[];
-    resource?: string;
-  }): RefreshTokenRecord {
-    const now = Date.now();
-    return {
-      token: this.generateRefreshToken(),
-      clientId: params.clientId,
-      userSub: params.userSub,
-      scopes: params.scopes,
-      resource: params.resource,
-      createdAt: now,
-      expiresAt: now + this.refreshTtlMs,
-      revoked: false,
-    };
+  createRefreshTokenRecord(params: CreateRefreshTokenRecordParams): RefreshTokenRecord {
+    return buildRefreshTokenRecord(params);
   }
 }
 
@@ -505,11 +588,23 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   generateCode(): string {
-    return randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+    return generateAuthorizationCode();
   }
 
   generateRefreshToken(): string {
-    return randomUUID() + '-' + randomUUID();
+    return generateRefreshTokenValue();
+  }
+
+  createCodeRecord(params: CreateCodeRecordParams): AuthorizationCodeRecord {
+    return buildCodeRecord(params);
+  }
+
+  createPendingRecord(params: CreatePendingRecordParams): PendingAuthorizationRecord {
+    return buildPendingRecord(params);
+  }
+
+  createRefreshTokenRecord(params: CreateRefreshTokenRecordParams): RefreshTokenRecord {
+    return buildRefreshTokenRecord(params);
   }
 
   async storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void> {

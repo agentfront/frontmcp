@@ -7,6 +7,7 @@ import {
   copyFile,
   cp,
   ensureDir,
+  ensureDirSync,
   fileExists,
   getSpawnFn,
   isDirEmpty,
@@ -137,6 +138,20 @@ describe('FS Utils', () => {
 
     it('should not throw if directory exists', async () => {
       await expect(ensureDir(tempDir)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('ensureDirSync', () => {
+    it('should create nested directories synchronously', () => {
+      const dirPath = path.join(tempDir, 'sync', 'nested', 'dir');
+
+      ensureDirSync(dirPath);
+
+      expect(fs.existsSync(dirPath)).toBe(true);
+    });
+
+    it('should not throw if directory already exists', () => {
+      expect(() => ensureDirSync(tempDir)).not.toThrow();
     });
   });
 

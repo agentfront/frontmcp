@@ -6,7 +6,9 @@
  */
 
 import type Database from 'better-sqlite3';
-import { deriveEncryptionKey, encryptValue, decryptValue } from './encryption';
+
+import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
+import { openDatabase } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
@@ -41,15 +43,8 @@ export class SqliteKvStore {
   private stmts: KvPreparedStatements | null = null;
 
   constructor(options: SqliteStorageOptions) {
-    // Lazy require to avoid bundling when not used
-
-    const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    try {
-      this.db = new BetterSqlite3(options.path);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`SqliteKvStore: failed to open database at "${options.path}": ${message}`);
-    }
+    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
+    this.db = openDatabase(options.path, 'SqliteKvStore');
 
     // Enable WAL mode for better concurrency
     if (options.walMode !== false) {
@@ -93,7 +88,11 @@ export class SqliteKvStore {
       del: this.db.prepare('DELETE FROM kv WHERE key = ?'),
       has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
       keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
-      keysPattern: this.db.prepare('SELECT key FROM kv WHERE key LIKE ? AND (expires_at IS NULL OR expires_at > ?)'),
+      keysPattern: this.db.prepare(
+        // ESCAPE '\' lets callers (e.g. SqliteStorageAdapter.keys) escape literal
+        // `%`/`_` as `\%`/`\_`; without it SQLite treats the backslash literally.
+        "SELECT key FROM kv WHERE key LIKE ? ESCAPE '\\' AND (expires_at IS NULL OR expires_at > ?)",
+      ),
       cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
       ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
       expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?'),

@@ -6,13 +6,18 @@
  * - Anonymous users can access all tools
  * - Sessions are created for anonymous users
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Public Auth Mode E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-public/src/main.ts',
     project: 'demo-e2e-public',
     publicMode: true,
+    // Pin the server's JWT secret so the test token factory signs HS256 with the
+    // SAME secret — public mode is a gateway mode and now cryptographically
+    // verifies bearer tokens, so the "accepts valid tokens" case must use a
+    // genuinely-signed token.
+    env: { JWT_SECRET: 'public-e2e-shared-secret-0123456789abc' },
   });
 
   test.describe('Anonymous Access', () => {

@@ -40,7 +40,7 @@ graph TB
 ### Key Features
 
 - **OAuth 2.1 Compliant**: PKCE required (S256), authorization code flow only
-- **JWT-based**: Access tokens are signed JWTs with configurable algorithms (RS256/ES256)
+- **JWT-based**: Gateway access tokens are HS256-signed with the instance secret; RS256/ES256 apply to external JWTs verified by `JwksService` (transparent-mode upstream tokens)
 - **Flexible Storage**: In-memory (dev) or Redis (production)
 - **Session Support**: Both stateful and stateless session modes
 - **Discovery**: Standard `.well-known` endpoints for OAuth and JWKS
@@ -867,9 +867,6 @@ class JwksService {
   // Get signing key for issuing tokens
   getOrchestratorSigningKey(): { kid: string; key: KeyObject; alg: string };
 
-  // Verify a token issued by the gateway
-  verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult>;
-
   // Verify a token from external providers (transparent mode)
   verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult>;
 
@@ -878,16 +875,26 @@ class JwksService {
 }
 ```
 
+> **Gateway tokens** (public/local/orchestrated modes) are HS256-signed by the
+> auth instance with its own secret, so verification lives on the instance
+> (`LocalPrimaryAuth.verifyGatewayToken`, exposed on the `FrontMcpAuth` base),
+> not on `JwksService`. It enforces signature + expiration and pins HS256;
+> issuer equality is intentionally not enforced (proxy/tunnel tolerance).
+
 ### Token Structure
 
-Access tokens are JWTs with standard claims:
+FrontMCP-issued **gateway tokens** (public/local/orchestrated modes) are JWTs
+HS256-signed with the instance secret, so the header carries `alg: "HS256"` and
+no `kid` (verification is instance-secret-based via
+`LocalPrimaryAuth.verifyGatewayToken`, not key-id lookup). RS256/ES256 apply
+only to **external** JWTs verified by `JwksService` (transparent-mode upstream
+tokens), which do carry a `kid`.
 
 ```json
 {
   "header": {
-    "alg": "RS256",
-    "typ": "JWT",
-    "kid": "abc123"
+    "alg": "HS256",
+    "typ": "JWT"
   },
   "payload": {
     "sub": "user-uuid",

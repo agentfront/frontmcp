@@ -11,23 +11,23 @@
  * - orchestrated.schema.ts (localAuthSchema, remoteAuthSchema)
  */
 
+import { localAuthSchema, remoteAuthSchema } from '../orchestrated.schema';
+import { publicAuthOptionsSchema } from '../public.schema';
+import { authOptionsSchema } from '../schema';
 import {
-  publicAccessConfigSchema,
-  localSigningConfigSchema,
-  providerConfigSchema,
-  tokenStorageConfigSchema,
-  tokenRefreshConfigSchema,
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
+  localSigningConfigSchema,
+  providerConfigSchema,
+  publicAccessConfigSchema,
   remoteProviderConfigSchema,
   skippedAppBehaviorSchema,
+  tokenRefreshConfigSchema,
+  tokenStorageConfigSchema,
+  upstreamProviderSchema,
 } from '../shared.schemas';
-
-import { authOptionsSchema } from '../schema';
-import { publicAuthOptionsSchema } from '../public.schema';
 import { transparentAuthOptionsSchema } from '../transparent.schema';
-import { localAuthSchema, remoteAuthSchema } from '../orchestrated.schema';
 
 // ============================================
 // publicAccessConfigSchema
@@ -454,6 +454,95 @@ describe('federatedAuthConfigSchema', () => {
     const result = federatedAuthConfigSchema.safeParse({ stateValidation: 'loose' });
     expect(result.success).toBe(false);
   });
+
+  it('leaves minProviders/requiredProviders undefined by default (defaults preserved)', () => {
+    const result = federatedAuthConfigSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.minProviders).toBeUndefined();
+      expect(result.data.requiredProviders).toBeUndefined();
+    }
+  });
+
+  it('accepts minProviders and requiredProviders gating knobs', () => {
+    const result = federatedAuthConfigSchema.safeParse({
+      minProviders: 2,
+      requiredProviders: ['github', 'slack'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.minProviders).toBe(2);
+      expect(result.data.requiredProviders).toEqual(['github', 'slack']);
+    }
+  });
+
+  it('rejects a non-positive minProviders', () => {
+    expect(federatedAuthConfigSchema.safeParse({ minProviders: 0 }).success).toBe(false);
+    expect(federatedAuthConfigSchema.safeParse({ minProviders: -1 }).success).toBe(false);
+  });
+});
+
+// ============================================
+// upstreamProviderSchema
+// ============================================
+
+describe('upstreamProviderSchema', () => {
+  const base = {
+    id: 'github',
+    authorizationEndpoint: 'https://github.example.com/authorize',
+    tokenEndpoint: 'https://github.example.com/token',
+    clientId: 'gh-client',
+  };
+
+  it('accepts a provider with canonical endpoint names', () => {
+    const result = upstreamProviderSchema.safeParse({ ...base, scopes: ['repo'] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBe('github');
+      expect(result.data.authorizationEndpoint).toBe('https://github.example.com/authorize');
+      expect(result.data.tokenEndpoint).toBe('https://github.example.com/token');
+      expect(result.data.scopes).toEqual(['repo']);
+    }
+  });
+
+  it('accepts the authorizeUrl/tokenUrl aliases', () => {
+    const result = upstreamProviderSchema.safeParse({
+      id: 'slack',
+      authorizeUrl: 'https://slack.example.com/authorize',
+      tokenUrl: 'https://slack.example.com/token',
+      clientId: 'slack-client',
+      clientSecret: 'shh',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.authorizeUrl).toBe('https://slack.example.com/authorize');
+      expect(result.data.tokenUrl).toBe('https://slack.example.com/token');
+      expect(result.data.clientSecret).toBe('shh');
+    }
+  });
+
+  it('rejects a provider missing both authorization endpoint forms', () => {
+    const result = upstreamProviderSchema.safeParse({
+      id: 'github',
+      tokenEndpoint: 'https://github.example.com/token',
+      clientId: 'gh-client',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a provider missing both token endpoint forms', () => {
+    const result = upstreamProviderSchema.safeParse({
+      id: 'github',
+      authorizationEndpoint: 'https://github.example.com/authorize',
+      clientId: 'gh-client',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a provider with an empty id or clientId', () => {
+    expect(upstreamProviderSchema.safeParse({ ...base, id: '' }).success).toBe(false);
+    expect(upstreamProviderSchema.safeParse({ ...base, clientId: '' }).success).toBe(false);
+  });
 });
 
 // ============================================
@@ -844,6 +933,144 @@ describe('localAuthSchema', () => {
     if (result.success) {
       expect(result.data.expectedAudience).toEqual(['aud1', 'aud2']);
     }
+  });
+
+  // ----------------------------------------------------------------
+  // Checkpoint 3a — login customization + authenticate()
+  // ----------------------------------------------------------------
+
+  it('leaves login and authenticate undefined when omitted (default path preserved)', () => {
+    const result = localAuthSchema.safeParse({ mode: 'local' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.login).toBeUndefined();
+      expect(result.data.authenticate).toBeUndefined();
+    }
+  });
+
+  it('accepts a declarative login.fields config', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      login: {
+        title: 'Sign in to Acme',
+        subtitle: 'Use your API key',
+        logoUri: 'https://acme.example/logo.png',
+        fields: {
+          apiKey: { type: 'password', label: 'API Key', required: true, placeholder: 'sk-...' },
+          region: {
+            type: 'select',
+            label: 'Region',
+            options: [
+              { value: 'us', label: 'US' },
+              { value: 'eu', label: 'EU' },
+            ],
+          },
+        },
+        subject: { fromField: 'apiKey', strategy: 'per-account' },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.login?.title).toBe('Sign in to Acme');
+      expect(result.data.login?.fields?.['apiKey'].type).toBe('password');
+      expect(result.data.login?.fields?.['region'].options).toHaveLength(2);
+      expect(result.data.login?.subject?.strategy).toBe('per-account');
+    }
+  });
+
+  it('accepts a login.render function override', () => {
+    const render = () => '<html>custom</html>';
+    const result = localAuthSchema.safeParse({ mode: 'local', login: { render } });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(typeof result.data.login?.render).toBe('function');
+      expect(result.data.login?.render?.({} as never)).toBe('<html>custom</html>');
+    }
+  });
+
+  it('rejects a non-function login.render', () => {
+    const result = localAuthSchema.safeParse({ mode: 'local', login: { render: 'not-a-fn' } });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an invalid login field type', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      login: { fields: { x: { type: 'checkbox' } } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an authenticate function', () => {
+    const authenticate = async () => ({ ok: true as const, sub: 'u1' });
+    const result = localAuthSchema.safeParse({ mode: 'local', authenticate });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(typeof result.data.authenticate).toBe('function');
+    }
+  });
+
+  // ----------------------------------------------------------------
+  // Multi-OAuth-provider orchestration
+  // ----------------------------------------------------------------
+
+  it('leaves providers undefined when omitted (single-operator default preserved)', () => {
+    const result = localAuthSchema.safeParse({ mode: 'local' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.providers).toBeUndefined();
+    }
+  });
+
+  it('accepts a declarative providers array with federated gating knobs', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      federatedAuth: { minProviders: 1, requiredProviders: ['github'] },
+      providers: [
+        {
+          id: 'github',
+          authorizationEndpoint: 'https://github.example.com/authorize',
+          tokenEndpoint: 'https://github.example.com/token',
+          clientId: 'gh-client',
+          clientSecret: 'gh-secret',
+          scopes: ['read:user', 'repo'],
+        },
+        {
+          id: 'slack',
+          authorizeUrl: 'https://slack.example.com/authorize',
+          tokenUrl: 'https://slack.example.com/token',
+          clientId: 'slack-client',
+          scopes: ['users:read'],
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.providers).toHaveLength(2);
+      expect(result.data.providers?.[0].id).toBe('github');
+      expect(result.data.providers?.[1].id).toBe('slack');
+      expect(result.data.federatedAuth?.minProviders).toBe(1);
+      expect(result.data.federatedAuth?.requiredProviders).toEqual(['github']);
+    }
+  });
+
+  it('rejects a providers entry missing its token endpoint', () => {
+    const result = localAuthSchema.safeParse({
+      mode: 'local',
+      providers: [
+        {
+          id: 'github',
+          authorizationEndpoint: 'https://github.example.com/authorize',
+          clientId: 'gh-client',
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-function authenticate', () => {
+    const result = localAuthSchema.safeParse({ mode: 'local', authenticate: 'nope' });
+    expect(result.success).toBe(false);
   });
 });
 

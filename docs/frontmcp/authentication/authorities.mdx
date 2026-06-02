@@ -70,6 +70,10 @@ class DeleteUserTool extends ToolContext {
 
 If a user without the required role calls `delete_user`, the `checkEntryAuthorities` flow stage throws an `AuthorityDeniedError` with MCP error code `-32003` before the handler executes.
 
+<Note>
+**Boot-time fail-fast.** If any entry — a tool, resource, prompt, agent, **or skill** — declares `authorities` but the server has no authorities engine configured (no `@FrontMcp({ authorities: { … } })`), startup fails with an `AuthConfigurationError`. This prevents a silent bypass where an entry looks protected but is actually open to everyone. Either add the `authorities` config or remove `authorities` from the entry. Servers with **no** `authorities` config and **no** gated entries are unaffected.
+</Note>
+
 ## JWT Claims Mapping
 
 Every identity provider stores roles and permissions in different JWT claim paths. The `claimsMapping` option tells the engine where to find them.
@@ -400,6 +404,10 @@ Condition values can reference runtime data instead of using static literals.
 | `{ fromInput: 'fieldName' }` | Resolves to the value of the named tool input argument |
 | `{ fromClaims: 'dot.path' }` | Resolves to a value from the user's JWT claims via dot-path |
 
+<Note>
+  `fromInput` is only meaningful for entries that receive request input at call time — **tools and agents**. `@Resource` and `@Prompt` do not pass tool-style input into the authorities evaluation, so a `fromInput` reference (in an ABAC condition or a ReBAC `resourceId`) has nothing to resolve against on those entries. Gate resources and prompts with role / permission / claims (`fromClaims`) policies instead.
+</Note>
+
 ## ReBAC
 
 Relationship-based access control delegates checks to an external authorization backend (e.g., SpiceDB, OpenFGA, or a custom database query).
@@ -649,7 +657,7 @@ If a referenced custom evaluator is not registered, the policy is denied with th
 
 ## Discovery Filtering
 
-List flows automatically filter entries based on the caller's authorities via the built-in `filterByAuthorities` stage. When a client calls `tools/list`, `resources/list`, or `prompts/list`, entries the user is not authorized to access are silently removed from the results.
+List and discovery flows automatically filter entries based on the caller's authorities via the built-in `filterByAuthorities` stage. When a client calls `tools/list`, `resources/list`, or `prompts/list`, entries the user is not authorized to access are silently removed from the results.
 
 | Flow | Stage | Runs After |
 | ---- | ----- | ---------- |
@@ -668,6 +676,33 @@ List flows automatically filter entries based on the caller's authorities via th
 
 This ensures AI agents only see tools they can actually call, preventing wasted context and failed invocations.
 
+<Warning>
+  **Discovery filtering runs without request input.** `filterByAuthorities` evaluates each entry's policy against the caller's identity (roles / permissions / claims) only — there is no tool input at list time. As a result, a policy that depends on `fromInput` (an ABAC condition or a ReBAC `resourceId` resolved from input) **cannot be satisfied at discovery time and is treated as denied for everyone**, so the entry is filtered out of `tools/list` (and the skill/resource/prompt discovery surfaces) for all callers — even users who would pass the check at call time. Gate **discovery visibility** with role / permission / claims-only policies; reserve `fromInput`/ReBAC-by-input policies for **call-time** enforcement (`checkEntryAuthorities`), where the input is available.
+</Warning>
+
+### Skill Discovery Filtering
+
+Skills are filtered on **every** discovery surface so a caller never sees a skill they are not authorized to load:
+
+| Surface | What is filtered |
+| ------- | ---------------- |
+| `skills/search`, `skills/list` (MCP) | Authority-gated skills the caller can't access are removed from results |
+| `skill://index.json` + skill-path completions (SEP-2640) | Gated skills are excluded from the discovery index and autocomplete |
+| `GET /skills`, `GET /skills?query=…` (HTTP) | Gated skills are hidden (see HTTP note below) |
+
+```typescript
+@Skill({ name: 'review-pr' })                              // Visible to everyone
+@Skill({ name: 'internal-runbook', authorities: 'admin' }) // Only visible to admins
+```
+
+<Warning>
+**List-time filtering is role/permission/claims-only.** Discovery runs **without request input**, so input-dependent policies — ABAC conditions using `{ fromInput: '…' }` or ReBAC `resourceId: { fromInput: '…' }` — cannot be evaluated when filtering a list and will exclude the skill from discovery. Use role-, permission-, or claims-based authorities (e.g. `authorities: 'admin'` or `{ roles: { any: ['admin'] } }`) for skills that must stay discoverable. Input-dependent policies are still enforced correctly at **load time** (see below), where the request input is available. The same limitation applies to tools, resources, and prompts.
+</Warning>
+
+<Note>
+**HTTP skills discovery is fail-closed.** The Skills HTTP API (`GET /skills`) authenticates with a binary api-key/bearer gate that does not surface JWT claims, so authority-gated skills are hidden from HTTP discovery and denied on HTTP load (`GET /skills/{id}`) regardless of the bearer. Serve gated skills over an MCP transport (where the full claims context is available) for claims-based access. Skills **without** `authorities` are served over HTTP exactly as before.
+</Note>
+
 ## Hooking into Authority Checks
 
 Authority enforcement runs as **native flow stages**, not plugin hooks. This means developers can hook into them with `Will`, `Did`, and `Around` decorators — just like any other flow stage.
@@ -682,6 +717,8 @@ Authority enforcement runs as **native flow stages**, not plugin hooks. This mea
 | `resources:list-resources` | `filterByAuthorities` | Filter unauthorized resources from discovery |
 | `prompts:get-prompt` | `checkEntryAuthorities` | Enforce before prompt execution |
 | `prompts:list-prompts` | `filterByAuthorities` | Filter unauthorized prompts from discovery |
+
+Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
 
 ### Will Hook — Run Before the Authority Check
 

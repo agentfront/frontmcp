@@ -102,7 +102,8 @@ Use `createSkillHttpAuthValidator()` to create a validator from skill config:
 import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
 
 const validator = createSkillHttpAuthValidator(skillsConfig, logger);
-// Returns null if no validation needed (public mode)
+// Returns null when no validation is needed: `auth: 'public'`, `auth: 'inherit'`,
+// or when `skillsConfig.auth` is unset.
 
 if (validator) {
   const result = await validator.validate({ headers: request.headers });
@@ -124,7 +125,7 @@ When a skill session is active, the **Tool Authorization Guard** enforces which 
 | ---- | -------- |
 | `strict` | Tool must be in the skill's allowlist. Denied tools throw `ToolNotAllowedError`. |
 | `approval` | Unlisted tools trigger an approval flow. Throws `ToolApprovalRequiredError` until approved. |
-| `open` | All tools are allowed (no enforcement). |
+| `permissive` | Unlisted tools are **allowed with a warning** (logging only) — not silently unenforced. This is the default policy mode. |
 
 ### Usage
 
@@ -150,7 +151,7 @@ guard.approveTool('my_tool');
 guard.denyTool('dangerous_tool');
 
 // Inspect current state
-const mode = guard.getPolicyMode();      // 'strict' | 'approval' | 'open'
+const mode = guard.getPolicyMode();      // 'strict' | 'approval' | 'permissive'
 const tools = guard.getAllowlist();       // ['tool_a', 'tool_b']
 const hasSkill = guard.hasActiveSkill(); // true/false
 ```
@@ -165,7 +166,7 @@ Thrown when a tool is not in the skill's allowlist (strict mode).
 | -------- | ---- | ----------- |
 | `toolName` | `string` | The denied tool name |
 | `skillId` | `string \| undefined` | Active skill session ID |
-| `reason` | `string` | One of: `not_in_allowlist`, `denied`, `rate_limited`, `no_active_skill` |
+| `reason` | `string` | The **denial** reason carried by this error: `not_in_allowlist`, `denied`, `rate_limited`, or `no_active_skill`. (The underlying `ToolAuthorizationResult['reason']` enum also includes the *grant* reasons `skill_allowlist` and `dynamically_approved`, which appear on a successful `guard.check()` result rather than on this error.) |
 | `allowedTools` | `string[]` | List of allowed tool names |
 | `mcpErrorCode` | `number` | MCP error code (`INVALID_REQUEST`) |
 

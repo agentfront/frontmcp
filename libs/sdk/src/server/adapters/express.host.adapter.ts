@@ -84,8 +84,25 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     const jsonLimit = options?.bodyLimit ?? DEFAULT_EXPRESS_BODY_LIMIT;
     const formLimit = options?.urlencodedLimit ?? jsonLimit;
-    this.app.use(express.json({ limit: jsonLimit }));
-    this.app.use(express.urlencoded({ extended: true, limit: formLimit }));
+    // Tolerant Content-Type matching (#473). Some OAuth clients (e.g. the MCP
+    // Inspector token refresh) send a hybrid header such as
+    // `application/json, application/x-www-form-urlencoded`. body-parser's
+    // default `type` matcher can't parse a comma-list, so NEITHER stock parser
+    // fired and `req.body` arrived empty — surfacing as an opaque
+    // "Invalid request body" at /oauth/token. We widen the matchers so:
+    //   - a header that CONTAINS `x-www-form-urlencoded` parses as urlencoded
+    //     (form wins; an actual form body would fail JSON.parse), and
+    //   - a header that CONTAINS `application/json` (and NOT the form type)
+    //     parses as JSON.
+    // Clean single-type headers keep their existing behavior.
+    const headerContains = (req: http.IncomingMessage, needle: string): boolean =>
+      (req.headers['content-type'] ?? '').toLowerCase().includes(needle);
+    const isUrlencoded = (req: http.IncomingMessage): boolean =>
+      headerContains(req, 'application/x-www-form-urlencoded');
+    const isJson = (req: http.IncomingMessage): boolean =>
+      headerContains(req, 'application/json') && !isUrlencoded(req);
+    this.app.use(express.urlencoded({ extended: true, limit: formLimit, type: isUrlencoded }));
+    this.app.use(express.json({ limit: jsonLimit, type: isJson }));
 
     // Translate body-parser's `entity.too.large` (raised when a request body
     // exceeds the configured `limit`) into a structured JSON-RPC 413 response

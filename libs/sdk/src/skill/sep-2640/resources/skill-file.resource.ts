@@ -5,6 +5,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 import { ResourceTemplate } from '../../../common';
 import { ResourceContext, type ResourceCompletionResult } from '../../../common/interfaces';
 import { ResourceNotFoundError } from '../../../errors';
+import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import type { SkillInstance } from '../../skill.instance';
 import {
   findAndLoadSkillByPath,
@@ -36,7 +37,8 @@ type Params = { skillPath: string; filePath: string };
 })
 export class Sep2640SkillFileResource extends ResourceContext<Params> {
   async skillPathCompleter(partial: string): Promise<ResourceCompletionResult> {
-    const skills = getSepVisibleSkills(this.scope);
+    const visible = getSepVisibleSkills(this.scope);
+    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
     const paths = skills.map((s) => s.getSkillPath());
     const filtered = partial ? paths.filter((p) => p.toLowerCase().startsWith(partial.toLowerCase())) : paths;
     return { values: filtered, total: filtered.length };
@@ -46,7 +48,8 @@ export class Sep2640SkillFileResource extends ResourceContext<Params> {
     // We can't scope to a particular skill (MCP completion doesn't pass other
     // template variables yet), so collect file paths across all visible
     // skills. Filter by partial to keep the list small.
-    const skills = getSepVisibleSkills(this.scope);
+    const visible = getSepVisibleSkills(this.scope);
+    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
     const seen = new Set<string>();
     for (const skill of skills) {
       try {
@@ -84,6 +87,9 @@ export class Sep2640SkillFileResource extends ResourceContext<Params> {
     }
 
     const instance = entry as SkillInstance;
+    // Deny reads of files inside an authority-gated skill the caller can't
+    // access (mirrors a denied tool call: AuthorityDeniedError, code -32003).
+    await assertSkillAuthorized(this.scope, instance, this.getAuthInfo() as Record<string, unknown>);
     const result = await readSkillFileByPath(instance, params.filePath);
 
     // Emit the MCP `TextResourceContents` branch for text files and the
