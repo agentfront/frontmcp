@@ -62,6 +62,7 @@ import type ProviderRegistry from '../../provider/provider.registry';
 import { CimdService } from '../cimd';
 import { createCredentialsProviders } from '../credentials';
 import { credentialsContextExtension } from '../credentials/credentials.context-extension';
+import OauthAuthUiExtraFlow from '../flows/oauth.auth-ui.flow';
 import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
 import OauthConnectFlow from '../flows/oauth.connect.flow';
@@ -1045,6 +1046,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       OauthConnectFlow /** GET|POST /oauth/connect - mid-session add-credential (Checkpoint 3b) */,
       OauthRegisterFlow /** POST /oauth/register */,
       OauthProviderCallbackFlow /** GET /oauth/provider/:providerId/callback */,
+      OauthAuthUiExtraFlow /** POST /oauth/ui/extra — @AuthExtra validated-field submit (#469) */,
     );
   }
 

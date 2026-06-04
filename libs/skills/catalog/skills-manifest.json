@@ -460,6 +460,50 @@
       ]
     },
     {
+      "name": "frontmcp-auth-ui",
+      "category": "config",
+      "description": "Use when you want to customize, brand, or replace the built-in FrontMCP login / consent / federated / incremental / error pages with your own React component. Covers the `auth.ui` slot→file map + `auth.extras` name→handler map on the auth config (no decorator, no class), the `@frontmcp/ui/auth` React hooks + `<AuthPageWrapper>` + `mountAuthPage` (client-rendered via an esm.sh import-map + a server-side per-file transform — no bundling, no SSR), and the framework-owned CSRF + CSP. The skill for CUSTOM AUTHORIZATION UI.",
+      "path": "frontmcp-auth-ui",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["auth", "auth-ui", "login", "consent", "custom-ui", "react", "oauth", "guide"],
+      "bundle": ["full"],
+      "references": [
+        {
+          "name": "custom-auth-ui",
+          "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot→file map and auth.extras name→handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
+          "examples": [
+            {
+              "name": "login-slot",
+              "description": "Replace the built-in login page with a custom React component via auth.ui: { login: './login.tsx' } and useAuthFlow, while the framework keeps owning CSRF and CSP.",
+              "level": "intermediate",
+              "tags": ["auth", "auth-ui", "login", "custom-ui", "react", "client-rendered"],
+              "features": [
+                "Mapping a slot to a `.tsx` file with `auth.ui: { login: './login.tsx' }` (the supported render path)",
+                "Using a RELATIVE path auto-anchored to the config file — no `fileURLToPath`, no decorator, no class",
+                "Reading the injected `AuthFlowState` via `useAuthFlow()` and submitting with `<form onSubmit={submitFinish}>`",
+                "Letting `<AuthPageWrapper>` render the enclosing finish `<form>` with the `pending_auth_id` + `csrf` hidden fields",
+                "The SDK transpiling the `.tsx` server-side and inlining it as an ES module (deps from esm.sh via an import-map) + appending the `mountAuthPage` call automatically"
+              ]
+            },
+            {
+              "name": "multi-step-auth-extra",
+              "description": "Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems — accepted rows accumulate server-side and reflect back without a reload.",
+              "level": "advanced",
+              "tags": ["auth", "auth-ui", "auth-extras", "useExtraField", "useAddedItems", "multi-step", "react"],
+              "features": [
+                "Declaring a server-validated field as an `auth.extras['envs:add']` handler fn returning `{ ok, error?, addedItems? }`",
+                "Rejecting bad input and duplicates using `ctx.current` (the items already accepted for this extra in this flow)",
+                "Binding the add-row form to `useExtraField('envs:add').onSubmit` (POSTs to `/oauth/ui/extra` with `pending_auth_id` + `csrf` attached)",
+                "Reflecting the server-side accumulator reactively with `useAddedItems('envs:add')` after each successful add",
+                "Declaring both the `auth.ui` slot and the `auth.extras` handler under `auth`: `@FrontMcp({ auth: { mode, ui, extras } })`"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "frontmcp-config",
       "category": "config",
       "description": "Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.",

@@ -160,11 +160,24 @@ export interface LocalAppMetadata {
    *    standalone app list and will act as a separated scope under the appName prefix
    */
   standalone?: 'includeInParent' | boolean;
+
+  /**
+   * Directory of the source file that declared this `@App` class, captured
+   * automatically at decoration time (no `fileURLToPath` needed). Anchors
+   * relative file paths in the app config — notably `auth.ui[slot]` for a
+   * `splitByApp` scope (whose auth comes from `@App`). `undefined` when the
+   * call-site couldn't be determined. Internal; do not set manually.
+   *
+   * @internal
+   */
+  __sourceDir?: string;
 }
 
 export const frontMcpLocalAppMetadataSchema = z.looseObject({
   id: z.string().optional(),
   name: z.string().min(1),
+  // Captured call-site dir (#469 — anchors auth.ui relative paths for splitByApp).
+  __sourceDir: z.string().optional(),
   description: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   authProviders: z.array(annotatedFrontMcpAuthProvidersSchema).optional().default([]),

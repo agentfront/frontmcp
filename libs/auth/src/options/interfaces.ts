@@ -688,6 +688,88 @@ export type AuthenticateResult = AuthenticateSuccess | AuthenticateFailure;
 export type AuthenticateFn = (input: AuthenticateInput, ctx: AuthenticateContext) => Promise<AuthenticateResult>;
 
 // ============================================
+// CUSTOM AUTH-UI SLOTS + EXTRAS (#469 — map form)
+// ============================================
+
+/**
+ * Which built-in authorization page a custom React component replaces. Mirrors
+ * the SDK-side `AuthSlot` and the `@frontmcp/ui/auth` client contract. A slot is
+ * a KEY in {@link AuthUiMap}; its value is the relative `.tsx`/`.jsx` path.
+ */
+export type AuthSlot = 'login' | 'consent' | 'incremental' | 'federated' | 'error';
+
+/**
+ * Custom authorization-UI map: a slot → relative component file path. Each path
+ * is a `.tsx`/`.jsx` source resolved RELATIVE TO THE CONFIG FILE that declared
+ * it (the `@FrontMcp` / `@App` source directory, captured automatically — no
+ * `fileURLToPath` needed); absolute paths pass through unchanged. The component
+ * is transpiled server-side and client-rendered (esm.sh import-map). When a slot
+ * is absent the built-in HTML page is served unchanged.
+ *
+ * @example
+ * ```ts
+ * ui: { login: './auth/login.tsx', consent: './auth/consent.tsx' }
+ * ```
+ */
+export type AuthUiMap = Partial<Record<AuthSlot, string>>;
+
+/**
+ * Server-side accumulator-aware context handed to an {@link AuthExtraHandler}.
+ * Intentionally minimal and PII-free: the extra name, the pending-auth id (for
+ * correlation), and the items already accepted for this extra.
+ */
+export interface AuthExtraContext {
+  /** The extra name being handled (the `action` posted by the page). */
+  name: string;
+  /** The pending authorization id this submission belongs to (when known). */
+  pendingAuthId?: string;
+  /** Items already accepted for this extra (the current accumulator). */
+  current: unknown[];
+}
+
+/**
+ * Result an {@link AuthExtraHandler} returns. The handler only hands back the
+ * NEW items it accepted; the framework merges them into the per-pending-auth
+ * accumulator and echoes the full map back to the page (so `useAddedItems(name)`
+ * reflects them on re-render).
+ */
+export interface AuthExtraResult {
+  /** Whether the field was accepted. */
+  ok: boolean;
+  /** Human-readable validation error when `ok` is false. */
+  error?: string;
+  /** Items to APPEND to this extra's accumulator on success. */
+  addedItems?: unknown[];
+  /** Free-form side-effect data echoed back to the client. */
+  sideEffects?: Record<string, unknown>;
+}
+
+/**
+ * A server handler for a custom auth-UI extra (`auth.extras[name]`). Receives the
+ * page's validated field submission and the {@link AuthExtraContext}; returns
+ * (or resolves to) an {@link AuthExtraResult}. Replaces the old `@AuthExtra`
+ * class — a plain function keyed by the extra name.
+ *
+ * @example
+ * ```ts
+ * extras: {
+ *   'envs:add': async (input, ctx) => {
+ *     const key = String(input.key ?? '').trim();
+ *     if (!key) return { ok: false, error: 'key required' };
+ *     return { ok: true, addedItems: [{ key, value: input.value }] };
+ *   },
+ * }
+ * ```
+ */
+export type AuthExtraHandler = (
+  input: Record<string, unknown>,
+  ctx: AuthExtraContext,
+) => Promise<AuthExtraResult> | AuthExtraResult;
+
+/** Custom auth-UI extras map: extra name → server handler function. */
+export type AuthExtrasMap = Record<string, AuthExtraHandler>;
+
+// ============================================
 // AUTH MODE INTERFACES
 // ============================================
 
@@ -800,6 +882,36 @@ export interface LocalAuthOptionsInterface {
    * @see LocalDcrConfig
    */
   dcr?: LocalDcrConfig;
+  /**
+   * Custom authorization-UI slots (#469): a slot → relative `.tsx`/`.jsx` path
+   * map. Each component replaces the built-in login / consent / incremental /
+   * federated / error page. Relative paths resolve against THIS config file's
+   * directory (captured automatically — no `fileURLToPath`); absolute paths pass
+   * through. Scoped to THIS auth config, so each app under `splitByApp` gets its
+   * own custom UI. When a slot is absent, the built-in HTML page is served
+   * unchanged (the no-config default).
+   *
+   * @example
+   * ```ts
+   * auth: { mode: 'local', ui: { login: './auth/login.tsx' } }
+   * ```
+   * @see AuthUiMap
+   */
+  ui?: AuthUiMap;
+  /**
+   * Server handlers for custom auth-UI extras (#469): an extra name → handler
+   * function map. Each handler accepts a validated field submission and returns
+   * `{ ok, error?, addedItems?, sideEffects? }`; accepted items accumulate
+   * server-side so `useAddedItems(name)` reflects them on re-render. Scoped to
+   * THIS auth config (per-app under `splitByApp`).
+   *
+   * @example
+   * ```ts
+   * extras: { 'envs:add': async (input, ctx) => ({ ok: true, addedItems: [...] }) }
+   * ```
+   * @see AuthExtraHandler
+   */
+  extras?: AuthExtrasMap;
 }
 
 export interface RemoteAuthOptionsInterface {
@@ -826,6 +938,16 @@ export interface RemoteAuthOptionsInterface {
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
   cimd?: CimdConfigInput;
+  /**
+   * Custom authorization-UI slots (#469), scoped to this auth config.
+   * See {@link LocalAuthOptionsInterface.ui}.
+   */
+  ui?: AuthUiMap;
+  /**
+   * Server handlers for custom auth-UI extras (#469), scoped to this auth config.
+   * See {@link LocalAuthOptionsInterface.extras}.
+   */
+  extras?: AuthExtrasMap;
 }
 
 // ============================================

@@ -44,6 +44,10 @@ export function normalizeAppScope(
       id: scopeId,
       apps: [appItem],
       auth: appMetadata.auth,
+      // For a splitByApp scope, auth (and any auth.ui paths) come from `@App`, so
+      // anchor on the App's captured source dir. Fall back to the server's.
+      // `__sourceDir` lives on LocalAppMetadata only; read it defensively.
+      __sourceDir: (appMetadata as { __sourceDir?: string }).__sourceDir ?? metadata.__sourceDir,
     } as AppScopeMetadata,
   };
 }

@@ -14,12 +14,17 @@ import {
   frontMcpSkill,
   getSkillMetadata,
   isSkillDecorated,
-  parseCallerDir,
   Skill,
   skill,
 } from '../../common/decorators/skill.decorator';
+import { parseCallerDir as parseCallerDirShared } from '../../common/utils/caller-dir.utils';
 
 const THIS_DIR = __dirname;
+
+// The skill decorator skips its own file by basename; the spec exercises the
+// shared parser with the same skip list so behavior matches `@Skill`.
+const SKILL_SKIP = ['skill.decorator.ts', 'skill.decorator.js'];
+const parseCallerDir = (stack: string | undefined): string | undefined => parseCallerDirShared(stack, SKILL_SKIP);
 
 // Mock SkillContext for testing
 class MockSkillContext extends SkillContext {

@@ -287,6 +287,13 @@ export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');
 
+// Custom authorization-UI primitives (#469) are configured via the `auth.ui`
+// slot→file map + `auth.extras` name→handler map on the auth config — there is
+// no decorator and no class. The `AuthSlot` / `AuthUiMap` / `AuthExtraHandler` /
+// `AuthExtraContext` / `AuthExtraResult` types are surfaced via the auth options
+// re-export (`@frontmcp/auth` → `./common`), and the SSR machinery (registry,
+// page assembly) is internal.
+
 // OAuth flow hooks (local-mode authorization server). Exported so the OAuth AS
 // flow augmentations land in the public type graph and `FlowHooksOf('oauth:*')`
 // typechecks for consumers — no more `as any` to hook login/callback/token (#460).

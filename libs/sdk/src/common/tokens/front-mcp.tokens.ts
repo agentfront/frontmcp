@@ -5,6 +5,8 @@ import { tokenFactory } from './base.tokens';
 export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   type: tokenFactory.type('root'),
   info: tokenFactory.meta('info'),
+  // Captured call-site dir (#469) — anchors auth.ui relative paths.
+  __sourceDir: tokenFactory.meta('__sourceDir'),
   instructions: tokenFactory.meta('instructions'),
   apps: tokenFactory.meta('apps'),
   http: tokenFactory.meta('http'),

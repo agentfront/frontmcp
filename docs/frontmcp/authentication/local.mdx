@@ -302,6 +302,10 @@ upstream service — add a declarative `login` config and an `authenticate`
 verifier. **Both are optional; omitting them preserves the default login page and
 flow exactly.**
 
+<Tip>
+  For a fully custom page — your own React component for the login, consent, federated, incremental, or error slot, with the framework still owning CSRF + CSP — use the [`auth.ui` slot→file map](/frontmcp/authentication/custom-ui) instead of (or alongside) the declarative `login` fields.
+</Tip>
+
 ### Declarative login fields
 
 `login.fields` appends (or, in the built-in page, replaces the default email/name

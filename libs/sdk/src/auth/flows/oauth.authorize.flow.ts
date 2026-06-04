@@ -51,6 +51,16 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import {
+  authUiExtraPath,
+  buildAuthUiPage,
+  buildFederatedState,
+  buildIncrementalState,
+  buildLoginState,
+  type AuthFlowState,
+  type AuthProvider,
+  type AuthUiRegistry,
+} from '../auth-ui';
 import { CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
@@ -604,6 +614,18 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const appName = app?.metadata?.name || targetAppId;
       const appDescription = app?.metadata?.description;
 
+      // Custom `@AuthUi({ slot: 'incremental' })` renderer takes over when registered.
+      const customIncremental = await this.tryRenderCustomSlot('incremental', pendingAuthId, (common) =>
+        buildIncrementalState(common, {
+          appId: targetAppId,
+          appName,
+          appDescription,
+          toolId: targetToolId,
+          redirectUri: validatedRequest.redirect_uri,
+        }),
+      );
+      if (customIncremental) return;
+
       const incrementalAuthHtml = this.renderIncrementalAuthPage({
         pendingAuthId,
         appId: targetAppId,
@@ -676,6 +698,26 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         warnings: [],
       };
 
+      // Custom `@AuthUi({ slot: 'federated' })` renderer takes over when registered.
+      const customFederated = await this.tryRenderCustomSlot('federated', pendingAuthId, (common) =>
+        buildFederatedState(common, {
+          clientId: validatedRequest.client_id,
+          clientName: clientDisplayName,
+          redirectUri: validatedRequest.redirect_uri,
+          providers: [...detection.providers.values()].map(
+            (p): AuthProvider => ({
+              id: p.id,
+              name: p.id,
+              url: p.providerUrl,
+              mode: p.mode,
+              appIds: p.appIds.filter((id) => id !== '__parent__'),
+              primary: p.isParentProvider,
+            }),
+          ),
+        }),
+      );
+      if (customFederated) return;
+
       const federatedLoginHtml = this.renderFederatedLoginPage({
         pendingAuthId,
         detection,
@@ -686,6 +728,18 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       this.respond(httpRespond.html(federatedLoginHtml));
       return;
     }
+
+    // Custom `@AuthUi({ slot: 'login' })` renderer takes over when registered.
+    const customLogin = await this.tryRenderCustomSlot('login', pendingAuthId, (common) =>
+      buildLoginState(common, {
+        clientId: validatedRequest.client_id,
+        clientName: clientDisplayName,
+        scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
+        redirectUri: validatedRequest.redirect_uri,
+        logoUri: cimdMetadata?.logo_uri,
+      }),
+    );
+    if (customLogin) return;
 
     // Render a simple login page for full authorization
     // In production, this would redirect to a proper login UI
@@ -699,6 +753,60 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     });
 
     this.respond(httpRespond.html(loginHtml));
+  }
+
+  /**
+   * Render a custom `@AuthUi` slot when one is registered for this scope.
+   *
+   * Mints the per-pending-auth CSRF token (server-owned), persists it onto the
+   * pending authorization record (so the callback can verify it across nodes),
+   * builds the {@link AuthFlowState} via `buildState`, SSRs the registered
+   * component, and responds with the assembled page + CSP / anti-clickjacking
+   * headers. Returns `true` when it handled the slot (caller should `return`),
+   * `false` to fall through to the built-in page (no renderer / build failed).
+   */
+  private async tryRenderCustomSlot(
+    slot: 'login' | 'consent' | 'incremental' | 'federated' | 'error',
+    pendingAuthId: string,
+    buildState: (common: {
+      pendingAuthId: string;
+      submitUrl: string;
+      extraUrl: string;
+      csrfToken: string;
+      addedItems?: Record<string, unknown[]>;
+    }) => AuthFlowState,
+  ): Promise<boolean> {
+    const authUi: AuthUiRegistry | undefined = this.scope.authUi;
+    if (!authUi || !authUi.hasSlot(slot)) return false;
+
+    const csrfToken = authUi.mintCsrf(pendingAuthId);
+
+    // Persist the CSRF token on the pending record so the callback can verify it
+    // even if the in-memory registry map is on a different node.
+    try {
+      const localAuth = this.scope.auth as LocalPrimaryAuth;
+      const record = await localAuth.authorizationStore.getPendingAuthorization(pendingAuthId);
+      if (record) {
+        record.authUiCsrf = csrfToken;
+        await localAuth.authorizationStore.storePendingAuthorization(record);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to persist auth-UI CSRF on pending record: ${err instanceof Error ? err.message : err}`);
+    }
+
+    const state = buildState({
+      pendingAuthId,
+      submitUrl: `${this.scope.fullPath}/oauth/callback`,
+      extraUrl: authUiExtraPath(this.scope.fullPath),
+      csrfToken,
+      addedItems: authUi.getAddedItems(pendingAuthId),
+    });
+
+    const page = buildAuthUiPage({ registry: authUi, slot, state, fullPath: this.scope.fullPath });
+    if (!page) return false; // build failed → fall back to the built-in page
+
+    this.respond(httpRespond.html(page.html, 200, page.headers));
+    return true;
   }
 
   /**

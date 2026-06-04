@@ -60,6 +60,37 @@ export function buildDataInjectionScript(options: {
 }
 
 /**
+ * Generic data-injection descriptor: override the injected window global.
+ *
+ * This is the auth-agnostic counterpart to {@link buildDataInjectionScript}.
+ * The renderer uses it when a caller supplies a custom injected global instead
+ * of the default `window.__mcp*` widget data. No field is feature-specific — the
+ * caller provides the `globalKey` + `value` (or a fully-formed `script`).
+ *
+ * @see ShellDataInjectionDescriptor in ../shell/types
+ */
+export function buildCustomDataInjectionScript(descriptor: {
+  globalKey?: string;
+  value?: unknown;
+  script?: string;
+}): string {
+  // A fully-formed script wins — emitted verbatim.
+  if (descriptor.script !== undefined) {
+    return descriptor.script;
+  }
+  if (descriptor.globalKey !== undefined) {
+    // Single line: `<script>window[KEY] = VALUE;</script>` — the assignment and
+    // the closing tag stay on one line so a caller can match the injected global
+    // with a simple `window[KEY] = (…);</script>` regex.
+    return `<script>window[${safeJsonForScript(descriptor.globalKey)}] = ${safeJsonForScript(
+      descriptor.value ?? null,
+    )};</script>`;
+  }
+  // Nothing to inject (caller passed an empty descriptor).
+  return '';
+}
+
+/**
  * Template helper functions for safe rendering.
  */
 export interface TemplateHelpers {

@@ -1,0 +1,302 @@
+---
+title: Custom Authorization UI (auth.ui)
+sidebarTitle: Custom Auth UI
+slug: authentication/custom-ui
+icon: palette
+description: Replace the built-in login, consent, and federated pages with your own React components — a simple slot→file map under auth, while the framework keeps owning CSRF, CSP, and the OAuth wire
+keywords: ['frontmcp', 'mcp', 'model context protocol', 'authentication', 'auth', 'oauth', 'auth.ui', 'auth.extras', 'custom login', 'consent', 'react', 'typescript']
+---
+
+FrontMCP's `local` and `remote` OAuth modes serve built-in HTML pages for the login, consent, incremental, federated, and error steps. With the `auth.ui` **slot→file map** you replace any of those slots with **your own React component** while the framework keeps owning everything security-sensitive — CSRF, the Content-Security-Policy, anti-clickjacking headers, the pending-authorization state, the submit target, and the OAuth redirect. **You write only the UI.**
+
+<Info>
+  This page documents the `auth.ui` / `auth.extras` config maps (on the auth config in `@frontmcp/sdk`) and the client primitives in `@frontmcp/ui/auth`. There is **no decorator and no class** — a slot is just a `.tsx` path, and an extra is just a handler function. If no `auth.ui` slot is configured, the built-in pages are served unchanged — this is purely additive.
+</Info>
+
+## How it fits together
+
+There are two halves:
+
+| Half       | Package                              | Responsibility                                                                                         |
+| ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **Server** | `@frontmcp/sdk` (`auth.ui` / `auth.extras`) | Transpiles your component's `.tsx` once (server-side, single-file transform — deps stay external), inlines it as an ES module + an import-map, injects the flow state, mints/verifies CSRF, sets CSP. It never bundles or renders your component server-side. |
+| **Client** | `@frontmcp/ui/auth`                  | The framework-free contract (`AuthFlowState`, wire constants) **plus** the React hooks (`useAuthFlow`, …), `<AuthPageWrapper>`, and `mountAuthPage` that read the injected state, render the component in the browser, and drive submits. Loaded in the browser **from esm.sh** via the import-map. |
+
+At request time the server serializes an `AuthFlowState` into `window.__FRONTMCP_AUTH__`, serves a page with an **empty** `#frontmcp-auth-root` mount node, an **`<script type="importmap">`** that maps `react`, `react-dom`, and `@frontmcp/ui/auth` to **esm.sh**, and an inline **`<script type="module">`** containing your transpiled component plus a `mountAuthPage(<YourComponent>)` tail. The browser loads the deps from esm.sh, runs the module, and `mountAuthPage` renders your component **client-side** into the empty node; your component (via the hooks) reads the injected state and submits back to the OAuth callback. There is **no bundling and no server-side React** — exactly how a `@Tool({ ui: { file } })` widget loads (server transpiles the single file, the browser loads React from esm.sh via an import-map). This mirrors the `window.FrontMcpBridge` injected-global pattern that tool widgets use.
+
+<Info>
+  **Single React via `?external=react`.** The `@frontmcp/ui/auth` entry in the import-map carries `?external=react,react-dom`, so every module shares the ONE React instance the import-map provides — the same trick the tool-widget renderer uses.
+</Info>
+
+## Server API: `auth.ui` — a slot→file map
+
+Customize a slot by pointing it at a sibling `.tsx`/`.jsx` source (default export). The SDK transpiles it once with esbuild and inlines it as an ES module (deps loaded from esm.sh via an import-map), exactly like a `@Tool({ ui: { file } })` widget:
+
+```tsx
+// src/auth/login.tsx — your component (default export)
+import React from 'react';
+import { useAuthFlow } from '@frontmcp/ui/auth';
+
+export default function LoginPage(): React.ReactElement {
+  const { clientName, scopes, error, submitFinish } = useAuthFlow();
+  return (
+    <div className="login">
+      <h1>Sign in to {clientName}</h1>
+      {error && <p className="error">{error}</p>}
+      {/* <AuthPageWrapper> already renders the enclosing <form> with the
+          pending_auth_id + csrf hidden fields; just add your visible fields. */}
+      <label>
+        Email
+        <input type="email" name="email" required />
+      </label>
+      <button type="submit">Continue</button>
+    </div>
+  );
+}
+```
+
+```ts
+// src/server.ts — map the slot under `auth` (NOT a top-level field)
+import { App } from '@frontmcp/sdk'; // or @FrontMcp
+
+@App({
+  auth: {
+    mode: 'local',
+    // slot → RELATIVE .tsx path, auto-anchored to THIS config file's directory.
+    ui: { login: './auth/login.tsx' },
+  },
+})
+export default class Server {}
+```
+
+That is the whole recipe: **write a React component with the hooks (default export — the server appends the `mountAuthPage` call for you), then map the slot to its `.tsx` path under `auth: { ui: { … } }`, done.** No decorator, no class, no `fileURLToPath`. The component renders in the browser; the server only ships the page with the inlined, transpiled module + an esm.sh import-map.
+
+<Info>
+  **Auto-anchored paths.** A relative `auth.ui` path resolves against the directory of the source file that declares the `@App` / `@FrontMcp` config — captured automatically at decoration time. You do **not** need `fileURLToPath(new URL('./login.tsx', import.meta.url))`. Absolute paths pass through unchanged. If the call-site can't be determined, the framework falls back to `process.cwd()` with a warning (use an absolute path if that's wrong).
+</Info>
+
+<Note>
+  `auth.ui` / `auth.extras` are **scoped to the auth config they live on**. Under `splitByApp`, each `@App({ auth: { mode, ui, extras } })` gets its OWN custom auth UI (paths anchored to that `@App` file); the parent multi-app scope uses the top-level `@FrontMcp({ auth })` (paths anchored to the server file). Put the slots on whichever auth config owns the OAuth pages you want to brand.
+</Note>
+
+### `slot` values
+
+| Slot          | Replaces the built-in…                          | Receives                                  |
+| ------------- | ----------------------------------------------- | ----------------------------------------- |
+| `login`       | Local sign-in page                              | `clientName`, `scopes`, `redirectUri`     |
+| `consent`     | Tool-consent screen                             | `tools[]` (selectable tool cards)         |
+| `incremental` | Single-app incremental authorization screen     | `extras.appId` / `extras.appName`         |
+| `federated`   | Multi-provider selection                        | `providers[]` (selectable provider cards) |
+| `error`       | OAuth error page                                | `error` text                              |
+
+A slot not present in the `auth.ui` map keeps its built-in page. Map only the slots you want to customize:
+
+```ts
+auth: {
+  mode: 'local',
+  ui: {
+    login: './auth/login.tsx',
+    consent: './auth/consent.tsx',
+    // incremental / federated / error keep their built-in pages
+  },
+}
+```
+
+## Server API: `auth.extras` — validated extra fields
+
+An `auth.extras` entry is a **server handler function keyed by name** that adds a server-validated side endpoint your page can POST to **mid-flow**, without finishing the authorization. The classic use is a multi-step form — e.g. "add another environment variable" — where each addition is validated and accumulated server-side, then reflected back to the page.
+
+```ts
+// src/auth/extras.ts — a handler function (no class)
+import { type AuthExtraContext } from '@frontmcp/sdk';
+
+export async function addEnv(input: Record<string, unknown>, ctx: AuthExtraContext) {
+  const key = typeof input['key'] === 'string' ? input['key'].trim() : '';
+  if (!key) return { ok: false as const, error: 'key is required' };
+  // ctx.current is the list already accepted for this extra in this flow.
+  if (ctx.current.some((it) => (it as { key?: string }).key === key)) {
+    return { ok: false as const, error: `"${key}" was already added` };
+  }
+  const value = typeof input['value'] === 'string' ? input['value'] : '';
+  // Items in `addedItems` are APPENDED to the per-flow accumulator on success.
+  return { ok: true as const, addedItems: [{ key, value }] };
+}
+```
+
+```ts
+import { addEnv } from './auth/extras';
+
+@App({
+  auth: {
+    mode: 'local',
+    ui: { login: './auth/login.tsx' },
+    // extra name → handler fn. The page posts `action=<name>` to /oauth/ui/extra.
+    extras: { 'envs:add': addEnv },
+  },
+})
+export default class Server {}
+```
+
+The handler returns `{ ok, error?, addedItems?, sideEffects? }`. On success its `addedItems` (the **new** items) are appended to a per-`(pending-auth, extra)` accumulator the framework keeps. The HTTP response then carries the **full** accumulator map keyed by extra name, so your page refreshes without a reload. The `ctx` handed to the handler is deliberately minimal and PII-free: `{ name, pendingAuthId?, current }`. The handler may be sync or async.
+
+## The flow-state your component receives
+
+Your component reads the injected `AuthFlowState` through the hooks. The fields:
+
+| Field          | Type                          | Notes                                                                        |
+| -------------- | ----------------------------- | ---------------------------------------------------------------------------- |
+| `slot`         | `AuthSlot`                    | Which page slot is rendering.                                                |
+| `pendingAuthId`| `string?`                     | Correlation id; round-tripped on every submit. Absent only for `error`.      |
+| `clientName`   | `string?`                     | OAuth client display name (**not** an end user) — CIMD `client_name` or id.  |
+| `clientId`     | `string?`                     | OAuth `client_id`.                                                           |
+| `scopes`       | `string[]`                    | Requested OAuth scopes.                                                      |
+| `redirectUri`  | `string?`                     | Validated `redirect_uri` the code is sent to.                               |
+| `resource`     | `string?`                     | RFC 8707 resource indicator, when supplied.                                  |
+| `error`        | `string?`                     | Error text (error slot, or a re-rendered failed submit).                     |
+| `csrfToken`    | `string?`                     | Server-minted anti-CSRF token. The hooks echo it for you.                    |
+| `providers`    | `AuthProvider[]`              | Selectable providers on the `federated` slot.                                |
+| `tools`        | `AuthTool[]`                  | Selectable tools on the `consent` slot.                                      |
+| `extras`       | `Record<string, unknown>`     | Free-form, slot-specific extras (e.g. logo URI, incremental target app).     |
+
+<Warning>
+  **No PII is in the contract.** `clientName` / `clientId` are OAuth client identifiers, not end-user identity. Anything the user types (email, name, …) is carried by **your own form fields**, never serialized into `AuthFlowState`.
+</Warning>
+
+## Client API: `@frontmcp/ui/auth`
+
+The client primitives ship in `@frontmcp/ui` (React is a peer dependency). Install it alongside React:
+
+```bash
+npm install @frontmcp/ui react react-dom
+```
+
+| Import                       | Use                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `@frontmcp/ui/auth`          | The framework-free contract types + wire constants (no React) **and** the React hooks (`useAuthFlow`, …) + `<AuthPageWrapper>` + `mountAuthPage`. Single source of truth for the client API. |
+| `@frontmcp/ui/auth/vanilla`  | Framework-free (browser) helpers: `getAuthFlow`, `submitFinish`, `submitExtra`, `getAddedItems` (plus the contract types). |
+
+<Note>
+  `@frontmcp/ui/auth` imports only `react` / `react-dom` — it does **not** pull in MUI, so the module the browser loads from esm.sh stays lean. The framework-free contract types (e.g. `AuthFlowState`) live here too, so a non-React page can import them without React. **`@frontmcp/ui` is browser-only and is never imported by `@frontmcp/sdk` / `@frontmcp/uipack`** — the SDK passes `@frontmcp/ui/auth` to the renderer only as an import-map specifier string.
+</Note>
+
+### React: hooks + wrapper + client mount
+
+`@frontmcp/ui/auth` exposes:
+
+- **`useAuthFlow()`** — returns the flow-state fields above plus a `submitFinish` handler. Pass it straight to `<form onSubmit={submitFinish}>`: it `preventDefault`s, serializes the form, attaches `pending_auth_id` + `csrf` + the slot marker, posts to the callback, and follows the OAuth redirect.
+- **`useExtraField(name)`** — returns `{ onSubmit, result, pending }` for an `auth.extras` form. `onSubmit` POSTs to the extra endpoint and, on success, merges the returned `addedItems` back into context so `useAddedItems` re-renders.
+- **`useAddedItems(name)`** — the server-side accumulator for a named extra, reactively.
+- **`<AuthPageWrapper>`** — outer chrome that reads the injected state once, provides it to the hooks via context, and (by default) renders the enclosing `<form>` with the `pending_auth_id` + `csrf` hidden fields so a no-JS submit still works. Pass `renderForm={false}` to supply your own forms.
+- **`mountAuthPage(Component, options?)`** — the client entrypoint; wraps `Component` in `<AuthPageWrapper>` and **renders** it (`createRoot(...).render(...)`) into the empty `#frontmcp-auth-root` node in the browser. Pure client render — there is no server markup to hydrate. **The SDK appends `mountAuthPage(<your default export>)` to the inlined module for you**, so your `file` component just needs a default export. (`mountAuthPage` is loaded in the browser from esm.sh via the import-map.)
+
+```tsx
+import { useAuthFlow, useAddedItems, useExtraField, AuthPageWrapper } from '@frontmcp/ui/auth';
+
+function LoginPage() {
+  const { clientName, error, submitFinish } = useAuthFlow();
+  const envs = useAddedItems<{ key: string; value: string }>('envs:add');
+  const addEnv = useExtraField('envs:add');
+
+  return (
+    <AuthPageWrapper>
+      <h1>Connect to {clientName}</h1>
+      {error && <p className="error">{error}</p>}
+
+      <ul>
+        {envs.map((e) => (
+          <li key={e.key}>{e.key}</li>
+        ))}
+      </ul>
+
+      {/* validated extra — server-side auth.extras['envs:add'] */}
+      <form onSubmit={addEnv.onSubmit}>
+        <input name="key" placeholder="KEY" />
+        <input name="value" placeholder="value" />
+        <button disabled={addEnv.pending}>Add</button>
+        {addEnv.result && !addEnv.result.ok && <span className="error">{addEnv.result.error}</span>}
+      </form>
+
+      {/* finish — posts pending_auth_id + csrf and follows the redirect */}
+      <form onSubmit={submitFinish}>
+        <input name="email" type="email" />
+        <button>Authorize</button>
+      </form>
+    </AuthPageWrapper>
+  );
+}
+
+// The SDK appends `mountAuthPage(LoginPage)` to the inlined module automatically,
+// so a `file`-based component only needs a default export. (You may still call
+// it explicitly if you mount the component yourself outside the auth.ui pipeline.)
+```
+
+### Vanilla (no framework)
+
+The same flow without React, via `@frontmcp/ui/auth/vanilla`:
+
+- **`getAuthFlow()`** — read `window.__FRONTMCP_AUTH__` (throws if absent; `tryGetAuthFlow()` is the tolerant variant).
+- **`getAddedItems(name)`** — the accumulator for a named extra.
+- **`submitFinish(formOrData?)`** — finish the flow (attaches control fields, follows the redirect).
+- **`submitExtra(name, formOrData?)`** — POST a validated extra; returns `{ ok, error?, addedItems? }`.
+
+```ts
+import { getAuthFlow, submitExtra, submitFinish } from '@frontmcp/ui/auth/vanilla';
+
+const flow = getAuthFlow(); // reads window.__FRONTMCP_AUTH__
+console.log(flow.slot, flow.clientName);
+
+document.querySelector('#add')!.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const res = await submitExtra('envs:add', e.target as HTMLFormElement);
+  if (!res.ok) showError(res.error);
+});
+
+document.querySelector('#finish')!.addEventListener('submit', (e) => {
+  e.preventDefault();
+  void submitFinish(e.target as HTMLFormElement); // follows the OAuth redirect
+});
+```
+
+## Routes the server adds
+
+When at least one `auth.extras` handler is configured, the scope exposes one endpoint under its OAuth path (it 404s / falls through when nothing is configured, so defaults are untouched):
+
+| Route             | Method | Purpose                                                                                              |
+| ----------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `/oauth/ui/extra` | `POST` | Routes an `auth.extras[name]` submission — the `action` field names the extra — to its handler, accumulates accepted items, and returns `{ ok, error?, addedItems?, sideEffects? }`. CSRF is verified against the server-minted token (400 on mismatch). |
+
+There is **no `/oauth/ui/:slot.js` route** — the component is transpiled server-side and **inlined** into the authorize/callback page as a `<script type="module">` (deps from esm.sh via the import-map), so there is no separately-served bundle. The login/consent/federated/incremental pages themselves are served by the existing `/oauth/authorize` and `/oauth/callback` flows; an `auth.ui` slot swaps the served page body (import-map + injected state + the inline transpiled module + empty mount) — the component renders client-side. The finish submit still posts to `/oauth/callback`.
+
+## Security: the framework owns it, you write only UI
+
+This separation is the whole point of the primitive:
+
+<Check>**CSRF** — the server mints a per-pending-authorization token, stores it (echoed into `AuthFlowState.csrfToken`), and verifies it on both the finish submit and every `auth.extras` POST using a constant-time compare. Your component never generates or checks it; the hooks just round-trip the value.</Check>
+<Check>**CSP + anti-clickjacking** — the auth-UI HTML is served with a strict Content-Security-Policy: `default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://esm.sh; img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`, plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`. It allows `https://esm.sh` (where the deps load) and `'unsafe-inline'` for the single server-injected, JSON-escaped state script — but **not `'unsafe-eval'`**, because the TSX→JS transform happens server-side, never in the browser.</Check>
+<Check>**No PII in the contract** — the injected state carries OAuth client identifiers + control fields only; user-typed identity travels in your own form fields.</Check>
+<Check>**Fail-safe rendering** — if your component can't be transpiled (missing / invalid `.tsx`), the framework logs it (and caches the error so a broken file isn't retried every request) and **falls back to the built-in page** for that slot. A broken custom page can't take the server down.</Check>
+
+## Local dev / offline: the esm.sh caveat
+
+The browser loads `react`, `react-dom`, and `@frontmcp/ui/auth` from **esm.sh** via the import-map. `react` / `react-dom` are always on esm.sh, but `@frontmcp/ui/auth` resolves there only once **published to npm**. In a fresh monorepo (before publishing), an in-browser render of the auth page can't fetch `@frontmcp/ui/auth` from esm.sh.
+
+This does **not** affect the server: the page (import-map → esm.sh, the injected state, the inline transpiled module) is produced regardless — only the actual browser DOM render depends on the `@frontmcp/ui/auth` specifier being reachable. To render in the browser before publishing, map it to a locally-served ESM URL with `@FrontMcp({ ui: { cdnOverrides } })`, e.g.:
+
+```ts
+@FrontMcp({
+  ui: { cdnOverrides: { '@frontmcp/ui/auth': 'http://localhost:5173/ui-auth.mjs' } },
+  auth: { mode: 'local', ui: { login: './auth/login.tsx' } },
+})
+```
+
+(A non-esm.sh override URL is left as-is — it is not given `?external=react`.) Once the package is published, no overrides are needed.
+
+## Default: no `auth.ui` ⇒ built-in pages
+
+If you configure no `auth.ui` slots, nothing changes — the built-in login, consent, incremental, federated, and error pages are served exactly as before. `auth.ui` is opt-in per slot, so you can customize just the `login` page and keep the built-in `consent` screen.
+
+## See also
+
+- [Local OAuth Provider](/frontmcp/authentication/local) — the built-in pages `auth.ui` replaces, plus `login` / `authenticate` / `consent` config.
+- [Authentication Overview](/frontmcp/authentication/overview) — the four auth modes.
+- [Tools — Tool UI](/frontmcp/servers/tools) — the `@Tool({ ui: { file } })` widget pipeline `auth.ui` mirrors.

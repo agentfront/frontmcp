@@ -44,6 +44,13 @@ export type {
   AuthenticateFailure,
   AuthenticateResult,
   AuthenticateFn,
+  // Custom auth-UI slots + extras (#469, map form)
+  AuthSlot,
+  AuthUiMap,
+  AuthExtraContext,
+  AuthExtraResult,
+  AuthExtraHandler,
+  AuthExtrasMap,
   // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,

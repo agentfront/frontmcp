@@ -292,11 +292,12 @@ export const httpRespond = {
     contentType: 'application/json; charset=utf-8',
   }),
 
-  html: (markup: string, status = 200): z.infer<typeof HttpHtmlSchema> => ({
+  html: (markup: string, status = 200, headers?: Record<string, string>): z.infer<typeof HttpHtmlSchema> => ({
     kind: 'html',
     status,
     body: markup,
     contentType: 'text/html; charset=utf-8',
+    ...(headers ? { headers } : {}),
   }),
 
   notFound: (message = 'Not Found'): z.infer<typeof HttpTextSchema> => ({

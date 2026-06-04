@@ -6,6 +6,7 @@ import { z } from '@frontmcp/lazy-zod';
 import type { RawZodShape } from '../common/zod-utils';
 import type {
   AuthenticateFn,
+  AuthExtraHandler,
   LocalAuthOptionsInterface,
   LoginRenderContext,
   RemoteAuthOptionsInterface,
@@ -30,6 +31,36 @@ import {
 // Common fields between local and remote modes
 // ============================================
 
+/**
+ * The five custom auth-UI slots. A slot is a KEY in the {@link authUiMapSchema};
+ * its value is the relative `.tsx`/`.jsx` path resolved against the config file.
+ */
+const authSlotSchema = z.enum(['login', 'consent', 'incremental', 'federated', 'error']);
+
+/**
+ * `auth.ui` — a slot → relative component file map (#469, map form). Replaces
+ * the old `@AuthUi`-class array. The path resolution (relative to the declaring
+ * `@FrontMcp`/`@App` source dir vs absolute pass-through) happens at registry
+ * build time, not at parse time, so this only validates the shape.
+ *
+ * `partialRecord` (not `record`) so every slot is OPTIONAL — `z.record(enum, …)`
+ * in Zod 4 would otherwise require ALL five slots. Slots are opt-in: only the
+ * ones you declare override the built-in page.
+ */
+const authUiMapSchema = z.partialRecord(authSlotSchema, z.string().min(1));
+
+/**
+ * `auth.extras` — an extra name → handler function map (#469, map form).
+ * Replaces the old `@AuthExtra`-class array. Validated structurally
+ * (`typeof === 'function'`) exactly like the other callback schemas in this
+ * file (`authenticate`, `login.render`), since Zod cannot validate the async
+ * signature at parse time.
+ */
+const authExtraHandlerSchema = z.custom<AuthExtraHandler>((v) => typeof v === 'function', {
+  message: 'auth.extras entries must be handler functions (input, ctx) => AuthExtraResult.',
+});
+const authExtrasMapSchema = z.record(z.string().min(1), authExtraHandlerSchema);
+
 const sharedAuthFields = {
   local: localSigningConfigSchema.optional(),
   tokenStorage: tokenStorageConfigSchema.default('memory'),
@@ -46,6 +77,10 @@ const sharedAuthFields = {
   expectedAudience: z.union([z.string(), z.array(z.string())]).optional(),
   incrementalAuth: incrementalAuthConfigSchema.optional(),
   cimd: cimdConfigSchema.optional(),
+  // #469 — custom auth UI as a slot→file map + extras name→handler map (per-app
+  // under splitByApp). Both optional; omitting them serves the built-in pages.
+  ui: authUiMapSchema.optional(),
+  extras: authExtrasMapSchema.optional(),
 };
 
 // ============================================

@@ -156,6 +156,13 @@ export interface PendingAuthorizationRecord {
   // Consent State
   /** Consent state for tool selection */
   consent?: ConsentStateRecord;
+
+  /**
+   * Anti-CSRF token minted at SSR time for a custom `@AuthUi` page (#469).
+   * Echoed back by the client in the `csrf` field and verified on the callback /
+   * extra submit. Absent for the built-in pages (no CSRF requirement there).
+   */
+  authUiCsrf?: string;
 }
 
 /**

@@ -134,3 +134,53 @@ describe('resolveUISource — inlineReact plumbing for FileSource (#454)', () =>
     expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
   });
 });
+
+describe('resolveUISource — transformOnly plumbing for FileSource (#469)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('transpiles single-file (transformSync), keeps imports external, and does NOT bundle', () => {
+    const fs = require('fs');
+    const path = require('path');
+    (path.isAbsolute as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      `import React from 'react';\nimport { mountAuthPage } from '@frontmcp/ui/auth';\nexport default function LoginPage(){ return React.createElement('div'); }`,
+    );
+
+    const esbuild = require('esbuild');
+    const buildSyncSpy = esbuild.buildSync as jest.Mock;
+    const transformSyncSpy = esbuild.transformSync as jest.Mock;
+    transformSyncSpy.mockReturnValue({
+      code: `import React from "react";\nimport { mountAuthPage } from "@frontmcp/ui/auth";\nexport default function LoginPage() { return React.createElement("div"); }`,
+    });
+
+    const { resolveUISource } = require('../loader');
+    const resolved = resolveUISource({ file: '/abs/login.tsx' }, { transformOnly: true });
+
+    // Transform-only never bundles.
+    expect(buildSyncSpy).not.toHaveBeenCalled();
+    expect(transformSyncSpy).toHaveBeenCalledTimes(1);
+    expect(resolved.bundled).toBe(false);
+    expect(resolved.mode).toBe('module');
+    expect(resolved.code).toContain('React.createElement');
+    expect(resolved.exportName).toBe('LoginPage');
+    // External imports from the transpiled source are surfaced for the import map.
+    expect(resolved.imports).toEqual(expect.arrayContaining(['react', '@frontmcp/ui/auth']));
+  });
+
+  it('honors an explicit exportName in transform-only mode', () => {
+    const fs = require('fs');
+    const path = require('path');
+    (path.isAbsolute as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue(`export const Foo = () => null;`);
+
+    const esbuild = require('esbuild');
+    (esbuild.transformSync as jest.Mock).mockReturnValue({ code: `export const Foo = () => null;` });
+
+    const { resolveUISource } = require('../loader');
+    const resolved = resolveUISource({ file: '/abs/foo.tsx', exportName: 'Foo' }, { transformOnly: true });
+    expect(resolved.exportName).toBe('Foo');
+    expect(resolved.bundled).toBe(false);
+  });
+});
