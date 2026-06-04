@@ -12,9 +12,37 @@ import { buildCSPMetaTag } from './csp';
 import { applyShellTemplate } from './custom-shell-applier';
 import type { ResolvedShellTemplate } from './custom-shell-types';
 import { validateShellTemplate } from './custom-shell-validator';
-import { buildDataInjectionScript } from './data-injector';
+import { buildCustomDataInjectionScript, buildDataInjectionScript } from './data-injector';
 import { buildSizingStyleTag } from './sizing-css';
-import type { ShellConfig, ShellResult } from './types';
+import type { ShellConfig, ShellDataInjectionDescriptor, ShellResult } from './types';
+
+/**
+ * Resolve the injected-data `<script>` for a shell.
+ *
+ * When a caller supplies a {@link ShellDataInjectionDescriptor} the global it
+ * describes is injected; otherwise the default `window.__mcp*` widget data is
+ * injected. This keeps the injected global pluggable while leaving the
+ * tool-widget output byte-for-byte unchanged when no descriptor is passed.
+ */
+function resolveDataInjectionScript(args: {
+  dataInjection?: ShellDataInjectionDescriptor;
+  toolName: string;
+  input?: unknown;
+  output?: unknown;
+  structuredContent?: unknown;
+  sizing?: ShellConfig['sizing'];
+}): string {
+  if (args.dataInjection) {
+    return buildCustomDataInjectionScript(args.dataInjection);
+  }
+  return buildDataInjectionScript({
+    toolName: args.toolName,
+    input: args.input,
+    output: args.output,
+    structuredContent: args.structuredContent,
+    sizing: args.sizing,
+  });
+}
 
 /**
  * Build an HTML shell wrapping the provided content.
@@ -49,8 +77,15 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
     sizing,
   } = config;
 
-  const { customShell } = config;
-  const dataScript = buildDataInjectionScript({ toolName, input, output, structuredContent, sizing });
+  const { customShell, dataInjection } = config;
+  const dataScript = resolveDataInjectionScript({
+    dataInjection,
+    toolName,
+    input,
+    output,
+    structuredContent,
+    sizing,
+  });
 
   if (!withShell) {
     // Shell-less mode: just data injection + content (custom shell ignored)
@@ -73,6 +108,7 @@ export function buildShell(content: string, config: ShellConfig): ShellResult {
       includeBridge,
       title,
       sizing,
+      dataInjection,
     });
   }
 
@@ -137,6 +173,7 @@ function buildCustomShell(
     includeBridge: boolean;
     title?: string;
     sizing?: ShellConfig['sizing'];
+    dataInjection?: ShellDataInjectionDescriptor;
   },
 ): ShellResult {
   let template: string;
@@ -155,7 +192,8 @@ function buildCustomShell(
   }
 
   const cspTag = buildCSPMetaTag(ctx.csp);
-  const dataScript = buildDataInjectionScript({
+  const dataScript = resolveDataInjectionScript({
+    dataInjection: ctx.dataInjection,
     toolName: ctx.toolName,
     input: ctx.input,
     output: ctx.output,

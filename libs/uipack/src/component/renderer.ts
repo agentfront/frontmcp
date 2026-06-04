@@ -11,9 +11,22 @@ import { createEsmShResolver } from '../resolver/esm-sh.resolver';
 import { createImportMapFromResolved, generateImportMapScriptTag } from '../resolver/import-map';
 import { type ImportResolver, type ResolvedImport } from '../resolver/types';
 import { buildShell } from '../shell/builder';
-import { type ShellConfig, type ShellResult } from '../shell/types';
+import { type ShellConfig, type ShellMountDescriptor, type ShellResult } from '../shell/types';
 import { generateMountScript, resolveUISource } from './loader';
 import { type ResolvedComponent, type UIConfig } from './types';
+
+/**
+ * Default inline-module mount descriptor: the tool-widget mount.
+ *
+ * Wraps the component in `McpBridgeProvider` from `@frontmcp/ui/react` so the
+ * widget hooks (`useToolOutput`, `useToolInput`, `useTheme`, …) work. Callers
+ * that don't supply a {@link ShellMountDescriptor} get exactly this — keeping
+ * tool-widget output byte-for-byte unchanged.
+ */
+const DEFAULT_WIDGET_MOUNT: ShellMountDescriptor = {
+  moduleSpecifier: '@frontmcp/ui/react',
+  wrapperImportName: 'McpBridgeProvider',
+};
 
 /**
  * Render a complete HTML shell for a UI component.
@@ -41,6 +54,7 @@ export function renderComponent(config: UIConfig, shellConfig: ShellConfig): She
     input: shellConfig.input,
     output: shellConfig.output,
     inlineReact: config.inlineReact === true,
+    transformOnly: config.transformOnly === true,
   });
 
   const mergedShellConfig = {
@@ -55,8 +69,10 @@ export function renderComponent(config: UIConfig, shellConfig: ShellConfig): She
     return buildShell(resolved.html ?? '', mergedShellConfig);
   }
 
-  // Module mode: generate import map + mount script
-  const content = buildModuleContent(resolved, resolver, config.props);
+  // Module mode: generate import map + mount script. The inline-module path's
+  // mount tail + import-map mounter are driven by the (pluggable) mount
+  // descriptor; absent one it defaults to the widget McpBridgeProvider mount.
+  const content = buildModuleContent(resolved, resolver, config.props, shellConfig.mount);
 
   return buildShell(content, mergedShellConfig);
 }
@@ -74,6 +90,7 @@ function buildModuleContent(
   resolved: ResolvedComponent,
   resolver: ImportResolver,
   propsMapping?: Record<string, string>,
+  mount: ShellMountDescriptor = DEFAULT_WIDGET_MOUNT,
 ): string {
   const parts: string[] = [];
 
@@ -101,17 +118,27 @@ function buildModuleContent(
     // === INLINE MODULE PATH (transpiled .tsx/.jsx, non-bundled) ===
     const importEntries: Record<string, ResolvedImport> = {};
 
-    // Collect all specifiers: from source imports + mount dependencies
+    // Collect all specifiers: from source imports + mount dependencies.
+    // `mount.moduleSpecifier` is whatever the caller's mount tail imports the
+    // mounter/provider from (default `@frontmcp/ui/react` for widgets); it is
+    // always added so a non-default mounter resolves via the import map.
     const allSpecifiers = new Set([
       ...(resolved.imports || []),
       'react-dom/client', // needed by mount script
-      '@frontmcp/ui/react', // needed for McpBridgeProvider
+      mount.moduleSpecifier, // mounter/provider package (e.g. @frontmcp/ui/react)
       // React subpath entries needed by esm.sh externalized modules:
       'react/jsx-runtime',
       'react/jsx-dev-runtime',
-      'react-dom/server',
-      'react-dom/static',
     ]);
+
+    // The `react-dom/server` + `react-dom/static` subpaths back the widget
+    // bridge's SSR-ish paths and are only mapped for the DEFAULT widget mount.
+    // A custom (non-widget) mount — e.g. an auth page — maps only what its
+    // source imports, so its page never advertises `react-dom/server`.
+    if (mount === DEFAULT_WIDGET_MOUNT) {
+      allSpecifiers.add('react-dom/server');
+      allSpecifiers.add('react-dom/static');
+    }
 
     const coreDeps = new Set([
       'react',
@@ -151,10 +178,14 @@ function buildModuleContent(
       parts.push(generateImportMapScriptTag(importMap));
     }
 
-    parts.push('<div id="root"></div>');
+    // Mount node — id + inner content are pluggable (default `#root`, empty),
+    // so a non-widget caller (e.g. an auth page) can ship `#frontmcp-auth-root`
+    // with a `<noscript>` fallback over the SAME pipeline.
+    const mountNodeId = mount.mountNodeId ?? 'root';
+    parts.push(`<div id="${mountNodeId}">${mount.mountNodeInnerHtml ?? ''}</div>`);
 
     // Embed transpiled code + mount code in a single <script type="module">
-    const mountCode = generateInlineMountCode(resolved.exportName);
+    const mountCode = generateInlineMountCode(resolved.exportName, mount);
     parts.push(`<script type="module">\n${resolved.code}\n${mountCode}\n</script>`);
   } else {
     // === URL MODULE PATH (existing behavior) ===
@@ -204,20 +235,39 @@ function addExternalParam(url: string, externals: string[]): string {
 }
 
 /**
- * Generate mount code for inline modules.
+ * Generate the mount tail for inline modules.
  *
- * Wraps the component in McpBridgeProvider so that hooks like
- * useToolOutput, useToolInput, useTheme etc. work correctly.
+ * Pluggable via the {@link ShellMountDescriptor}:
+ * - `mount.generate` — full override; returns the entire tail for the export.
+ * - otherwise a provider-wrapper tail is generated that imports
+ *   `mount.wrapperImportName` from `mount.moduleSpecifier` and wraps the
+ *   component in it.
+ *
+ * The default ({@link DEFAULT_WIDGET_MOUNT}) wraps the component in
+ * `McpBridgeProvider` from `@frontmcp/ui/react` so widget hooks
+ * (`useToolOutput`, `useToolInput`, `useTheme`, …) work — and reproduces the
+ * historical widget mount tail byte-for-byte.
  */
-function generateInlineMountCode(componentName: string): string {
+function generateInlineMountCode(componentName: string, mount: ShellMountDescriptor): string {
+  if (mount.generate) {
+    return mount.generate(componentName);
+  }
+
+  // Provider-wrapper tail. The local alias is derived from the wrapper name so
+  // the default (`McpBridgeProvider`) yields `__McpBridgeProvider`, identical to
+  // the historical widget output. The mount-node id matches the `<div>` the
+  // renderer emits (default `root`), so a custom `mountNodeId` lands correctly.
+  const wrapperName = mount.wrapperImportName ?? 'McpBridgeProvider';
+  const wrapperAlias = `__${wrapperName}`;
+  const mountNodeId = mount.mountNodeId ?? 'root';
   return `
 // --- Mount ---
 import { createRoot as __createRoot } from 'react-dom/client';
-import { McpBridgeProvider as __McpBridgeProvider } from '@frontmcp/ui/react';
-const __root = document.getElementById('root');
+import { ${wrapperName} as ${wrapperAlias} } from '${mount.moduleSpecifier}';
+const __root = document.getElementById('${mountNodeId}');
 if (__root) {
   __createRoot(__root).render(
-    React.createElement(__McpBridgeProvider, null,
+    React.createElement(${wrapperAlias}, null,
       React.createElement(${componentName})
     )
   );

@@ -6,6 +6,10 @@ import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { InternalMcpError } from '../../errors/mcp.error';
 import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
 import { FrontMcpTokens } from '../tokens';
+import { captureCallerDir } from '../utils/caller-dir.utils';
+
+/** Basenames of THIS decorator file, skipped so the captured frame is the user's server module. */
+const FRONT_MCP_DECORATOR_BASENAMES = ['front-mcp.decorator.ts', 'front-mcp.decorator.js'] as const;
 
 /**
  * Reflect metadata key under which the @FrontMcp() decorator stores the
@@ -72,8 +76,19 @@ function getServerlessHandlerFns(): ServerlessHandlerFns {
  * Decorator that marks a class as a FrontMcp Server and provides metadata
  */
 export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
+  // Capture the defining module's directory at decorator-evaluation time (while
+  // the user's source file is on the stack), so `auth.ui[slot]` relative paths
+  // anchor to THIS config file rather than process.cwd() (#469 / issue #444).
+  const sourceDir = captureCallerDir(FRONT_MCP_DECORATOR_BASENAMES);
+
   return (target: Function) => {
-    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(providedMetadata);
+    // Inject the captured dir BEFORE parsing so the schema's `__sourceDir`
+    // passthrough preserves it (and a user-supplied value is never overwritten).
+    const withSourceDir =
+      sourceDir && !(providedMetadata as { __sourceDir?: string }).__sourceDir
+        ? ({ ...providedMetadata, __sourceDir: sourceDir } as FrontMcpMetadata)
+        : providedMetadata;
+    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(withSourceDir);
     if (error) {
       const formatted = error.format();
       if (formatted.apps) {

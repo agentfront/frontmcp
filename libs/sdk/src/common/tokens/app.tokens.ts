@@ -22,6 +22,8 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   channels: tokenFactory.meta('channels'),
   output: tokenFactory.meta('output'),
   standalone: tokenFactory.meta('standalone'),
+  // Captured call-site dir (#469) — anchors auth.ui relative paths for splitByApp.
+  __sourceDir: tokenFactory.meta('__sourceDir'),
 } as const;
 
 export const FrontMcpRemoteAppTokens: RawMetadataShape<RemoteAppMetadata> = {

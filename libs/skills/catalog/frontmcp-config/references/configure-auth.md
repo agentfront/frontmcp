@@ -106,6 +106,7 @@ Key local-mode options:
 - `authenticate(input, ctx)` -- custom verification run at the login callback **before** a token is minted. `input.fields` carries the submitted login fields (reserved OAuth params excluded); `ctx` is `{ get, fetch, logger, clientId?, clientName? }`. Return `{ ok: true, sub?, claims? }` to mint a token (custom `claims` are embedded in the JWT; reserved claims like `sub`/`iss`/`exp`/`scope` are stripped) or `{ ok: false, message, retryField? }` to re-render the login page with the error (no code issued). When set, the email requirement no longer applies.
 - `providers` -- declarative upstream OAuth providers (GitHub, Slack, Jira, …) to orchestrate. When set, FrontMCP federates them at `/oauth/authorize`, stores each provider's tokens **encrypted server-side**, and exposes them to tools via `this.orchestration.getToken(id)`. See [Multi-provider orchestration](#multi-provider-orchestration-providers--federatedauth) below.
 - `federatedAuth` -- gates JWT issuance during federated login: `minProviders` (default `1` when `providers` are set — "no JWT until ≥1 linked"), `requiredProviders` (ids that must all be linked), and `stateValidation` (`'strict'` default).
+- `dcr` -- declarative control surface for the built-in Dynamic Client Registration endpoint (`POST /oauth/register`) and the `/oauth/authorize` client allowlist. All fields optional; omitting `dcr` preserves today's behavior (DCR on in dev, off in prod). See [Dynamic Client Registration](#dynamic-client-registration-dcr) below.
 - `anonymousScopes` (default `['anonymous']`) -- scopes assigned to anonymous sessions (used when `allowDefaultPublic` lets an unauthenticated request through).
 - `allowDefaultPublic` (default `false`) -- when `true`, requests without a token are allowed through as anonymous instead of being rejected with a 401. Keep `false` to require auth on every request.
 - `expectedAudience` -- the `aud` claim value tokens must carry. Also valid in local/remote mode (not just transparent); set it when FrontMCP must reject tokens minted for a different audience.
@@ -158,6 +159,40 @@ class GitHubReposTool extends ToolContext {
 ```
 
 Tokens stay server-side and AES-256-GCM-encrypted at rest — never placed in the JWT or exposed to the model. No login PII is stored (only provider tokens + non-PII provider ids).
+
+### Dynamic Client Registration (`dcr`)
+
+The built-in `POST /oauth/register` (RFC 7591) endpoint lets clients self-register. By default it is **enabled in development and disabled in production** (`NODE_ENV=production` short-circuits it), holds clients in an in-memory map, and enforces no allowlist. The optional `dcr` block makes that a declarative control surface. **Omitting `dcr` preserves the default behavior exactly.**
+
+```typescript
+@FrontMcp({
+  info: { name: 'internal-api', version: '1.0.0' },
+  auth: {
+    mode: 'local',
+    dcr: {
+      enabled: false, // force off regardless of NODE_ENV (register → 404; metadata omits registration_endpoint)
+      allowedRedirectUris: ['https://app.example.com/callback', 'http://localhost:*/callback'], // exact or `*` glob
+      allowedClientIds: ['dashboard'], // only these client_ids may use /oauth/authorize
+      initialAccessToken: process.env.DCR_INITIAL_ACCESS_TOKEN, // require `Authorization: Bearer <token>` on register
+      clients: [
+        // pre-registered trusted clients — accepted WITHOUT a DCR round-trip
+        { clientId: 'dashboard', redirectUris: ['https://app.example.com/callback'], clientName: 'Internal Dashboard' },
+      ],
+    },
+  },
+})
+class Server {}
+```
+
+`LocalDcrConfig` fields:
+
+- `enabled` -- when `false`, `/oauth/register` responds `404` and `registration_endpoint` is omitted from `/.well-known/oauth-authorization-server`. When unset, defaults to on in dev / off in prod.
+- `allowedRedirectUris` -- exact or simple-`*`-glob allowlist. A `redirect_uri` not on it is rejected at **register** (`400 invalid_redirect_uri`) and at **authorize** (error page — the unlisted URI is never redirected to, an open-redirect guard).
+- `allowedClientIds` -- only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by the CIMD layer and are exempt.
+- `initialAccessToken` -- when set, `/oauth/register` requires a matching `Authorization: Bearer <token>` (constant-time compared); otherwise `401 invalid_token`.
+- `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients.
+
+A successful registration responds `201 Created`. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
 
 ### Custom login + verification (`login` / `authenticate`)
 
@@ -226,6 +261,55 @@ class CallAcmeTool extends ToolContext {
 - `requireConnect({ key, context? })` -> returns the credential when connected, else a **framework-signed**, short-lived `/oauth/connect?token=…` resume URL. Opening it renders a single-field add-credential page (reusing `login.fields`); on submit FrontMCP re-invokes `authenticate()` with a `resume: { sub, key, context }` context and **additively** stores the returned credential into the existing session vault. A rotated-away (dead) session is refused.
 
 Security: per-record AES key derived (HKDF) from a fresh per-session `vaultId` + a pepper from `VAULT_SECRET ?? JWT_SECRET` (random per-process fallback, logged with a warning — credentials then do not survive a restart, never plaintext). A disconnect + reconnect rotates the `vaultId`, so the reconnected session sees an **empty vault** and old ciphertext is undecryptable. The vault is backed by the same `auth.tokenStorage` backend (memory / Redis / SQLite). No login PII is stored.
+
+### Session secure-secret store (`this.secureStore`)
+
+`this.credentials` is OAuth-credential-centric (resume URLs, per-authorize vault rotation). For **arbitrary user-typed secrets** (an API key a tool prompts for, a webhook signing secret, a per-session draft token) use `this.secureStore` — a general, typed, session-scoped key→secret store whose backing is **pluggable per deployment**. It is enabled automatically in `local` (and `remote`) modes. Stop re-implementing AES-GCM + HKDF + scope + persistence by hand.
+
+Select the backing with `auth.secureStore` (mirrors `tokenStorage`, plus a namespace `scope`):
+
+```typescript
+@FrontMcp({
+  apps: [MyApp],
+  auth: {
+    mode: 'local',
+    // 'memory' | { sqlite } | { redis } | { backend } | { scope?, ttlMs?, encryption? }
+    secureStore: { sqlite: { path: './.frontmcp/secrets.sqlite' }, scope: 'user' },
+  },
+})
+export default class Server {}
+```
+
+Read/write from any tool (or the auth UI):
+
+```typescript
+@Tool({ name: 'save_api_key' })
+class SaveApiKeyTool extends ToolContext {
+  async execute(input: { apiKey: string }) {
+    await this.secureStore.set('stg.api-key', input.apiKey); // JSON-serialized
+    const key = await this.secureStore.get<string>('stg.api-key');
+    const all = await this.secureStore.list();
+    // await this.secureStore.delete('stg.api-key');
+    return { saved: key !== undefined, keys: all };
+  }
+}
+```
+
+Backings:
+
+- `'memory'` (default) -- in-memory, **AES-256-GCM**-encrypted via `VaultEncryption` (lost on restart).
+- `{ sqlite: { path } }` / `{ redis: { ... } }` -- persistent; same `VaultEncryption` over the shared `StorageAdapter` (reuses `createTokenStorageAdapter`). When the backing matches `tokenStorage`, the same adapter/connection is shared.
+- `{ backend }` -- a **custom** backing implementing the four-method `SecureStoreBackend` (`get`/`set`/`delete`/`list`), e.g. an OS keychain. Used as-is — **no native dependency is bundled** by the framework (see below).
+
+Scope (`scope`, identity is hashed into the namespace, never stored raw):
+
+- `user` (default) -- keyed by the authenticated `sub`; anonymous requests read empty / skip writes.
+- `session` -- keyed by the transport `sessionId`.
+- `global` -- one server-wide namespace.
+
+`this.secureStore` API: `get<T>(key)` -> `Promise<T | undefined>`, `set<T>(key, value, { ttlMs? })`, `delete(key)` -> `Promise<boolean>`, `list()` -> `Promise<string[]>`. Object configs also accept `ttlMs` (default write TTL) and `encryption.pepper` (overrides `VAULT_SECRET ?? JWT_SECRET`).
+
+**OS keychain is pluggable, not bundled.** FrontMCP does not ship `keytar`/`wincred`/`libsecret`. To back the store with an OS keychain, pass `secureStore: { backend: myKeychainBackend }` where `myKeychainBackend` implements `SecureStoreBackend` (you load the native peer-dep). A backend deals only in `(namespace, key) → string`; the accessor resolves the namespace and JSON-serializes values. Backends that cannot honor a TTL (an OS keychain) ignore the `ttlMs` argument; OS keychains rely on the OS for at-rest encryption rather than `VaultEncryption`.
 
 ## Mode 4: Remote
 
@@ -399,12 +483,13 @@ If the vault is not configured, accessing `this.authProviders` throws (`AuthProv
 
 ## Examples
 
-| Example                                                                            | Level        | Description                                                                                                                                                          |
-| ---------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.                 |
-| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                                  |
-| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken. |
-| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.                |
+| Example                                                                            | Level        | Description                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.                                        |
+| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                                                         |
+| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with local OAuth orchestration of an upstream provider and read the downstream provider token in a tool via this.orchestration.getToken.                        |
+| [`local-credential-vault`](../examples/configure-auth/local-credential-vault.md)   | Intermediate | Persist a per-session credential from a local authenticate() verifier into the built-in encrypted vault and read it from a tool via this.credentials.                                       |
+| [`local-secure-store`](../examples/configure-auth/local-secure-store.md)           | Intermediate | Configure the general session secure-secret store (this.secureStore) with a pluggable backing (memory / sqlite / redis / custom OS-keychain) and read/write user-typed secrets from a tool. |
 
 > See all examples in [`examples/configure-auth/`](../examples/configure-auth/)
 

@@ -3,12 +3,16 @@
     "target": "es2022",
     "parser": {
       "syntax": "typescript",
+      "tsx": true,
       "decorators": true,
       "dynamicImport": true
     },
     "transform": {
       "decoratorMetadata": true,
-      "legacyDecorator": true
+      "legacyDecorator": true,
+      "react": {
+        "runtime": "automatic"
+      }
     },
     "keepClassNames": true,
     "externalHelpers": true,

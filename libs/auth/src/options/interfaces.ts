@@ -186,6 +186,70 @@ export interface TokenStorageSqliteConfig {
  */
 export type TokenStorageConfig = 'memory' | { redis: RedisConfig } | { sqlite: TokenStorageSqliteConfig };
 
+// ============================================
+// SECURE STORE CONFIG (#470)
+// ============================================
+
+/**
+ * How a secure-store namespace is derived from the request:
+ * - `user` (default): keyed by the authenticated subject (`sub`).
+ * - `session`: keyed by the transport `sessionId`.
+ * - `global`: a single server-wide namespace.
+ */
+export type SecureStoreScope = 'user' | 'session' | 'global';
+
+/**
+ * At-rest encryption settings for the built-in secure-store backings. Ignored
+ * for a custom `{ backend }` backing.
+ */
+export interface SecureStoreEncryptionConfig {
+  /** Server pepper mixed into HKDF key derivation. Defaults to `VAULT_SECRET ?? JWT_SECRET`. */
+  pepper?: string;
+}
+
+/**
+ * A custom secure-store backing — an object implementing the four-method
+ * `SecureStoreBackend` contract (e.g. an OS-keychain backend). Typed loosely
+ * here (the strict `SecureStoreBackend` interface lives in `session/`) so the
+ * options module stays free of session imports.
+ */
+export interface SecureStoreCustomBackend {
+  get(namespace: string, key: string): Promise<string | null>;
+  set(namespace: string, key: string, value: string, ttlMs?: number): Promise<void>;
+  delete(namespace: string, key: string): Promise<boolean>;
+  list(namespace: string): Promise<string[]>;
+  dispose?(): Promise<void>;
+}
+
+/** Fields shared by the object-form secure-store configs. */
+interface SecureStoreCommonConfig {
+  /** Namespace scope. @default 'user' */
+  scope?: SecureStoreScope;
+  /** Default TTL (ms) for stored secrets. @default undefined (no expiry) */
+  ttlMs?: number;
+  /** At-rest encryption settings (built-in backings only). */
+  encryption?: SecureStoreEncryptionConfig;
+}
+
+/**
+ * Secure-store configuration (#470) — the general session-scoped secure-secret
+ * store backing for `this.secureStore`.
+ *
+ * - `'memory'` — in-memory, AES-256-GCM-encrypted (default; lost on restart).
+ * - `{ sqlite }` — local SQLite-file persistence (survives restart).
+ * - `{ redis }` — Redis-backed persistence.
+ * - `{ backend }` — a custom backing (e.g. an OS keychain). No native dependency
+ *   is bundled by the framework.
+ *
+ * The object forms also accept `scope`, `ttlMs`, and (for built-ins) `encryption`.
+ */
+export type SecureStoreConfig =
+  | 'memory'
+  | (SecureStoreCommonConfig & { sqlite?: never; redis?: never; backend?: never })
+  | (SecureStoreCommonConfig & { sqlite: TokenStorageSqliteConfig })
+  | (SecureStoreCommonConfig & { redis: RedisConfig })
+  | (SecureStoreCommonConfig & { backend: SecureStoreCustomBackend });
+
 /**
  * Token refresh configuration
  */
@@ -308,6 +372,83 @@ export interface UpstreamProviderOptions {
   userInfoEndpoint?: string;
   /** JWKS URI for upstream id_token validation (optional). */
   jwksUri?: string;
+}
+
+/**
+ * A pre-registered (trusted) OAuth client for the LOCAL Authorization Server.
+ * Seeded into the client registry at startup so the authorize/token flows
+ * accept it without a Dynamic Client Registration round-trip. See
+ * {@link LocalDcrConfig.clients}. No PII is stored — only OAuth client metadata.
+ */
+export interface LocalDcrClient {
+  /** Stable, pre-assigned client identifier. */
+  clientId: string;
+  /** Confidential-client secret. Omit for public (PKCE) clients. */
+  clientSecret?: string;
+  /** Exact redirect URIs this client may use (at least one). */
+  redirectUris: string[];
+  /** Human-readable client name for consent/login screens. */
+  clientName?: string;
+  /**
+   * Token-endpoint auth method.
+   * @default 'none'
+   */
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post';
+  /**
+   * Allowed grant types.
+   * @default ['authorization_code']
+   */
+  grantTypes?: Array<'authorization_code' | 'refresh_token'>;
+  /**
+   * Allowed response types.
+   * @default ['code']
+   */
+  responseTypes?: Array<'code'>;
+  /** Optional space-delimited default scope string. */
+  scope?: string;
+}
+
+/**
+ * Declarative control surface for the LOCAL Authorization Server's Dynamic
+ * Client Registration endpoint (`POST /oauth/register`) and client allowlist.
+ *
+ * IMPORTANT: distinct from the upstream-provider `dcrEnabled`/
+ * `registrationEndpoint` fields on {@link ProviderConfig}/
+ * {@link RemoteProviderConfig} (those register THIS server against an upstream
+ * IdP and are not read by the local AS). Every field is optional; omitting the
+ * whole `dcr` block preserves the historical behavior exactly (DCR enabled in
+ * dev, disabled in production; no allowlist; no initial access token).
+ */
+export interface LocalDcrConfig {
+  /**
+   * Whether `POST /oauth/register` is active and `registration_endpoint` is
+   * advertised. When unset, the historical guard applies (on in dev, off in
+   * production).
+   */
+  enabled?: boolean;
+  /**
+   * Redirect-URI allowlist (exact match or simple `*` glob). When set, both DCR
+   * registrations and `/oauth/authorize` reject a `redirect_uri` not on the
+   * list. When unset, no redirect_uri allowlist is enforced.
+   */
+  allowedRedirectUris?: string[];
+  /**
+   * Client-id allowlist. When set, only these ids may register or be used at
+   * `/oauth/authorize` (CIMD URL client ids are exempt). When unset, any id is
+   * accepted subject to the other checks.
+   */
+  allowedClientIds?: string[];
+  /**
+   * Initial Access Token (RFC 7591 §3). When set, `POST /oauth/register`
+   * requires a matching `Authorization: Bearer <token>` header. When unset,
+   * registration is unauthenticated (historical behavior).
+   */
+  initialAccessToken?: string;
+  /**
+   * Pre-registered trusted clients seeded at startup. Accepted by the
+   * authorize/token flows without a DCR round-trip.
+   */
+  clients?: LocalDcrClient[];
 }
 
 /**
@@ -547,6 +688,88 @@ export type AuthenticateResult = AuthenticateSuccess | AuthenticateFailure;
 export type AuthenticateFn = (input: AuthenticateInput, ctx: AuthenticateContext) => Promise<AuthenticateResult>;
 
 // ============================================
+// CUSTOM AUTH-UI SLOTS + EXTRAS (#469 — map form)
+// ============================================
+
+/**
+ * Which built-in authorization page a custom React component replaces. Mirrors
+ * the SDK-side `AuthSlot` and the `@frontmcp/ui/auth` client contract. A slot is
+ * a KEY in {@link AuthUiMap}; its value is the relative `.tsx`/`.jsx` path.
+ */
+export type AuthSlot = 'login' | 'consent' | 'incremental' | 'federated' | 'error';
+
+/**
+ * Custom authorization-UI map: a slot → relative component file path. Each path
+ * is a `.tsx`/`.jsx` source resolved RELATIVE TO THE CONFIG FILE that declared
+ * it (the `@FrontMcp` / `@App` source directory, captured automatically — no
+ * `fileURLToPath` needed); absolute paths pass through unchanged. The component
+ * is transpiled server-side and client-rendered (esm.sh import-map). When a slot
+ * is absent the built-in HTML page is served unchanged.
+ *
+ * @example
+ * ```ts
+ * ui: { login: './auth/login.tsx', consent: './auth/consent.tsx' }
+ * ```
+ */
+export type AuthUiMap = Partial<Record<AuthSlot, string>>;
+
+/**
+ * Server-side accumulator-aware context handed to an {@link AuthExtraHandler}.
+ * Intentionally minimal and PII-free: the extra name, the pending-auth id (for
+ * correlation), and the items already accepted for this extra.
+ */
+export interface AuthExtraContext {
+  /** The extra name being handled (the `action` posted by the page). */
+  name: string;
+  /** The pending authorization id this submission belongs to (when known). */
+  pendingAuthId?: string;
+  /** Items already accepted for this extra (the current accumulator). */
+  current: unknown[];
+}
+
+/**
+ * Result an {@link AuthExtraHandler} returns. The handler only hands back the
+ * NEW items it accepted; the framework merges them into the per-pending-auth
+ * accumulator and echoes the full map back to the page (so `useAddedItems(name)`
+ * reflects them on re-render).
+ */
+export interface AuthExtraResult {
+  /** Whether the field was accepted. */
+  ok: boolean;
+  /** Human-readable validation error when `ok` is false. */
+  error?: string;
+  /** Items to APPEND to this extra's accumulator on success. */
+  addedItems?: unknown[];
+  /** Free-form side-effect data echoed back to the client. */
+  sideEffects?: Record<string, unknown>;
+}
+
+/**
+ * A server handler for a custom auth-UI extra (`auth.extras[name]`). Receives the
+ * page's validated field submission and the {@link AuthExtraContext}; returns
+ * (or resolves to) an {@link AuthExtraResult}. Replaces the old `@AuthExtra`
+ * class — a plain function keyed by the extra name.
+ *
+ * @example
+ * ```ts
+ * extras: {
+ *   'envs:add': async (input, ctx) => {
+ *     const key = String(input.key ?? '').trim();
+ *     if (!key) return { ok: false, error: 'key required' };
+ *     return { ok: true, addedItems: [{ key, value: input.value }] };
+ *   },
+ * }
+ * ```
+ */
+export type AuthExtraHandler = (
+  input: Record<string, unknown>,
+  ctx: AuthExtraContext,
+) => Promise<AuthExtraResult> | AuthExtraResult;
+
+/** Custom auth-UI extras map: extra name → server handler function. */
+export type AuthExtrasMap = Record<string, AuthExtraHandler>;
+
+// ============================================
 // AUTH MODE INTERFACES
 // ============================================
 
@@ -578,6 +801,15 @@ export interface LocalAuthOptionsInterface {
   mode: 'local';
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
+  /**
+   * Backing for the general session-scoped secure-secret store (`this.secureStore`,
+   * #470). Selects memory / sqlite / redis / a custom (e.g. OS-keychain) backend,
+   * plus the namespace `scope`. Optional — omitting it defaults to an in-memory,
+   * AES-256-GCM-encrypted, `user`-scoped store.
+   *
+   * @see SecureStoreConfig
+   */
+  secureStore?: SecureStoreConfig;
   allowDefaultPublic?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
@@ -640,6 +872,46 @@ export interface LocalAuthOptionsInterface {
    * @see UpstreamProviderOptions
    */
   providers?: UpstreamProviderOptions[];
+  /**
+   * Local Authorization Server Dynamic Client Registration control surface
+   * (#462): gate `POST /oauth/register`, allowlist redirect URIs / client ids,
+   * require an initial access token, and seed pre-registered trusted clients.
+   * Optional — omitting it preserves today's behavior exactly (DCR on in dev,
+   * off in production; no allowlist; no initial access token).
+   *
+   * @see LocalDcrConfig
+   */
+  dcr?: LocalDcrConfig;
+  /**
+   * Custom authorization-UI slots (#469): a slot → relative `.tsx`/`.jsx` path
+   * map. Each component replaces the built-in login / consent / incremental /
+   * federated / error page. Relative paths resolve against THIS config file's
+   * directory (captured automatically — no `fileURLToPath`); absolute paths pass
+   * through. Scoped to THIS auth config, so each app under `splitByApp` gets its
+   * own custom UI. When a slot is absent, the built-in HTML page is served
+   * unchanged (the no-config default).
+   *
+   * @example
+   * ```ts
+   * auth: { mode: 'local', ui: { login: './auth/login.tsx' } }
+   * ```
+   * @see AuthUiMap
+   */
+  ui?: AuthUiMap;
+  /**
+   * Server handlers for custom auth-UI extras (#469): an extra name → handler
+   * function map. Each handler accepts a validated field submission and returns
+   * `{ ok, error?, addedItems?, sideEffects? }`; accepted items accumulate
+   * server-side so `useAddedItems(name)` reflects them on re-render. Scoped to
+   * THIS auth config (per-app under `splitByApp`).
+   *
+   * @example
+   * ```ts
+   * extras: { 'envs:add': async (input, ctx) => ({ ok: true, addedItems: [...] }) }
+   * ```
+   * @see AuthExtraHandler
+   */
+  extras?: AuthExtrasMap;
 }
 
 export interface RemoteAuthOptionsInterface {
@@ -651,6 +923,12 @@ export interface RemoteAuthOptionsInterface {
   providerConfig?: ProviderConfig;
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
+  /**
+   * Backing for the general session-scoped secure-secret store (`this.secureStore`,
+   * #470). See {@link SecureStoreConfig}. Optional — defaults to an in-memory,
+   * AES-256-GCM-encrypted, `user`-scoped store.
+   */
+  secureStore?: SecureStoreConfig;
   allowDefaultPublic?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
@@ -660,6 +938,16 @@ export interface RemoteAuthOptionsInterface {
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
   cimd?: CimdConfigInput;
+  /**
+   * Custom authorization-UI slots (#469), scoped to this auth config.
+   * See {@link LocalAuthOptionsInterface.ui}.
+   */
+  ui?: AuthUiMap;
+  /**
+   * Server handlers for custom auth-UI extras (#469), scoped to this auth config.
+   * See {@link LocalAuthOptionsInterface.extras}.
+   */
+  extras?: AuthExtrasMap;
 }
 
 // ============================================

@@ -138,6 +138,7 @@
                   "frontmcp/authentication/overview",
                   "frontmcp/authentication/modes",
                   "frontmcp/authentication/local",
+                  "frontmcp/authentication/custom-ui",
                   "frontmcp/authentication/remote",
                   "frontmcp/authentication/remote-proxy",
                   "frontmcp/authentication/cimd",

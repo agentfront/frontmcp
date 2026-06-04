@@ -8,7 +8,14 @@
  */
 
 // Types
-export type { ShellConfig, ShellResult, CSPConfig, WidgetSizing } from './types';
+export type {
+  ShellConfig,
+  ShellResult,
+  CSPConfig,
+  WidgetSizing,
+  ShellMountDescriptor,
+  ShellDataInjectionDescriptor,
+} from './types';
 
 // Builder
 export { buildShell } from './builder';
@@ -28,7 +35,13 @@ export {
 } from './csp';
 
 // Data Injector
-export { buildDataInjectionScript, createTemplateHelpers, hasSizing, type TemplateHelpers } from './data-injector';
+export {
+  buildDataInjectionScript,
+  buildCustomDataInjectionScript,
+  createTemplateHelpers,
+  hasSizing,
+  type TemplateHelpers,
+} from './data-injector';
 
 // Custom Shell Types
 export type {

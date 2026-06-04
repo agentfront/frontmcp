@@ -57,6 +57,17 @@ export interface FrontMcpBaseMetadata {
   serve?: boolean; // default to true
 
   /**
+   * Directory of the source file that declared this `@FrontMcp` class, captured
+   * automatically at decoration time (no `fileURLToPath` needed). Anchors
+   * relative file paths in the server config — notably `auth.ui[slot]` for the
+   * multi-app scope. `undefined` when the call-site couldn't be determined (the
+   * registry then falls back to `process.cwd()`). Internal; do not set manually.
+   *
+   * @internal
+   */
+  __sourceDir?: string;
+
+  /**
    * Server-level instructions surfaced through the MCP `initialize` response.
    *
    * The MCP `InitializeResult.instructions` field lets the server hand the
@@ -518,6 +529,9 @@ export interface FrontMcpBaseMetadata {
 
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
+  // Captured call-site dir (#469 — anchors auth.ui relative paths). Passthrough
+  // so it survives the strict-object parse and reaches the scope metadata.
+  __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
@@ -730,6 +744,8 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
  */
 const frontMcpLiteSchema = z.object({
   info: serverInfoOptionsSchema,
+  // Captured call-site dir (#469) — round-trip through the lite parser too.
+  __sourceDir: z.string().optional(),
   // Server-level instructions injected into the MCP `initialize` response.
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),

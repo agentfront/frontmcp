@@ -11,12 +11,20 @@ export type {
   RemoteProviderConfig,
   TokenStorageConfig,
   TokenStorageSqliteConfig,
+  // Secure store config (#470)
+  SecureStoreConfig,
+  SecureStoreScope as SecureStoreScopeType,
+  SecureStoreEncryptionConfig,
+  SecureStoreCustomBackend,
   TokenRefreshConfig,
   SkippedAppBehavior,
   ConsentConfig,
   FederatedAuthConfig,
   IncrementalAuthConfig,
   UpstreamProviderOptions,
+  // Local-AS Dynamic Client Registration config (#462)
+  LocalDcrConfig,
+  LocalDcrClient,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
@@ -36,6 +44,13 @@ export type {
   AuthenticateFailure,
   AuthenticateResult,
   AuthenticateFn,
+  // Custom auth-UI slots + extras (#469, map form)
+  AuthSlot,
+  AuthUiMap,
+  AuthExtraContext,
+  AuthExtraResult,
+  AuthExtraHandler,
+  AuthExtrasMap,
   // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
@@ -54,12 +69,19 @@ export {
   flatRemoteProviderFields,
   tokenStorageConfigSchema,
   tokenStorageSqliteSchema,
+  // Secure store schemas (#470)
+  secureStoreConfigSchema,
+  secureStoreScopeSchema,
+  secureStoreEncryptionSchema,
+  secureStoreCustomBackendSchema,
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
   upstreamProviderSchema,
+  localDcrClientSchema,
+  localDcrConfigSchema,
 } from './shared.schemas';
 
 export type {
@@ -73,6 +95,11 @@ export type {
   RemoteProviderConfigInput,
   TokenStorageConfig as TokenStorageConfigZod,
   TokenStorageConfigInput,
+  // Secure store schema-inferred types (#470)
+  SecureStoreConfig as SecureStoreConfigZod,
+  SecureStoreConfigInput,
+  SecureStoreScope as SecureStoreScopeZod,
+  SecureStoreEncryptionConfig as SecureStoreEncryptionConfigZod,
   TokenRefreshConfig as TokenRefreshConfigZod,
   TokenRefreshConfigInput,
   SkippedAppBehavior as SkippedAppBehaviorZod,
@@ -84,6 +111,10 @@ export type {
   IncrementalAuthConfigInput,
   UpstreamProviderOptions as UpstreamProviderOptionsZod,
   UpstreamProviderOptionsInput,
+  LocalDcrClientConfig as LocalDcrClientConfigZod,
+  LocalDcrClientConfigInput,
+  LocalDcrConfig as LocalDcrConfigZod,
+  LocalDcrConfigInput,
   RedisConfig,
 } from './shared.schemas';
 

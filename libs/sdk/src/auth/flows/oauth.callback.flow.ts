@@ -40,6 +40,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
@@ -101,6 +102,9 @@ const stateSchema = z.object({
   // True when the consent form was submitted (distinguishes an empty selection
   // from a first visit so an empty `requireSelection` submit doesn't loop).
   consentSubmitted: z.boolean().default(false),
+  // Anti-CSRF token echoed by a custom `@AuthUi` page (#469). Verified against
+  // the token persisted on the pending record when present.
+  csrf: z.string().optional(),
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
@@ -184,6 +188,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const consentSubmitted =
       request.query['consent_submitted'] === '1' || this.readBodyParam(request, 'consent_submitted') === '1';
 
+    // Anti-CSRF token echoed by a custom `@AuthUi` page (#469). Read from query
+    // (GET round-trip) or a urlencoded POST body.
+    const csrfRaw = request.query['csrf'] ?? this.readBodyParam(request, 'csrf');
+    const csrf = typeof csrfRaw === 'string' ? csrfRaw : Array.isArray(csrfRaw) ? csrfRaw[0] : undefined;
+
     this.state.set({
       pendingAuthId,
       email,
@@ -195,6 +204,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       selectedTools,
       consentSubmitted,
       loginFields,
+      csrf,
     });
 
     if (isIncremental) {
@@ -273,6 +283,20 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         ),
       );
       return;
+    }
+
+    // CSRF gate (#469): a custom `@AuthUi` page persisted a CSRF token on the
+    // pending record. The submit MUST echo a matching token. This applies ONLY
+    // to the auth-UI form path — built-in pages set no `authUiCsrf`, so existing
+    // flows / e2es are unaffected. A consent re-render from a custom page keeps
+    // the SAME pending id + token, so the resubmit still validates.
+    if (pendingAuth.authUiCsrf) {
+      const submitted = this.state.csrf;
+      if (!submitted || !timingSafeEqualStr(pendingAuth.authUiCsrf, submitted)) {
+        this.logger.warn('Auth-UI CSRF token mismatch on callback');
+        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid or missing CSRF token'), 400));
+        return;
+      }
     }
 
     // Generate a user sub from email (in production, this would come from a user database)
@@ -468,6 +492,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // consent form GETs back to this same endpoint with the identity + `tools=`.
     if (consentGateApplies && !rememberSkip && !consentSubmitted && selectedTools === undefined) {
       this.logger.info('Consent enabled and not yet submitted — rendering consent screen');
+      // Custom `@AuthUi({ slot: 'consent' })` renderer takes over when registered.
+      if (await this.tryRenderCustomConsent(pendingAuth, consentConfig)) return;
       this.respond(
         httpRespond.html(this.renderConsentScreen(pendingAuth, consentConfig, { email, name, loginFields })),
       );
@@ -1134,6 +1160,89 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
+   * Render a custom `@AuthUi({ slot: 'consent' })` page when one is registered.
+   *
+   * Mints + persists the per-pending-auth CSRF token (reusing any token a prior
+   * custom page already set on the record, so a consent re-render keeps the same
+   * token), builds the consent {@link AuthFlowState} from the SAME tool
+   * projection the built-in screen uses, SSRs the component, and responds with
+   * the assembled page + CSP headers. Returns `true` when handled.
+   */
+  private async tryRenderCustomConsent(
+    pendingAuth: { id: string; clientId: string; authUiCsrf?: string },
+    consentConfig: ConsentConfig | undefined,
+  ): Promise<boolean> {
+    const authUi: AuthUiRegistry | undefined = this.scope.authUi;
+    if (!authUi || !authUi.hasSlot('consent')) return false;
+
+    // Reuse the record's existing token (set by the authorize-time login page or
+    // a prior consent render) so the in-flight pending id keeps one stable CSRF.
+    let csrfToken = pendingAuth.authUiCsrf;
+    if (!csrfToken) {
+      csrfToken = authUi.mintCsrf(pendingAuth.id);
+      // The callback CSRF gate only fires when the pending record carries an
+      // `authUiCsrf` (see the gate earlier in this flow). If we can't persist
+      // the freshly-minted token, that gate would be SKIPPED on the consent
+      // submit — a fail-OPEN path. So fail CLOSED here rather than render a
+      // consent page whose submit can't be CSRF-verified.
+      try {
+        const localAuth = this.scope.auth as LocalPrimaryAuth;
+        const record = await localAuth.authorizationStore.getPendingAuthorization(pendingAuth.id);
+        if (!record) {
+          this.respond(
+            httpRespond.html(
+              this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
+              400,
+            ),
+          );
+          return true;
+        }
+        record.authUiCsrf = csrfToken;
+        await localAuth.authorizationStore.storePendingAuthorization(record);
+      } catch (err) {
+        this.logger.error(`Failed to persist auth-UI CSRF for consent: ${err instanceof Error ? err.message : err}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
+            500,
+          ),
+        );
+        return true;
+      }
+    } else {
+      // Keep the in-memory registry map in sync for the accumulator/verify path.
+      authUi.mintCsrf(pendingAuth.id);
+    }
+
+    const { toolCards } = projectConsentTools(this.scope, consentConfig?.excludedTools);
+    const tools: AuthTool[] = toolCards.map((c) => ({
+      id: c.toolId,
+      name: c.toolName,
+      description: c.description,
+      appId: c.appId,
+      appName: c.appName,
+      defaultSelected: consentConfig?.defaultSelectedTools?.includes(c.toolId),
+    }));
+
+    const state = buildConsentState(
+      {
+        pendingAuthId: pendingAuth.id,
+        submitUrl: `${this.scope.fullPath}/oauth/callback`,
+        extraUrl: authUiExtraPath(this.scope.fullPath),
+        csrfToken,
+        addedItems: authUi.getAddedItems(pendingAuth.id),
+      },
+      { clientId: pendingAuth.clientId, tools },
+    );
+
+    const page = buildAuthUiPage({ registry: authUi, slot: 'consent', state, fullPath: this.scope.fullPath });
+    if (!page) return false;
+
+    this.respond(httpRespond.html(page.html, 200, page.headers));
+    return true;
+  }
+
+  /**
    * Render the tool-consent screen.
    *
    * The form GETs back to `/oauth/callback` carrying `pending_auth_id`,
@@ -1148,7 +1257,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * (used for an empty `requireSelection` submit).
    */
   private renderConsentScreen(
-    pendingAuth: { id: string; clientId: string },
+    pendingAuth: { id: string; clientId: string; authUiCsrf?: string },
     consentConfig: ConsentConfig | undefined,
     identity: { email?: string; name?: string; loginFields?: Record<string, string> },
     error?: string,
@@ -1179,6 +1288,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       if (key === 'email' || key === 'name') continue; // already added above
       if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
       hiddenFields.push({ name: key, value });
+    }
+    // When a custom `@AuthUi` login page set a CSRF token on the pending record
+    // (#469), the built-in consent form must round-trip it so the consent submit
+    // passes the CSRF gate. Built-in-only flows have no `authUiCsrf` → no field.
+    if (pendingAuth.authUiCsrf) {
+      hiddenFields.push({ name: 'csrf', value: pendingAuth.authUiCsrf });
     }
 
     return buildToolConsentPage({
@@ -1271,4 +1386,14 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 </body>
 </html>`;
   }
+}
+
+/** Constant-time string compare to avoid timing oracles on the CSRF token. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }

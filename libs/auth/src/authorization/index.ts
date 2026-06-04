@@ -57,3 +57,7 @@ export {
   NullOrchestratedAuthAccessor,
   ORCHESTRATED_AUTH_ACCESSOR,
 } from './orchestrated.accessor';
+
+// Local-AS Dynamic Client Registration registry (#462)
+export { DcrClientRegistry } from './dcr-client.registry';
+export type { RegisteredClient, PreRegisteredClientInput, DcrRegistryConfig } from './dcr-client.registry';

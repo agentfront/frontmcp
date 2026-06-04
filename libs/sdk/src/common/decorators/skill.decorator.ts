@@ -1,7 +1,5 @@
 import 'reflect-metadata';
 
-import { basename, dirname } from '@frontmcp/utils';
-
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 import { skillMetadataSchema, type EsmOptions, type RemoteOptions, type SkillMetadata } from '../metadata';
 import { SkillKind, type SkillValueRecord } from '../records';
@@ -11,7 +9,11 @@ import { SkillKind, type SkillValueRecord } from '../records';
 
 import { type SkillEsmTargetRecord, type SkillRemoteRecord } from '../records/skill.record';
 import { extendedSkillMetadata, FrontMcpSkillTokens, skillCallerDir } from '../tokens';
+import { captureCallerDir } from '../utils/caller-dir.utils';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
+
+/** Basenames of THIS decorator file, skipped so the captured frame is the user's skill module. */
+const SKILL_DECORATOR_BASENAMES = ['skill.decorator.ts', 'skill.decorator.js'] as const;
 
 /**
  * Class decorator that marks a class as a Skill and provides metadata.
@@ -180,85 +182,13 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
 }
 
 /**
- * Walk the call stack to find the first file outside this module.
- * Returns the directory of that file, or undefined if it cannot be determined.
- *
- * Supports both CJS frames (`at fn (/abs/path/foo.ts:1:1)`) and ESM frames
- * (`at fn (file:///abs/path/foo.ts:1:1)`). For ESM frames, the `file://`
- * scheme is converted via `node:url`'s `fileURLToPath` so the result is a
- * usable filesystem path on both POSIX and Windows.
+ * Walk the call stack to find the first user-code file outside this decorator
+ * module and return its directory (or `undefined`). Thin wrapper around the
+ * shared {@link captureCallerDir}, skipping this decorator file by basename so
+ * the captured frame is the user's skill module.
  */
 function resolveCallerDir(): string | undefined {
-  return parseCallerDir(new Error().stack);
-}
-
-/**
- * Pure helper that parses a V8-format stack string and returns the directory
- * of the first user-code frame. Exported for unit testing only — the
- * production entry point is `resolveCallerDir()`.
- *
- * Filters out:
- *   - Node internals (`node:internal/...`, `node:fs`, etc.)
- *   - `node_modules` packages
- *   - this decorator file itself (basename match — `skill.decorator.ts`/`.js`)
- *
- * @internal
- */
-export function parseCallerDir(stack: string | undefined): string | undefined {
-  if (!stack) return undefined;
-
-  const lines = stack.split('\n');
-  // Start from index 1 (skip the "Error" header line); cap at 30 frames.
-  for (let i = 1; i < lines.length && i < 30; i++) {
-    const line = lines[i];
-    // Cap per-line length so the greedy regexes below can never backtrack
-    // pathologically on a hostile / malformed stack (CodeQL ReDoS warning
-    // PR #419: GHAS finding 146/147). A real stack-trace frame is well
-    // under this — anything longer is almost certainly not a real frame.
-    if (line.length > 2048) continue;
-    // Match "at func (...:line:col)" and "at ...:line:col"; capture group
-    // tolerates `file:///` because it greedily includes the scheme.
-    const match = line.match(/\(([^)]+):\d+:\d+\)/) || line.match(/at\s+([^\s]+):\d+:\d+/);
-    if (!match) continue;
-
-    let file = match[1];
-
-    // ESM frames surface URLs; convert to a filesystem path before dirname().
-    if (file.startsWith('file://')) {
-      try {
-        // Lazy-require so browser/Edge builds that never import `node:url` stay clean.
-
-        const { fileURLToPath } = require('node:url');
-        file = fileURLToPath(file);
-      } catch {
-        // If node:url is unavailable (browser-ish runtimes), fall back to a
-        // best-effort strip. dirname() works on most POSIX cases this way.
-        file = file.replace(/^file:\/\//, '');
-      }
-    }
-
-    // Skip frames that don't represent user code:
-    //   - Node internals (`node:internal/...`, `node:fs`, etc.)
-    //   - third-party packages (`node_modules`)
-    //   - this decorator file itself (match by basename only — `skill.decorator.ts`
-    //     or `.js` — so we don't accidentally reject files like `skill.decorator.spec.ts`)
-    //
-    // `basename` from `@frontmcp/utils` handles both POSIX and Windows
-    // separators and is not a regex — sidesteps the CodeQL ReDoS warning
-    // GHAS #147 that the previous `[^/\\]+$` regex tripped.
-    const base = basename(file);
-    if (
-      file.startsWith('node:') ||
-      file.includes('node_modules') ||
-      base === 'skill.decorator.ts' ||
-      base === 'skill.decorator.js'
-    ) {
-      continue;
-    }
-
-    return dirname(file);
-  }
-  return undefined;
+  return captureCallerDir(SKILL_DECORATOR_BASENAMES);
 }
 
 function skillEsm(specifier: string, targetName: string, options?: EsmOptions<SkillMetadata>): SkillEsmTargetRecord {

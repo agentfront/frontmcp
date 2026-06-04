@@ -355,6 +355,28 @@
         "default": "./dist/esm/react/index.mjs"
       }
     },
+    "./auth": {
+      "development": "./src/auth/index.ts",
+      "require": {
+        "types": "./dist/auth/index.d.ts",
+        "default": "./dist/auth/index.js"
+      },
+      "import": {
+        "types": "./dist/auth/index.d.ts",
+        "default": "./dist/esm/auth/index.mjs"
+      }
+    },
+    "./auth/vanilla": {
+      "development": "./src/auth/vanilla/index.ts",
+      "require": {
+        "types": "./dist/auth/vanilla/index.d.ts",
+        "default": "./dist/auth/vanilla/index.js"
+      },
+      "import": {
+        "types": "./dist/auth/vanilla/index.d.ts",
+        "default": "./dist/esm/auth/vanilla/index.mjs"
+      }
+    },
     "./bridge": {
       "development": "./src/bridge/index.ts",
       "require": {

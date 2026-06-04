@@ -4,6 +4,7 @@ import type { GuardManager } from '@frontmcp/guard';
 
 import type AgentRegistry from '../../agent/agent.registry';
 import type AppRegistry from '../../app/app.registry';
+import type { AuthUiRegistry } from '../../auth/auth-ui';
 import type { AuthRegistry } from '../../auth/auth.registry';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
@@ -65,6 +66,13 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get agents(): AgentRegistry;
 
   abstract get toolUI(): ToolUIRegistry | undefined;
+
+  /**
+   * Registry of custom `@AuthUi` slot renderers + `@AuthExtra` validators (#469).
+   * `undefined` in CLI mode or when no custom auth UI is configured — the OAuth
+   * flows then serve the built-in HTML pages unchanged.
+   */
+  abstract get authUi(): AuthUiRegistry | undefined;
 
   abstract get transportService(): TransportService | undefined;
 

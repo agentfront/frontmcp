@@ -7,6 +7,7 @@ import { getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@fro
 import AgentRegistry from '../agent/agent.registry';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import AppRegistry from '../app/app.registry';
+import { AuthUiRegistry } from '../auth/auth-ui';
 import { AuthRegistry } from '../auth/auth.registry';
 import { type ChannelNotificationService } from '../channel/channel-notification.service';
 import { registerChannelCapabilities } from '../channel/channel-scope.helper';
@@ -106,6 +107,7 @@ export class Scope extends ScopeEntry {
   notificationService: NotificationService;
   declare haManager?: HaManager;
   private toolUIRegistry: ToolUIRegistry;
+  private authUiRegistry?: AuthUiRegistry;
   readonly entryPath: string;
   readonly routeBase: string;
   readonly orchestrated: boolean = false;
@@ -694,6 +696,14 @@ export class Scope extends ScopeEntry {
       await this.compileUIWidgets();
     }
 
+    // Build the custom auth-UI registry (#469) from this scope's resolved auth
+    // options (`auth.ui` / `auth.extras`) — per-scope, so each `splitByApp` app
+    // gets its own. Skipped in CLI mode (no HTTP auth pages). When no custom
+    // slots/extras are declared the OAuth flows fall back to the built-in pages.
+    if (!this.cliMode) {
+      await this.buildAuthUiRegistry();
+    }
+
     // Initialize skill session manager if skills are available
     if (this.scopeSkills.hasAny()) {
       const store = createSkillSessionStore({ type: 'memory' });
@@ -1084,6 +1094,69 @@ export class Scope extends ScopeEntry {
     }
   }
 
+  /**
+   * Build the custom auth-UI registry (#469) PER SCOPE from this scope's resolved
+   * auth options (`auth.ui` / `auth.extras`). The parent multi-app scope reads
+   * the top-level `@FrontMcp({ auth })`, and each `splitByApp` scope reads its own
+   * `@App({ auth })` (resolved into `this.metadata.auth` by `normalizeAppScope`),
+   * so a split app gets ITS OWN auth UI.
+   *
+   * No-op (leaves {@link authUiRegistry} undefined) when neither is declared, so
+   * the OAuth flows serve the built-in HTML pages exactly as before. When custom
+   * slots ARE declared, their SSR + hydration bundles are pre-built at startup
+   * (mirroring `compileUIWidgets`); build failures are logged + cached, never
+   * thrown, so a broken component degrades to the built-in page.
+   */
+  private async buildAuthUiRegistry(): Promise<void> {
+    // `auth.ui` / `auth.extras` exist only on local/remote auth modes; read them
+    // defensively so public/transparent (and absent auth) are a clean no-op.
+    const auth = this.metadata.auth as
+      | { ui?: import('@frontmcp/auth').AuthUiMap; extras?: import('@frontmcp/auth').AuthExtrasMap }
+      | undefined;
+    const authUi = auth?.ui;
+    const authExtras = auth?.extras;
+    const uiSlotCount = authUi ? Object.keys(authUi).length : 0;
+    const extraCount = authExtras ? Object.keys(authExtras).length : 0;
+    if (uiSlotCount === 0 && extraCount === 0) return;
+
+    // Anchor `auth.ui[slot]` relative paths to the config file that declared this
+    // scope's auth (the `@FrontMcp`/`@App` source dir captured at decoration
+    // time). Fall back to process.cwd() with a warning when capture failed.
+    let sourceDir = this.metadata.__sourceDir;
+    if (!sourceDir) {
+      sourceDir = process.cwd();
+      if (uiSlotCount > 0) {
+        this.logger.warn(
+          `auth.ui paths will resolve against process.cwd() ("${sourceDir}") — the declaring ` +
+            `@FrontMcp/@App source directory could not be captured. Use absolute paths if this is wrong.`,
+        );
+      }
+    }
+
+    const registry = new AuthUiRegistry(this.logger);
+    registry.registerAuthUiMap(authUi, sourceDir);
+    registry.registerAuthExtrasMap(authExtras);
+    // In dev / offline, map @frontmcp/ui/auth (not on esm.sh in a monorepo) to a
+    // served URL via the same cdnOverrides used for tool widgets.
+    const cdnOverrides = this.metadata.ui?.cdnOverrides;
+    if (cdnOverrides && Object.keys(cdnOverrides).length > 0) {
+      registry.setResolverOverrides(cdnOverrides);
+    }
+    // warmup() is a best-effort preflight that caches per-slot errors; guard it
+    // anyway so a broken custom page can never take scope init (and the server)
+    // down — the OAuth flows then serve the built-in pages for broken slots.
+    try {
+      await registry.warmup();
+    } catch (error) {
+      this.logger.warn(
+        'Auth-UI registry warmup encountered errors — affected custom pages will fall back to built-in',
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+    }
+    this.authUiRegistry = registry;
+    this.logger.verbose(`Auth-UI registry initialized (${uiSlotCount} slot file(s), ${extraCount} extra(s))`);
+  }
+
   private formatScopeSummary(): string {
     const entries: string[] = [];
     const add = (count: number, label: string) => {
@@ -1160,6 +1233,10 @@ export class Scope extends ScopeEntry {
 
   get toolUI(): ToolUIRegistry {
     return this.toolUIRegistry;
+  }
+
+  get authUi(): AuthUiRegistry | undefined {
+    return this.authUiRegistry;
   }
 
   get resources(): ResourceRegistry {

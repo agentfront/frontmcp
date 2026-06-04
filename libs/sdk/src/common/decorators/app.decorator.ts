@@ -10,7 +10,11 @@ import {
   type RemoteUrlAppOptions,
 } from '../metadata';
 import { FrontMcpLocalAppTokens } from '../tokens';
+import { captureCallerDir } from '../utils/caller-dir.utils';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
+
+/** Basenames of THIS decorator file, skipped so the captured frame is the user's app module. */
+const APP_DECORATOR_BASENAMES = ['app.decorator.ts', 'app.decorator.js'] as const;
 
 /**
  * Decorator that marks a class as a McpApp module and provides metadata.
@@ -37,8 +41,15 @@ import { validateRemoteUrl } from '../utils/validate-remote-url';
  * ```
  */
 function FrontMcpApp(providedMetadata: LocalAppMetadata): ClassDecorator {
+  // Capture the defining module's directory at decorator-evaluation time so a
+  // `splitByApp` app's `auth.ui[slot]` relative paths anchor to THIS app file
+  // rather than process.cwd() (#469 / issue #444).
+  const sourceDir = captureCallerDir(APP_DECORATOR_BASENAMES);
+
   return (target: Function) => {
-    const { error, data: metadata } = frontMcpLocalAppMetadataSchema.safeParse(providedMetadata);
+    const withSourceDir =
+      sourceDir && !providedMetadata.__sourceDir ? { ...providedMetadata, __sourceDir: sourceDir } : providedMetadata;
+    const { error, data: metadata } = frontMcpLocalAppMetadataSchema.safeParse(withSourceDir);
     if (error) {
       const formatted = error.format();
       if (formatted.plugins) {

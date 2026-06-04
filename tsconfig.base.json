@@ -70,6 +70,8 @@
       "@frontmcp/ui/web-components": ["libs/ui/src/web-components/index.ts"],
       "@frontmcp/ui/renderers": ["libs/ui/src/renderers/index.ts"],
       "@frontmcp/ui/react": ["libs/ui/src/react/index.ts"],
+      "@frontmcp/ui/auth": ["libs/ui/src/auth/index.ts"],
+      "@frontmcp/ui/auth/vanilla": ["libs/ui/src/auth/vanilla/index.ts"],
       "@frontmcp/ui/renderer": ["libs/ui/src/renderer/index.ts"],
       "@frontmcp/ui/renderer/common": ["libs/ui/src/renderer/common/index.ts"],
       "@frontmcp/ui/renderer/charts": ["libs/ui/src/renderer/charts/index.ts"],

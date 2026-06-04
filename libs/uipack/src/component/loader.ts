@@ -11,7 +11,7 @@ import { createEsmShResolver } from '../resolver/esm-sh.resolver';
 import { getPackageName, parseImports } from '../resolver/import-parser';
 import type { ImportResolver, ResolvedImport } from '../resolver/types';
 import { safeJsonForScript } from '../utils';
-import { bundleFileSource, extractDefaultExportName } from './transpiler';
+import { bundleFileSource, extractDefaultExportName, transpileReactSource } from './transpiler';
 import {
   FRONTMCP_META_KEY,
   isFileSource,
@@ -53,8 +53,28 @@ export function resolveUISource(
      * `bundleFileSource({ bundleReact })`.
      */
     inlineReact?: boolean;
+    /**
+     * When true, FileSource `.tsx`/`.jsx` widgets are TRANSFORM-ONLY: the source
+     * is transpiled with esbuild `transformSync` (single file, JSX → createElement)
+     * and ALL imports — including `react`/`react-dom` — stay external bare
+     * specifiers resolved by the import map. NO bundling, NO auto-injected mount
+     * (the caller supplies a {@link ShellMountDescriptor} on the render side).
+     *
+     * This is the generic primitive a non-widget caller (e.g. an auth page) uses
+     * to route a `.tsx` through `renderComponent`'s inline-module path without
+     * pulling in the widget bundle + `McpBridgeProvider` mount. Mutually
+     * exclusive with {@link inlineReact} (bundling). Default `false`.
+     */
+    transformOnly?: boolean;
   },
 ): ResolvedComponent {
+  // `inlineReact` (bundle React in) and `transformOnly` (single-file transform,
+  // all deps external) are mutually exclusive build modes. Fail fast rather than
+  // silently picking one, so an ambiguous config never ships.
+  if (options?.inlineReact && options?.transformOnly) {
+    throw new Error('resolveUISource: `inlineReact` and `transformOnly` are mutually exclusive — set at most one.');
+  }
+
   const resolver = options?.resolver ?? createEsmShResolver();
 
   if (isNpmSource(source)) {
@@ -66,7 +86,7 @@ export function resolveUISource(
   }
 
   if (isFileSource(source)) {
-    return resolveFileSource(source, { inlineReact: options?.inlineReact });
+    return resolveFileSource(source, { inlineReact: options?.inlineReact, transformOnly: options?.transformOnly });
   }
 
   if (isFunctionSource(source)) {
@@ -110,11 +130,14 @@ function resolveImportSource(source: ImportSource): ResolvedComponent {
   };
 }
 
-function resolveFileSource(source: FileSource, options: { inlineReact?: boolean } = {}): ResolvedComponent {
+function resolveFileSource(
+  source: FileSource,
+  options: { inlineReact?: boolean; transformOnly?: boolean } = {},
+): ResolvedComponent {
   const path = require('path') as typeof import('path');
   const ext = path.extname(source.file).toLowerCase();
 
-  // React source files (.tsx/.jsx) — bundle with esbuild, embed as inline module
+  // React source files (.tsx/.jsx) — bundle (default) or transform-only.
   if (ext === '.tsx' || ext === '.jsx') {
     const fs = require('fs') as typeof import('fs');
     // NOTE: relative paths resolve against `process.cwd()`, NOT the tool file's
@@ -139,8 +162,26 @@ function resolveFileSource(source: FileSource, options: { inlineReact?: boolean 
       throw err;
     }
 
-    // Extract name from RAW source (before bundling changes export structure)
+    // Extract name from RAW source (before transform/bundle changes structure)
     const componentName = source.exportName || extractDefaultExportName(rawSource) || 'Component';
+
+    // TRANSFORM-ONLY path: single-file transpile, ALL imports stay external
+    // (no bundling, no auto-mount). The renderer's inline-module path then
+    // appends the caller-supplied mount tail. This is the generic primitive a
+    // non-widget caller (e.g. auth pages) routes a `.tsx` through.
+    if (options.transformOnly === true) {
+      const code = transpileReactSource(rawSource, path.basename(filePath));
+      const parsed = parseImports(code);
+      return {
+        mode: 'module',
+        code,
+        imports: [...new Set(parsed.externalImports.map((i) => i.specifier))],
+        exportName: componentName,
+        meta: { mcpAware: true, renderer: 'react' },
+        peerDependencies: source.peerDependencies || ['react', 'react-dom'],
+        bundled: false,
+      };
+    }
 
     // Bundle: workspace deps resolved locally. When `inlineReact` is set
     // (resourceMode: 'inline'), React itself is bundled in — see #454.

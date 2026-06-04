@@ -98,6 +98,9 @@
         "command": "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json"
       }
     },
+    "test": {
+      "dependsOn": ["^build", { "projects": ["uipack", "ui"], "target": "build" }]
+    },
     "publish": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],

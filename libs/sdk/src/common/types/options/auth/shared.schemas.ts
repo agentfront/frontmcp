@@ -13,11 +13,15 @@ export {
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
   upstreamProviderSchema,
+  localDcrClientSchema,
+  localDcrConfigSchema,
   cimdCacheConfigSchema,
   cimdSecurityConfigSchema,
   cimdNetworkConfigSchema,
   cimdConfigSchema,
 } from '@frontmcp/auth';
+// NOTE: This module is a legacy re-export stub; the active SDK auth surface is
+// ./index.ts (which re-exports directly from @frontmcp/auth).
 export type {
   PublicAccessConfig,
   PublicAccessConfigInput,
@@ -41,6 +45,10 @@ export type {
   IncrementalAuthConfigInput,
   UpstreamProviderOptionsZod,
   UpstreamProviderOptionsInput,
+  LocalDcrClientConfigZod,
+  LocalDcrClientConfigInput,
+  LocalDcrConfigZod,
+  LocalDcrConfigInput,
   CimdCacheConfig,
   CimdSecurityConfig,
   CimdNetworkConfig,

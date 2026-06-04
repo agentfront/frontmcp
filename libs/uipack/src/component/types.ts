@@ -81,6 +81,16 @@ export interface UIConfig<In = unknown, Out = unknown> {
    * Desktop / claude.ai — see issue #454).
    */
   inlineReact?: boolean;
+  /**
+   * When true, a FileSource `.tsx`/`.jsx` is TRANSFORM-ONLY: transpiled as a
+   * single file with ALL imports (incl. react/react-dom) left external for the
+   * import map, and NO auto-injected widget mount. Pair with a
+   * {@link import('../shell/types').ShellMountDescriptor} on the shell config to
+   * supply the mount tail. The generic primitive for routing a non-widget page
+   * (e.g. an auth page) through `renderComponent`'s inline-module path. Mutually
+   * exclusive with {@link inlineReact}. Default `false`.
+   */
+  transformOnly?: boolean;
 }
 
 /** Auto-detected or declared metadata on a component module */

@@ -2,6 +2,7 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import { isProduction } from '@frontmcp/utils';
 
 import {
   Flow,
@@ -11,6 +12,7 @@ import {
   HttpRedirectSchema,
   httpRespond,
   HttpTextSchema,
+  isLocalMode,
   isOrchestratedMode,
   makeWellKnownPaths,
   StageHookOf,
@@ -20,6 +22,23 @@ import {
   type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
+
+/**
+ * Resolve whether the local-AS Dynamic Client Registration endpoint is active
+ * (#462), so AS metadata only advertises `registration_endpoint` when DCR is
+ * actually mounted. Honors an explicit `auth.dcr.enabled`; otherwise falls back
+ * to the historical guard (on in development, off in production). Only `local`
+ * mode carries `dcr` — every other orchestrated mode keeps the dev/prod default.
+ */
+function resolveDcrEnabled(auth: unknown): boolean {
+  if (auth && isLocalMode(auth as never)) {
+    const dcr = (auth as { dcr?: { enabled?: boolean } }).dcr;
+    if (dcr && typeof dcr.enabled === 'boolean') {
+      return dcr.enabled;
+    }
+  }
+  return !isProduction();
+}
 
 const inputSchema = httpInputSchema;
 
@@ -129,7 +148,9 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
         oauthBaseUrl,
         scopesSupported: [],
         tokenEndpointAuthMethods: [],
-        dcrEnabled: false, //scope.oauth.dcrEnabled,
+        // #462 — advertise registration_endpoint only when local-AS DCR is
+        // actually active (explicit auth.dcr.enabled, else dev/prod default).
+        dcrEnabled: resolveDcrEnabled(metadata.auth),
         isOrchestrated: metadata.auth ? isOrchestratedMode(metadata.auth) : false,
         cimdEnabled,
       }),
@@ -138,8 +159,15 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
   @Stage('collectData')
   async collectData() {
-    const { baseUrl, oauthBaseUrl, scopesSupported, tokenEndpointAuthMethods, isOrchestrated, cimdEnabled } =
-      this.state.required;
+    const {
+      baseUrl,
+      oauthBaseUrl,
+      scopesSupported,
+      tokenEndpointAuthMethods,
+      dcrEnabled,
+      isOrchestrated,
+      cimdEnabled,
+    } = this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
       const baseIssuer = `${baseUrl}`;
@@ -157,7 +185,9 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           token_endpoint: `${oauthBaseUrl}/oauth/token`,
           userinfo_endpoint: `${oauthBaseUrl}/oauth/userinfo`,
           jwks_uri: `${baseIssuer}/.well-known/jwks.json`,
-          registration_endpoint: `${oauthBaseUrl}/oauth/register`,
+          // #462 — only advertise registration when DCR is active. When it is
+          // disabled, omitting the endpoint signals "no DCR" to clients.
+          ...(dcrEnabled ? { registration_endpoint: `${oauthBaseUrl}/oauth/register` } : {}),
           token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],

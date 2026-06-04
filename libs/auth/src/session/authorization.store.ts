@@ -156,6 +156,13 @@ export interface PendingAuthorizationRecord {
   // Consent State
   /** Consent state for tool selection */
   consent?: ConsentStateRecord;
+
+  /**
+   * Anti-CSRF token minted at SSR time for a custom `@AuthUi` page (#469).
+   * Echoed back by the client in the `csrf` field and verified on the callback /
+   * extra submit. Absent for the built-in pages (no CSRF requirement there).
+   */
+  authUiCsrf?: string;
 }
 
 /**
@@ -266,6 +273,10 @@ export interface CreatePendingRecordParams {
   federatedLogin?: FederatedLoginStateRecord;
   // Consent State
   consent?: ConsentStateRecord;
+  // Anti-CSRF token for a custom `@AuthUi` page (#469). Usually minted lazily at
+  // SSR time and assigned onto an existing record, but accepted here so a caller
+  // can seed it at creation time without losing it.
+  authUiCsrf?: string;
 }
 
 /**
@@ -353,6 +364,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     priorAuthorizedAppIds: params.priorAuthorizedAppIds,
     federatedLogin: params.federatedLogin,
     consent: params.consent,
+    authUiCsrf: params.authUiCsrf,
   };
 }
 

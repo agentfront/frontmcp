@@ -80,6 +80,8 @@ export {
   type ShellConfig,
   type ShellResult,
   type CSPConfig,
+  type ShellMountDescriptor,
+  type ShellDataInjectionDescriptor,
   buildShell,
   DEFAULT_CDN_DOMAINS,
   DEFAULT_CSP_DIRECTIVES,
@@ -89,6 +91,7 @@ export {
   validateCSPDomain,
   sanitizeCSPDomains,
   buildDataInjectionScript,
+  buildCustomDataInjectionScript,
   createTemplateHelpers,
   // Custom Shell
   type ShellPlaceholderName,

@@ -1,7 +1,9 @@
 import { jwtVerify, SignJWT } from 'jose';
 
 import {
+  createSecureStore,
   createTokenStorageAdapter,
+  DcrClientRegistry,
   InMemoryAuthorizationStore,
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
@@ -18,7 +20,10 @@ import {
   verifyPkce,
   type AuthorizationStore,
   type ConsentStore,
+  type DcrRegistryConfig,
   type FederatedAuthSessionStore,
+  type SecureStoreBackend,
+  type SecureStoreConfig,
   type TokenStorageConfig,
   type OrchestratedTokenStore as TokenStore,
   type VerifyResult,
@@ -26,6 +31,7 @@ import {
 import {
   base64urlDecode,
   getEnv,
+  isProduction,
   MemoryStorageAdapter,
   randomBytes,
   randomUUID,
@@ -56,6 +62,7 @@ import type ProviderRegistry from '../../provider/provider.registry';
 import { CimdService } from '../cimd';
 import { createCredentialsProviders } from '../credentials';
 import { credentialsContextExtension } from '../credentials/credentials.context-extension';
+import OauthAuthUiExtraFlow from '../flows/oauth.auth-ui.flow';
 import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
 import OauthConnectFlow from '../flows/oauth.connect.flow';
@@ -67,6 +74,8 @@ import SessionVerifyFlow from '../flows/session.verify.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
+import { createSecureStoreProviders } from '../secure-store';
+import { secureStoreContextExtension } from '../secure-store/secure-store.context-extension';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -218,6 +227,14 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /** Remembered per-(user, client) consent selections (`rememberConsent`). */
   private consentStoreImpl: ConsentStore;
 
+  /**
+   * Local-AS Dynamic Client Registration registry (#462). Seeded with any
+   * `dcr.clients` at construction so the authorize/token flows accept those
+   * pre-registered clients without a DCR round-trip, and mutated by
+   * `POST /oauth/register`. Always present (empty when no `dcr` is configured).
+   */
+  private readonly dcrClientRegistryImpl: DcrClientRegistry;
+
   /** Storage adapter backing the persistent stores (kept for disposal). */
   private storageAdapter?: StorageAdapter;
 
@@ -231,6 +248,18 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /** Per-session encrypted credential vault (Checkpoint 3b), if enabled. */
   get credentialVault(): SessionCredentialVault | undefined {
     return this.credentialVaultImpl;
+  }
+
+  /**
+   * General session-scoped secure-secret store backend (#470). Backs
+   * `this.secureStore` in tools. Constructed in {@link initialize} from
+   * `auth.secureStore`; defaults to an in-memory, AES-256-GCM-encrypted backing.
+   */
+  private secureStoreBackendImpl?: SecureStoreBackend;
+
+  /** General secure-store backend (#470), if enabled. */
+  get secureStoreBackend(): SecureStoreBackend | undefined {
+    return this.secureStoreBackendImpl;
   }
 
   /** OAuth authorization-code / pending / refresh-token store. */
@@ -255,6 +284,39 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    */
   get consentStore(): ConsentStore {
     return this.consentStoreImpl;
+  }
+
+  /**
+   * Local-AS Dynamic Client Registration registry (#462). Consulted by the
+   * register/authorize flows to enforce the declarative `dcr` allowlists and to
+   * look up pre-registered + dynamically-registered clients.
+   */
+  get dcrClientRegistry(): DcrClientRegistry {
+    return this.dcrClientRegistryImpl;
+  }
+
+  /**
+   * Resolved local-AS DCR config. Only `local` mode carries `dcr`; every other
+   * mode returns `undefined`, preserving the historical behavior exactly.
+   */
+  getDcrConfig(): DcrRegistryConfig | undefined {
+    if (isLocalMode(this.options)) {
+      return this.options.dcr;
+    }
+    return undefined;
+  }
+
+  /**
+   * Whether `POST /oauth/register` and the `registration_endpoint` advertisement
+   * are active. Honors an explicit `dcr.enabled`; when unset, falls back to the
+   * historical guard (enabled in development, disabled in production).
+   */
+  isDcrEnabled(): boolean {
+    const dcr = this.getDcrConfig();
+    if (dcr && typeof dcr.enabled === 'boolean') {
+      return dcr.enabled;
+    }
+    return !isProduction();
   }
 
   /** Provider configurations (indexed by provider ID) */
@@ -319,6 +381,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       encryptionKey: this.secret, // Reuse JWT secret for token encryption
     });
     this.consentStoreImpl = new InMemoryConsentStore();
+
+    // Local-AS DCR registry (#462). Seed any declarative `dcr.clients` so the
+    // authorize/token flows accept those trusted clients without a DCR
+    // round-trip. `getDcrConfig()` returns undefined outside local mode, so the
+    // registry is simply empty there (preserving the historical behavior).
+    this.dcrClientRegistryImpl = new DcrClientRegistry(this.getDcrConfig() ?? {});
 
     // Initialize CIMD service if orchestrated mode
     if (isOrchestratedMode(options)) {
@@ -469,6 +537,89 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     installContextExtensions('credentials', [credentialsContextExtension]);
 
     this.logger.debug('SessionCredentialVault initialized; this.credentials enabled');
+  }
+
+  /**
+   * Read the `secureStore` selection off the auth options. Only
+   * local/remote/orchestrated modes declare it; public mode does not.
+   */
+  private readSecureStoreConfig(): SecureStoreConfig | undefined {
+    if ('secureStore' in this.options) {
+      return (this.options as { secureStore?: SecureStoreConfig }).secureStore;
+    }
+    return undefined;
+  }
+
+  /**
+   * Build the general session-scoped secure-secret store (#470) and register the
+   * `this.secureStore` accessor.
+   *
+   * Skipped in pure public mode (no authenticated subject / no session-bound
+   * secrets there). The backing comes from `auth.secureStore`:
+   * - unset / `'memory'` → in-memory, AES-256-GCM-encrypted store (default);
+   * - `{ sqlite }` / `{ redis }` → persistent encrypted store. When the chosen
+   *   persistent backing matches the configured `tokenStorage`, the SAME
+   *   StorageAdapter is reused (one connection);
+   * - `{ backend }` → a custom backing used as-is (e.g. an OS keychain) — the
+   *   framework bundles NO native dependency for this path.
+   *
+   * The HKDF pepper for the built-in encrypted backings derives from the server
+   * JWT secret (`this.secret`) unless an explicit `encryption.pepper` is set, so
+   * secrets share the same trust root as the access tokens.
+   */
+  private async initializeSecureStore(): Promise<void> {
+    // Public mode has no stable sub / session-bound secret scope — no store.
+    if (isPublicMode(this.options)) {
+      return;
+    }
+
+    const config = this.readSecureStoreConfig();
+
+    // Reuse the persistent token-storage adapter ONLY when the secure store is
+    // configured for the same persistent backing as tokenStorage. Otherwise let
+    // the factory build a dedicated (in-memory or independently-configured) one.
+    const reuseAdapter =
+      this.storageAdapter && this.secureStoreSharesTokenStorage(config) ? this.storageAdapter : undefined;
+
+    // Built-in encrypted backings derive their pepper from the server JWT secret
+    // (matching the token signer / credential vault) unless overridden in config.
+    const pepper = getEnv('VAULT_SECRET') ?? getEnv('JWT_SECRET') ?? new TextDecoder().decode(this.secret);
+
+    const resolved = await createSecureStore({
+      config,
+      pepper,
+      storage: reuseAdapter,
+      logger: this.logger.child('SecureStore'),
+    });
+    this.secureStoreBackendImpl = resolved.backend;
+
+    await this.providers.addDynamicProviders(
+      createSecureStoreProviders({
+        backend: resolved.backend,
+        scope: resolved.scope,
+        ttlMs: resolved.ttlMs,
+      }),
+    );
+
+    // Install `this.secureStore` on ExecutionContextBase (idempotent).
+    installContextExtensions('secureStore', [secureStoreContextExtension]);
+
+    this.logger.debug(
+      `SecureStore initialized (backing: ${resolved.kind}, scope: ${resolved.scope}); this.secureStore enabled`,
+    );
+  }
+
+  /**
+   * Whether the `secureStore` config selects the SAME persistent backing as the
+   * configured `tokenStorage`, so they can share one StorageAdapter. Returns
+   * false for memory/custom/undefined and for mismatched backings (in which case
+   * the secure store gets its own adapter).
+   */
+  private secureStoreSharesTokenStorage(config: SecureStoreConfig | undefined): boolean {
+    if (typeof config !== 'object' || config === null) return false;
+    if ('sqlite' in config && config.sqlite) return isSqliteTokenStorage(this.tokenStorage);
+    if ('redis' in config && config.redis) return isRedisTokenStorage(this.tokenStorage);
+    return false;
   }
 
   async signAnonymousJwt() {
@@ -839,6 +990,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // persistent StorageAdapter when one is configured.
     await this.initializeCredentialVault();
 
+    // Build the general session secure-secret store and register
+    // `this.secureStore` (#470). Runs after initializeStores so it can share the
+    // same persistent StorageAdapter when configured for the same backing.
+    await this.initializeSecureStore();
+
     // TODO: create separated jwk service for local/remote auth options
     this.providers.injectProvider({
       value: this.jwks,
@@ -890,6 +1046,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       OauthConnectFlow /** GET|POST /oauth/connect - mid-session add-credential (Checkpoint 3b) */,
       OauthRegisterFlow /** POST /oauth/register */,
       OauthProviderCallbackFlow /** GET /oauth/provider/:providerId/callback */,
+      OauthAuthUiExtraFlow /** POST /oauth/ui/extra — @AuthExtra validated-field submit (#469) */,
     );
   }
 
