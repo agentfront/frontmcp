@@ -130,7 +130,6 @@ function formDataToEntries(fd: FormData): Array<[string, string]> {
 function isFormElement(input: AuthFormInput): input is HTMLFormElement {
   return (
     typeof input === 'object' &&
-    input !== null &&
     // `nodeName` + a `FormData`-constructible shape is enough; avoids requiring
     // a live `HTMLFormElement` global (jsdom provides one, node does not).
     (input as { nodeName?: string }).nodeName === 'FORM'

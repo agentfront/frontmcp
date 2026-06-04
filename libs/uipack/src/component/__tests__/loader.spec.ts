@@ -183,4 +183,14 @@ describe('resolveUISource — transformOnly plumbing for FileSource (#469)', () 
     expect(resolved.exportName).toBe('Foo');
     expect(resolved.bundled).toBe(false);
   });
+
+  it('rejects inlineReact + transformOnly together (mutually exclusive, fail fast)', () => {
+    const { resolveUISource } = require('../loader');
+    expect(() => resolveUISource({ file: '/abs/login.tsx' }, { inlineReact: true, transformOnly: true })).toThrow(
+      Error,
+    );
+    expect(() => resolveUISource({ file: '/abs/login.tsx' }, { inlineReact: true, transformOnly: true })).toThrow(
+      /mutually exclusive/,
+    );
+  });
 });

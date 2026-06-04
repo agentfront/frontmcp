@@ -14,9 +14,10 @@
  * The transform runs the REAL esbuild path against a tiny temp `.tsx`; the
  * registry exposes only the slot source + resolver overrides the assembler uses.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { AUTH_FLOW_GLOBAL_KEY, type AuthFlowState, type AuthUiFileSource } from '../auth-ui.contract';
 import { type AuthUiRegistry } from '../auth-ui.registry';
@@ -35,14 +36,14 @@ export default function CustomLogin() {
 let dir: string;
 let file: string;
 
-beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), 'authui-render-'));
+beforeAll(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'authui-render-'));
   file = join(dir, 'login.tsx');
-  writeFileSync(file, COMPONENT, 'utf-8');
+  await writeFile(file, COMPONENT);
 });
 
-afterAll(() => {
-  rmSync(dir, { recursive: true, force: true });
+afterAll(async () => {
+  await rm(dir, { recursive: true, force: true });
 });
 
 /** Minimal stub of the registry surface buildAuthUiPage uses. */
@@ -213,6 +214,11 @@ describe('buildAuthUiPage', () => {
 describe('auth-UI path + header helpers', () => {
   it('builds the extra path under the scope path', () => {
     expect(authUiExtraPath('/mcp')).toBe('/mcp/oauth/ui/extra');
+  });
+
+  it('normalizes a trailing slash on the scope path (no double slash)', () => {
+    expect(authUiExtraPath('/mcp/')).toBe('/mcp/oauth/ui/extra');
+    expect(authUiExtraPath('/')).toBe('/oauth/ui/extra');
   });
 
   it('security headers include the expected directives', () => {

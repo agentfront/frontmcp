@@ -68,6 +68,13 @@ export function resolveUISource(
     transformOnly?: boolean;
   },
 ): ResolvedComponent {
+  // `inlineReact` (bundle React in) and `transformOnly` (single-file transform,
+  // all deps external) are mutually exclusive build modes. Fail fast rather than
+  // silently picking one, so an ambiguous config never ships.
+  if (options?.inlineReact && options?.transformOnly) {
+    throw new Error('resolveUISource: `inlineReact` and `transformOnly` are mutually exclusive — set at most one.');
+  }
+
   const resolver = options?.resolver ?? createEsmShResolver();
 
   if (isNpmSource(source)) {

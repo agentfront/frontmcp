@@ -1180,15 +1180,34 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     let csrfToken = pendingAuth.authUiCsrf;
     if (!csrfToken) {
       csrfToken = authUi.mintCsrf(pendingAuth.id);
+      // The callback CSRF gate only fires when the pending record carries an
+      // `authUiCsrf` (see the gate earlier in this flow). If we can't persist
+      // the freshly-minted token, that gate would be SKIPPED on the consent
+      // submit — a fail-OPEN path. So fail CLOSED here rather than render a
+      // consent page whose submit can't be CSRF-verified.
       try {
         const localAuth = this.scope.auth as LocalPrimaryAuth;
         const record = await localAuth.authorizationStore.getPendingAuthorization(pendingAuth.id);
-        if (record) {
-          record.authUiCsrf = csrfToken;
-          await localAuth.authorizationStore.storePendingAuthorization(record);
+        if (!record) {
+          this.respond(
+            httpRespond.html(
+              this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
+              400,
+            ),
+          );
+          return true;
         }
+        record.authUiCsrf = csrfToken;
+        await localAuth.authorizationStore.storePendingAuthorization(record);
       } catch (err) {
-        this.logger.warn(`Failed to persist auth-UI CSRF for consent: ${err instanceof Error ? err.message : err}`);
+        this.logger.error(`Failed to persist auth-UI CSRF for consent: ${err instanceof Error ? err.message : err}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
+            500,
+          ),
+        );
+        return true;
       }
     } else {
       // Keep the in-memory registry map in sync for the accumulator/verify path.

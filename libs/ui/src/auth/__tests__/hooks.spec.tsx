@@ -138,6 +138,7 @@ describe('react/hooks', () => {
     it('throws when used outside the provider', () => {
       // Suppress the expected React error boundary console noise.
       const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      expect(() => renderHook(() => useAuthFlow())).toThrow(Error);
       expect(() => renderHook(() => useAuthFlow())).toThrow(/must be used inside/);
       spy.mockRestore();
     });

@@ -52,6 +52,7 @@ describe('AuthUiRegistry — slot map registration + resolution', () => {
 
   it('throws on an unknown slot key', () => {
     const reg = new AuthUiRegistry();
+    expect(() => reg.registerAuthUiMap({ nope: './x.tsx' } as never, '/dir')).toThrow(Error);
     expect(() => reg.registerAuthUiMap({ nope: './x.tsx' } as never, '/dir')).toThrow(/slot "nope"/);
   });
 
@@ -105,6 +106,7 @@ describe('AuthUiRegistry — extras map registration + routing', () => {
 
   it('throws when an extra value is not a function', () => {
     const reg = new AuthUiRegistry();
+    expect(() => reg.registerAuthExtrasMap({ bad: 123 as never })).toThrow(Error);
     expect(() => reg.registerAuthExtrasMap({ bad: 123 as never })).toThrow(/handler function/);
   });
 

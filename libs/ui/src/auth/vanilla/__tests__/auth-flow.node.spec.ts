@@ -90,6 +90,7 @@ describe('vanilla/auth-flow (node, no window)', () => {
 
   it('throws when global fetch is unavailable (POST path)', async () => {
     (globalThis as unknown as { fetch?: unknown }).fetch = undefined;
+    await expect(submitExtra('envs:add', { env: 'prod' }, { ...state, submitMethod: 'POST' })).rejects.toThrow(Error);
     await expect(submitExtra('envs:add', { env: 'prod' }, { ...state, submitMethod: 'POST' })).rejects.toThrow(
       /fetch is unavailable/,
     );

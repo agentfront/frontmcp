@@ -73,6 +73,7 @@ describe('vanilla/auth-flow', () => {
     });
 
     it('getAuthFlow throws a helpful error when not injected', () => {
+      expect(() => getAuthFlow()).toThrow(Error);
       expect(() => getAuthFlow()).toThrow(/No injected auth flow state/);
     });
   });
@@ -190,6 +191,7 @@ describe('vanilla/auth-flow', () => {
 
     it('throws when submitUrl is missing', async () => {
       inject({ slot: 'login', pendingAuthId: 'x' });
+      await expect(submitFinish({}, { navigate: false })).rejects.toThrow(Error);
       await expect(submitFinish({}, { navigate: false })).rejects.toThrow(/no submitUrl/);
     });
 
@@ -326,6 +328,7 @@ describe('vanilla/auth-flow', () => {
 
     it('throws when neither extraUrl nor submitUrl is present', async () => {
       inject({ slot: 'login', pendingAuthId: 'x' });
+      await expect(submitExtra('envs:add', {})).rejects.toThrow(Error);
       await expect(submitExtra('envs:add', {})).rejects.toThrow(/no extraUrl\/submitUrl/);
     });
 
@@ -347,6 +350,7 @@ describe('vanilla/auth-flow', () => {
     it('throws a clear error when global fetch is unavailable', async () => {
       inject(baseState);
       (globalThis as unknown as { fetch?: unknown }).fetch = undefined;
+      await expect(submitFinish({ email: 'a@b.com' }, { navigate: false })).rejects.toThrow(Error);
       await expect(submitFinish({ email: 'a@b.com' }, { navigate: false })).rejects.toThrow(/fetch is unavailable/);
     });
   });

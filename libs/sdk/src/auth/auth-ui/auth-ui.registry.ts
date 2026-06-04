@@ -205,12 +205,27 @@ export class AuthUiRegistry {
   }
 
   /**
+   * Look up a pending-ui entry, enforcing the TTL at read time: an expired entry
+   * is deleted and treated as absent. This guarantees a stale token can never
+   * validate even if no prune-triggering write happened after it expired.
+   */
+  private getActivePending(pendingAuthId: string): PendingAuthUiState | undefined {
+    const state = this.pending.get(pendingAuthId);
+    if (!state) return undefined;
+    if (Date.now() - state.createdAt > PENDING_UI_TTL_MS) {
+      this.pending.delete(pendingAuthId);
+      return undefined;
+    }
+    return state;
+  }
+
+  /**
    * Verify a submitted CSRF token against the minted one for this pending-auth.
-   * Returns false on any mismatch / unknown pending id (caller rejects 400).
+   * Returns false on any mismatch / unknown / expired pending id (caller rejects 400).
    */
   verifyCsrf(pendingAuthId: string | undefined, submitted: string | undefined): boolean {
     if (!pendingAuthId || !submitted) return false;
-    const state = this.pending.get(pendingAuthId);
+    const state = this.getActivePending(pendingAuthId);
     if (!state) return false;
     return timingSafeEqualStr(state.csrf, submitted);
   }
@@ -219,11 +234,16 @@ export class AuthUiRegistry {
   // Accumulator (backs useAddedItems)
   // ============================================
 
-  /** Current accumulators for a pending-auth id (empty when none yet). */
+  /**
+   * Current accumulators for a pending-auth id (empty when none yet). Returns a
+   * DEEP copy — each array is cloned — so callers (e.g. an extra handler reading
+   * `ctx.current`) can never mutate the internal accumulator by reference.
+   */
   getAddedItems(pendingAuthId: string | undefined): Record<string, unknown[]> {
     if (!pendingAuthId) return {};
     const state = this.pending.get(pendingAuthId);
-    return state ? { ...state.addedItems } : {};
+    if (!state) return {};
+    return Object.fromEntries(Object.entries(state.addedItems).map(([name, items]) => [name, [...items]]));
   }
 
   /** Append accepted items to an extra's accumulator and return the full map. */

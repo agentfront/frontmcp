@@ -57,7 +57,9 @@ export { AUTH_MOUNT_ID };
 
 /** Path the auth extra submissions POST to (action discriminates the extra). */
 export function authUiExtraPath(fullPath: string): string {
-  return `${fullPath}/oauth/ui/extra`;
+  // Trim any trailing slash(es) so a `fullPath` of "/mcp/" doesn't yield a
+  // double-slash ("/mcp//oauth/ui/extra") that breaks strict route matching.
+  return `${fullPath.replace(/\/+$/, '')}/oauth/ui/extra`;
 }
 
 /**

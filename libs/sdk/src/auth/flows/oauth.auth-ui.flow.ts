@@ -95,8 +95,11 @@ export default class OauthAuthUiExtraFlow extends FlowBase<typeof extraName> {
     };
 
     // The validated field payload is everything except the reserved control keys.
-    const reserved = new Set(['action', 'pending_auth_id', 'csrf']);
-    const payload: Record<string, unknown> = {};
+    // Use a null-prototype object and skip prototype-pollution keys so an
+    // untrusted body (e.g. JSON with an own `__proto__` key) can't mutate the
+    // object's prototype.
+    const reserved = new Set(['action', 'pending_auth_id', 'csrf', '__proto__', 'constructor', 'prototype']);
+    const payload: Record<string, unknown> = Object.create(null);
     for (const [k, v] of Object.entries(body)) {
       if (!reserved.has(k)) payload[k] = v;
     }
