@@ -109,6 +109,8 @@ The most common transport. The MCP client spawns your server as a child process 
 - All logs are automatically redirected to stderr and `~/.frontmcp/logs/`
 - stdout contains ONLY MCP JSON-RPC protocol messages
 - One client per process (no multiplexing)
+- **Stdio binds no TCP port** — the HTTP server is disabled, so multiple stdio
+  instances of the same server run without an `EADDRINUSE` conflict
 
 ### npx (published npm package)
 
@@ -139,18 +141,42 @@ The most common transport. The MCP client spawns your server as a child process 
 }
 ```
 
-### Node.js bundle
+### Node.js CLI bundle
+
+Run the **CLI bundle** (`frontmcp build --target cli`) — it parses `--stdio`
+itself before any framework initialization:
 
 ```json
 {
   "mcpServers": {
     "my-server": {
       "command": "node",
-      "args": ["/path/to/my-server.bundle.js", "--stdio"]
+      "args": ["/path/to/my-server-cli.bundle.js", "--stdio"]
     }
   }
 }
 ```
+
+### Server runner (`--target node`)
+
+`frontmcp build --target node` emits a runner at `dist/node/<name>`. Pass
+`--stdio` to serve over stdin/stdout instead of HTTP — the runner sets
+`FRONTMCP_STDIO=1`, so the server connects over stdio and binds no port:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/path/to/dist/node/my-server",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+
+> Do not run the raw `--target node` bundle as `node dist/node/my-server.bundle.js --stdio`
+> — that bundle is your `@FrontMcp` server module and starts the HTTP server on
+> import. Use the runner above, or set `FRONTMCP_STDIO=1` before the bundle loads.
 
 ## HTTP Transport
 

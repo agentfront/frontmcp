@@ -4,6 +4,7 @@ import {
   FrontMcpLogger,
   frontMcpMetadataSchema,
   FrontMcpServer,
+  getDecoratorConfig,
   parseFrontMcpConfigLite,
   type FrontMcpConfigInput,
   type FrontMcpConfigType,
@@ -24,6 +25,44 @@ import { type FrontMcpServerInstance } from '../server/server.instance';
 import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
 import { createMcpGlobalProviders } from './front-mcp.providers';
+
+/**
+ * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
+ * Entry points that accept either resolve a class to its stored config via
+ * {@link resolveConfigInput}.
+ */
+export type ConfigOrServerClass = FrontMcpConfigInput | (abstract new (...args: never[]) => unknown);
+
+/**
+ * Tracks whether a stdio server has already connected in this process. stdio
+ * owns the single stdin/stdout pair, so only one connection can exist — a
+ * second `runStdio()` (e.g. the `@FrontMcp` decorator auto-serving plus an
+ * explicit call) is ignored rather than corrupting the JSON-RPC stream by
+ * attaching a second transport to stdin.
+ */
+let stdioServing = false;
+
+/**
+ * Normalize an argument that may be either a raw FrontMCP config object or a
+ * `@FrontMcp`-decorated class. Mirrors `connect()` so every entry point accepts
+ * the same inputs (#450). A class is resolved to the config the decorator
+ * stored under its reflect-metadata key.
+ */
+function resolveConfigInput(optionsOrClass: ConfigOrServerClass): FrontMcpConfigInput {
+  if (typeof optionsOrClass === 'function') {
+    const stored = getDecoratorConfig(optionsOrClass);
+    // `getDecoratorConfig` returns the decorator's already-parsed metadata
+    // (schema output), which is a valid input to `frontMcpMetadataSchema.parse`
+    // — the same round-trip `bootstrap()` relies on. The cast bridges the
+    // output→input shape; callers re-parse it, so it is safe.
+    if (stored) return stored as unknown as FrontMcpConfigInput;
+    throw new InternalMcpError(
+      'runStdio() received a class without @FrontMcp() metadata. Pass a ' +
+        '@FrontMcp-decorated class, or the same config object you pass to @FrontMcp().',
+    );
+  }
+  return optionsOrClass;
+}
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -321,48 +360,22 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   /**
-   * Runs the FrontMCP server using stdio transport for use with Claude Code
-   * or other MCP clients that support stdio communication.
-   *
-   * This method connects the server to stdin/stdout and handles MCP protocol
-   * messages directly. It does not return until the connection is closed.
-   *
-   * @example
-   * ```typescript
-   * // In your CLI entrypoint
-   * import { FrontMcpInstance } from '@frontmcp/sdk';
-   * import MyServer from './my-server';
-   *
-   * FrontMcpInstance.runStdio(MyServer);
-   * ```
-   *
-   * @example
-   * ```bash
-   * # In Claude Desktop config:
-   * {
-   *   "mcpServers": {
-   *     "my-server": {
-   *       "command": "node",
-   *       "args": ["./dist/main.js", "--stdio"]
-   *     }
-   *   }
-   * }
-   * ```
-   */
-  /**
    * Runs the FrontMCP server on a Unix socket for local-only access.
    *
    * This enables a persistent background FrontMCP server accessible only via
    * a Unix `.sock` file. The entire HTTP feature set (streamable HTTP, SSE,
    * elicitation, sessions) works unchanged over Unix sockets.
    *
+   * Pass the same config object you give to `@FrontMcp()` (not the decorated
+   * class — spreading a class yields no config) plus the socket path.
+   *
    * @example
    * ```typescript
    * import { FrontMcpInstance } from '@frontmcp/sdk';
-   * import MyServer from './my-server';
+   * import { serverConfig } from './server-config';
    *
    * const handle = await FrontMcpInstance.runUnixSocket({
-   *   ...MyServer,
+   *   ...serverConfig,
    *   socketPath: '/tmp/my-app.sock',
    *   sqlite: { path: '~/.frontmcp/data/my-app.sqlite' },
    * });
@@ -427,7 +440,53 @@ export class FrontMcpInstance implements FrontMcpInterface {
     return { close };
   }
 
-  public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
+  /**
+   * Runs the FrontMCP server over **stdio** (stdin/stdout JSON-RPC) for local
+   * MCP clients such as Claude Desktop, Claude Code, and Cursor. Connects the
+   * transport and returns only when the connection closes. **No TCP port is
+   * bound** — the HTTP server is disabled for this entry point (#451).
+   *
+   * Accepts either a `@FrontMcp`-decorated class or the same config object you
+   * pass to `@FrontMcp()` (#450).
+   *
+   * IMPORTANT — importing a `@FrontMcp`-decorated class starts an HTTP server at
+   * import time unless `FRONTMCP_STDIO=1` is set *before* the import. Two safe
+   * patterns avoid that:
+   *
+   * 1. Built bundles — `frontmcp build --target node`, then run the emitted
+   *    runner with `--stdio` (it sets `FRONTMCP_STDIO=1` for you, so the
+   *    decorator serves over stdio). A `--target cli` binary supports
+   *    `<bin> --stdio` the same way.
+   * 2. Hand-written entry — keep the config object in its own module (no
+   *    decorated class in the import graph) and pass it directly, as below.
+   *
+   * @example Hand-written stdio entry (config kept separate from the class)
+   * ```typescript
+   * // server-config.ts — a plain object, no @FrontMcp decorator here
+   * export const serverConfig = { info: { name: 'my-server', version: '0.1.0' }, apps: [MyApp] };
+   *
+   * // stdio.ts
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import { serverConfig } from './server-config';
+   * FrontMcpInstance.runStdio(serverConfig);
+   * ```
+   *
+   * @example Claude Desktop config (built `--target node` runner)
+   * ```json
+   * {
+   *   "mcpServers": {
+   *     "my-server": { "command": "/abs/path/dist/node/my-server", "args": ["--stdio"] }
+   *   }
+   * }
+   * ```
+   */
+  public static async runStdio(optionsOrClass: ConfigOrServerClass): Promise<void> {
+    // Resolve a decorated class to its stored config, or accept a raw config
+    // object (#450). Done FIRST — before any global side effects (console
+    // redirection, env flags) — so invalid input fails fast and a failed
+    // resolve never trips the single-connection guard below.
+    const options = resolveConfigInput(optionsOrClass);
+
     // ── Stdio stdout protection ──────────────────────────────────────────
     // In stdio mode, stdout is the MCP JSON-RPC channel. ANY non-protocol
     // output (logs, warnings, debug prints) on stdout corrupts the wire.
@@ -448,14 +507,29 @@ export class FrontMcpInstance implements FrontMcpInterface {
     console.count = stderrConsole.count.bind(stderrConsole);
     // console.warn and console.error already go to stderr — leave them.
 
+    // Mark stdio mode so any @FrontMcp decorator imported from here on serves
+    // over stdio rather than binding an HTTP port (#451). Guard against a
+    // second stdio connection (decorator auto-serve plus an explicit call),
+    // which would corrupt the JSON-RPC stream by attaching two transports to
+    // the single stdin/stdout pair.
+    process.env['FRONTMCP_STDIO'] = '1';
+    if (stdioServing) {
+      console.error('[FrontMCP] runStdio() called more than once; ignoring the duplicate stdio connection.');
+      return;
+    }
+    stdioServing = true;
+
     // Dynamically import to avoid bundling issues
     const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
-    // Parse config: disable HTTP server, disable console logging, enable file logging.
-    // All structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP protocol.
+    // Parse config: disable the HTTP server, disable console logging, enable
+    // file logging. `serve: false` selects the no-op server so no Express
+    // adapter is constructed and no TCP port can ever bind (#451). All
+    // structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP.
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
       http: undefined,
+      serve: false,
     });
     // Force console logging off and file transport on (same pattern as createForCli)
     if (parsedConfig.logging) {

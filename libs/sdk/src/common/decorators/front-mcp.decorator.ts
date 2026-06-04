@@ -120,6 +120,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     const isServerless = getEnvFlag('FRONTMCP_SERVERLESS');
     const isSchemaExtract = getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');
+    const isStdio = getEnvFlag('FRONTMCP_STDIO');
     const taskWorkerId = typeof process !== 'undefined' ? process.env?.['FRONTMCP_RUN_TASK_ID'] : undefined;
 
     if (taskWorkerId && metadata.serve !== false) {
@@ -141,6 +142,20 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isSchemaExtract) {
       // Schema extraction mode — metadata already stored above, skip bootstrap
+    } else if (isStdio) {
+      // Stdio mode (FRONTMCP_STDIO=1): serve over stdin/stdout instead of HTTP.
+      // The `--stdio` runner (`node dist/main.js --stdio`) — or the user, before
+      // importing the server — sets this flag so the decorated server connects
+      // over stdio and never binds a TCP port (#448, #451). `serve: false` opts
+      // out of auto-serving entirely, matching the HTTP branch below.
+      if (metadata.serve) {
+        getFrontMcpInstance()
+          .runStdio(metadata)
+          .catch((err: unknown) => {
+            console.error('[FrontMCP] stdio server failed:', err);
+            process.exit(1);
+          });
+      }
     } else if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
       // Uses direct relative imports to avoid circular dependency with @frontmcp/sdk

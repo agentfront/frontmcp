@@ -318,7 +318,7 @@ export {
 // RAW MCP CLIENT (for low-level e2e testing)
 // ═══════════════════════════════════════════════════════════════════
 
-export { McpClient, McpStdioClientTransport } from './raw-client';
+export { McpClient, McpStdioClientTransport, isTcpPortListening } from './raw-client';
 
 export type {
   // Memory & CPU Types

@@ -45,6 +45,15 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 | `serve`  | `boolean`          | `true`  | Auto-start HTTP server    |
 | `http`   | `HttpOptionsInput` | -       | HTTP server configuration |
 
+<Warning>
+With `serve: true` (the default), the decorated server **starts when its module
+is imported**. To serve over **stdio** instead — with no HTTP port bound — set
+`FRONTMCP_STDIO=1` before the module loads; the decorator then connects the
+stdio transport rather than starting HTTP. The built `--stdio` runner and
+`--target cli` binaries set this flag for you. Set `serve: false` to opt out of
+auto-starting entirely (use `FrontMcpInstance.bootstrap`/`runStdio` explicitly).
+</Warning>
+
 ```typescript
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
@@ -291,10 +300,12 @@ export default FrontMcpInstance.createHandler(config);
 
 ```typescript
 import { FrontMcpInstance } from '@frontmcp/sdk';
-import config from './server';
+// Import the config object, NOT the @FrontMcp-decorated class — importing the
+// decorated class would auto-start an HTTP server alongside stdio.
+import { serverConfig } from './server-config';
 
-// Connect via stdio (for Claude Desktop)
-await FrontMcpInstance.runStdio(config);
+// Connect via stdio (for Claude Desktop). Binds no HTTP port.
+await FrontMcpInstance.runStdio(serverConfig);
 ```
 
 ### Direct Client

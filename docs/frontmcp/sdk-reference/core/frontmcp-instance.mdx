@@ -109,24 +109,35 @@ scopes.forEach(scope => {
 });
 ```
 
-### runStdio(options)
+### runStdio(optionsOrClass)
 
-Run the server with stdio transport.
+Run the server over **stdio** (stdin/stdout JSON-RPC). **No HTTP/TCP port is bound** — the HTTP server is disabled for this entry point.
 
 ```typescript
-static async runStdio(options: FrontMcpConfigInput): Promise<void>
+static async runStdio(optionsOrClass: ConfigOrServerClass): Promise<void>
 ```
 
-Best for: Claude Desktop, stdio-based MCP clients.
+Best for: Claude Desktop, Claude Code, Cursor, and other stdio MCP clients.
+
+Accepts **either** a `@FrontMcp`-decorated class **or** the same config object you pass to `@FrontMcp()`.
 
 ```typescript
-// bin/cli.ts
+// stdio.ts — config kept in its own module (no @FrontMcp decorator imported here)
 import { FrontMcpInstance } from '@frontmcp/sdk';
-import config from '../src/server';
+import { serverConfig } from './server-config';
 
-await FrontMcpInstance.runStdio(config);
-// Never returns until connection closes
+await FrontMcpInstance.runStdio(serverConfig);
+// Never returns until the connection closes
 ```
+
+<Warning>
+Importing a `@FrontMcp`-decorated class starts an HTTP server at import time
+unless `FRONTMCP_STDIO=1` is set **before** the import. For a hand-written stdio
+entry, keep the config object in its own module (as above) so no decorated class
+is evaluated. For built servers, use the `--stdio` runner (`./dist/node/<name>
+--stdio`) or a `--target cli` binary (`<bin> --stdio`) — both set the flag for
+you, so the decorated server connects over stdio and binds no port.
+</Warning>
 
 ## Instance Methods
 
@@ -242,7 +253,7 @@ describe('MCP Server', () => {
   "mcpServers": {
     "my-server": {
       "command": "node",
-      "args": ["dist/cli.js"],
+      "args": ["dist/stdio.js"],
       "cwd": "/path/to/server"
     }
   }
@@ -250,12 +261,27 @@ describe('MCP Server', () => {
 ```
 
 ```typescript
-// src/cli.ts
-import { FrontMcpInstance } from '@frontmcp/sdk';
-import config from './server';
-
-FrontMcpInstance.runStdio(config).catch(console.error);
+// src/server-config.ts — a plain object; do NOT add @FrontMcp here
+export const serverConfig = {
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+};
 ```
+
+```typescript
+// src/stdio.ts — imports only the config, so nothing auto-starts an HTTP server
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import { serverConfig } from './server-config';
+
+FrontMcpInstance.runStdio(serverConfig).catch(console.error);
+```
+
+<Tip>
+Keep `serverConfig` separate from your `@FrontMcp`-decorated `main.ts`. The
+decorator starts an HTTP server when its module is imported, so a stdio entry
+that imports the decorated class would bind a port alongside stdio. Importing
+just the config object avoids that.
+</Tip>
 
 ## Related
 

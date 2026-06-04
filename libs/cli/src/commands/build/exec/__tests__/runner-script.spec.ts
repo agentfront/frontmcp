@@ -125,6 +125,45 @@ describe('runner-script', () => {
     });
   });
 
+  // #448 / #451 — the node-target runner now honors `--stdio`: it exports
+  // FRONTMCP_STDIO=1 (so the @FrontMcp decorator serves over stdio instead of
+  // binding a TCP port) and execs the bundle/binary. CLI-mode runners delegate
+  // `--stdio` to the CLI bundle's own parser instead.
+  describe('generateRunnerScript (--stdio)', () => {
+    it('routes --stdio to FRONTMCP_STDIO=1 in the JS server runner', () => {
+      const config: FrontmcpExecConfig = { name: 'demo', version: '0.1.0' };
+      const script = generateRunnerScript(config, /* cliMode */ false, /* seaMode */ false);
+      expect(script).toContain('--stdio)');
+      expect(script).toContain('export FRONTMCP_STDIO=1');
+    });
+
+    it('routes --stdio to FRONTMCP_STDIO=1 in the SEA server runner', () => {
+      const config: FrontmcpExecConfig = { name: 'demo', version: '0.1.0' };
+      const script = generateRunnerScript(config, /* cliMode */ false, /* seaMode */ true);
+      expect(script).toContain('--stdio)');
+      expect(script).toContain('export FRONTMCP_STDIO=1');
+    });
+
+    it('documents --stdio in the server runner --help output', () => {
+      const config: FrontmcpExecConfig = { name: 'demo', version: '0.1.0' };
+      const script = generateRunnerScript(config, false, false);
+      expect(script).toMatch(/--stdio.*stdin\/stdout JSON-RPC/i);
+    });
+
+    it('notes --stdio as an allowed exception in the rejection message', () => {
+      const config: FrontmcpExecConfig = { name: 'demo' };
+      const script = generateRunnerScript(config, false, false);
+      expect(script).toContain('except --stdio');
+    });
+
+    it('does NOT add a --stdio interceptor in CLI mode (the CLI bundle parses it)', () => {
+      const config: FrontmcpExecConfig = { name: 'demo' };
+      const cliScript = generateRunnerScript(config, /* cliMode */ true, /* seaMode */ false);
+      expect(cliScript).not.toContain('--stdio)');
+      expect(cliScript).not.toContain('export FRONTMCP_STDIO=1');
+    });
+  });
+
   describe('extractMinMajor fallback', () => {
     it('should default min Node major to 22 when version has no digits', () => {
       const config: FrontmcpExecConfig = { name: 'app', nodeVersion: 'latest' };

@@ -4,3 +4,4 @@
  */
 export { Client as McpClient } from '@frontmcp/protocol';
 export { StdioClientTransport as McpStdioClientTransport } from '@frontmcp/protocol';
+export { isTcpPortListening } from './port-probe';
