@@ -1,6 +1,6 @@
 ---
 name: frontmcp-testing
-description: 'Use when you want to write tests, run tests, add e2e tests, improve test coverage, test a tool, test a resource, or learn how to test any FrontMCP component. The skill for ALL testing needs.'
+description: 'Use for anything about testing FrontMCP servers: writing or running unit, integration, and E2E tests and reaching the 95%+ coverage bar. Covers Jest setup and coverage gating; unit-testing a ToolContext execute() with mock context, inputs, and Zod schema validation; testing resources and prompts; in-memory testing via create() and connectOpenAI / connectClaude (no HTTP); full MCP-protocol E2E over HTTP with McpTestClient and TestServer; authenticated tests with TestTokenFactory, MockOAuthServer, and role-based access; browser-bundle validation with Playwright; and CLI-binary / SEA startup tests. Triggers: write tests, run tests, add e2e tests, improve coverage, test a tool / resource / prompt, mock auth, jest config. The skill for ALL testing needs.'
 tags: [router, testing, jest, e2e, coverage, quality, guide]
 category: testing
 targets: [all]

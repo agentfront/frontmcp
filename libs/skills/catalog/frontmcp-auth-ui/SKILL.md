@@ -1,6 +1,6 @@
 ---
 name: frontmcp-auth-ui
-description: 'Use when you want to customize, brand, or replace the built-in FrontMCP login / consent / federated / incremental / error pages with your own React component. Covers the `auth.ui` slot→file map + `auth.extras` name→handler map on the auth config (no decorator, no class), the `@frontmcp/ui/auth` React hooks + `<AuthPageWrapper>` + `mountAuthPage` (client-rendered via an esm.sh import-map + a server-side per-file transform — no bundling, no SSR), and the framework-owned CSRF + CSP. The skill for CUSTOM AUTHORIZATION UI.'
+description: 'Use when customizing, branding, or replacing the built-in FrontMCP OAuth pages (the login, consent, federated-select, incremental-authorization, and error pages) with your own React components. Covers the auth.ui slot-to-file map and auth.extras name-to-handler map on the auth config (no decorator, no class); the @frontmcp/ui/auth React hooks, the AuthPageWrapper component, and mountAuthPage (client-rendered via an esm.sh import-map plus a per-file server-side transform, with no bundling and no SSR); and the framework-owned CSRF and CSP. Triggers: custom login page, brand the consent screen, replace the OAuth UI, custom authorization UI, style the auth pages, multi-step login. The skill for CUSTOM AUTHORIZATION UI (distinct from auth config in frontmcp-config and permissions in frontmcp-authorities).'
 tags: [auth, auth-ui, login, consent, custom-ui, react, oauth, guide]
 category: config
 targets: [all]

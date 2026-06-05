@@ -1,6 +1,6 @@
 ---
 name: frontmcp-authorities
-description: 'Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, prompts, or skills. Covers JWT claims mapping, authority profiles, and policy enforcement.'
+description: 'Use when implementing authorization and access control for FrontMCP tools, resources, prompts, or skills, deciding who may invoke what. Covers the RBAC, ABAC, and ReBAC models and when to choose each; JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg); reusable named authority profiles; and custom authority evaluators for domain-specific policy. This is about who-can-do-what (permissions, roles, scopes), distinct from configuring auth modes and login (see frontmcp-config) and custom login UI (see frontmcp-auth-ui). Triggers: authorization, access control, RBAC, ABAC, ReBAC, permissions, roles, scopes, policy enforcement, JWT claims, restrict who can call a tool.'
 tags: [authorization, rbac, abac, rebac, security, permissions, roles, access-control, authorities, jwt]
 category: development
 targets: [all]

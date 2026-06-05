@@ -1,6 +1,6 @@
 ---
 name: frontmcp-setup
-description: "Domain router for project setup, scaffolding, and organization. Use this skill whenever someone asks to create a new FrontMCP project, set up an Nx monorepo, configure Redis or SQLite storage, organize project structure, compose multiple apps into one server, or manage the skills system. Also triggers for questions like 'how do I start', 'project layout', 'folder structure', 'add redis', 'set up database', or 'create a new app'."
+description: 'Use when starting, scaffolding, or organizing a FrontMCP project. Covers creating a new project (CLI scaffold or manual) for Node, Vercel, and other targets; standalone versus Nx-monorepo layout, naming conventions, generators, and dependency rules; composing multiple @App classes, ESM packages, and remote MCP servers into one server; provisioning session and storage backends (Redis, Vercel KV, SQLite with WAL and optional encryption); generating deployment-target-aware README files; and searching, installing, and managing the FrontMCP skill catalog for AI agents (Claude Code, Codex). Triggers: create a new project, how do I start, scaffold, project layout, folder structure, Nx monorepo, add Redis, set up SQLite or a database, compose apps, create a new app, manage skills.'
 tags: [router, setup, scaffold, project, nx, redis, sqlite, structure, guide]
 category: setup
 targets: [all]
