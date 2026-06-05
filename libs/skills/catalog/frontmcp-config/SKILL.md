@@ -1,6 +1,13 @@
 ---
 name: frontmcp-config
 description: 'Use when configuring a FrontMCP server through frontmcp.config or the @FrontMcp options. Covers auth modes (public, transparent, local, remote), OAuth plus credential vault and secureStore, CORS, HTTP port / entry-path prefix / unix socket, security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options), rate limiting / throttling / concurrency / timeout / IP filtering (GuardConfig), session storage (Redis, Vercel KV), client transport protocols (SSE, Streamable HTTP, stateless, protocol presets), elicitation, multi-target build config, and skillsConfig (HTTP catalog, caching, audit log, instruction injection). Triggers: configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, configure JWT or OAuth. The skill for server CONFIGURATION.'
+when_to_use: |
+  Trigger when creating or editing frontmcp.config.ts/js or the @FrontMcp({...})
+  options: configuring auth modes, OAuth + credential vault, CORS, HTTP port /
+  entry path / unix socket, security headers, rate limiting / throttling /
+  GuardConfig, session storage (Redis, Vercel KV), client transport / protocol
+  presets, elicitation, multi-target builds, or skillsConfig.
+paths: '**/frontmcp.config.*'
 tags: [router, config, transport, http, auth, session, redis, sqlite, throttle, guide]
 category: config
 targets: [all]

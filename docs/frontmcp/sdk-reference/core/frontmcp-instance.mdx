@@ -273,7 +273,7 @@ export const serverConfig = {
 import { FrontMcpInstance } from '@frontmcp/sdk';
 import { serverConfig } from './server-config';
 
-FrontMcpInstance.runStdio(serverConfig).catch(console.error);
+await FrontMcpInstance.runStdio(serverConfig);
 ```
 
 <Tip>

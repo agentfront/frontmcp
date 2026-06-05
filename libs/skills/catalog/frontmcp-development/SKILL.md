@@ -1,6 +1,13 @@
 ---
 name: frontmcp-development
 description: 'Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, plugin, adapter, or OpenAPI integration.'
+when_to_use: |
+  Trigger when creating or editing a non-tool FrontMCP component: a
+  *.resource.ts, *.prompt.ts, *.provider.ts, *.agent.ts, *.job.ts,
+  *.workflow.ts, *.plugin.ts, or *.skill.ts file, or adding @Resource, @Prompt,
+  @Provider, @Agent, @Job, @Workflow, a plugin, an adapter, or an OpenAPI
+  integration. For tools (*.tool.ts) use create-tool instead.
+paths: '**/*.resource.ts, **/*.prompt.ts, **/*.provider.ts, **/*.agent.ts, **/*.job.ts, **/*.workflow.ts, **/*.plugin.ts, **/*.skill.ts'
 tags: [router, development, tools, resources, prompts, agents, skills, guide]
 category: development
 targets: [all]
