@@ -1,6 +1,6 @@
 ---
 name: frontmcp-channels
-description: 'Use when you want to push real-time notifications into Claude Code sessions. Build webhook channels, chat bridges (WhatsApp, Telegram, Slack), agent completion alerts, job status notifications, or error forwarding. The skill for CHANNELS and NOTIFICATIONS.'
+description: 'Use when pushing real-time notifications or events into Claude Code (or another MCP client) sessions, or building two-way chat bridges. Covers channel source types: incoming webhooks (such as GitHub), app error events, agent-completion and job-completion alerts, service connectors, file watchers, and replay buffers; plus two-way conversational bridges connecting WhatsApp, Telegram, Slack, and Discord to a Claude Code session. Triggers: push notifications, real-time alerts, webhook channel, chat bridge, WhatsApp / Telegram / Slack / Discord, agent completion alert, job status notification, error forwarding, server-to-client messaging. The skill for CHANNELS and NOTIFICATIONS.'
 tags: [channels, notifications, claude-code, webhooks, messaging, real-time, two-way]
 category: development
 targets: [all]

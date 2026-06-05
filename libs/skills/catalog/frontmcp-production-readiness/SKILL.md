@@ -1,6 +1,6 @@
 ---
 name: frontmcp-production-readiness
-description: 'Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.'
+description: 'Pre-production audit, hardening, and go-live checklists for FrontMCP servers. Use before shipping to verify security hardening, performance, reliability, and observability, and for target-specific production checklists: Node server (Docker, graceful shutdown, Redis session scaling), Vercel and edge (cold-start, stateless design), AWS Lambda (cold start, scaling, monitoring), Cloudflare Workers (KV, Durable Objects, runtime limits), CLI binary and local daemon (stdio and socket transport), browser SDK bundle, and embedded npm SDK. Also configuring /healthz and /readyz health and readiness endpoints with custom probes, and distributed high-availability (multi-pod heartbeat, session takeover, notification relay). Triggers: production ready, security audit, hardening, performance check, production checklist, go live, pre-launch review.'
 tags: [production, security, performance, reliability, observability, audit, best-practices]
 category: production
 targets: [all]

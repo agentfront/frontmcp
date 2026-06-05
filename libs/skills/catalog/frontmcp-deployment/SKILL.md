@@ -1,6 +1,6 @@
 ---
 name: frontmcp-deployment
-description: 'Use when you need to deploy, build for production, containerize, or ship a FrontMCP server. Covers Vercel, Lambda, Cloudflare, Docker, edge runtime, serverless, bundle for CLI, and Node targets. Triggers: deploy, build for production, dockerize, serverless, go live.'
+description: 'Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, and MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP. Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.'
 tags: [router, deployment, node, vercel, lambda, cloudflare, cli, browser, sdk, guide]
 category: deployment
 targets: [all]

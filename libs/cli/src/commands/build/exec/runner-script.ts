@@ -34,15 +34,19 @@ case "\${1:-}" in
     cat <<EOF
 ${name} v${version} — FrontMCP server
 
-This binary starts a long-running MCP HTTP server.
+This binary starts a long-running MCP HTTP server, or an MCP stdio server with --stdio.
 
 Usage:
-  ${name}                       Start the server
+  ${name}                       Start the HTTP server
+  ${name} --stdio               Serve over stdio (stdin/stdout JSON-RPC); binds no TCP port
   ${name} --help                Show this help
   ${name} --version             Show version
   ${name} --print-manifest      Print the deployment manifest as JSON
 
 Configure via environment variables, .env, or frontmcp.config.
+
+Use --stdio for local MCP clients (Claude Desktop, Cursor). Example config:
+  { "command": "${name}", "args": ["--stdio"] }
 
 For a CLI-style binary that exposes tools/resources/prompts as subcommands,
 build with: frontmcp build --target cli
@@ -57,10 +61,18 @@ EOF
     cat "\${SCRIPT_DIR}/${name}.manifest.json"
     exit 0
     ;;
+  --stdio)
+    # Serve over stdio (stdin/stdout JSON-RPC) instead of starting the HTTP
+    # server. FRONTMCP_STDIO=1 makes the @FrontMcp decorator connect the stdio
+    # transport and bind no TCP port (#448, #451); logs go to stderr and
+    # ~/.frontmcp/logs. Drop the flag and fall through to the exec below.
+    export FRONTMCP_STDIO=1
+    shift
+    ;;
   --*)
     echo "Error: unsupported flag '\${1}' on the server runner."
-    echo "This binary is a long-running HTTP server; flag-style invocation is reserved." >&2
-    echo "Run with no args to start, or build with --target cli for a CLI binary." >&2
+    echo "This binary is a long-running HTTP server; flag-style invocation is reserved (except --stdio)." >&2
+    echo "Run with no args to start, --stdio to serve over stdio, or build with --target cli for a CLI binary." >&2
     exit 2
     ;;
 esac

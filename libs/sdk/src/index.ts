@@ -20,6 +20,7 @@ import { FlowHooksOf } from './common';
 })();
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
+export type { ConfigOrServerClass } from './front-mcp';
 export {
   getServerlessHandler,
   getServerlessHandlerAsync,

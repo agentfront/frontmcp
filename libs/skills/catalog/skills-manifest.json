@@ -462,7 +462,7 @@
     {
       "name": "frontmcp-auth-ui",
       "category": "config",
-      "description": "Use when you want to customize, brand, or replace the built-in FrontMCP login / consent / federated / incremental / error pages with your own React component. Covers the `auth.ui` slot→file map + `auth.extras` name→handler map on the auth config (no decorator, no class), the `@frontmcp/ui/auth` React hooks + `<AuthPageWrapper>` + `mountAuthPage` (client-rendered via an esm.sh import-map + a server-side per-file transform — no bundling, no SSR), and the framework-owned CSRF + CSP. The skill for CUSTOM AUTHORIZATION UI.",
+      "description": "Use when customizing, branding, or replacing the built-in FrontMCP OAuth pages (the login, consent, federated-select, incremental-authorization, and error pages) with your own React components. Covers the auth.ui slot-to-file map and auth.extras name-to-handler map on the auth config (no decorator, no class); the @frontmcp/ui/auth React hooks, the AuthPageWrapper component, and mountAuthPage (client-rendered via an esm.sh import-map plus a per-file server-side transform, with no bundling and no SSR); and the framework-owned CSRF and CSP. Triggers: custom login page, brand the consent screen, replace the OAuth UI, custom authorization UI, style the auth pages, multi-step login. The skill for CUSTOM AUTHORIZATION UI (distinct from auth config in frontmcp-config and permissions in frontmcp-authorities).",
       "path": "frontmcp-auth-ui",
       "targets": ["all"],
       "hasResources": true,
@@ -506,7 +506,7 @@
     {
       "name": "frontmcp-config",
       "category": "config",
-      "description": "Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.",
+      "description": "Use when configuring a FrontMCP server through frontmcp.config or the @FrontMcp options. Covers auth modes (public, transparent, local, remote), OAuth plus credential vault and secureStore, CORS, HTTP port / entry-path prefix / unix socket, security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options), rate limiting / throttling / concurrency / timeout / IP filtering (GuardConfig), session storage (Redis, Vercel KV), client transport protocols (SSE, Streamable HTTP, stateless, protocol presets), elicitation, multi-target build config, and skillsConfig (HTTP catalog, caching, audit log, instruction injection). Triggers: configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, configure JWT or OAuth. The skill for server CONFIGURATION.",
       "path": "frontmcp-config",
       "targets": ["all"],
       "hasResources": true,
@@ -1089,7 +1089,7 @@
     {
       "name": "frontmcp-deployment",
       "category": "deployment",
-      "description": "Use when you need to deploy, build for production, containerize, or ship a FrontMCP server. Covers Vercel, Lambda, Cloudflare, Docker, edge runtime, serverless, bundle for CLI, and Node targets. Triggers: deploy, build for production, dockerize, serverless, go live.",
+      "description": "Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, and MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP. Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.",
       "path": "frontmcp-deployment",
       "targets": ["all"],
       "hasResources": true,
@@ -1486,7 +1486,7 @@
     {
       "name": "frontmcp-development",
       "category": "development",
-      "description": "Use when you want to create a tool, add a resource, build a prompt, write a provider, implement an adapter, add OpenAPI integration, create a plugin, agent, job, or workflow. The skill for BUILDING any FrontMCP component.",
+      "description": "Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, plugin, adapter, or OpenAPI integration.",
       "path": "frontmcp-development",
       "targets": ["all"],
       "hasResources": true,
@@ -2148,7 +2148,7 @@
     {
       "name": "frontmcp-extensibility",
       "category": "extensibility",
-      "description": "Extend FrontMCP servers with external npm packages and libraries. Covers VectoriaDB for semantic search, and patterns for integrating third-party services into providers and tools. Use when adding search, ML, database, or external API capabilities beyond the core SDK.",
+      "description": "Use when extending FrontMCP beyond the core SDK by integrating external npm packages, libraries, or third-party services into providers and tools. Covers VectoriaDB for in-memory semantic and vector search (ML-based embeddings or TF-IDF keyword engines, with persistence) and the tamper-evident, hash-chained skill audit log (pluggable signer and store, with chain verification). Triggers: add semantic search, vector search, embeddings, similarity search, recommendations, ML features, audit logging, or integrate an external library, database, or API beyond the built-in SDK.",
       "path": "frontmcp-extensibility",
       "targets": ["all"],
       "hasResources": true,
@@ -2237,7 +2237,7 @@
     {
       "name": "frontmcp-guides",
       "category": "guides",
-      "description": "Tutorials, walkthroughs, and end-to-end examples for building FrontMCP servers. Use when you want a getting started guide, how to build a complete project, learn best practices, or follow a step-by-step example. Triggers: tutorial, walkthrough, how to build, getting started, learn FrontMCP.",
+      "description": "Tutorials, end-to-end walkthroughs, and complete reference projects for FrontMCP. Use when you want a getting-started guide, a full worked example, or to learn best practices by following a step-by-step build rather than a single API reference. Includes a beginner weather-API server (tool plus static resource, Zod schemas, E2E tests), an authenticated task manager (CRUD tools, Redis storage, OAuth, Vercel deploy, authenticated E2E tests), and a multi-app knowledge base (vector search, semantic resources, an AI research agent, audit logging). Triggers: tutorial, walkthrough, how do I build, getting started, end-to-end example, sample project, learn FrontMCP, full app example.",
       "path": "frontmcp-guides",
       "targets": ["all"],
       "hasResources": true,
@@ -2383,7 +2383,7 @@
     {
       "name": "frontmcp-production-readiness",
       "category": "production",
-      "description": "Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.",
+      "description": "Pre-production audit, hardening, and go-live checklists for FrontMCP servers. Use before shipping to verify security hardening, performance, reliability, and observability, and for target-specific production checklists: Node server (Docker, graceful shutdown, Redis session scaling), Vercel and edge (cold-start, stateless design), AWS Lambda (cold start, scaling, monitoring), Cloudflare Workers (KV, Durable Objects, runtime limits), CLI binary and local daemon (stdio and socket transport), browser SDK bundle, and embedded npm SDK. Also configuring /healthz and /readyz health and readiness endpoints with custom probes, and distributed high-availability (multi-pod heartbeat, session takeover, notification relay). Triggers: production ready, security audit, hardening, performance check, production checklist, go live, pre-launch review.",
       "path": "frontmcp-production-readiness",
       "targets": ["all"],
       "hasResources": true,
@@ -2827,7 +2827,7 @@
     {
       "name": "frontmcp-setup",
       "category": "setup",
-      "description": "Domain router for project setup, scaffolding, and organization. Use this skill whenever someone asks to create a new FrontMCP project, set up an Nx monorepo, configure Redis or SQLite storage, organize project structure, compose multiple apps into one server, or manage the skills system. Also triggers for questions like 'how do I start', 'project layout', 'folder structure', 'add redis', 'set up database', or 'create a new app'.",
+      "description": "Use when starting, scaffolding, or organizing a FrontMCP project. Covers creating a new project (CLI scaffold or manual) for Node, Vercel, and other targets; standalone versus Nx-monorepo layout, naming conventions, generators, and dependency rules; composing multiple @App classes, ESM packages, and remote MCP servers into one server; provisioning session and storage backends (Redis, Vercel KV, SQLite with WAL and optional encryption); generating deployment-target-aware README files; and searching, installing, and managing the FrontMCP skill catalog for AI agents (Claude Code, Codex). Triggers: create a new project, how do I start, scaffold, project layout, folder structure, Nx monorepo, add Redis, set up SQLite or a database, compose apps, create a new app, manage skills.",
       "path": "frontmcp-setup",
       "targets": ["all"],
       "hasResources": true,
@@ -3198,7 +3198,7 @@
     {
       "name": "frontmcp-testing",
       "category": "testing",
-      "description": "Use when you want to write tests, run tests, add e2e tests, improve test coverage, test a tool, test a resource, or learn how to test any FrontMCP component. The skill for ALL testing needs.",
+      "description": "Use for anything about testing FrontMCP servers: writing or running unit, integration, and E2E tests and reaching the 95%+ coverage bar. Covers Jest setup and coverage gating; unit-testing a ToolContext execute() with mock context, inputs, and Zod schema validation; testing resources and prompts; in-memory testing via create() and connectOpenAI / connectClaude (no HTTP); full MCP-protocol E2E over HTTP with McpTestClient and TestServer; authenticated tests with TestTokenFactory, MockOAuthServer, and role-based access; browser-bundle validation with Playwright; and CLI-binary / SEA startup tests. Triggers: write tests, run tests, add e2e tests, improve coverage, test a tool / resource / prompt, mock auth, jest config. The skill for ALL testing needs.",
       "path": "frontmcp-testing",
       "targets": ["all"],
       "hasResources": true,
@@ -3469,7 +3469,7 @@
     {
       "name": "frontmcp-observability",
       "category": "observability",
-      "description": "Use when you want to add tracing, structured logging, or monitoring to your FrontMCP server. Covers OpenTelemetry instrumentation, vendor integrations (Coralogix, Datadog, Logz.io, Grafana), this.telemetry API for custom spans, structured JSON logging with sinks, and testing observability. Triggers: observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans, datadog, coralogix, logz, grafana, winston, pino.",
+      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
       "path": "frontmcp-observability",
       "targets": ["all"],
       "hasResources": true,
@@ -3665,7 +3665,7 @@
     {
       "name": "frontmcp-channels",
       "category": "development",
-      "description": "Use when you want to push real-time notifications into Claude Code sessions. Build webhook channels, chat bridges (WhatsApp, Telegram, Slack), agent completion alerts, job status notifications, or error forwarding. The skill for CHANNELS and NOTIFICATIONS.",
+      "description": "Use when pushing real-time notifications or events into Claude Code (or another MCP client) sessions, or building two-way chat bridges. Covers channel source types: incoming webhooks (such as GitHub), app error events, agent-completion and job-completion alerts, service connectors, file watchers, and replay buffers; plus two-way conversational bridges connecting WhatsApp, Telegram, Slack, and Discord to a Claude Code session. Triggers: push notifications, real-time alerts, webhook channel, chat bridge, WhatsApp / Telegram / Slack / Discord, agent completion alert, job status notification, error forwarding, server-to-client messaging. The skill for CHANNELS and NOTIFICATIONS.",
       "path": "frontmcp-channels",
       "targets": ["all"],
       "hasResources": true,
@@ -3793,7 +3793,7 @@
     {
       "name": "frontmcp-authorities",
       "category": "development",
-      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, prompts, or skills. Covers JWT claims mapping, authority profiles, and policy enforcement.",
+      "description": "Use when implementing authorization and access control for FrontMCP tools, resources, prompts, or skills, deciding who may invoke what. Covers the RBAC, ABAC, and ReBAC models and when to choose each; JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg); reusable named authority profiles; and custom authority evaluators for domain-specific policy. This is about who-can-do-what (permissions, roles, scopes), distinct from configuring auth modes and login (see frontmcp-config) and custom login UI (see frontmcp-auth-ui). Triggers: authorization, access control, RBAC, ABAC, ReBAC, permissions, roles, scopes, policy enforcement, JWT claims, restrict who can call a tool.",
       "path": "frontmcp-authorities",
       "targets": ["all"],
       "hasResources": true,

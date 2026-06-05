@@ -1,6 +1,6 @@
 ---
 name: frontmcp-extensibility
-description: 'Extend FrontMCP servers with external npm packages and libraries. Covers VectoriaDB for semantic search, and patterns for integrating third-party services into providers and tools. Use when adding search, ML, database, or external API capabilities beyond the core SDK.'
+description: 'Use when extending FrontMCP beyond the core SDK by integrating external npm packages, libraries, or third-party services into providers and tools. Covers VectoriaDB for in-memory semantic and vector search (ML-based embeddings or TF-IDF keyword engines, with persistence) and the tamper-evident, hash-chained skill audit log (pluggable signer and store, with chain verification). Triggers: add semantic search, vector search, embeddings, similarity search, recommendations, ML features, audit logging, or integrate an external library, database, or API beyond the built-in SDK.'
 tags: [extensibility, vectoriadb, search, integration, npm, provider, external-services]
 category: extensibility
 targets: [all]

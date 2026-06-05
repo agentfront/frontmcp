@@ -1,6 +1,6 @@
 ---
 name: frontmcp-observability
-description: 'Use when you want to add tracing, structured logging, or monitoring to your FrontMCP server. Covers OpenTelemetry instrumentation, vendor integrations (Coralogix, Datadog, Logz.io, Grafana), this.telemetry API for custom spans, structured JSON logging with sinks, and testing observability. Triggers: observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans, datadog, coralogix, logz, grafana, winston, pino.'
+description: 'Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.'
 tags: [router, observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans]
 category: observability
 targets: [all]

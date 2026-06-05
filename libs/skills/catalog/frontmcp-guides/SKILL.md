@@ -1,6 +1,6 @@
 ---
 name: frontmcp-guides
-description: 'Tutorials, walkthroughs, and end-to-end examples for building FrontMCP servers. Use when you want a getting started guide, how to build a complete project, learn best practices, or follow a step-by-step example. Triggers: tutorial, walkthrough, how to build, getting started, learn FrontMCP.'
+description: 'Tutorials, end-to-end walkthroughs, and complete reference projects for FrontMCP. Use when you want a getting-started guide, a full worked example, or to learn best practices by following a step-by-step build rather than a single API reference. Includes a beginner weather-API server (tool plus static resource, Zod schemas, E2E tests), an authenticated task manager (CRUD tools, Redis storage, OAuth, Vercel deploy, authenticated E2E tests), and a multi-app knowledge base (vector search, semantic resources, an AI research agent, audit logging). Triggers: tutorial, walkthrough, how do I build, getting started, end-to-end example, sample project, learn FrontMCP, full app example.'
 tags: [guides, examples, best-practices, architecture, walkthrough, end-to-end]
 category: guides
 targets: [all]

@@ -27,6 +27,10 @@ Stdio is the most common transport for MCP servers. The client spawns your serve
 In stdio mode, **stdout is reserved for MCP protocol messages**. All logs are automatically redirected to stderr and `~/.frontmcp/logs/`. You don't need to configure anything — FrontMCP handles this automatically when `--stdio` is passed.
 </Info>
 
+<Info>
+Stdio mode binds **no TCP port** — the HTTP server is disabled entirely. You can run multiple stdio instances of the same server on one machine without an `EADDRINUSE` conflict.
+</Info>
+
 ### Using npx (npm package)
 
 The simplest way to distribute your MCP server. Publish to npm, then users can run it with `npx`:
@@ -105,18 +109,37 @@ If you built your server with `frontmcp build --target cli`, point directly to t
 
 ### Using Node.js Directly
 
-Run the JS bundle directly with Node.js:
+Run the **CLI bundle** (`frontmcp build --target cli`) directly with Node.js. The CLI bundle parses `--stdio` itself before any framework initialization:
 
 ```json
 {
   "mcpServers": {
     "my-server": {
       "command": "node",
-      "args": ["/path/to/my-server.bundle.js", "--stdio"]
+      "args": ["/path/to/my-server-cli.bundle.js", "--stdio"]
     }
   }
 }
 ```
+
+### Using the Server Runner (`--target node`)
+
+`frontmcp build --target node` emits a runner script at `dist/node/<name>`. Pass `--stdio` to serve over stdin/stdout instead of starting the HTTP server — the runner sets `FRONTMCP_STDIO=1`, so the server connects over stdio and binds no port:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/path/to/dist/node/my-server",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+
+<Warning>
+Don't run the raw `--target node` bundle as `node dist/node/my-server.bundle.js --stdio` — that bundle is your `@FrontMcp` server module, which starts the HTTP server on import. Use the runner above (or set `FRONTMCP_STDIO=1` yourself before the bundle loads).
+</Warning>
 
 ### With Environment Variables
 
