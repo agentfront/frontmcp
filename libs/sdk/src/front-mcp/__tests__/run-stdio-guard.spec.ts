@@ -15,6 +15,8 @@
  */
 import 'reflect-metadata';
 
+import { ZodError } from '@frontmcp/lazy-zod';
+
 import { FrontMcpInstance } from '../front-mcp';
 
 describe('FrontMcpInstance.runStdio — startup guard reset', () => {
@@ -46,19 +48,17 @@ describe('FrontMcpInstance.runStdio — startup guard reset', () => {
   // an array) — i.e. AFTER the guard is set but BEFORE a transport is attached.
   const badConfig = { info: { name: 't', version: '1.0.0' }, apps: 'not-an-array' } as never;
 
-  const runOutcome = (config: never): Promise<'resolved' | 'threw'> =>
-    FrontMcpInstance.runStdio(config).then(
-      () => 'resolved' as const,
-      () => 'threw' as const,
-    );
-
   it('resets the guard after a failed startup so a retry is not silently ignored', async () => {
-    // First attempt fails during config parse (after stdioServing = true).
-    expect(await runOutcome(badConfig)).toBe('threw');
+    // First attempt fails during config parse (after stdioServing = true). The
+    // invalid `apps` makes frontMcpMetadataSchema.parse throw a ZodError —
+    // asserting the class (not just "it rejected") ensures we validate the
+    // intended failure, not some unrelated exception.
+    await expect(FrontMcpInstance.runStdio(badConfig)).rejects.toBeInstanceOf(ZodError);
 
     // Before the fix, the guard stayed stuck `true`, so this retry hit the
-    // "called more than once" guard and resolved to undefined. After the fix the
-    // guard was reset, so the retry re-attempts and throws again.
-    expect(await runOutcome(badConfig)).toBe('threw');
+    // "called more than once" guard and RESOLVED to undefined — which would fail
+    // `.rejects`. After the fix the guard was reset, so the retry re-attempts and
+    // rejects with the same ZodError.
+    await expect(FrontMcpInstance.runStdio(badConfig)).rejects.toBeInstanceOf(ZodError);
   });
 });

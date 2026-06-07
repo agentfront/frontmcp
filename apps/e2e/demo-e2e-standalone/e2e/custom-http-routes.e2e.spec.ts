@@ -69,6 +69,7 @@ test.describe('Custom HTTP Routes E2E (public mode)', () => {
     expect(rejected.status).toBe(400);
     const badBody = (await rejected.json()) as { ok?: boolean; error?: string };
     expect(badBody.ok).toBe(false);
+    expect(badBody.error).toBe('invalid secret');
   });
 
   test('unmatched custom path still falls through to 404', async ({ server }) => {

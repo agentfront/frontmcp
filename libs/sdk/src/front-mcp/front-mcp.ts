@@ -523,6 +523,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // same process isn't permanently ignored — the failed attempt never attached
     // a transport to stdin/stdout, so a second runStdio() is safe and necessary.
     let startupSucceeded = false;
+    // Rollback hooks for resources created during startup, run newest-first if
+    // initialization fails before the transport is attached. Without this, a
+    // failed-then-retried startup (enabled by the guard reset) would leak the
+    // prior attempt's scopes (sqlite/redis/channels), MCP server, and transport.
+    const startupCleanups: Array<() => Promise<void> | void> = [];
     try {
       // Dynamically import to avoid bundling issues
       const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
@@ -553,6 +558,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       const frontMcp = new FrontMcpInstance(parsedConfig);
       await frontMcp.ready;
+      // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
+      // later startup step throws.
+      startupCleanups.push(async () => {
+        for (const s of frontMcp.getScopes()) {
+          await (s as Scope).shutdown();
+        }
+      });
 
       // Get the primary scope
       const scopes = frontMcp.getScopes();
@@ -568,10 +580,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
 
       // Build server options with capabilities
-      const hasTools = scope.tools.hasAny() || hasRemoteApps;
       const hasResources = scope.resources.hasAny() || hasRemoteApps;
       const hasPrompts = scope.prompts.hasAny() || hasRemoteApps;
-      const hasAgents = scope.agents.hasAny();
 
       const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
       const remoteCapabilities = hasRemoteApps
@@ -617,6 +627,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       // Create MCP server
       const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+      startupCleanups.push(() => mcpServer.close());
 
       // Generate session ID for stdio connection
       const sessionId = `stdio:${randomUUID()}`;
@@ -646,6 +657,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
       // Create stdio transport and connect
       const transport = new StdioServerTransport();
+      startupCleanups.push(() => transport.close());
       await mcpServer.connect(transport);
       // The transport now owns stdin/stdout — the guard must stay set even on a
       // later throw, otherwise a retry would attach a second transport and corrupt
@@ -685,6 +697,16 @@ export class FrontMcpInstance implements FrontMcpInterface {
       process.on('SIGTERM', shutdownHandler);
     } finally {
       if (!startupSucceeded) {
+        // Roll back resources the partial startup created (newest-first), then
+        // clear the guard so a retry starts clean. Best-effort — a cleanup
+        // failure must not mask the original startup error.
+        for (const cleanup of startupCleanups.reverse()) {
+          try {
+            await cleanup();
+          } catch {
+            /* ignore cleanup failure */
+          }
+        }
         stdioServing = false;
       }
     }
