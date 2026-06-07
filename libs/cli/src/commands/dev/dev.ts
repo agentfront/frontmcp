@@ -132,11 +132,21 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     envPort: process.env['PORT'],
   });
 
+  // Issue #446 — honor the configured MCP mount path in dev. `transport.http.path`
+  // already drives the generated client URLs (eject); propagate it to the spawned
+  // server via FRONTMCP_HTTP_ENTRY_PATH so the endpoint is actually mounted there
+  // (the SDK's httpOptionsSchema.entryPath default reads this env). Same precedence
+  // caveat as PORT: a hard-coded `@FrontMcp({ http: { entryPath } })` still wins.
+  const configHttpPath = typeof cfg?.transport?.http?.path === 'string' ? cfg.transport.http.path : undefined;
+
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
   if (resolved.configPath || resolved.configDir) {
     console.log(`${c('gray', '[dev]')} config: ${resolved.configPath ?? resolved.configDir}`);
   }
   console.log(`${c('cyan', '[dev]')} listening on port: ${port}`);
+  if (configHttpPath) {
+    console.log(`${c('gray', '[dev]')} MCP endpoint path: ${configHttpPath}`);
+  }
   console.log(
     `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(
       'bold',
@@ -157,7 +167,12 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
   // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
   // into `process.env` above, so they win (they're closer to deployment).
-  const childEnv = { ...resolved.effectiveEnv, ...process.env, PORT: String(port) };
+  const childEnv = {
+    ...resolved.effectiveEnv,
+    ...process.env,
+    PORT: String(port),
+    ...(configHttpPath !== undefined ? { FRONTMCP_HTTP_ENTRY_PATH: configHttpPath } : {}),
+  };
   const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
     env: childEnv,

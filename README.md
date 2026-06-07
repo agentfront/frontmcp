@@ -7,10 +7,10 @@
 </picture>
 <hr>
 
-**The TypeScript way to build MCP servers with decorators, DI, and Streamable HTTP.**
+**The production-grade, TypeScript-first framework for building MCP servers — decorators, DI, auth, and Streamable HTTP, batteries included.**
 
 [![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg?v=2)](https://www.npmjs.com/package/@frontmcp/sdk)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?v=1)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 [![Snyk](https://snyk.io/test/github/agentfront/frontmcp/badge.svg)](https://snyk.io/test/github/agentfront/frontmcp)
 
@@ -20,12 +20,17 @@
 
 ---
 
-FrontMCP is a **TypeScript-first framework** for the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
-You write clean, typed code; FrontMCP handles the protocol, transport, DI, session/auth, and execution flow.
+FrontMCP turns the [Model Context Protocol](https://modelcontextprotocol.io) into a
+typed, declarative framework. You write clean `@Tool`, `@Resource`, and `@App`
+classes; FrontMCP handles the protocol, transport, dependency injection, sessions,
+auth, and execution flow — and the **same server runs locally and ships to
+production unchanged**.
 
 ```ts
 import 'reflect-metadata';
+
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import HelloApp from './hello.app';
 
 @FrontMcp({
@@ -36,6 +41,14 @@ import HelloApp from './hello.app';
 })
 export default class Server {}
 ```
+
+## Why FrontMCP
+
+- **Typed by default** — decorators + Zod schemas give end-to-end types from input to output, with editor autocomplete and compile-time checks.
+- **Batteries included** — auth (OAuth/JWKS/DCR), sessions, transport, discovery, and DI are built in, not bolted on.
+- **Ship anywhere** — one codebase deploys to Node, Vercel, AWS Lambda, Cloudflare Workers, or a serverless bundle.
+- **Production-minded** — stateful/stateless sessions, high-availability transport, structured observability, and a 95%+ tested core.
+- **Extensible** — plugins, lifecycle hooks, OpenAPI adapters, and external MCP sub-apps when you outgrow the defaults.
 
 ## Installation
 
@@ -50,34 +63,30 @@ npm i -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 
-> Full setup guide: [Installation][docs-install]
+> Full setup guide: [Installation][docs-install] &middot; [Quickstart][docs-quickstart]
 
 ## Capabilities
 
-| Capability           | Description                                                                     | Docs                            |
-| -------------------- | ------------------------------------------------------------------------------- | ------------------------------- |
-| **@FrontMcp Server** | Decorator-configured server with info, apps, HTTP, logging, session, auth       | [Server][docs-server]           |
-| **@App**             | Organizational units grouping tools, resources, prompts with optional isolation | [Apps][docs-apps]               |
-| **@Tool**            | Typed actions with Zod schemas — class or function style                        | [Tools][docs-tools]             |
-| **@Resource**        | Read-only data exposure with static and template URIs                           | [Resources][docs-resources]     |
-| **@Prompt**          | Reusable message templates returning `GetPromptResult`                          | [Prompts][docs-prompts]         |
-| **@Agent**           | Orchestrated multi-step tool chains                                             | [Agents][docs-agents]           |
-| **Elicitation**      | Request structured user input mid-flow                                          | [Elicitation][docs-elicitation] |
-| **Skills**           | HTTP-discoverable tool manifests for agent marketplaces                         | [Skills][docs-skills]           |
-| **Discovery**        | Automatic capability advertisement for MCP clients                              | [Discovery][docs-discovery]     |
-| **Authentication**   | Remote OAuth, Local OAuth, JWKS, DCR, per-app auth                              | [Authentication][docs-auth]     |
-| **Sessions**         | Stateful/stateless session modes with JWT or UUID transport IDs                 | [Server][docs-server]           |
-| **Direct Client**    | In-process `create()`, `connect()`, `connectOpenAI()`, `connectClaude()`        | [Direct Client][docs-direct]    |
-| **Transport**        | Streamable HTTP + SSE with session headers                                      | [Transport][docs-transport]     |
-| **Ext-Apps**         | Mount external MCP servers as sub-apps                                          | [Ext-Apps][docs-ext-apps]       |
-| **Hooks**            | 5 hook families: tool, list-tools, HTTP, resource, prompt                       | [Hooks][docs-hooks]             |
-| **Providers / DI**   | Scoped dependency injection with GLOBAL and CONTEXT scopes                      | [Providers][docs-providers]     |
-| **Plugins**          | Cache, Remember, CodeCall, Dashboard — or build your own                        | [Plugins][docs-plugins]         |
-| **Adapters**         | Generate tools from OpenAPI specs                                               | [Adapters][docs-adapters]       |
-| **Testing**          | E2E fixtures, matchers, HTTP mocking for MCP servers                            | [Testing][docs-testing]         |
-| **UI Library**       | HTML/React widgets, SSR, MCP Bridge, web components                             | [UI][docs-ui]                   |
-| **CLI**              | `create`, `init`, `dev`, `build`, `inspector`, `doctor`                         | [CLI][docs-install]             |
-| **Deployment**       | Local dev, production builds, version alignment                                 | [Deployment][docs-deploy]       |
+**Build** — decorator-configured [`@FrontMcp` server][docs-server] and [`@App`][docs-apps]
+domains; typed [`@Tool`][docs-tools], [`@Resource`][docs-resources], and
+[`@Prompt`][docs-prompts] primitives; [`@Agent`][docs-agents] multi-step chains; and
+scoped [Providers / DI][docs-providers].
+
+**Secure** — [Remote & Local OAuth, JWKS, DCR, per-app auth][docs-auth] with
+stateful / stateless [sessions][docs-server] (JWT or UUID transport IDs).
+
+**Connect & operate** — [Streamable HTTP + SSE transport][docs-transport],
+capability [discovery][docs-discovery], [elicitation][docs-elicitation],
+[hooks][docs-hooks], HTTP-discoverable [skills][docs-skills],
+[external MCP sub-apps][docs-ext-apps], an in-process [Direct Client][docs-direct]
+(`connectOpenAI` / `connectClaude`), and first-class [deployment][docs-deploy].
+
+**Extend & tooling** — official [plugins][docs-plugins] (Cache, Remember, CodeCall,
+Dashboard), the [OpenAPI adapter][docs-adapters], a [UI library][docs-ui] (HTML/React
+widgets, SSR, MCP Bridge), an [E2E testing framework][docs-testing], and a
+[CLI][docs-install] (`create`, `init`, `dev`, `build`, `inspect`, `doctor`).
+
+→ Full reference: **[docs.agentfront.dev/frontmcp][docs-home]**
 
 ## Packages
 

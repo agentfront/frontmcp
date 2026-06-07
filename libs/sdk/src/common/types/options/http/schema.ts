@@ -83,7 +83,13 @@ export const httpOptionsSchema = z.object({
     .number()
     .optional()
     .default(Number(process.env['PORT']) || 3000),
-  entryPath: z.string().default(''),
+  // `FRONTMCP_HTTP_ENTRY_PATH` lets `frontmcp dev` propagate the configured
+  // `transport.http.path` to the spawned server so the MCP endpoint is mounted
+  // where the generated client URL points (#446) — mirrors how `port` reads
+  // `PORT` above. The function default reads the env at parse time. An explicit
+  // `entryPath` in `@FrontMcp({ http })` still wins (the default applies only
+  // when the field is omitted).
+  entryPath: z.string().default(() => process.env['FRONTMCP_HTTP_ENTRY_PATH'] ?? ''),
   // Using z.any() because hostFactory accepts FrontMcpServer | ((config) => FrontMcpServer)
   // which Zod cannot validate at runtime - type safety is enforced via TypeScript interface
   hostFactory: z.any().optional(),

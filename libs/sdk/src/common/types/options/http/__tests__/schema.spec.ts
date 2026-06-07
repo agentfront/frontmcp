@@ -34,6 +34,38 @@ describe('httpOptionsSchema', () => {
     });
   });
 
+  describe('entryPath (issue #446 — frontmcp dev honors transport.http.path)', () => {
+    const ENV = 'FRONTMCP_HTTP_ENTRY_PATH';
+    const saved = process.env[ENV];
+
+    afterEach(() => {
+      if (saved === undefined) delete process.env[ENV];
+      else process.env[ENV] = saved;
+    });
+
+    it('defaults to "" when omitted and the env is unset', () => {
+      delete process.env[ENV];
+      expect(httpOptionsSchema.parse({}).entryPath).toBe('');
+    });
+
+    it('reads FRONTMCP_HTTP_ENTRY_PATH when entryPath is omitted (dev propagates it)', () => {
+      process.env[ENV] = '/mcp';
+      expect(httpOptionsSchema.parse({}).entryPath).toBe('/mcp');
+    });
+
+    it('lets an explicit entryPath win over the env (default only applies when omitted)', () => {
+      process.env[ENV] = '/from-env';
+      expect(httpOptionsSchema.parse({ entryPath: '/explicit' }).entryPath).toBe('/explicit');
+    });
+
+    it('reads the env at parse time (function default), not module-load time', () => {
+      delete process.env[ENV];
+      expect(httpOptionsSchema.parse({}).entryPath).toBe('');
+      process.env[ENV] = '/late';
+      expect(httpOptionsSchema.parse({}).entryPath).toBe('/late');
+    });
+  });
+
   describe('bodyLimit format validation (CodeRabbit PR #422)', () => {
     it.each([
       ['1024', 1024],
