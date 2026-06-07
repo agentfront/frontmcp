@@ -4,6 +4,9 @@
   "description": "Cache plugin for FrontMCP - Redis, Vercel KV, and in-memory caching with automatic tool result caching",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "cache",

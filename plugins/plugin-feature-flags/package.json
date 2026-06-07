@@ -4,6 +4,9 @@
   "description": "Feature flag plugin for FrontMCP - dynamically gate MCP capabilities behind feature flags",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "feature-flags",

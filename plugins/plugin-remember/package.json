@@ -4,6 +4,9 @@
   "description": "Remember plugin for FrontMCP - encrypted session memory with approval system for secure tool authorization",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "memory",

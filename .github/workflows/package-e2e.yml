@@ -39,16 +39,10 @@ jobs:
           version="$(cat .nvmrc)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ steps.node-version.outputs.version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --immutable
 
       - name: Install Verdaccio globally
         run: npm install -g verdaccio

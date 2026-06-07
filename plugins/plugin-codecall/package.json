@@ -4,6 +4,9 @@
   "description": "CodeCall plugin for FrontMCP - AgentScript-based meta-tools for orchestrating MCP tools",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "codecall",

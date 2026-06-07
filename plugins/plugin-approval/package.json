@@ -4,6 +4,9 @@
   "description": "Approval plugin for FrontMCP - tool authorization workflow with PKCE webhook security",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "approval",
