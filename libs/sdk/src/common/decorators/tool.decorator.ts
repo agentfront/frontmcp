@@ -237,14 +237,61 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
  * Guard fields (concurrency, rateLimit, timeout) use auto-generated Input types
  * where all fields are optional. Required fields are validated at runtime by Zod.
  * @see schemas.generated.ts in @frontmcp/guard
+ *
+ * These four fields are `Omit`-ed from {@link ToolMetadata} and re-declared with
+ * the permissive `*Input` types. The re-declarations carry their own JSDoc so
+ * editor hover docs work on them (the base field docs do not survive `Omit`) —
+ * #452.
  */
 export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = Omit<
   __ToolMetadataBase<I, O>,
   'concurrency' | 'rateLimit' | 'timeout' | 'ui'
 > & {
+  /**
+   * Concurrency control for this tool — caps the number of simultaneous executions.
+   *
+   * @example
+   * ```typescript
+   * @Tool({ name: 'deploy', inputSchema: { env: z.string() }, concurrency: { maxConcurrent: 1 } })
+   * ```
+   */
   concurrency?: ConcurrencyConfigInput;
+
+  /**
+   * Rate limiting for this tool — how many requests are allowed within a time window.
+   *
+   * @example
+   * ```typescript
+   * @Tool({
+   *   name: 'search',
+   *   inputSchema: { query: z.string() },
+   *   rateLimit: { maxRequests: 100, windowMs: 60_000, partitionBy: 'userId' },
+   * })
+   * ```
+   */
   rateLimit?: RateLimitConfigInput;
+
+  /**
+   * Timeout for this tool's execution — wraps the execute stage with a deadline.
+   *
+   * @example
+   * ```typescript
+   * @Tool({ name: 'long-task', inputSchema: { query: z.string() }, timeout: { executeMs: 30_000 } })
+   * ```
+   */
   timeout?: TimeoutConfigInput;
+
+  /**
+   * Interactive widget UI for this tool's result (MCP-UI / ext-apps).
+   *
+   * Prefer the file-based form — point at a `.tsx`/`.html` widget and the build
+   * bundles it; the input/output types are inferred from this tool's schemas.
+   *
+   * @example
+   * ```typescript
+   * @Tool({ name: 'chart', inputSchema: { points: z.array(z.number()) }, ui: { file: './chart.widget.tsx' } })
+   * ```
+   */
   ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 };
 

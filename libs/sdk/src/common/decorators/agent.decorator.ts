@@ -323,13 +323,47 @@ type __OutputSchema = __AgentSingleOutputType | __AgentSingleOutputType[];
  * Guard fields (concurrency, rateLimit, timeout) use auto-generated Input types
  * where all fields are optional. Required fields are validated at runtime by Zod.
  * @see schemas.generated.ts in @frontmcp/guard
+ *
+ * These fields are `Omit`-ed from {@link AgentMetadata} and re-declared with the
+ * permissive `*Input` types. The re-declarations carry their own JSDoc so editor
+ * hover docs work on them (the base field docs do not survive `Omit`) — #452.
  */
 export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = Omit<
   AgentMetadata<I, O>,
   'concurrency' | 'rateLimit' | 'timeout'
 > & {
+  /**
+   * Concurrency control for this agent — caps the number of simultaneous executions.
+   *
+   * @example
+   * ```typescript
+   * @Agent({ name: 'researcher', inputSchema: { topic: z.string() }, concurrency: { maxConcurrent: 2 } })
+   * ```
+   */
   concurrency?: ConcurrencyConfigInput;
+
+  /**
+   * Rate limiting for this agent — how many invocations are allowed within a time window.
+   *
+   * @example
+   * ```typescript
+   * @Agent({
+   *   name: 'researcher',
+   *   inputSchema: { topic: z.string() },
+   *   rateLimit: { maxRequests: 20, windowMs: 60_000 },
+   * })
+   * ```
+   */
   rateLimit?: RateLimitConfigInput;
+
+  /**
+   * Timeout for this agent's execution — wraps the execute stage with a deadline.
+   *
+   * @example
+   * ```typescript
+   * @Agent({ name: 'researcher', inputSchema: { topic: z.string() }, timeout: { executeMs: 120_000 } })
+   * ```
+   */
   timeout?: TimeoutConfigInput;
 };
 

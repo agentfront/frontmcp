@@ -772,7 +772,7 @@
         },
         {
           "name": "configure-http",
-          "description": "Configure HTTP server port, CORS policy, unix sockets, and entry path prefix",
+          "description": "Configure HTTP server port, CORS policy, unix sockets, entry path prefix, request body limits, and custom HTTP routes",
           "examples": [
             {
               "name": "cors-restricted-origins",
@@ -784,6 +784,19 @@
                 "Enabling `credentials: true` with specific origins (required -- browsers reject `*` with credentials)",
                 "Setting `maxAge` to reduce preflight request overhead",
                 "Reading port from an environment variable with a fallback"
+              ]
+            },
+            {
+              "name": "custom-http-routes",
+              "description": "Mount first-class custom HTTP routes (download, secret-validation POST, auth-gated webhook) on the MCP listener via http.routes.",
+              "level": "intermediate",
+              "tags": ["config", "http", "routes", "custom", "webhook", "download", "auth"],
+              "features": [
+                "Registering custom HTTP endpoints with `http.routes` — no tool/resource/prompt needed",
+                "A POST endpoint that validates a user-entered secret server-side (the `/connect-env` pattern)",
+                "Overriding the default `application/json` Content-Type for binary/HTML delivery",
+                "Gating a route behind the MCP `session:verify` flow with `auth: true`",
+                "Avoiding reserved paths (`/sse`, `/message`, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`)"
               ]
             },
             {

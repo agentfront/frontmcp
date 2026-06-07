@@ -5,7 +5,9 @@
  *
  * initialize + valid signed mcp-session-id:
  *   - terminated → unmark, re-initialize under same session ID
- *   - active → MCP SDK rejects with 400 "Server already initialized"
+ *   - active → idempotent re-initialize (200) under the same session ID (#474):
+ *     the live transport is reset in place instead of dead-ending with the MCP
+ *     SDK's -32600 "Server already initialized"
  *   - missing → initialize with the provided session ID
  *
  * initialize + no/invalid mcp-session-id:
@@ -17,7 +19,7 @@
  * Uses raw fetch for DELETE and initialize requests since McpTestClient
  * doesn't expose DELETE and always sends mcp-session-id when it has one.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 // ═══════════════════════════════════════════════════════════════════
 // HELPERS
@@ -315,10 +317,10 @@ test.describe('Session Management E2E', () => {
     });
   });
 
-  // ─── Initialize on active session (400) ───────────────────────
+  // ─── Initialize on active session (idempotent re-init, #474) ──────
 
   test.describe('Initialize on active session', () => {
-    test('should reject re-initialization on active session with 400', async ({ server }) => {
+    test('re-initializing an active session succeeds (idempotent, #474)', async ({ server }) => {
       // Initialize first session
       const init1 = await sendInitialize(server.info.baseUrl);
       expect(init1.status).toBe(200);
@@ -329,9 +331,16 @@ test.describe('Session Management E2E', () => {
       const list = await sendToolsList(server.info.baseUrl, sessionId);
       expect(list.status).toBe(200);
 
-      // Try to re-initialize on the SAME active session
+      // Re-initialize on the SAME active session (no DELETE in between). Before
+      // #474 this dead-ended with 400 / -32600 "Server already initialized"; the
+      // live transport is now reset in place and the handshake succeeds.
       const init2 = await sendInitialize(server.info.baseUrl, sessionId);
-      expect(init2.status).toBe(400);
+      expect(init2.status).toBe(200);
+
+      // The session is still usable after the idempotent re-initialization.
+      await sendNotificationInitialized(server.info.baseUrl, init2.sessionId ?? sessionId);
+      const listAfter = await sendToolsList(server.info.baseUrl, init2.sessionId ?? sessionId);
+      expect(listAfter.status).toBe(200);
     });
   });
 

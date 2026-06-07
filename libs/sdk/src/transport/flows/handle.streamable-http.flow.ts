@@ -1,6 +1,6 @@
 import type { StoredSession } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { CallToolResultSchema, ElicitResultSchema, RequestSchema } from '@frontmcp/protocol';
+import { CallToolResultSchema, ElicitResultSchema, RequestSchema, type RequestId } from '@frontmcp/protocol';
 import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
@@ -128,6 +128,60 @@ export function syncStreamableHttpAuthorizationSession(
   if (!authorization.session) {
     authorization.session = session;
   }
+}
+
+/**
+ * Minimal structural view of a transport that can be re-initialized in place.
+ * Implemented by `LocalTransporter` / `TransportStreamableHttpAdapter`.
+ */
+export interface ReinitializableTransport {
+  readonly isInitialized: boolean;
+  resetForReinitialization(): void;
+  reregisterServer(): void;
+}
+
+/**
+ * Reset an already-initialized streamable-HTTP transport so a fresh `initialize`
+ * handshake is accepted under the same session id (idempotent re-initialization).
+ *
+ * An `initialize` request on a live, initialized transport must NOT dead-end with
+ * the MCP SDK's `-32600 "Server already initialized"` (returned with `id: null`,
+ * trapping the client). This is the recovery path for every legitimate re-init:
+ * explicit DELETE-then-reconnect, a dev-server restart that recreated the session
+ * from Redis, or a client that simply retries the handshake (#474).
+ *
+ * - Returns `true` when the transport is ready to (re-)initialize — either it was
+ *   never initialized, or the reset cleared its initialized state.
+ * - Returns `false` when the transport STILL reports initialized after the reset
+ *   (e.g. an incompatible MCP SDK internal layout). The caller must then surface a
+ *   clear, actionable error instead of letting the SDK emit a bare `-32600`.
+ *
+ * `reregisterServer()` is called because a prior DELETE → `terminateSession` →
+ * `unregisterServer` removed the server from the notification map; re-registering
+ * an already-registered server is a harmless overwrite for the restart/retry case.
+ */
+export function resetInitializedTransportForReinit(transport: ReinitializableTransport): boolean {
+  if (!transport.isInitialized) {
+    return true;
+  }
+  transport.resetForReinitialization();
+  transport.reregisterServer();
+  return !transport.isInitialized;
+}
+
+/**
+ * Build the clear, actionable HTTP error returned when an initialized transport
+ * could NOT be reset for re-initialization (#474). This replaces the MCP SDK's
+ * bare `-32600 "Server already initialized" / id: null` — which traps the client
+ * — with a `-32000` keyed to the request's JSON-RPC id and a recovery hint.
+ */
+export function buildReinitFailedResponse(sessionId: string, requestId: RequestId | null) {
+  return httpRespond.rpcError(
+    `Could not re-initialize session "${sessionId}". It is stuck in an initialized state — ` +
+      `terminate it with an HTTP DELETE to the MCP endpoint (including the mcp-session-id header), ` +
+      `or reconnect without the stored mcp-session-id to start a fresh session.`,
+    requestId,
+  );
 }
 
 export interface StreamableHttpTransport {
@@ -352,23 +406,41 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
       const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
 
-      // If the transport is already initialized:
-      // - For re-initialization of a terminated session (reinitialize flag set by router):
-      //   The transport may still exist in the registry from before DELETE.
-      //   Reset it so the MCP SDK accepts the new initialize request.
-      // - For an active session the client didn't DELETE:
-      //   The MCP SDK rejects with 400 "Server already initialized".
+      // An `initialize` request for an already-initialized transport is treated as
+      // an idempotent re-initialization rather than dead-ended with the MCP SDK's
+      // `-32600 "Server already initialized"` (which it returns with `id: null`,
+      // trapping the client with no path forward — #474).
+      //
+      // This fires whenever a client re-sends `initialize` on a live session:
+      //   - explicit DELETE then reconnect (router sets the `reinitialize` flag),
+      //   - a dev-server restart that recreated the session from Redis, or
+      //   - a client that simply retries the handshake.
+      // The previous code only reset when the `reinitialize` flag was set, so the
+      // restart/retry cases (where the session was never DELETE-terminated in this
+      // process) fell through to the SDK and 400'd. We now reset whenever the
+      // transport reports initialized; `reinitialize` is kept only for diagnostics.
       const isReinitialize = !!request[ServerRequestTokens.reinitialize];
-      if (transport.isInitialized && isReinitialize) {
+      if (transport.isInitialized) {
         logger.info('onInitialize: transport already initialized, resetting for re-initialization', {
           sessionId: session.id?.slice(0, 20),
+          reinitialize: isReinitialize,
         });
-        transport.resetForReinitialization();
-        // Re-register the MCP server with NotificationService.
-        // terminateSession (from DELETE) called unregisterServer which removed the
-        // server from the map. Without re-registering, setClientCapabilities,
-        // setClientInfo, setLogLevel, and broadcast notifications would all fail.
-        transport.reregisterServer();
+
+        if (!resetInitializedTransportForReinit(transport)) {
+          // Reset did not clear the SDK's initialized state. Surface a clear,
+          // actionable error keyed to the JSON-RPC request id instead of letting
+          // the SDK emit a bare `-32600 / id:null` the client cannot recover from.
+          // `?? null` (nullish) preserves a literal `id: 0` / `''`; only a missing
+          // id falls back to a generated one inside httpRespond.rpcError.
+          const requestId = (request.body as { id?: RequestId } | undefined)?.id ?? null;
+          logger.error('onInitialize: transport still initialized after reset — cannot re-initialize', {
+            sessionId: session.id?.slice(0, 20),
+          });
+          // Terminal error branch: respond + return WITHOUT this.handled() (mirrors
+          // the early-exit pattern in onMessage). No later stage runs for this id.
+          this.respond(buildReinitFailedResponse(session.id, requestId));
+          return;
+        }
       }
 
       // Set LB affinity headers in distributed mode

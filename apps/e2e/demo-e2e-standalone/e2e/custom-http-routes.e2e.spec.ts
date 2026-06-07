@@ -47,6 +47,30 @@ test.describe('Custom HTTP Routes E2E (public mode)', () => {
     expect(body.hasAuthSession).toBe(true);
   });
 
+  test('POST route reads and validates a JSON body (connect-env pattern)', async ({ server }) => {
+    // The issue's reported use case: a POST endpoint that validates a
+    // user-entered secret server-side. The shared express.json() middleware
+    // parses req.body, so the handler can read it directly.
+    const accepted = await fetch(`${server.info.baseUrl}/custom/connect-env`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: 'sk-valid' }),
+    });
+    expect(accepted.status).toBe(200);
+    const okBody = (await accepted.json()) as { ok?: boolean; connected?: boolean };
+    expect(okBody.ok).toBe(true);
+    expect(okBody.connected).toBe(true);
+
+    const rejected = await fetch(`${server.info.baseUrl}/custom/connect-env`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: 'wrong' }),
+    });
+    expect(rejected.status).toBe(400);
+    const badBody = (await rejected.json()) as { ok?: boolean; error?: string };
+    expect(badBody.ok).toBe(false);
+  });
+
   test('unmatched custom path still falls through to 404', async ({ server }) => {
     const res = await fetch(`${server.info.baseUrl}/custom/does-not-exist`);
     expect(res.status).toBe(404);

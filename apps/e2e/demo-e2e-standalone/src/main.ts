@@ -57,6 +57,22 @@ const port = parseInt(process.env['PORT'] ?? '3103', 10);
           res.status(200).json({ ok: true, hasAuthSession: !!req.authSession });
         },
       },
+      // POST route that reads and validates a JSON body — mirrors the issue's
+      // `/connect-env` use case (#465): validate a user-entered secret
+      // server-side without finalizing an OAuth exchange. The body is parsed by
+      // the shared express.json() middleware (subject to http.bodyLimit).
+      {
+        method: 'POST',
+        path: '/custom/connect-env',
+        handler: (req: ServerRequest, res: ServerResponse) => {
+          const secret = (req.body as { secret?: string } | undefined)?.secret;
+          if (secret === 'sk-valid') {
+            res.status(200).json({ ok: true, connected: true });
+          } else {
+            res.status(400).json({ ok: false, error: 'invalid secret' });
+          }
+        },
+      },
     ],
   },
   auth: {

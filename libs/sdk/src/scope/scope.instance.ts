@@ -85,6 +85,7 @@ import { createEventStore } from '../transport/event-stores';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpRequestFlow from './flows/http.request.flow';
+import { probeOptionalDependency } from './optional-dependency.util';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -502,11 +503,26 @@ export class Scope extends ScopeEntry {
       let ObservabilityPluginModule: any;
       try {
         ObservabilityPluginModule = require('@frontmcp/observability');
-      } catch {
-        this.logger.warn(
-          'observability config is set but @frontmcp/observability is not installed. ' +
-            'Install it with: npm install @frontmcp/observability',
-        );
+      } catch (err) {
+        // Don't blindly report "not installed" — `require()` also throws when the
+        // package resolves but fails to load (export-condition / transpile / peer
+        // mismatch, e.g. tsx + yarn resolving the source entry). Re-probe with the
+        // runtime resolver so the warning matches reality and is debuggable (#453).
+        const probe = probeOptionalDependency('@frontmcp/observability', err, require.resolve);
+        if (probe.status === 'not-installed') {
+          this.logger.warn(
+            'observability config is set but @frontmcp/observability is not installed. ' +
+              'Install it with: npm install @frontmcp/observability',
+          );
+        } else {
+          this.logger.warn(
+            'observability config is set and @frontmcp/observability resolved but failed to load — ' +
+              'telemetry is disabled. Reinstalling will not help: this is usually an export-condition or ' +
+              'transpile mismatch (e.g. a dev runtime resolving the package source instead of its built ' +
+              'entry) or a failing transitive peer dependency. Inspect the resolved path and error below.',
+            { resolvedPath: probe.resolvedPath, error: probe.error },
+          );
+        }
       }
       if (ObservabilityPluginModule)
         try {
