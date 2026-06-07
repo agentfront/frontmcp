@@ -90,3 +90,12 @@ planning/
 /.claude/*.lock
 /WORK_LOG.md
 /TOOL-ISSUE-DRAFTS.md
+
+# Yarn (berry / yarn 4) — ignore caches/state, KEEP patches/releases/etc.
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*

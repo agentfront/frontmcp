@@ -55,7 +55,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -90,7 +92,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -144,7 +148,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Discover E2E projects and create chunks
         id: discover
@@ -186,7 +192,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Discover unit projects and create 5 chunks
         id: discover
@@ -231,7 +239,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -282,7 +292,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -348,7 +360,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Download unit coverage artifacts
         uses: actions/download-artifact@v8

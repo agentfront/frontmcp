@@ -1,0 +1,13 @@
+diff --git a/lib/syml.js b/lib/syml.js
+index 7e7c011dc30df5f5021b7851aadf7a8e1ccfb3f1..4ebf48224c29762b2b6967bd1457a98464a13e45 100644
+--- a/lib/syml.js
++++ b/lib/syml.js
+@@ -113,7 +113,7 @@ const LEGACY_REGEXP = /^(#.*(\r?\n))*?#\s+yarn\s+lockfile\s+v1\r?\n/i;
+ function parseViaJsYaml(source) {
+     if (LEGACY_REGEXP.test(source))
+         return parseViaPeg(source);
+-    const value = (0, js_yaml_1.safeLoad)(source, {
++    const value = (0, js_yaml_1.load)(source, {
+         schema: js_yaml_1.FAILSAFE_SCHEMA,
+         json: true,
+     });

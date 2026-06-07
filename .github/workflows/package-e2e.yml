@@ -46,7 +46,9 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
 
       - name: Install Verdaccio globally
         run: npm install -g verdaccio

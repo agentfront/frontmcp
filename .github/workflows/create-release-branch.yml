@@ -57,7 +57,9 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install deps
-        run: yarn install --frozen-lockfile
+        run: |
+          corepack enable
+          yarn install --immutable
         env:
           npm_config_onnxruntime_node_install_cuda: skip
 

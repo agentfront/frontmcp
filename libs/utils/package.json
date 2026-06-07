@@ -27,14 +27,14 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
+    "@enclave-vm/ast": "^2.13.0",
     "@noble/ciphers": "^2.1.1",
-    "@enclave-vm/ast": "^2.13.0"
+    "@noble/hashes": "^2.0.1"
   },
   "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.4.0",
     "@vercel/kv": "^2.0.0 || ^3.0.0",
-    "ioredis": "^5.0.0",
-    "@frontmcp/lazy-zod": "1.4.0"
+    "ioredis": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {

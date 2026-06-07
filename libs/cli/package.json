@@ -23,9 +23,7 @@
   },
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
-  "bin": {
-    "frontmcp": "./dist/src/core/cli.js"
-  },
+  "bin": "./dist/src/core/cli.js",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -38,21 +36,21 @@
   "dependencies": {
     "@clack/prompts": "^0.10.0",
     "@frontmcp/lazy-zod": "1.4.0",
-    "@frontmcp/utils": "1.4.0",
     "@frontmcp/skills": "1.4.0",
+    "@frontmcp/utils": "1.4.0",
+    "@rspack/core": "^1.7.6",
     "commander": "^13.0.0",
+    "esbuild": "^0.27.3",
     "tslib": "^2.3.0",
     "vectoriadb": "^2.2.0",
-    "@rspack/core": "^1.7.6",
-    "esbuild": "^0.27.3",
     "yauzl": "^3.2.0",
     "yazl": "^3.3.1"
   },
   "devDependencies": {
-    "typescript": "^5.5.3",
-    "tsx": "^4.20.6",
     "@types/node": "^24.0.0",
     "@types/yauzl": "^2.10.3",
-    "@types/yazl": "^2.4.5"
+    "@types/yazl": "^2.4.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.5.3"
   }
 }

@@ -532,18 +532,23 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // Dynamically import to avoid bundling issues
       const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
-      // Parse config: disable the HTTP server, disable console logging, enable
-      // file logging. `serve: false` selects the no-op server so no Express
-      // adapter is constructed and no TCP port can ever bind (#451). All
-      // structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP.
+      // Parse config: disable the HTTP server, route console logging to
+      // stderr, and keep file logging. `serve: false` selects the no-op
+      // server so no Express adapter is constructed and no TCP port can ever
+      // bind (#451). console.* were rebound to stderr above, so the console
+      // transport's diagnostics surface on the terminal while stdout stays
+      // clean for MCP JSON-RPC; structured logs also persist to
+      // ~/.frontmcp/logs/ (fix: stdio servers were previously silent on the
+      // terminal — see issue 03).
       const parsedConfig = frontMcpMetadataSchema.parse({
         ...options,
         http: undefined,
         serve: false,
       });
-      // Force console logging off and file transport on (same pattern as createForCli)
+      // Console transport on (writes to the stderr-rebound console) + file
+      // transport on (same file pattern as createForCli).
       if (parsedConfig.logging) {
-        parsedConfig.logging.enableConsole = false;
+        parsedConfig.logging.enableConsole = true;
         const transports = parsedConfig.logging.transports ?? [];
         if (!transports.includes(FileLogTransportInstance)) {
           transports.push(FileLogTransportInstance);
@@ -551,7 +556,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         parsedConfig.logging.transports = transports;
       } else {
         (parsedConfig as Record<string, unknown>)['logging'] = {
-          enableConsole: false,
+          enableConsole: true,
           transports: [FileLogTransportInstance],
         };
       }
