@@ -63,6 +63,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -70,9 +72,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Build packages
         run: yarn build
@@ -102,6 +102,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -109,9 +111,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8

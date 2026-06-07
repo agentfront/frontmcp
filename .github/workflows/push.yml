@@ -48,6 +48,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -55,9 +57,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -85,6 +85,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -92,9 +94,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -141,6 +141,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -148,9 +150,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Discover E2E projects and create chunks
         id: discover
@@ -185,6 +185,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -192,9 +194,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Discover unit projects and create 5 chunks
         id: discover
@@ -232,6 +232,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -239,9 +241,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -285,6 +285,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -292,9 +294,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -353,6 +353,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -360,9 +362,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Download unit coverage artifacts
         uses: actions/download-artifact@v8

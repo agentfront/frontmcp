@@ -70,6 +70,8 @@ jobs:
         id: node-version
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -78,9 +80,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Determine release context
         id: context
@@ -327,6 +327,8 @@ jobs:
         with:
           name: dist-packages
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node for npm publish
         uses: actions/setup-node@v6
         with:

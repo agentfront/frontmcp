@@ -39,6 +39,8 @@ jobs:
           version="$(cat .nvmrc)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -46,9 +48,7 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
 
       - name: Install Verdaccio globally
         run: npm install -g verdaccio

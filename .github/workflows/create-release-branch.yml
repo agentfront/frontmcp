@@ -49,6 +49,8 @@ jobs:
           ref: ${{ inputs.base_branch }}
           fetch-depth: 0
 
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -57,9 +59,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install deps
-        run: |
-          corepack enable
-          yarn install --immutable
+        run: yarn install --immutable
         env:
           npm_config_onnxruntime_node_install_cuda: skip
 
