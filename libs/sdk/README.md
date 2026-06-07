@@ -1,46 +1,45 @@
+<div align="center">
+
 # @frontmcp/sdk
 
-The core FrontMCP framework for building MCP servers and clients in TypeScript.
+**Build production-grade [MCP](https://modelcontextprotocol.io) servers in TypeScript — decorators, DI, and Streamable HTTP, batteries included.**
 
-[![NPM](https://img.shields.io/npm/v/@frontmcp/sdk.svg)](https://www.npmjs.com/package/@frontmcp/sdk)
+[![npm](https://img.shields.io/npm/v/@frontmcp/sdk.svg)](https://www.npmjs.com/package/@frontmcp/sdk)
+[![node](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/@frontmcp/sdk.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
+
+[Docs][docs-home] &bull; [Quickstart][docs-quickstart] &bull; [SDK Reference][docs-sdk-ref]
+
+</div>
+
+---
+
+FrontMCP turns the Model Context Protocol into a typed, declarative framework. You
+write `@Tool`, `@Resource`, and `@App` classes; the SDK handles the protocol,
+transport, sessions, auth, dependency injection, and execution flow — so the same
+server runs on your laptop and ships to production unchanged.
 
 ## Install
 
 ```bash
+npx frontmcp create my-app      # scaffold a new project (recommended)
+# …or add to an existing one:
 npm install @frontmcp/sdk
 ```
 
-> Most users should scaffold with `npx frontmcp create my-app` instead of installing manually. See [Installation][docs-install].
+Requires **Node.js 24+**. Full guide → [Installation][docs-install].
 
-## Features
-
-- **`@FrontMcp` server** — single decorator configures info, apps, HTTP, logging, session, auth ([docs][docs-server])
-- **`@App`** — group tools, resources, prompts into isolated domains ([docs][docs-apps])
-- **`@Tool`** — typed actions with Zod input schemas, class or function style ([docs][docs-tools])
-- **`@Resource`** — read-only data with static and template URIs ([docs][docs-resources])
-- **`@Prompt`** — reusable message templates returning `GetPromptResult` ([docs][docs-prompts])
-- **`@Agent`** — orchestrated multi-step tool chains ([docs][docs-agents])
-- **Elicitation** — request structured user input mid-flow ([docs][docs-elicitation])
-- **Skills** — HTTP-discoverable tool manifests for agent marketplaces ([docs][docs-skills])
-- **5 context classes** — `ToolContext`, `ResourceContext`, `PromptContext`, `AgentContext`, `HookContext`
-- **Direct client** — `create()`, `connect()`, `connectOpenAI()`, `connectClaude()`, `connectLangChain()`, `connectVercelAI()` ([docs][docs-direct])
-- **Authentication** — Remote OAuth, Local OAuth, JWKS, DCR, per-app auth surfaces ([docs][docs-auth])
-- **Sessions** — stateful / stateless modes, JWT or UUID transport IDs
-- **Hooks** — tool, list-tools, HTTP, resource, prompt hook families ([docs][docs-hooks])
-- **Ext-Apps** — mount external MCP servers as sub-apps ([docs][docs-ext-apps])
-- **Providers / DI** — scoped injection with GLOBAL and CONTEXT scopes ([docs][docs-providers])
-- **ConfigPlugin** — load `frontmcp.yaml` / `frontmcp.json` config files ([docs][docs-config])
-- **Transport** — Streamable HTTP + SSE ([docs][docs-transport])
-
-## Quick Example
+## Quick example
 
 ```ts
 import 'reflect-metadata';
-import { FrontMcp, App, Tool } from '@frontmcp/sdk';
+
 import { z } from 'zod';
 
+import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+
 @Tool({ name: 'greet', inputSchema: { name: z.string() } })
-class GreetTool {
+class GreetTool extends ToolContext {
   async execute({ name }: { name: string }) {
     return `Hello, ${name}!`;
   }
@@ -53,26 +52,34 @@ class HelloApp {}
 export default class Server {}
 ```
 
-> Full walkthrough: [Quickstart][docs-quickstart]
+Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quickstart][docs-quickstart].
 
-## Docs
+## What you get
 
-| Topic                     | Link                                                                                               |
-| ------------------------- | -------------------------------------------------------------------------------------------------- |
-| Server configuration      | [The FrontMCP Server][docs-server]                                                                 |
-| Apps & isolation          | [Apps][docs-apps]                                                                                  |
-| Tools, Resources, Prompts | [Tools][docs-tools] &middot; [Resources][docs-resources] &middot; [Prompts][docs-prompts]          |
-| Agents                    | [Agents][docs-agents]                                                                              |
-| Authentication            | [Auth Overview][docs-auth] &middot; [Remote OAuth][docs-remote] &middot; [Local OAuth][docs-local] |
-| Direct client             | [Direct Client][docs-direct]                                                                       |
-| Hooks & providers         | [Hooks][docs-hooks] &middot; [Providers][docs-providers]                                           |
-| Deployment                | [Local Dev][docs-deploy] &middot; [Production][docs-production]                                    |
-| SDK reference             | [Overview][docs-sdk-ref]                                                                           |
+- **Build** — `@FrontMcp` server, `@App` domains, and typed `@Tool` / `@Resource` /
+  `@Prompt` primitives with Zod schemas; `@Agent` multi-step chains and `@Provider`
+  dependency injection.
+  &nbsp;([Tools][docs-tools] · [Resources][docs-resources] · [Prompts][docs-prompts] · [Agents][docs-agents] · [Providers][docs-providers])
+- **Secure** — Remote & Local OAuth, JWKS, Dynamic Client Registration, per-app auth,
+  and stateful / stateless sessions.
+  &nbsp;([Authentication][docs-auth])
+- **Operate** — Streamable HTTP + SSE transport, capability discovery, elicitation,
+  lifecycle hooks, and HTTP-discoverable skill manifests.
+  &nbsp;([Transport][docs-transport] · [Discovery][docs-discovery] · [Elicitation][docs-elicitation] · [Hooks][docs-hooks] · [Skills][docs-skills])
+- **Extend & embed** — plugins (Cache, Remember, CodeCall, Dashboard), the OpenAPI
+  adapter, mounting external MCP servers as sub-apps, and an in-process Direct Client
+  (`connectOpenAI` / `connectClaude` / `connectLangChain`).
+  &nbsp;([Plugins][docs-plugins] · [Adapters][docs-adapters] · [Ext-Apps][docs-ext-apps] · [Direct Client][docs-direct])
+- **Ship anywhere** — one codebase deploys to Node, Vercel, AWS Lambda, Cloudflare
+  Workers, or a serverless bundle.
+  &nbsp;([Deployment][docs-deploy])
 
-## Related Packages
+→ Everything is documented at **[docs.agentfront.dev/frontmcp][docs-home]**.
 
-- [`@frontmcp/cli`](../cli) — scaffolding and dev tooling
-- [`@frontmcp/auth`](../auth) — authentication library
+## Related packages
+
+- [`@frontmcp/cli`](../cli) — scaffolding and dev tooling (`frontmcp create`, `dev`, `build`)
+- [`@frontmcp/auth`](../auth) — authentication, OAuth, JWKS, credential vault
 - [`@frontmcp/adapters`](../adapters) — OpenAPI adapter
 - [`@frontmcp/plugins`](../plugins) — Cache, Remember, CodeCall, Dashboard
 - [`@frontmcp/testing`](../testing) — E2E testing framework
@@ -80,29 +87,27 @@ export default class Server {}
 
 ## License
 
-Apache-2.0 — see [LICENSE](../../LICENSE).
+[Apache-2.0](../../LICENSE)
 
 <!-- links -->
 
+[docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
 [docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation
 [docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart
-[docs-server]: https://docs.agentfront.dev/frontmcp/servers/server
-[docs-apps]: https://docs.agentfront.dev/frontmcp/servers/apps
+[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/overview
 [docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools
 [docs-resources]: https://docs.agentfront.dev/frontmcp/servers/resources
 [docs-prompts]: https://docs.agentfront.dev/frontmcp/servers/prompts
 [docs-agents]: https://docs.agentfront.dev/frontmcp/servers/agents
-[docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation
-[docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills
-[docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview
-[docs-remote]: https://docs.agentfront.dev/frontmcp/authentication/remote
-[docs-local]: https://docs.agentfront.dev/frontmcp/authentication/local
-[docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client
-[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport
-[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/servers/ext-apps
-[docs-hooks]: https://docs.agentfront.dev/frontmcp/extensibility/hooks
 [docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers
-[docs-config]: https://docs.agentfront.dev/frontmcp/extensibility/config-yaml
+[docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview
+[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport
+[docs-discovery]: https://docs.agentfront.dev/frontmcp/servers/discovery
+[docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation
+[docs-hooks]: https://docs.agentfront.dev/frontmcp/extensibility/hooks
+[docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills
+[docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview
+[docs-adapters]: https://docs.agentfront.dev/frontmcp/adapters/overview
+[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/servers/ext-apps
+[docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client
 [docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server
-[docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build
-[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/overview

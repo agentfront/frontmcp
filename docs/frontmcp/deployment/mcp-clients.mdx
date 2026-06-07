@@ -253,6 +253,19 @@ The workflow is now fully live:
 4. **Agent tests** the change by calling the tool directly
 5. **Repeat** — no manual restart needed
 
+<Note>
+**The endpoint path must match the `url`.** The `url` above ends in `/mcp`, but
+`frontmcp dev` serves the MCP endpoint at `transport.http.path` from
+`frontmcp.config.ts` (default `/`). Set
+`transport: { default: 'http', http: { path: '/mcp' } }` so the served path and
+the client `url` agree — otherwise the client hits `/mcp` while the server
+listens on `/` and every request 404s (issue #446). `dev` honors the configured
+path, and the generated `clients.*.url` derives from the same
+`transport.http.path`, so [`frontmcp eject`](/frontmcp/getting-started/cli-reference)
+and `dev` stay in sync. A hard-coded `@FrontMcp({ http: { entryPath } })` in
+metadata wins over both — keep them aligned.
+</Note>
+
 ### Stdio bridge: `frontmcp dev --stdio` (issue #399)
 
 When a client must speak stdio (Claude Code's stdio mode, MCPB-installed bundles, etc.) and you still want the dev hot-reload loop, run the bridge:

@@ -61,6 +61,16 @@ When building a FrontMCP server with a coding agent (Claude Code, Cursor, Windsu
    ```
 3. Code and iterate — every file save triggers a server reload
 
+> **The endpoint path must match the `url`.** `frontmcp dev` serves the MCP
+> endpoint at `transport.http.path` from `frontmcp.config.ts` (default `/`). The
+> `url` above ends in `/mcp`, so set `transport: { default: 'http', http: { path: '/mcp' } }`
+> in `frontmcp.config.ts` — otherwise the client hits `/mcp` while the server
+> listens on `/` and every request 404s (issue #446). `dev` honors the configured
+> path (it propagates it to the server via `FRONTMCP_HTTP_ENTRY_PATH`), and the
+> generated `clients.*.url` derives from the same `transport.http.path`, so
+> `frontmcp eject` and `dev` stay in sync. (A hard-coded
+> `@FrontMcp({ http: { entryPath } })` in metadata wins over both — keep them aligned.)
+
 ### Why HTTP for development (not stdio)
 
 - **Hot reload:** Server restarts on file change (~200ms), client reconnects automatically

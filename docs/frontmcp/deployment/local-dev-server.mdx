@@ -206,6 +206,36 @@ bind to 4000 regardless of `--port` or `PORT`, and the pre-flight probe is
 advisory only.
 </Warning>
 
+### MCP endpoint path
+
+By default the MCP endpoint is served at the root path (`/`). Set
+`transport.http.path` in `frontmcp.config.ts` to mount it elsewhere — `frontmcp dev`
+honors it, so the endpoint matches the URL emitted in your generated client
+config (`clients.*.url`) and an HTTP client pointed at that path no longer 404s:
+
+```ts
+// frontmcp.config.ts
+export default {
+  // ...
+  transport: { default: 'http', http: { port: 3000, path: '/mcp' } },
+};
+```
+
+```text
+[dev] listening on port: 3000
+[dev] MCP endpoint path: /mcp        # POST http://localhost:3000/mcp
+```
+
+Under the hood `dev` passes the configured path to the spawned server via the
+`FRONTMCP_HTTP_ENTRY_PATH` env var, which the SDK's `http.entryPath` default
+reads — the same pattern as `PORT`.
+
+<Warning>
+As with `PORT`, an explicit `@FrontMcp({ http: { entryPath } })` in your metadata
+wins over `transport.http.path` / the env var. Keep the two in sync, or omit
+`entryPath` from metadata and let `transport.http.path` drive the mount.
+</Warning>
+
 ---
 
 ## Inspect locally (zero setup)
