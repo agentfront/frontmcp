@@ -518,161 +518,197 @@ export class FrontMcpInstance implements FrontMcpInterface {
       return;
     }
     stdioServing = true;
+    // Track whether startup reached the point of attaching the stdio transport.
+    // If initialization throws before that, reset the guard so a retry in the
+    // same process isn't permanently ignored — the failed attempt never attached
+    // a transport to stdin/stdout, so a second runStdio() is safe and necessary.
+    let startupSucceeded = false;
+    // Rollback hooks for resources created during startup, run newest-first if
+    // initialization fails before the transport is attached. Without this, a
+    // failed-then-retried startup (enabled by the guard reset) would leak the
+    // prior attempt's scopes (sqlite/redis/channels), MCP server, and transport.
+    const startupCleanups: Array<() => Promise<void> | void> = [];
+    try {
+      // Dynamically import to avoid bundling issues
+      const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
-    // Dynamically import to avoid bundling issues
-    const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
-
-    // Parse config: disable the HTTP server, disable console logging, enable
-    // file logging. `serve: false` selects the no-op server so no Express
-    // adapter is constructed and no TCP port can ever bind (#451). All
-    // structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP.
-    const parsedConfig = frontMcpMetadataSchema.parse({
-      ...options,
-      http: undefined,
-      serve: false,
-    });
-    // Force console logging off and file transport on (same pattern as createForCli)
-    if (parsedConfig.logging) {
-      parsedConfig.logging.enableConsole = false;
-      const transports = parsedConfig.logging.transports ?? [];
-      if (!transports.includes(FileLogTransportInstance)) {
-        transports.push(FileLogTransportInstance);
-      }
-      parsedConfig.logging.transports = transports;
-    } else {
-      (parsedConfig as Record<string, unknown>)['logging'] = {
-        enableConsole: false,
-        transports: [FileLogTransportInstance],
-      };
-    }
-
-    const frontMcp = new FrontMcpInstance(parsedConfig);
-    await frontMcp.ready;
-
-    // Get the primary scope
-    const scopes = frontMcp.getScopes();
-    if (scopes.length === 0) {
-      throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
-    }
-    const scope = scopes[0] as Scope;
-
-    // Import the MCP handlers creator
-    const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');
-
-    // Check for remote apps
-    const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
-
-    // Build server options with capabilities
-    const hasTools = scope.tools.hasAny() || hasRemoteApps;
-    const hasResources = scope.resources.hasAny() || hasRemoteApps;
-    const hasPrompts = scope.prompts.hasAny() || hasRemoteApps;
-    const hasAgents = scope.agents.hasAny();
-
-    const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
-    const remoteCapabilities = hasRemoteApps
-      ? {
-          tools: { listChanged: true },
-          resources: { subscribe: true, listChanged: true },
-          prompts: { listChanged: true },
-        }
-      : {};
-
-    // Channel capabilities (experimental extension for Claude Code)
-    const channelCapabilities = scope.channels?.getCapabilities() ?? {};
-
-    // Compose `instructions` lazily on every `initialize` so dynamic skill
-    // registrations after boot are reflected without restarting the server.
-    // The static value below seeds the McpServer constructor for SDK
-    // compatibility; the actual response is recomputed inside the handler
-    // via `composeInstructions` (see initialize-request.handler.ts).
-    const composeInstructions = (): string =>
-      composeInitializeInstructions({
-        userInstructions: scope.metadata.instructions,
-        channelInstructions: buildChannelInstructions(scope.channels),
-        skillRegistry: scope.skills,
-        policy: scope.metadata.skillsConfig?.injectInstructions,
+      // Parse config: disable the HTTP server, disable console logging, enable
+      // file logging. `serve: false` selects the no-op server so no Express
+      // adapter is constructed and no TCP port can ever bind (#451). All
+      // structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP.
+      const parsedConfig = frontMcpMetadataSchema.parse({
+        ...options,
+        http: undefined,
+        serve: false,
       });
-    const instructions = composeInstructions();
-
-    const serverOptions = {
-      instructions,
-      capabilities: {
-        ...remoteCapabilities,
-        ...scope.tools.getCapabilities(),
-        ...scope.resources.getCapabilities(),
-        ...scope.prompts.getCapabilities(),
-        ...scope.agents.getCapabilities(),
-        ...channelCapabilities,
-        ...completionsCapability,
-        ...computeTaskCapabilities(scope),
-        logging: {},
-      },
-      serverInfo: scope.metadata.info,
-    };
-
-    // Create MCP server
-    const mcpServer = new McpServer(scope.metadata.info, serverOptions);
-
-    // Generate session ID for stdio connection
-    const sessionId = `stdio:${randomUUID()}`;
-
-    // Register handlers with auth context injection
-    const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
-    for (const handler of handlers) {
-      // Wrap handler to inject auth context (same pattern as in-memory-server)
-      const originalHandler = handler.handler;
-      const wrappedHandler = async (request: unknown, ctx: Record<string, unknown>) => {
-        // Inject auth info into context while preserving MCP SDK context properties
-        // Merge with existing authInfo to avoid clobbering any existing properties
-        const existingAuthInfo = ctx?.['authInfo'] as Record<string, unknown> | undefined;
-        const enrichedCtx = {
-          ...ctx,
-          authInfo: { ...existingAuthInfo, sessionId },
+      // Force console logging off and file transport on (same pattern as createForCli)
+      if (parsedConfig.logging) {
+        parsedConfig.logging.enableConsole = false;
+        const transports = parsedConfig.logging.transports ?? [];
+        if (!transports.includes(FileLogTransportInstance)) {
+          transports.push(FileLogTransportInstance);
+        }
+        parsedConfig.logging.transports = transports;
+      } else {
+        (parsedConfig as Record<string, unknown>)['logging'] = {
+          enableConsole: false,
+          transports: [FileLogTransportInstance],
         };
-        // The cast is safe: request type matches handler.requestSchema
-
-        return originalHandler(request as any, enrichedCtx as any);
-      };
-      // Cast required: MCP SDK's handler type expects specific context shape,
-      // but our wrapped handlers preserve all context properties via pass-through
-
-      mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
-    }
-
-    // Create stdio transport and connect
-    const transport = new StdioServerTransport();
-    await mcpServer.connect(transport);
-
-    // Register server and auto-subscribe stdio session to all channels
-    // (stdio sessions always have channel capability since we advertise it)
-    scope.notifications.registerServer(sessionId, mcpServer);
-    if (scope.channels?.hasAny()) {
-      const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
-      scope.notifications.subscribeAllChannels(sessionId, channelNames);
-    }
-
-    // Graceful shutdown: cleanup resources then exit with code 0.
-    // A ref'd timer keeps the event loop alive while async cleanup runs —
-    // without it, closing the transport removes the last ref (stdin) and the
-    // process exits via the raw signal before process.exit(0) is reached.
-    // This is the same pattern used by Express/Fastify for graceful shutdown.
-    let shuttingDown = false;
-    const shutdownHandler = async () => {
-      if (shuttingDown) return; // prevent re-entry from second signal
-      shuttingDown = true;
-      const deadline = setTimeout(() => process.exit(1), 5000);
-      try {
-        scope.notifications.unregisterServer(sessionId);
-        await scope.shutdown();
-        await mcpServer.close();
-      } catch (err) {
-        console.error('Error closing MCP server:', err);
-      } finally {
-        clearTimeout(deadline);
       }
-      process.exit(0);
-    };
-    process.on('SIGINT', shutdownHandler);
-    process.on('SIGTERM', shutdownHandler);
+
+      const frontMcp = new FrontMcpInstance(parsedConfig);
+      await frontMcp.ready;
+      // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
+      // later startup step throws.
+      startupCleanups.push(async () => {
+        for (const s of frontMcp.getScopes()) {
+          await (s as Scope).shutdown();
+        }
+      });
+
+      // Get the primary scope
+      const scopes = frontMcp.getScopes();
+      if (scopes.length === 0) {
+        throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
+      }
+      const scope = scopes[0] as Scope;
+
+      // Import the MCP handlers creator
+      const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');
+
+      // Check for remote apps
+      const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
+
+      // Build server options with capabilities
+      const hasResources = scope.resources.hasAny() || hasRemoteApps;
+      const hasPrompts = scope.prompts.hasAny() || hasRemoteApps;
+
+      const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
+      const remoteCapabilities = hasRemoteApps
+        ? {
+            tools: { listChanged: true },
+            resources: { subscribe: true, listChanged: true },
+            prompts: { listChanged: true },
+          }
+        : {};
+
+      // Channel capabilities (experimental extension for Claude Code)
+      const channelCapabilities = scope.channels?.getCapabilities() ?? {};
+
+      // Compose `instructions` lazily on every `initialize` so dynamic skill
+      // registrations after boot are reflected without restarting the server.
+      // The static value below seeds the McpServer constructor for SDK
+      // compatibility; the actual response is recomputed inside the handler
+      // via `composeInstructions` (see initialize-request.handler.ts).
+      const composeInstructions = (): string =>
+        composeInitializeInstructions({
+          userInstructions: scope.metadata.instructions,
+          channelInstructions: buildChannelInstructions(scope.channels),
+          skillRegistry: scope.skills,
+          policy: scope.metadata.skillsConfig?.injectInstructions,
+        });
+      const instructions = composeInstructions();
+
+      const serverOptions = {
+        instructions,
+        capabilities: {
+          ...remoteCapabilities,
+          ...scope.tools.getCapabilities(),
+          ...scope.resources.getCapabilities(),
+          ...scope.prompts.getCapabilities(),
+          ...scope.agents.getCapabilities(),
+          ...channelCapabilities,
+          ...completionsCapability,
+          ...computeTaskCapabilities(scope),
+          logging: {},
+        },
+        serverInfo: scope.metadata.info,
+      };
+
+      // Create MCP server
+      const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+      startupCleanups.push(() => mcpServer.close());
+
+      // Generate session ID for stdio connection
+      const sessionId = `stdio:${randomUUID()}`;
+
+      // Register handlers with auth context injection
+      const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
+      for (const handler of handlers) {
+        // Wrap handler to inject auth context (same pattern as in-memory-server)
+        const originalHandler = handler.handler;
+        const wrappedHandler = async (request: unknown, ctx: Record<string, unknown>) => {
+          // Inject auth info into context while preserving MCP SDK context properties
+          // Merge with existing authInfo to avoid clobbering any existing properties
+          const existingAuthInfo = ctx?.['authInfo'] as Record<string, unknown> | undefined;
+          const enrichedCtx = {
+            ...ctx,
+            authInfo: { ...existingAuthInfo, sessionId },
+          };
+          // The cast is safe: request type matches handler.requestSchema
+
+          return originalHandler(request as any, enrichedCtx as any);
+        };
+        // Cast required: MCP SDK's handler type expects specific context shape,
+        // but our wrapped handlers preserve all context properties via pass-through
+
+        mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
+      }
+
+      // Create stdio transport and connect
+      const transport = new StdioServerTransport();
+      startupCleanups.push(() => transport.close());
+      await mcpServer.connect(transport);
+      // The transport now owns stdin/stdout — the guard must stay set even on a
+      // later throw, otherwise a retry would attach a second transport and corrupt
+      // the JSON-RPC stream.
+      startupSucceeded = true;
+
+      // Register server and auto-subscribe stdio session to all channels
+      // (stdio sessions always have channel capability since we advertise it)
+      scope.notifications.registerServer(sessionId, mcpServer);
+      if (scope.channels?.hasAny()) {
+        const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
+        scope.notifications.subscribeAllChannels(sessionId, channelNames);
+      }
+
+      // Graceful shutdown: cleanup resources then exit with code 0.
+      // A ref'd timer keeps the event loop alive while async cleanup runs —
+      // without it, closing the transport removes the last ref (stdin) and the
+      // process exits via the raw signal before process.exit(0) is reached.
+      // This is the same pattern used by Express/Fastify for graceful shutdown.
+      let shuttingDown = false;
+      const shutdownHandler = async () => {
+        if (shuttingDown) return; // prevent re-entry from second signal
+        shuttingDown = true;
+        const deadline = setTimeout(() => process.exit(1), 5000);
+        try {
+          scope.notifications.unregisterServer(sessionId);
+          await scope.shutdown();
+          await mcpServer.close();
+        } catch (err) {
+          console.error('Error closing MCP server:', err);
+        } finally {
+          clearTimeout(deadline);
+        }
+        process.exit(0);
+      };
+      process.on('SIGINT', shutdownHandler);
+      process.on('SIGTERM', shutdownHandler);
+    } finally {
+      if (!startupSucceeded) {
+        // Roll back resources the partial startup created (newest-first), then
+        // clear the guard so a retry starts clean. Best-effort — a cleanup
+        // failure must not mask the original startup error.
+        for (const cleanup of startupCleanups.reverse()) {
+          try {
+            await cleanup();
+          } catch {
+            /* ignore cleanup failure */
+          }
+        }
+        stdioServing = false;
+      }
+    }
   }
 }

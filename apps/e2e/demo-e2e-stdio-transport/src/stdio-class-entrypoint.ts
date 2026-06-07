@@ -16,13 +16,14 @@ import { FrontMcpInstance } from '@frontmcp/sdk';
 
 async function main(): Promise<void> {
   process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
-  const mod = await import('./main.js');
+  const mod = (await import('./main.js')) as { StdioTransportE2EServer: new () => unknown };
   delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
 
-  const ServerClass = (mod as Record<string, unknown>)['StdioTransportE2EServer'];
-  // Pass the decorated CLASS (not a config object) — runStdio resolves its
-  // @FrontMcp metadata and serves over stdio with no TCP port bound.
-  await FrontMcpInstance.runStdio(ServerClass as never);
+  // Pass the decorated CLASS (not a config object). runStdio accepts a
+  // ConfigOrServerClass, so the decorated constructor is assignable directly —
+  // it resolves the stored @FrontMcp metadata and serves over stdio with no
+  // TCP port bound.
+  await FrontMcpInstance.runStdio(mod.StdioTransportE2EServer);
 }
 
 main().catch((err) => {

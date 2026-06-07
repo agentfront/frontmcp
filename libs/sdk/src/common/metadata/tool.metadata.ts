@@ -303,6 +303,11 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    */
   tags?: string[];
 
+  /**
+   * MCP tool annotations (behavioral hints) surfaced in `tools/list` — e.g.
+   * `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`,
+   * `openWorldHint`. Advisory only; clients use them for display and safety UX.
+   */
   annotations?: ToolAnnotations;
 
   /**
@@ -336,6 +341,18 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    */
   examples?: ToolExample[];
 
+  /**
+   * Interactive widget UI for this tool's result (MCP-UI / ext-apps).
+   *
+   * Prefer the file-based form — point at a `.tsx`/`.html` widget file and the
+   * build bundles it; the widget's input/output types are inferred from this
+   * tool's `inputSchema`/`outputSchema`.
+   *
+   * @example
+   * ```typescript
+   * @Tool({ name: 'chart', inputSchema: { points: z.array(z.number()) }, ui: { file: './chart.widget.tsx' } })
+   * ```
+   */
   ui?: ToolUIConfig<ToolInputOf<InSchema>, ToolOutputOf<OutSchema>>;
 
   /**

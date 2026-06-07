@@ -398,11 +398,12 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Examples
 
-| Example                                                                              | Level        | Description                                                                          |
-| ------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
-| [`cors-restricted-origins`](../examples/configure-http/cors-restricted-origins.md)   | Basic        | Configure CORS to allow only specific frontend origins with credentials.             |
-| [`entry-path-reverse-proxy`](../examples/configure-http/entry-path-reverse-proxy.md) | Intermediate | Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.   |
-| [`unix-socket-local`](../examples/configure-http/unix-socket-local.md)               | Intermediate | Bind the server to a unix socket instead of a TCP port for local-only communication. |
+| Example                                                                              | Level        | Description                                                                                                                      |
+| ------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| [`cors-restricted-origins`](../examples/configure-http/cors-restricted-origins.md)   | Basic        | Configure CORS to allow only specific frontend origins with credentials.                                                         |
+| [`custom-http-routes`](../examples/configure-http/custom-http-routes.md)             | Intermediate | Mount first-class custom HTTP routes (download, secret-validation POST, auth-gated webhook) on the MCP listener via http.routes. |
+| [`entry-path-reverse-proxy`](../examples/configure-http/entry-path-reverse-proxy.md) | Intermediate | Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.                                               |
+| [`unix-socket-local`](../examples/configure-http/unix-socket-local.md)               | Intermediate | Bind the server to a unix socket instead of a TCP port for local-only communication.                                             |
 
 > See all examples in [`examples/configure-http/`](../examples/configure-http/)
 
