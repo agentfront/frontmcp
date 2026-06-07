@@ -76,6 +76,31 @@ export async function resolveDevPort(opts: {
   return exit(1);
 }
 
+/**
+ * Build the environment handed to the spawned dev child.
+ *
+ * The resolved port is exported as `PORT`, and the configured
+ * `transport.http.path` (when set) as `FRONTMCP_HTTP_ENTRY_PATH` so the server
+ * mounts the MCP endpoint where the generated client URLs point (#446). Both are
+ * applied AFTER the inherited env so the dev-resolved values win for this run —
+ * the same precedence as `PORT`. A hard-coded `@FrontMcp({ http: { entryPath } })`
+ * in metadata still wins over the env (the SDK only reads it as a default).
+ */
+export function buildDevChildEnv(params: {
+  effectiveEnv: NodeJS.ProcessEnv;
+  baseEnv: NodeJS.ProcessEnv;
+  port: number;
+  configHttpPath?: string;
+}): NodeJS.ProcessEnv {
+  const { effectiveEnv, baseEnv, port, configHttpPath } = params;
+  return {
+    ...effectiveEnv,
+    ...baseEnv,
+    PORT: String(port),
+    ...(configHttpPath !== undefined ? { FRONTMCP_HTTP_ENTRY_PATH: configHttpPath } : {}),
+  };
+}
+
 export async function runDev(opts: ParsedArgs): Promise<void> {
   // Issue #399 — `--stdio` runs the first-party watch-aware stdio bridge
   // instead of the legacy `tsx --watch + tsc --noEmit --watch` pair. The
@@ -167,12 +192,12 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   // Issue #400 — env overlays from `frontmcp.config.env.{shared,dev}` are
   // included via `resolved.effectiveEnv`. `.env`/`.env.local` already loaded
   // into `process.env` above, so they win (they're closer to deployment).
-  const childEnv = {
-    ...resolved.effectiveEnv,
-    ...process.env,
-    PORT: String(port),
-    ...(configHttpPath !== undefined ? { FRONTMCP_HTTP_ENTRY_PATH: configHttpPath } : {}),
-  };
+  const childEnv = buildDevChildEnv({
+    effectiveEnv: resolved.effectiveEnv,
+    baseEnv: process.env,
+    port,
+    configHttpPath,
+  });
   const app = spawn(npxCmd, ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
     env: childEnv,
