@@ -305,11 +305,16 @@ jobs:
         project: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
-      - name: Checkout (for .nvmrc)
+      - name: Checkout (for .nvmrc + local action)
         uses: actions/checkout@v6
         with:
+          # The local composite action below (./.github/actions/setup-node-yarn)
+          # must exist on disk, so its directory has to be part of the sparse
+          # checkout alongside .nvmrc — otherwise the action resolves to a
+          # missing path and the job fails with "Can't find 'action.yml'".
           sparse-checkout: |
             .nvmrc
+            .github/actions/setup-node-yarn
           sparse-checkout-cone-mode: false
 
       - name: Get Node version
