@@ -2191,21 +2191,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@frontmcp/adapters@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/adapters@npm:1.0.4"
-  dependencies:
-    "@frontmcp/sdk": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
-    mcp-from-openapi: "npm:2.3.0"
-    openapi-types: "npm:^12.1.3"
-    zod: "npm:^4.0.0"
-    zod-from-json-schema: "npm:^0.5.2"
-  checksum: 10c0/b286f29d121f7c43d9c6a8cd80c3932b3756d5e43a74bb9ef0554ae8ab49b213a1e85f365a58660da3ca302c0aa8feccf6d544b40ae78bc3c8640b357ad93c15
-  languageName: node
-  linkType: hard
-
-"@frontmcp/adapters@workspace:libs/adapters":
+"@frontmcp/adapters@npm:1.4.0, @frontmcp/adapters@workspace:libs/adapters":
   version: 0.0.0-use.local
   resolution: "@frontmcp/adapters@workspace:libs/adapters"
   dependencies:
@@ -2220,29 +2206,6 @@ __metadata:
     "@frontmcp/lazy-zod": 1.4.0
   languageName: unknown
   linkType: soft
-
-"@frontmcp/auth@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/auth@npm:1.0.4"
-  dependencies:
-    "@frontmcp/di": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
-    jose: "npm:^6.0.0"
-  peerDependencies:
-    "@frontmcp/storage-sqlite": 1.0.4
-    "@vercel/kv": ^3.0.0
-    ioredis: ^5.0.0
-    zod: ^4.0.0
-  peerDependenciesMeta:
-    "@frontmcp/storage-sqlite":
-      optional: true
-    "@vercel/kv":
-      optional: true
-    ioredis:
-      optional: true
-  checksum: 10c0/9f761d7dc94cfa06c5ab7c45b8b0037e983f11c128a0abcac8fabed53570dd3050a8df2bcb35170c689f17eb2918ae86cc82167de90ff40a7acd928d712563b6
-  languageName: node
-  linkType: hard
 
 "@frontmcp/auth@npm:1.4.0, @frontmcp/auth@workspace:libs/auth":
   version: 0.0.0-use.local
@@ -2267,18 +2230,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/di@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/di@npm:1.0.4"
-  dependencies:
-    mitt: "npm:^3.0.1"
-  peerDependencies:
-    reflect-metadata: ^0.2.0
-    zod: ^4.0.0
-  checksum: 10c0/8e3d45cd0c85e9613afc768c0aebac624ef1f857ef12e69a7c6d67111081c1bab6683cbbe7b820cf75e42fd9923701a43d2f56aadd06120c55c2a5af0a2d8891
-  languageName: node
-  linkType: hard
-
 "@frontmcp/di@npm:1.4.0, @frontmcp/di@workspace:libs/di":
   version: 0.0.0-use.local
   resolution: "@frontmcp/di@workspace:libs/di"
@@ -2294,19 +2245,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/guard@npm:1.0.4, @frontmcp/guard@workspace:libs/guard":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/guard@workspace:libs/guard"
-  dependencies:
-    "@frontmcp/utils": "npm:1.0.4"
-    "@types/node": "npm:^24.0.0"
-    typescript: "npm:^5.0.0"
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.0.4
-  languageName: unknown
-  linkType: soft
-
 "@frontmcp/guard@npm:1.4.0":
   version: 1.4.0
   resolution: "@frontmcp/guard@npm:1.4.0"
@@ -2317,6 +2255,19 @@ __metadata:
   checksum: 10c0/6943c35ec8de225984b9d93013685fe87d80a140a813ddc1dd2fb2f7fe32665424bdeebc2f327b13aa1532dc051ea76fd481c7bc941a11d993c125c834ea48ad
   languageName: node
   linkType: hard
+
+"@frontmcp/guard@workspace:libs/guard":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/guard@workspace:libs/guard"
+  dependencies:
+    "@frontmcp/utils": "npm:1.4.0"
+    "@types/node": "npm:^24.0.0"
+    typescript: "npm:^5.0.0"
+    zod: "npm:^4.0.0"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.4.0
+  languageName: unknown
+  linkType: soft
 
 "@frontmcp/lazy-zod@npm:1.4.0":
   version: 1.4.0
@@ -2343,7 +2294,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/nx@workspace:libs/nx-plugin"
   dependencies:
-    "@frontmcp/skills": "npm:1.0.4"
+    "@frontmcp/skills": "npm:1.4.0"
     "@nx/devkit": "npm:22.6.4"
     tslib: "npm:^2.3.0"
   peerDependencies:
@@ -2399,23 +2350,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-cache@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/plugin-cache@npm:1.0.4"
-  dependencies:
-    "@frontmcp/sdk": "npm:1.0.4"
-    ioredis: "npm:^5.8.0"
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@vercel/kv": ^2.0.0 || ^3.0.0
-  peerDependenciesMeta:
-    "@vercel/kv":
-      optional: true
-  checksum: 10c0/dab0d0a1bac9d74d4f9479b2177191db4301d56024bc1f3c08fc294e15c4b821a6a67f44aec4e7f1fdc4e5f7dacac4cefb7a6d75001721a8feb239512637572b
-  languageName: node
-  linkType: hard
-
-"@frontmcp/plugin-cache@workspace:plugins/plugin-cache":
+"@frontmcp/plugin-cache@npm:1.4.0, @frontmcp/plugin-cache@workspace:plugins/plugin-cache":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-cache@workspace:plugins/plugin-cache"
   dependencies:
@@ -2430,22 +2365,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-codecall@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/plugin-codecall@npm:1.0.4"
-  dependencies:
-    "@enclave-vm/core": "npm:^2.13.0"
-    "@frontmcp/protocol": "npm:1.0.4"
-    "@frontmcp/sdk": "npm:1.0.4"
-    vectoriadb: "npm:^2.2.0"
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@frontmcp/plugin-cache": 1.0.4
-  checksum: 10c0/55065e2b5ad22158f6e2cec4214ee2d34b492b125935cbf4ad1c4a07ca934c3edf0e87a2069e089b84df84759ee4229675e2b39dc243dcdb9bab0963fc9e63f7
-  languageName: node
-  linkType: hard
-
-"@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall":
+"@frontmcp/plugin-codecall@npm:1.4.0, @frontmcp/plugin-codecall@workspace:plugins/plugin-codecall":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
   dependencies:
@@ -2460,14 +2380,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-dashboard@npm:1.0.4, @frontmcp/plugin-dashboard@workspace:plugins/plugin-dashboard":
+"@frontmcp/plugin-dashboard@npm:1.4.0, @frontmcp/plugin-dashboard@workspace:plugins/plugin-dashboard":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-dashboard@workspace:plugins/plugin-dashboard"
   dependencies:
-    "@frontmcp/sdk": "npm:1.0.4"
+    "@frontmcp/sdk": "npm:1.4.0"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
-    "@frontmcp/lazy-zod": 1.0.4
+    "@frontmcp/lazy-zod": 1.4.0
   languageName: unknown
   linkType: soft
 
@@ -2475,8 +2395,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-feature-flags@workspace:plugins/plugin-feature-flags"
   dependencies:
-    "@frontmcp/sdk": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
+    "@frontmcp/sdk": "npm:1.4.0"
+    "@frontmcp/utils": "npm:1.4.0"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@launchdarkly/node-server-sdk": ^9.0.0 || ^10.0.0
@@ -2492,24 +2412,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-remember@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/plugin-remember@npm:1.0.4"
-  dependencies:
-    "@frontmcp/sdk": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
-    ioredis: "npm:^5.8.0"
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@vercel/kv": ^2.0.0 || ^3.0.0
-  peerDependenciesMeta:
-    "@vercel/kv":
-      optional: true
-  checksum: 10c0/81024ed480fc9febdb144f5a73650b617d390b5b3a2e83b720789113eb3e7ca039aacffd4c50d788dc15e708d624214243c7e219d515aad7566af51a692baa55
-  languageName: node
-  linkType: hard
-
-"@frontmcp/plugin-remember@workspace:plugins/plugin-remember":
+"@frontmcp/plugin-remember@npm:1.4.0, @frontmcp/plugin-remember@workspace:plugins/plugin-remember":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-remember@workspace:plugins/plugin-remember"
   dependencies:
@@ -2530,14 +2433,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-skilled-openapi@workspace:plugins/plugin-skilled-openapi"
   dependencies:
-    "@frontmcp/adapters": "npm:1.0.4"
-    "@frontmcp/auth": "npm:1.0.4"
-    "@frontmcp/protocol": "npm:1.0.4"
-    "@frontmcp/sdk": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
+    "@frontmcp/adapters": "npm:1.4.0"
+    "@frontmcp/auth": "npm:1.4.0"
+    "@frontmcp/protocol": "npm:1.4.0"
+    "@frontmcp/sdk": "npm:1.4.0"
+    "@frontmcp/utils": "npm:1.4.0"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
-    "@frontmcp/lazy-zod": 1.0.4
+    "@frontmcp/lazy-zod": 1.4.0
   languageName: unknown
   linkType: soft
 
@@ -2545,21 +2448,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugins@workspace:libs/plugins"
   dependencies:
-    "@frontmcp/plugin-cache": "npm:1.0.4"
-    "@frontmcp/plugin-codecall": "npm:1.0.4"
-    "@frontmcp/plugin-dashboard": "npm:1.0.4"
-    "@frontmcp/plugin-remember": "npm:1.0.4"
+    "@frontmcp/plugin-cache": "npm:1.4.0"
+    "@frontmcp/plugin-codecall": "npm:1.4.0"
+    "@frontmcp/plugin-dashboard": "npm:1.4.0"
+    "@frontmcp/plugin-remember": "npm:1.4.0"
     reflect-metadata: "npm:^0.2.2"
-  languageName: unknown
-  linkType: soft
-
-"@frontmcp/protocol@npm:1.0.4, @frontmcp/protocol@workspace:libs/protocol":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/protocol@workspace:libs/protocol"
-  dependencies:
-    "@modelcontextprotocol/sdk": "npm:1.29.0"
-    "@types/node": "npm:^24.0.0"
-    typescript: "npm:^5.0.0"
   languageName: unknown
   linkType: soft
 
@@ -2571,6 +2464,16 @@ __metadata:
   checksum: 10c0/46ab330669808cb1e912da46389ede5ff5e5cb135b5cbd7d671f40a3632e8c60f6b97616af7873ee3db1e6586a51959a01b1d5b8d2b06c8ec135e9529d5cc777
   languageName: node
   linkType: hard
+
+"@frontmcp/protocol@workspace:libs/protocol":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/protocol@workspace:libs/protocol"
+  dependencies:
+    "@modelcontextprotocol/sdk": "npm:1.29.0"
+    "@types/node": "npm:^24.0.0"
+    typescript: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
 
 "@frontmcp/react@workspace:libs/react":
   version: 0.0.0-use.local
@@ -2593,59 +2496,6 @@ __metadata:
       optional: true
   languageName: unknown
   linkType: soft
-
-"@frontmcp/sdk@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/sdk@npm:1.0.4"
-  dependencies:
-    "@frontmcp/auth": "npm:1.0.4"
-    "@frontmcp/di": "npm:1.0.4"
-    "@frontmcp/guard": "npm:1.0.4"
-    "@frontmcp/protocol": "npm:1.0.4"
-    "@frontmcp/uipack": "npm:1.0.4"
-    "@frontmcp/utils": "npm:1.0.4"
-    "@types/cors": "npm:^2.8.17"
-    ioredis: "npm:^5.8.0"
-    jose: "npm:^6.1.3"
-    js-yaml: "npm:^4.1.1"
-    reflect-metadata: "npm:^0.2.2"
-    semver: "npm:^7.6.0"
-    vectoriadb: "npm:^2.2.0"
-  peerDependencies:
-    "@anthropic-ai/sdk": ^0.30.0 || ^0.78.0
-    "@enclave-vm/core": ^2.13.0
-    "@frontmcp/observability": 1.0.3
-    "@frontmcp/storage-sqlite": 1.0.4
-    "@opentelemetry/api": ^1.9.0
-    "@opentelemetry/sdk-trace-base": ^1.25.0
-    "@vercel/kv": ^3.0.0
-    content-type: ^1.0.5
-    cors: ^2.8.5
-    express: ^4.18.0 || ^5.0.0
-    openai: ^4.0.0 || ^5.0.0 || ^6.0.0
-    raw-body: ^3.0.0
-    zod: ^4.0.0
-    zod-from-json-schema: ^0.5.2
-  peerDependenciesMeta:
-    "@anthropic-ai/sdk":
-      optional: true
-    "@enclave-vm/core":
-      optional: true
-    "@frontmcp/observability":
-      optional: true
-    "@frontmcp/storage-sqlite":
-      optional: true
-    "@opentelemetry/api":
-      optional: true
-    "@opentelemetry/sdk-trace-base":
-      optional: true
-    "@vercel/kv":
-      optional: true
-    openai:
-      optional: true
-  checksum: 10c0/de102eaffe49fc243e3c89705e2841d29f826e149b2cc03ec3a085becf15b9bdba311a07b8e9a60dcc8497a9deb9ab59b75f6ca6a4d2ed96f1fb4db22c2db01e
-  languageName: node
-  linkType: hard
 
 "@frontmcp/sdk@npm:1.4.0, @frontmcp/sdk@workspace:libs/sdk":
   version: 0.0.0-use.local
@@ -2701,14 +2551,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/skills@npm:1.0.4, @frontmcp/skills@workspace:libs/skills":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/skills@workspace:libs/skills"
-  dependencies:
-    tslib: "npm:^2.3.0"
-  languageName: unknown
-  linkType: soft
-
 "@frontmcp/skills@npm:1.4.0":
   version: 1.4.0
   resolution: "@frontmcp/skills@npm:1.4.0"
@@ -2717,6 +2559,14 @@ __metadata:
   checksum: 10c0/28900d507d4ecf0510c9742d04b5ad2276eedc68c0f5d017669668fa9c1f8568a4ea46bed2090b4b6a6df85c9425f285faa2daee8e3e01b1ab672727dcbe433d
   languageName: node
   linkType: hard
+
+"@frontmcp/skills@workspace:libs/skills":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/skills@workspace:libs/skills"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  languageName: unknown
+  linkType: soft
 
 "@frontmcp/source@workspace:.":
   version: 0.0.0-use.local
@@ -2829,12 +2679,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/storage-sqlite@workspace:libs/storage-sqlite"
   dependencies:
-    "@frontmcp/utils": "npm:1.0.4"
+    "@frontmcp/utils": "npm:1.4.0"
     "@types/better-sqlite3": "npm:^7.6.13"
     better-sqlite3: "npm:^12.6.2"
     typescript: "npm:^5.9.3"
   peerDependencies:
-    "@frontmcp/lazy-zod": 1.0.4
+    "@frontmcp/lazy-zod": 1.4.0
   languageName: unknown
   linkType: soft
 
@@ -2871,7 +2721,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/ui@workspace:libs/ui"
   dependencies:
-    "@frontmcp/uipack": "npm:1.0.4"
+    "@frontmcp/uipack": "npm:1.4.0"
     "@types/dompurify": "npm:^3.0.0"
     "@types/katex": "npm:^0.16.0"
     "@types/leaflet": "npm:^1.9.0"
@@ -2935,17 +2785,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/uipack@npm:1.0.4, @frontmcp/uipack@workspace:libs/uipack":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/uipack@workspace:libs/uipack"
-  dependencies:
-    typescript: "npm:^5.9.3"
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.0.4
-  languageName: unknown
-  linkType: soft
-
 "@frontmcp/uipack@npm:1.4.0":
   version: 1.4.0
   resolution: "@frontmcp/uipack@npm:1.4.0"
@@ -2957,25 +2796,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@frontmcp/utils@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@frontmcp/utils@npm:1.0.4"
+"@frontmcp/uipack@workspace:libs/uipack":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/uipack@workspace:libs/uipack"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.13.0"
-    "@noble/ciphers": "npm:^2.1.1"
-    "@noble/hashes": "npm:^2.0.1"
+    typescript: "npm:^5.9.3"
     zod: "npm:^4.0.0"
   peerDependencies:
-    "@vercel/kv": ^2.0.0 || ^3.0.0
-    ioredis: ^5.0.0
-  peerDependenciesMeta:
-    "@vercel/kv":
-      optional: true
-    ioredis:
-      optional: true
-  checksum: 10c0/3e7f773e2393c69f79620bef36165fb24454fca213258da1f45a16d33a1bcf87432be36850a08575ad4723fa53b0205d9686da484e6ed0a2f6d1bb6288b0a0e5
-  languageName: node
-  linkType: hard
+    "@frontmcp/lazy-zod": 1.4.0
+  languageName: unknown
+  linkType: soft
 
 "@frontmcp/utils@npm:1.4.0, @frontmcp/utils@workspace:libs/utils":
   version: 0.0.0-use.local
@@ -22103,15 +21933,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod-from-json-schema@npm:^0.5.2":
-  version: 0.5.2
-  resolution: "zod-from-json-schema@npm:0.5.2"
-  dependencies:
-    zod: "npm:^4.0.17"
-  checksum: 10c0/cb0d49fc7b860d2d8f295b894502a85b372b950267808ade5b5307698f17618e97e5cb6a8c07978c6010bcb714d6af652ae829f714d8513a176b2c1190c39171
-  languageName: node
-  linkType: hard
-
 "zod-to-json-schema@npm:^3.25.1":
   version: 3.25.1
   resolution: "zod-to-json-schema@npm:3.25.1"
@@ -22125,13 +21946,6 @@ __metadata:
   version: 4.3.6
   resolution: "zod@npm:4.3.6"
   checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.0.17":
-  version: 4.4.3
-  resolution: "zod@npm:4.4.3"
-  checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
   languageName: node
   linkType: hard
 
