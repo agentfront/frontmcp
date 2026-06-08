@@ -650,6 +650,7 @@ var _getCmd = promptCmd
   .description('Render a prompt by name')
 ${promptGetOptionLines}
   .allowUnknownOption(true)
+  .allowExcessArguments(true) // #382 — without this, an out-of-spec flag like \`--bogus x\` becomes excess operands and Commander throws "too many arguments" before the action can emit the precise "unknown option(s) for prompt" error.
   .action(async function(name) {
     try {
       var spec = promptArgs[name];

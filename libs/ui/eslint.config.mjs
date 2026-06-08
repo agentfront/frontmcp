@@ -21,6 +21,8 @@ export default [
           ignoredDependencies: [
             '@swc/core', // Optional: used by SWC-based bundler at runtime
             'react-dom', // Peer dep required for React rendering
+            '@types/react', // Type-only peer dep: consumed by published .d.ts, never imported at runtime
+            '@types/react-dom', // Type-only peer dep: consumed by published .d.ts, never imported at runtime
             '@emotion/react', // Peer dep required by @mui/material
             '@emotion/styled', // Peer dep required by @mui/material
             'react-pdf', // Optional peer dep: lazy-loaded by pdf renderer

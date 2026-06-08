@@ -1,0 +1,57 @@
+name: "Setup Node + Yarn"
+description: "Enable Corepack, set up Node.js with the Yarn cache, and (optionally) install dependencies."
+
+inputs:
+  node-version:
+    description: "Node.js version to install (mutually exclusive with node-version-file)."
+    required: false
+    default: ""
+  node-version-file:
+    description: "Path to a file holding the Node.js version, e.g. .nvmrc (mutually exclusive with node-version)."
+    required: false
+    default: ""
+  registry-url:
+    description: "Optional npm registry URL to configure for auth/publish."
+    required: false
+    default: ""
+  cache:
+    description: 'setup-node package-manager cache: "yarn"/"npm"/"pnpm", or "" to disable (e.g. a sparse checkout with no lockfile).'
+    required: false
+    default: "yarn"
+  install:
+    description: 'Run "yarn install --immutable". Set to "false" to only set up the toolchain.'
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      if: ${{ inputs.node-version != '' && inputs.node-version-file != '' }}
+      shell: bash
+      run: |
+        echo "::error::setup-node-yarn: provide either 'node-version' or 'node-version-file', not both."
+        exit 1
+
+    # Corepack must be enabled BEFORE setup-node so its `cache: yarn` detection
+    # resolves to the packageManager-pinned Yarn 4 (not the runner's default).
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version-file }}
+        registry-url: ${{ inputs.registry-url }}
+        cache: ${{ inputs.cache }}
+
+    - name: Install dependencies
+      if: ${{ inputs.install == 'true' }}
+      shell: bash
+      run: yarn install --immutable
+      env:
+        # onnxruntime-node (via @huggingface/transformers) otherwise downloads a
+        # CUDA build that CI never uses — skip it for faster, GPU-free installs.
+        npm_config_onnxruntime_node_install_cuda: skip

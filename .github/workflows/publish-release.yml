@@ -70,15 +70,11 @@ jobs:
         id: node-version
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ steps.node-version.outputs.version }}
-          cache: "yarn"
           registry-url: "https://registry.npmjs.org/"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Determine release context
         id: context
@@ -326,10 +322,13 @@ jobs:
           name: dist-packages
 
       - name: Setup Node for npm publish
-        uses: actions/setup-node@v6
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ steps.node-version.outputs.version }}
           registry-url: "https://registry.npmjs.org/"
+          install: "false"
+          # Sparse checkout (.nvmrc only) — no yarn.lock present to key a Yarn cache on.
+          cache: ""
 
       - name: Update npm CLI for OIDC
         run: npm install -g npm@11.5.1 # Pin to version with proper OIDC publishing support
@@ -578,13 +577,39 @@ jobs:
 
           echo "Created and pushed tag: $TAG"
 
+      - name: Generate changelog notes against the correct previous tag
+        # Non-fatal: a transient gh API failure must not block the release creation below.
+        continue-on-error: true
+        if: ${{ steps.prev_version.outputs.prev_tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          PREV_TAG="${{ steps.prev_version.outputs.prev_tag }}"
+          BRANCH="${{ needs.prepare.outputs.branch }}"
+          # GitHub's auto "generate_release_notes" chooses the previous tag itself and
+          # frequently picks the wrong base (e.g. v1.4.1 -> v1.3.0, or v1.4.0 -> v1.0.0).
+          # Generate the notes explicitly against the predecessor we already computed so
+          # the "Full Changelog" compare link is always vPREV...vNEW.
+          NOTES=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="v$VERSION" \
+            -f previous_tag_name="$PREV_TAG" \
+            -f target_commitish="$BRANCH" \
+            --jq '.body')
+          if [ -n "$NOTES" ]; then
+            printf '\n%s\n' "$NOTES" >> /tmp/release-body.md
+            echo "Appended GitHub changelog notes (base: $PREV_TAG)"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
           name: v${{ needs.prepare.outputs.version }}
           prerelease: ${{ needs.prepare.outputs.is_prerelease }}
-          generate_release_notes: true
+          # Notes (with the correct previous tag) are appended to the body in the step
+          # above; only fall back to GitHub's auto-pick for the very first release.
+          generate_release_notes: ${{ steps.prev_version.outputs.prev_tag == '' }}
           body_path: /tmp/release-body.md
         env:
           GITHUB_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}

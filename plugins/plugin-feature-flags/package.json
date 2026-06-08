@@ -1,9 +1,12 @@
 {
   "name": "@frontmcp/plugin-feature-flags",
-  "version": "1.0.4",
+  "version": "1.4.0",
   "description": "Feature flag plugin for FrontMCP - dynamically gate MCP capabilities behind feature flags",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "feature-flags",
@@ -47,19 +50,19 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.0.4",
-    "@frontmcp/utils": "1.0.4"
+    "@frontmcp/sdk": "1.4.0",
+    "@frontmcp/utils": "1.4.0"
   },
   "peerDependencies": {
-    "@splitsoftware/splitio": "^10.0.0 || ^11.0.0",
     "@launchdarkly/node-server-sdk": "^9.0.0 || ^10.0.0",
+    "@splitsoftware/splitio": "^10.0.0 || ^11.0.0",
     "unleash-client": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
-    "@splitsoftware/splitio": {
+    "@launchdarkly/node-server-sdk": {
       "optional": true
     },
-    "@launchdarkly/node-server-sdk": {
+    "@splitsoftware/splitio": {
       "optional": true
     },
     "unleash-client": {
