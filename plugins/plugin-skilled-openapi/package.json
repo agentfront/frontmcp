@@ -4,6 +4,9 @@
   "description": "FrontMCP plugin: serve a customer's OpenAPI spec as skill bundles (signed, OpenAPI-Overlay-based) with hidden per-operation tools mediated by three meta-tools (search_skill / load_skill / execute_action).",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "frontmcp",
