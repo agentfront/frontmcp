@@ -2245,18 +2245,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/guard@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@frontmcp/guard@npm:1.4.0"
-  dependencies:
-    "@frontmcp/utils": "npm:1.4.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.4.0
-  checksum: 10c0/6943c35ec8de225984b9d93013685fe87d80a140a813ddc1dd2fb2f7fe32665424bdeebc2f327b13aa1532dc051ea76fd481c7bc941a11d993c125c834ea48ad
-  languageName: node
-  linkType: hard
-
-"@frontmcp/guard@workspace:libs/guard":
+"@frontmcp/guard@npm:1.4.0, @frontmcp/guard@workspace:libs/guard":
   version: 0.0.0-use.local
   resolution: "@frontmcp/guard@workspace:libs/guard"
   dependencies:
@@ -2269,16 +2258,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/lazy-zod@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@frontmcp/lazy-zod@npm:1.4.0"
-  peerDependencies:
-    zod: ^4.0.0
-  checksum: 10c0/12fc365ebbff1362b9c879fcfc94d3875f4123adf2bc58b045ec8bb242cd280c4f626876ad87d98b64cd888d6ee2ef27bb84b81473f2da06512ae56f7b0b910c
-  languageName: node
-  linkType: hard
-
-"@frontmcp/lazy-zod@workspace:libs/lazy-zod":
+"@frontmcp/lazy-zod@npm:1.4.0, @frontmcp/lazy-zod@workspace:libs/lazy-zod":
   version: 0.0.0-use.local
   resolution: "@frontmcp/lazy-zod@workspace:libs/lazy-zod"
   dependencies:
@@ -2456,16 +2436,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/protocol@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@frontmcp/protocol@npm:1.4.0"
-  dependencies:
-    "@modelcontextprotocol/sdk": "npm:1.29.0"
-  checksum: 10c0/46ab330669808cb1e912da46389ede5ff5e5cb135b5cbd7d671f40a3632e8c60f6b97616af7873ee3db1e6586a51959a01b1d5b8d2b06c8ec135e9529d5cc777
-  languageName: node
-  linkType: hard
-
-"@frontmcp/protocol@workspace:libs/protocol":
+"@frontmcp/protocol@npm:1.4.0, @frontmcp/protocol@workspace:libs/protocol":
   version: 0.0.0-use.local
   resolution: "@frontmcp/protocol@workspace:libs/protocol"
   dependencies:
@@ -2551,16 +2522,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/skills@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@frontmcp/skills@npm:1.4.0"
-  dependencies:
-    tslib: "npm:^2.3.0"
-  checksum: 10c0/28900d507d4ecf0510c9742d04b5ad2276eedc68c0f5d017669668fa9c1f8568a4ea46bed2090b4b6a6df85c9425f285faa2daee8e3e01b1ab672727dcbe433d
-  languageName: node
-  linkType: hard
-
-"@frontmcp/skills@workspace:libs/skills":
+"@frontmcp/skills@npm:1.4.0, @frontmcp/skills@workspace:libs/skills":
   version: 0.0.0-use.local
   resolution: "@frontmcp/skills@workspace:libs/skills"
   dependencies:
@@ -2785,18 +2747,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/uipack@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@frontmcp/uipack@npm:1.4.0"
-  dependencies:
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.4.0
-  checksum: 10c0/a6d41e786aec7e957939d3a46705ef9f10f94b84955538e1442e26f9c7a2a72be933e896c996bfad86c70912f1d800554c3bebcfef5cb078b92c0c674cc656ac
-  languageName: node
-  linkType: hard
-
-"@frontmcp/uipack@workspace:libs/uipack":
+"@frontmcp/uipack@npm:1.4.0, @frontmcp/uipack@workspace:libs/uipack":
   version: 0.0.0-use.local
   resolution: "@frontmcp/uipack@workspace:libs/uipack"
   dependencies:
