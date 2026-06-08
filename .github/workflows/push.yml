@@ -48,14 +48,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -83,14 +79,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Restore Nx cache
         uses: ./.github/actions/nx-cache-restore
@@ -137,14 +129,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Discover E2E projects and create chunks
         id: discover
@@ -179,14 +167,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Discover unit projects and create 5 chunks
         id: discover
@@ -224,14 +208,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -275,14 +255,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
@@ -341,14 +317,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
 
       - name: Download unit coverage artifacts
         uses: actions/download-artifact@v8

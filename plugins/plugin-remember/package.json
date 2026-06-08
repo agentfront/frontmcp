@@ -1,9 +1,12 @@
 {
   "name": "@frontmcp/plugin-remember",
-  "version": "1.0.4",
+  "version": "1.4.0",
   "description": "Remember plugin for FrontMCP - encrypted session memory with approval system for secure tool authorization",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "memory",
@@ -47,13 +50,13 @@
     }
   },
   "dependencies": {
-    "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "1.0.4",
-    "@frontmcp/utils": "1.0.4"
+    "@frontmcp/sdk": "1.4.0",
+    "@frontmcp/utils": "1.4.0",
+    "ioredis": "^5.8.0"
   },
   "peerDependencies": {
-    "@vercel/kv": "^2.0.0 || ^3.0.0",
-    "@frontmcp/lazy-zod": "1.0.4"
+    "@frontmcp/lazy-zod": "1.4.0",
+    "@vercel/kv": "^2.0.0 || ^3.0.0"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {

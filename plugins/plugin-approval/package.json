@@ -1,9 +1,12 @@
 {
   "name": "@frontmcp/plugin-approval",
-  "version": "1.0.4",
+  "version": "1.4.0",
   "description": "Approval plugin for FrontMCP - tool authorization workflow with PKCE webhook security",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "keywords": [
     "mcp",
     "approval",
@@ -47,14 +50,14 @@
     }
   },
   "dependencies": {
+    "@frontmcp/sdk": "1.4.0",
+    "@frontmcp/utils": "1.4.0",
     "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "1.0.4",
-    "@frontmcp/utils": "1.0.4",
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@vercel/kv": "^2.0.0 || ^3.0.0",
-    "@frontmcp/lazy-zod": "1.0.4"
+    "@frontmcp/lazy-zod": "1.4.0",
+    "@vercel/kv": "^2.0.0 || ^3.0.0"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {
