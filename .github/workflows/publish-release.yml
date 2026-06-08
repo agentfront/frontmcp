@@ -327,6 +327,8 @@ jobs:
           node-version: ${{ steps.node-version.outputs.version }}
           registry-url: "https://registry.npmjs.org/"
           install: "false"
+          # Sparse checkout (.nvmrc only) — no yarn.lock present to key a Yarn cache on.
+          cache: ""
 
       - name: Update npm CLI for OIDC
         run: npm install -g npm@11.5.1 # Pin to version with proper OIDC publishing support
@@ -576,6 +578,8 @@ jobs:
           echo "Created and pushed tag: $TAG"
 
       - name: Generate changelog notes against the correct previous tag
+        # Non-fatal: a transient gh API failure must not block the release creation below.
+        continue-on-error: true
         if: ${{ steps.prev_version.outputs.prev_tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}

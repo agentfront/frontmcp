@@ -14,6 +14,10 @@ inputs:
     description: "Optional npm registry URL to configure for auth/publish."
     required: false
     default: ""
+  cache:
+    description: 'setup-node package-manager cache: "yarn"/"npm"/"pnpm", or "" to disable (e.g. a sparse checkout with no lockfile).'
+    required: false
+    default: "yarn"
   install:
     description: 'Run "yarn install --immutable". Set to "false" to only set up the toolchain.'
     required: false
@@ -41,7 +45,7 @@ runs:
         node-version: ${{ inputs.node-version }}
         node-version-file: ${{ inputs.node-version-file }}
         registry-url: ${{ inputs.registry-url }}
-        cache: "yarn"
+        cache: ${{ inputs.cache }}
 
     - name: Install dependencies
       if: ${{ inputs.install == 'true' }}
