@@ -27,6 +27,10 @@ export default [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
+      // Newly added to eslint:recommended in ESLint 10; surfaced as warnings here so
+      // the upgrade lands without bundling a repo-wide error-cause/dead-store cleanup.
+      'preserve-caught-error': 'warn',
+      'no-useless-assignment': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-empty-function': 'off', // Many lifecycle hooks and abstract methods are intentionally empty
       '@typescript-eslint/no-empty-interface': 'off', // Used for module augmentation and marker interfaces

@@ -1,5 +1,5 @@
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
+import { SpanStatusCode, diag, DiagLogLevel, trace } from '@opentelemetry/api';
 import {
   onToolWillParse,
   onToolWillFindTool,
@@ -63,13 +63,14 @@ const DEFAULT_OPTS: TracingOptions = {
 };
 
 const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+const provider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+});
 diag.setLogger(
   { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, verbose: () => {} },
   DiagLogLevel.NONE,
 );
-provider.register();
+trace.setGlobalTracerProvider(provider);
 afterAll(async () => {
   await provider.shutdown();
 });

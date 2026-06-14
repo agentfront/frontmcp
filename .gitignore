@@ -99,3 +99,6 @@ planning/
 !.yarn/sdks
 !.yarn/versions
 .pnp.*
+
+.nx/polygraph
+.nx/self-healing

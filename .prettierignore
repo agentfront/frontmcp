@@ -23,3 +23,5 @@ docs/docs.backup.json
 apps/poc-lazy-zod/results/
 apps/poc-lazy-zod/src/schemas/eager.ts
 apps/poc-lazy-zod/src/schemas/lazy.ts
+
+.nx/self-healing

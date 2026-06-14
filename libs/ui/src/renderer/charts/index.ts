@@ -125,7 +125,7 @@ function ChartView({ config, className }: ChartViewProps): React.ReactElement {
     config.title &&
       React.createElement(
         Typography,
-        { variant: 'subtitle1', gutterBottom: true, fontWeight: 600, textAlign: 'center' },
+        { variant: 'subtitle1', gutterBottom: true, sx: { fontWeight: 600, textAlign: 'center' } },
         config.title,
       ),
     React.createElement(ResponsiveContainer, { width: '100%', height }, chartContent),

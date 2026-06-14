@@ -1,0 +1,2 @@
+- [Dep-bump duplication gotcha](dep-bump-duplication-gotcha.md) — bumping zod/jest creates duplicate copies that break the build; fix via yarn resolutions
+- [TS6 held back](ts6-held-back-cli-tsc.md) — TypeScript 6.0 (and @mui 9, webpack-cli 7, rspack 2) held back in the June 2026 upgrade, with reasons

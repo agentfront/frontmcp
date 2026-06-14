@@ -143,7 +143,7 @@ export interface MemorySkillProviderOptions {
 export class MemorySkillProvider implements MutableSkillStorageProvider {
   readonly type: SkillStorageProviderType = 'memory';
 
-  private vectorDB!: TFIDFVectoria<SkillDocumentMetadata>;
+  private vectorDB?: TFIDFVectoria<SkillDocumentMetadata>;
   private readonly vectorDBReady: Promise<void>;
   private skills: Map<string, SkillContent> = new Map();
   private defaultTopK: number;
@@ -187,6 +187,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   /** Await the lazy vectoriadb load (throws the clear install hint if absent). */
   private async db(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
     await this.vectorDBReady;
+    if (!this.vectorDB) {
+      throw new Error('Vector DB not initialized; await this.vectorDBReady before use.');
+    }
     return this.vectorDB;
   }
 

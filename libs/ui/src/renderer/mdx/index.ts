@@ -202,9 +202,9 @@ function renderFallback(content: string): React.ReactElement[] {
     } else if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(React.createElement('li', { key: i }, line.slice(2)));
     } else if (line.startsWith('**') && line.endsWith('**')) {
-      elements.push(React.createElement(Typography, { key: i, variant: 'body1', fontWeight: 700 }, line.slice(2, -2)));
+      elements.push(React.createElement(Typography, { key: i, variant: 'body1', sx: { fontWeight: 700 } }, line.slice(2, -2)));
     } else if (line.trim()) {
-      elements.push(React.createElement(Typography, { key: i, variant: 'body1', paragraph: true }, line));
+      elements.push(React.createElement(Typography, { key: i, variant: 'body1', sx: { mb: 2 } }, line));
     }
   }
 

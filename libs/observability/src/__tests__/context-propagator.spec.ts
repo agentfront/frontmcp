@@ -87,8 +87,9 @@ describe('FrontMcpPropagator', () => {
     it('should inject traceparent header from active span', () => {
       const carrier: Record<string, string> = {};
 
-      const provider = new BasicTracerProvider();
-      provider.addSpanProcessor(new SimpleSpanProcessor(new InMemorySpanExporter()));
+      const provider = new BasicTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(new InMemorySpanExporter())],
+      });
       // Get tracer directly from provider, do NOT register globally
       const tracer = provider.getTracer('test');
 

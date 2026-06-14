@@ -50,8 +50,7 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.4.0",
-    "@frontmcp/utils": "1.4.0"
+    "@frontmcp/sdk": "1.4.0"
   },
   "peerDependencies": {
     "@launchdarkly/node-server-sdk": "^9.0.0 || ^10.0.0",

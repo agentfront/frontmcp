@@ -149,7 +149,7 @@ function FlowView({ config, className }: FlowViewProps): React.ReactElement {
     config.title &&
       React.createElement(
         Typography,
-        { variant: 'subtitle1', fontWeight: 600, sx: { p: 1.5, borderBottom: 1, borderColor: 'divider' } },
+        { variant: 'subtitle1', sx: { fontWeight: 600, p: 1.5, borderBottom: 1, borderColor: 'divider' } },
         config.title,
       ),
     React.createElement(
