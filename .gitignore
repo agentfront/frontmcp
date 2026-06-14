@@ -85,6 +85,7 @@ apps/*/src/**/*.d.ts.map
 perf-results/
 /test-results/.last-run.json
 /.claude/planning/
+/.claude/projects/
 ROADMAP.md
 planning/
 /.claude/*.lock
