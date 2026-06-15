@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb';
+import type { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
 
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
@@ -143,7 +143,8 @@ export interface MemorySkillProviderOptions {
 export class MemorySkillProvider implements MutableSkillStorageProvider {
   readonly type: SkillStorageProviderType = 'memory';
 
-  private vectorDB: TFIDFVectoria<SkillDocumentMetadata>;
+  private vectorDB?: TFIDFVectoria<SkillDocumentMetadata>;
+  private readonly vectorDBReady: Promise<void>;
   private skills: Map<string, SkillContent> = new Map();
   private defaultTopK: number;
   private defaultMinScore: number;
@@ -155,10 +156,41 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     this.defaultMinScore = options.defaultMinScore ?? 0.1;
     this.toolValidator = options.toolValidator;
 
-    this.vectorDB = new TFIDFVectoria<SkillDocumentMetadata>({
+    // `vectoriadb` is an OPTIONAL peer of the SDK: import it lazily so consumers
+    // that never touch skills don't need it installed, and a missing install
+    // surfaces as a clear on-use error instead of an ERR_MODULE_NOT_FOUND at
+    // module-evaluation time (which crashed every standalone consumer at boot).
+    this.vectorDBReady = this.initVectorDB();
+    // Mark handled so a missing optional peer can't become an unhandled
+    // rejection when the provider is constructed but never used; awaiters
+    // of `vectorDBReady` still observe the original rejection.
+    this.vectorDBReady.catch(() => undefined);
+  }
+
+  private async initVectorDB(): Promise<void> {
+    let mod: typeof import('vectoriadb');
+    try {
+      mod = await import('vectoriadb');
+    } catch (cause) {
+      throw new Error(
+        "@frontmcp/sdk skill storage needs the optional peer dependency 'vectoriadb'. " +
+          'Install it in your project (e.g. `npm i vectoriadb`) to use skill search/storage.',
+        { cause },
+      );
+    }
+    this.vectorDB = new mod.TFIDFVectoria<SkillDocumentMetadata>({
       defaultTopK: this.defaultTopK,
       defaultSimilarityThreshold: this.defaultMinScore,
     });
+  }
+
+  /** Await the lazy vectoriadb load (throws the clear install hint if absent). */
+  private async db(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
+    await this.vectorDBReady;
+    if (!this.vectorDB) {
+      throw new Error('Vector DB not initialized; await this.vectorDBReady before use.');
+    }
+    return this.vectorDB;
   }
 
   /**
@@ -170,6 +202,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async initialize(): Promise<void> {
+    // Surface a missing `vectoriadb` here (first lifecycle call) rather than
+    // deep inside the first search.
+    await this.vectorDBReady;
     this.initialized = true;
   }
 
@@ -217,7 +252,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     };
 
     // Search using TF-IDF
-    let results = await this.vectorDB.search(query, {
+    const db = await this.db();
+    let results = await db.search(query, {
       topK,
       threshold: minScore,
       filter,
@@ -368,7 +404,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
   async add(skill: SkillContent): Promise<void> {
     this.skills.set(skill.id, skill);
-    this.indexSkill(skill);
+    await this.indexSkill(skill);
   }
 
   async update(skillId: string, skill: SkillContent): Promise<void> {
@@ -376,30 +412,35 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     const normalizedSkill = skill.id !== skillId ? { ...skill, id: skillId } : skill;
 
     // Remove old entry by skillId
-    if (this.vectorDB.hasDocument(skillId)) {
-      this.vectorDB.removeDocument(skillId);
+    const db = await this.db();
+    if (db.hasDocument(skillId)) {
+      db.removeDocument(skillId);
     }
 
     // Add updated skill with normalized id
     this.skills.set(skillId, normalizedSkill);
-    this.indexSkill(normalizedSkill);
+    await this.indexSkill(normalizedSkill);
   }
 
   async remove(skillId: string): Promise<void> {
     this.skills.delete(skillId);
-    if (this.vectorDB.hasDocument(skillId)) {
-      this.vectorDB.removeDocument(skillId);
+    const db = await this.db();
+    if (db.hasDocument(skillId)) {
+      db.removeDocument(skillId);
     }
   }
 
   async clear(): Promise<void> {
     this.skills.clear();
-    this.vectorDB.clear();
+    // Resilient when the optional peer is absent: nothing was indexed anyway.
+    const db = await this.db().catch(() => undefined);
+    db?.clear();
   }
 
   async dispose(): Promise<void> {
     this.skills.clear();
-    this.vectorDB.clear();
+    const db = await this.db().catch(() => undefined);
+    db?.clear();
     this.initialized = false;
   }
 
@@ -420,14 +461,15 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       };
     });
 
-    this.vectorDB.addDocuments(documents);
-    this.vectorDB.reindex();
+    const db = await this.db();
+    db.addDocuments(documents);
+    db.reindex();
   }
 
   /**
    * Index a single skill in the vector database.
    */
-  private indexSkill(skill: SkillContent): void {
+  private async indexSkill(skill: SkillContent): Promise<void> {
     const document = {
       id: skill.id,
       text: this.buildSearchableText(skill),
@@ -438,8 +480,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       },
     };
 
-    this.vectorDB.addDocuments([document]);
-    this.vectorDB.reindex();
+    const db = await this.db();
+    db.addDocuments([document]);
+    db.reindex();
   }
 
   /**

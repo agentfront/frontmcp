@@ -17,8 +17,9 @@ describe('Span Utilities', () => {
 
   beforeEach(() => {
     exporter = new InMemorySpanExporter();
-    provider = new BasicTracerProvider();
-    provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+    provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
     // Get tracer directly from provider, not from global trace API
     tracer = provider.getTracer('test');
   });

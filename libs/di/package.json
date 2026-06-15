@@ -47,9 +47,6 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "dependencies": {
-    "mitt": "^3.0.1"
-  },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.4.0",
     "reflect-metadata": "^0.2.0"

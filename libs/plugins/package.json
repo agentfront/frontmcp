@@ -52,8 +52,5 @@
     "@frontmcp/plugin-codecall": "1.4.0",
     "@frontmcp/plugin-dashboard": "1.4.0",
     "@frontmcp/plugin-remember": "1.4.0"
-  },
-  "devDependencies": {
-    "reflect-metadata": "^0.2.2"
   }
 }

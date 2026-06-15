@@ -17,7 +17,7 @@
  */
 
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
+import { SpanStatusCode, diag, DiagLogLevel, trace } from '@opentelemetry/api';
 
 import { StructuredLogTransport, type ContextSnapshot } from '../logging/structured-log-transport';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
@@ -56,13 +56,14 @@ import type { TracingOptions } from '../otel/otel.types';
 
 // ─── Global OTel test setup ────────────────────────────────────────────────
 const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+const provider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+});
 diag.setLogger(
   { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, verbose: () => {} },
   DiagLogLevel.NONE,
 );
-provider.register();
+trace.setGlobalTracerProvider(provider);
 afterAll(async () => {
   await provider.shutdown();
 });
@@ -215,7 +216,7 @@ describe('Integration: Tool execution observability', () => {
     expect(toolSpan!.spanContext().traceId).toBe(TRACE_ID);
 
     // Verify parent-child: tool span is child of RPC span
-    expect(toolSpan!.parentSpanId).toBe(rpcSpan!.spanContext().spanId);
+    expect(toolSpan!.parentSpanContext?.spanId).toBe(rpcSpan!.spanContext().spanId);
 
     // Verify MCP attributes
     expect(rpcSpan!.attributes['rpc.system']).toBe('mcp');
@@ -444,7 +445,7 @@ describe('Integration: TelemetryAccessor (this.telemetry) in tool context', () =
     expect(childSpan).toBeTruthy();
     expect(childSpan!.spanContext().traceId).toBe(TRACE_ID);
     // Child should be nested under tool span
-    expect(childSpan!.parentSpanId).toBe(toolSpan!.spanContext().spanId);
+    expect(childSpan!.parentSpanContext?.spanId).toBe(toolSpan!.spanContext().spanId);
   });
 
   it('should handle withSpan async wrapper', async () => {

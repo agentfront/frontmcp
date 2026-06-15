@@ -14,7 +14,7 @@ describe('setupOTel', () => {
 
     // Mock all OTel SDK packages
     jest.mock('@opentelemetry/sdk-node', () => ({ NodeSDK: mockNodeSDK }), { virtual: true });
-    jest.mock('@opentelemetry/resources', () => ({ Resource: mockResource }), { virtual: true });
+    jest.mock('@opentelemetry/resources', () => ({ resourceFromAttributes: mockResource }), { virtual: true });
     jest.mock(
       '@opentelemetry/semantic-conventions',
       () => ({

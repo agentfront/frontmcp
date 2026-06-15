@@ -57,10 +57,10 @@ export function setupOTel(options?: OTelSetupOptions): () => Promise<void> {
 
   try {
     const { NodeSDK } = require('@opentelemetry/sdk-node');
-    const { Resource } = require('@opentelemetry/resources');
+    const { resourceFromAttributes } = require('@opentelemetry/resources');
     const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-    const resource = new Resource({
+    const resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: serviceName,
       ...(options?.serviceVersion ? { [ATTR_SERVICE_VERSION]: options.serviceVersion } : {}),
     });

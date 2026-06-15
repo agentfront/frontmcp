@@ -95,7 +95,7 @@
     "@frontmcp/observability": "1.4.0",
     "@frontmcp/storage-sqlite": "1.4.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@opentelemetry/sdk-trace-base": "^2.8.0",
     "@vercel/kv": "^3.0.0",
     "content-type": "^1.0.5",
     "cors": "^2.8.5",

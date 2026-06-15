@@ -4,13 +4,14 @@ import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 import { ACTIVE_SPAN_KEY, ACTIVE_OTEL_CTX_KEY } from '../plugin/observability.hooks';
 
 const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+const provider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+});
 diag.setLogger(
   { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, verbose: () => {} },
   DiagLogLevel.NONE,
 );
-provider.register();
+trace.setGlobalTracerProvider(provider);
 afterAll(async () => {
   await provider.shutdown();
 });
@@ -196,7 +197,7 @@ describe('TelemetryAccessor', () => {
       expect(childSpan).toBeTruthy();
       expect(parentSpan).toBeTruthy();
       // Child should reference parent's span ID
-      expect(childSpan!.parentSpanId).toBe(parentSpan!.spanContext().spanId);
+      expect(childSpan!.parentSpanContext?.spanId).toBe(parentSpan!.spanContext().spanId);
     });
   });
 

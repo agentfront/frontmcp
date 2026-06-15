@@ -51,9 +51,7 @@
   "dependencies": {
     "@frontmcp/adapters": "1.4.0",
     "@frontmcp/auth": "1.4.0",
-    "@frontmcp/protocol": "1.4.0",
-    "@frontmcp/sdk": "1.4.0",
-    "@frontmcp/utils": "1.4.0"
+    "@frontmcp/sdk": "1.4.0"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.4.0"

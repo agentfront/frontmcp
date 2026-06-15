@@ -64,8 +64,9 @@ export interface TestTracer {
  */
 export function createTestTracer(name = 'test'): TestTracer {
   const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider();
-  provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+  const provider = new BasicTracerProvider({
+    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  });
   const tracer = provider.getTracer(name);
 
   return {

@@ -13,7 +13,6 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
       spanId: 'aaaaaaaaaaaaaaaa',
       traceFlags: 1,
     }),
-    parentSpanId: undefined,
     parentSpanContext: undefined,
     startTime: [0, 0],
     endTime: [0, 8_000_000],
