@@ -1,6 +1,9 @@
 name = "<%= projectName %>"
-main = "dist/main.js"
-compatibility_date = "2024-01-01"
+main = "dist/cloudflare/index.js"
+compatibility_date = "2024-09-23"
+# Required: the FrontMCP worker entry require()s @frontmcp/sdk + Express, which
+# need Node builtins. Without nodejs_compat the Worker fails to boot.
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 NODE_ENV = "production"

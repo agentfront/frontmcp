@@ -55,12 +55,15 @@ export default TranslateServer;
 ```
 
 ```toml
-# wrangler.toml — name/compatibility_date are managed by frontmcp.config;
-# bindings appended below are re-applied after each build (the adapter
-# overwrites the top-level keys on every `frontmcp build --target cloudflare`).
+# wrangler.toml — name/compatibility_date/compatibility_flags are managed by
+# frontmcp.config; bindings appended below are re-applied after each build (the
+# adapter overwrites the top-level keys on every `frontmcp build --target
+# cloudflare`). nodejs_compat is always emitted — the worker entry needs Node
+# builtins or it won't boot.
 name = "translate-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "FRONTMCP_KV"

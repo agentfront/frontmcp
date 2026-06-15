@@ -163,7 +163,15 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       const { setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError } =
         getServerlessHandlerFns();
 
-      const handlerPromise = ServerlessInstance.createHandler(metadata);
+      // FRONTMCP_WORKER=1 (set by the Cloudflare build adapter's entry) selects
+      // the Web-standard `fetch` handler — `(Request) => Promise<Response>` —
+      // instead of the Express app, so V8-isolate runtimes never touch Node
+      // `req`/`res`. The same global registry stores it; the worker entry
+      // invokes the stored value as `handler(request)`.
+      const isWorker = getEnvFlag('FRONTMCP_WORKER');
+      const handlerPromise = isWorker
+        ? ServerlessInstance.createFetchHandler(metadata)
+        : ServerlessInstance.createHandler(metadata);
       setServerlessHandlerPromise(handlerPromise);
       handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
         const e = err instanceof Error ? err : new InternalMcpError(String(err), 'SERVERLESS_INIT_FAILED');

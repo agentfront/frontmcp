@@ -1,0 +1,35 @@
+{
+  "name": "demo-e2e-cloudflare",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-cloudflare/e2e",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:cloudflare"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cloudflare"],
+      "dependsOn": [
+        { "projects": ["cli"], "target": "build" },
+        { "projects": ["sdk"], "target": "build" }
+      ],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cloudflare-e2e"],
+      "dependsOn": [
+        { "projects": ["cli"], "target": "build" },
+        { "projects": ["sdk"], "target": "build" }
+      ],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

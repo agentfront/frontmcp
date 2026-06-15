@@ -49,11 +49,14 @@ export default MyServer;
 ```
 
 ```toml
-# wrangler.toml — name/main/compatibility_date are rewritten by the build.
-# Bindings below need to be re-applied (or appended) after each build.
+# wrangler.toml — name/main/compatibility_date/compatibility_flags are
+# rewritten by the build (nodejs_compat is always emitted; the worker entry
+# needs Node builtins or it won't boot). Bindings below need to be re-applied
+# (or appended) after each build.
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "FRONTMCP_KV"

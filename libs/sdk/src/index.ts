@@ -415,6 +415,10 @@ export type { CreateConfig } from './direct';
 export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
 
+// Web-standard fetch handler (Cloudflare Workers / Deno / Bun) — no Express/Node shim
+export { createWebFetchHandler } from './transport';
+export type { WebFetchHandler, CreateWebFetchHandlerOptions } from './transport';
+
 // Transport types
 export type { TransportType, TransportKey } from './transport';
 

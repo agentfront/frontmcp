@@ -87,3 +87,15 @@ export type { CreateInMemoryServerOptions } from './in-memory-server';
  * @see createInMemoryServer
  */
 export type { InMemoryServerResult } from './in-memory-server';
+
+/**
+ * Web-standard `fetch` handler for a Scope — routes Web Request/Response
+ * straight into the MCP WebStandard transport (no Express/Node shim). The
+ * runtime for V8-isolate targets (Cloudflare Workers, Deno, Bun).
+ */
+export { createWebFetchHandler } from './web-fetch-handler';
+export type { WebFetchHandler, CreateWebFetchHandlerOptions } from './web-fetch-handler';
+
+/** Shared MCP server-options/capability builder used across transports. */
+export { buildScopedServerOptions } from './build-scoped-server-options';
+export type { ScopedServerOptions } from './build-scoped-server-options';

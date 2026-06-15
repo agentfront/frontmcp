@@ -64,19 +64,20 @@ wrangler.toml    # Wrangler configuration (overwritten on every build)
 
 Cloudflare Workers use CommonJS (not ESM). The build command sets `--module commonjs` automatically.
 
-> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true` and overwrites the entire `wrangler.toml` on every build with the three-line template below. Hand-edited bindings (`[[kv_namespaces]]`, `[vars]`, `[[d1_databases]]`, etc.) WILL be erased the next time you run `frontmcp build --target cloudflare`. Configure `name` and `compatibility_date` via your `frontmcp.config` file's `deployments[].wrangler` section, and keep bindings in a separate config file referenced from your toolchain (or re-add them after each build).
+> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true` and overwrites the entire `wrangler.toml` on every build with the template below. Hand-edited bindings (`[[kv_namespaces]]`, `[vars]`, `[[d1_databases]]`, etc.) WILL be erased the next time you run `frontmcp build --target cloudflare`. Configure `name`, `compatibility_date`, and extra `compatibility_flags` via your `frontmcp.config` file's `deployments[].wrangler` section, and keep bindings in a separate config file referenced from your toolchain (or re-add them after each build).
 
 ## Step 3: Configure wrangler.toml
 
-The build always writes exactly this:
+The build always writes this. `compatibility_flags = ["nodejs_compat"]` is **always** emitted — the worker entry `require()`s `@frontmcp/sdk` + Express, which need Node builtins; without the flag the deployed Worker fails to boot. The default `compatibility_date` is `2024-09-23` (the date that enables full `nodejs_compat`).
 
 ```toml
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 ```
 
-`name` and `compatibility_date` come from `frontmcp.config.{ts,js}`'s `deployments` array. Example:
+`name`, `compatibility_date`, and any extra `compatibilityFlags` come from `frontmcp.config.{ts,js}`'s `deployments` array (`nodejs_compat` is merged in automatically). Example:
 
 ```ts
 // frontmcp.config.ts
@@ -87,6 +88,8 @@ export default {
       wrangler: {
         name: 'my-worker',
         compatibilityDate: '2025-01-15',
+        // Optional — nodejs_compat is always added for you.
+        compatibilityFlags: ['nodejs_compat_populate_process_env'],
       },
     },
   ],
@@ -99,6 +102,7 @@ To add KV storage or other bindings, append them AFTER each build (or use a wrap
 name = "my-worker"
 main = "dist/cloudflare/index.js"
 compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "FRONTMCP_KV"
@@ -215,7 +219,7 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 
 **Configuration**
 
-- [ ] `wrangler.toml` has correct `name`, `main`, and `compatibility_date`
+- [ ] `wrangler.toml` has correct `name`, `main`, `compatibility_date`, and `compatibility_flags = ["nodejs_compat"]`
 - [ ] KV namespace IDs match between dashboard and `wrangler.toml`
 - [ ] Secrets are stored via `wrangler secret put`, not in `[vars]`
 

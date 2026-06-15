@@ -28,9 +28,15 @@ const fs = require('fs');
 const path = require('path');
 
 const MARKER = '__frontmcpCreateRequire';
+// `import.meta.url` is undefined when this bundle is re-bundled into a V8
+// isolate (Cloudflare Workers / workerd) — `createRequire(undefined)` then
+// throws at module-eval and crashes the Worker at startup. Fall back to a dummy
+// `file:///` base: `require` is only used here to reach Node builtins (via
+// `nodejs_compat`), and builtin resolution doesn't depend on the base path. On
+// Node, the real `import.meta.url` is used unchanged.
 const BANNER =
   "import { createRequire as __frontmcpCreateRequire } from 'module';\n" +
-  'const require = __frontmcpCreateRequire(import.meta.url);\n';
+  "const require = __frontmcpCreateRequire(import.meta.url || 'file:///');\n";
 
 function injectInto(file) {
   const original = fs.readFileSync(file, 'utf8');

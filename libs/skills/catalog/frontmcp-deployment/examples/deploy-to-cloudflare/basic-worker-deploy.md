@@ -47,12 +47,15 @@ export default MyServer;
 ```
 
 ```toml
-# wrangler.toml — the Cloudflare adapter overwrites this on every build
-# with exactly these three lines (configure name/compatibility_date via
-# frontmcp.config.deployments[].wrangler).
+# wrangler.toml — the Cloudflare adapter overwrites these top-level keys on
+# every build (configure name/compatibility_date/compatibility_flags via
+# frontmcp.config.deployments[].wrangler). nodejs_compat is always emitted —
+# the worker entry require()s @frontmcp/sdk + Express, so without it the
+# Worker fails to boot.
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 ```
 
 ```bash

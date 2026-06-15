@@ -2,6 +2,7 @@
 
 import type { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
 
+import { importOptionalPeer } from '../../scope/optional-dependency.util';
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import {
@@ -168,16 +169,15 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   private async initVectorDB(): Promise<void> {
-    let mod: typeof import('vectoriadb');
-    try {
-      mod = await import('vectoriadb');
-    } catch (cause) {
-      throw new Error(
-        "@frontmcp/sdk skill storage needs the optional peer dependency 'vectoriadb'. " +
-          'Install it in your project (e.g. `npm i vectoriadb`) to use skill search/storage.',
-        { cause },
-      );
-    }
+    // Route the lazy load through importOptionalPeer so a missing install and an
+    // install-but-failed-to-load are reported differently — never blindly
+    // "reinstall it" when the package is present but threw (#453).
+    const mod = await importOptionalPeer(
+      'vectoriadb',
+      () => import('vectoriadb'),
+      require.resolve,
+      'skill storage',
+    );
     this.vectorDB = new mod.TFIDFVectoria<SkillDocumentMetadata>({
       defaultTopK: this.defaultTopK,
       defaultSimilarityThreshold: this.defaultMinScore,

@@ -289,8 +289,11 @@ npm run deploy  # Runs: wrangler deploy
 
 ```toml
 name = "frontmcp-worker"
-main = "dist/index.js"
-compatibility_date = "2024-01-01"
+main = "dist/cloudflare/index.js"
+compatibility_date = "2024-09-23"
+# Required — the worker entry require()s @frontmcp/sdk + Express (Node builtins).
+# Without nodejs_compat the Worker fails to boot. The build always emits it.
+compatibility_flags = ["nodejs_compat"]
 ```
 
 ## Storage Considerations

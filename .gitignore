@@ -103,3 +103,6 @@ planning/
 
 .nx/polygraph
 .nx/self-healing
+
+# Cloudflare Workers local dev/build state (wrangler dev / miniflare)
+.wrangler

@@ -38,8 +38,10 @@ const createTestSkill = (): SkillContent => ({
   tools: [{ name: 'tool1' }],
 });
 
-// Matches the on-use error thrown by MemorySkillProvider.initVectorDB().
-const INSTALL_HINT = /optional peer dependency 'vectoriadb'[\s\S]*npm i vectoriadb/;
+// The on-use error must name the optional peer so the failure is actionable.
+// Exact per-branch wording (not-installed vs failed-to-load) is covered by the
+// importOptionalPeer tests in optional-dependency.util.spec.ts.
+const PEER_ERROR = /vectoriadb/;
 
 describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => {
   it('does not require the optional peer at module-evaluation time (no boot crash)', () => {
@@ -77,17 +79,17 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
 
   it('initialize() rejects with a clear, actionable install hint', async () => {
     const provider = new MemorySkillProvider();
-    await expect(provider.initialize()).rejects.toThrow(INSTALL_HINT);
+    await expect(provider.initialize()).rejects.toThrow(PEER_ERROR);
   });
 
   it('search() surfaces the same clear install hint on first use', async () => {
     const provider = new MemorySkillProvider();
-    await expect(provider.search('anything')).rejects.toThrow(INSTALL_HINT);
+    await expect(provider.search('anything')).rejects.toThrow(PEER_ERROR);
   });
 
   it('add() surfaces the same clear install hint on first use', async () => {
     const provider = new MemorySkillProvider();
-    await expect(provider.add(createTestSkill())).rejects.toThrow(INSTALL_HINT);
+    await expect(provider.add(createTestSkill())).rejects.toThrow(PEER_ERROR);
   });
 
   it('clear() stays resilient (resolves) when the peer is absent', async () => {

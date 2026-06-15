@@ -147,6 +147,7 @@ export const wranglerConfigSchema = z
   .object({
     name: z.string().optional(),
     compatibilityDate: z.string().optional(),
+    compatibilityFlags: z.array(z.string()).optional(),
   })
   .strict();
 

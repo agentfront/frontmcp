@@ -319,6 +319,14 @@ async function runAdapterBuild(
   }
 
   args.push('--module', moduleFormat);
+  // `--module esnext` defaults `moduleResolution` to `classic`, which can't
+  // resolve bare specifiers like `@frontmcp/sdk` (package.json `exports`). Use
+  // `bundler` resolution — it mirrors how wrangler/esbuild resolve the worker
+  // bundle and keeps the ESM (Module Worker) target building. `commonjs`
+  // already defaults to node resolution, so only the ESM path needs this.
+  if (moduleFormat === 'esnext') {
+    args.push('--moduleResolution', 'bundler');
+  }
   args.push('--outDir', outDir);
   args.push('--skipLibCheck');
 
