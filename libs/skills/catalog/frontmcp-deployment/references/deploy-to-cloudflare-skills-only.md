@@ -33,7 +33,7 @@ For the older Express-to-Workers adapter, see [`deploy-to-cloudflare.md`](./depl
 
 ```ts
 // worker.ts (~10 lines)
-import { createWorker } from '@frontmcp/worker';
+import { createWorker } from '@frontmcp/edge';
 
 import deployBundle from './frontmcp.deploy.bundle.js'; // emitted by the GH Action
 

@@ -121,7 +121,8 @@ describe('machine-id', () => {
       throw err;
     });
 
-    await import('../machine-id');
+    const { getMachineId } = await import('../machine-id');
+    getMachineId(); // machine ID is computed lazily on first use → triggers the save
     // Give the fire-and-forget promise a tick to execute
     await new Promise((r) => setTimeout(r, 50));
     expect(mockMkdir).toHaveBeenCalled();
@@ -132,13 +133,30 @@ describe('machine-id', () => {
     );
   });
 
+  it('does NOT compute or persist the machine ID at import (V8-isolate safe)', async () => {
+    // Importing must have no side effects — Cloudflare Workers forbid random
+    // generation / I-O at module-eval scope. The work happens lazily on first
+    // getMachineId() (covered by the save test above).
+    mockReadFileSync.mockImplementation(() => {
+      const err = new Error('ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    });
+
+    await import('../machine-id');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockMkdir).not.toHaveBeenCalled();
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
   it('should not save to file in production mode', async () => {
     process.env['NODE_ENV'] = 'production';
     mockReadFileSync.mockImplementation(() => {
       throw new Error('should not be called');
     });
 
-    await import('../machine-id');
+    const { getMachineId } = await import('../machine-id');
+    getMachineId(); // compute lazily — production mode must still NOT persist
     await new Promise((r) => setTimeout(r, 50));
     expect(mockMkdir).not.toHaveBeenCalled();
     expect(mockWriteFile).not.toHaveBeenCalled();

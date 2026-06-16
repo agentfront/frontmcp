@@ -184,4 +184,21 @@ type AppDecorator = {
 
 const App = FrontMcpApp as unknown as AppDecorator;
 
-export { FrontMcpApp, App };
+/**
+ * Functional form of `@App` — build an app from a plain metadata object, no
+ * decorator syntax. Synthesizes a class and applies the SAME `@App` metadata, so
+ * the result is a genuine local app (`AppKind.LOCAL_CLASS`) usable anywhere a
+ * decorated app class is — no parallel registry. Mirrors `tool` / `resource` /
+ * `prompt` / `skill`, and lets a config/manifest assemble apps declaratively.
+ *
+ * @example
+ * const billing = app({ name: 'billing', tools: [echoTool] });
+ * createEdgeMcp({ info, apps: [billing] });
+ */
+function frontMcpApp(metadata: LocalAppMetadata): new () => object {
+  const FunctionalApp = class {};
+  FrontMcpApp(metadata)(FunctionalApp);
+  return FunctionalApp;
+}
+
+export { FrontMcpApp, App, frontMcpApp, frontMcpApp as app };

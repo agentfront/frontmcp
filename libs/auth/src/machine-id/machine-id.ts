@@ -104,7 +104,7 @@ function saveMachineIdAsync(machineId: string): void {
  * - In production: Set MACHINE_ID env var for stability, or allow ephemeral generation
  * - For distributed systems: Use same MACHINE_ID for portability, or unique per-node for affinity
  */
-const machineId = (() => {
+function computeMachineId(): string {
   // 1. Check env var (highest priority - supports Redis, K8s, etc.)
   const envMachineId = getEnv('MACHINE_ID');
   if (envMachineId) {
@@ -124,17 +124,31 @@ const machineId = (() => {
   saveMachineIdAsync(newId);
 
   return newId;
-})();
+}
+
+/**
+ * Lazily-computed, memoized machine ID. Computed on first {@link getMachineId}
+ * call rather than at module load: V8-isolate runtimes (Cloudflare Workers)
+ * forbid generating random values in global/module-eval scope, so an eager
+ * `randomUUID()` here would crash the Worker at startup. Resolution is identical
+ * on Node; the module import is now side-effect-free.
+ */
+let cachedMachineId: string | undefined;
 
 /** Process-wide override set by `create()` for session continuity */
 let machineIdOverride: string | undefined;
 
 /**
  * Get the current machine ID.
- * Returns the override (if set via `setMachineIdOverride`) or the computed value.
+ * Returns the override (if set via `setMachineIdOverride`) or the lazily
+ * computed-and-memoized value.
  */
 export function getMachineId(): string {
-  return machineIdOverride ?? machineId;
+  if (machineIdOverride !== undefined) return machineIdOverride;
+  if (cachedMachineId === undefined) {
+    cachedMachineId = computeMachineId();
+  }
+  return cachedMachineId;
 }
 
 /**

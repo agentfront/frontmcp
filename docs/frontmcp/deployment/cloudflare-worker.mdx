@@ -35,7 +35,7 @@ The user's `worker.ts` is ~10 lines. Everything else is in the deploy bundle.
 
 ```ts
 // worker.ts
-import { createWorker } from '@frontmcp/worker';
+import { createWorker } from '@frontmcp/edge';
 import deployBundle from './frontmcp.deploy.bundle.js'; // emitted by the GH Action
 
 const { handler, durableObjects } = createWorker({

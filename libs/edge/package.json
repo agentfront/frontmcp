@@ -1,0 +1,64 @@
+{
+  "name": "@frontmcp/edge",
+  "version": "1.4.0",
+  "description": "Run a FrontMCP MCP server on Cloudflare Workers / V8 isolates from a plain config — no decorators, no build step",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "frontmcp",
+    "mcp",
+    "cloudflare",
+    "cloudflare-workers",
+    "workerd",
+    "edge",
+    "deno",
+    "bun",
+    "fetch",
+    "v8-isolate"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/edge"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/edge/README.md",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./esm": null
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "peerDependencies": {
+    "@frontmcp/sdk": "1.4.0",
+    "@frontmcp/plugin-skilled-openapi": "1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@frontmcp/plugin-skilled-openapi": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0"
+  }
+}
