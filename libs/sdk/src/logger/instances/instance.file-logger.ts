@@ -1,8 +1,17 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import { LogLevel, LogTransport, LogTransportInterface, type LogRecord } from '../../common';
+
+// `fs` is lazy-`require`d (not statically imported) so this module doesn't pull
+// `node:fs` into worker/browser bundles — workerd has no fs module and a static
+// import would fail the whole bundle at load. File logging is a Node-only
+// feature; on other runtimes `getFs()` throws and every call site below is
+// already wrapped in try/catch and degrades silently.
+let _fs: typeof import('fs') | undefined;
+function getFs(): typeof import('fs') {
+  return (_fs ??= require('fs'));
+}
 
 const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
   [LogLevel.Off]: 'OFF',
@@ -70,12 +79,12 @@ export class FileLogTransportInstance extends LogTransportInterface {
     }
 
     try {
-      fs.mkdirSync(this.logDir, { recursive: true });
+      getFs().mkdirSync(this.logDir, { recursive: true });
 
       // npm-style timestamped filename: appName-2026-04-06T12_34_56_789Z.log
       const ts = new Date().toISOString().replace(/:/g, '_');
       const filePath = path.join(this.logDir, `${this.appName}-${ts}.log`);
-      this.fd = fs.openSync(filePath, 'a');
+      this.fd = getFs().openSync(filePath, 'a');
 
       // Rotate old log files
       this.rotate(isNaN(logsMax) ? DEFAULT_LOGS_MAX : logsMax);
@@ -89,7 +98,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
   close(): void {
     if (this.fd !== undefined) {
       try {
-        fs.closeSync(this.fd);
+        getFs().closeSync(this.fd);
       } catch {
         /* ignore */
       }
@@ -107,7 +116,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
     const line = `[${ts}] ${level}${prefix} ${message}\n`;
 
     try {
-      fs.writeSync(this.fd, line);
+      getFs().writeSync(this.fd, line);
     } catch {
       // Silently ignore write errors (disk full, file removed, etc.)
     }
@@ -117,7 +126,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
   private rotate(maxFiles: number): void {
     try {
       const prefix = `${this.appName}-`;
-      const files = fs
+      const files = getFs()
         .readdirSync(this.logDir)
         .filter((f) => f.startsWith(prefix) && f.endsWith('.log'))
         .sort(); // ISO timestamps sort chronologically
@@ -127,7 +136,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
       for (let i = 0; i < excess; i++) {
         try {
-          fs.unlinkSync(path.join(this.logDir, files[i]));
+          getFs().unlinkSync(path.join(this.logDir, files[i]));
         } catch {
           // Ignore individual file deletion failures
         }

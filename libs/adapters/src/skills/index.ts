@@ -54,7 +54,12 @@ export {
 
 // Sources
 export { createBundleSource, NpmSource, SaasPullSource, StaticSource } from './sources';
-export type { BundleSourceListener, SkillBundleSource } from './sources/skill-bundle-source.interface';
+export type {
+  BundleCacheStore,
+  BundleSourceDeps,
+  BundleSourceListener,
+  SkillBundleSource,
+} from './sources/skill-bundle-source.interface';
 
 // Filesystem skills source — produces SkillContent events for plain disk
 // directories with hot reload (xmcp / mcp-skillset parity).
@@ -165,6 +170,16 @@ export {
   type DeployManifestSigning,
   type DeployManifestSkills,
 } from './deploy/deploy-manifest.schema';
+
+// Manifest → FrontMCP config projection (#6 keystone): turns a parsed
+// `frontmcp.deploy.yaml` into the `info` / `skillsConfig` / normalized `specs`
+// inputs that `@FrontMcp(...)` and `createEdgeMcp(...)` accept.
+export {
+  buildFrontMcpConfigFromManifest,
+  type ManifestFrontMcpConfig,
+  type ManifestSkillsConfig,
+  type NormalizedSpecSource,
+} from './deploy/manifest-to-config';
 
 // OpenAPI -> MCP classifier. Pure build-time function: turns a list of
 // operations into a per-op classification (tool/resource/both + notification

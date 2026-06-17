@@ -3,9 +3,11 @@
 import {
   BundleStore,
   createBundleSource,
+  type BundleSourceDeps,
   type BundleStoreCounter,
   type BundleStoreSpan,
   type BundleStoreTelemetry,
+  type SkillBundleSource,
 } from '@frontmcp/adapters/skills';
 import {
   DynamicPlugin,
@@ -41,6 +43,52 @@ import SearchSkillTool from './tools/search-skill.tool';
  * without taking a hard dependency on the optional observability peer.
  */
 const TELEMETRY_FACTORY_TOKEN = Symbol.for('frontmcp:observability:telemetry-factory');
+
+/**
+ * Well-known DI token a host can use to inject runtime dependencies into the
+ * plugin's bundle source — without taking a hard dependency on this plugin (the
+ * host just provides a value under `Symbol.for(...)`). This is the same
+ * cross-package wiring pattern as {@link TELEMETRY_FACTORY_TOKEN}.
+ *
+ * `@frontmcp/edge` uses it to (a) swap the on-disk last-good cache for a
+ * KV-backed store and disable background polling (no filesystem / no background
+ * execution on a Worker), and (b) receive the live source so a Cron Trigger /
+ * Durable Object alarm can drive {@link SkillBundleSource.refresh}.
+ */
+export const SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-openapi:runtime-deps');
+
+/**
+ * Runtime dependencies a host injects under {@link
+ * SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN}. Extends the generic {@link
+ * BundleSourceDeps} (pluggable cache + `disablePolling`) with an `attach`
+ * callback that hands back the live source for external refresh scheduling.
+ */
+export interface SkilledOpenApiRuntimeDeps extends BundleSourceDeps {
+  /**
+   * Invoked once with the live bundle source right after it's constructed, so
+   * an external scheduler (Cloudflare Cron Trigger / DO alarm) can call
+   * `source.refresh()` on a runtime with no background timers.
+   */
+  attach?(source: SkillBundleSource): void;
+}
+
+/**
+ * Resolve host-injected {@link SkilledOpenApiRuntimeDeps} from the scope's
+ * provider registry. Returns `undefined` when nothing is registered (the normal
+ * Node path) — mirrors {@link resolveBundleTelemetry}'s try/catch probe so the
+ * plugin takes no hard dependency on the injecting host.
+ */
+function resolveRuntimeDeps(scope: ScopeEntry): SkilledOpenApiRuntimeDeps | undefined {
+  const providers = scope?.providers;
+  if (!providers || typeof providers.get !== 'function') return undefined;
+  try {
+    const deps = providers.get<SkilledOpenApiRuntimeDeps>(SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN as never);
+    return deps && typeof deps === 'object' ? deps : undefined;
+  } catch {
+    // Token not registered — no host injection (standard Node runtime).
+    return undefined;
+  }
+}
 
 /**
  * Resolve a `BundleStoreTelemetry` from the scope's provider registry.
@@ -226,12 +274,28 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             logger,
             opToolFactory,
           );
+          // Host-injected runtime deps (e.g. `@frontmcp/edge` supplies a
+          // KV-backed cache + `disablePolling` on a Worker). `undefined` on the
+          // standard Node path — createBundleSource then keeps its fs cache and
+          // internal poll loop.
+          const runtimeDeps = resolveRuntimeDeps(scope);
           let source;
           try {
-            source = createBundleSource(parsed.source, parsed.bundleCacheDir, logger);
+            source = createBundleSource(parsed.source, parsed.bundleCacheDir, logger, runtimeDeps);
           } catch (e) {
             logger.error(`failed to construct bundle source: ${(e as Error).message}`);
             return sync;
+          }
+          // Hand the live source back to the host so an external scheduler
+          // (Cron Trigger / DO alarm) can drive refresh() where there are no
+          // background timers. Best-effort: a throwing attach must not abort
+          // sync wiring.
+          if (runtimeDeps?.attach) {
+            try {
+              runtimeDeps.attach(source);
+            } catch (e) {
+              logger.warn(`runtime-deps attach threw: ${(e as Error).message}`);
+            }
           }
           // BundleSourceListener is invoked synchronously by the source, so any
           // rejection from sync.apply() must be caught here — passing an async

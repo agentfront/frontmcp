@@ -99,6 +99,13 @@ export interface EsmCacheOptions {
   cacheDir?: string;
   /** Maximum age of cached entries in milliseconds. Defaults to 24 hours. */
   maxAgeMs?: number;
+  /**
+   * Maximum number of bundles kept in the in-memory cache. When exceeded, the
+   * oldest entries are evicted (FIFO). Bounds heap growth on a long-running
+   * server that loads/reloads many package versions over its lifetime — TTL
+   * alone doesn't cap the count within the age window. Defaults to 100.
+   */
+  maxEntries?: number;
 }
 
 /**
@@ -146,6 +153,9 @@ const DEFAULT_CACHE_DIR = getDefaultCacheDir();
 /** Default max age: 24 hours */
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/** Default in-memory cache cap (number of bundles). */
+const DEFAULT_MAX_ENTRIES = 100;
+
 /**
  * Cache manager for ESM bundles.
  *
@@ -161,11 +171,22 @@ const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export class EsmCacheManager {
   private readonly cacheDir: string;
   private readonly maxAgeMs: number;
+  private readonly maxEntries: number;
   private readonly memoryStore = new Map<string, EsmCacheEntry>();
 
   constructor(options?: EsmCacheOptions) {
     this.cacheDir = options?.cacheDir ?? DEFAULT_CACHE_DIR;
     this.maxAgeMs = options?.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+    this.maxEntries = options?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  }
+
+  /** Evict oldest in-memory entries (FIFO via Map insertion order) past the cap. */
+  private evictIfNeeded(): void {
+    while (this.memoryStore.size > this.maxEntries) {
+      const oldest = this.memoryStore.keys().next().value;
+      if (oldest === undefined) break;
+      this.memoryStore.delete(oldest);
+    }
   }
 
   /**
@@ -276,6 +297,7 @@ export class EsmCacheManager {
     };
 
     this.memoryStore.set(memKey, entry);
+    this.evictIfNeeded();
     return entry;
   }
 

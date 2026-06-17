@@ -9,6 +9,8 @@
  * (which handles signature verification, replay/SSRF guards, and last-good
  * cache fallback).
  */
+import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
+
 export interface ManagedEdgeOptions {
   /** SaaS pull endpoint serving the signed bundle (HTTPS). */
   endpoint: string;
@@ -37,8 +39,22 @@ export interface ManagedEdgeOptions {
   credentials?: Record<string, string>;
   /** Outbound HTTP / SSRF options for the executor. */
   outbound?: Record<string, unknown>;
-  /** Cache dir for the last-good bundle (boot fallback when a fresh pull fails). */
+  /**
+   * Cache dir for the last-good bundle (boot fallback when a fresh pull fails).
+   * Filesystem-only — a no-op on a Worker (there is no filesystem); use {@link
+   * ManagedEdgeOptions.cache} there instead.
+   */
   bundleCacheDir?: string;
+  /**
+   * Pluggable last-good bundle cache, replacing the on-disk cache entirely.
+   *
+   * On Cloudflare Workers a KV binding lives on the per-request `env`, not in
+   * module scope, so prefer the `env`-resolving factory form — e.g.
+   * `cache: kvBundleCacheFromEnv('BUNDLE_CACHE')` (or a custom
+   * `(env) => createKvBundleCache(env.MY_KV)`). A plain store is also accepted
+   * for runtimes where the cache is available at construction time.
+   */
+  cache?: EdgeBundleCacheStore | EdgeBundleCacheFactory;
 }
 
 /**

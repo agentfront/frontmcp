@@ -1,7 +1,5 @@
 import { getRuntimeContext } from '@frontmcp/utils';
 
-import { ExpressHostAdapter } from '#express-host';
-
 import {
   FrontMcpServer,
   type CorsOptions,
@@ -42,6 +40,13 @@ export class FrontMcpServerInstance extends FrontMcpServer {
       this.host = this.config.hostFactory;
     } else {
       const corsConfig = this.config.cors === false ? undefined : (this.config.cors ?? DEFAULT_CORS);
+      // Lazy-`require` (not a top-level import) so express — and its module-eval
+      // `require('fs')` — is only loaded when an express host is actually
+      // constructed (a Node server). On a V8 isolate `FrontMcpServerInstance` is
+      // never built (the edge uses `createWebFetchHandler`), so this never runs
+      // and express stays out of the worker's executed code. The `#express-host`
+      // conditional still yields the browser stub under a worker-conditioned build.
+      const { ExpressHostAdapter } = require('#express-host') as typeof import('#express-host');
       this.host = new ExpressHostAdapter({
         ...(corsConfig ? { cors: corsConfig } : {}),
         ...(this.config.security ? { security: this.config.security } : {}),

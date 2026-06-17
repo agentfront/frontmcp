@@ -10,7 +10,9 @@
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cloudflare"],
       "dependsOn": [
         { "projects": ["cli"], "target": "build" },
-        { "projects": ["sdk"], "target": "build" }
+        { "projects": ["sdk"], "target": "build" },
+        { "projects": ["edge"], "target": "build" },
+        { "projects": ["plugin-skilled-openapi"], "target": "build" }
       ],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",
@@ -23,7 +25,9 @@
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cloudflare-e2e"],
       "dependsOn": [
         { "projects": ["cli"], "target": "build" },
-        { "projects": ["sdk"], "target": "build" }
+        { "projects": ["sdk"], "target": "build" },
+        { "projects": ["edge"], "target": "build" },
+        { "projects": ["plugin-skilled-openapi"], "target": "build" }
       ],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",

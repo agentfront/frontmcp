@@ -1,4 +1,4 @@
-// file: plugins/plugin-skilled-openapi/src/sources/saas-pull.source.ts
+// file: libs/adapters/src/skills/sources/saas-pull.source.ts
 
 // All Node APIs route through `@frontmcp/utils` (env-aware via `#path` and
 // `#fs` subpath imports + assertNode guards). The build pipeline
@@ -9,7 +9,7 @@ import { dirname, ensureDir, pathResolve, readFile, writeFile } from '@frontmcp/
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
 import type { SaasSourceOptions } from '../source-options';
-import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
+import type { BundleSourceDeps, BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';
 const DEFAULT_PULL_TIMEOUT_MS = 30_000;
@@ -44,6 +44,7 @@ export class SaasPullSource implements SkillBundleSource {
     private readonly options: SaasSourceOptions,
     private readonly cacheDir: string | undefined,
     private readonly logger: FrontMcpLogger,
+    private readonly deps: BundleSourceDeps = {},
   ) {
     this.id = `saas:${this.options.endpoint}`;
   }
@@ -86,11 +87,33 @@ export class SaasPullSource implements SkillBundleSource {
   }
 
   private schedulePoll(): void {
-    if (this.stopped) return;
+    // `disablePolling` is for runtimes with no background execution (Cloudflare
+    // Workers) — a Cron Trigger / DO alarm calls `refresh()` instead.
+    if (this.stopped || this.deps.disablePolling) return;
     this.pollHandle = setTimeout(() => {
       void this.pollOnce();
     }, this.options.pollIntervalMs);
     this.pollHandle.unref?.();
+  }
+
+  /**
+   * Manually pull a fresh bundle, persist it, and notify listeners. Drive this
+   * from a Cron Trigger / Durable Object alarm on runtimes without background
+   * timers (where `disablePolling` is set). Single-flight: returns `undefined`
+   * if a pull is already in flight; throws if the pull itself fails (the caller
+   * — e.g. a scheduled handler — decides how to surface it).
+   */
+  async refresh(): Promise<ResolvedBundle | undefined> {
+    if (this.stopped || this.inFlight) return undefined;
+    this.inFlight = true;
+    try {
+      const bundle = await this.fetchOnce();
+      await this.persistCache(bundle);
+      this.notify(bundle);
+      return bundle;
+    } finally {
+      this.inFlight = false;
+    }
   }
 
   private async pollOnce(): Promise<void> {
@@ -154,6 +177,11 @@ export class SaasPullSource implements SkillBundleSource {
 
   private async persistCache(bundle: ResolvedBundle): Promise<void> {
     try {
+      // Injected cache (e.g. KV on Cloudflare) wins — no filesystem on edge.
+      if (this.deps.cache) {
+        await this.deps.cache.write(bundle);
+        return;
+      }
       const filePath = this.cachePath();
       await ensureDir(dirname(filePath));
       await writeFile(filePath, JSON.stringify(bundle));
@@ -164,6 +192,14 @@ export class SaasPullSource implements SkillBundleSource {
 
   private async loadCache(): Promise<ResolvedBundle | undefined> {
     try {
+      if (this.deps.cache) {
+        const cached = await this.deps.cache.read();
+        if (cached === undefined || cached === null) return undefined;
+        // Validate the injected-cache result through the SAME schema gate the
+        // disk path uses (parseOverlay → resolvedBundleSchema + crossValidate),
+        // so a corrupt/tampered KV entry can't bypass validation and be applied.
+        return parseOverlay({ kind: 'object', content: cached });
+      }
       const filePath = this.cachePath();
       const raw = await readFile(filePath, 'utf8');
       return parseOverlay({ kind: 'json', content: raw });

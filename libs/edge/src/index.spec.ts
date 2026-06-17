@@ -72,4 +72,27 @@ describe('createEdgeMcp', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).status).toBe('ok');
   });
+
+  it('exposes a Cron `scheduled` handler only in managed mode', () => {
+    // Plain edge — no auto-update source, so no scheduled entrypoint.
+    expect(worker.scheduled).toBeUndefined();
+
+    // Managed edge — `scheduled` is wired for Cron-driven refresh. Constructing
+    // it does NOT import the plugin or boot the scope (both are lazy in build()),
+    // so this assertion stays a pure unit check.
+    const managed = createEdgeMcp({
+      info: { name: 'managed', version: '1.0.0' },
+      apps: [],
+      tasks: { enabled: false },
+      managed: {
+        endpoint: 'https://cloud.example.dev/v1/bundles/acme',
+        authToken: 'tok',
+        expectedAudience: 'acme:prod',
+        jwksUrl: 'https://cloud.example.dev/.well-known/jwks.json',
+        expectedIssuer: 'https://cloud.example.dev',
+      },
+    });
+    expect(typeof managed.fetch).toBe('function');
+    expect(typeof managed.scheduled).toBe('function');
+  });
 });
