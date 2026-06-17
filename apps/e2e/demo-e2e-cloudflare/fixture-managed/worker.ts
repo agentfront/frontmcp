@@ -20,6 +20,8 @@ declare const __E2E_BUNDLE_ENDPOINT__: string;
 export default createEdgeMcp({
   info: { name: 'cf-managed-fixture', version: '1.0.0' },
   apps: [],
+  // Config-driven worker endpoint: serve MCP at /mcp (default is root `/`).
+  http: { entryPath: '/mcp' },
   // No Redis on this Worker; background tasks need distributed storage.
   tasks: { enabled: false },
   managed: {

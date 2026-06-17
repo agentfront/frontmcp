@@ -112,6 +112,19 @@ export function buildFrontMcpConfigFromManifest(manifest: DeployManifest): Manif
     specsDir = manifest.specs;
   } else {
     specs = manifest.specs.map(normalizeSpec);
+    // Derived ids key resource URIs / binding namespaces, so a collision (e.g.
+    // two bare refs whose filename stems collapse to the same id) would silently
+    // clobber one spec's binding — fail loudly instead.
+    const seen = new Set<string>();
+    for (const s of specs) {
+      if (seen.has(s.id)) {
+        throw new Error(
+          `manifest specs: duplicate spec id "${s.id}" (derived from the filename stem). ` +
+            `Give the colliding spec an explicit { id } in frontmcp.deploy.yaml.`,
+        );
+      }
+      seen.add(s.id);
+    }
   }
 
   return {

@@ -49,7 +49,17 @@ async function mcp(body: unknown): Promise<{ status: number; json: any }> {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
-  return { status: res.status, json: await res.json() };
+  return { status: res.status, json: await readMcp(res) };
+}
+
+/** Read an MCP response, handling both buffered JSON and the SSE stream the worker emits by default. */
+async function readMcp(res: Response): Promise<any> {
+  const text = await res.text();
+  if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+    const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+    return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+  }
+  return text ? JSON.parse(text) : undefined;
 }
 
 describe('FrontMCP on Cloudflare Workers (workerd)', () => {

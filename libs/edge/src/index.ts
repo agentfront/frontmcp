@@ -86,7 +86,16 @@ class EdgeRefreshController {
   }
 
   async refresh(): Promise<unknown> {
-    return this.source?.refresh?.();
+    if (!this.source) {
+      // The scope built but the skilled-openapi plugin never attached a source
+      // — it failed to construct one (see earlier logs). Throw so the Cron run
+      // surfaces as a FAILED scheduled invocation instead of silently
+      // "succeeding" while the bundle stays stale forever.
+      throw new Error(
+        'createEdgeMcp(managed): no bundle source attached — the skilled-openapi plugin failed to construct it; Cron refresh cannot run.',
+      );
+    }
+    return this.source.refresh?.();
   }
 }
 
@@ -158,8 +167,14 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   // `env` from the first request (fetch or scheduled) is what build() uses to
   // resolve the cache; build is memoized via `handlerPromise`, so it runs once.
   const build = async (env: unknown): Promise<WebFetchHandler> => {
-    const { managed, ...base } = config;
-    let frontmcpConfig = base as BaseConfig;
+    const { managed, ...rest } = config;
+    // The edge serves via the web-fetch handler, NOT an HTTP listen server, so
+    // tell the scope `serve: false`. That selects the no-op `FrontMcpServer`
+    // provider instead of `FrontMcpServerInstance` — which would otherwise be
+    // eagerly constructed during scope build and pull in the Node Express host
+    // (not worker-safe). The web-fetch handler doesn't need it.
+    const base = { ...rest, serve: false } as BaseConfig;
+    let frontmcpConfig = base;
 
     if (managed) {
       controller = new EdgeRefreshController(resolveCache(managed.cache, env));
@@ -190,6 +205,9 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     if (!scope) {
       throw new Error('createEdgeMcp: the config produced no scope — declare an app/tool or `managed`.');
     }
+    // The web-fetch handler derives entryPath / cors / sse from the scope's
+    // `http` + `transport` config (same surface the decorator path uses) — no
+    // edge-specific transport knobs, so one config drives every deployment.
     return createWebFetchHandler(scope);
   };
 
@@ -209,9 +227,11 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   };
 
   const mcp: EdgeMcp = {
-    async fetch(request: Request, env?: unknown): Promise<Response> {
+    async fetch(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
       const handler = await ensureHandler(env);
-      return handler(request);
+      // Forward the Worker ExecutionContext so the handler can `waitUntil` an
+      // SSE stream (keeps the isolate alive past `fetch` until the stream ends).
+      return handler(request, ctx as { waitUntil?(p: Promise<unknown>): void } | undefined);
     },
   };
 

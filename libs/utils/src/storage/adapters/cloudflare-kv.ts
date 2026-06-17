@@ -94,6 +94,9 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
 
   async delete(key: string): Promise<boolean> {
     this.ensureConnected();
+    // The returned "existed" flag is BEST-EFFORT: KV's `delete` is void, so we
+    // probe with a `get` first, but under KV's eventual consistency that read
+    // may be stale. Treat the boolean as advisory, not a transactional result.
     const existed = await this.exists(key);
     await this.kv.delete(this.prefixKey(key));
     return existed;
@@ -109,6 +112,9 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
     this.ensureConnected();
     const ttl = this.toExpirationTtl(ttlSeconds, key);
     // KV can't update TTL in place — re-put the existing value with a new TTL.
+    // BEST-EFFORT + non-atomic: this read-modify-write can resurrect a value
+    // that was concurrently deleted, and the read may be stale (eventual
+    // consistency). Don't rely on it for correctness-critical expiry.
     const value = await this.kv.get(this.prefixKey(key), 'text');
     if (value === null) return false;
     await this.kv.put(this.prefixKey(key), value, { expirationTtl: ttl });

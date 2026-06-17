@@ -16,6 +16,17 @@
  * in workerd, and the bundle is pulled over real HTTP from a local server.
  *
  * ──────────────────────────────────────────────────────────────────────────
+ * IMPORTANT — miniflare is STRICTER than production Cloudflare. Deploying the
+ * edge package to a REAL Cloudflare account (see `cloudflare-sandbox/`, the
+ * `edge` variant) showed that production `nodejs_compat` PROVIDES `node:http2` /
+ * `node:fs` / buffer — the modules this miniflare harness rejects. On real CF the
+ * `@frontmcp/edge` `createEdgeMcp` worker boots + serves MCP once you (a) set
+ * `serve: false` (now the default in createEdgeMcp — it was eagerly constructing
+ * the Node Express host) and (b) stub three statically-bundled-but-unused Node
+ * transports: express (node:tty), raw-body (safer-buffer), cross-spawn
+ * (node:child_process). So this skip reflects miniflare strictness, NOT a hard
+ * production blocker. The worker-conditioned build below would remove the stubs.
+ * ──────────────────────────────────────────────────────────────────────────
  * STATUS: skipped — gated on the "strip Node-only imports from the SDK/adapters
  * hot path" ROADMAP item (Cloudflare Worker Runtime / V8-isolate-compatible
  * build). The auto-update *mechanism* is fully verified elsewhere by unit +
@@ -97,7 +108,7 @@ function makeBundle(version: string) {
 
 const MCP_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
 
-// eslint-disable-next-line jest/no-disabled-tests -- gated on the worker-conditioned SDK build; see the file header.
+// NOTE: skipped — gated on the worker-conditioned SDK build (see the file header).
 describe.skip('managed edge auto-update on workerd (miniflare)', () => {
   let server: Server;
   let mf: Miniflare;
@@ -182,7 +193,17 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
       headers: MCP_HEADERS,
       body: JSON.stringify(body),
     });
-    return { status: res.status, json: (await res.json()) as any };
+    return { status: res.status, json: await readMcp(res) };
+  };
+
+  // The worker streams SSE by default (legacy protocol); read either shape.
+  const readMcp = async (res: Response): Promise<any> => {
+    const text = await res.text();
+    if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+      return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+    }
+    return text ? JSON.parse(text) : undefined;
   };
 
   const triggerCron = async () => {

@@ -50,23 +50,38 @@ export class SaasPullSource implements SkillBundleSource {
   }
 
   async start(): Promise<void> {
+    // Participate in the single-flight guard. On edge runtimes the plugin
+    // defers boot via `setImmediate(() => source.start())`; if a Cron Trigger
+    // fires during cold-start and calls `refresh()` first, that pull holds
+    // `inFlight` — so start() must skip its own pull (otherwise two concurrent
+    // pulls + cache writes + notifies race, last-writer-wins). The check+set is
+    // atomic (no await between), so it's a correct mutex in single-threaded JS.
+    if (this.stopped || this.inFlight) {
+      this.schedulePoll();
+      return;
+    }
+    this.inFlight = true;
     let bundle: ResolvedBundle | undefined;
     try {
-      bundle = await this.fetchOnce();
-      await this.persistCache(bundle);
-    } catch (e) {
-      this.logger.warn(
-        `[saas-source] initial pull failed (${(e as Error).message}); attempting cached bundle fallback`,
-      );
-      bundle = await this.loadCache();
-      if (!bundle) {
-        throw new Error(
-          `[saas-source] initial pull failed and no cached bundle is available at ${this.cachePath()}: ${(e as Error).message}`,
+      try {
+        bundle = await this.fetchOnce();
+        await this.persistCache(bundle);
+      } catch (e) {
+        this.logger.warn(
+          `[saas-source] initial pull failed (${(e as Error).message}); attempting cached bundle fallback`,
         );
+        bundle = await this.loadCache();
+        if (!bundle) {
+          throw new Error(
+            `[saas-source] initial pull failed and no cached bundle is available at ${this.cachePath()}: ${(e as Error).message}`,
+          );
+        }
+        this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
       }
-      this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
+      this.notify(bundle);
+    } finally {
+      this.inFlight = false;
     }
-    this.notify(bundle);
     this.schedulePoll();
   }
 
@@ -90,6 +105,10 @@ export class SaasPullSource implements SkillBundleSource {
     // `disablePolling` is for runtimes with no background execution (Cloudflare
     // Workers) — a Cron Trigger / DO alarm calls `refresh()` instead.
     if (this.stopped || this.deps.disablePolling) return;
+    // Clear any prior handle before scheduling — pollOnce's skip-path and its
+    // finally-reschedule could otherwise overwrite `pollHandle` and leak a
+    // dangling timer that fires an extra poll.
+    if (this.pollHandle) clearTimeout(this.pollHandle);
     this.pollHandle = setTimeout(() => {
       void this.pollOnce();
     }, this.options.pollIntervalMs);

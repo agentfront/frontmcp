@@ -25,6 +25,11 @@ export interface ManagedEdgeOptions {
   /**
    * Auto-update polling interval in ms (the boot pull is always immediate).
    * Default 300000 (5 min) — the plugin re-pulls and hot-swaps on change.
+   *
+   * NOTE: IGNORED on the edge. `createEdgeMcp` disables the internal poll loop
+   * (Workers have no background execution between requests); a Cron Trigger
+   * drives {@link EdgeMcp.scheduled} → refresh instead. Set your refresh cadence
+   * via `[triggers] crontabs` in `wrangler.toml`, not this field.
    */
   pollIntervalMs?: number;
   /** Also mount a push webhook (`POST /__skilled_openapi/push`) for synchronous updates. */

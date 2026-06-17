@@ -107,5 +107,12 @@ describe('buildFrontMcpConfigFromManifest', () => {
       expect(cfg.specs[0].id).toBe('My-Spec--v2-');
       expect(cfg.specs[0].spec).toBe('./My Spec (v2).yaml');
     });
+
+    it('throws on a derived spec-id collision (would silently clobber a binding)', () => {
+      // Two different paths whose filename stems collapse to the same id.
+      expect(() =>
+        buildFrontMcpConfigFromManifest(mk({ server: baseServer, specs: ['./a/petstore.yaml', './b/petstore.json'], skills: baseSkills })),
+      ).toThrow(/duplicate spec id "petstore"/);
+    });
   });
 });

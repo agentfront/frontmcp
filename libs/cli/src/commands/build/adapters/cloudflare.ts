@@ -3,7 +3,16 @@ import type { AdapterTemplate } from '../types';
 
 /**
  * Cloudflare Workers adapter - edge deployment on Cloudflare.
- * Compiles to CommonJS and adapts the Express app to Cloudflare's fetch API.
+ * Compiles to an ES Module Worker that routes the native Web `Request` into the
+ * SDK's web-fetch handler (`getServerlessHandlerAsync` in worker mode) — no
+ * Express, no Node `req`/`res` shim.
+ *
+ * NOTE: this decorator-build path does NOT emit KV / Durable Object / R2 / D1
+ * bindings or `[triggers] crontabs` into `wrangler.toml`, and the entry passes
+ * only the `Request` to the handler (not `env`/`ctx`). Workers needing bindings
+ * or the managed auto-update Cron (`scheduled`) should use `@frontmcp/edge`
+ * `createEdgeMcp` with a hand-written `wrangler.toml`. See
+ * docs/frontmcp/deployment/cloudflare-worker.mdx.
  *
  * @see https://developers.cloudflare.com/workers/
  */
@@ -111,12 +120,13 @@ export default {
   getConfig: (_cwd, deployment) => {
     const wrangler = (deployment as CloudflareDeployment | undefined)?.wrangler ?? {};
     const name = wrangler.name ?? 'frontmcp-worker';
-    // The cloudflare entry (getEntryTemplate) is CommonJS and `require()`s
-    // `@frontmcp/sdk` + Express, which pull in Node builtins (node:*, Buffer,
-    // process, streams). On Workers those exist ONLY behind the `nodejs_compat`
-    // flag — without it the Worker fails to even load. The flag is therefore
-    // non-negotiable for this target; we always emit it and merge in any extra
-    // flags the user declared (deduped, `nodejs_compat` guaranteed first).
+    // The cloudflare entry (getEntryTemplate) is an ES Module that imports the
+    // SDK's web-fetch handler, which still transitively pulls in Node builtins
+    // (node:*, Buffer, process, streams) through the SDK runtime. On Workers
+    // those exist ONLY behind the `nodejs_compat` flag — without it the Worker
+    // fails to even load. The flag is therefore non-negotiable for this target;
+    // we always emit it and merge in any extra flags the user declared (deduped,
+    // `nodejs_compat` guaranteed first).
     const flags = Array.from(new Set(['nodejs_compat', ...(wrangler.compatibilityFlags ?? [])]));
     // `nodejs_compat` only provides the full Node API surface (incl. `require`
     // of builtins) when compatibility_date >= 2024-09-23; default to that so a

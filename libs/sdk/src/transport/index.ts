@@ -94,7 +94,12 @@ export type { InMemoryServerResult } from './in-memory-server';
  * runtime for V8-isolate targets (Cloudflare Workers, Deno, Bun).
  */
 export { createWebFetchHandler } from './web-fetch-handler';
-export type { WebFetchHandler, CreateWebFetchHandlerOptions } from './web-fetch-handler';
+export type {
+  WebFetchHandler,
+  CreateWebFetchHandlerOptions,
+  WebFetchCorsOptions,
+  FetchHandlerCtx,
+} from './web-fetch-handler';
 
 /** Shared MCP server-options/capability builder used across transports. */
 export { buildScopedServerOptions } from './build-scoped-server-options';

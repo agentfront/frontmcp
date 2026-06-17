@@ -38,11 +38,43 @@ const MCP_HEADERS = {
 };
 
 function mcpRequest(body: unknown): Request {
-  return new Request('https://worker.example.com/mcp', {
+  return mcpRequestAt('/mcp', body);
+}
+
+function mcpRequestAt(path: string, body: unknown): Request {
+  return new Request(`https://worker.example.com${path}`, {
     method: 'POST',
     headers: MCP_HEADERS,
     body: JSON.stringify(body),
   });
+}
+
+const INITIALIZE = {
+  jsonrpc: '2.0' as const,
+  id: 1,
+  method: 'initialize',
+  params: {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'test-client', version: '1.0.0' },
+  },
+};
+
+/**
+ * Read an MCP JSON-RPC response, transparently handling both buffered JSON and
+ * an SSE stream. The worker streams SSE by default (the SDK's
+ * `enableJsonResponse: false`, matching the Express host), so a POST that the
+ * client accepts `text/event-stream` for comes back as `event: message` /
+ * `data: {…}` rather than a JSON body.
+ */
+async function readMcpResult<T = Record<string, unknown>>(res: Response): Promise<T> {
+  const text = await res.text();
+  if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+    const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+    if (!dataLine) throw new Error(`No SSE data frame in response: ${text}`);
+    return JSON.parse(dataLine.slice('data:'.length).trim()) as T;
+  }
+  return JSON.parse(text) as T;
 }
 
 describe('createWebFetchHandler (Cloudflare Worker path)', () => {
@@ -53,6 +85,9 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
     instance = await FrontMcpInstance.createForGraph({
       info: { name: 'web-fetch-test', version: '1.0.0' },
       apps: [WebFetchApp],
+      // Serve at /mcp (config-driven) so `mcpRequest` (which posts to /mcp) hits
+      // the endpoint; the default would otherwise be the worker root `/`.
+      http: { entryPath: '/mcp' },
     });
     const scope = instance.getScopes()[0] as Scope;
     handler = createWebFetchHandler(scope);
@@ -85,9 +120,9 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
     );
 
     expect(res.status).toBe(200);
-    const json = (await res.json()) as {
+    const json = await readMcpResult<{
       result?: { serverInfo?: { name?: string }; capabilities?: Record<string, unknown> };
-    };
+    }>(res);
     expect(json.result?.serverInfo?.name).toBe('web-fetch-test');
     expect(json.result?.capabilities).toBeDefined();
   });
@@ -98,7 +133,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
     );
 
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { result?: { tools?: Array<{ name: string }> } };
+    const json = await readMcpResult<{ result?: { tools?: Array<{ name: string }> } }>(res);
     const names = (json.result?.tools ?? []).map((t) => t.name);
     expect(names).toContain('echo');
   });
@@ -114,9 +149,104 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
     );
 
     expect(res.status).toBe(200);
-    const json = (await res.json()) as {
+    const json = await readMcpResult<{
       result?: { content?: Array<{ type: string; text?: string }> };
-    };
+    }>(res);
     expect(json.result?.content?.[0]?.text).toBe('Echo: hi');
+  });
+});
+
+describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
+  const instances: FrontMcpInstance[] = [];
+
+  async function scopeFor(extra: Record<string, unknown>): Promise<Scope> {
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'cfg-test', version: '1.0.0' },
+      apps: [WebFetchApp],
+      ...extra,
+    });
+    instances.push(instance);
+    return instance.getScopes()[0] as Scope;
+  }
+
+  afterAll(async () => {
+    await Promise.all(instances.map((i) => i.dispose?.()));
+  });
+
+  it('defaults to the worker root `/` when http.entryPath is unset (one path, not both)', async () => {
+    const handler = createWebFetchHandler(await scopeFor({}));
+    expect((await handler(mcpRequestAt('/', INITIALIZE))).status).toBe(200);
+    const miss = await handler(mcpRequestAt('/mcp', INITIALIZE));
+    expect(miss.status).toBe(404);
+    expect((await miss.json()).entryPaths).toEqual(['/']);
+  });
+
+  it('serves the single path from http.entryPath (config-driven) and 404s others', async () => {
+    const handler = createWebFetchHandler(await scopeFor({ http: { entryPath: '/mcp' } }));
+    expect((await handler(mcpRequestAt('/mcp', INITIALIZE))).status).toBe(200);
+    expect((await handler(mcpRequestAt('/mcp/', INITIALIZE))).status).toBe(200); // trailing slash normalized
+    expect((await handler(mcpRequestAt('/', INITIALIZE))).status).toBe(404);
+  });
+
+  it('an explicit entryPath option overrides http.entryPath', async () => {
+    const handler = createWebFetchHandler(await scopeFor({ http: { entryPath: '/mcp' } }), { entryPath: '/rpc' });
+    expect((await handler(mcpRequestAt('/rpc', INITIALIZE))).status).toBe(200);
+    expect((await handler(mcpRequestAt('/mcp', INITIALIZE))).status).toBe(404);
+  });
+
+  it('a custom array entryPath option serves only the listed paths', async () => {
+    const handler = createWebFetchHandler(await scopeFor({}), { entryPath: ['/rpc', '/mcp'] });
+    expect((await handler(mcpRequestAt('/rpc', INITIALIZE))).status).toBe(200);
+    expect((await handler(mcpRequestAt('/mcp', INITIALIZE))).status).toBe(200);
+    expect((await handler(mcpRequestAt('/', INITIALIZE))).status).toBe(404);
+  });
+
+  it('mirrors http.cors → Access-Control-* headers (config-driven CORS)', async () => {
+    const handler = createWebFetchHandler(await scopeFor({ http: { cors: { origin: true } } }));
+    const preflight = await handler(
+      new Request('https://worker.example.com/', {
+        method: 'OPTIONS',
+        headers: { origin: 'https://app.example.com' },
+      }),
+    );
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
+
+    const res = await handler(
+      new Request('https://worker.example.com/', {
+        method: 'POST',
+        headers: { ...MCP_HEADERS, origin: 'https://app.example.com' },
+        body: JSON.stringify(INITIALIZE),
+      }),
+    );
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
+  });
+
+  it('passes http.cors.maxAge to the preflight; no CORS headers when http.cors is unset', async () => {
+    const withMaxAge = createWebFetchHandler(await scopeFor({ http: { cors: { origin: '*', maxAge: 600 } } }));
+    const preflight = await withMaxAge(new Request('https://worker.example.com/', { method: 'OPTIONS' }));
+    expect(preflight.headers.get('access-control-max-age')).toBe('600');
+
+    const noCors = createWebFetchHandler(await scopeFor({}));
+    const res = await noCors(
+      new Request('https://worker.example.com/', {
+        method: 'POST',
+        headers: { ...MCP_HEADERS, origin: 'https://app.example.com' },
+        body: JSON.stringify(INITIALIZE),
+      }),
+    );
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('derives SSE streaming from the transport protocol (legacy streams, stateless-api buffers)', async () => {
+    // Default (legacy): streamable + no JSON-buffering → POST streams SSE.
+    const streaming = createWebFetchHandler(await scopeFor({}));
+    const sseRes = await streaming(mcpRequestAt('/', INITIALIZE));
+    expect(sseRes.headers.get('content-type')).toContain('text/event-stream');
+
+    // stateless-api: streamable:false → POST returns buffered JSON.
+    const buffered = createWebFetchHandler(await scopeFor({ transport: { protocol: 'stateless-api' } }));
+    const jsonRes = await buffered(mcpRequestAt('/', INITIALIZE));
+    expect(jsonRes.headers.get('content-type')).toContain('application/json');
   });
 });

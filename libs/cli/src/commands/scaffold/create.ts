@@ -658,19 +658,32 @@ Outputs:
     Value: !Sub "https://\${ServerlessHttpApi}.execute-api.\${AWS::Region}.amazonaws.com"
 `;
 
-// Cloudflare Workers template
+// Cloudflare Workers template.
+// NOTE: `frontmcp build --target cloudflare` regenerates the top-level keys
+// (name / main / compatibility_date / compatibility_flags) on every build, so
+// they MUST match the adapter's output: an ES Module Worker at
+// dist/cloudflare/index.js, requiring `nodejs_compat` with date >= 2024-09-23
+// (without the flag the Worker fails to load). KV/cron below are for the
+// managed `@frontmcp/edge` path (which is bundled by wrangler, not `frontmcp
+// build`, so those keys persist there).
 const TEMPLATE_WRANGLER_TOML = (projectName: string) => `
 name = "${projectName}"
-main = "dist/main.js"
-compatibility_date = "2024-01-01"
+main = "dist/cloudflare/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 NODE_ENV = "production"
 
-# Uncomment to enable KV namespace for caching
+# ── Managed auto-update (only when using @frontmcp/edge createEdgeMcp) ──
+# Last-good bundle cache (createKvBundleCache / kvBundleCacheFromEnv('BUNDLE_CACHE')):
 # [[kv_namespaces]]
-# binding = "CACHE"
+# binding = "BUNDLE_CACHE"
 # id = "your-kv-namespace-id"
+#
+# Cron Trigger that drives the \`scheduled\` refresh handler (set your cadence here):
+# [triggers]
+# crontabs = ["*/5 * * * *"]
 `;
 
 // =============================================================================

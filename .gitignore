@@ -106,3 +106,7 @@ planning/
 
 # Cloudflare Workers local dev/build state (wrangler dev / miniflare)
 .wrangler
+
+# Local throwaway sandbox for deploying a FrontMCP worker to a real Cloudflare
+# account (not committed; see cloudflare-sandbox/README.md to use it).
+/cloudflare-sandbox

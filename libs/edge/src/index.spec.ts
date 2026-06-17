@@ -28,11 +28,24 @@ const MCP_HEADERS = {
   accept: 'application/json, text/event-stream',
 };
 
+/** Read an MCP JSON-RPC response, handling both buffered JSON and the SSE stream the worker emits by default. */
+async function readMcp<T = Record<string, unknown>>(res: Response): Promise<T> {
+  const text = await res.text();
+  if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+    const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+    if (!dataLine) throw new Error(`No SSE data frame: ${text}`);
+    return JSON.parse(dataLine.slice('data:'.length).trim()) as T;
+  }
+  return JSON.parse(text) as T;
+}
+
 describe('createEdgeMcp', () => {
   const worker = createEdgeMcp({
     info: { name: 'worker-pkg-test', version: '1.0.0' },
     apps: [WorkerApp],
     tasks: { enabled: false },
+    // Config-driven endpoint path: serve MCP at /mcp (default is the worker root `/`).
+    http: { entryPath: '/mcp' },
   });
 
   const mcp = (body: unknown): Promise<Response> =>
@@ -51,19 +64,19 @@ describe('createEdgeMcp', () => {
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1.0.0' } },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { result?: { serverInfo?: { name?: string } } };
+    const json = await readMcp<{ result?: { serverInfo?: { name?: string } } }>(res);
     expect(json.result?.serverInfo?.name).toBe('worker-pkg-test');
   });
 
   it('lists tools and executes a tool call', async () => {
-    const list = (await (await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })).json()) as {
-      result?: { tools?: Array<{ name: string }> };
-    };
+    const list = await readMcp<{ result?: { tools?: Array<{ name: string }> } }>(
+      await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+    );
     expect((list.result?.tools ?? []).map((t) => t.name)).toContain('echo');
 
-    const call = (await (
-      await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { message: 'hi' } } })
-    ).json()) as { result?: { content?: Array<{ text?: string }> } };
+    const call = await readMcp<{ result?: { content?: Array<{ text?: string }> } }>(
+      await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { message: 'hi' } } }),
+    );
     expect(call.result?.content?.[0]?.text).toBe('Echo: hi');
   });
 

@@ -19,6 +19,9 @@ class CfWorkerApp {}
 @FrontMcp({
   info: { name: 'cf-worker-fixture', version: '1.0.0' },
   apps: [CfWorkerApp],
+  // Config-driven worker endpoint: serve MCP at /mcp (default is the worker
+  // root `/`). The same `http` block drives the Express host and the worker.
+  http: { entryPath: '/mcp' },
   // Background tasks need distributed storage (Redis/Upstash) on edge runtimes;
   // this fixture has none, so disable them. (A real worker would configure
   // tasks.redis or leave them off.)
