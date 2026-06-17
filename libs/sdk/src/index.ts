@@ -416,13 +416,19 @@ export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
 
 // Web-standard fetch handler (Cloudflare Workers / Deno / Bun) — no Express/Node shim
-export { createWebFetchHandler } from './transport';
+export { createWebFetchHandler, runHttpRequestFlowWeb } from './transport';
 export type {
   WebFetchHandler,
   CreateWebFetchHandlerOptions,
   WebFetchCorsOptions,
+  WebFetchSessionRouter,
   FetchHandlerCtx,
 } from './transport';
+
+// Web-standard MCP transport helpers — stateless runner + persistent (Durable
+// Object) session builder, for the Cloudflare DO session host.
+export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport';
+export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport';
 
 
 // Transport types

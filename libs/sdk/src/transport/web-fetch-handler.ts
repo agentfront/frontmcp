@@ -1,27 +1,26 @@
 /**
- * Web-standard `fetch` handler for FrontMCP.
+ * Web-standard `fetch` handler for FrontMCP — the V8-isolate adapter (Cloudflare
+ * Workers, Deno Deploy, Bun) where Node `http` objects don't exist.
  *
- * Routes a Web `Request` straight into the MCP SDK's
- * `WebStandardStreamableHTTPServerTransport` (Request/Response/ReadableStream) —
- * no Express, no Node `req`/`res` shim. This is the correct runtime for V8
- * isolates (Cloudflare Workers, Deno Deploy, Bun) where Node `http` objects
- * don't exist, and it avoids the fragile Web→Node→Web double conversion the
- * old Cloudflare entry template performed.
- *
- * Stateless by design: each request gets a fresh `McpServer` + transport
- * (`sessionIdGenerator: undefined`), matching the serverless execution model.
- * FrontMCP's full request pipeline (tool/resource/prompt flows, hooks) is
- * preserved because the handlers come from `createMcpHandlers(scope)` — the
- * same handlers the stdio and in-memory transports use.
+ * It does NOT bypass the request pipeline: it translates the native Web
+ * `Request` into the normalized `ServerRequest`, runs the SAME `http:request`
+ * flow every other transport runs (auth, quota, router, audit, metrics + hooks),
+ * and renders the flow's normalized `httpOutput` back to a Web `Response`. The
+ * flow's web-mode MCP execute stage (`handleWebFetch`) produces the MCP response
+ * via the SDK's `WebStandardStreamableHTTPServerTransport`. The adapter itself
+ * only handles transport-level concerns — CORS, liveness probes, and entry-path
+ * routing — which are not flow stages.
  */
-import { type AuthInfo } from '@frontmcp/protocol';
-import { randomUUID } from '@frontmcp/utils';
-
+import { FlowControl } from '../common';
+import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
+import { type HttpOutput } from '../common/schemas/http-output.schema';
+import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
-import { expandProtocolConfig } from '../common/types/options/transport/schema';
 import { normalizeEntryPrefix } from '../common/utils/path.utils';
+import { PublicMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
-import { buildScopedServerOptions } from './build-scoped-server-options';
+import { renderHttpOutputToWebResponse } from './web-response.renderer';
+import { type WebStandardMcpPair } from './web-standard-mcp';
 
 /**
  * The host execution context — its `waitUntil` keeps the worker alive past the
@@ -32,8 +31,20 @@ export interface FetchHandlerCtx {
   waitUntil?(promise: Promise<unknown>): void;
 }
 
-/** A Web-standard fetch handler: `(request, ctx?) => Promise<Response>`. */
-export type WebFetchHandler = (request: Request, ctx?: FetchHandlerCtx) => Promise<Response>;
+/** A Web-standard fetch handler: `(request, ctx?, env?) => Promise<Response>`. */
+export type WebFetchHandler = (request: Request, ctx?: FetchHandlerCtx, env?: unknown) => Promise<Response>;
+
+/**
+ * Routes an MCP request to a stateful session host (a Cloudflare Durable Object)
+ * instead of handling it statelessly. Receives the per-request `env` (for the DO
+ * binding). Returns a `Response` when it routed the request, or `undefined` to
+ * fall through to stateless handling (e.g. the binding isn't present).
+ */
+export type WebFetchSessionRouter = (
+  request: Request,
+  env: unknown,
+  ctx?: FetchHandlerCtx,
+) => Promise<Response | undefined>;
 
 /**
  * CORS for the web-fetch adapter — the transport-level analog of the Express
@@ -76,11 +87,6 @@ function mapHttpCors(httpCors: CorsOptions | false | undefined, scope: Scope): W
 
 export interface CreateWebFetchHandlerOptions {
   /**
-   * Auth info injected on every MCP request. The Worker target's auth gate is
-   * a follow-up (v1.3 managed auth); for now this is a static context.
-   */
-  authInfo?: Partial<AuthInfo>;
-  /**
    * Path the MCP endpoint (both Streamable HTTP `POST` and the SSE `GET`
    * stream) is served at. **Config-driven**: when omitted, it falls back to the
    * scope's `http.entryPath` (the same gateway prefix the Express host mounts
@@ -100,23 +106,6 @@ export interface CreateWebFetchHandlerOptions {
    */
   healthPaths?: string[];
   /**
-   * Allow **SSE streaming responses** on the MCP `POST` (Streamable HTTP
-   * streaming mode) for clients that accept `text/event-stream` — instead of
-   * always buffering JSON. The server is kept alive (via `ctx.waitUntil`) until
-   * the stream closes. Server→client streams (the MCP `GET`) are always honored
-   * regardless of this flag; it only governs whether POST responses may stream.
-   *
-   * **Config-driven**: when omitted, it's derived from the scope's transport
-   * protocol — streaming is on when Streamable HTTP is enabled and JSON-only
-   * buffering is off (true under the default `legacy`/`modern` presets, false
-   * under `stateless-api`). An explicit value here overrides that.
-   *
-   * NOTE: session-correlated server push and the legacy `/sse` + `/message`
-   * transport require a stateful session store (a Durable Object), which the
-   * stateless web-fetch handler does not provide.
-   */
-  sse?: boolean;
-  /**
    * CORS for browser MCP clients (Inspector "Direct" mode, web apps). A
    * transport-adapter concern, not a flow stage. **Config-driven**: when
    * omitted, it mirrors the scope's `http.cors` (the same config the Express
@@ -124,6 +113,14 @@ export interface CreateWebFetchHandlerOptions {
    * value here overrides that.
    */
   cors?: WebFetchCorsOptions;
+  /**
+   * Optional stateful-session router (Cloudflare Durable Object host). When set,
+   * MCP requests at the entry path are offered to it first; if it returns a
+   * `Response` the request was routed to a session DO, otherwise handling falls
+   * through to the stateless path. CORS / health / entry-path routing stay here
+   * in the adapter regardless.
+   */
+  sessionRouter?: WebFetchSessionRouter;
 }
 
 /**
@@ -154,11 +151,6 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   // CORS: explicit option wins, else mirror the scope's `http.cors`.
   const cors = options.cors ?? mapHttpCors(httpConfig?.cors, scope);
   const corsEnabled = cors?.origin !== undefined && cors.origin !== false;
-  // SSE streaming on POST: explicit option wins, else derived from the transport
-  // protocol — stream when Streamable HTTP is on and JSON-only buffering is off.
-  const proto = expandProtocolConfig(scope.metadata.transport?.protocol);
-  const sseEnabled = options.sse ?? (proto.streamable && !proto.json);
-  const serverOptions = buildScopedServerOptions(scope);
 
   /** CORS response headers for this request (empty when CORS is off / origin not allowed). */
   const corsHeadersFor = (request: Request): Record<string, string> => {
@@ -195,7 +187,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   };
 
-  return async function handle(request: Request, ctx?: FetchHandlerCtx): Promise<Response> {
+  return async function handle(request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> {
     const url = new URL(request.url);
 
     // CORS preflight — answer OPTIONS directly (transport-adapter concern).
@@ -214,72 +206,155 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       );
     }
 
-    // MCP is served only at the configured entry path(s) (default: both `/`
-    // and `/mcp`). Everything else 404s. Trailing slashes are normalized.
+    // MCP is served only at the configured entry path(s). Everything else 404s.
+    // Trailing slashes are normalized.
     if (!entryPaths.has(normalizePath(url.pathname))) {
       return withCors(Response.json({ error: 'Not Found', entryPaths: [...entryPaths] }, { status: 404 }), request);
     }
 
-    // Lazy-load protocol bindings so non-worker bundles don't eagerly pull the
-    // transport, and so this module stays import-safe in browser builds.
-    const { McpServer, WebStandardStreamableHTTPServerTransport } = await import('@frontmcp/protocol');
-    const { createMcpHandlers } = await import('./mcp-handlers/index.js');
-
-    const sessionId = `web:${randomUUID()}`;
-    const mcpServer = new McpServer(scope.metadata.info, serverOptions);
-
-    const handlers = createMcpHandlers({ scope, serverOptions });
-    for (const handler of handlers) {
-      const originalHandler = handler.handler;
-      const wrappedHandler = async (req: unknown, ctx: Record<string, unknown>): Promise<unknown> => {
-        const existingAuthInfo = (ctx?.['authInfo'] as Record<string, unknown> | undefined) ?? {};
-        const enrichedCtx = {
-          ...ctx,
-          authInfo: { ...options.authInfo, ...existingAuthInfo, sessionId },
-        };
-        return originalHandler(req as never, enrichedCtx as never);
-      };
-      mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as never);
+    // Run the request through the REAL `http:request` flow (auth, quota, router,
+    // audit, metrics + hooks) — the worker is just another adapter; the flow
+    // decides. The flow's `handleWebFetch` execute stage produces the MCP
+    // response via the WebStandard transport, carried back as a `web-response`
+    // output. We render whatever normalized output the flow emits (a 401 from
+    // the auth stage, the MCP response, etc.) to a Web `Response`.
+    // Stateful sessions: offer the request to the Durable Object session router
+    // first. If it routed (returned a Response), use it; otherwise fall through
+    // to stateless handling.
+    if (options.sessionRouter) {
+      const routed = await options.sessionRouter(request, env, ctx);
+      if (routed) return withCors(routed, request);
     }
 
-    // A GET opens the server→client SSE stream; a POST may stream SSE when the
-    // handler is configured for it AND the client accepts text/event-stream.
-    // Otherwise the POST response is buffered JSON. `enableJsonResponse` only
-    // governs POST; GET always streams.
-    const accept = request.headers.get('accept') ?? '';
-    const wantsStream =
-      request.method === 'GET' || (sseEnabled && accept.includes('text/event-stream'));
-
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: !wantsStream,
-    });
-
-    await mcpServer.connect(transport);
-    const response = await transport.handleRequest(request, {
-      authInfo: options.authInfo as AuthInfo | undefined,
-    });
-
-    // If the response is an SSE stream, its body keeps producing AFTER this
-    // function returns — tearing the server down now (the old `finally`) would
-    // close the stream immediately. Keep the server alive until the transport
-    // closes (client disconnects / stream ends), holding the isolate open via
-    // `ctx.waitUntil`. Buffered-JSON responses are fully materialized, so we can
-    // close right away.
-    if (response.headers.get('content-type')?.includes('text/event-stream')) {
-      const closed = new Promise<void>((resolve) => {
-        const prev = transport.onclose;
-        transport.onclose = () => {
-          prev?.();
-          resolve();
-        };
-      });
-      const teardown = closed.then(() => mcpServer.close().catch(() => undefined));
-      if (ctx?.waitUntil) ctx.waitUntil(teardown);
-      else void teardown;
-    } else {
-      void mcpServer.close().catch(() => undefined);
-    }
-    return withCors(response, request);
+    const rendered = await runHttpRequestFlowWeb(scope, request, { ctx });
+    // `next`/`handled`/no-output means no MCP handler claimed the request.
+    return withCors(rendered ?? Response.json({ error: 'Not Found' }, { status: 404 }), request);
   };
+}
+
+/**
+ * Run a Web `Request` through the `http:request` flow and render its normalized
+ * output to a Web `Response`. Shared by {@link createWebFetchHandler} (stateless)
+ * and the Durable Object session host (which passes its `persistent` transport
+ * so the GET notification stream + server push work). Returns `undefined` when
+ * the flow produced no response (`next`/`handled`) — the caller decides the
+ * fallback (typically 404).
+ */
+export async function runHttpRequestFlowWeb(
+  scope: Scope,
+  request: Request,
+  opts: { ctx?: FetchHandlerCtx; persistent?: WebStandardMcpPair } = {},
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent);
+  let output: HttpOutput | undefined;
+  try {
+    output = (await scope.runFlow('http:request', {
+      request: serverRequest,
+      response: {},
+    } as never)) as HttpOutput | undefined;
+  } catch (error) {
+    output = flowErrorToHttpOutput(error);
+  }
+  return output ? renderHttpOutputToWebResponse(output) : undefined;
+}
+
+/**
+ * Build the normalized `ServerRequest` the flow consumes from a Web `Request`,
+ * and carry the native Web `Request` (+ worker ctx) on it under the web tokens
+ * so the flow's `handleWebFetch` stage can hand a fresh, unread request to the
+ * WebStandard transport. The incoming body is read once (to populate
+ * `request.body` for the router / intent decision) and re-attached to the fresh
+ * request for the transport.
+ */
+async function toServerRequest(
+  request: Request,
+  url: URL,
+  ctx?: FetchHandlerCtx,
+  persistent?: WebStandardMcpPair,
+): Promise<ServerRequest> {
+  const headers: Record<string, string> = {};
+  request.headers.forEach((v, k) => {
+    headers[k] = v;
+  });
+
+  const query: Record<string, string | string[]> = {};
+  url.searchParams.forEach((v, k) => {
+    const existing = query[k];
+    if (existing === undefined) query[k] = v;
+    else if (Array.isArray(existing)) existing.push(v);
+    else query[k] = [existing, v];
+  });
+
+  const method = request.method.toUpperCase() as HttpMethod;
+  const hasBody = method !== 'GET' && method !== 'HEAD';
+  let rawBody = '';
+  if (hasBody) {
+    try {
+      rawBody = await request.text();
+    } catch {
+      rawBody = '';
+    }
+  }
+  let body: unknown;
+  if (rawBody) {
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = rawBody;
+    }
+  }
+
+  // A fresh Web Request for the transport — the original body stream is consumed
+  // above, and the WebStandard transport reads the body itself.
+  const init: RequestInit = { method: request.method, headers: request.headers };
+  if (rawBody) (init as RequestInit & { body: string }).body = rawBody;
+  const webRequest = new Request(url.toString(), init);
+
+  const serverRequest = {
+    method,
+    path: url.pathname,
+    url: url.pathname + url.search,
+    headers,
+    query,
+    body,
+  } as unknown as ServerRequest;
+
+  const tokenized = serverRequest as unknown as Record<PropertyKey, unknown>;
+  tokenized[ServerRequestTokens.webRequest] = webRequest;
+  tokenized[ServerRequestTokens.webCtx] = ctx;
+  if (persistent) tokenized[ServerRequestTokens.webTransport] = persistent;
+  return serverRequest;
+}
+
+/**
+ * Map an error thrown out of `runFlow('http:request', …)` to a normalized
+ * `HttpOutput`, mirroring the Express middleware's FlowControl handling. Returns
+ * `undefined` for `next`/`handled` (no response → the caller 404s).
+ */
+function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
+  if (error instanceof FlowControl) {
+    switch (error.type) {
+      case 'respond':
+        return error.output as HttpOutput;
+      case 'next':
+      case 'handled':
+        return undefined;
+      default: // 'abort' | 'fail'
+        return { kind: 'text', status: 500, body: 'Internal Server Error', contentType: 'text/plain; charset=utf-8' };
+    }
+  }
+  if (error instanceof PublicMcpError) {
+    const challenge = error.wwwAuthenticate;
+    return {
+      kind: 'json',
+      status: error.statusCode,
+      contentType: 'application/json; charset=utf-8',
+      body: { error: error.getPublicMessage() },
+      ...(typeof challenge === 'string' && challenge.length > 0
+        ? { headers: { 'WWW-Authenticate': challenge } }
+        : {}),
+    };
+  }
+  return { kind: 'text', status: 500, body: 'Internal Server Error', contentType: 'text/plain; charset=utf-8' };
 }

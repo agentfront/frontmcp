@@ -205,5 +205,21 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
       res.status(out.status).end();
       return;
     }
+
+    case 'web-response': {
+      // A pre-built Web `Response` — normally produced + rendered only on the
+      // web-fetch (worker) path. If it reaches the Node renderer, stream it
+      // best-effort so the response isn't silently dropped.
+      const r = out.response;
+      r.headers.forEach((v, k) => res.setHeader(k, v));
+      res.status(r.status);
+      if (r.body) {
+        for await (const chunk of r.body as unknown as AsyncIterable<Uint8Array>) {
+          res.write(chunk);
+        }
+      }
+      res.end();
+      return;
+    }
   }
 }

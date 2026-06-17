@@ -41,6 +41,7 @@ import { FrontMcpInstance, createWebFetchHandler, type WebFetchHandler } from '@
 
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
+import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
 
 export type { ManagedEdgeOptions } from './managed';
 export { buildManagedOpenApiPluginOptions } from './managed';
@@ -112,6 +113,27 @@ function resolveCache(
   return typeof cache === 'function' ? cache(env) : cache;
 }
 
+let envBridged = false;
+/**
+ * Bridge the Worker `env` (vars + secrets) into `process.env` once, so
+ * FrontMCP's `getEnv()` — which reads `process.env` — sees configuration the
+ * flow needs at runtime (e.g. `MCP_SESSION_SECRET` for session-id encryption,
+ * auth provider settings). On Cloudflare these live on the per-request `env`,
+ * not `process.env`; without this the `http:request` flow's `session:verify`
+ * stage throws `SessionSecretRequiredError` on a production isolate. Only copies
+ * string values that aren't already set, so wrangler `[vars]`/secrets win
+ * without clobbering anything pre-existing.
+ */
+function bridgeEnvToProcessEnv(env: unknown): void {
+  if (envBridged || !env || typeof env !== 'object') return;
+  const proc = (globalThis as { process?: { env?: Record<string, string> } }).process;
+  if (!proc?.env) return;
+  for (const [key, value] of Object.entries(env as Record<string, unknown>)) {
+    if (typeof value === 'string' && proc.env[key] === undefined) proc.env[key] = value;
+  }
+  envBridged = true;
+}
+
 /** The plain FrontMCP config the SDK accepts (same shape `@FrontMcp(...)` takes). */
 type BaseConfig = Parameters<typeof FrontMcpInstance.createForGraph>[0];
 
@@ -125,11 +147,23 @@ export type EdgeMcpConfig = BaseConfig & {
    * endpoint. Requires the optional peer `@frontmcp/plugin-skilled-openapi`.
    */
   managed?: ManagedEdgeOptions;
+  /**
+   * Enable **stateful MCP sessions** via a Cloudflare Durable Object, so the
+   * Streamable HTTP standalone GET notification stream stays open across
+   * requests and a `tools/call`'s notifications reach it (the stateless worker
+   * can't do this). Export the returned {@link EdgeMcp.SessionDurableObject} and
+   * bind it in `wrangler.toml` under this `binding` name (default
+   * `FRONTMCP_SESSIONS`). When omitted, the worker is stateless.
+   */
+  sessions?: { binding?: string };
 };
 
 // The Scope shape `createWebFetchHandler` expects (not re-exported from the SDK
 // root; derived to avoid widening the SDK's public surface).
 type Scope = Parameters<typeof createWebFetchHandler>[0];
+
+/** Default DurableObject binding name when `sessions` is enabled without an explicit one. */
+const DEFAULT_SESSION_BINDING = 'FRONTMCP_SESSIONS';
 
 /** An edge module: `export default createEdgeMcp(config)`. */
 export interface EdgeMcp {
@@ -141,6 +175,18 @@ export interface EdgeMcp {
    * it (Workers have no background timers, so this replaces internal polling).
    */
   scheduled?: (event?: unknown, env?: unknown, ctx?: unknown) => Promise<void>;
+  /**
+   * The **Durable Object class** for stateful sessions. Always present; re-export
+   * it from the worker entry and bind it in `wrangler.toml` (with a migration)
+   * to enable stateful sessions:
+   *
+   * ```ts
+   * const mcp = createEdgeMcp({ ..., sessions: {} });
+   * export default mcp;
+   * export const FrontMcpSession = mcp.SessionDurableObject;
+   * ```
+   */
+  SessionDurableObject: new (state: unknown, env: unknown) => { fetch(request: Request): Promise<Response> };
 }
 
 /**
@@ -164,10 +210,12 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   // at module-eval). Shared between `fetch` and `scheduled` via this closure.
   let controller: EdgeRefreshController | undefined;
 
-  // `env` from the first request (fetch or scheduled) is what build() uses to
-  // resolve the cache; build is memoized via `handlerPromise`, so it runs once.
-  const build = async (env: unknown): Promise<WebFetchHandler> => {
-    const { managed, ...rest } = config;
+  // `env` from the first request (fetch or scheduled) is what buildScope() uses
+  // to resolve the cache; the handler is memoized via `handlerPromise`, so it
+  // runs once. `buildScope` is ALSO called by the Durable Object (in its own
+  // isolate) to build a session-local scope.
+  const buildScope = async (env: unknown): Promise<Scope> => {
+    const { managed, sessions: _sessions, ...rest } = config;
     // The edge serves via the web-fetch handler, NOT an HTTP listen server, so
     // tell the scope `serve: false`. That selects the no-op `FrontMcpServer`
     // provider instead of `FrontMcpServerInstance` — which would otherwise be
@@ -205,10 +253,22 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     if (!scope) {
       throw new Error('createEdgeMcp: the config produced no scope — declare an app/tool or `managed`.');
     }
+    return scope;
+  };
+
+  // Stateful sessions (Durable Object): when configured, MCP requests are routed
+  // to a per-session DO so the GET notification stream + server push work. The
+  // router falls back to stateless handling if the binding isn't bound in `env`.
+  const sessionRouter = config.sessions
+    ? createEdgeSessionRouter(config.sessions.binding ?? DEFAULT_SESSION_BINDING)
+    : undefined;
+
+  const build = async (env: unknown): Promise<WebFetchHandler> => {
+    const scope = await buildScope(env);
     // The web-fetch handler derives entryPath / cors / sse from the scope's
-    // `http` + `transport` config (same surface the decorator path uses) — no
-    // edge-specific transport knobs, so one config drives every deployment.
-    return createWebFetchHandler(scope);
+    // `http` + `transport` config (same surface the decorator path uses). The
+    // sessionRouter (if any) routes MCP requests to the Durable Object.
+    return createWebFetchHandler(scope, sessionRouter ? { sessionRouter } : {});
   };
 
   // Build (memoized) on the first request, resolving the cache from that
@@ -228,15 +288,20 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
 
   const mcp: EdgeMcp = {
     async fetch(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
+      bridgeEnvToProcessEnv(env);
       const handler = await ensureHandler(env);
-      // Forward the Worker ExecutionContext so the handler can `waitUntil` an
-      // SSE stream (keeps the isolate alive past `fetch` until the stream ends).
-      return handler(request, ctx as { waitUntil?(p: Promise<unknown>): void } | undefined);
+      // Forward the Worker ExecutionContext (for `waitUntil` on SSE bodies) and
+      // `env` (so the session router can resolve its Durable Object binding).
+      return handler(request, ctx as { waitUntil?(p: Promise<unknown>): void } | undefined, env);
     },
+    // The DO builds its own session-local scope (in its isolate) via buildScope,
+    // and bridges `env`→`process.env` the same way the worker does.
+    SessionDurableObject: createEdgeSessionDurableObject(buildScope, bridgeEnvToProcessEnv),
   };
 
   if (config.managed) {
     mcp.scheduled = async (_event?: unknown, env?: unknown): Promise<void> => {
+      bridgeEnvToProcessEnv(env);
       // Ensure the scope is built (which resolves the cache from `env` and
       // attaches the live source to the controller), then pull + hot-swap.
       await ensureHandler(env);

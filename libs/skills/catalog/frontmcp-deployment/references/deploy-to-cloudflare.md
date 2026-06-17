@@ -203,7 +203,28 @@ createEdgeMcp({
 - **Bundle size**: Workers have a 1 MB compressed / 10 MB uncompressed limit (paid plan: 10 MB / 30 MB). Review dependencies and remove unused packages to reduce bundle size.
 - **CPU time**: 10 ms CPU time on free plan, 30 seconds on paid. Long-running operations must be optimized or use Durable Objects.
 - **No native modules**: `better-sqlite3` and other native Node.js modules are not available. Use KV, D1, or Upstash Redis for storage.
-- **Streaming**: Streamable HTTP works, including SSE responses (`POST` with `Accept: text/event-stream`) and the server→client SSE `GET` stream — the handler holds the isolate open via `ctx.waitUntil` until the stream closes. The legacy `/sse` + `/message` transport and session-correlated push need a stateful store (Durable Object), which the stateless web-fetch handler does not provide yet.
+- **Streaming**: Streamable HTTP works, including SSE responses (`POST` with `Accept: text/event-stream`) and the server→client SSE `GET` stream. The worker uses the SDK's `WebStandardStreamableHTTPServerTransport` — which **is** the standard Streamable HTTP transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it, so there's one engine). **Server→client notifications** on the standalone `GET` stream require **stateful sessions** — set `sessions: {}` and bind the `SessionDurableObject` (Durable Object) per `Mcp-Session-Id`. Without it the worker is stateless and the `GET` stream can't deliver pushed notifications.
+
+### Stateful sessions (Durable Object)
+
+```ts
+const mcp = createEdgeMcp({ /* …info, apps… */ http: { entryPath: '/mcp' }, sessions: {} });
+export default mcp;
+export const FrontMcpSession = mcp.SessionDurableObject;
+```
+
+```toml
+[[durable_objects.bindings]]
+name = "FRONTMCP_SESSIONS"
+class_name = "FrontMcpSession"
+[[migrations]]
+tag = "v1"
+new_classes = ["FrontMcpSession"]
+[vars]
+MCP_SESSION_SECRET = "..."   # required on production isolates; bridged into process.env
+```
+
+One DO per session holds a persistent transport so the `GET` notification stream stays open and `tools/call` notifications reach it. It runs the **same `http:request` flow** (auth/session:verify/router/audit/metrics + hooks) as the stateless path — so transparent auth returns `401` + `WWW-Authenticate` on the worker too.
 
 ## Storage Options
 

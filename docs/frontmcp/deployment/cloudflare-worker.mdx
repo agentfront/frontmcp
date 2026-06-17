@@ -250,6 +250,45 @@ KV is eventually-consistent and is **not** Redis. The adapter is honest about wh
 
 ---
 
+## Stateful sessions & notifications (Durable Objects)
+
+A stateless worker can't support the Streamable HTTP **standalone `GET` notification stream**: each request is a fresh isolate/transport, so a `tools/call`'s notifications have no path back to the client's open `GET` stream (it closes immediately). The fix is a **Durable Object** — one instance per `Mcp-Session-Id` holds a *persistent* MCP server + session-bound transport, so the `GET` stream stays open and server→client notifications reach it. It runs the **same `http:request` flow** as the stateless path — only the transport persists.
+
+Enable it with `sessions` and export the DO class `createEdgeMcp` returns:
+
+```ts
+// worker.ts
+const mcp = createEdgeMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [MyApp],
+  tasks: { enabled: false },
+  http: { entryPath: '/mcp' },
+  sessions: {}, // default binding name: FRONTMCP_SESSIONS
+});
+export default mcp;
+export const FrontMcpSession = mcp.SessionDurableObject; // bind in wrangler.toml
+```
+
+```toml
+# wrangler.toml
+[[durable_objects.bindings]]
+name = "FRONTMCP_SESSIONS"
+class_name = "FrontMcpSession"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["FrontMcpSession"]
+
+[vars]
+MCP_SESSION_SECRET = "..." # or `wrangler secret put MCP_SESSION_SECRET`
+```
+
+The worker routes a request to its session DO by `Mcp-Session-Id` (minting one on `initialize`); the router falls back to stateless handling if the binding isn't present. Without `sessions`, the worker stays stateless (request/response tools work; no server push).
+
+<Note>
+`MCP_SESSION_SECRET` is required on a production isolate (`NODE_ENV=production`) — the flow's `session:verify` stage encrypts session IDs with it. `createEdgeMcp` bridges Worker `env` vars/secrets into `process.env` so FrontMCP's config resolution sees them.
+</Note>
+
 ## Current status & limitations
 
 FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missing:
@@ -257,6 +296,8 @@ FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missi
 **Works today (verified on real Cloudflare):**
 - The decorator build path (`frontmcp build --target cloudflare`) boots on real workerd and serves MCP over `/mcp` with a `/healthz` liveness probe.
 - **`createEdgeMcp` also deploys + serves on real Cloudflare** — bundled with esbuild + a small set of stubs (see the next bullet). Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
+- **The worker runs the real `http:request` flow** — the same hookable pipeline every transport runs: `session:verify` (auth), router, audit, metrics + plugin/user hooks all execute on the worker. The MCP response is produced by the SDK's web-standard Streamable HTTP transport (`WebStandardStreamableHTTPServerTransport`) — which **is** the standard transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it). Configure transparent auth and the flow's `checkAuthorization` stage returns `401` + `WWW-Authenticate` on the worker, just like Node.
+- **Stateful sessions via a Durable Object** (`sessions: {}` + the bound `SessionDurableObject`): the Streamable HTTP standalone `GET` notification stream stays open across requests and requests for a session route back to the same DO — so server→client notifications work. Verified live.
 - `CloudflareKvStorageAdapter` (KV only, with the honest limits above).
 
 **Deploying `createEdgeMcp` today needs two things:**
@@ -268,8 +309,8 @@ The miniflare-based local e2e is stricter than production — it rejects `node:h
 </Note>
 
 **Known gaps (roadmap):**
-- **No auth gate at the edge.** The web-fetch handler currently injects a static auth context — it does not authenticate requests. Don't expose an unauthenticated managed edge server publicly.
-- **No Durable Object session host.** The Worker is stateless (`sessionIdGenerator: undefined`); `/sse` resumability and stateful flows don't survive isolate restarts yet.
+- **Stateless mode has no server push.** Without `sessions`, the worker is stateless and the standalone `GET` notification stream can't deliver server→client notifications (each request is a fresh isolate) — enable `sessions` (the Durable Object) for that.
+- **DO session eviction.** A Durable Object is evicted when idle; an in-flight session then needs to re-`initialize`. WebSocket-hibernation-style persistence is a follow-up.
 - **KV only.** No R2 (blobs) or D1 (relational) stores, and no `@frontmcp/adapters/cloudflare` subpath yet.
 - **No worker observability sink, no deploy CLI / GitHub Action / push webhook**, and the declarative [`frontmcp.deploy.yaml`](/frontmcp/deployment/deploy-manifest) manifest is schema-only (no runtime consumer yet).
 
