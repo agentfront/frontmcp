@@ -132,7 +132,7 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
  *
  * Consumes signed skill bundles (OpenAPI spec + Overlay) from a configured
  * source (static, npm, or SaaS-pull) and serves them as FrontMCP skills with
- * three meta-tools (`search_skill`, `load_skill`, `execute_action`). Per-op
+ * three meta-tools (`search_skill`, `load_skill`, `run_workflow`). Per-op
  * REST tools stay hidden from `tools/list`.
  *
  * Lifecycle: `BundleSyncService` is a useFactory provider that starts the

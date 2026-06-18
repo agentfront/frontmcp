@@ -2,7 +2,7 @@
  * Behavioral tests for the three meta-tools' execute() methods. We don't go
  * through the FrontMCP DI bootstrap here — we directly stub `this.get(Token)`
  * to inject the singletons the tools depend on. The runtime correctness of
- * search → load → execute_action is what's covered.
+ * search → load is what's covered (execute is covered by execute-skill-action.spec.ts).
  */
 
 import 'reflect-metadata';

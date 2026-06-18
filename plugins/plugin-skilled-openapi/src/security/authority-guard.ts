@@ -59,7 +59,7 @@ export class AuthorityGuard {
       // No policy → grant (skill-level signed-bundle origin trust is the upstream gate).
       return { granted: true, evaluatedPolicies: [] };
     }
-    // execute_action documents a non-throwing contract — every authority
+    // the skill-action executor documents a non-throwing contract — every authority
     // failure must surface as { granted: false, deniedBy: ... }. A malformed
     // policy or an unsupported authInfo shape can throw inside libs/auth's
     // contextBuilder.build / engine.evaluate, so wrap both in try/catch and

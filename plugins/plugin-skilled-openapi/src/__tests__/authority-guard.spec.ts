@@ -96,7 +96,7 @@ describe('AuthorityGuard', () => {
   });
 
   describe('error path — translates engine throws into structured deny', () => {
-    // The execute_action contract is "every authority failure surfaces as
+    // The skill-action executor contract is "every authority failure surfaces as
     // { granted: false, deniedBy }". Force the underlying engine to throw and
     // assert the catch block translates faithfully instead of bubbling.
     const installEngineThrow = (guard: AuthorityGuard, thrown: unknown) => {

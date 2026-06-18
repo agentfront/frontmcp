@@ -40,7 +40,7 @@ export interface BundleSyncOptions {
    * other tools / agents / CodeCall scripts / jobs can compose with it via
    * `this.callTool(name, args)` from `ExecutionContextBase`. Internal tools
    * are excluded from `tools/list` and rejected for external `tools/call`.
-   * The existing meta-tools (`search_skill` / `load_skill` / `execute_action`)
+   * The existing meta-tools (`search_skill` / `load_skill` / `run_workflow`)
    * are unaffected.
    */
   exposeOperationsAsInternalTools: boolean;

@@ -6,7 +6,7 @@
 // except `callTool`). Each `callTool(actionId, input)` resolves the operation
 // across loaded skills and runs it through the SAME authorize → validate →
 // outbound-HTTPS → validate path as a direct action call. This replaces the
-// single-shot execute_action with a composable, sandboxed executor.
+// prior single-shot execute tool with a composable, sandboxed executor.
 import { BundleStore, SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 

@@ -15,7 +15,7 @@ import { getCompiledOpSchemas } from './schema-cache';
 import { type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { type AuthorityGuard } from '../security/authority-guard';
 
-/** Structured result envelope (same shape `execute_action` returned). */
+/** Structured result envelope (the structured envelope the skill-action executor returns). */
 export interface SkillActionResult {
   ok: boolean;
   status: number;

@@ -2,7 +2,7 @@
 //
 // HTTP entrypoint for the skilled-openapi e2e harness. Boots:
 //   1. The mock REST server on :9876 (so SkilledOpenApiPlugin's outbound
-//      calls have a real upstream to hit during execute_action tests)
+//      calls have a real upstream to hit during run_workflow action tests)
 //   2. A FrontMCP server with the shared `serverConfig` + the HTTP port
 //      — streamable HTTP transport on $PORT (default 3107).
 //

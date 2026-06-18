@@ -228,7 +228,8 @@ export class OperationToolFactory {
   }
 
   /**
-   * Build the actual function executor for one op. Mirrors `ExecuteActionTool.execute`:
+   * Build the actual function executor for one op. Mirrors the skill-action
+   * executor (`executeSkillAction`):
    * authority check + input validation + `executeOperation` — so callers
    * reaching the op via `callTool` get the same security gates as callers
    * going through `run_workflow`.
