@@ -29,6 +29,7 @@ const opEqual = (a: OperationDescriptor, b: OperationDescriptor): boolean =>
   JSON.stringify(a.inputSchema) === JSON.stringify(b.inputSchema) &&
   JSON.stringify(a.outputSchema) === JSON.stringify(b.outputSchema) &&
   JSON.stringify(a.requiredAuthorities ?? null) === JSON.stringify(b.requiredAuthorities ?? null) &&
+  (a.public ?? false) === (b.public ?? false) &&
   a.maxResponseBytes === b.maxResponseBytes &&
   a.timeoutMs === b.timeoutMs;
 

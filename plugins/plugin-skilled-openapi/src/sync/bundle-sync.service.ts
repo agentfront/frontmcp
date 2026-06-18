@@ -368,6 +368,11 @@ export class BundleSyncService {
         }
         const entry: HiddenOpEntry = {
           skillId: skill.id,
+          // Pin the skill-level policy so it is AND-ed with the op-level policy
+          // at execution time (C2 — previously this was silently dropped).
+          ...(skill.requiredAuthorities !== undefined && {
+            skillRequiredAuthorities: skill.requiredAuthorities,
+          }),
           op,
           service,
           authBinding,

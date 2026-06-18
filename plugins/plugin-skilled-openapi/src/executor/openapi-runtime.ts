@@ -31,6 +31,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
 import type { CredentialResolver } from './credential-resolver';
+import { withHostConcurrency } from './host-concurrency';
 import { checkOutboundUrl } from './ssrf-guard';
 
 /** Caller-supplied input. Flat keys match `mapper[].inputKey`. */
@@ -229,55 +230,87 @@ export async function executeOperation(args: {
 
   const timeoutMs = entry.op.timeoutMs ?? outbound.defaultTimeoutMs;
   const maxBytes = entry.op.maxResponseBytes ?? outbound.defaultMaxResponseBytes;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  timer.unref?.();
 
-  try {
-    const response = await fetchImpl(req.url, {
-      method: entry.op.httpMethod,
-      headers: req.headers,
-      body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
-      signal: ac.signal,
-    });
-    const contentType = response.headers.get('content-type') ?? undefined;
-    const reader = response.body?.getReader();
-    let received = 0;
-    const chunks: Uint8Array[] = [];
-    if (reader) {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          received += value.byteLength;
-          if (received > maxBytes) {
-            return failure(response.status, `response exceeded maxResponseBytes (${maxBytes})`);
+  // Bound concurrent in-flight requests to this single host (B6). The timeout
+  // clock starts AFTER a slot is acquired so queue wait doesn't count against
+  // the op timeout. `req.url` already passed the SSRF allowlist above.
+  const host = ((): string => {
+    try {
+      return new URL(req.url).hostname.toLowerCase();
+    } catch {
+      return req.url;
+    }
+  })();
+
+  return withHostConcurrency(host, outbound.maxConcurrencyPerHost, async () => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    timer.unref?.();
+
+    try {
+      const response = await fetchImpl(req.url, {
+        method: entry.op.httpMethod,
+        headers: req.headers,
+        body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        signal: ac.signal,
+        // SECURITY: never auto-follow redirects. `fetch` defaults to
+        // `redirect: 'follow'`, which re-sends the request — INCLUDING the
+        // vault-injected `Authorization`/api-key headers — to the redirect
+        // target, even cross-origin. An allowlisted-but-compromised (or
+        // open-redirecting) upstream could thus exfiltrate the credential to an
+        // attacker host, and the SSRF allowlist (validated only on the initial
+        // URL) would never re-evaluate the hop. `manual` makes the 3xx visible
+        // here so we can refuse it instead of following blindly.
+        redirect: 'manual',
+      });
+      // A redirect from the upstream is not followed (credential-exfiltration +
+      // SSRF-allowlist-bypass guard). REST operations should resolve in one hop;
+      // surface the redirect as a failure rather than chasing it with creds.
+      if (response.status >= 300 && response.status < 400) {
+        return failure(
+          response.status,
+          `upstream returned a redirect (${response.status}); not followed to protect injected credentials`,
+        );
+      }
+      const contentType = response.headers.get('content-type') ?? undefined;
+      const reader = response.body?.getReader();
+      let received = 0;
+      const chunks: Uint8Array[] = [];
+      if (reader) {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            received += value.byteLength;
+            if (received > maxBytes) {
+              return failure(response.status, `response exceeded maxResponseBytes (${maxBytes})`);
+            }
+            chunks.push(value);
           }
-          chunks.push(value);
         }
       }
+      const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+      // Re-create Response so parseResponse can do its own content-type handling.
+      const synthetic = new Response(buf, {
+        status: response.status,
+        headers: response.headers,
+      });
+      const parsed = await parseResponse(synthetic);
+      void logger;
+      return {
+        ok: response.ok,
+        status: response.status,
+        contentType,
+        data: parsed.data,
+        responseBytes: received,
+      };
+    } catch (e) {
+      const err = e as Error;
+      return failure(0, err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message);
+    } finally {
+      clearTimeout(timer);
     }
-    const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-    // Re-create Response so parseResponse can do its own content-type handling.
-    const synthetic = new Response(buf, {
-      status: response.status,
-      headers: response.headers,
-    });
-    const parsed = await parseResponse(synthetic);
-    void logger;
-    return {
-      ok: response.ok,
-      status: response.status,
-      contentType,
-      data: parsed.data,
-      responseBytes: received,
-    };
-  } catch (e) {
-    const err = e as Error;
-    return failure(0, err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message);
-  } finally {
-    clearTimeout(timer);
-  }
+  });
 }
 
 function failure(status: number, error: string): ExecutionResult {

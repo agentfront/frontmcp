@@ -7,13 +7,13 @@
 // authorized/validated operations a single direct call would run. Failures are
 // returned as `{ ok:false, error }` envelopes — they never throw.
 
-import { type BundleStore, type SkillAuditWriter } from '@frontmcp/adapters/skills';
+import { type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
+import { type HiddenOpEntry } from '../registry/hidden-op.registry';
+import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
 import { getCompiledOpSchemas } from './schema-cache';
-import { type HiddenOpEntry } from '../registry/hidden-op.registry';
-import { type AuthorityGuard } from '../security/authority-guard';
 
 /** Structured result envelope (the structured envelope the skill-action executor returns). */
 export interface SkillActionResult {
@@ -26,10 +26,13 @@ export interface SkillActionResult {
 
 /** Dependencies the shared executor needs — all resolved from DI by the caller. */
 export interface SkillActionDeps {
-  config: { outbound: OpenApiRuntimeDeps['outbound'] };
+  config: {
+    outbound: OpenApiRuntimeDeps['outbound'];
+    /** Default-deny policy for ops with no required-authorities (C1/C3). */
+    unprotectedOps: UnprotectedOpsPolicy;
+  };
   resolver: { resolve: OpenApiRuntimeDeps['resolver']['resolve'] };
   guard: AuthorityGuard;
-  bundleStore: BundleStore;
   logger: FrontMcpLogger;
   /** Opt-in tamper-evident audit (when `skillsConfig.audit.enabled`). */
   audit?: { writer: SkillAuditWriter; subject: string };
@@ -57,7 +60,7 @@ export async function executeSkillAction(args: {
   deps: SkillActionDeps;
 }): Promise<SkillActionResult> {
   const { entry, input, authInfo, deps } = args;
-  const { config, resolver, guard, bundleStore, logger, audit } = deps;
+  const { config, resolver, guard, logger, audit } = deps;
 
   // Audit context shared by every write; writes are detached (a slow/failing
   // audit backend must never block or fail the caller).
@@ -73,9 +76,13 @@ export async function executeSkillAction(args: {
     op?.catch((e) => logger.warn(`[skill-audit] ${phase} write failed: ${e instanceof Error ? e.message : String(e)}`));
   };
 
-  // 1) Authority check (skill-level + op-level merged).
+  // 1) Authority check: skill-level AND op-level policies must both grant; a
+  //    policy-less op is allowed/denied per `unprotectedOps` (C1/C2/C3).
   const authResult = await guard.check({
     policy: entry.op.requiredAuthorities,
+    skillPolicy: entry.skillRequiredAuthorities,
+    isPublic: entry.op.public,
+    unprotectedOps: config.unprotectedOps,
     authInfo: (authInfo ?? {}) as never as Parameters<AuthorityGuard['check']>[0]['authInfo'],
     input: input ?? {},
   });
@@ -100,22 +107,17 @@ export async function executeSkillAction(args: {
     return { ok: false, status: 0, error: `input validation failed: ${formatZodIssues(inputParse.error.issues)}` };
   }
 
-  // 3) Allowed hosts: pinned service first, union'd with the active bundle's.
+  // 3) Allowed hosts: ONLY the single service this op is bound to (B3).
+  //    The credential injected below is the op's per-service vault credential;
+  //    unioning every bundle service's host (the prior behavior) meant a
+  //    credential for service A could egress to service B if a crafted input
+  //    ever steered the request URL there. Least-privilege: the SSRF allowlist
+  //    is exactly the one host whose credential we are about to attach.
   const allowedHosts = new Set<string>();
   try {
     allowedHosts.add(new URL(entry.service.baseUrl).hostname.toLowerCase());
   } catch {
     // malformed pinned service URL — SSRF guard will reject in executeOperation
-  }
-  const bundle = bundleStore.current();
-  if (bundle) {
-    for (const svc of bundle.services) {
-      try {
-        allowedHosts.add(new URL(svc.baseUrl).hostname.toLowerCase());
-      } catch {
-        // skip malformed
-      }
-    }
   }
 
   const runtimeDeps: OpenApiRuntimeDeps = {
@@ -139,7 +141,10 @@ export async function executeSkillAction(args: {
     throw e;
   }
   if (result.ok) {
-    detach(audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }), 'http-call-success');
+    detach(
+      audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }),
+      'http-call-success',
+    );
   } else {
     detach(
       audit?.writer.writeHttpCallFailure(auditCtx, {

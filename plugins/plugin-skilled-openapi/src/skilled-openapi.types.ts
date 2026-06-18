@@ -88,6 +88,21 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
   outbound: outboundOptionsSchema,
 
   /**
+   * How to treat operations that carry NO required-authorities policy (neither
+   * skill-level nor op-level) on the execution surface (`run_workflow` and the
+   * internal per-op tools):
+   *
+   * - `'allow'` (default, backward compatible): policy-less ops are callable —
+   *   origin trust comes from the signed bundle. Appropriate when every op in
+   *   the bundle is genuinely public (e.g. a public REST API).
+   * - `'deny'`: default-deny the execution surface — a policy-less op is blocked
+   *   unless the bundle explicitly marks it `public: true`. **Recommended for
+   *   production**: it ensures a single missing `requiredAuthorities` line can't
+   *   silently expose a protected op (closes SECURITY-REVIEW C1/C3).
+   */
+  unprotectedOps: z.enum(['allow', 'deny']).default('allow'),
+
+  /**
    * Source-conflict policy when more than one source registers a skill with
    * the same id. Default: locally-pinned static beats npm beats saas.
    */

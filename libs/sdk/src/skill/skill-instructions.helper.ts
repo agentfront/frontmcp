@@ -91,6 +91,30 @@ export function sanitizeDescription(raw: string | undefined): string {
     .trim();
 }
 
+/** Max chars a skill NAME may occupy in the catalog (prevents one skill dominating). */
+const MAX_SKILL_NAME_CHARS = 80;
+
+/**
+ * Sanitize a skill NAME for safe embedding as a bold catalog label. The name is
+ * attacker-influenced (bundle-supplied) and was previously interpolated RAW into
+ * `- **${name}**:` — a name with NEWLINES could break out of its bullet and
+ * inject fake catalog lines / "SYSTEM:" framing into the catalog (surfaced in the
+ * `search_skill` tool description AND the initialize `instructions`). Strip all
+ * line breaks + control chars (the STRUCTURAL injection vector), collapse
+ * whitespace, and hard-cap the length. Emphasis chars (`_`/`*`) are intentionally
+ * NOT escaped — they're common in legitimate identifiers and a single line of
+ * markdown can't inject cross-line instructions; malicious TEXT content (vs
+ * structure) is defended by bundle signing, not by escaping.
+ */
+export function sanitizeName(raw: string | undefined): string {
+  if (!raw) return '(unnamed)';
+  // Collapse ALL whitespace (newlines/tabs included) to single spaces so the
+  // name can never break out of its single catalog line, then hard-cap length.
+  const s = raw.replace(/\s+/g, ' ').trim();
+  if (!s) return '(unnamed)';
+  return s.length > MAX_SKILL_NAME_CHARS ? `${s.slice(0, MAX_SKILL_NAME_CHARS)}…` : s;
+}
+
 const CATALOG_HEADER =
   'Available skills (read the `skills://catalog` resource to browse, ' +
   'or `skills://{name}/SKILL.md` for full content):';
@@ -129,7 +153,7 @@ export function buildSkillsCatalogSummary(skillRegistry: SkillRegistryInterface 
   const effectiveCap = MAX_SKILL_CATALOG_CHARS - TRUNCATION_FOOTER_RESERVE;
   for (const skill of skills) {
     const meta = skill.metadata;
-    const name = meta.name;
+    const name = sanitizeName(meta.name);
     const description = sanitizeDescription(meta.description);
     const line = description ? `- **${name}**: ${description}` : `- **${name}**`;
     if (charCount + line.length + 1 > effectiveCap) {

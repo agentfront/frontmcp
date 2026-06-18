@@ -240,10 +240,13 @@ export class OperationToolFactory {
       const guard = ctx.get(AuthorityGuard);
       const resolver = ctx.get(SkilledOpenApiCredentialResolver);
 
-      // 1) Authority gate (same policy plumbing as executeSkillAction).
-      const policy = entry.op.requiredAuthorities;
+      // 1) Authority gate (same policy plumbing as executeSkillAction): skill-
+      //    level AND op-level policies; default-deny per config for unprotected ops.
       const authResult = await guard.check({
-        policy,
+        policy: entry.op.requiredAuthorities,
+        skillPolicy: entry.skillRequiredAuthorities,
+        isPublic: entry.op.public,
+        unprotectedOps: config.unprotectedOps,
         authInfo: (ctx.authInfo ?? {}) as Parameters<AuthorityGuard['check']>[0]['authInfo'],
         input: (input ?? {}) as Record<string, unknown>,
       });

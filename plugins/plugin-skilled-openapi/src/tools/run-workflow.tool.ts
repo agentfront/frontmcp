@@ -7,7 +7,7 @@
 // across loaded skills and runs it through the SAME authorize → validate →
 // outbound-HTTPS → validate path as a direct action call. This replaces the
 // prior single-shot execute tool with a composable, sandboxed executor.
-import { BundleStore, SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
+import { SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { executeSkillAction, type SkillActionDeps } from '../executor/execute-skill-action';
@@ -45,7 +45,6 @@ export default class RunWorkflowTool extends ToolContext {
     this.get(BundleSyncService);
     const config = this.get(SkilledOpenApiConfig);
     const hiddenOps = this.get(HiddenOpRegistry);
-    const bundleStore = this.get(BundleStore);
     const guard = this.get(AuthorityGuard);
     const resolver = this.get(SkilledOpenApiCredentialResolver);
 
@@ -68,10 +67,9 @@ export default class RunWorkflowTool extends ToolContext {
     // Opt-in tamper-evident audit (registered when skillsConfig.audit.enabled).
     const auditWriter = this.tryGet<SkillAuditWriter>(SkillAuditWriterToken);
     const deps: SkillActionDeps = {
-      config: { outbound: config.outbound },
+      config: { outbound: config.outbound, unprotectedOps: config.unprotectedOps },
       resolver: { resolve: (ref, opts) => resolver.resolve(ref, opts) },
       guard,
-      bundleStore,
       logger: this.logger,
       ...(auditWriter ? { audit: { writer: auditWriter, subject: this.authInfo?.user?.sub ?? 'anonymous' } } : {}),
     };

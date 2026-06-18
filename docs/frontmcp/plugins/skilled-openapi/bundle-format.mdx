@@ -104,7 +104,8 @@ interface OperationDescriptor {
   outputSchema: Record<string, unknown>;        // JSON Schema 2020-12
   mapper: ParameterMapper[];                    // from mcp-from-openapi
   authBindingRef: string;                       // → bundle.authBindings[ref]
-  requiredAuthorities?: AuthoritiesPolicy;      // optional per-op ABAC
+  requiredAuthorities?: AuthoritiesPolicy;      // optional per-op ABAC (AND-ed with skill-level)
+  public?: boolean;                             // explicit "no auth required"; only consulted under unprotectedOps:'deny'
   maxResponseBytes?: number;                    // override default cap
   timeoutMs?: number;                           // override default timeout
   summary?: string;

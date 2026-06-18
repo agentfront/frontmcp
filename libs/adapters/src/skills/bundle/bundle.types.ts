@@ -64,6 +64,14 @@ export interface OperationDescriptor {
   authBindingRef: string;
   /** Optional ABAC policy required to invoke this op. */
   requiredAuthorities?: AuthoritiesPolicy;
+  /**
+   * Explicitly mark this op as public (no authorization required). Only
+   * consulted when the deployment runs with `unprotectedOps: 'deny'`: a
+   * policy-less op is blocked by default-deny UNLESS the bundle opts in with
+   * `public: true`. Under the default `unprotectedOps: 'allow'` this field has
+   * no effect (policy-less ops are already callable).
+   */
+  public?: boolean;
   /** Optional override of the response cap (bytes). */
   maxResponseBytes?: number;
   /** Optional override of the per-op timeout (ms). */
