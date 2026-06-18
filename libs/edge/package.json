@@ -49,8 +49,8 @@
     "node": ">=24.0.0"
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "1.4.0",
-    "@frontmcp/plugin-skilled-openapi": "1.4.0"
+    "@frontmcp/plugin-skilled-openapi": "1.4.0",
+    "@frontmcp/sdk": "1.4.0"
   },
   "peerDependenciesMeta": {
     "@frontmcp/plugin-skilled-openapi": {

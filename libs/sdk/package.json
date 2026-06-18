@@ -91,7 +91,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": "^0.30.0 || ^0.78.0",
-    "@enclave-vm/core": "^2.13.0",
+    "@enclave-vm/core": "^2.14.0",
     "@frontmcp/observability": "1.4.0",
     "@frontmcp/storage-sqlite": "1.4.0",
     "@opentelemetry/api": "^1.9.0",
@@ -102,7 +102,7 @@
     "express": "^4.18.0 || ^5.0.0",
     "openai": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "raw-body": "^3.0.0",
-    "vectoriadb": "^2.2.0"
+    "vectoriadb": "^2.3.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {

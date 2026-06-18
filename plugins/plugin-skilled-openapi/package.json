@@ -54,13 +54,17 @@
     "@frontmcp/sdk": "1.4.0"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.4.0",
     "@enclave-vm/ast": "*",
-    "@enclave-vm/core": "*"
+    "@enclave-vm/core": "*",
+    "@frontmcp/lazy-zod": "1.4.0"
   },
   "peerDependenciesMeta": {
-    "@enclave-vm/ast": { "optional": true },
-    "@enclave-vm/core": { "optional": true }
+    "@enclave-vm/ast": {
+      "optional": true
+    },
+    "@enclave-vm/core": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"
