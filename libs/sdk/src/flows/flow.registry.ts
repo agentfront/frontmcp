@@ -8,6 +8,7 @@ import {
   type FlowOutputOf,
   type FlowRecord,
   type FlowType,
+  type ServerRequest,
 } from '../common';
 import { FrontMcpContextStorage } from '../context';
 import { FlowNotRegisteredError, RegistryDependencyNotRegisteredError } from '../errors';
@@ -137,6 +138,25 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
         },
       ),
     );
+  }
+
+  /**
+   * Find the name of the first registered flow whose HTTP matcher claims this
+   * request (method + `middleware.path` prefix + `canActivate`). For runtimes
+   * with no middleware server (the web-fetch/Worker handler), this replaces
+   * Express's route dispatch so auth/well-known/oauth flows still run. Returns
+   * `undefined` when no flow matches.
+   */
+  async findHttpFlowName(
+    request: ServerRequest,
+    exclude: ReadonlySet<string> = new Set(),
+  ): Promise<FlowName | undefined> {
+    for (const instance of this.instances.values()) {
+      const name = instance.name;
+      if (exclude.has(name)) continue;
+      if (await instance.matchHttp(request)) return name as FlowName;
+    }
+    return undefined;
   }
 
   /**

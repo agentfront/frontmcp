@@ -206,9 +206,16 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       );
     }
 
-    // MCP is served only at the configured entry path(s). Everything else 404s.
-    // Trailing slashes are normalized.
+    // MCP is served only at the configured entry path(s). Everything else is
+    // NOT auto-404'd: auth / well-known / OAuth endpoints (PRM + AS metadata,
+    // /oauth/authorize|token|register|callback, JWKS, /userinfo) are real flows
+    // that self-select by path/canActivate. The Express host mounts them as
+    // middleware; the Worker has no middleware server, so we dispatch the
+    // matching flow here through the SAME flow pipeline (hookable) instead of
+    // hand-rolling discovery. Trailing slashes are normalized.
     if (!entryPaths.has(normalizePath(url.pathname))) {
+      const authResponse = await runMatchingHttpFlowWeb(scope, request);
+      if (authResponse) return withCors(authResponse, request);
       return withCors(Response.json({ error: 'Not Found', entryPaths: [...entryPaths] }, { status: 404 }), request);
     }
 
@@ -250,6 +257,30 @@ export async function runHttpRequestFlowWeb(
   let output: HttpOutput | undefined;
   try {
     output = (await scope.runFlow('http:request', {
+      request: serverRequest,
+      response: {},
+    } as never)) as HttpOutput | undefined;
+  } catch (error) {
+    output = flowErrorToHttpOutput(error);
+  }
+  return output ? renderHttpOutputToWebResponse(output) : undefined;
+}
+
+/**
+ * Dispatch a non-entry-path request through the FrontMCP flow that claims it
+ * (auth / well-known / oauth flows match by `middleware.path` + `canActivate`).
+ * Mirrors the Express host's route dispatch for runtimes with no middleware
+ * server (Cloudflare Worker / web-fetch). Returns the rendered Web `Response`,
+ * or `undefined` when no flow matches (caller 404s).
+ */
+export async function runMatchingHttpFlowWeb(scope: Scope, request: Request): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  const serverRequest = await toServerRequest(request, url);
+  const flowName = await scope.findHttpFlowName(serverRequest);
+  if (!flowName) return undefined;
+  let output: HttpOutput | undefined;
+  try {
+    output = (await scope.runFlow(flowName, {
       request: serverRequest,
       response: {},
     } as never)) as HttpOutput | undefined;

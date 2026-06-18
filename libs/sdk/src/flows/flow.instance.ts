@@ -167,6 +167,35 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   }
 
   /**
+   * Express-equivalent HTTP match for runtimes that have NO middleware server
+   * (the Cloudflare Worker / web-fetch handler, where `registerMiddleware` is a
+   * no-op so flows never mount as routes). It mirrors how Express dispatches:
+   * method + `middleware.path` (mounted as a prefix) + `canActivate`.
+   *
+   * Only flows with a SPECIFIC matcher qualify — a `middleware.path` (e.g.
+   * `/oauth/token`) and/or a `canActivate` (static class method or
+   * `middleware.canActivate`, e.g. the well-known PRM path set). A bare
+   * `{ method }` middleware is too broad to safely claim an arbitrary request,
+   * so it returns false. Used by the web-fetch handler to serve auth/well-known/
+   * oauth endpoints through the real flow pipeline.
+   */
+  async matchHttp(request: ServerRequest): Promise<boolean> {
+    const mw = this.metadata.middleware;
+    if (!mw) return false;
+    const path = typeof mw.path === 'string' ? mw.path : '';
+    const hasStaticCanActivate = typeof (this.FlowClass as unknown as { canActivate?: unknown }).canActivate === 'function';
+    const hasMwCanActivate = (mw.canActivate?.length ?? 0) > 0;
+    if (!path && !hasStaticCanActivate && !hasMwCanActivate) return false;
+    if (this.method && request.method !== this.method) return false;
+    if (path) {
+      const reqPath = request.path;
+      const prefix = path.endsWith('/') ? path : `${path}/`;
+      if (reqPath !== path && !reqPath.startsWith(prefix)) return false;
+    }
+    return this.canActivate(request);
+  }
+
+  /**
    * Get FrontMcpContextStorage from providers (with fallback).
    * Returns undefined if not available (backward compatibility).
    */

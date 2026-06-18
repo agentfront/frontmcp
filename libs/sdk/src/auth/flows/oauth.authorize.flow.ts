@@ -796,7 +796,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     const state = buildState({
       pendingAuthId,
-      submitUrl: `${this.scope.fullPath}/oauth/callback`,
+      submitUrl: '/oauth/callback',
       extraUrl: authUiExtraPath(this.scope.fullPath),
       csrfToken,
       addedItems: authUi.getAddedItems(pendingAuthId),
@@ -982,7 +982,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     logoUri?: string;
   }): string {
     const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     // Read the optional login customization from the local auth options.
     // Only local mode carries `login`; any other mode leaves it undefined,
@@ -1016,7 +1016,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, appId, appName, appDescription, toolId } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     const app: AppAuthCard = {
       appId,
@@ -1042,7 +1042,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, detection, clientId } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     // Convert detection providers to ProviderCard format
     const providers: ProviderCard[] = [...detection.providers.values()].map((provider) => ({

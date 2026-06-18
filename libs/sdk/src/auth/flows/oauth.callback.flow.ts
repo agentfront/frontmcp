@@ -1146,7 +1146,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     fields: Record<string, string>,
     failure: { message: string; retryField?: string },
   ): string {
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
     const ctx: LoginRenderContext = {
       clientId: pendingAuth.clientId,
       clientName: pendingAuth.clientId,
@@ -1227,7 +1227,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const state = buildConsentState(
       {
         pendingAuthId: pendingAuth.id,
-        submitUrl: `${this.scope.fullPath}/oauth/callback`,
+        submitUrl: '/oauth/callback',
         extraUrl: authUiExtraPath(this.scope.fullPath),
         csrfToken,
         addedItems: authUi.getAddedItems(pendingAuth.id),
@@ -1269,7 +1269,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
      */
     preSelectedTools?: string[],
   ): string {
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     // Derive the offered tool cards from the scope via the shared projection so
     // the screen, the validation set, and call-time enforcement agree (and

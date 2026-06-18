@@ -226,7 +226,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const userAgent = (request.headers?.['user-agent'] as string | undefined) ?? undefined;
 
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
-    const prmUrl = `${baseUrl}${prmMetadataPath}`;
+    // `prmMetadataPath` already carries `entryPath`, so the PRM URL is built from
+    // the ORIGIN (not `baseUrl`, which is origin+entryPath and is kept for token
+    // audience verification). Using `baseUrl` here double-counted `entryPath`
+    // (e.g. `/mcp/.well-known/oauth-protected-resource/mcp`), so the
+    // `WWW-Authenticate` `resource_metadata` URL 404'd for any non-root entryPath.
+    const prmUrl = `${getRequestBaseUrl(request)}${prmMetadataPath}`;
     const prmMetadataHeader = buildUnauthorizedHeader(prmUrl);
 
     this.logger.verbose('parseInput', {
