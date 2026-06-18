@@ -46,8 +46,10 @@ class FakeVectorDb {
   needsReindexing(): boolean {
     return this.dirty;
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  search(query: string, _opts: any): Array<{ id: string; metadata: FakeDoc['metadata']; score: number; text: string }> {
+  search(
+    query: string,
+    _opts: Record<string, unknown>,
+  ): Array<{ id: string; metadata: FakeDoc['metadata']; score: number; text: string }> {
     const q = query.toLowerCase();
     return Array.from(this.docs.values())
       .map((d) => ({ id: d.id, metadata: d.metadata, score: d.text.toLowerCase().includes(q) ? 1 : 0, text: d.text }))
