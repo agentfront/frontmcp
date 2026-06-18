@@ -39,6 +39,21 @@ export interface SkillSearchOptions {
    * Filter by specific tools (skills must reference these tools).
    */
   tools?: string[];
+
+  /**
+   * Anti-query / negative search term(s). A skill's relevance score is reduced
+   * by how strongly it matches these terms — surfacing what the user wants while
+   * demoting what they explicitly do NOT want (e.g. query "rate limiting",
+   * negativeQuery "enforcement" to prefer guidance over enforcement skills).
+   * Honored when the installed `vectoriadb` supports it; ignored otherwise.
+   */
+  negativeQuery?: string | string[];
+
+  /**
+   * Weight applied to the negative-query penalty (higher = stronger demotion).
+   * @default 1
+   */
+  negativeWeight?: number;
 }
 
 /**

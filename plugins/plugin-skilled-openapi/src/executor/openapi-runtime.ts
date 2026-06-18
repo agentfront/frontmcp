@@ -154,11 +154,12 @@ function toMcpOpenAPITool(entry: HiddenOpEntry): McpOpenAPITool {
  */
 type AwaitedSecurity = Awaited<ReturnType<McpSecurityResolver['resolve']>>;
 async function resolveSecurity(tool: McpOpenAPITool, ctx: SecurityContext): Promise<AwaitedSecurity> {
-  // Lazy require: SecurityResolver lives in mcp-from-openapi which is the
-  // upstream the adapter wraps. require() keeps the surface narrow without
-  // forcing yet another re-export from the adapter.
-
-  const { SecurityResolver } = require('mcp-from-openapi') as {
+  // Lazy import: SecurityResolver lives in mcp-from-openapi which is the
+  // upstream the adapter wraps. A dynamic `import()` (not `require()`) keeps the
+  // surface narrow AND stays bundlable on V8-isolate runtimes — esbuild inlines
+  // a literal dynamic import, whereas a `require()` under an ESM `createRequire`
+  // banner is left as a runtime resolve that fails on a Worker (no node_modules).
+  const { SecurityResolver } = (await import('mcp-from-openapi')) as {
     SecurityResolver: new () => McpSecurityResolver;
   };
   const resolver = new SecurityResolver();

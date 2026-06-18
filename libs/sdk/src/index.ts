@@ -251,6 +251,8 @@ export type {
   SkillStorageFactoryOptions,
   SkillStorageFactoryResult,
   InjectInstructionsPolicy,
+  SkillIndexCache,
+  SkillIndexScoring,
 } from './skill';
 
 // Agent exports - only user-facing APIs

@@ -379,6 +379,20 @@ export interface SkillsConfigOptions {
    * @default 'append'
    */
   injectInstructions?: 'off' | 'append' | 'prepend' | 'replace';
+
+  /**
+   * Ranking function for skill semantic search (the in-memory vector index).
+   *
+   * - `'cosine'` (default): cosine similarity over normalized TF-IDF vectors.
+   * - `'bm25'`: Okapi BM25 — term-saturating, length-normalized relevance,
+   *   generally stronger for keyword-style queries over a large catalog.
+   *
+   * Only takes effect when the installed `vectoriadb` peer supports it (newer
+   * versions); older versions silently fall back to cosine.
+   *
+   * @default 'cosine'
+   */
+  scoring?: 'cosine' | 'bm25';
 }
 
 /**

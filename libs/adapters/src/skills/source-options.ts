@@ -67,11 +67,28 @@ export const saasSourceSchema = z.object({
   expectedIssuer: z.string().min(1),
 });
 
-export const bundleSourceSchema = z.discriminatedUnion('type', [staticSourceSchema, npmSourceSchema, saasSourceSchema]);
+export const inlineSourceSchema = z.object({
+  type: z.literal('inline'),
+  /**
+   * The skilled-OpenAPI bundle object, embedded directly (no filesystem, no
+   * network). The right source for V8-isolate runtimes (Cloudflare Workers),
+   * where `static` (fs) and `npm` can't run and `saas` needs an endpoint. The
+   * object is validated by the overlay parser, same as file/remote bundles.
+   */
+  content: z.unknown(),
+});
+
+export const bundleSourceSchema = z.discriminatedUnion('type', [
+  staticSourceSchema,
+  npmSourceSchema,
+  saasSourceSchema,
+  inlineSourceSchema,
+]);
 
 export type StaticSourceOptions = z.infer<typeof staticSourceSchema>;
 export type NpmSourceOptions = z.infer<typeof npmSourceSchema>;
 export type SaasSourceOptions = z.infer<typeof saasSourceSchema>;
+export type InlineSourceOptions = z.infer<typeof inlineSourceSchema>;
 export type BundleSourceOptions = z.infer<typeof bundleSourceSchema>;
 
 // ─── Signature verification ────────────────────────────────────────────────

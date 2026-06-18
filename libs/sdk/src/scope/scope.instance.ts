@@ -660,7 +660,9 @@ export class Scope extends ScopeEntry {
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
-    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
+    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef, {
+      ...(this.metadata.skillsConfig?.scoring ? { scoring: this.metadata.skillsConfig.scoring } : {}),
+    });
 
     await Promise.all([
       this.scopeTools.ready,

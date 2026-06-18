@@ -37,11 +37,12 @@
  * });
  * ```
  */
-import { FrontMcpInstance, createWebFetchHandler, type WebFetchHandler } from '@frontmcp/sdk';
+import { FrontMcpInstance, createWebFetchHandler, type SkillIndexCache, type WebFetchHandler } from '@frontmcp/sdk';
 
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
 import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
+import { kvSkillIndexCacheFromEnv, type EdgeSkillIndexCacheFactory } from './skill-index-cache';
 
 export type { ManagedEdgeOptions } from './managed';
 export { buildManagedOpenApiPluginOptions } from './managed';
@@ -53,6 +54,12 @@ export {
   type EdgeKvNamespace,
   type KvBundleCacheOptions,
 } from './kv-cache';
+export {
+  createKvSkillIndexCache,
+  kvSkillIndexCacheFromEnv,
+  type EdgeSkillIndexCacheFactory,
+  type KvSkillIndexCacheOptions,
+} from './skill-index-cache';
 
 /**
  * Well-known DI token `@frontmcp/plugin-skilled-openapi` reads to pick up
@@ -156,6 +163,18 @@ export type EdgeMcpConfig = BaseConfig & {
    * `FRONTMCP_SESSIONS`). When omitted, the worker is stateless.
    */
   sessions?: { binding?: string };
+  /**
+   * Enable a **KV-backed skill search-index cache** for fast cold starts. The
+   * built TF-IDF/BM25 index (embeddings + IDF model) is persisted to a Cloudflare
+   * KV namespace keyed by a content hash of the indexed skills, so a cold start
+   * restores it instead of recomputing the whole corpus. Bind a KV namespace in
+   * `wrangler.toml` under this `binding` name (default `FRONTMCP_SKILL_INDEX`).
+   *
+   * Accepts either a `{ binding }` (resolved from `env` at request time) or a
+   * ready factory `(env) => SkillIndexCache | undefined`. When omitted, or when
+   * the binding is absent on `env`, the index is rebuilt each cold start.
+   */
+  skillIndex?: { binding?: string; ttlSeconds?: number } | EdgeSkillIndexCacheFactory;
 };
 
 // The Scope shape `createWebFetchHandler` expects (not re-exported from the SDK
@@ -164,6 +183,41 @@ type Scope = Parameters<typeof createWebFetchHandler>[0];
 
 /** Default DurableObject binding name when `sessions` is enabled without an explicit one. */
 const DEFAULT_SESSION_BINDING = 'FRONTMCP_SESSIONS';
+
+/** Default KV binding name for the skill search-index cache. */
+const DEFAULT_SKILL_INDEX_BINDING = 'FRONTMCP_SKILL_INDEX';
+
+/** Resolve the skill-index cache (factory form or `{ binding }`) against `env`. */
+function resolveSkillIndexCache(config: EdgeMcpConfig, env: unknown): SkillIndexCache | undefined {
+  const cfg = config.skillIndex;
+  if (!cfg) return undefined;
+  if (typeof cfg === 'function') return cfg(env);
+  const factory = kvSkillIndexCacheFromEnv(
+    cfg.binding ?? DEFAULT_SKILL_INDEX_BINDING,
+    cfg.ttlSeconds != null ? { expirationTtl: cfg.ttlSeconds } : undefined,
+  );
+  return factory(env);
+}
+
+/**
+ * Attach the KV skill-index cache to the scope's skill registry and warm it
+ * (restore-from-KV or build-and-persist) so the first search is fast and future
+ * cold starts skip the rebuild. Best-effort: a missing binding / cache failure
+ * degrades to an on-demand rebuild and never blocks boot.
+ */
+async function wireSkillIndexCache(scope: Scope, config: EdgeMcpConfig, env: unknown): Promise<void> {
+  const cache = resolveSkillIndexCache(config, env);
+  if (!cache) return;
+  const skills = (scope as { skills?: { setIndexCache?: (c: SkillIndexCache) => void; warmIndex?: () => Promise<void> } })
+    .skills;
+  if (typeof skills?.setIndexCache !== 'function' || typeof skills.warmIndex !== 'function') return;
+  skills.setIndexCache(cache);
+  try {
+    await skills.warmIndex();
+  } catch {
+    // A warm failure (e.g. KV hiccup) must not brick boot — search rebuilds lazily.
+  }
+}
 
 /** An edge module: `export default createEdgeMcp(config)`. */
 export interface EdgeMcp {
@@ -215,7 +269,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   // runs once. `buildScope` is ALSO called by the Durable Object (in its own
   // isolate) to build a session-local scope.
   const buildScope = async (env: unknown): Promise<Scope> => {
-    const { managed, sessions: _sessions, ...rest } = config;
+    const { managed, sessions: _sessions, skillIndex: _skillIndex, ...rest } = config;
     // The edge serves via the web-fetch handler, NOT an HTTP listen server, so
     // tell the scope `serve: false`. That selects the no-op `FrontMcpServer`
     // provider instead of `FrontMcpServerInstance` — which would otherwise be
@@ -253,6 +307,10 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     if (!scope) {
       throw new Error('createEdgeMcp: the config produced no scope — declare an app/tool or `managed`.');
     }
+    // Fast cold start: restore (or build + persist) the skill search index from
+    // KV before the handler serves traffic. Runs for the worker isolate AND each
+    // session Durable Object isolate (both call buildScope), all sharing one KV.
+    await wireSkillIndexCache(scope, config, env);
     return scope;
   };
 

@@ -53,7 +53,16 @@ export {
 } from './source-options';
 
 // Sources
-export { createBundleSource, NpmSource, SaasPullSource, StaticSource } from './sources';
+export { createBundleSource, InlineSource, NpmSource, SaasPullSource, StaticSource } from './sources';
+
+// OpenAPI → skilled-bundle compiler (operationId ↔ skill linkage). First-party
+// in-repo compiler; the SaaS control plane reuses it to produce signed manifests.
+export {
+  compileSkilledBundleFromOpenApi,
+  type SkillOpenApiRef,
+  type CompileSkilledBundleOptions,
+  type CompiledSkilledBundle,
+} from './openapi/compile-skilled-bundle';
 export type {
   BundleCacheStore,
   BundleSourceDeps,

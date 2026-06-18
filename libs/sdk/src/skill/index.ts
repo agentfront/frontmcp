@@ -68,6 +68,7 @@ export type {
   SkillListResult,
   MutableSkillStorageProvider,
 } from './skill-storage.interface';
+export type { SkillIndexCache, SkillIndexScoring } from './skill-index-cache.interface';
 
 // Providers
 export { MemorySkillProvider } from './providers/memory-skill.provider';

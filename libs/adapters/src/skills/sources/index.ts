@@ -3,12 +3,13 @@
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { BundleSourceOptions } from '../source-options';
+import { InlineSource } from './inline.source';
 import { NpmSource } from './npm.source';
 import { SaasPullSource } from './saas-pull.source';
 import type { BundleSourceDeps, SkillBundleSource } from './skill-bundle-source.interface';
 import { StaticSource } from './static.source';
 
-export { StaticSource, NpmSource, SaasPullSource };
+export { StaticSource, NpmSource, SaasPullSource, InlineSource };
 export type {
   BundleCacheStore,
   BundleSourceDeps,
@@ -31,5 +32,7 @@ export function createBundleSource(
       return new NpmSource(source, logger);
     case 'saas':
       return new SaasPullSource(source, cacheDir, logger, deps);
+    case 'inline':
+      return new InlineSource(source, logger);
   }
 }

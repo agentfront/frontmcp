@@ -16,8 +16,6 @@
 // fetch, so in practice this catches direct attacks; targeted DNS-rebinding
 // against a tight time window is the documented residual risk.
 
-import { promises as dns } from 'node:dns';
-
 import type { OutboundOptions } from '../skilled-openapi.types';
 
 export interface SsrfCheckResult {
@@ -109,9 +107,14 @@ export async function checkOutboundUrl(
   }
 
   // Resolve to IP and check blocklist. dns.lookup respects the OS resolver
-  // (which honors /etc/hosts and other configured resolvers).
+  // (which honors /etc/hosts and other configured resolvers). `node:dns` is
+  // imported lazily here — only when private-network checks are enabled — so a
+  // V8-isolate runtime (Cloudflare Worker), where `node:dns` may be absent and
+  // egress is already sandboxed, never loads it at module-eval. Set
+  // `outbound.allowPrivateNetworks: true` on such runtimes to skip this entirely.
   let addresses;
   try {
+    const { promises: dns } = await import('node:dns');
     addresses = await dns.lookup(hostname, { all: true });
   } catch (e) {
     return { ok: false, reason: `DNS resolution failed for "${hostname}": ${(e as Error).message}` };
