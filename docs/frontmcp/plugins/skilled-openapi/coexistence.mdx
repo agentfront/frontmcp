@@ -74,7 +74,7 @@ The MCP client sees:
 
 ```
 tools/list:
-  - search_skill, load_skill, execute_action   # from the plugin
+  - search_skill, load_skill, run_workflow     # from the plugin
   - admin:resetCache, admin:reindex, ...       # from the adapter
 skills/list:
   - billing, customers, orders, ...            # from the plugin
@@ -99,6 +99,6 @@ Rare, but possible — if you decide a particular surface should be flatly expos
 
 ## What if both register the same tool name?
 
-The adapter writes to `scope.tools`; the plugin only ever writes meta-tool names (`search_skill`, `load_skill`, `execute_action`) to `scope.tools`. Your adapter-mounted ops and the meta-tools cannot collide unless you deliberately name an adapter tool `search_skill`.
+The adapter writes to `scope.tools`; the plugin only ever writes meta-tool names (`search_skill`, `load_skill`, `run_workflow`) to `scope.tools`. Your adapter-mounted ops and the meta-tools cannot collide unless you deliberately name an adapter tool `search_skill`.
 
 For per-operation collisions inside the plugin (one bundle declaring two skills that both reference the same `operationId`), the bundle's Zod cross-validator rejects at apply time.

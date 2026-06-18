@@ -16,14 +16,15 @@ Every security control in this page maps to one of those vectors. This is not a 
 
 ## Five-gate authorization stack
 
-Every `execute_action` traverses five gates. Removing any of them requires editing the plugin source:
+Every `callTool(actionId, input)` a `run_workflow` script issues traverses five gates. The AgentScript runs inside the enclave sandbox; the gates fire on each `callTool`, not once per `run_workflow`. Removing any of them requires editing the plugin source:
 
 ```
 MCP client
    │
    ▼  ① Inbound auth (RFC 8707-validated JWT from the MCP transport)
-SkilledOpenApi meta-tools
+SkilledOpenApi meta-tools (run_workflow → enclave sandbox)
    │
+   ▼     each callTool(actionId, input) inside the script:
    ▼  ② Bundle origin (signature verified, see below)
 HiddenOpRegistry
    │
@@ -35,6 +36,12 @@ OpenApiHttpExecutor
    ▼  ⑤ Outbound execution (SSRF allowlist + IP blocklist + circuit breaker)
 Customer REST API
 ```
+
+The enclave itself is a sixth, ambient containment layer: the dependency-free
+`@enclave-vm` interpreter gives the script no host access and no network except
+`callTool`, and caps a single workflow's step count, tool-call count, and wall
+time. A workflow can chain many `callTool`s in one round-trip, and each one runs
+the full five-gate path above.
 
 ## Bundle signing (OPA model)
 
@@ -135,7 +142,7 @@ A hostname allowlist alone is insufficient (DNS rebinding bypasses it). The plug
 
 Evaluation runs through `AuthoritiesEngine` from `@frontmcp/auth` — RBAC, ABAC, ReBAC, custom evaluators, and combinators (`anyOf`, `allOf`, `not`) are all available. See the [authorities docs](/frontmcp/authentication/authorities) for the full grammar.
 
-The check happens inside `execute_action`, with the caller's `authInfo` from the MCP request mapped through `AuthoritiesContextBuilder`. Denial returns `ok: false` with a structured reason and is recorded in the audit log.
+The check happens on each `callTool` the `run_workflow` script issues, with the caller's `authInfo` from the MCP request mapped through `AuthoritiesContextBuilder`. A denied action throws inside the script (failing that `callTool`, and the workflow unless the script catches it) and is recorded in the audit log via the `authority-fail` event.
 
 ## OWASP MCP Top 10 (2026) coverage
 
@@ -143,7 +150,7 @@ The check happens inside `execute_action`, with the caller's `authInfo` from the
 | --- | --- |
 | MCP-1 Tool poisoning | Bundle signing + bundle-diff log on every swap (rug-pull detection) |
 | MCP-2 Prompt injection (direct) | Inbound auth + meta-tool input schema strict validation |
-| MCP-3 Indirect prompt injection | Structural output envelope from `execute_action`; output schema enforcement |
+| MCP-3 Indirect prompt injection | Enclave-sandboxed `run_workflow` (script reaches upstream data only via `callTool`); output schema enforcement on each action |
 | MCP-4 Excessive agency | Per-skill ABAC + credential scoping + structured ABAC denial path |
 | MCP-5 Sensitive info disclosure | Outbound allowlist + audit log + no credential echo in logs/traces |
 | MCP-6 Insecure tool description | Signed-bundle origin + bundle-diff log surfaces description changes |
@@ -156,7 +163,7 @@ The check happens inside `execute_action`, with the caller's `authInfo` from the
 
 The customer's REST API can return content (CRM names, ticket bodies, user-supplied fields) that contains instructions targeting the LLM. Defenses:
 
-- **Structural separation**: `execute_action` returns `{ ok, status, data, contentType, error }` — `data` is opaque to the LLM unless explicitly extracted.
+- **Structural separation**: upstream responses never reach the LLM directly. Each `callTool` returns the action's `data` *into the sandboxed AgentScript*, and only the script's final `return <value>` (surfaced as `run_workflow`'s `{ success, value, error, stats }`) is handed back to the LLM. Raw response bodies are opaque to the model unless the script explicitly extracts and returns them.
 - **Output schema validation as a bottleneck**: every response validated against the bundle's declared `outputSchema`.
 - **Response size cap** (`defaultMaxResponseBytes`, default 256KB; per-op override via `op.maxResponseBytes`).
 - **Optional content sanitizer hook** (planned v1.2.x): customers register a `sanitize(action, data)` callback to strip HTML, redact PII, or refuse content matching known-injection heuristics.

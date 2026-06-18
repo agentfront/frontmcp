@@ -13,7 +13,7 @@
 //   - For parity tests (discovery only), the plugin never reaches the
 //     upstream — booting the mock would just collide with main.ts on
 //     :9876 and the listen never resolves.
-//   - For standalone stdio runs that need execute_action, set
+//   - For standalone stdio runs that need run_workflow action execution, set
 //     MOCK_BILLING_PORT to a free port and start the mock in-process
 //     before booting the FrontMCP server (mirror the pattern in main.ts).
 // Keeping this entrypoint slim makes it usable from any future stdio test

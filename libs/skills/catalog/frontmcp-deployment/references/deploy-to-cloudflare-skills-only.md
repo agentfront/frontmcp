@@ -21,9 +21,11 @@ description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with 
 > edge auth described below remain ROADMAP — not yet implemented.
 
 The managed model hosts FrontMCP where the MCP surface is a small set of
-meta-tools (`search_skill`, `load_skill`, `execute_action`) and every capability
-is reached through a skill compiled from an OpenAPI spec. The bundle is pulled
-from a SaaS endpoint, cached in KV, and refreshed on a Cron Trigger.
+meta-tools (`search_skill`, `load_skill`, `run_workflow`) and every capability
+is reached through a skill compiled from an OpenAPI spec. `run_workflow` runs a
+short AgentScript program in the Worker isolate, where each `callTool(actionId,
+input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
+endpoint, cached in KV, and refreshed on a Cron Trigger.
 
 For the conceptual picture, see [Skills-Only Deployment](https://docs.agentfront.dev/frontmcp/features/skills-only-deployment).
 For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).

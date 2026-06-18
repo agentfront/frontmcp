@@ -1,12 +1,12 @@
 ---
 title: Meta-Tools
 sidebarTitle: Meta-Tools
-description: search_skill / load_skill / execute_action — the three tools the MCP client sees, and the prompts to give the LLM.
+description: search_skill / load_skill / run_workflow — the three tools the MCP client sees, and the prompts to give the LLM.
 icon: wrench
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'meta', 'tools', 'typescript']
 ---
 
-The plugin exposes exactly three tools through standard `tools/list`. Every per-operation OpenAPI tool is hidden behind these — `execute_action` is the **only** path to actually invoke an upstream operation, and it's the sole authorization checkpoint.
+The plugin exposes exactly three tools through standard `tools/list`. Every per-operation OpenAPI tool is hidden behind these — `run_workflow` is the **only** path to actually invoke an upstream operation. It runs a short AgentScript program in an enclave sandbox, and each `callTool(actionId, input)` inside that script is the sole authorization checkpoint for that action.
 
 ## `search_skill`
 
@@ -65,50 +65,66 @@ Load the full markdown instructions and the executable actions for one skill.
 }
 ```
 
-The LLM should call `load_skill` once per skill it intends to use, then keep the action schemas in context. Schemas inside `actions[]` are the same schemas the OpenAPI spec declared; the executor validates input against them on every `execute_action`.
+The LLM should call `load_skill` once per skill it intends to use, then keep the action schemas in context. Schemas inside `actions[]` are the same schemas the OpenAPI spec declared; the executor validates input against them on every `callTool` a `run_workflow` script issues. The `actionId` values listed here are exactly what you pass to `callTool(actionId, input)`.
 
 Throws an MCP-protocol error when the `skillId` is unknown.
 
-## `execute_action`
+## `run_workflow`
 
-Invoke one action of a previously-loaded skill.
+Execute a task by running a short **AgentScript** program inside a secure **enclave** sandbox. This is the EXECUTE step: after `search_skill` and `load_skill`, the LLM writes a script that calls the loaded skill's actions to accomplish the user's task — chaining several calls in ONE round-trip.
 
 ```json title="input"
 {
-  "skillId": "invoices",
-  "actionId": "createInvoice",
-  "input": { "customerId": "cus_42", "amount": 1234 }
+  "script": "const inv = await callTool(\"createInvoice\", { customerId: \"cus_42\", amount: 1234 });\nreturn inv;"
 }
 ```
 
 ```json title="output (success)"
 {
-  "ok": true,
-  "status": 201,
-  "contentType": "application/json",
-  "data": { "id": "inv_1", "status": "open" }
+  "success": true,
+  "value": { "id": "inv_1", "status": "open" },
+  "stats": { "durationMs": 38, "toolCalls": 1, "steps": 12 }
 }
 ```
 
 ```json title="output (failure)"
 {
-  "ok": false,
-  "status": 0,
-  "error": "authority denied: missing required role 'admin'"
+  "success": false,
+  "error": "authority denied: missing required role 'admin'",
+  "stats": { "durationMs": 4, "toolCalls": 1, "steps": 3 }
 }
 ```
 
-### Pipeline
+### Inside the script
 
-1. **Resolve** `(skillId, actionId)` from the plugin-private `HiddenOpRegistry`. Unknown action returns `ok: false` with `error: "unknown action ..."`.
+The script runs in the dependency-free `@enclave-vm` interpreter — **no host access** and **no network** except `callTool`:
+
+- `await callTool(actionId, input)` invokes a loaded skill's action (the `actionId` is what `load_skill` lists under `actions[]`). It resolves the operation across all loaded skills, runs it through the full pipeline below, and returns the action's response `data` — or **throws** if the action is unknown / unauthorized / fails validation.
+- `Math` and `JSON` are available.
+- The script's final `return <value>` becomes the workflow's `value`.
+
+```js title="example: chain two actions in one round-trip"
+const t = await callTool("getTodo", { id: 1 });
+const u = await callTool("getUser", { id: t.userId });
+return { todo: t.title, owner: u.name };
+```
+
+The sandbox caps a single workflow's step count, tool-call count (25), and wall time (8s).
+
+### Per-`callTool` pipeline
+
+Each `callTool(actionId, input)` runs the same authorized/validated path a single direct action call would:
+
+1. **Resolve** `actionId` from the plugin-private `HiddenOpRegistry` across loaded skills. Unknown action **throws** `unknown action "..." — run search_skill then load_skill to discover available actions`.
 2. **Pin** the operation descriptor at call entry — a hot bundle-swap mid-call doesn't change the descriptor the in-flight call uses.
-3. **Authorize**: evaluate the action's `requiredAuthorities` (if any) against the caller's `authInfo` via `@frontmcp/auth`'s `AuthoritiesEngine`. Denial returns `ok: false` with `error: "authority denied: ..."`.
-4. **Build** the outbound HTTP request through `@frontmcp/adapters/openapi`'s `buildRequest` — path interpolation, header injection defenses, body serialization, security context resolution all flow through the adapter.
-5. **SSRF gate**: scheme allowlist (`https:` by default), hostname allowlist (built from the active bundle's `services[].baseUrl`), post-DNS IPv4/IPv6 blocklist (RFC 1918, link-local incl. cloud metadata, loopback, ULA), cloud-metadata hostname blocklist.
-6. **Fetch** with timeout (`op.timeoutMs ?? defaultTimeoutMs`) and response-size cap (`op.maxResponseBytes ?? defaultMaxResponseBytes`).
-7. **Parse** the response through `parseResponse` and return the structured envelope.
+3. **Authorize**: evaluate the action's `requiredAuthorities` (if any) against the caller's `authInfo` via `@frontmcp/auth`'s `AuthoritiesEngine`. Denial **throws** `authority denied: ...`.
+4. **Validate input** strictly against the action's JSON Schema. A validation failure **throws** `input validation failed: ...`.
+5. **Build** the outbound HTTP request through `@frontmcp/adapters/openapi`'s `buildRequest` — path interpolation, header injection defenses, body serialization, security context resolution all flow through the adapter.
+6. **SSRF gate**: scheme allowlist (`https:` by default), hostname allowlist (built from the active bundle's `services[].baseUrl`), post-DNS IPv4/IPv6 blocklist (RFC 1918, link-local incl. cloud metadata, loopback, ULA), cloud-metadata hostname blocklist.
+7. **Fetch** with timeout (`op.timeoutMs ?? defaultTimeoutMs`) and response-size cap (`op.maxResponseBytes ?? defaultMaxResponseBytes`).
+8. **Parse** the response through `parseResponse`, validate the JSON body against the action's `outputSchema`, and return the response `data` into the script.
 
-`execute_action` **never throws** — every failure (auth, schema, network, SSRF) returns `ok: false` with a structured `error` string. This keeps the meta-tool surface predictable for the LLM.
+A `callTool` failure (auth, schema, network, SSRF) **throws inside the script**. If the script doesn't catch it, the workflow returns `{ success: false, error, stats }` — `run_workflow` itself never throws to the MCP client; every outcome is a structured envelope. (If the enclave isn't installed, `run_workflow` returns `{ success: false, error: "workflow execution unavailable: ..." }`.)
 
 ## Prompts to give the LLM
 
@@ -116,7 +132,7 @@ The exact prompt depends on your agent harness, but these phrasings work well in
 
 - For `search_skill`: *"Use this tool first to discover what skills exist for the user's request."*
 - For `load_skill`: *"Call this tool once per skill you intend to use. The instructions field is markdown — read it carefully before invoking any action."*
-- For `execute_action`: *"This is the only way to invoke an upstream operation. The pipeline auto-validates input, applies authority checks, and returns a structured envelope. Failures are returned as `ok: false` with a reason — they don't throw."*
+- For `run_workflow`: *"This is the only way to invoke upstream operations. Write a short AgentScript program and call `await callTool(actionId, input)` for each loaded action — you can chain several calls in one round-trip. End with `return <value>`. Each `callTool` auto-validates input and applies authority checks; an unauthorized or failing call throws inside your script. The result comes back as `{ success, value, error, stats }`."*
 
 ## Skills-only mode
 
@@ -129,6 +145,6 @@ By default (`exposeOperationsAsInternalTools: true`), per-operation tools are re
 - Are still callable via the SDK / direct client and can participate in DI, hooks, and observability
 - **Do NOT appear** in the public MCP `tools/list` response
 - Are **NOT directly callable** from MCP clients via `tools/call`
-- Always live in the plugin's `HiddenOpRegistry` so the meta-tools (`load_skill`, `execute_action`) can find and run them with the ABAC checkpoint
+- Always live in the plugin's `HiddenOpRegistry` so a `run_workflow` script's `callTool` can find and run them with the ABAC checkpoint
 
-If you set `exposeOperationsAsInternalTools: false`, the per-operation tools live **only** in `HiddenOpRegistry` (not in `scope.tools`) and the only way to invoke them is `execute_action`. Use this stricter mode when you need to guarantee that nothing — not even other plugins or in-process tooling — can bypass the ABAC checkpoint.
+If you set `exposeOperationsAsInternalTools: false`, the per-operation tools live **only** in `HiddenOpRegistry` (not in `scope.tools`) and the only way to invoke them is a `callTool` inside a `run_workflow` script. Use this stricter mode when you need to guarantee that nothing — not even other plugins or in-process tooling — can bypass the ABAC checkpoint.

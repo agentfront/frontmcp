@@ -250,7 +250,7 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
   it('exposes the skilled-openapi meta-tools (plugin wired + bundled)', async () => {
     const { json } = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const names = (json.result?.tools ?? []).map((t: { name: string }) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['search_skill', 'load_skill', 'execute_action']));
+    expect(names).toEqual(expect.arrayContaining(['search_skill', 'load_skill', 'run_workflow']));
   });
 
   it('Cron scheduled() pulls the bundle and persists it to KV', async () => {

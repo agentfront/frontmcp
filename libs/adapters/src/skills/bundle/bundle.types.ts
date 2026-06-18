@@ -30,7 +30,8 @@ export interface ServiceDescriptor {
 /**
  * One executable operation derived from an OpenAPI `operationId`. The MCP client
  * never sees these directly — they are invokable only through the plugin's
- * `execute_action` meta-tool, which resolves `(skillId, actionId)` to one of these.
+ * `run_workflow` meta-tool, whose sandboxed `callTool(actionId, …)` resolves to
+ * one of these.
  *
  * The descriptor is shaped so it can be projected onto an `McpOpenAPITool` for
  * reuse of `@frontmcp/adapters/openapi`'s `buildRequest` / `parseResponse`
@@ -136,8 +137,8 @@ export interface ResolvedBundle {
  *
  * Throws if any of the skill's `operationIds` is missing from `ops`. Silently
  * dropping unknown ids would let a malformed bundle apply with the skill's
- * advertised action list out of sync with what `execute_action` can actually
- * resolve, so the bundle apply path treats this as a hard failure that trips
+ * advertised action list out of sync with what `run_workflow`'s `callTool` can
+ * actually resolve, so the bundle apply path treats this as a hard failure that trips
  * the rollback.
  */
 export function bundleSkillToActions(skill: BundledSkill, ops: Record<string, OperationDescriptor>): SkillAction[] {

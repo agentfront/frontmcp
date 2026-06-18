@@ -62,7 +62,7 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
 
       const refundMatch = url.pathname.match(/^\/v1\/invoices\/([^/]+)\/refunds$/);
       if (req.method === 'POST' && refundMatch) {
-        // Validate the refund body so a regression in execute_action's body
+        // Validate the refund body so a regression in the skill action body
         // mapper (e.g. dropping the `amount` parameter) actually fails the
         // e2e suite rather than silently passing.
         const raw = await readBody(req);

@@ -169,7 +169,7 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
     const stdioTools = normaliseTools(stdioRaw);
 
     // Sanity: both surfaces must expose the three skilled-openapi meta-tools.
-    const expectedMeta = ['execute_action', 'load_skill', 'search_skill'];
+    const expectedMeta = ['load_skill', 'run_workflow', 'search_skill'];
     const httpNames = httpTools.map((t) => t.name);
     const stdioNames = stdioTools.map((t) => t.name);
     for (const name of expectedMeta) {

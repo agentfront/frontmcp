@@ -12,8 +12,11 @@ import {
 import {
   DynamicPlugin,
   FrontMcpLogger,
+  ListToolsHook,
   Plugin,
   ScopeEntry,
+  buildSkillsCatalogSummary,
+  type FlowCtxOf,
   type ProviderRegistry,
   type ProviderType,
 } from '@frontmcp/sdk';
@@ -28,10 +31,11 @@ import {
   type SkilledOpenApiPluginOptionsInput,
 } from './skilled-openapi.types';
 import { BundleSyncService } from './sync/bundle-sync.service';
-import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
+import RunWorkflowTool from './tools/run-workflow.tool';
 import SearchSkillTool from './tools/search-skill.tool';
+import { searchSkillDescription } from './tools/search-skill.schema';
 
 /**
  * Symbol used by `@frontmcp/observability` to register the GLOBAL-scoped
@@ -141,7 +145,7 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
   description:
     "Serve a customer's OpenAPI spec as signed skill bundles with hidden per-operation tools mediated by 3 meta-tools.",
   providers: [],
-  tools: [SearchSkillTool, LoadSkillTool, ExecuteActionTool],
+  tools: [SearchSkillTool, LoadSkillTool, RunWorkflowTool],
 })
 export default class SkilledOpenApiPlugin extends DynamicPlugin<
   SkilledOpenApiPluginOptions,
@@ -161,6 +165,39 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       this.cachedLogger = this.get(FrontMcpLogger).child('skilled-openapi');
     }
     return this.cachedLogger;
+  }
+
+  /**
+   * Make the always-loaded `search_skill` tool description carry a live catalog
+   * of the available skills (name + short description). Because tools/list is
+   * always in the agent's context (unlike the initialize `instructions` a client
+   * may not inject), embedding the catalog here tells the agent WHEN to call
+   * `search_skill` — it can see what this server can do without searching first.
+   *
+   * Runs at every `tools:list-tools`, so the catalog reflects the currently
+   * loaded bundle (hot-swaps included). Idempotent: the description is rebuilt
+   * from the static base each time, never appended onto a prior catalog.
+   */
+  @ListToolsHook.Did('findTools', { priority: 50 })
+  async injectSkillCatalogIntoSearchTool(flowCtx: FlowCtxOf<'tools:list-tools'>): Promise<void> {
+    const { tools } = flowCtx.state;
+    if (!tools || tools.length === 0) return;
+    const target = tools.find((item) => item.tool?.metadata?.name === 'search_skill');
+    if (!target) return;
+
+    // Ensure the bundle source has booted so the catalog reflects loaded skills.
+    try {
+      this.get(BundleSyncService);
+    } catch {
+      // sync service not available yet — fall back to whatever is registered
+    }
+
+    const scope = this.get(ScopeEntry);
+    const catalog = buildSkillsCatalogSummary(scope.skills);
+    const description = catalog ? `${searchSkillDescription}\n\n---\n\n${catalog}` : searchSkillDescription;
+    // `metadata` is readonly at the type level only; rebuild (not append) from
+    // the static base so repeated lists stay idempotent.
+    (target.tool.metadata as { description?: string }).description = description;
   }
 
   private warnIfInsecureConfig(): void {

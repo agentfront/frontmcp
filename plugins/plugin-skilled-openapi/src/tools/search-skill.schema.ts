@@ -6,8 +6,9 @@ A "skill" is a curated bundle of REST operations exposed to you behind a single
 named capability — instead of seeing each individual API endpoint, you see one
 skill that knows how to do something useful (e.g. "billing", "customers"). Use
 this tool first to discover what skills exist for the user's request, then call
-\`load_skill\` to read its instructions + the actions it offers, and \`execute_action\`
-to actually invoke one.
+\`load_skill\` to read its instructions + the actions it offers, and \`run_workflow\`
+to execute — a short sandboxed script that calls the skill's actions via
+\`callTool(actionId, input)\` (chaining several in one round-trip).
 
 INPUT:
 - query: short natural-language description of what you want to do

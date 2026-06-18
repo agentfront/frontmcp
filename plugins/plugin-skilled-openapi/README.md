@@ -2,7 +2,7 @@
 
 > Wrap your REST API as a **skilled MCP server** without rewriting any controllers.
 
-This plugin lets a FrontMCP server consume **signed skill bundles** produced by an external pipeline (typically FrontMCP Cloud, from your customer's OpenAPI spec at CI time) and serve them as MCP **skills**. The MCP client only sees three meta-tools — `search_skill`, `load_skill`, `execute_action` — while the per-operation REST tools stay hidden behind the skill abstraction. This avoids the well-documented "tool overload" problem (Claude reliability degrades past ~20 tools, GPT Actions caps at 30, Cursor at 40) when wrapping a real-world API with hundreds of endpoints.
+This plugin lets a FrontMCP server consume **signed skill bundles** produced by an external pipeline (typically FrontMCP Cloud, from your customer's OpenAPI spec at CI time) and serve them as MCP **skills**. The MCP client only sees three meta-tools — `search_skill`, `load_skill`, `run_workflow` — while the per-operation REST tools stay hidden behind the skill abstraction. `run_workflow` runs a short AgentScript program in a dependency-free enclave sandbox, where each `await callTool(actionId, input)` invokes a loaded skill's operation; one workflow can chain many calls in a single round-trip. This avoids the well-documented "tool overload" problem (Claude reliability degrades past ~20 tools, GPT Actions caps at 30, Cursor at 40) when wrapping a real-world API with hundreds of endpoints.
 
 ## How it works
 
@@ -13,9 +13,10 @@ OpenAPI spec  --(SaaS analyzer, signs)-->  spec.yaml + overlay.yaml   (signed bu
                           FrontMCP server with @frontmcp/plugin-skilled-openapi
                                                   │
                                                   ▼
-   tools/list  ->  [search_skill, load_skill, execute_action, ...]
+   tools/list  ->  [search_skill, load_skill, run_workflow, ...]
    skills/*    ->  curated skills (each carrying instructions + actions[])
-   execute_action -> ABAC -> input validate -> HTTP -> output validate -> result
+   run_workflow -> enclave sandbox runs AgentScript; per callTool(actionId, input):
+                   ABAC -> input validate -> HTTP -> output validate -> result
 ```
 
 ## Standards alignment
@@ -31,7 +32,7 @@ OpenAPI spec  --(SaaS analyzer, signs)-->  spec.yaml + overlay.yaml   (signed bu
 - **SSRF defenses** layered: URL string check → host allowlist → post-DNS-resolution IP blocklist (RFC 1918, link-local incl. AWS/GCP/Azure metadata, loopback, ULA) → DNS-rebinding pin → per-host concurrency cap → optional egress proxy.
 - **Bundle data treated as adversarial** even after signature verify (CVE-2025-6514 lesson). WHATWG `URL` only, RFC 7230 header validation, no shell-out, no `eval`, strict JSON Schema with `additionalProperties: false`.
 - **Five-gate authorization stack**: bundle signature → inbound JWT (RFC 8707) → per-skill ABAC → credential allowlist → outbound SSRF + circuit breaker.
-- **Indirect prompt injection** mitigations: `execute_action` returns a structured envelope; output schema validation is mandatory; response size capped; optional sanitizer hook.
+- **Indirect prompt injection** mitigations: `run_workflow` runs in a no-host-access enclave sandbox (upstream data reaches the LLM only via the script's `return`); output schema validation is mandatory on each action; response size capped; optional sanitizer hook.
 
 See the OWASP MCP Top 10 (2026) coverage table in the plan document for full mapping.
 

@@ -2,7 +2,7 @@
 //
 // Compile a raw OpenAPI document + hand-authored skills (each referencing the
 // `operationId`s it uses) into a skilled-OpenAPI **bundle** — the manifest the
-// `search_skill` / `load_skill` / `execute_action` runtime consumes.
+// `search_skill` / `load_skill` / `run_workflow` runtime consumes.
 //
 // The connection between operationId ↔ skill lives here: an operation is
 // included ONLY if at least one skill references its `operationId`. So uploading

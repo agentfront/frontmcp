@@ -320,7 +320,8 @@ export interface SkillsConfigOptions {
    * Tamper-evident audit log for skill action invocations.
    *
    * When enabled, every authority-pass / http-call-success / http-call-failure
-   * inside `execute_action` appends a signed, hash-chained record to the
+   * for a skill action (run via `run_workflow`'s `callTool`) appends a signed,
+   * hash-chained record to the
    * configured store. The chain can be verified with `verifyChain()` from
    * `@frontmcp/adapters/skills` — any retroactive edit to a single record
    * breaks the chain at that point.
