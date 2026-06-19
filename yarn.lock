@@ -1900,25 +1900,26 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@enclave-vm/ast@npm:2.14.0, @enclave-vm/ast@npm:^2.14.0":
-  version: 2.14.0
-  resolution: "@enclave-vm/ast@npm:2.14.0"
+"@enclave-vm/ast@npm:2.14.1, @enclave-vm/ast@npm:^2.14.1":
+  version: 2.14.1
+  resolution: "@enclave-vm/ast@npm:2.14.1"
   dependencies:
     "@types/estree": "npm:1.0.8"
     acorn: "npm:8.15.0"
     acorn-walk: "npm:8.3.4"
     astring: "npm:1.9.0"
-  checksum: 10c0/0de6ab8dd125d00a3fb63e7e27c588e5b7cc86814aae328e8fae475781824b93f55a93239f2f1c5412848bbcba99f341bfa035da9d2790b6a7d97b69fd4a5bcb
+  checksum: 10c0/88269a0afb8b47d24ebf70997ee70597899a0429f7da963c955c56b0137fca426bfa6bfae80900cc90b80d2b181be70c9113174d938ad50893e64951f95d293a
   languageName: node
   linkType: hard
 
-"@enclave-vm/core@npm:^2.14.0":
-  version: 2.14.0
-  resolution: "@enclave-vm/core@npm:2.14.0"
+"@enclave-vm/core@npm:^2.14.1":
+  version: 2.14.1
+  resolution: "@enclave-vm/core@npm:2.14.1"
   dependencies:
     "@babel/standalone": "npm:^7.29.0"
-    "@enclave-vm/ast": "npm:2.14.0"
-    "@enclave-vm/types": "npm:2.14.0"
+    "@enclave-vm/ast": "npm:2.14.1"
+    "@enclave-vm/types": "npm:2.14.1"
+    "@types/estree": "npm:1.0.8"
     acorn: "npm:8.15.0"
     acorn-walk: "npm:8.3.4"
     astring: "npm:1.9.0"
@@ -1931,16 +1932,16 @@ __metadata:
       optional: true
     vectoriadb:
       optional: true
-  checksum: 10c0/e1ae625eff8a9a5821fa106a0af12e32f3f355235b2c9a3ce664deaea3dc6d0b3423909044cd7d10e8ec4e80df31382e699c161a6fff556c66cda6b61c42dd80
+  checksum: 10c0/dfab4524b31954566f053852bfdf80ad84e9c9846cd62cbf56a022a53aed2693d2161fac1509575d0abbf73feb6558b10b1446cb136a40dc4a177562cf566354
   languageName: node
   linkType: hard
 
-"@enclave-vm/types@npm:2.14.0":
-  version: 2.14.0
-  resolution: "@enclave-vm/types@npm:2.14.0"
+"@enclave-vm/types@npm:2.14.1":
+  version: 2.14.1
+  resolution: "@enclave-vm/types@npm:2.14.1"
   dependencies:
     zod: "npm:^4.3.6"
-  checksum: 10c0/62608eb1c0847c27122b3b32c4f09df3075a42b05b3111741f1e47be68992029756901d0e752686f2b36cfc6a6ea89fc7223e541e44dbbad479b8e5021436a06
+  checksum: 10c0/dce2c779c35ab30517e58547a3562cfa50d97369dbb87af67d317a2aeee72b4e61c7da2af3c4c90d476129edd1fdfa20376972d22385e11fee4957267247c003
   languageName: node
   linkType: hard
 
@@ -2555,11 +2556,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
   dependencies:
-    "@enclave-vm/core": "npm:^2.14.0"
+    "@enclave-vm/core": "npm:^2.14.1"
     "@frontmcp/protocol": "npm:1.4.0"
     "@frontmcp/sdk": "npm:1.4.0"
     reflect-metadata: "npm:^0.2.2"
-    vectoriadb: "npm:^2.3.0"
+    vectoriadb: "npm:^2.3.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.4.0
     "@frontmcp/plugin-cache": 1.4.0
@@ -2746,7 +2747,7 @@ __metadata:
     "@anthropic-ai/sdk": "npm:^0.104.1"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
-    "@enclave-vm/core": "npm:^2.14.0"
+    "@enclave-vm/core": "npm:^2.14.1"
     "@eslint/js": "npm:^10.0.1"
     "@huggingface/transformers": "npm:^3.2.2"
     "@ianvs/prettier-plugin-sort-imports": "npm:^4.7.1"
@@ -2829,7 +2830,7 @@ __metadata:
     tslib: "npm:^2.8.1"
     typescript: "npm:~5.9.2"
     typescript-eslint: "npm:^8.61.0"
-    vectoriadb: "npm:^2.3.0"
+    vectoriadb: "npm:^2.3.2"
     verdaccio: "npm:6.7.2"
     vite: "npm:^8.0.16"
     webpack-cli: "npm:^5.1.4"
@@ -2964,7 +2965,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/utils@workspace:libs/utils"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.14.0"
+    "@enclave-vm/ast": "npm:^2.14.1"
     "@noble/ciphers": "npm:^2.1.1"
     "@noble/hashes": "npm:^2.0.1"
     "@types/node": "npm:^24.0.0"
@@ -13013,7 +13014,7 @@ __metadata:
     tslib: "npm:^2.3.0"
     tsx: "npm:^4.20.6"
     typescript: "npm:^5.5.3"
-    vectoriadb: "npm:^2.3.0"
+    vectoriadb: "npm:^2.3.2"
     yauzl: "npm:^3.2.0"
     yazl: "npm:^3.3.1"
   bin:
@@ -22688,15 +22689,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vectoriadb@npm:^2.3.0":
-  version: 2.3.0
-  resolution: "vectoriadb@npm:2.3.0"
+"vectoriadb@npm:^2.3.2":
+  version: 2.3.2
+  resolution: "vectoriadb@npm:2.3.2"
   peerDependencies:
     "@huggingface/transformers": ^3.2.2
   peerDependenciesMeta:
     "@huggingface/transformers":
       optional: true
-  checksum: 10c0/2380994162f6e3d7598412c860eb79c4e86fe0c99cdfe803e7fb993a7f6ed22e074a34206fa8a5fc77c312c36951742f45ecbd51118d8528580249510d1599a1
+  checksum: 10c0/96e7ee55616f86f7236607c8ce92deb279f1a6ef1120764bd1b40d3d6719dd48379cdf6d5a87d69d047ce68790558e51f0d7a4c8eef05d9d695ba0e4cf9cf2d2
   languageName: node
   linkType: hard
 
