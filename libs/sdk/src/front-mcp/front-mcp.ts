@@ -291,7 +291,15 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     return async (request: Request): Promise<Response> => {
       if (!inner) {
-        building ??= build();
+        // Reset the memo if build() rejects, so one transient init error doesn't
+        // poison the isolate — without this, every later request would reuse the
+        // rejected promise with no retry path.
+        if (!building) {
+          building = build().catch((err) => {
+            building = undefined;
+            throw err;
+          });
+        }
         inner = await building;
       }
       return inner(request);

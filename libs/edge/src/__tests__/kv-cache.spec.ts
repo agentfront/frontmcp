@@ -79,7 +79,8 @@ describe('kvBundleCacheFromEnv', () => {
     const cache = factory({ BUNDLE_CACHE: kv });
 
     expect(cache).toBeDefined();
-    await cache!.write({ bundleId: 'b' });
+    if (!cache) throw new Error('Expected cache from BUNDLE_CACHE binding');
+    await cache.write({ bundleId: 'b' });
     expect(kv.store.has('frontmcp:bundle:last-good')).toBe(true);
   });
 
@@ -91,7 +92,8 @@ describe('kvBundleCacheFromEnv', () => {
   it('forwards options (key) to the underlying cache', async () => {
     const kv = fakeKv();
     const cache = kvBundleCacheFromEnv('KV', { key: 'k2' })({ KV: kv });
-    await cache!.write({ a: 1 });
+    if (!cache) throw new Error('Expected cache from KV binding');
+    await cache.write({ a: 1 });
     expect(kv.store.has('k2')).toBe(true);
   });
 });

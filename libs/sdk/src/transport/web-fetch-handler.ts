@@ -139,8 +139,12 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   // root as `/`). So `/mcp`, `/mcp/`, and a configured `mcp` all compare equal.
   const normalizePath = (p: string): string => {
     const withSlash = p.startsWith('/') ? p : `/${p}`;
-    const trimmed = withSlash.length > 1 ? withSlash.replace(/\/+$/, '') : withSlash;
-    return trimmed === '' ? '/' : trimmed;
+    // Linear trailing-slash trim. Avoids the polynomial-backtracking `/\/+$/`
+    // regex on an attacker-controlled path (CodeQL js/polynomial-redos): a path
+    // of many '/' would make that regex O(n²). Keeps root as `/`.
+    let end = withSlash.length;
+    while (end > 1 && withSlash.charCodeAt(end - 1) === 47 /* '/' */) end--;
+    return withSlash.slice(0, end);
   };
   // The single MCP endpoint path, driven by config: explicit option → scope's
   // `http.entryPath` (the Express gateway prefix) → worker root `/`. The worker

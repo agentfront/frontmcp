@@ -16,7 +16,7 @@ interface ServerRequestTokenValue {
    * execute stage hands it to `WebStandardStreamableHTTPServerTransport`, which
    * consumes the request body itself (so it must be a fresh, unread Request).
    */
-  webRequest: Request;
+  webRequest: Request | undefined;
   /**
    * The Worker `ExecutionContext` (`{ waitUntil }`) for the current fetch, used
    * to keep the isolate alive past `fetch` while an SSE response body streams.
@@ -31,10 +31,12 @@ interface ServerRequestTokenValue {
    * `tools/call`'s notifications reach it. The DO owns the lifecycle (no
    * per-request teardown). Absent in the stateless web path.
    */
-  webTransport: {
-    mcpServer: unknown;
-    transport: { handleRequest(request: Request, options?: { authInfo?: unknown }): Promise<Response> };
-  };
+  webTransport:
+    | {
+        mcpServer: unknown;
+        transport: { handleRequest(request: Request, options?: { authInfo?: unknown }): Promise<Response> };
+      }
+    | undefined;
 }
 
 export const ServerRequestTokens = {

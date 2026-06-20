@@ -58,7 +58,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/unit/worker"],
+      "outputs": ["{workspaceRoot}/coverage/unit/edge"],
       "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
       "options": {
         "jestConfig": "libs/edge/jest.config.ts",

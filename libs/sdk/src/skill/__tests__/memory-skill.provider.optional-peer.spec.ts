@@ -79,7 +79,9 @@ describe('MemorySkillProvider — optional peer `vectoriadb` (issue 05)', () => 
 
   it('initialize() rejects with a clear, actionable install hint', async () => {
     const provider = new MemorySkillProvider();
-    await expect(provider.initialize()).rejects.toThrow(PEER_ERROR);
+    const error = await provider.initialize().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(PEER_ERROR);
   });
 
   it('search() surfaces the same clear install hint on first use', async () => {

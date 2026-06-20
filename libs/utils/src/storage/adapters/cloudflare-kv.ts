@@ -65,6 +65,9 @@ export class CloudflareKvStorageAdapter extends BaseStorageAdapter {
   }
 
   async ping(): Promise<boolean> {
+    // Honor the adapter's connection state: a disconnected adapter is never
+    // "healthy", regardless of whether the underlying KV would still answer.
+    if (!this.connected) return false;
     try {
       await this.kv.list({ limit: 1 });
       return true;

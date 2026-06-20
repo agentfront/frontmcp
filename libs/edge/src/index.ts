@@ -86,7 +86,7 @@ class EdgeRefreshController {
 
   constructor(
     readonly cache?: EdgeBundleCacheStore,
-    readonly disablePolling: boolean = true,
+    readonly disablePolling = true,
   ) {}
 
   attach(source: RefreshableSource): void {

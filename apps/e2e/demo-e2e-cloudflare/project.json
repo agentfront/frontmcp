@@ -17,7 +17,7 @@
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",
         "runInBand": true,
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     },
     "test:e2e": {
@@ -32,7 +32,7 @@
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cloudflare/jest.e2e.config.ts",
         "runInBand": true,
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     }
   }

@@ -57,14 +57,28 @@ describe('functional factories (decorator-free assembly via app())', () => {
 
   beforeAll(async () => {
     instance = await FrontMcpInstance.createForGraph({ info: { name: 'factory-test', version: '1.0.0' }, apps: [allApp] });
-    handler = createWebFetchHandler(instance.getScopes()[0] as Scope);
+    // The handler serves ONE configured path; this suite drives requests at
+    // `/mcp`, so pin the entry path (unconfigured it defaults to the worker root `/`).
+    handler = createWebFetchHandler(instance.getScopes()[0] as Scope, { entryPath: '/mcp' });
   });
   afterAll(async () => {
     await instance?.dispose?.();
   });
 
-  const result = async (body: unknown): Promise<any> =>
-    (await handler(new Request('https://w/mcp', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) }))).json();
+  // The web handler answers with the MCP Streamable-HTTP transport, which emits
+  // an SSE stream (`event: message\ndata: {…}`) when the client accepts
+  // `text/event-stream`. Parse that (or plain JSON) into the JSON-RPC envelope.
+  const result = async (body: unknown): Promise<any> => {
+    const res = await handler(
+      new Request('https://w/mcp', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) }),
+    );
+    const text = await res.text();
+    if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+      return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+    }
+    return text ? JSON.parse(text) : undefined;
+  };
 
   it('app() boots a server with tool/resource/prompt/skill (initialize ok)', async () => {
     const json = await result({

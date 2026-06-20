@@ -83,7 +83,15 @@ export function createEdgeSessionDurableObject(
       const sessionId =
         request.headers.get(SESSION_ID_HEADER) ?? request.headers.get('mcp-session-id') ?? randomUUID();
 
-      const scope = await (this.#scopePromise ??= buildScope(this.#doEnv));
+      // Reset the memoized promise on failure so a transient init error doesn't
+      // permanently brick this Durable Object instance — the next request retries.
+      let scope;
+      try {
+        scope = await (this.#scopePromise ??= buildScope(this.#doEnv));
+      } catch (error) {
+        this.#scopePromise = undefined;
+        throw error;
+      }
       // Build the session's persistent server + transport once; reuse it for
       // every subsequent request so the GET notification stream survives.
       if (!this.#pair) {

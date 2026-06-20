@@ -267,7 +267,11 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       try {
         const snapshot = await this.indexCache.get(key);
         if (snapshot !== undefined && snapshot !== null) {
-          db.loadSnapshot(snapshot);
+          // The cache round-trips an opaque snapshot (`unknown`); the provider
+          // owns its shape — it is exactly what `db.toSnapshot()` produced — so
+          // cast back to the DB's own snapshot parameter type. (vectoriadb's
+          // `loadSnapshot` is strictly typed as of 2.3.x.)
+          db.loadSnapshot(snapshot as Parameters<typeof db.loadSnapshot>[0]);
           this.indexReady = true;
           return;
         }
@@ -311,7 +315,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private async computeIndexKey(): Promise<string> {
     const parts = Array.from(this.skills.values())
-      .map((s) => `${s.id} ${this.buildSearchableText(s)}`)
+      .map((s) => `${s.id}\u0000${this.buildSearchableText(s)}`)
       .sort();
     const canonical = `frontmcp-skill-index:v1|${this.scoring}|${this.skills.size}|${parts.join('')}`;
     return sha256Hex(canonical);
@@ -342,6 +346,13 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async search(query: string, options: SkillSearchOptions = {}): Promise<SkillSearchResult[]> {
+    // An empty / whitespace-only query has no terms to rank: historically the
+    // zero-score results were dropped by the score threshold (→ no results), and
+    // vectoriadb >= 2.3 now THROWS on such a query. Short-circuit to preserve the
+    // "empty query → no results" contract without hitting the vector DB.
+    if (query.trim().length === 0) {
+      return [];
+    }
     const {
       topK = this.defaultTopK,
       tags,

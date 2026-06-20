@@ -104,6 +104,7 @@ describe('importOptionalPeer (#453)', () => {
       (e: unknown) => e as Error,
     );
 
+    expect(error).toBeInstanceOf(Error);
     expect((error as Error & { cause?: unknown }).cause).toBe(original);
   });
 });

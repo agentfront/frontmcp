@@ -42,6 +42,11 @@ function bytesFrom(body: string | Uint8Array, encoding?: string): Uint8Array {
   if (typeof body !== 'string') return body;
   if (encoding === 'base64') return Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
   if (encoding === 'hex') {
+    // Validate before decoding: an odd length would silently truncate and a
+    // non-hex char would coerce to NaN→0, corrupting the body without error.
+    if (body.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(body)) {
+      throw new TypeError('Invalid hex-encoded body');
+    }
     const out = new Uint8Array(body.length / 2);
     for (let i = 0; i < out.length; i++) out[i] = parseInt(body.slice(i * 2, i * 2 + 2), 16);
     return out;

@@ -119,7 +119,7 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
     // 1. Fake SaaS bundle endpoint — serves the current bundle version,
     //    authenticated by the pinned bearer token.
     server = createServer((req, res) => {
-      if (req.url?.startsWith('/jwks')) {
+      if (req.url?.endsWith('/jwks')) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ keys: [] }));
         return;
@@ -184,7 +184,7 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
 
   const fetchWorker = async (url: string, init?: RequestInit) => {
     const worker = await mf.getWorker();
-    return worker.fetch(url, init as never);
+    return worker.fetch(new Request(url, init));
   };
 
   const mcp = async (body: unknown) => {

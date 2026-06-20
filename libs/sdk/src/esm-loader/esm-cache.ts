@@ -231,8 +231,10 @@ export class EsmCacheManager {
         return undefined;
       }
 
-      // Populate memory cache from disk
+      // Populate memory cache from disk, then enforce the cap — cold-read
+      // hydration must respect `maxEntries` just like the write path does.
       this.memoryStore.set(memKey, meta);
+      this.evictIfNeeded();
       return meta;
     } catch {
       return undefined;
