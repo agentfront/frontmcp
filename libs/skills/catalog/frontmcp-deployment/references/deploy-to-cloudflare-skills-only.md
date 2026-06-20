@@ -138,7 +138,11 @@ Day-to-day skill / OpenAPI edits are pure hot-reload. `wrangler deploy` is only 
 
 `@enclave-vm/core` (full VM) needs `node:vm` and is NOT Worker-safe — the Worker target uses AST-preflight + frozen scope only.
 
-## Auth at the Edge
+## Auth at the Edge 🚧 Roadmap — not yet implemented
+
+> The Frontegg **edge** JWT verification below is a ROADMAP shape, not a shipped
+> feature. Don't wire it expecting edge-native verification today; use the
+> standard auth providers via the decorator build until this lands.
 
 ```yaml
 auth:
@@ -172,7 +176,11 @@ wrangler secret put ACME_API_TOKEN
 
 The cross-validator REJECTS any manifest that references a secret name not declared in `secrets[]`.
 
-## Sample `.github/workflows/deploy.yml`
+## Sample `.github/workflows/deploy.yml` 🚧 Roadmap — not yet implemented
+
+> The packaged GitHub Action and the signed-resync webhook are ROADMAP. The
+> workflow below is an illustrative target, not a copy-paste-ready pipeline —
+> deploy manually with `wrangler deploy` until the Action ships.
 
 ```yaml
 name: Deploy

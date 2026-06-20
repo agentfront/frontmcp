@@ -289,6 +289,50 @@ The worker routes a request to its session DO by `Mcp-Session-Id` (minting one o
 `MCP_SESSION_SECRET` is required on a production isolate (`NODE_ENV=production`) — the flow's `session:verify` stage encrypts session IDs with it. `createEdgeMcp` bridges Worker `env` vars/secrets into `process.env` so FrontMCP's config resolution sees them.
 </Note>
 
+## Low-level: `createWebFetchHandler()` (custom runtimes — Deno, Bun, custom workers)
+
+`createEdgeMcp` (above) is the recommended path. Under it sits the SDK's
+runtime-agnostic Web-standard transport, exported for advanced use — wiring
+FrontMCP into Deno, Bun, or a hand-rolled Worker where you control the
+`export default { fetch }` yourself. It turns a `Scope` into a
+`(request: Request) => Promise<Response>` handler.
+
+```ts
+import { createWebFetchHandler } from '@frontmcp/sdk';
+
+// `scope` comes from a booted FrontMcpInstance (e.g. instance.getScopes()[0]).
+const handler = createWebFetchHandler(scope, { entryPath: '/mcp' });
+
+// Cloudflare Worker / Deno / Bun all speak Web `Request`/`Response`:
+export default { fetch: (request: Request) => handler(request) };
+```
+
+### Types
+
+```ts
+type WebFetchHandler = (request: Request) => Promise<Response>;
+
+function createWebFetchHandler(scope: Scope, options?: CreateWebFetchHandlerOptions): WebFetchHandler;
+
+interface CreateWebFetchHandlerOptions {
+  /** MCP endpoint path(s). Defaults to the scope's `http.entryPath`, else `/`. A trailing slash is normalized; an array opts into a multi-path allow-list. */
+  entryPath?: string | string[];
+  /** Paths answered with a 200 liveness/readiness response. Defaults to `/healthz`, `/readyz`. */
+  healthPaths?: string[];
+  /** CORS for browser MCP clients. Defaults to the scope's `http.cors`. */
+  cors?: WebFetchCorsOptions;
+  /** Optional Durable-Object session router (stateful sessions); falls through to stateless when it returns no `Response`. */
+  sessionRouter?: WebFetchSessionRouter;
+}
+```
+
+Unlike the Express/Node host (`@FrontMcp({ http })` + `serve`), this handler has
+no server to start — the runtime owns the listener and just hands each
+`Request` to it. It runs the **same** `http:request` flow (auth, quota, audit,
+routing) as the Express adapter, so behavior is identical across runtimes; only
+the transport translation differs. `FrontMcp.fetch()` and `createEdgeMcp` are
+thin wrappers that build a scope and call this.
+
 ## Current status & limitations
 
 FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missing:

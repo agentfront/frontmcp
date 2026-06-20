@@ -12,6 +12,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import { type Scope } from '../../../scope/scope.instance';
 import { createWebFetchHandler, type WebFetchHandler } from '../../../transport/web-fetch-handler';
+import { InvalidDecoratorMetadataError } from '../../../errors/decorator.errors';
 import { app } from '../app.decorator';
 import { prompt } from '../prompt.decorator';
 import { resource } from '../resource.decorator';
@@ -51,6 +52,22 @@ const allApp = app({
 
 const HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
 
+/** Minimal JSON-RPC envelope covering exactly the fields these tests read. */
+type JsonRpcResponse = {
+  jsonrpc?: string;
+  id?: number | string | null;
+  result?: {
+    serverInfo?: { name?: string; version?: string };
+    tools?: Array<{ name: string }>;
+    resources?: Array<{ uri: string }>;
+    prompts?: Array<{ name: string }>;
+    content?: Array<{ text?: string }>;
+    contents?: Array<{ text?: string }>;
+    messages?: Array<{ content?: { text?: string } }>;
+  };
+  error?: { code: number; message: string };
+};
+
 describe('functional factories (decorator-free assembly via app())', () => {
   let instance: FrontMcpInstance;
   let handler: WebFetchHandler;
@@ -68,16 +85,16 @@ describe('functional factories (decorator-free assembly via app())', () => {
   // The web handler answers with the MCP Streamable-HTTP transport, which emits
   // an SSE stream (`event: message\ndata: {…}`) when the client accepts
   // `text/event-stream`. Parse that (or plain JSON) into the JSON-RPC envelope.
-  const result = async (body: unknown): Promise<any> => {
+  const result = async (body: unknown): Promise<JsonRpcResponse> => {
     const res = await handler(
       new Request('https://w/mcp', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) }),
     );
     const text = await res.text();
     if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
-      return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+      return dataLine ? (JSON.parse(dataLine.slice('data:'.length).trim()) as JsonRpcResponse) : {};
     }
-    return text ? JSON.parse(text) : undefined;
+    return text ? (JSON.parse(text) as JsonRpcResponse) : {};
   };
 
   it('app() boots a server with tool/resource/prompt/skill (initialize ok)', async () => {
@@ -109,5 +126,20 @@ describe('functional factories (decorator-free assembly via app())', () => {
     expect((list.result?.prompts ?? []).map((p: { name: string }) => p.name)).toContain('greet');
     const get = await result({ jsonrpc: '2.0', id: 6, method: 'prompts/get', params: { name: 'greet', arguments: { who: 'Ada' } } });
     expect(get.result?.messages?.[0]?.content?.text).toBe('Hi Ada');
+  });
+
+  it('app() rejects invalid metadata with InvalidDecoratorMetadataError', () => {
+    // `tools` must be an array of tool entries; a non-array fails the app
+    // metadata schema and must surface as the typed decorator-metadata error.
+    expect(() => app({ id: 'bad', name: 'bad', tools: 'not-an-array' } as never)).toThrow(
+      InvalidDecoratorMetadataError,
+    );
+    let caught: unknown;
+    try {
+      app({ id: 'bad', name: 'bad', resources: 123 } as never);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(InvalidDecoratorMetadataError);
   });
 });

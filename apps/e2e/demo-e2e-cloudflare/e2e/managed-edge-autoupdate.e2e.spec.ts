@@ -108,6 +108,19 @@ function makeBundle(version: string) {
 
 const MCP_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
 
+/** Minimal JSON-RPC envelope covering exactly the fields these tests read. */
+type JsonRpcResponse = {
+  jsonrpc?: string;
+  id?: number | string | null;
+  result?: {
+    serverInfo?: { name?: string; version?: string };
+    capabilities?: { tools?: unknown };
+    tools?: Array<{ name: string }>;
+    content?: Array<{ text?: string }>;
+  };
+  error?: { code: number; message: string };
+};
+
 // NOTE: skipped — gated on the worker-conditioned SDK build (see the file header).
 describe.skip('managed edge auto-update on workerd (miniflare)', () => {
   let server: Server;
@@ -197,13 +210,13 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
   };
 
   // The worker streams SSE by default (legacy protocol); read either shape.
-  const readMcp = async (res: Response): Promise<any> => {
+  const readMcp = async (res: Response): Promise<JsonRpcResponse> => {
     const text = await res.text();
     if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
-      return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+      return dataLine ? (JSON.parse(dataLine.slice('data:'.length).trim()) as JsonRpcResponse) : {};
     }
-    return text ? JSON.parse(text) : undefined;
+    return text ? (JSON.parse(text) as JsonRpcResponse) : {};
   };
 
   const triggerCron = async () => {

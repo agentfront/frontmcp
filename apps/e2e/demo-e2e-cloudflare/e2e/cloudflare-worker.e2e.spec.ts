@@ -42,7 +42,20 @@ async function waitForReady(timeoutMs: number): Promise<boolean> {
   return false;
 }
 
-async function mcp(body: unknown): Promise<{ status: number; json: any }> {
+/** Minimal JSON-RPC envelope covering exactly the fields these tests read. */
+type JsonRpcResponse = {
+  jsonrpc?: string;
+  id?: number | string | null;
+  result?: {
+    serverInfo?: { name?: string; version?: string };
+    capabilities?: { tools?: unknown };
+    tools?: Array<{ name: string }>;
+    content?: Array<{ text?: string }>;
+  };
+  error?: { code: number; message: string };
+};
+
+async function mcp(body: unknown): Promise<{ status: number; json: JsonRpcResponse }> {
   const res = await fetch(`${BASE_URL}/mcp`, {
     method: 'POST',
     headers: MCP_HEADERS,
@@ -53,13 +66,13 @@ async function mcp(body: unknown): Promise<{ status: number; json: any }> {
 }
 
 /** Read an MCP response, handling both buffered JSON and the SSE stream the worker emits by default. */
-async function readMcp(res: Response): Promise<any> {
+async function readMcp(res: Response): Promise<JsonRpcResponse> {
   const text = await res.text();
   if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
     const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
-    return dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : undefined;
+    return dataLine ? (JSON.parse(dataLine.slice('data:'.length).trim()) as JsonRpcResponse) : {};
   }
-  return text ? JSON.parse(text) : undefined;
+  return text ? (JSON.parse(text) as JsonRpcResponse) : {};
 }
 
 describe('FrontMCP on Cloudflare Workers (workerd)', () => {

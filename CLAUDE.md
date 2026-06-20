@@ -442,6 +442,15 @@ Benefits:
 - Consistent API across the codebase
 - Centralized error handling and logging
 
+**Exception — low-level file-descriptor ops in Node-only CLI features:** a few
+Node-only features (e.g. the file logger's sync `openSync`/`writeSync`/
+`closeSync`/`unlinkSync`) need low-level fd APIs that `@frontmcp/utils` does not
+expose. These MAY use a lazily-`require('fs')`'d handle, provided every call site
+is wrapped in try/catch and degrades silently on non-Node runtimes (matching the
+lazy-load pattern `@frontmcp/utils/fs` itself uses). Prefer extending
+`@frontmcp/utils/fs` when an operation will be reused; the direct-`require` path
+is only for genuinely Node-only, fd-level CLI code.
+
 ### Storage Factory Pattern
 
 **IMPORTANT**: When creating stores (session stores, elicitation stores, etc.), always use the factory pattern. Never construct stores directly with raw Redis clients.
