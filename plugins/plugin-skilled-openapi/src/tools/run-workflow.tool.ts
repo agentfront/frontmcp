@@ -106,7 +106,12 @@ export default class RunWorkflowTool extends ToolContext {
       aborted: false,
       toolHandler,
     };
-    const result = await adapter.execute(transformed, context);
+    // enclave >= 2.14 types `ExecutionContext.config` as the FULL (Required)
+    // EnclaveConfig, but the interpreter only reads `maxToolCalls`/`timeout`/
+    // `toolHandler` from the context at runtime (the rest come from the adapter
+    // options/defaults). Cast to the adapter's own param type — runtime is
+    // unchanged and the extra config fields are genuinely unused here.
+    const result = await adapter.execute(transformed, context as Parameters<typeof adapter.execute>[1]);
 
     const stats = {
       durationMs: result.stats.duration,

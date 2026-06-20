@@ -284,7 +284,10 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       // on boot and auto-refreshed. Lazy-imported so non-managed edges never
       // pay for it. The literal specifier stays bundlable by wrangler.
       const mod = await import('@frontmcp/plugin-skilled-openapi');
-      const SkilledOpenApiPlugin = (mod as { default: { init(options: unknown): unknown } }).default;
+      // The packed (CJS) and workspace (ESM) builds expose the default export
+      // through different namespace shapes, so go through `unknown` to keep the
+      // cast valid under both resolutions (the runtime value is the plugin class).
+      const SkilledOpenApiPlugin = (mod as unknown as { default: { init(options: unknown): unknown } }).default;
       const plugin = SkilledOpenApiPlugin.init(buildManagedOpenApiPluginOptions(managed));
       const existingPlugins = ((base as { plugins?: unknown[] }).plugins ?? []) as unknown[];
       // Provide the controller under the well-known token. Config-level
