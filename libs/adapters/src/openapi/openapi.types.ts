@@ -750,7 +750,14 @@ interface BaseOptions {
   staticAuth?: Partial<SecurityContext>;
 
   /**
-   * Options for loading the OpenAPI specification
+   * Options for loading the OpenAPI specification.
+   *
+   * SSRF protection for the spec URL (and external `$ref` resolution) is
+   * configured via `loadOptions.refResolution` — see `@frontmcp/adapters`
+   * OpenAPI docs. As of `mcp-from-openapi` 2.5.0 the guard resolves DNS and
+   * re-validates redirect hops; `allowedHosts` / `blockedHosts` /
+   * `allowInternalIPs` apply to both the spec URL and `$ref`s.
+   *
    * @see LoadOptions from mcp-from-openapi
    */
   loadOptions?: Omit<LoadOptions, 'baseUrl'>; // baseUrl is in BaseOptions

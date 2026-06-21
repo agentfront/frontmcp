@@ -89,7 +89,11 @@ const adapter = new OpenapiAdapter({
       Authorization: 'Bearer token',
     },
     timeout: 30000, // Request timeout in ms (default: 30000)
-    followRedirects: true, // Follow HTTP redirects (default: true)
+    followRedirects: false, // Follow spec-URL redirects (FrontMCP default: false — secure; each hop is re-validated on mcp-from-openapi >= 2.5.0)
+    // SECURITY: external $ref resolution is DISABLED by default (SSRF). Opt in
+    // and restrict via refResolution; allowInternalIPs / allowedHosts also gate
+    // the spec-URL fetch. See "Spec Loading & $ref SSRF" under Security Protections.
+    // refResolution: { allowedProtocols: ['http', 'https'], allowedHosts: ['schemas.example.com'] },
   },
 });
 ```
@@ -1240,6 +1244,28 @@ The adapter includes defense-in-depth security protections:
 | Query Param Collision | Detects conflicts between security and user input parameters                          |
 
 See [`openapi.executor.ts`](./openapi.executor.ts) for implementation details.
+
+### Spec Loading & `$ref` SSRF (GHSA-65h7-9wrw-629c)
+
+Fetching the spec `url` and external `$ref` targets is an SSRF vector. This
+requires `mcp-from-openapi` >= 2.5.0, which DNS-resolves hosts and validates the
+**resolved IP** (not just the hostname string), guards the spec-URL fetch, and
+re-validates every redirect hop. FrontMCP's secure defaults:
+
+- **External `$ref` resolution is OFF by default** — only internal `#/...` refs
+  resolve; set `loadOptions.refResolution` to opt in.
+- **Spec-URL redirects are NOT followed by default** — set
+  `loadOptions.followRedirects: true` to opt in.
+- **Internal/private targets are blocked** for the spec URL and `$ref`s alike
+  (loopback, RFC 1918, CGNAT, link-local / cloud-metadata, multicast, IPv6
+  ULA/link-local); hostnames are DNS-resolved and re-checked.
+
+`loadOptions.refResolution` (`allowedHosts` / `blockedHosts` / `allowInternalIPs`)
+governs **both** the spec URL and `$ref`s. For local/internal specs (e.g.
+`http://localhost:3000/openapi.json`) set `refResolution.allowInternalIPs: true`
+(trusted environments only). See the
+[OpenAPI adapter docs](https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter#spec-loading--ref-resolution-security-ssrf)
+for the full reference.
 
 ## Supported Authentication Types
 

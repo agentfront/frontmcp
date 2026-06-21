@@ -108,7 +108,7 @@ export default class MyApiApp {}
 </ParamField>
 
 <ParamField path="loadOptions" type="LoadOptions">
-  Options for loading the OpenAPI specification — headers, timeout, validation, and `$ref` resolution security. See [`refResolution`](#ref-resolution-security) for controlling how external `$ref` pointers are resolved.
+  Options for loading the OpenAPI specification — headers, timeout, validation, redirect-following, and SSRF/`$ref` resolution security. See [Spec Loading & $ref Resolution Security](#spec-loading--ref-resolution-security-ssrf) for the secure defaults and how to enable external refs or internal targets.
 </ParamField>
 
 <ParamField path="generateOptions" type="GenerateOptions">
@@ -876,29 +876,55 @@ OpenapiAdapter.init({
 });
 ```
 
-### $ref Resolution Security
+### Spec Loading & $ref Resolution Security (SSRF)
 
 <Warning>
-  **Security Advisory (GHSA-v6ph-xcq9-qxxj):** In `mcp-from-openapi` versions &le; 2.1.2, external `$ref` pointers in OpenAPI specs were resolved without restrictions, enabling SSRF attacks (cloud metadata theft, internal network scanning, local file reads). Upgrade to `mcp-from-openapi` &ge; 2.2.0 for built-in protection.
+  **Security Advisories (GHSA-v6ph-xcq9-qxxj, GHSA-65h7-9wrw-629c):** Loading an OpenAPI spec fetches attacker-influenceable URLs — both the spec `url` and any external `$ref` pointers — which is an SSRF vector (cloud-metadata theft, internal-network scanning, local file reads). Hostname-string denylists are bypassable via DNS names that resolve to internal IPs (e.g. `http://127.0.0.1.nip.io/`), HTTP redirects, and IPv4-mapped IPv6 forms. **Use `mcp-from-openapi` &ge; 2.5.0**, which resolves DNS and validates the *resolved IP* (not just the hostname string), guards the initial spec-URL fetch (not only `$ref`s), and re-validates every redirect hop.
 </Warning>
 
-When the adapter dereferences `$ref` pointers in your OpenAPI spec, it enforces security restrictions by default:
+FrontMCP applies **secure defaults** on top of that guard:
 
-- **`file://` protocol is blocked** — prevents local file reads (e.g., `$ref: "file:///etc/passwd"`)
-- **Internal/private IPs are blocked** — prevents SSRF to cloud metadata endpoints and internal services
-- **`http://` and `https://` to public hosts are allowed** — external schema references work normally
+- **External `$ref` resolution is disabled by default.** Only internal `#/...` JSON-pointer refs are resolved; inline `spec:` objects are unaffected. To resolve external refs, set `loadOptions.refResolution` explicitly (you then own its allow/deny lists).
+- **Spec-URL redirects are not followed by default.** A 3xx from your spec host won't be chased toward a (possibly internal) target. Opt in with `loadOptions.followRedirects: true` (each hop is still re-validated on `mcp-from-openapi` &ge; 2.5.0).
+- **Internal/private targets are blocked** for the spec `url` and external `$ref`s alike — loopback (`127.0.0.0/8`, `::1`), RFC 1918 private (`10/8`, `172.16/12`, `192.168/16`), CGNAT (`100.64/10`), link-local / cloud metadata (`169.254/16`, `fe80::/10`), unspecified, multicast, and ULA (`fc00::/7`) — and hostnames are **DNS-resolved** and re-checked, closing the `127.0.0.1.nip.io` class of bypass. Blocked names include `localhost` and `metadata.google.internal`.
+- **`file://` is blocked**, preventing local file reads (e.g. `$ref: "file:///etc/passwd"`).
 
-The blocked IP ranges include: `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` (cloud metadata), `::1`, `fd00::/8`, and hostnames `localhost`, `metadata.google.internal`.
-
-Configure via `loadOptions.refResolution`:
+`loadOptions.refResolution` configures both surfaces — `allowedHosts` / `blockedHosts` / `allowInternalIPs` apply to the spec URL **and** external `$ref`s:
 
 <CodeGroup>
 ```ts Default (Secure)
 // Default behavior — no configuration needed.
-// file:// blocked, internal IPs blocked, http/https to public hosts allowed.
+// External $refs are NOT resolved; spec-URL redirects are NOT followed;
+// the spec URL is fetched only if it (and its resolved IP) is public.
 OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
+});
+```
+
+```ts Enable External Refs (public hosts only)
+// Opt back into external $ref resolution. Internal/private targets stay
+// blocked; hosts are DNS-resolved and redirects re-validated.
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  loadOptions: {
+    refResolution: {
+      allowedProtocols: ['http', 'https'],
+    },
+  },
+});
+```
+
+```ts Local / Internal Development
+// Spec URL on localhost or a private network (e.g. http://localhost:3000).
+// allowInternalIPs also re-allows the spec-URL fetch to internal targets.
+OpenapiAdapter.init({
+  name: 'local-api',
+  url: 'http://localhost:3000/openapi.json',
+  loadOptions: {
+    refResolution: { allowInternalIPs: true },
+  },
 });
 ```
 
@@ -941,8 +967,9 @@ OpenapiAdapter.init({
 });
 ```
 
-```ts Block All External Refs
-// Only resolve local #/ JSON pointer refs, block everything external
+```ts Block All External Refs (FrontMCP default)
+// This is the default — only local #/ JSON pointer refs resolve. Shown here for
+// clarity; you don't need to set it unless overriding a broader policy.
 OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
@@ -955,14 +982,20 @@ OpenapiAdapter.init({
 ```
 </CodeGroup>
 
+<Note>
+  **`followRedirects`** (a `loadOptions` field, not part of `refResolution`) defaults to `false` in FrontMCP — the spec-URL fetch will not follow 3xx redirects unless you opt in. On `mcp-from-openapi` &ge; 2.5.0 each followed hop is re-validated against the SSRF guard.
+</Note>
+
 #### `refResolution` Options Reference
 
-| Option | Type | Default | Description |
+These apply to **both** the spec-URL fetch and external `$ref` resolution (`mcp-from-openapi` &ge; 2.5.0).
+
+| Option | Type | Default (FrontMCP) | Description |
 | --- | --- | --- | --- |
-| `allowedProtocols` | `string[]` | `['http', 'https']` | Protocols allowed for external `$ref` resolution. Supports any protocol (http, https, ftp, ws, wss, etc.). Set to `[]` to block all external refs. |
-| `allowedHosts` | `string[]` | `undefined` | When set, only `$ref` URLs pointing to these hostnames are resolved. All other hosts are blocked. |
-| `blockedHosts` | `string[]` | `undefined` | Additional hostnames/IPs to block, on top of the built-in internal IP block list. |
-| `allowInternalIPs` | `boolean` | `false` | Set to `true` to disable the built-in internal/private IP block list. **Warning:** may expose to SSRF. |
+| `allowedProtocols` | `string[]` | `[]` | Protocols allowed for external `$ref` resolution (http, https, file, …). **FrontMCP defaults this to `[]`** (external refs disabled); set `['http','https']` to enable. |
+| `allowedHosts` | `string[]` | `undefined` | When set, only the spec URL / `$ref` URLs pointing to these hostnames are allowed. All other hosts are blocked. |
+| `blockedHosts` | `string[]` | `undefined` | Additional hostnames/IPs to block, on top of the built-in internal-address block list. |
+| `allowInternalIPs` | `boolean` | `false` | Set to `true` to allow loopback / private / internal targets for the spec URL **and** `$ref`s (skips the internal-address block list and DNS re-check). **Warning:** re-exposes SSRF; use only in trusted/local environments. |
 
 ## Polling & Live Updates
 

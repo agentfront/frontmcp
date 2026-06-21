@@ -209,7 +209,24 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
    * Initialize the OpenAPI tool generator from URL or spec
    * @private
    */
+  /**
+   * Resolve the `$ref` resolution policy with FrontMCP's secure defaults.
+   *
+   * SECURITY (GHSA-65h7-9wrw-629c): external `$ref` resolution is **disabled by
+   * default** — an untrusted spec can otherwise smuggle SSRF via external refs.
+   * Internal-only (`#/...`) refs and inline `spec:` are unaffected. Developers
+   * who genuinely need external refs opt back in by setting
+   * `loadOptions.refResolution` explicitly (and then own its allow/deny lists;
+   * `mcp-from-openapi` ≥ 2.5.0 DNS-resolves and re-validates redirects).
+   * @private
+   */
+  private resolveRefResolution(): NonNullable<OpenApiAdapterOptions['loadOptions']>['refResolution'] {
+    return this.options.loadOptions?.refResolution ?? { allowedProtocols: [] };
+  }
+
   private async initializeGenerator(): Promise<OpenAPIToolGenerator> {
+    const refResolution = this.resolveRefResolution();
+
     if ('url' in this.options) {
       return await OpenAPIToolGenerator.fromURL(this.options.url, {
         baseUrl: this.options.baseUrl,
@@ -217,15 +234,18 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         dereference: this.options.loadOptions?.dereference ?? true,
         headers: this.options.loadOptions?.headers,
         timeout: this.options.loadOptions?.timeout,
-        followRedirects: this.options.loadOptions?.followRedirects,
-        refResolution: this.options.loadOptions?.refResolution,
+        // SECURITY: do not follow spec-URL redirects by default — a 3xx to an
+        // internal target would otherwise be fetched. With mcp-from-openapi
+        // ≥ 2.5.0 each hop is re-validated; opt in with loadOptions.followRedirects.
+        followRedirects: this.options.loadOptions?.followRedirects ?? false,
+        refResolution,
       });
     } else if ('spec' in this.options) {
       return await OpenAPIToolGenerator.fromJSON(this.options.spec, {
         baseUrl: this.options.baseUrl,
         validate: this.options.loadOptions?.validate ?? true,
         dereference: this.options.loadOptions?.dereference ?? true,
-        refResolution: this.options.loadOptions?.refResolution,
+        refResolution,
       });
     } else {
       throw new Error('Either url or spec must be provided in OpenApiAdapterOptions');
