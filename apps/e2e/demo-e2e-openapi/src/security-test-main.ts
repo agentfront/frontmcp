@@ -20,6 +20,17 @@ const staticJwt = process.env['STATIC_AUTH_JWT'];
       name: 'secured-api',
       url: openapiUrl,
       baseUrl: apiBaseUrl,
+      // E2E tests serve the spec from a MockAPIServer on http://localhost:<port>.
+      // mcp-from-openapi (>= 2.5.0) DNS-resolves the spec URL and blocks internal
+      // addresses by default (SSRF guard), so we must opt back into loopback here.
+      // Keep allowedProtocols: [] to preserve the adapter's secure default of
+      // disabling external $ref resolution.
+      loadOptions: {
+        refResolution: {
+          allowedProtocols: [],
+          allowInternalIPs: true,
+        },
+      },
       // Use staticAuth with JWT from environment variable
       staticAuth: staticJwt ? { jwt: staticJwt } : undefined,
     }),
