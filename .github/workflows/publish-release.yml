@@ -218,6 +218,22 @@ jobs:
           console.log(`Normalized ${totalChanged} package.json file(s) to v${VERSION}`);
           NODE
 
+      - name: Refresh yarn.lock to match bumped versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # nx release version + the normalize step above rewrite every internal
+          # @frontmcp/* version pin in libs/*/package.json and plugins/*/package.json.
+          # Yarn records those exact pins inside yarn.lock (workspace peerDependencies
+          # are stored verbatim), so the lockfile is now stale relative to the manifests.
+          # If we commit without refreshing it, the next push to the release branch runs
+          # `yarn install --immutable` (package-e2e + others) and fails with YN0028
+          # "The lockfile would have been modified by this install, which is explicitly
+          # forbidden." --mode=update-lockfile resolves offline (the bumped packages are
+          # workspace soft-links) and only rewrites the recorded pins — no fetch/link.
+          yarn install --mode=update-lockfile
+
       - name: Commit version bump
         env:
           BRANCH: ${{ steps.context.outputs.branch }}
