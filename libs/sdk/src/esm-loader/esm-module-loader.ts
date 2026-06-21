@@ -17,24 +17,26 @@ import { normalizeEsmExport } from './esm-manifest';
 import { VersionResolver } from './version-resolver';
 
 /**
- * Dynamic `import()` of a runtime-computed specifier, indirected through a
- * lazily-built function so static bundlers (esbuild / `wrangler dev` /
- * miniflare) don't try to resolve these specifiers at build time.
+ * Dynamic `import()` of a runtime-computed specifier.
  *
- * Why: this loader's only job is to import npm packages / bundles from disk,
- * blob, or temp files — a Node/browser concern that never runs on a V8 isolate
- * (Cloudflare Workers). But `export * from './esm-loader'` in the SDK barrel
- * pulls this module into a worker bundle, and a literal `import(computedUrl)`
- * makes the bundle un-analyzable: miniflare aborts with `ERR_MODULE_DYNAMIC_SPEC`.
- * Wrapping `import()` in a `new Function` body hides it from the bundler's AST
- * walk. The function is built lazily on first call (Node/browser only), so a
- * Worker that merely bundles the SDK never constructs it — workerd forbids
- * `eval`/`new Function` at runtime, but only execution is blocked, not loading.
+ * This loader's only job is to import npm packages / bundles from disk, blob, or
+ * temp files — a Node/browser concern that never executes on a V8 isolate
+ * (Cloudflare Workers). `export * from './esm-loader'` in the SDK barrel still
+ * pulls this module into a worker bundle, so the dynamic specifier carries the
+ * `webpackIgnore` + `@vite-ignore` magic comments to tell bundlers not to try to
+ * resolve it at build time; the call site is simply never reached in a worker.
+ *
+ * It MUST stay a real `import()` expression (not hidden behind `new Function`):
+ * Jest's swc transform rewrites a literal `import()` to a runtime it can execute,
+ * whereas a `new Function('s','return import(s)')` body becomes a native VM
+ * dynamic import that throws `A dynamic import callback was invoked without
+ * --experimental-vm-modules` (and that flag breaks the rest of the suite). The
+ * `webpackIgnore`/`@vite-ignore` comments already keep the worker bundle happy
+ * (verified by the demo-e2e-cloudflare workerd boot), so no further indirection
+ * is needed.
  */
-let dynamicImport: ((specifier: string) => Promise<unknown>) | undefined;
 function importComputed(specifier: string): Promise<unknown> {
-  dynamicImport ??= new Function('s', 'return import(s)') as (s: string) => Promise<unknown>;
-  return dynamicImport(specifier);
+  return import(/* webpackIgnore: true */ /* @vite-ignore */ specifier);
 }
 
 /**

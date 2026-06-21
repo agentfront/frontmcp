@@ -264,4 +264,23 @@ describe('search_skill — additional coverage', () => {
     expect(result.skills[0]).not.toHaveProperty('bundleVersion');
     expect(result.skills[0].description).toBe('');
   });
+
+  it('forwards the anti-query (notQuery) and demotion weight (notWeight) to the registry', async () => {
+    const search = jest.fn(async () => []);
+    const ctx = makeToolThis({ scopeSkills: { search, hasAny: jest.fn(() => true) } });
+    await SearchSkillTool.prototype.execute.call(ctx, {
+      query: 'rate limiting',
+      tags: ['guidance'],
+      notQuery: 'enforcement',
+      notWeight: 3,
+    });
+    expect(search).toHaveBeenCalledWith(
+      'rate limiting',
+      expect.objectContaining({
+        tags: ['guidance'],
+        negativeQuery: 'enforcement',
+        negativeWeight: 3,
+      }),
+    );
+  });
 });

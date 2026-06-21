@@ -264,4 +264,49 @@ describe('executeOperation', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Required.*path.*'id'/i);
   });
+
+  it('returns auth error when apiKey vaultRef does not resolve', async () => {
+    const entry = buildEntry();
+    entry.authBinding = { kind: 'apiKey', in: 'header', name: 'X-Api-Key', vaultRef: 'missing' };
+    const result = await executeOperation({
+      entry,
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({ resolver: new MemoryCredentialResolver({}) }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/auth resolution failed/);
+    expect(result.error).toMatch(/apiKey vaultRef "missing" did not resolve/);
+  });
+
+  it('returns auth error when oauth2 vaultRef does not resolve', async () => {
+    const entry = buildEntry();
+    entry.authBinding = { kind: 'oauth2', flow: 'client_credentials', vaultRef: 'missing' };
+    const result = await executeOperation({
+      entry,
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({ resolver: new MemoryCredentialResolver({}) }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/auth resolution failed/);
+    expect(result.error).toMatch(/oauth2 vaultRef "missing" did not resolve/);
+  });
+
+  it('refuses an upstream 3xx redirect instead of following it (credential-exfiltration guard)', async () => {
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({
+        // 302 with no body — the runtime must surface it as a failure, never follow.
+        fetchImpl: (async () =>
+          new Response(null, { status: 302, headers: { location: 'https://evil.example/steal' } })) as never,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(302);
+    expect(result.error).toMatch(/redirect/);
+    expect(result.error).toMatch(/not followed/);
+  });
 });

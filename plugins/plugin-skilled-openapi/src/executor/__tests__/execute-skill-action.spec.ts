@@ -128,4 +128,77 @@ describe('executeSkillAction', () => {
     expect(writer.writeAuthorityFail).toHaveBeenCalledTimes(1);
     expect(writer.writeHttpCallSuccess).not.toHaveBeenCalled();
   });
+
+  it('rethrows when the outbound call throws, after a detached http-call-failure audit', async () => {
+    const boom = new Error('network down');
+    mockExecuteOperation.mockRejectedValue(boom);
+    const writer = {
+      writeAuthorityPass: jest.fn(async () => undefined),
+      writeAuthorityFail: jest.fn(async () => undefined),
+      writeHttpCallSuccess: jest.fn(async () => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    };
+    await expect(
+      executeSkillAction({
+        entry: makeEntry(),
+        input: { id: 1 },
+        authInfo: {},
+        deps: makeDeps({ audit: { writer: writer as never, subject: 'u' } }),
+      }),
+    ).rejects.toThrow('network down');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(expect.anything(), { status: 0, error: boom });
+  });
+
+  it('tolerates a malformed pinned service URL (allowedHosts stays empty)', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 200, data: { id: 1, name: 'x' }, contentType: 'application/json' });
+    const entry = makeEntry();
+    entry.service = { ...entry.service, baseUrl: 'http://[not a url' } as HiddenOpEntry['service'];
+    const res = await executeSkillAction({ entry, input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    expect(res.ok).toBe(true);
+    const passed = mockExecuteOperation.mock.calls[0][0] as { deps: { allowedHosts: Set<string> } };
+    expect(passed.deps.allowedHosts.size).toBe(0);
+  });
+
+  it('audits an upstream ok:false with a synthesized message when the envelope has no error', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: false, status: 503 });
+    const writer = {
+      writeAuthorityPass: jest.fn(async () => undefined),
+      writeAuthorityFail: jest.fn(async () => undefined),
+      writeHttpCallSuccess: jest.fn(async () => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    };
+    const res = await executeSkillAction({
+      entry: makeEntry(),
+      input: { id: 1 },
+      authInfo: {},
+      deps: makeDeps({ audit: { writer: writer as never, subject: 'u' } }),
+    });
+    expect(res).toMatchObject({ ok: false, status: 503 });
+    expect(res.error).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 503, error: 'http call failed with status 503' }),
+    );
+  });
+
+  it('logs a warning (never throws) when a detached audit write rejects', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 200, data: { id: 1, name: 'x' }, contentType: 'application/json' });
+    const warn = jest.fn();
+    const writer = {
+      writeAuthorityPass: jest.fn(async () => {
+        throw new Error('audit backend down');
+      }),
+      writeAuthorityFail: jest.fn(async () => undefined),
+      writeHttpCallSuccess: jest.fn(async () => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    };
+    const deps = makeDeps({ audit: { writer: writer as never, subject: 'u' } });
+    (deps.logger as unknown as { warn: jest.Mock }).warn = warn;
+    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps });
+    expect(res.ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('authority-pass write failed'));
+  });
 });

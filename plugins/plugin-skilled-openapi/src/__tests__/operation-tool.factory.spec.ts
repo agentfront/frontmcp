@@ -153,6 +153,38 @@ describe('OperationToolFactory', () => {
       expect(toolRegistry.registered).toHaveLength(1);
       expect(toolRegistry.registered[0].metadataName).toBe('acme.createInvoice');
     });
+
+    it('marks GET operations as read-only / non-destructive in the annotations', () => {
+      const toolRegistry = new FakeToolRegistry();
+      const providers = new FakeProviderRegistry();
+      // Capture the metadata block by intercepting registerToolInstance.
+      let captured: Record<string, unknown> | undefined;
+      jest
+        .spyOn(toolRegistry, 'registerToolInstance')
+        .mockImplementation((tool: { record: { metadata: Record<string, unknown> } }) => {
+          captured = tool.record.metadata;
+        });
+      const factory = new OperationToolFactory({
+        toolRegistry: toolRegistry as unknown as ToolRegistry,
+        providers: providers as unknown as ProviderRegistry,
+        logger: noopLogger as never,
+      });
+      const entry = buildEntry({
+        op: { ...buildEntry().op, httpMethod: 'GET', summary: 'List invoices', description: 'Returns all invoices.' },
+      });
+      factory.register(entry);
+
+      const annotations = captured?.annotations as {
+        readOnlyHint: boolean;
+        destructiveHint: boolean;
+        openWorldHint: boolean;
+      };
+      expect(annotations.readOnlyHint).toBe(true);
+      expect(annotations.destructiveHint).toBe(false);
+      // With both summary + description present, the description is the
+      // composed "<summary>\n\n<description>" form.
+      expect(captured?.description).toBe('List invoices\n\nReturns all invoices.');
+    });
   });
 
   describe('register', () => {
