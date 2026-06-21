@@ -66,6 +66,9 @@ jobs:
         run: npx prettier --check .
         continue-on-error: true
 
+      - name: Validate package manifests (strip-dist + worker export conditions)
+        run: node --test scripts/*.test.mjs
+
   # Build all libraries
   build:
     name: "Build Libraries"

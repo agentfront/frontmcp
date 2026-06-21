@@ -29,22 +29,27 @@
   },
   "imports": {
     "#mcp-streamable-http": {
+      "worker": "./src/node-mcp-streamable-http.ts",
       "browser": "./src/browser-mcp-streamable-http.ts",
       "default": "./src/node-mcp-streamable-http.ts"
     },
     "#mcp-server": {
+      "worker": "./src/node-mcp-server.ts",
       "browser": "./src/browser-mcp-server.ts",
       "default": "./src/node-mcp-server.ts"
     },
     "#server-types": {
+      "worker": "./src/node-server-types.ts",
       "browser": "./src/browser-server-types.ts",
       "default": "./src/node-server-types.ts"
     },
     "#stdio-client": {
+      "worker": "./src/browser-stdio-client.ts",
       "browser": "./src/browser-stdio-client.ts",
       "default": "./src/node-stdio-client.ts"
     },
     "#stdio-server": {
+      "worker": "./src/browser-stdio-server.ts",
       "browser": "./src/browser-stdio-server.ts",
       "default": "./src/node-stdio-server.ts"
     }

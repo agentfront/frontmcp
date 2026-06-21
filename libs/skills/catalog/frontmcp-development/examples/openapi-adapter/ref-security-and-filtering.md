@@ -2,19 +2,19 @@
 name: ref-security-and-filtering
 reference: openapi-adapter
 level: intermediate
-description: 'Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.'
+description: 'Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF attacks (GHSA-65h7-9wrw-629c) and filtering which API operations become MCP tools.'
 tags: [development, openapi, adapters, security, ssrf, filtering]
 features:
-  - 'Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers'
-  - 'Using `allowedHosts` to restrict $refs to trusted schema servers'
-  - 'Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols'
+  - 'Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0'
+  - 'Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`'
+  - 'Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)'
   - 'Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`'
   - 'Combining security hardening with operation filtering for a production-ready setup'
 ---
 
 # $ref Security and Operation Filtering
 
-Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.
+Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF attacks (GHSA-65h7-9wrw-629c) and filtering which API operations become MCP tools.
 
 ## Code
 
@@ -26,14 +26,19 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
 @App({
   name: 'secure-app',
   adapters: [
-    // Production-hardened: restrict $refs to trusted hosts + filter operations
+    // Production-hardened: ENABLE external $refs but restrict to trusted hosts.
+    // (External refs are OFF by default in FrontMCP; you must opt in.)
+    // NOTE: allowedHosts now also gates the spec URL itself, so the spec host
+    // (api.partner.com) must be in the list. Internal targets stay blocked and
+    // hostnames are DNS-resolved (mcp-from-openapi >= 2.5.0).
     OpenapiAdapter.init({
       name: 'partner-api',
       url: 'https://api.partner.com/openapi.json',
       baseUrl: 'https://api.partner.com',
       loadOptions: {
         refResolution: {
-          // Only allow $refs pointing to the partner's own schema server
+          allowedProtocols: ['http', 'https'], // opt back into external refs
+          // Only allow the spec URL + $refs pointing to the partner's own hosts
           allowedHosts: ['schemas.partner.com', 'api.partner.com'],
           // Block additional hosts known to be problematic
           blockedHosts: ['internal.partner.com'],
@@ -50,7 +55,8 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       },
     }),
 
-    // Internal API: allow internal IPs but lock down to specific operations
+    // Internal API: allow internal targets (trusted environment only).
+    // allowInternalIPs re-allows BOTH the spec-URL fetch to 10.0.0.5 AND $refs.
     OpenapiAdapter.init({
       name: 'internal-api',
       url: 'http://10.0.0.5:8080/openapi.json',
@@ -67,7 +73,8 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       },
     }),
 
-    // Maximum lockdown: no external $refs at all
+    // Maximum lockdown: no external $refs at all. This matches the FrontMCP
+    // default (external refs off) — shown explicitly for clarity.
     OpenapiAdapter.init({
       name: 'sandbox-api',
       url: 'https://sandbox.example.com/openapi.json',
@@ -99,9 +106,9 @@ class MyServer {}
 
 ## What This Demonstrates
 
-- Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers
-- Using `allowedHosts` to restrict $refs to trusted schema servers
-- Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols
+- Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0
+- Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`
+- Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)
 - Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`
 - Combining security hardening with operation filtering for a production-ready setup
 

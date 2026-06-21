@@ -25,10 +25,12 @@
   },
   "imports": {
     "#sse-transport": {
+      "worker": "./src/transport/adapters/polyfills/browser-sse-transport.ts",
       "browser": "./src/transport/adapters/polyfills/browser-sse-transport.ts",
       "default": "./src/transport/adapters/polyfills/node-sse-transport.ts"
     },
     "#express-host": {
+      "worker": "./src/server/adapters/polyfills/browser-express-host.ts",
       "browser": "./src/server/adapters/polyfills/browser-express-host.ts",
       "default": "./src/server/adapters/polyfills/node-express-host.ts"
     }
