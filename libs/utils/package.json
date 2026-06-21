@@ -46,26 +46,32 @@
   },
   "imports": {
     "#crypto-provider": {
+      "worker": "./src/crypto/node.ts",
       "browser": "./src/crypto/browser.ts",
       "default": "./src/crypto/node.ts"
     },
     "#async-context": {
+      "worker": "./src/async-context/node-async-context.ts",
       "browser": "./src/async-context/browser-async-context.ts",
       "default": "./src/async-context/node-async-context.ts"
     },
     "#event-emitter": {
+      "worker": "./src/event-emitter/node-event-emitter.ts",
       "browser": "./src/event-emitter/browser-event-emitter.ts",
       "default": "./src/event-emitter/node-event-emitter.ts"
     },
     "#env": {
+      "worker": "./src/env/node-env.ts",
       "browser": "./src/env/browser-env.ts",
       "default": "./src/env/node-env.ts"
     },
     "#runtime-context": {
+      "worker": "./src/env/runtime-context.ts",
       "browser": "./src/env/browser-runtime-context.ts",
       "default": "./src/env/runtime-context.ts"
     },
     "#path": {
+      "worker": "./src/path/node-path.ts",
       "browser": "./src/path/browser-path.ts",
       "default": "./src/path/node-path.ts"
     }
