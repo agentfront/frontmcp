@@ -91,7 +91,7 @@ If you started with the adapter and your spec grew past the point where flat exp
 3. **Register the plugin** with a `static` source pointing at the bundle artifact your CI produces.
 4. **Phase**: deploy with both running, remove operations from the adapter as the bundle covers them, eventually drop adapter-managed ops the bundle now owns.
 
-A future v1.2.x release may ship a CLI helper (`frontmcp openapi-to-bundle`) that does step 2 mechanically; for now it's a small script.
+Step 2 is a small script you run in CI — read your OpenAPI spec, group operations into skills, and emit a signed `ResolvedBundle`.
 
 ### From plugin to adapter
 

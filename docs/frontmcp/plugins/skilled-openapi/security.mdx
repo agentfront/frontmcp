@@ -154,10 +154,10 @@ The check happens on each `callTool` the `run_workflow` script issues, with the 
 | MCP-4 Excessive agency | Per-skill ABAC + credential scoping + structured ABAC denial path |
 | MCP-5 Sensitive info disclosure | Outbound allowlist + audit log + no credential echo in logs/traces |
 | MCP-6 Insecure tool description | Signed-bundle origin + bundle-diff log surfaces description changes |
-| MCP-7 Confused deputy | RFC 8707 enforcement on every JWT (push channel + caller-token passthrough) |
-| MCP-8 Supply chain | Sigstore/SLSA provenance verification on npm-source (planned v1.2.x) |
+| MCP-7 Confused deputy | RFC 8707 enforcement on every inbound JWT (caller-token passthrough) |
+| MCP-8 Supply chain | Bundle signing (RS256/Ed25519 JWT-of-hashes) + signed `integrity` envelope + pinned npm version |
 | MCP-9 Excessive permissions | Per-bundle credential allowlist + per-skill scoping |
-| MCP-10 Insufficient observability | OTel spans + audit log + bundle diff + `/healthz` enrichment |
+| MCP-10 Insufficient observability | OTel spans + audit log + bundle-diff log on every swap |
 
 ## Indirect prompt injection mitigations
 
@@ -166,7 +166,6 @@ The customer's REST API can return content (CRM names, ticket bodies, user-suppl
 - **Structural separation**: upstream responses never reach the LLM directly. Each `callTool` returns the action's `data` *into the sandboxed AgentScript*, and only the script's final `return <value>` (surfaced as `run_workflow`'s `{ success, value, error, stats }`) is handed back to the LLM. Raw response bodies are opaque to the model unless the script explicitly extracts and returns them.
 - **Output schema validation as a bottleneck**: every response validated against the bundle's declared `outputSchema`.
 - **Response size cap** (`defaultMaxResponseBytes`, default 256KB; per-op override via `op.maxResponseBytes`).
-- **Optional content sanitizer hook** (planned v1.2.x): customers register a `sanitize(action, data)` callback to strip HTML, redact PII, or refuse content matching known-injection heuristics.
 
 The signed-bundle origin reduces the surface (you trust your own CI pipeline to produce instructions), but it does not eliminate it. **Treat customer REST API responses no more than user input.** Document this loudly in your team's playbook.
 
@@ -181,19 +180,4 @@ Before flipping to production:
 - [ ] `allowPrivateNetworks: false` (default) unless self-hosted on a private network
 - [ ] `outbound.maxConcurrencyPerHost` tuned to match your upstream's rate-limit budget
 - [ ] Audit log routed to a SIEM
-- [ ] `/healthz` polling configured to alert on `lastPullAt > 2 * pollIntervalMs` (saas source) or `lastApplyError != null`
-
-## Deferred to v1.2.x
-
-The following are planned but not in v1.2.0:
-
-- Sigstore Cosign v3 keyless verification (alongside the JWT/key path)
-- GitHub artifact attestation verification for npm-source
-- Webhook channel (`POST /__skilled_openapi/push`) with nonce + replay window
-- Optional content-sanitizer hook for response bodies
-- Discovery-bundle pattern for signing key rotation
-- Bundle rollback admin endpoint (`POST /__skilled_openapi/rollback`)
-- Per-service circuit-breaker (currently relies on per-host concurrency cap)
-- TLS pinning per service (opt-in)
-
-Track [the v1.2.x roadmap](/frontmcp/updates) for release dates.
+- [ ] SaaS-side metrics monitored to detect a stalled bundle pipeline (saas source)

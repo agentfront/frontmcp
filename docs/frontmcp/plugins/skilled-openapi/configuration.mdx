@@ -38,7 +38,6 @@ SkilledOpenApiPlugin.init({
 | `outbound.maxConcurrencyPerHost` | `number` | `10` | Per-host concurrent outbound-request cap, **enforced** by an async semaphore (per runtime isolate). Excess calls queue until a slot frees |
 | `outbound.defaultTimeoutMs` | `number` | `30_000` | Default per-op timeout. Override per-op via `OperationDescriptor.timeoutMs` |
 | `outbound.defaultMaxResponseBytes` | `number` | `262_144` (256KB) | Default response size cap. Override per-op via `OperationDescriptor.maxResponseBytes` |
-| `outbound.egressProxy` | `string` | `undefined` | Optional egress proxy URL (planned v1.2.x; honors `HTTPS_PROXY` env when set) |
 | `sourceConflictPolicy` | `'static-wins'\|'last-wins'\|'reject'` | `'static-wins'` | Policy for when multiple sources register the same `bundleId` |
 | `bundleCacheDir` | `string` | `.frontmcp/skilled-openapi` | Where the SaaS source caches the last-good bundle |
 | `credentials` | `Record<string,string>` | `undefined` | In-memory credential map keyed by `vaultRef`. For dev / single-tenant only — production should override the `SkilledOpenApiCredentialResolver` provider with a libs/auth-vault-backed resolver |

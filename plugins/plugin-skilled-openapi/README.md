@@ -112,7 +112,6 @@ All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSc
 | --- | --- | --- |
 | `allowPrivateNetworks` | `false` | Allow connections to private/loopback/link-local IPs. |
 | `allowHttp` | `false` | Allow `http://` upstreams (auto-enabled by `dev: true`). |
-| `egressProxy` | — | Optional egress proxy URL. |
 | `maxConcurrencyPerHost` | `10` | Per-host concurrency cap. |
 | `defaultTimeoutMs` | `30000` | Per-request timeout. |
 | `defaultMaxResponseBytes` | `262144` | Per-response size cap. |

@@ -152,7 +152,7 @@ The full e2e fixture bundle lives at [`apps/e2e/demo-e2e-skilled-openapi/src/fix
 
 One bundle can wrap several microservices natively — declare each service in `services[]` and point each operation at its `serviceId`. The plugin's host allowlist for outbound HTTP is built from the union of `services[].baseUrl` hostnames in the active bundle, so a bundle that mixes `api.billing.acme.com` and `api.crm.acme.com` produces a two-host allowlist for the executor's SSRF gate.
 
-## What's NOT in v1.2.0
+## What's not supported
 
 | Feature | Status |
 | --- | --- |
