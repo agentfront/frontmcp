@@ -6,7 +6,7 @@ icon: layer-group
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'typescript']
 ---
 
-The **Skilled OpenAPI plugin** turns an existing REST API into a **skilled MCP server** without rewriting any controllers. A signed *skill bundle* (an OpenAPI spec plus an OpenAPI Overlay annotated with skill grouping) is consumed at runtime by the plugin, projected into the FrontMCP `SkillRegistry`, and exposed through three meta-tools — `search_skill`, `load_skill`, `execute_action`. The per-operation tools stay hidden from `tools/list` so the LLM never sees a 150-endpoint dump.
+The **Skilled OpenAPI plugin** turns an existing REST API into a **skilled MCP server** without rewriting any controllers. A signed *skill bundle* (an OpenAPI spec plus an OpenAPI Overlay annotated with skill grouping) is consumed at runtime by the plugin, projected into the FrontMCP `SkillRegistry`, and exposed through three meta-tools — `search_skill`, `load_skill`, `run_workflow`. The per-operation tools stay hidden from `tools/list` so the LLM never sees a 150-endpoint dump.
 
 <CardGroup cols={2}>
   <Card title="Skills, not flat tools" icon="layer-group">
@@ -50,16 +50,16 @@ flowchart LR
   subgraph FrontMCP server
     SkillRegistry
     Hidden
-    Meta[search_skill / load_skill / execute_action]
+    Meta[search_skill / load_skill / run_workflow]
     Hidden -.private.- Meta
   end
 
   Client[MCP client] -- search_skill --> Meta
-  Meta -- ABAC + SSRF --> Exec[OpenAPI HTTP executor]
-  Exec --> Customer[Your REST API]
+  Meta -- enclave script: callTool --> Exec[OpenAPI HTTP executor]
+  Exec -- ABAC + SSRF --> Customer[Your REST API]
 ```
 
-The MCP client only ever sees the three meta-tools plus whatever skills the active bundle declares. Per-operation tools are reachable **only** through `execute_action`, which evaluates the action's `requiredAuthorities` against the caller's `authInfo` before the executor builds the outbound request.
+The MCP client only ever sees the three meta-tools plus whatever skills the active bundle declares. Per-operation tools are reachable **only** through `run_workflow`: the agent submits a short **AgentScript** program that runs inside a dependency-free **enclave** sandbox (no host access, no network except tool calls), and each `await callTool(actionId, input)` invokes a loaded skill's operation — evaluating the action's `requiredAuthorities` against the caller's `authInfo` before the executor builds the outbound request. A single workflow can chain many `callTool`s in one round-trip; its final `return <value>` is the result.
 
 ---
 
@@ -77,7 +77,7 @@ The two are designed to coexist in the same FrontMCP server. See [Coexistence](/
 
 ---
 
-## What ships in v1.2.0
+## What's included
 
 - **Three bundle sources**: static (filesystem with optional `fs.watch`), npm (dynamic import of a published bundle package), saas-pull (HTTPS GET against a configured endpoint with JWT, interval polling, last-good cache fallback).
 - **OpenAPI Overlay + custom JSON** wire formats, both validated by Zod and cross-referenced for service / authBinding / operationId integrity.
@@ -87,15 +87,13 @@ The two are designed to coexist in the same FrontMCP server. See [Coexistence](/
 - **ABAC integration** via `@frontmcp/auth`'s `AuthoritiesEngine` (RBAC + ABAC + custom evaluators).
 - **`notifications/skills/list_changed`** broadcast on every bundle swap, with `bundleVersion` on every skill so polling clients can detect changes regardless of client `list_changed` support.
 
-Deferred to v1.2.x: Sigstore Cosign keyless verification, GitHub artifact attestations for npm-source, the webhook push channel, content-sanitizer hooks. See [Security](/frontmcp/plugins/skilled-openapi/security#deferred-to-v12x) for the full list.
-
 ---
 
 ## Next steps
 
 <CardGroup cols={2}>
   <Card title="Quick Start" icon="rocket" href="/frontmcp/plugins/skilled-openapi/quickstart">
-    Install, point the plugin at a fixture bundle, and call `execute_action` end-to-end in 5 minutes.
+    Install, point the plugin at a fixture bundle, and run a `run_workflow` AgentScript end-to-end in 5 minutes.
   </Card>
   <Card title="Bundle Format" icon="file-code" href="/frontmcp/plugins/skilled-openapi/bundle-format">
     The wire format the plugin consumes — services, authBindings, skills, operations, signature envelope.

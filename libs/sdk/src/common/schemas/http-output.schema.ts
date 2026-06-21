@@ -97,6 +97,23 @@ export const HttpNextSchema = z
 export const HttpConsumedSchema = z.object({ kind: z.literal('consumed') });
 
 /**
+ * A pre-built Web `Response` (kind='web-response'), produced by the
+ * `handleWebFetch` execute stage when the `http:request` flow runs on a
+ * V8-isolate (Cloudflare Worker). The MCP `WebStandardStreamableHTTPServerTransport`
+ * natively returns a Web `Response` (JSON or an SSE stream); rather than
+ * lossily down-convert it to a `stream`/`jsonrpc` variant, the flow carries it
+ * verbatim and the web-fetch adapter returns it as-is. The Node renderer
+ * (`writeHttpResponse`) never normally sees this — it's a web-mode-only output.
+ */
+export const HttpWebResponseSchema = z.object({
+  kind: z.literal('web-response'),
+  response: z.custom<Response>(
+    (v) => typeof Response !== 'undefined' && v instanceof Response,
+    'must be a Web Response',
+  ),
+});
+
+/**
  * Text (text/*) — plain text, HTML, etc.
  */
 export const HttpTextSchema = z
@@ -248,6 +265,7 @@ export const httpOutputSchema = z.discriminatedUnion('kind', [
   HttpEmptySchema,
   HttpNextSchema,
   HttpConsumedSchema,
+  HttpWebResponseSchema,
 ]);
 
 export type HttpOutput = z.infer<typeof httpOutputSchema>;
@@ -374,6 +392,9 @@ export const httpRespond = {
   },
   consumed(): z.infer<typeof HttpConsumedSchema> {
     return { kind: 'consumed' };
+  },
+  webResponse(response: Response): z.infer<typeof HttpWebResponseSchema> {
+    return { kind: 'web-response', response };
   },
   empty(status: 204 | 304 = 204, headers?: Record<string, string>): z.infer<typeof HttpEmptySchema> {
     return { kind: 'empty', status, headers };

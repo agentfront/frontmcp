@@ -1,7 +1,8 @@
 // file: libs/adapters/src/skills/audit/__tests__/audit-integration.spec.ts
 //
-// End-to-end test: simulate the call-site interactions ExecuteActionTool
-// performs against the writer, then verify the resulting chain. Intentionally
+// End-to-end test: simulate the call-site interactions the skill-action
+// executor (`executeSkillAction`) performs against the writer, then verify
+// the resulting chain. Intentionally
 // avoids spinning up a full SDK scope — the call shapes the tool produces
 // are well-defined (writeAuthorityPass / writeHttpCallSuccess /
 // writeHttpCallFailure), so we reproduce them verbatim. This catches
@@ -27,7 +28,7 @@ const fakeCtx = {
   input: { customerId: 'cus_1', amountCents: 9900 },
 };
 
-describe('audit chain — ExecuteActionTool simulated invocation flow', () => {
+describe('audit chain — executeSkillAction simulated invocation flow', () => {
   it('captures success path: authority pass + http success', async () => {
     const store = new MemoryAuditStore();
     const signer = new Hs256AuditSigner(SECRET, KEY_ID);

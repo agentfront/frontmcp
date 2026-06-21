@@ -66,6 +66,38 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `channels:send-notification`        | Channel notification send | `ChannelSendHook`           |
 | `channels:list`                     | Channel listing           | `ChannelListHook`           |
 
+## Strict architecture: flows are the only path — never bypass them
+
+This is the load-bearing invariant behind every hook above: in FrontMCP **every
+request runs through a flow**, and because flows are made of `@Stage` steps that
+`FlowHooksOf` exposes for interception, hooks work *everywhere* automatically.
+The hookability is only guaranteed because nothing handles a request outside a
+flow.
+
+Therefore:
+
+- **Never bypass the flow pipeline to make something work.** Add or extend a flow
+  + its stages; do not hand-roll request logic (auth, transport, routing) in a
+  transport/adapter that skips the flow. A bypass silently deletes every hook on
+  that path.
+- **Adapters only translate.** A transport adapter (Express, the Web-fetch/worker
+  handler, stdio) converts its native request/response to the flow's normalized
+  `ServerRequest` + `httpRespond` output and then runs the **same** flows. Two
+  adapters must never diverge in behavior (e.g. one enforcing auth, another not).
+- **Fix runtime gaps in the flow, not around it.** If a flow stage can't run in a
+  target runtime (e.g. a stage needs a Node `ServerResponse` but a Worker only has
+  Web `Request`/`Response`), make the stage runtime-agnostic (emit normalized
+  output each adapter renders) — do not write a runtime-specific shortcut that
+  skips the flow.
+- **Cross-cutting concerns are stages, not inlined code.** Auth, quota, audit,
+  metrics belong to flow stages (so they're hookable), never re-implemented inside
+  an adapter.
+- **Use `FlowInputOf` / `FlowOutputOf`**, never ad-hoc `as { … }` casts on flow
+  results — a cast is a sign you're working around the flow instead of with it.
+
+If a change handles a request without going through a flow, or inlines a
+cross-cutting concern, it's wrong — rework it through a hookable flow.
+
 ## Server Lifecycle Hooks
 
 In addition to flow-based hooks, the framework exposes a single `scope.onServerStarted(callback)` API for post-startup work. Callbacks register against the active `ScopeEntry` and run after `server.start()` completes.

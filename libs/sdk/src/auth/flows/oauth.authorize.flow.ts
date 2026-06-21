@@ -452,6 +452,26 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         return;
       }
     }
+
+    // When the client_id is REGISTERED, `redirect_uri` MUST EXACTLY match one of
+    // the client's registered redirect_uris (OAuth 2.1). This closes auth-code
+    // interception: previously the token flow bound the code only to whatever
+    // redirect was used at authorize time — never to the legitimate client — so
+    // an attacker could lure a victim to an authorize URL carrying the victim's
+    // (registered) client_id + the attacker's OWN redirect_uri and receive the
+    // victim's code. Reject with an error PAGE (never redirect an unvalidated
+    // redirect_uri — open-redirect guard). (Unknown/unregistered client_ids fall
+    // through to the existing CIMD / dcr-allowlist controls; a stricter
+    // require-registration mode is a separate opt-in.)
+    if (!isCimdClientId) {
+      const registry = (this.scope.auth as LocalPrimaryAuth).dcrClientRegistry;
+      const registered = registry?.get?.(client_id);
+      if (registered && !registered.redirect_uris.includes(redirect_uri)) {
+        this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
+        this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
+        return;
+      }
+    }
   }
 
   @Stage('checkIfAuthorized')
@@ -796,7 +816,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     const state = buildState({
       pendingAuthId,
-      submitUrl: `${this.scope.fullPath}/oauth/callback`,
+      submitUrl: '/oauth/callback',
       extraUrl: authUiExtraPath(this.scope.fullPath),
       csrfToken,
       addedItems: authUi.getAddedItems(pendingAuthId),
@@ -982,7 +1002,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     logoUri?: string;
   }): string {
     const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     // Read the optional login customization from the local auth options.
     // Only local mode carries `login`; any other mode leaves it undefined,
@@ -1016,7 +1036,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, appId, appName, appDescription, toolId } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     const app: AppAuthCard = {
       appId,
@@ -1042,7 +1062,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, detection, clientId } = params;
-    const callbackPath = `${this.scope.fullPath}/oauth/callback`;
+    const callbackPath = '/oauth/callback';
 
     // Convert detection providers to ProviderCard format
     const providers: ProviderCard[] = [...detection.providers.values()].map((provider) => ({

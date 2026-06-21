@@ -234,6 +234,8 @@ module.exports = {};
       expect(toml).toContain('compatibility_date = "2025-01-01"');
       // main path must always reflect the build's actual output dir (#374 round-1 fix).
       expect(toml).toContain('main = "dist/cloudflare/index.js"');
+      // nodejs_compat is emitted regardless of user wrangler overrides.
+      expect(toml).toContain('compatibility_flags = ["nodejs_compat"]');
     });
 
     it('falls back to defaults when deployments[].wrangler is omitted', async () => {
@@ -255,7 +257,11 @@ module.exports = {};
 
       const toml = await readFile(wranglerPath);
       expect(toml).toContain('name = "frontmcp-worker"');
-      expect(toml).toContain('compatibility_date = "2024-01-01"');
+      expect(toml).toContain('compatibility_date = "2024-09-23"');
+      // The worker entry require()s @frontmcp/sdk + Express → Node builtins, so
+      // the emitted config MUST carry nodejs_compat or the deployed Worker
+      // cannot boot.
+      expect(toml).toContain('compatibility_flags = ["nodejs_compat"]');
     });
 
     it('overwrites an existing wrangler.toml on every build (#374 round-1 alwaysWriteConfig)', async () => {

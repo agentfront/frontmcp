@@ -153,13 +153,34 @@ async function createTestFixtures(): Promise<TestFixtures> {
     throw new Error('Token factory not initialized');
   }
 
-  // Create MCP client for this test
-  // Pass publicMode if configured to skip authentication
-  const clientInstance = await McpTestClient.create({
+  // Create the MCP client for this test. It is connected eagerly so the `mcp`
+  // fixture is ready to use, but the connect is TOLERANT of auth-required
+  // servers: a server with non-public auth (e.g. `allowDefaultPublic:false`)
+  // correctly rejects the anonymous bootstrap token and answers `initialize`
+  // with 401. Suites that only exercise the OAuth/HTTP surface via the
+  // `server`/`auth` fixtures (and never touch `mcp`) must still run. If a test
+  // does use an unconnected `mcp` client the failure surfaces clearly at the
+  // point of use rather than aborting the whole file in fixture setup.
+  const clientInstance = McpTestClient.create({
     baseUrl: serverInstance.info.baseUrl,
     transport: currentConfig.transport ?? 'streamable-http',
     publicMode: currentConfig.publicMode,
-  }).buildAndConnect();
+  }).build();
+
+  try {
+    await clientInstance.connect();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/\b401\b|unauthor/i.test(message)) {
+      console.warn(
+        `[TestFixture] MCP client could not connect anonymously — the server requires ` +
+          `authentication (${message}). Tests using only the 'server'/'auth' fixtures are ` +
+          `unaffected; tests using the 'mcp' fixture must supply a token.`,
+      );
+    } else {
+      throw err;
+    }
+  }
 
   // Build fixtures
   const auth = createAuthFixture(tokenFactory);

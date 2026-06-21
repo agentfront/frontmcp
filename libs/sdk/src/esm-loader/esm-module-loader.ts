@@ -17,6 +17,29 @@ import { normalizeEsmExport } from './esm-manifest';
 import { VersionResolver } from './version-resolver';
 
 /**
+ * Dynamic `import()` of a runtime-computed specifier.
+ *
+ * This loader's only job is to import npm packages / bundles from disk, blob, or
+ * temp files — a Node/browser concern that never executes on a V8 isolate
+ * (Cloudflare Workers). `export * from './esm-loader'` in the SDK barrel still
+ * pulls this module into a worker bundle, so the dynamic specifier carries the
+ * `webpackIgnore` + `@vite-ignore` magic comments to tell bundlers not to try to
+ * resolve it at build time; the call site is simply never reached in a worker.
+ *
+ * It MUST stay a real `import()` expression (not hidden behind `new Function`):
+ * Jest's swc transform rewrites a literal `import()` to a runtime it can execute,
+ * whereas a `new Function('s','return import(s)')` body becomes a native VM
+ * dynamic import that throws `A dynamic import callback was invoked without
+ * --experimental-vm-modules` (and that flag breaks the rest of the suite). The
+ * `webpackIgnore`/`@vite-ignore` comments already keep the worker bundle happy
+ * (verified by the demo-e2e-cloudflare workerd boot), so no further indirection
+ * is needed.
+ */
+function importComputed(specifier: string): Promise<unknown> {
+  return import(/* webpackIgnore: true */ /* @vite-ignore */ specifier);
+}
+
+/**
  * Result of loading an ESM package.
  */
 export interface EsmLoadResult {
@@ -217,10 +240,16 @@ export class EsmModuleLoader {
    */
   private async importFromPath(filePath: string): Promise<unknown> {
     const { pathToFileURL } = await import('node:url');
-    const fileUrl = pathToFileURL(filePath).href;
-    // Append cache-busting query to avoid Node.js module cache
-    const bustUrl = `${fileUrl}?t=${Date.now()}`;
-    return import(bustUrl);
+    // NO cache-busting query. The disk cache path is keyed by package@version
+    // (an immutable coordinate — see EsmCache.getEntryDir), so the same path
+    // always holds the same content and reusing Node's ESM module cache is
+    // correct; a new version resolves to a new path and is imported fresh.
+    //
+    // A `?t=${Date.now()}` here made every import a UNIQUE URL. Node's internal
+    // ESM module registry is keyed by full URL and is never garbage-collected,
+    // so under VersionPoller-driven reloads a long-running server leaked one
+    // retained module per reload (unbounded heap growth) for no benefit.
+    return importComputed(pathToFileURL(filePath).href);
   }
 
   /**
@@ -254,25 +283,36 @@ export class EsmModuleLoader {
       const blob = new Blob([bundleContent], { type: 'text/javascript' });
       const url = URL.createObjectURL(blob);
       try {
-        return await import(/* webpackIgnore: true */ url);
+        return await importComputed(url);
       } finally {
         URL.revokeObjectURL(url);
       }
     }
 
-    // Node.js: write to temp .mjs file and use native import()
-    const { mkdtemp, writeFile, rm } = await import('@frontmcp/utils');
+    // Node.js: write to a CONTENT-ADDRESSED temp file and use native import().
+    // The filename is the bundle's SHA-256, so identical content always maps to
+    // the same module URL — Node's ESM registry (never GC'd) keeps ONE entry per
+    // distinct bundle rather than leaking a fresh entry on every reload, and a
+    // re-import of unchanged content is a no-op write + cached module.
+    //
+    // The file is intentionally NOT deleted: it's a small content cache (bounded
+    // by distinct bundle contents; the OS reclaims tmp on reboot), and deleting
+    // it after import previously (a) added write/delete churn per call and
+    // (b) still leaked the registry entry via the old `?t=${Date.now()}`.
+    //
+    // This branch is only the fallback for when the version-keyed disk cache
+    // artifact is unavailable; the primary path imports that file directly.
+    const { ensureDir, fileExists, sha256Hex, writeFile } = await import('@frontmcp/utils');
     const nodePath = await import('node:path');
     const nodeOs = await import('node:os');
     const { pathToFileURL } = await import('node:url');
 
-    const tempDir = await mkdtemp(nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-'));
-    const tempPath = nodePath.join(tempDir, 'bundle.mjs');
-    try {
+    const dir = nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-modules');
+    await ensureDir(dir);
+    const tempPath = nodePath.join(dir, `${sha256Hex(bundleContent)}.mjs`);
+    if (!(await fileExists(tempPath))) {
       await writeFile(tempPath, bundleContent);
-      return await import(pathToFileURL(tempPath).href + `?t=${Date.now()}`);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
+    return importComputed(pathToFileURL(tempPath).href);
   }
 }

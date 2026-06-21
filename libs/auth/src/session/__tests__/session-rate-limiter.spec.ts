@@ -258,12 +258,32 @@ describe('SessionRateLimiter', () => {
     it('should stop cleanup timer', () => {
       const limiter = new SessionRateLimiter({ cleanupIntervalMs: 1000 });
 
+      // The cleanup timer is started lazily on first use (not in the
+      // constructor — V8-isolate runtimes forbid timers at module-eval scope),
+      // so exercise the limiter once to start it before asserting dispose stops it.
+      limiter.check('key');
+
       const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
 
       limiter.dispose();
 
       expect(clearIntervalSpy).toHaveBeenCalled();
       clearIntervalSpy.mockRestore();
+    });
+
+    it('does NOT start the cleanup timer in the constructor (V8-isolate safe)', () => {
+      // Constructing at module scope must have no side effects — Cloudflare
+      // Workers forbid setInterval in global/module-eval scope.
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+      const limiter = new SessionRateLimiter({ cleanupIntervalMs: 1000 });
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+
+      // ...but it DOES start lazily on first use.
+      limiter.check('key');
+      expect(setIntervalSpy).toHaveBeenCalled();
+
+      setIntervalSpy.mockRestore();
+      limiter.dispose();
     });
 
     it('should handle double dispose gracefully', () => {

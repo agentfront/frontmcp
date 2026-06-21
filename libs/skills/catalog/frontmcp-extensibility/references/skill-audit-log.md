@@ -6,7 +6,7 @@ tags: [extensibility, audit, skills, tamper-evident, signature, chain]
 
 # Skill Audit Log
 
-The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained audit log for skill action executions. Every authority pass / authority fail / HTTP success / HTTP failure phase emitted by `execute-action.tool.ts` is captured, signed, and chained so any later mutation breaks signature verification.
+The `@frontmcp/adapters/skills` module provides a tamper-evident, hash-chained audit log for skill action executions. Every authority pass / authority fail / HTTP success / HTTP failure phase emitted by the skill-action executor (`run_workflow`'s `callTool`) is captured, signed, and chained so any later mutation breaks signature verification.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ phase method assembles its payload internally and routes through a shared
 chain pipeline:
 
 ```text
-ExecuteActionTool.execute()
+run_workflow → callTool(action)
   ├── writer.writeAuthorityPass(ctx)             // authority-check-pass
   ├── writer.writeAuthorityFail(ctx, { reason }) // authority-check-fail
   ├── writer.writeHttpCallSuccess(ctx, { status, output })  // http-call-success

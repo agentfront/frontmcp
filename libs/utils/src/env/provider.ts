@@ -10,8 +10,6 @@
  * Docker images that don't expose a discriminating env var).
  */
 
-import * as fs from 'node:fs';
-
 export type DeployProvider =
   | 'bare'
   | 'docker'
@@ -66,9 +64,15 @@ function detectProviderUncached(): DeployProvider {
   if (process.env['RAILWAY_ENVIRONMENT']) return 'railway';
 
   try {
-    if (fs.existsSync('/.dockerenv')) return 'docker';
+    // Docker detection is a Node-only last resort (serverless providers are
+    // matched above). Lazy-`require('node:fs')` rather than a static import so
+    // this module doesn't drag `node:fs` into worker/browser bundles — workerd
+    // has no `node:fs` module, and a static import would fail the whole bundle
+    // at load. On those runtimes the require throws and we fall through to 'bare'.
+    const nodeFs = require('node:fs') as typeof import('node:fs');
+    if (nodeFs.existsSync('/.dockerenv')) return 'docker';
   } catch {
-    // ignore — Linux-only file, non-Linux platforms throw here
+    // ignore — non-Node runtime (no node:fs), or the Linux-only file is absent
   }
   return 'bare';
 }

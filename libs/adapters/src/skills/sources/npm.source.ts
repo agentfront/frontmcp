@@ -7,6 +7,11 @@ import { parseOverlay } from '../bundle/overlay-parser';
 import type { NpmSourceOptions } from '../source-options';
 import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
+// Lazily-built dynamic importer — see NpmSource#dynamicImport. Hidden from
+// static bundlers so a worker bundle that statically reaches NpmSource (via
+// createBundleSource) stays analyzable; only constructed when actually used.
+let npmDynamicImport: ((specifier: string) => Promise<unknown>) | undefined;
+
 /**
  * Loads a bundle from an npm package's default (or named) export.
  *
@@ -77,9 +82,16 @@ export class NpmSource implements SkillBundleSource {
     return parseOverlay({ kind: 'object', content: exported });
   }
 
-  // Indirected so tests can stub.
+  // Indirected so tests can stub. The dynamic `import()` is wrapped in a
+  // lazily-built `new Function` so static bundlers (esbuild / `wrangler dev` /
+  // miniflare) don't try to resolve the runtime-computed package specifier at
+  // build time — installing an npm bundle is a Node-only path that never runs
+  // on a V8 isolate, but `createBundleSource` keeps NpmSource statically
+  // reachable in the worker bundle. The Function is only built when this runs
+  // (Node), so a Worker that merely bundles it never evaluates it.
   protected dynamicImport(specifier: string): Promise<unknown> {
-    return import(specifier);
+    npmDynamicImport ??= new Function('s', 'return import(s)') as (s: string) => Promise<unknown>;
+    return npmDynamicImport(specifier);
   }
 
   private notify(bundle: ResolvedBundle): void {

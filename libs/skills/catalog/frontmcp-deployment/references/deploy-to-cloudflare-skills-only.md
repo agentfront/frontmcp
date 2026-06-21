@@ -1,14 +1,34 @@
 ---
 name: deploy-to-cloudflare-skills-only
-description: Deploy a FrontMCP server to Cloudflare Workers using the v1.3 skills-only model — OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, hot-reload via GitHub Action and a signed-bundle webhook
+description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger
 ---
 
-# Deploy to Cloudflare Workers (Skills-Only Model)
+# Deploy to Cloudflare Workers (Managed / Skills-Only Model)
 
-The v1.3 Cloudflare Worker target hosts FrontMCP as a control plane where the MCP surface is just **four meta-tools** (`searchSkills`, `searchKnowledge`, `describe`, `execute`) and every capability is reached through a skill. OpenAPI specs ship to the project but are NEVER directly exposed — they are the capability inventory, classified by HTTP semantics into resources / tools, with auto-derived `notifications/resources/*` events.
+> **⚠️ Status — experimental.** `@frontmcp/edge` `createEdgeMcp` **deploys and
+> serves on real Cloudflare** (verified live), as long as you (1) keep
+> `serve: false` (now the createEdgeMcp default) and (2) stub three Node-only
+> transports your bundler statically includes but the edge never uses —
+> `express`, `raw-body`, `cross-spawn`. NOTE: **miniflare local-dev is stricter
+> than production** and rejects `node:http2`/`node:fs` that real Cloudflare's
+> `nodejs_compat` provides, so the local managed e2e is skipped even though the
+> package runs in production. Managed mode (this page) additionally needs a SaaS
+> bundle endpoint + the optional peer `@frontmcp/plugin-skilled-openapi`. The
+> worker-conditioned SDK build (roadmap) removes the manual stubs. For the
+> simplest production path, the decorator build in
+> [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md) needs none of this.
+> The GitHub Action / signed-resync-webhook / Durable Object stores / Frontegg
+> edge auth described below remain ROADMAP — not yet implemented.
+
+The managed model hosts FrontMCP where the MCP surface is a small set of
+meta-tools (`search_skill`, `load_skill`, `run_workflow`) and every capability
+is reached through a skill compiled from an OpenAPI spec. `run_workflow` runs a
+short AgentScript program in the Worker isolate, where each `callTool(actionId,
+input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
+endpoint, cached in KV, and refreshed on a Cron Trigger.
 
 For the conceptual picture, see [Skills-Only Deployment](https://docs.agentfront.dev/frontmcp/features/skills-only-deployment).
-For the older Express-to-Workers adapter, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
+For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
 
 ## When to Use This Skill
 
@@ -32,21 +52,47 @@ For the older Express-to-Workers adapter, see [`deploy-to-cloudflare.md`](./depl
 ## Worker Entry File
 
 ```ts
-// worker.ts (~10 lines)
-import { createWorker } from '@frontmcp/worker';
+// worker.ts — the real API is createEdgeMcp (not createWorker)
+import { createEdgeMcp, kvBundleCacheFromEnv } from '@frontmcp/edge';
 
-import deployBundle from './frontmcp.deploy.bundle.js'; // emitted by the GH Action
-
-const { handler, durableObjects } = createWorker({
-  bundle: deployBundle,
-  env: 'production',
+export default createEdgeMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [],
+  tasks: { enabled: false },
+  managed: {
+    endpoint: 'https://cloud.example.com/v1/bundles/acme',
+    authToken: 'pinned-pull-token',
+    expectedAudience: 'acme-mcp',
+    jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
+    expectedIssuer: 'https://cloud.example.com',
+    // KV-backed last-good cache, resolved from the per-request `env`.
+    cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
+  },
 });
-
-export default handler;
-export const { SessionDO, EventStoreDO, BundleDO } = durableObjects;
 ```
 
-`createWorker` parses the manifest, applies the `environments.production` overlay, verifies the signed envelope against `TRUSTED_KEYS`, and assembles the FrontMCP runtime.
+`createEdgeMcp` returns `{ fetch, scheduled }`: `fetch` serves MCP; `scheduled`
+is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it.
+Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`.
+
+This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
+`wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`
+and a `[triggers] crontabs = [...]` (the `managed.pollIntervalMs` option is
+ignored on edge — Workers have no background timers; the Cron drives refresh):
+
+```toml
+name = "my-worker"
+main = "worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[kv_namespaces]]
+binding = "BUNDLE_CACHE"
+id = "<your-kv-namespace-id>"
+
+[triggers]
+crontabs = ["*/5 * * * *"]
+```
 
 ## Storage Layout (Opinionated Default)
 
@@ -92,7 +138,11 @@ Day-to-day skill / OpenAPI edits are pure hot-reload. `wrangler deploy` is only 
 
 `@enclave-vm/core` (full VM) needs `node:vm` and is NOT Worker-safe — the Worker target uses AST-preflight + frozen scope only.
 
-## Auth at the Edge
+## Auth at the Edge 🚧 Roadmap — not yet implemented
+
+> The Frontegg **edge** JWT verification below is a ROADMAP shape, not a shipped
+> feature. Don't wire it expecting edge-native verification today; use the
+> standard auth providers via the decorator build until this lands.
 
 ```yaml
 auth:
@@ -126,7 +176,11 @@ wrangler secret put ACME_API_TOKEN
 
 The cross-validator REJECTS any manifest that references a secret name not declared in `secrets[]`.
 
-## Sample `.github/workflows/deploy.yml`
+## Sample `.github/workflows/deploy.yml` 🚧 Roadmap — not yet implemented
+
+> The packaged GitHub Action and the signed-resync webhook are ROADMAP. The
+> workflow below is an illustrative target, not a copy-paste-ready pipeline —
+> deploy manually with `wrangler deploy` until the Action ships.
 
 ```yaml
 name: Deploy

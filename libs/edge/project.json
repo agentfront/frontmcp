@@ -1,0 +1,84 @@
+{
+  "name": "edge",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/edge/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/edge/dist",
+        "main": "libs/edge/src/index.ts",
+        "tsConfig": "libs/edge/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/edge/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/edge/README.md", "LICENSE", "libs/edge/package.json"],
+        "esbuildOptions": {
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/sdk", "@frontmcp/plugin-skilled-openapi"]
+        }
+      },
+      "dependsOn": ["^build"]
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/edge/dist/esm",
+        "main": "libs/edge/src/index.ts",
+        "tsConfig": "libs/edge/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "esbuildOptions": {
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/sdk", "@frontmcp/plugin-skilled-openapi"]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/edge/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/edge"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
+      "options": {
+        "jestConfig": "libs/edge/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/edge/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

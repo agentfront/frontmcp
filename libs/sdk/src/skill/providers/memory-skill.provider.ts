@@ -2,6 +2,10 @@
 
 import type { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
 
+import { sha256Hex } from '@frontmcp/utils';
+
+import { importOptionalPeer } from '../../scope/optional-dependency.util';
+import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
 import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import {
@@ -132,6 +136,37 @@ export interface MemorySkillProviderOptions {
    * Optional tool validator for enriching results.
    */
   toolValidator?: SkillToolValidator;
+
+  /**
+   * Ranking function for the underlying vector DB. `bm25` gives stronger keyword
+   * relevance; `cosine` (default) preserves the historical behavior. Only takes
+   * effect when the installed `vectoriadb` supports it (newer versions); older
+   * versions silently ignore it and use cosine.
+   * @default 'cosine'
+   */
+  scoring?: SkillIndexScoring;
+
+  /**
+   * Optional cache for the built index so a cold start can restore it instead of
+   * recomputing IDF + embeddings for the whole corpus. Used only when the
+   * installed `vectoriadb` exposes snapshot support.
+   */
+  indexCache?: SkillIndexCache;
+}
+
+/**
+ * Structural subset of a snapshot-capable vector DB. Detected at runtime so the
+ * SDK keeps compiling against `vectoriadb` versions that predate snapshots; on
+ * such versions the cache is simply skipped (a rebuild happens instead).
+ */
+interface SnapshotCapableDb {
+  toSnapshot(): unknown;
+  loadSnapshot(snapshot: unknown): void;
+}
+
+function isSnapshotCapable(db: unknown): db is SnapshotCapableDb {
+  const d = db as Partial<SnapshotCapableDb>;
+  return typeof d.toSnapshot === 'function' && typeof d.loadSnapshot === 'function';
 }
 
 /**
@@ -151,10 +186,26 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private toolValidator?: SkillToolValidator;
   private initialized = false;
 
+  /** Ranking mode passed to the vector DB (cosine | bm25). */
+  private readonly scoring: SkillIndexScoring;
+
+  /** Optional snapshot cache for fast cold-start (e.g. KV-backed on the edge). */
+  private indexCache?: SkillIndexCache;
+
+  /**
+   * Whether the vector index reflects the current document set. Adds/removes
+   * mark it stale; the FIRST search after a mutation builds (or restores) it
+   * exactly once. This defers the expensive IDF/embedding pass off the
+   * registration hot-path — registering N skills no longer triggers N reindexes.
+   */
+  private indexReady = false;
+
   constructor(options: MemorySkillProviderOptions = {}) {
     this.defaultTopK = options.defaultTopK ?? 10;
     this.defaultMinScore = options.defaultMinScore ?? 0.1;
     this.toolValidator = options.toolValidator;
+    this.scoring = options.scoring ?? 'cosine';
+    this.indexCache = options.indexCache;
 
     // `vectoriadb` is an OPTIONAL peer of the SDK: import it lazily so consumers
     // that never touch skills don't need it installed, and a missing install
@@ -168,20 +219,106 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   private async initVectorDB(): Promise<void> {
-    let mod: typeof import('vectoriadb');
-    try {
-      mod = await import('vectoriadb');
-    } catch (cause) {
-      throw new Error(
-        "@frontmcp/sdk skill storage needs the optional peer dependency 'vectoriadb'. " +
-          'Install it in your project (e.g. `npm i vectoriadb`) to use skill search/storage.',
-        { cause },
-      );
-    }
-    this.vectorDB = new mod.TFIDFVectoria<SkillDocumentMetadata>({
+    // Route the lazy load through importOptionalPeer so a missing install and an
+    // install-but-failed-to-load are reported differently — never blindly
+    // "reinstall it" when the package is present but threw (#453).
+    const mod = await importOptionalPeer(
+      'vectoriadb',
+      () => import('vectoriadb'),
+      require.resolve,
+      'skill storage',
+    );
+    // `scoring` is read by newer vectoriadb versions; older ones ignore the
+    // extra field and use cosine. Built as a typed variable (not an object
+    // literal) so passing it to the older constructor type isn't an excess-
+    // property error.
+    const dbConfig: { defaultTopK: number; defaultSimilarityThreshold: number; scoring?: SkillIndexScoring } = {
       defaultTopK: this.defaultTopK,
       defaultSimilarityThreshold: this.defaultMinScore,
-    });
+    };
+    if (this.scoring !== 'cosine') dbConfig.scoring = this.scoring;
+    this.vectorDB = new mod.TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
+  }
+
+  /**
+   * Attach (or replace) the snapshot cache after construction — useful when the
+   * cache binding only exists at request time (e.g. a Cloudflare KV namespace on
+   * `env`). Marks the index stale so the next search consults the new cache.
+   */
+  setIndexCache(cache: SkillIndexCache | undefined): void {
+    this.indexCache = cache;
+    this.indexReady = false;
+  }
+
+  /**
+   * Ensure the vector index reflects the current document set, building it AT
+   * MOST once per mutation batch. When a snapshot cache is configured and the
+   * vector DB supports snapshots, a content-hash hit restores the index without
+   * recomputing IDF/embeddings (the cold-start fast path); a miss rebuilds and
+   * persists the snapshot for next time. Cache failures degrade to a local
+   * rebuild — they never block search.
+   */
+  private async ensureIndexed(): Promise<void> {
+    if (this.indexReady) return;
+    const db = await this.db();
+
+    if (this.indexCache && isSnapshotCapable(db)) {
+      const key = await this.computeIndexKey();
+      try {
+        const snapshot = await this.indexCache.get(key);
+        if (snapshot !== undefined && snapshot !== null) {
+          // The cache round-trips an opaque snapshot (`unknown`); the provider
+          // owns its shape — it is exactly what `db.toSnapshot()` produced — so
+          // cast back to the DB's own snapshot parameter type. (vectoriadb's
+          // `loadSnapshot` is strictly typed as of 2.3.x.)
+          db.loadSnapshot(snapshot as Parameters<typeof db.loadSnapshot>[0]);
+          this.indexReady = true;
+          return;
+        }
+      } catch {
+        // Treat a cache failure as a miss and rebuild locally.
+      }
+      this.reindexNow(db);
+      this.indexReady = true;
+      try {
+        await this.indexCache.set(key, db.toSnapshot());
+      } catch {
+        // Best-effort persist; a write failure must not fail the search.
+      }
+      return;
+    }
+
+    // No cache (or unsupported vectoriadb): just build locally.
+    this.reindexNow(db);
+    this.indexReady = true;
+  }
+
+  /**
+   * Eagerly build (or restore from cache) the search index now, rather than on
+   * the first search. A host calls this after registration completes to move the
+   * one-time index build off the first request's critical path (e.g. the edge
+   * does this right after attaching the KV cache).
+   */
+  async warm(): Promise<void> {
+    await this.ensureIndexed();
+  }
+
+  /** Force the vector DB to (re)compute its index now. */
+  private reindexNow(db: TFIDFVectoria<SkillDocumentMetadata>): void {
+    (db as unknown as { reindex(): void }).reindex();
+  }
+
+  /**
+   * Stable content hash of the indexed skill set + scoring mode. Changing any
+   * skill's searchable text, the set of skills, or the scoring mode changes the
+   * key, so a stale snapshot is never restored.
+   */
+  private async computeIndexKey(): Promise<string> {
+    const parts = Array.from(this.skills.values())
+      .map((s) => `${s.id}\u0000${this.buildSearchableText(s)}`)
+      .sort();
+    const canonical = `frontmcp-skill-index:v1|${this.scoring}|${this.skills.size}|${parts.join('')}`;
+    return sha256Hex(canonical);
   }
 
   /** Await the lazy vectoriadb load (throws the clear install hint if absent). */
@@ -209,6 +346,13 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async search(query: string, options: SkillSearchOptions = {}): Promise<SkillSearchResult[]> {
+    // An empty / whitespace-only query has no terms to rank: historically the
+    // zero-score results were dropped by the score threshold (→ no results), and
+    // vectoriadb >= 2.3 now THROWS on such a query. Short-circuit to preserve the
+    // "empty query → no results" contract without hitting the vector DB.
+    if (query.trim().length === 0) {
+      return [];
+    }
     const {
       topK = this.defaultTopK,
       tags,
@@ -251,13 +395,19 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       return true;
     };
 
-    // Search using TF-IDF
+    // Search using TF-IDF. Ensure the index is built/restored exactly once for
+    // the current document set (cold-start fast path via the snapshot cache).
     const db = await this.db();
+    await this.ensureIndexed();
     let results = await db.search(query, {
       topK,
       threshold: minScore,
       filter,
-    });
+      // `negativeQuery` (anti-query demotion) is honored by newer vectoriadb
+      // versions; older ones ignore the extra field.
+      ...(options.negativeQuery !== undefined ? { negativeQuery: options.negativeQuery } : {}),
+      ...(options.negativeWeight !== undefined ? { negativeWeight: options.negativeWeight } : {}),
+    } as Parameters<typeof db.search>[1]);
 
     // Fallback: if TF-IDF returns nothing (common with single-doc corpus where IDF=0),
     // do substring match against stored skills
@@ -428,6 +578,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     if (db.hasDocument(skillId)) {
       db.removeDocument(skillId);
     }
+    this.indexReady = false;
   }
 
   async clear(): Promise<void> {
@@ -435,6 +586,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     // Resilient when the optional peer is absent: nothing was indexed anyway.
     const db = await this.db().catch(() => undefined);
     db?.clear();
+    this.indexReady = false;
   }
 
   async dispose(): Promise<void> {
@@ -463,7 +615,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
     const db = await this.db();
     db.addDocuments(documents);
-    db.reindex();
+    // Defer the expensive IDF/embedding pass to the next search (built once),
+    // instead of reindexing per batch — see `ensureIndexed`.
+    this.indexReady = false;
   }
 
   /**
@@ -482,7 +636,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
     const db = await this.db();
     db.addDocuments([document]);
-    db.reindex();
+    // Mark stale; the next search reindexes once (avoids O(n^2) when many skills
+    // are registered one-by-one, e.g. a skilled-OpenAPI bundle).
+    this.indexReady = false;
   }
 
   /**

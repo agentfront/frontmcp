@@ -37,6 +37,10 @@ export default class SearchSkillTool extends ToolContext {
     const results = await skillRegistry.search(input.query, {
       topK: limit,
       ...(tags ? { tags } : {}),
+      // Anti-query demotion (honored when the skill index supports it) — surfaces
+      // what the user wants while pushing down what they explicitly do not.
+      ...(input.notQuery !== undefined ? { negativeQuery: input.notQuery } : {}),
+      ...(input.notWeight !== undefined ? { negativeWeight: input.notWeight } : {}),
     });
 
     return {

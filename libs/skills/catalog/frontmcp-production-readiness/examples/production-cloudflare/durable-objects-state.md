@@ -19,10 +19,13 @@ Shows how to use Cloudflare Durable Objects for stateful coordination alongside 
 
 ```toml
 # wrangler.toml — with Durable Objects and R2
-# NOTE: `main` is written by `frontmcp build --target cloudflare`. Do not hand-edit.
+# NOTE: `main`, `compatibility_date`, and `compatibility_flags` are written by
+# `frontmcp build --target cloudflare`. Do not hand-edit. nodejs_compat is
+# required — the worker entry needs Node builtins or it won't boot.
 name = "stateful-mcp-worker"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 # KV for cache
 [[kv_namespaces]]

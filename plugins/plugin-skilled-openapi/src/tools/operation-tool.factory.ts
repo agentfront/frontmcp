@@ -109,8 +109,8 @@ export interface OperationRegisterContext {
 
 /**
  * Stable result envelope produced by every operation executor. Mirrors the
- * shape returned by `execute_action.tool.ts` so call-site code (via
- * `callTool`) can branch on `ok` uniformly regardless of which surface the
+ * shape returned by the shared `executeSkillAction` executor so call-site code
+ * (via `callTool`) can branch on `ok` uniformly regardless of which surface the
  * operation was reached through.
  */
 export interface OperationToolResult {
@@ -228,10 +228,11 @@ export class OperationToolFactory {
   }
 
   /**
-   * Build the actual function executor for one op. Mirrors `ExecuteActionTool.execute`:
+   * Build the actual function executor for one op. Mirrors the skill-action
+   * executor (`executeSkillAction`):
    * authority check + input validation + `executeOperation` — so callers
    * reaching the op via `callTool` get the same security gates as callers
-   * going through `execute_action`.
+   * going through `run_workflow`.
    */
   private makeExecutor(entry: HiddenOpEntry): OperationExecutor {
     return async (input, ctx) => {
@@ -239,10 +240,13 @@ export class OperationToolFactory {
       const guard = ctx.get(AuthorityGuard);
       const resolver = ctx.get(SkilledOpenApiCredentialResolver);
 
-      // 1) Authority gate (same policy plumbing as execute_action).
-      const policy = entry.op.requiredAuthorities;
+      // 1) Authority gate (same policy plumbing as executeSkillAction): skill-
+      //    level AND op-level policies; default-deny per config for unprotected ops.
       const authResult = await guard.check({
-        policy,
+        policy: entry.op.requiredAuthorities,
+        skillPolicy: entry.skillRequiredAuthorities,
+        isPublic: entry.op.public,
+        unprotectedOps: config.unprotectedOps,
         authInfo: (ctx.authInfo ?? {}) as Parameters<AuthorityGuard['check']>[0]['authInfo'],
         input: (input ?? {}) as Record<string, unknown>,
       });
@@ -299,7 +303,7 @@ export class OperationToolFactory {
         deps,
       });
 
-      // 4) Same envelope shape as execute_action so call-site code is uniform.
+      // 4) Same envelope shape as executeSkillAction so call-site code is uniform.
       return {
         ok: result.ok,
         status: result.status,

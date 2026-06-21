@@ -53,3 +53,53 @@ export function probeOptionalDependency(
   const error = loadError instanceof Error ? loadError.message : String(loadError);
   return resolvedPath ? { status: 'load-failed', resolvedPath, error } : { status: 'not-installed', error };
 }
+
+/**
+ * Lazily load an OPTIONAL peer dependency, turning a failed load into a clear,
+ * accurate error instead of an opaque `ERR_MODULE_NOT_FOUND`.
+ *
+ * Pairs with {@link probeOptionalDependency}: on failure it classifies the cause
+ * so the message tells the truth (#453):
+ *   - `not-installed` → "install the peer" (reinstalling helps).
+ *   - `load-failed`   → "resolved but failed to load" (reinstalling will NOT
+ *     help; it's an export-condition / transpile / transitive-peer mismatch).
+ *
+ * Loading an optional peer eagerly at module scope crashes every consumer that
+ * never uses the feature — so the import MUST be deferred to the feature's
+ * use-site and routed through here.
+ *
+ * @param moduleName - bare specifier of the optional peer (used in messages + probe).
+ * @param importer - loader for the module. Pass a literal `() => import('pkg')`
+ *   so the bundler keeps it a real dynamic import; a variable specifier would
+ *   defeat static analysis.
+ * @param resolve - resolver used to classify the failure; pass `require.resolve`.
+ *   Kept injectable so this stays unit-testable and ESM-safe (this module never
+ *   references `require` itself).
+ * @param feature - short phrase naming what needs the peer, woven into the hint
+ *   (e.g. `'skill storage'`).
+ */
+export async function importOptionalPeer<T>(
+  moduleName: string,
+  importer: () => Promise<T>,
+  resolve: (id: string) => string,
+  feature: string,
+): Promise<T> {
+  try {
+    return await importer();
+  } catch (cause) {
+    const probe = probeOptionalDependency(moduleName, cause, resolve);
+    if (probe.status === 'not-installed') {
+      throw new Error(
+        `@frontmcp/sdk ${feature} needs the optional peer dependency '${moduleName}'. ` +
+          `Install it in your project (e.g. \`npm i ${moduleName}\`).`,
+        { cause },
+      );
+    }
+    throw new Error(
+      `@frontmcp/sdk ${feature} found '${moduleName}' at ${probe.resolvedPath} but it failed to load — ` +
+        `reinstalling will not help. This is usually an export-condition, transpile, or transitive-peer ` +
+        `mismatch. Original error: ${probe.error}`,
+      { cause },
+    );
+  }
+}

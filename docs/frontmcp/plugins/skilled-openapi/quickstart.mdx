@@ -1,7 +1,7 @@
 ---
 title: Quick Start
 sidebarTitle: Quick Start
-description: Install the plugin, point it at a fixture skill bundle, and call execute_action end-to-end in 5 minutes.
+description: Install the plugin, point it at a fixture skill bundle, and run a run_workflow AgentScript end-to-end in 5 minutes.
 icon: rocket
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'quickstart', 'typescript']
 ---
@@ -195,11 +195,11 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
   <Step title="Connect MCP Inspector and verify">
     Boot your FrontMCP server (`npx tsx src/main.ts`) and connect MCP Inspector to `http://localhost:3010`. You should see:
 
-    - `tools/list` returns **only** `search_skill`, `load_skill`, `execute_action`. The three OpenAPI operations are hidden.
+    - `tools/list` returns **only** `search_skill`, `load_skill`, `run_workflow`. The three OpenAPI operations are hidden.
     - `skills/list` returns the `invoices` skill.
     - `search_skill({ query: "create invoice" })` returns `[{ skillId: "invoices", ... }]`.
-    - `load_skill({ skillId: "invoices" })` returns the markdown instructions plus three actions with their JSON Schemas.
-    - `execute_action({ skillId: "invoices", actionId: "createInvoice", input: { customerId: "cus_1", amount: 4200 } })` returns `{ ok: true, status: 201, data: { id: "inv_1", status: "open" } }` and the mock server logs the hit.
+    - `load_skill({ skillId: "invoices" })` returns the markdown instructions plus three actions with their JSON Schemas (the `actionId`s you'll call from a workflow).
+    - `run_workflow({ script: 'const inv = await callTool("createInvoice", { customerId: "cus_1", amount: 4200 }); return inv;' })` returns `{ success: true, value: { id: "inv_1", status: "open" }, stats: { durationMs, toolCalls: 1, steps } }` and the mock server logs the hit. The AgentScript runs inside the enclave sandbox; `callTool` is the only way it reaches an upstream operation.
   </Step>
 </Steps>
 
@@ -209,13 +209,14 @@ You ran the same flow the [e2e suite](https://github.com/agentfront/frontmcp/tre
 
 1. The plugin parsed your bundle, validated it against the strict Zod schema, and registered the `invoices` skill into `scope.skills` via `SkillRegistry.registerSkillContent()`.
 2. It populated a plugin-private `HiddenOpRegistry` with the three operation descriptors, keyed by `(skillId, actionId)`. These never touch `scope.tools`, so they can't leak into `tools/list`.
-3. When the MCP client called `execute_action`, the plugin:
-   - looked up `(invoices, createInvoice)` in the hidden-op registry,
+3. When the MCP client called `run_workflow`, the plugin:
+   - transformed the AgentScript `script` and ran it inside the dependency-free **enclave** interpreter (no host access, no network except `callTool`),
+   - on `await callTool("createInvoice", ...)`, looked up `createInvoice` in the hidden-op registry across loaded skills,
    - ran the ABAC guard (no `requiredAuthorities` on this op → granted),
    - resolved the `bearer` auth binding via the in-memory `CredentialResolver` (seeded by your `credentials: { ... }` option),
    - delegated to `@frontmcp/adapters/openapi`'s `buildRequest` → `fetch` → `parseResponse`,
    - SSRF-checked the resolved URL against the bundle's declared `services[].baseUrl` host allowlist,
-   - returned a structured `{ ok, status, data }` envelope to the MCP client.
+   - returned the action's response `data` into the script, then surfaced the script's `return` value as `{ success, value, stats }` to the MCP client.
 
 ## Hot-swap test
 
@@ -231,7 +232,7 @@ While the server is running, edit `bundle.json` — bump the `version` to `"1.0.
     Move from `static` to `npm` (pinned) or `saas` (CI-driven, signed, hot-pulled) source.
   </Card>
   <Card title="Meta-tools" icon="wrench" href="/frontmcp/plugins/skilled-openapi/meta-tools">
-    `search_skill` / `load_skill` / `execute_action` — exact contracts and prompts for the LLM.
+    `search_skill` / `load_skill` / `run_workflow` — exact contracts and prompts for the LLM.
   </Card>
   <Card title="Security" icon="shield-check" href="/frontmcp/plugins/skilled-openapi/security">
     Sign your bundles, switch off `dev: true`, wire credentials to `libs/auth`'s vault.

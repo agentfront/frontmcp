@@ -27,7 +27,7 @@ describe('bundleSkillToActions', () => {
 
   it('throws on operationIds that are not present in the operations map', () => {
     // Silently dropping unknown ids would advertise a skill whose actions[]
-    // disagree with what execute_action can resolve; bundle apply must reject
+    // disagree with what run_workflow's callTool can resolve; bundle apply must reject
     // the bundle entirely instead.
     const skill: BundledSkill = {
       id: 's',

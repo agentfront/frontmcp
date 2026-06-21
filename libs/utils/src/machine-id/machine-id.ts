@@ -87,7 +87,7 @@ function saveMachineIdAsync(machineId: string): void {
 /**
  * Resolve machine ID based on deployment mode.
  */
-const machineId = (() => {
+function computeMachineId(): string {
   // 0. Explicit override always wins
   const envMachineId = getEnvDirect('MACHINE_ID');
   if (envMachineId) return envMachineId;
@@ -115,17 +115,33 @@ const machineId = (() => {
   const newId = randomUUID();
   saveMachineIdAsync(newId);
   return newId;
-})();
+}
+
+/**
+ * Lazily-computed, memoized machine ID.
+ *
+ * Computed on first {@link getMachineId} call rather than at module load.
+ * V8-isolate runtimes (Cloudflare Workers) FORBID generating random values or
+ * I/O in global (module-eval) scope — an eager `randomUUID()` here crashed the
+ * Worker at startup. Deferring to first use keeps the resolution identical on
+ * Node while making the module import side-effect-free.
+ */
+let cachedMachineId: string | undefined;
 
 /** Process-wide override set by `setMachineIdOverride()` for session continuity */
 let machineIdOverride: string | undefined;
 
 /**
  * Get the current machine ID.
- * Returns the override (if set via `setMachineIdOverride`) or the computed value.
+ * Returns the override (if set via `setMachineIdOverride`) or the lazily
+ * computed-and-memoized value.
  */
 export function getMachineId(): string {
-  return machineIdOverride ?? machineId;
+  if (machineIdOverride !== undefined) return machineIdOverride;
+  if (cachedMachineId === undefined) {
+    cachedMachineId = computeMachineId();
+  }
+  return cachedMachineId;
 }
 
 /**

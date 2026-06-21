@@ -60,19 +60,29 @@ export class SessionRateLimiter {
   private readonly windowMs: number;
   private readonly maxRequests: number;
   private readonly requests: Map<string, number[]> = new Map();
+  private readonly cleanupIntervalMs: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: SessionRateLimiterConfig = {}) {
     this.windowMs = config.windowMs ?? 60000;
     this.maxRequests = config.maxRequests ?? 100;
+    this.cleanupIntervalMs = config.cleanupIntervalMs ?? 60000;
+    // The cleanup timer is started LAZILY (ensureCleanupTimer) on first use —
+    // NOT here. V8-isolate runtimes (Cloudflare Workers) forbid setInterval in
+    // global/module-eval scope, and `export const defaultSessionRateLimiter =
+    // new SessionRateLimiter()` would otherwise crash the Worker at startup.
+  }
 
-    // Start automatic cleanup if configured
-    const cleanupIntervalMs = config.cleanupIntervalMs ?? 60000;
-    if (cleanupIntervalMs > 0) {
-      this.cleanupTimer = setInterval(() => this.cleanup(), cleanupIntervalMs);
-      // Don't block process exit
-      if (typeof this.cleanupTimer.unref === 'function') this.cleanupTimer.unref();
-    }
+  /**
+   * Start the periodic cleanup timer on first use (idempotent). Deferred out of
+   * the constructor so constructing an instance at module scope has no side
+   * effects — see the constructor note on V8-isolate global-scope restrictions.
+   */
+  private ensureCleanupTimer(): void {
+    if (this.cleanupTimer || this.cleanupIntervalMs <= 0) return;
+    this.cleanupTimer = setInterval(() => this.cleanup(), this.cleanupIntervalMs);
+    // Don't block process exit
+    if (typeof this.cleanupTimer.unref === 'function') this.cleanupTimer.unref();
   }
 
   /**
@@ -82,6 +92,7 @@ export class SessionRateLimiter {
    * @returns Rate limit result with allowed status and metadata
    */
   check(key: string): RateLimitResult {
+    this.ensureCleanupTimer();
     const now = Date.now();
     const windowStart = now - this.windowMs;
 

@@ -95,8 +95,103 @@ describe('AuthorityGuard', () => {
     expect(r.granted).toBe(true);
   });
 
+  // ── C2: skill-level + op-level policies are AND-ed ───────────────────────────
+  describe('skill-level + op-level AND (C2)', () => {
+    it('denies when the skill-level policy fails even if the op-level policy would pass', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({
+        policy: { roles: { all: ['user'] } }, // op-level: passes
+        skillPolicy: { roles: { all: ['admin'] } }, // skill-level: fails
+        authInfo: { user: { sub: 'u', roles: ['user'], permissions: [] } },
+        input: {},
+      });
+      expect(r.granted).toBe(false);
+    });
+
+    it('denies when the op-level policy fails even if the skill-level policy passes', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({
+        policy: { roles: { all: ['admin'] } }, // op-level: fails
+        skillPolicy: { roles: { all: ['user'] } }, // skill-level: passes
+        authInfo: { user: { sub: 'u', roles: ['user'], permissions: [] } },
+        input: {},
+      });
+      expect(r.granted).toBe(false);
+    });
+
+    it('grants only when BOTH skill-level and op-level policies pass', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({
+        policy: { permissions: { all: ['invoices:write'] } },
+        skillPolicy: { roles: { all: ['admin'] } },
+        authInfo: { user: { sub: 'u', roles: ['admin'], permissions: ['invoices:write'] } },
+        input: {},
+      });
+      expect(r.granted).toBe(true);
+    });
+
+    it('enforces the skill-level policy when there is no op-level policy', async () => {
+      const guard = new AuthorityGuard();
+      const denied = await guard.check({
+        policy: undefined,
+        skillPolicy: { roles: { all: ['admin'] } },
+        authInfo: { user: { sub: 'u', roles: ['user'], permissions: [] } },
+        input: {},
+      });
+      expect(denied.granted).toBe(false);
+      const granted = await guard.check({
+        policy: undefined,
+        skillPolicy: { roles: { all: ['admin'] } },
+        authInfo: { user: { sub: 'u', roles: ['admin'], permissions: [] } },
+        input: {},
+      });
+      expect(granted.granted).toBe(true);
+    });
+  });
+
+  // ── C1/C3: default-deny for unprotected ops ──────────────────────────────────
+  describe('unprotectedOps default-deny (C1/C3)', () => {
+    const anon = { user: { sub: 'u', roles: [], permissions: [] } };
+
+    it('grants a policy-less op under the default unprotectedOps:"allow"', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({ policy: undefined, authInfo: anon, input: {} });
+      expect(r.granted).toBe(true);
+    });
+
+    it('denies a policy-less, non-public op under unprotectedOps:"deny"', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({ policy: undefined, unprotectedOps: 'deny', authInfo: anon, input: {} });
+      expect(r.granted).toBe(false);
+      expect(r.deniedBy).toBe('unprotected_operation_denied');
+    });
+
+    it('grants a policy-less op marked public:true under unprotectedOps:"deny"', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({
+        policy: undefined,
+        isPublic: true,
+        unprotectedOps: 'deny',
+        authInfo: anon,
+        input: {},
+      });
+      expect(r.granted).toBe(true);
+    });
+
+    it('still evaluates a real policy under unprotectedOps:"deny" (deny does not blanket-block)', async () => {
+      const guard = new AuthorityGuard();
+      const r = await guard.check({
+        policy: { roles: { all: ['admin'] } },
+        unprotectedOps: 'deny',
+        authInfo: { user: { sub: 'u', roles: ['admin'], permissions: [] } },
+        input: {},
+      });
+      expect(r.granted).toBe(true);
+    });
+  });
+
   describe('error path — translates engine throws into structured deny', () => {
-    // The execute_action contract is "every authority failure surfaces as
+    // The skill-action executor contract is "every authority failure surfaces as
     // { granted: false, deniedBy }". Force the underlying engine to throw and
     // assert the catch block translates faithfully instead of bubbling.
     const installEngineThrow = (guard: AuthorityGuard, thrown: unknown) => {

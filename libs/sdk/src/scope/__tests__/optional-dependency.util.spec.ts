@@ -8,7 +8,7 @@
  * The classifier re-probes with the runtime resolver to tell the two apart.
  */
 
-import { probeOptionalDependency } from '../optional-dependency.util';
+import { importOptionalPeer, probeOptionalDependency } from '../optional-dependency.util';
 
 describe('probeOptionalDependency (#453)', () => {
   it('reports "not-installed" when the module cannot be resolved', () => {
@@ -61,5 +61,50 @@ describe('probeOptionalDependency (#453)', () => {
     const probe = probeOptionalDependency('pkg', new Error('x'), resolve);
 
     expect('resolvedPath' in probe).toBe(false);
+  });
+});
+
+describe('importOptionalPeer (#453)', () => {
+  it('returns the module when the importer succeeds', async () => {
+    const mod = { hello: 'world' };
+    const resolve = jest.fn(() => '/app/node_modules/pkg/index.js');
+
+    const result = await importOptionalPeer('pkg', async () => mod, resolve, 'feature');
+
+    expect(result).toBe(mod);
+    // No failure path → never needs to classify.
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('throws an "install it" error when the peer is not installed (unresolvable)', async () => {
+    const resolve = jest.fn(() => {
+      throw new Error("Cannot find module 'pkg'");
+    });
+    const importer = (): Promise<never> => Promise.reject(new Error('ERR_MODULE_NOT_FOUND'));
+
+    await expect(importOptionalPeer('pkg', importer, resolve, 'skill storage')).rejects.toThrow(
+      /skill storage needs the optional peer dependency 'pkg'[\s\S]*npm i pkg/,
+    );
+  });
+
+  it('throws a "resolved but failed to load" error when the peer is present but throws', async () => {
+    const resolve = jest.fn(() => '/app/node_modules/pkg/index.js');
+    const importer = (): Promise<never> => Promise.reject(new Error('Unexpected token in module'));
+
+    await expect(importOptionalPeer('pkg', importer, resolve, 'skill storage')).rejects.toThrow(
+      /found 'pkg' at \/app\/node_modules\/pkg\/index\.js but it failed to load[\s\S]*Unexpected token in module/,
+    );
+  });
+
+  it('preserves the original failure as the error cause', async () => {
+    const original = new Error('boom');
+    const resolve = jest.fn(() => '/app/node_modules/pkg/index.js');
+
+    const error = await importOptionalPeer('pkg', () => Promise.reject(original), resolve, 'feature').catch(
+      (e: unknown) => e as Error,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error & { cause?: unknown }).cause).toBe(original);
   });
 });

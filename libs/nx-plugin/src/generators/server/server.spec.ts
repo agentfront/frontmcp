@@ -69,6 +69,10 @@ describe('server generator', () => {
       expect(tree.exists('servers/prod/wrangler.toml')).toBe(true);
       const toml = tree.read('servers/prod/wrangler.toml', 'utf-8');
       expect(toml).toContain('server-prod');
+      // main must point at the cloudflare build output (not dist/main.js), and
+      // nodejs_compat is required or the deployed Worker can't boot.
+      expect(toml).toContain('main = "dist/cloudflare/index.js"');
+      expect(toml).toContain('compatibility_flags = ["nodejs_compat"]');
     });
   });
 

@@ -311,7 +311,12 @@
           "additionalProperties": false,
           "properties": {
             "name": { "type": "string", "description": "Worker name." },
-            "compatibilityDate": { "type": "string", "description": "Compatibility date." }
+            "compatibilityDate": { "type": "string", "description": "Compatibility date. Defaults to 2024-09-23 (enables full nodejs_compat)." },
+            "compatibilityFlags": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Extra Cloudflare compatibility flags. nodejs_compat is always emitted; list only additions."
+            }
           }
         }
       }

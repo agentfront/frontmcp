@@ -10,16 +10,15 @@
 //   2. Boots a FrontMCP server on :3010 with `SkilledOpenApiPlugin` configured
 //      to load `billing-bundle.json` from disk (static source, dev mode so we
 //      skip signature verification for the demo)
-//   3. The MCP client only sees `search_skill`, `load_skill`, `execute_action`
+//   3. The MCP client only sees `search_skill`, `load_skill`, `run_workflow`
 //      — the three OpenAPI operations are HIDDEN behind the `invoices` skill.
 //
 // Suggested verification flow:
 //   - Connect MCP Inspector to http://localhost:3010
-//   - tools/list → expect [search_skill, load_skill, execute_action]
+//   - tools/list → expect [search_skill, load_skill, run_workflow]
 //   - search_skill({ query: "create invoice" }) → returns the `invoices` skill
 //   - load_skill({ skillId: "invoices" }) → instructions + 3 actions w/ schemas
-//   - execute_action({ skillId: "invoices", actionId: "createInvoice",
-//       input: { customerId: "cus_1", amount: 4200 } })
+//   - run_workflow({ script: 'return await callTool("createInvoice", { customerId: "cus_1", amount: 4200 })' })
 //     → mock server logs the hit, returns { id: "inv_1", status: "open" }
 
 import * as path from 'node:path';
@@ -59,7 +58,7 @@ const bundlePath = path.resolve(__dirname, 'billing-bundle.json');
 export class SkilledOpenApiDemoApp {}
 
 if (require.main === module) {
-  // Start mock REST first so the plugin's first pull / first execute_action
+  // Start mock REST first so the plugin's first pull / first run_workflow action call
   // sees a live upstream. Awaited via .then so an EADDRINUSE surfaces as a
   // logged failure instead of a swallowed promise rejection.
   void startMockBillingServer(Number(process.env['MOCK_BILLING_PORT'] ?? 9876))

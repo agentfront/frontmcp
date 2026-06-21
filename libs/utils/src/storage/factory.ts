@@ -66,6 +66,17 @@ async function createAdapter(type: StorageType, config: StorageConfig): Promise<
       return new UpstashStorageAdapter(config.upstash);
     }
 
+    case 'cloudflare-kv': {
+      if (!config.cloudflareKv) {
+        throw new StorageConfigError(
+          'cloudflare-kv',
+          "cloudflare-kv requires `cloudflareKv: { namespace }` (the KV binding can't be auto-detected)",
+        );
+      }
+      const { CloudflareKvStorageAdapter } = await import('./adapters/cloudflare-kv.js');
+      return new CloudflareKvStorageAdapter(config.cloudflareKv);
+    }
+
     case 'auto':
       throw new StorageConfigError('auto', 'Auto type should be resolved before calling createAdapter');
 

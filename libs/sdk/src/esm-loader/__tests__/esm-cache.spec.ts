@@ -149,6 +149,21 @@ describe('EsmCacheManager', () => {
     });
   });
 
+  describe('memory eviction (maxEntries)', () => {
+    it('evicts the oldest in-memory entries past the cap', async () => {
+      // Memory-only (cacheDir '') so a get() miss is a real miss, not a disk hit.
+      const mem = new EsmCacheManager({ cacheDir: '', maxEntries: 3 });
+      for (let i = 1; i <= 5; i++) {
+        await mem.put('@acme/p', `${i}.0.0`, 'export default {}', `https://esm.sh/@acme/p@${i}.0.0`);
+      }
+      // Oldest two evicted (FIFO); newest three retained.
+      expect(await mem.get('@acme/p', '1.0.0')).toBeUndefined();
+      expect(await mem.get('@acme/p', '2.0.0')).toBeUndefined();
+      expect(await mem.get('@acme/p', '3.0.0')).toBeDefined();
+      expect(await mem.get('@acme/p', '5.0.0')).toBeDefined();
+    });
+  });
+
   describe('get()', () => {
     it('returns entry when cached and fresh', async () => {
       await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');

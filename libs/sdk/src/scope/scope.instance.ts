@@ -28,6 +28,7 @@ import {
   type FlowType,
   type FrontMcpAuth,
   type ScopeRecord,
+  type ServerRequest,
   type Token,
   type Type,
 } from '../common';
@@ -86,6 +87,12 @@ import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
+
+/**
+ * Flows the web-fetch adapter must NOT auto-dispatch by HTTP match: `http:request`
+ * is run directly for the MCP entry path, so excluding it avoids double-handling.
+ */
+const SCOPE_NON_DISPATCHABLE_FLOWS: ReadonlySet<string> = new Set(['http:request']);
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -660,7 +667,9 @@ export class Scope extends ScopeEntry {
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
-    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
+    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef, {
+      ...(this.metadata.skillsConfig?.scoring ? { scoring: this.metadata.skillsConfig.scoring } : {}),
+    });
 
     await Promise.all([
       this.scopeTools.ready,
@@ -1608,6 +1617,17 @@ export class Scope extends ScopeEntry {
     deps?: Map<Token, Type>,
   ): Promise<FlowOutputOf<Name> | undefined> {
     return this.scopeFlows.runFlow(name, input, deps);
+  }
+
+  /**
+   * Find the registered flow that handles this HTTP request (by method +
+   * `middleware.path` + `canActivate`), excluding `http:request` (which the
+   * web-fetch handler runs directly for the MCP entry path). Lets the
+   * Worker/web-fetch adapter dispatch auth/well-known/oauth flows the same way
+   * the Express host routes them — without a middleware server.
+   */
+  async findHttpFlowName(request: ServerRequest): Promise<FlowName | undefined> {
+    return this.scopeFlows.findHttpFlowName(request, SCOPE_NON_DISPATCHABLE_FLOWS);
   }
 
   async runFlowForOutput<Name extends FlowName>(

@@ -467,6 +467,34 @@ export interface UpstashAdapterOptions {
   enablePubSub?: boolean;
 }
 
+/**
+ * Minimal structural subset of the Cloudflare `KVNamespace` binding the
+ * `cloudflare-kv` adapter uses. Declared here rather than importing
+ * `@cloudflare/workers-types` so any runtime exposing this shape works.
+ */
+export interface CloudflareKvNamespace {
+  get(key: string, type?: 'text'): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(options?: {
+    prefix?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ keys: { name: string }[]; list_complete: boolean; cursor?: string }>;
+}
+
+/**
+ * Cloudflare Workers KV adapter options (when type='cloudflare-kv'). The bound
+ * KV namespace is supplied explicitly (resolved from the Worker `env`), since
+ * bindings don't exist as env vars and can't be auto-detected.
+ */
+export interface CloudflareKvAdapterOptions {
+  /** The bound KV namespace. */
+  namespace: CloudflareKvNamespace;
+  /** Key prefix applied to all keys. @default '' */
+  keyPrefix?: string;
+}
+
 // ============================================
 // Factory Types
 // ============================================
@@ -474,7 +502,7 @@ export interface UpstashAdapterOptions {
 /**
  * Storage backend type.
  */
-export type StorageType = 'memory' | 'redis' | 'vercel-kv' | 'upstash' | 'auto';
+export type StorageType = 'memory' | 'redis' | 'vercel-kv' | 'upstash' | 'cloudflare-kv' | 'auto';
 
 /**
  * Configuration for createStorage factory.
@@ -505,6 +533,11 @@ export interface StorageConfig {
    * Vercel KV adapter options (when type='vercel-kv').
    */
   vercelKv?: VercelKvAdapterOptions;
+
+  /**
+   * Cloudflare KV adapter options (when type='cloudflare-kv').
+   */
+  cloudflareKv?: CloudflareKvAdapterOptions;
 
   /**
    * Upstash adapter options (when type='upstash').

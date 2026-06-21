@@ -95,7 +95,7 @@ export interface SkillAuditConfig {
 
 /**
  * DI token for the audit writer service. Resolved lazily by the
- * ExecuteActionTool via `tryGet` so an unconfigured server is a no-op.
+ * run_workflow tool via `tryGet` so an unconfigured server is a no-op.
  */
 export const SkillAuditWriterToken: Token<SkillAuditWriter> = Symbol.for(
   'frontmcp:SKILL_AUDIT_WRITER',

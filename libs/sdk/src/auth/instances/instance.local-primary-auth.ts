@@ -82,7 +82,17 @@ import { secureStoreContextExtension } from '../secure-store/secure-store.contex
  */
 export type LocalPrimaryAuthOptions = PublicAuthOptions | LocalAuthOptions | RemoteAuthOptions;
 
-const DEFAULT_NO_AUTH_SECRET = randomBytes(32);
+// Lazily generated and memoized so importing this module has NO side effects —
+// V8-isolate runtimes (Cloudflare Workers) forbid generating random values in
+// global/module-eval scope. The constructor (which runs while a Scope is built,
+// inside a request handler on Workers) calls this, where random is allowed.
+let defaultNoAuthSecret: Uint8Array | undefined;
+function getDefaultNoAuthSecret(): Uint8Array {
+  if (!defaultNoAuthSecret) {
+    defaultNoAuthSecret = randomBytes(32);
+  }
+  return defaultNoAuthSecret;
+}
 
 /**
  * User information for JWT claims
@@ -364,7 +374,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.secret = new TextEncoder().encode(jwtSecret);
     } else {
       this.logger.warn('JWT_SECRET is not set, using default secret');
-      this.secret = DEFAULT_NO_AUTH_SECRET;
+      this.secret = getDefaultNoAuthSecret();
     }
 
     // Read the token-storage selection. Only local/remote/orchestrated modes

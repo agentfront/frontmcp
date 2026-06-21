@@ -46,7 +46,8 @@ Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target
 
 - [ ] No secrets in `wrangler.toml` — all set via `wrangler secret put <NAME>`
 - [ ] `[vars]` block contains only non-sensitive config (region names, feature flags)
-- [ ] `compatibility_date` set to a recent date and locked
+- [ ] `compatibility_date` set to a recent date and locked (the build defaults to `2024-09-23`, the date that enables full `nodejs_compat`)
+- [ ] `compatibility_flags` includes `nodejs_compat` — the build emits it automatically; without it the deployed Worker fails to boot (`require()`/`node:*` are unavailable)
 
 ## Deploy & observability
 

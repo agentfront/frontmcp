@@ -4,6 +4,7 @@
 // built by the plugin's `dynamicProviders()` and injected into the meta-tools
 // via the standard `this.get(Token)` API.
 
+import { type UnprotectedOpsPolicy } from './security/authority-guard';
 import { type CredentialResolver } from './executor/credential-resolver';
 import { type OutboundOptions, type SkilledOpenApiPluginOptions } from './skilled-openapi.types';
 
@@ -15,6 +16,10 @@ export class SkilledOpenApiConfig {
   constructor(public readonly options: SkilledOpenApiPluginOptions) {}
   get outbound(): OutboundOptions {
     return this.options.outbound;
+  }
+  /** Default-deny policy for ops with no required-authorities (C1/C3). */
+  get unprotectedOps(): UnprotectedOpsPolicy {
+    return this.options.unprotectedOps;
   }
 }
 

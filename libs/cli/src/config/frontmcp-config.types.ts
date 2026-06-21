@@ -168,8 +168,14 @@ export interface CliTargetConfig {
 export interface WranglerConfig {
   /** Worker name. */
   name?: string;
-  /** Compatibility date. */
+  /** Compatibility date. Defaults to `2024-09-23` (the date that enables full `nodejs_compat`). */
   compatibilityDate?: string;
+  /**
+   * Extra Cloudflare compatibility flags. `nodejs_compat` is always emitted
+   * (the FrontMCP worker entry requires Node builtins), so list only additions
+   * here — e.g. `['nodejs_compat_populate_process_env']`.
+   */
+  compatibilityFlags?: string[];
 }
 
 // ============================================

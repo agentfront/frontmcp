@@ -2,237 +2,373 @@
 title: Cloudflare Worker
 slug: deployment/cloudflare-worker
 icon: cloudflare
-description: Run FrontMCP on a Cloudflare Worker — the hosted v1.3 target with hot-reload via GitHub Action and a signed-bundle webhook
+description: Deploy a FrontMCP MCP server to Cloudflare Workers — the proven decorator build path, plus the auto-updating managed edge runtime
 keywords:
   [
     'frontmcp',
     'mcp',
     'cloudflare',
     'cloudflare worker',
+    'workerd',
     'deployment',
     'edge',
-    'durable objects',
-    'd1',
+    'createEdgeMcp',
     'kv',
-    'r2',
-    'hot reload',
-    'github action',
+    'cron trigger',
+    'wrangler',
     'typescript',
   ]
 ---
 
-The Cloudflare Worker target is FrontMCP's first **hosted runtime**. Clients connect to `https://your-worker.example.com/mcp`; the Worker boots from a signed bundle assembled by the GitHub Action, and live-reloads on every push without redeploying.
+FrontMCP runs on Cloudflare Workers via the Web-standard `fetch` handler — clients connect to `https://your-worker.workers.dev/mcp` over the MCP **Streamable HTTP** transport. There is no Express and no Node `req`/`res` shim on the Worker; the native `Request` is routed straight into the MCP transport.
 
-This page covers the Worker itself. The declarative configuration that drives it lives in [`frontmcp.deploy.yaml`](/frontmcp/deployment/deploy-manifest); the higher-level concepts behind the skills-only model are on the [Skills-Only Deployment](/frontmcp/features/skills-only-deployment) page.
+There are **two deployment paths**, and they have different maturity:
+
+| Path | API | Status |
+| --- | --- | --- |
+| **Decorator build** | `@FrontMcp` app + `frontmcp build --target cloudflare` | ✅ **Works today** — boots on real workerd (covered by `apps/e2e/demo-e2e-cloudflare`) |
+| **Managed edge** | `@frontmcp/edge` `createEdgeMcp({ managed })` | 🧪 **Experimental** — API + KV cache + Cron wiring are built and unit/integration-tested, but the full managed bundle does **not** yet boot on workerd (see [Current status](#current-status--limitations)) |
+
+Start with the decorator path. It's the one that's verified end-to-end.
+
+---
+
+## Path 1 — Deploy a FrontMCP app (decorator build)
+
+This is the proven path. You write a normal `@FrontMcp` app and `frontmcp build --target cloudflare` compiles it into an ES Module Worker.
+
+<Steps>
+<Step title="Write the server">
+```ts
+// src/main.ts
+import 'reflect-metadata';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
+
+@Tool({ name: 'echo', description: 'Echo a message', inputSchema: { message: z.string() } })
+class EchoTool extends ToolContext {
+  async execute(input: { message: string }) {
+    return { content: [{ type: 'text' as const, text: `Echo: ${input.message}` }] };
+  }
+}
+
+@App({ id: 'demo', name: 'demo', tools: [EchoTool] })
+class DemoApp {}
+
+@FrontMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [DemoApp],
+  // Serve MCP at /mcp (the worker default is root `/`). See "Endpoint path,
+  // CORS & SSE" below — all three are driven by this same `http`/`transport` config.
+  http: { entryPath: '/mcp' },
+  // Background tasks need distributed storage (Redis/Upstash) — disable on edge
+  // unless you've configured one.
+  tasks: { enabled: false },
+})
+class MyServer {}
+
+export default MyServer;
+```
+
+<Warning>
+Keep tool/resource/prompt code **worker-safe**: no `node:fs`, timers, `Math.random()`, or `Date.now()` at module top level. Inside `execute()` / `read()` is fine — that runs in a request context. `--target cloudflare` rejects `sqlite`/`redis` storage config at build time (no native modules / Node net on Workers).
+</Warning>
+</Step>
+
+<Step title="Add frontmcp.config.js">
+```js
+// frontmcp.config.js
+module.exports = {
+  name: 'my-worker',
+  entry: './src/main.ts',
+  deployments: [{ target: 'cloudflare', wrangler: { name: 'my-worker' } }],
+};
+```
+`wrangler.name` is the deployed Worker name; the build writes it into `wrangler.toml`.
+</Step>
+
+<Step title="Build">
+```bash
+frontmcp build --target cloudflare
+```
+This emits `dist/cloudflare/index.js` (an ES Module Worker) and **(re)writes the top-level keys** of `wrangler.toml`:
+
+```toml
+name = "my-worker"
+main = "dist/cloudflare/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+```
 
 <Note>
-  v1.3 ships the Worker runtime as the **first** hosted target. The Vercel Edge and Deno Deploy targets are deferred — declared in the `runtime.target` discriminator but not yet implemented.
+`nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load. The build always emits both.
+</Note>
+</Step>
+
+<Step title="Test locally in workerd, then deploy">
+```bash
+npx wrangler dev            # boots the bundle in workerd (same engine as prod)
+npx wrangler login          # one-time auth to your account
+npx wrangler deploy
+```
+</Step>
+
+<Step title="Verify">
+```bash
+curl https://my-worker.<subdomain>.workers.dev/healthz
+# → { "status": "ok", "transport": "web-fetch", "server": { "name": "my-worker", ... } }
+
+curl -s https://my-worker.<subdomain>.workers.dev/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
+```
+Point any MCP client at `https://<your-worker-url>/mcp` (Streamable HTTP).
+</Step>
+</Steps>
+
+<Note>
+`frontmcp build --target cloudflare` regenerates `wrangler.toml`'s four top-level keys on **every** build (`alwaysWriteConfig`). It does **not** emit `[[kv_namespaces]]`, `[[durable_objects]]`, `[[r2_buckets]]`, `[[d1_databases]]`, or `[triggers]`, and the generated entry passes only the `Request` (not `env`) to the handler — so the decorator-build path can't wire CF bindings. For bindings + the auto-update Cron, use the managed-edge path below with a hand-maintained `wrangler.toml`.
 </Note>
 
-## What a Worker entry file looks like
+---
 
-The user's `worker.ts` is ~10 lines. Everything else is in the deploy bundle.
+## Endpoint path, CORS & SSE — all config-driven
+
+The worker's transport is driven by the **standard `http` + `transport` config** — the same fields the Express host reads — so one config behaves identically on either adapter. There are no edge-specific knobs.
+
+The worker serves MCP at **exactly one path**: `http.entryPath` (the worker root `/` when unset). It does **not** guess a `/` + `/mcp` set — pick the path that matches how you expose the worker. Cloudflare routes never strip the path before it reaches the worker:
+
+| You expose | `http.entryPath` | Cloudflare route (`wrangler.toml`) | Worker serves |
+| --- | --- | --- | --- |
+| `https://mcp.example.com` (subdomain) | omit (root `/`) | `routes = [{ pattern = "mcp.example.com", custom_domain = true }]` | `/` |
+| `https://example.com/mcp` (path) | `'/mcp'` | `routes = [{ pattern = "example.com/mcp*", zone_name = "example.com" }]` | `/mcp` |
+
+```ts
+export default createEdgeMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [MyApp],
+  tasks: { enabled: false },
+  http: {
+    entryPath: '/mcp',        // the ONE path MCP is served at (omit → root '/')
+    cors: { origin: true },   // reflect Origin so a browser MCP client (Inspector "Direct") can connect
+  },
+  // transport: 'legacy' (default) / 'modern' → SSE streaming on POST;
+  // transport: 'stateless-api' → buffered JSON responses instead.
+});
+```
+
+- **CORS** comes from `http.cors` (`false` to disable, `{ origin, credentials, maxAge }` to configure). A function `origin` isn't supported on the worker — use a static origin (`true` / string / `string[]`).
+- **SSE** is derived from the transport protocol: streaming is on when Streamable HTTP is enabled and JSON-buffering is off (true under `legacy`/`modern`, false under `stateless-api`). Server→client `GET` streams are always honored.
+- A trailing slash is normalized (`/mcp/` matches `/mcp`); `/healthz` + `/readyz` always answer a liveness `200` regardless of `entryPath`.
+
+> The decorator-build path (`@FrontMcp({ http, transport })` + `frontmcp build --target cloudflare`) and the `@frontmcp/edge` `createEdgeMcp({ http, transport })` path read the **same** config, so the endpoint path / CORS / SSE behave identically on both.
+
+---
+
+## Path 2 — Managed auto-updating edge (`@frontmcp/edge`)
+
+The `@frontmcp/edge` package runs FrontMCP from a plain config object — no decorator, no `frontmcp build` step — and adds **managed mode**: it pulls a signed [skilled-OpenAPI bundle](/frontmcp/features/skills-only-deployment) from a SaaS endpoint, caches it in **KV**, and refreshes it on a **Cron Trigger**, so the server's capabilities update without a redeploy.
 
 ```ts
 // worker.ts
-import { createWorker } from '@frontmcp/worker';
-import deployBundle from './frontmcp.deploy.bundle.js'; // emitted by the GH Action
+import { createEdgeMcp, kvBundleCacheFromEnv } from '@frontmcp/edge';
 
-const { handler, durableObjects } = createWorker({
-  bundle: deployBundle,
-  env: 'production',
+export default createEdgeMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [],
+  tasks: { enabled: false },
+  managed: {
+    endpoint: 'https://cloud.example.com/v1/bundles/acme',
+    authToken: 'pinned-pull-token',
+    expectedAudience: 'acme-mcp',
+    jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
+    expectedIssuer: 'https://cloud.example.com',
+    // KV-backed last-good cache, resolved from the per-request `env` (CF bindings
+    // live on `env`, not module scope — so pass the factory, not a built store).
+    cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
+  },
 });
-
-export default handler;
-export const { SessionDO, EventStoreDO, BundleDO } = durableObjects;
 ```
 
-`createWorker` parses the manifest, applies the `environments.production` overlay, verifies the signed envelope against `TRUSTED_KEYS`, then assembles the FrontMCP runtime against the Worker's request handler.
+`createEdgeMcp` returns `{ fetch, scheduled }`. The `fetch` handler serves MCP; the `scheduled` handler is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it. Both come from the same module export.
 
-### Storage bindings (opinionated default)
+### Required `wrangler.toml` (hand-maintained)
 
-The Worker uses **Durable Objects + D1 + KV + R2** for its persistence stack:
+The managed path is bundled by **wrangler** (not `frontmcp build`), so you own `wrangler.toml`:
 
-| Binding | Class / kind | Purpose |
-| --- | --- | --- |
-| `SESSIONS` | Durable Object (`SessionDO`) | MCP session store; survives Worker restarts so `/sse` and Streamable HTTP resumability work. |
-| `EVENTS` | Durable Object (`EventStoreDO`) | Event store for the MCP transport's resumability protocol. |
-| `BUNDLE` | Durable Object (`BundleDO`) | Last-good signed envelope + active classifications, hot-swappable. |
-| `AUDIT` | D1 database | Tamper-evident skill action audit log (hash-chained per the v1.2 audit spec). |
-| `BUNDLE_CACHE` | KV namespace | Fallback bundle reused on boot if a resync push fails. |
-| `REPLAY_NONCE` | KV namespace | Replay-guard dedupe set for the resync webhook (windowed by `signing.replay.windowSeconds`). |
-| `SKILL_DATA` | R2 bucket | Large skill `data/` blobs that don't fit in the bundle envelope. |
+```toml
+name = "my-worker"
+main = "worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
-These names mirror the [`bindings.*`](/frontmcp/deployment/deploy-manifest#bindings) section of the manifest verbatim. The Action can also emit a `wrangler.toml` from the manifest so you can stay in lockstep.
+# Last-good bundle cache (createEdgeMcp reads it via kvBundleCacheFromEnv).
+[[kv_namespaces]]
+binding = "BUNDLE_CACHE"
+id = "<your-kv-namespace-id>"   # create with: npx wrangler kv namespace create BUNDLE_CACHE
 
-## Hot-reload on every push
-
-The Worker exposes one internal endpoint — `POST /_frontmcp/resync` — that accepts a freshly-built, signed bundle and atomically swaps the in-memory skill registry and classification registry.
-
-```text
-GitHub push
-   │
-   │  frontmcp/deploy-action@v1
-   ▼
-1. Parse + cross-validate frontmcp.deploy.yaml
-2. Apply environments.<env> overlay
-3. Walk skills/; run the markdown op-reference harvester
-4. Run the OpenAPI → MCP classifier
-5. Inline & content-address all artifacts
-6. Sign the envelope (Ed25519 by default)
-7. POST → worker.example.com/_frontmcp/resync
-   │
-   ▼
-Worker:
-- Verify signature against trustRoots[].publicKeySecret
-- Replay-guard via REPLAY_NONCE KV (timestamp + nonce dedupe)
-- Diff the envelope; if anything in `bindings` / DO class names changed,
-  the response says "redeploy required" — otherwise apply in-memory
-- Replace skill + classification registries atomically
-- Emit notifications/{skills,tools,resources,prompts}/list_changed
-- Persist the new envelope into BUNDLE_CACHE KV as the last-good fallback
+# Cron Trigger that drives scheduled() → refresh. Set your refresh cadence here
+# (the `managed.pollIntervalMs` option is IGNORED on edge — Workers have no
+# background timers between requests).
+[triggers]
+crontabs = ["*/5 * * * *"]
 ```
 
-A `wrangler deploy` is only needed on *structural* changes — new Durable Object classes, new bindings, new compatibility flags. Day-to-day skill / OpenAPI changes are pure hot-reload.
+### How the cache + refresh behave
 
-<Note>
-  The replay-guard window is shared with the v1.2 SaaS push hardening — same JWT + nonce machinery, generalised from skill-only bundles to the full deploy envelope.
-</Note>
-
-## Worker isolation strategy
-
-`codecall:execute` runs agent-authored AgentScript inside the Worker's V8 isolate. Two ingredients make this safe:
-
-1. **AST preflight on every call.** Each script is parsed by `@enclave-vm/ast` (pure-JS, Acorn-based, zero Node dependencies — Worker-safe). Disallowed identifiers are rejected before the script ever runs: `eval`, `Function`, `process`, `require`, dynamic `import`, raw `fetch`, top-level `globalThis` access, prototype walks, etc.
-2. **Frozen capability scope.** The script is executed via `new Function('skills', 'ctx', code)` with a frozen scope object containing only:
-    - The active skills' generated namespaces (`acme`, `billing`, …)
-    - `callTool` / `getTool` (still available for backward compat or non-namespaced names)
-    - `mcpLog` / `mcpNotify` (observability hooks)
-
-`@enclave-vm/core` (which the Node target uses) relies on `node:vm` and is therefore **not** Worker-safe — the Worker target uses the AST validator alone plus the frozen scope. This is the strategy documented in the v1.3 design memo and decided after the `@enclave-vm/*` Worker-compatibility audit.
+- **Boot:** the first request lazily builds the scope and pulls the bundle. If the pull fails, it falls back to the **last-good bundle in KV** (validated against the bundle schema) so a SaaS outage doesn't kill the server.
+- **Refresh:** the Cron Trigger invokes `scheduled()`, which pulls a fresh bundle, persists it to KV, and hot-swaps the live skill/tool registries — emitting `notifications/*/list_changed`.
+- **Single-flight:** boot and Cron refresh are mutually exclusive (no double-pull on cold start).
+- **No source attached → loud failure:** if the bundle source can't be constructed, `scheduled()` throws so the Cron run is reported as **failed** rather than silently succeeding with a stale bundle.
 
 <Warning>
-  The Worker isolation model leans on the AST guard's correctness. If you author your own custom plugin tools that the AgentScript could reach (beyond the auto-generated OpenAPI namespaces), make sure those tools' implementations don't re-introduce escape hatches.
+Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`. And see [Current status](#current-status--limitations) — the full managed bundle does not yet boot on workerd.
 </Warning>
 
-## Sessions on Durable Objects
+---
 
-`SessionDO` is the FrontMCP session store. Long-lived MCP sessions (Streamable HTTP, `/sse`) are bound to a DO instance keyed by session id; the instance survives Worker restarts and routes incoming requests for that session deterministically.
+## Storage on the edge
 
-This converges with the broader session-HA design — the DO IS the external session store for the Cloudflare deployment target. Existing HA primitives (heartbeat, takeover, relay) apply unchanged; the DO simply provides the durable substrate.
+Cloudflare KV backs the generic FrontMCP `StorageAdapter`, so factory-based stores (sessions, elicitation, cache) can run on Workers:
 
-## Auth at the Worker edge
+```ts
+import { createStorage } from '@frontmcp/utils';
 
-The deploy manifest's `auth` block configures the gate. The four shapes:
-
-```yaml
-auth: { provider: none }
+const storage = await createStorage({
+  type: 'cloudflare-kv',
+  cloudflareKv: { namespace: env.MY_KV },  // a KV binding from the Worker env
+});
 ```
 
-```yaml
-auth:
-  provider: frontegg
-  frontegg:
-    tenantResolver: subdomain
-    audience: acme-mcp
-    issuerSecret: FRONTEGG_ISSUER_URL
+KV is eventually-consistent and is **not** Redis. The adapter is honest about what KV can't do — these throw `StorageNotSupportedError` pointing at the (forthcoming) Durable Object path:
+
+- **Atomic counters** (`incr`/`decr`/`incrBy`) — no atomic increment on KV.
+- **Conditional writes** (`ifNotExists`/`ifExists`) — no compare-and-set.
+- **TTL introspection** (`ttl`) — KV doesn't expose remaining TTL.
+
+`keys()` runs over the prefix-scoped, paginated `list()` API with client-side glob filtering, and the 60-second minimum `expirationTtl` is enforced. `delete()`'s "existed" flag and `expire()`'s re-put are best-effort under eventual consistency.
+
+---
+
+## Stateful sessions & notifications (Durable Objects)
+
+A stateless worker can't support the Streamable HTTP **standalone `GET` notification stream**: each request is a fresh isolate/transport, so a `tools/call`'s notifications have no path back to the client's open `GET` stream (it closes immediately). The fix is a **Durable Object** — one instance per `Mcp-Session-Id` holds a *persistent* MCP server + session-bound transport, so the `GET` stream stays open and server→client notifications reach it. It runs the **same `http:request` flow** as the stateless path — only the transport persists.
+
+Enable it with `sessions` and export the DO class `createEdgeMcp` returns:
+
+```ts
+// worker.ts
+const mcp = createEdgeMcp({
+  info: { name: 'my-worker', version: '1.0.0' },
+  apps: [MyApp],
+  tasks: { enabled: false },
+  http: { entryPath: '/mcp' },
+  sessions: {}, // default binding name: FRONTMCP_SESSIONS
+});
+export default mcp;
+export const FrontMcpSession = mcp.SessionDurableObject; // bind in wrangler.toml
 ```
 
-```yaml
-auth:
-  provider: oauth
-  oauth:
-    issuer: https://issuer.example.com
-    audience: acme-mcp
-    credentialsSecret: M2M_CREDS   # optional, for machine-to-machine
+```toml
+# wrangler.toml
+[[durable_objects.bindings]]
+name = "FRONTMCP_SESSIONS"
+class_name = "FrontMcpSession"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["FrontMcpSession"]
+
+[vars]
+MCP_SESSION_SECRET = "..." # or `wrangler secret put MCP_SESSION_SECRET`
 ```
 
-```yaml
-auth:
-  provider: apiKey
-  apiKey:
-    header: X-API-Key
-    allowlistSecret: ACME_API_KEYS
+The worker routes a request to its session DO by `Mcp-Session-Id` (minting one on `initialize`); the router falls back to stateless handling if the binding isn't present. Without `sessions`, the worker stays stateless (request/response tools work; no server push).
+
+<Note>
+`MCP_SESSION_SECRET` is required on a production isolate (`NODE_ENV=production`) — the flow's `session:verify` stage encrypts session IDs with it. `createEdgeMcp` bridges Worker `env` vars/secrets into `process.env` so FrontMCP's config resolution sees them.
+</Note>
+
+## Low-level: `createWebFetchHandler()` (custom runtimes — Deno, Bun, custom workers)
+
+`createEdgeMcp` (above) is the recommended path. Under it sits the SDK's
+runtime-agnostic Web-standard transport, exported for advanced use — wiring
+FrontMCP into Deno, Bun, or a hand-rolled Worker where you control the
+`export default { fetch }` yourself. It turns a `Scope` into a
+`(request: Request) => Promise<Response>` handler.
+
+```ts
+import { createWebFetchHandler } from '@frontmcp/sdk';
+
+// `scope` comes from a booted FrontMcpInstance (e.g. instance.getScopes()[0]).
+const handler = createWebFetchHandler(scope, { entryPath: '/mcp' });
+
+// Cloudflare Worker / Deno / Bun all speak Web `Request`/`Response`:
+export default { fetch: (request: Request) => handler(request) };
 ```
 
-Frontegg integration runs JWT verification at the Worker edge — no upstream hop, no cold-start latency. Other providers follow the same shape: declare the secret name, populate it via `wrangler secret put`.
+### Types
 
-## Secrets
+```ts
+type WebFetchHandler = (request: Request) => Promise<Response>;
 
-Secret values are *never* in the manifest. Every secret name referenced from `auth`, `signing.trustRoots`, or any plugin must appear in the manifest's `secrets[]` list (the cross-validator enforces this). Populate the actual values out-of-band:
+function createWebFetchHandler(scope: Scope, options?: CreateWebFetchHandlerOptions): WebFetchHandler;
 
-```bash
-wrangler secret put TRUSTED_PUBKEY_PROD
-wrangler secret put FRONTEGG_ISSUER_URL
-wrangler secret put ACME_API_TOKEN
+interface CreateWebFetchHandlerOptions {
+  /** MCP endpoint path(s). Defaults to the scope's `http.entryPath`, else `/`. A trailing slash is normalized; an array opts into a multi-path allow-list. */
+  entryPath?: string | string[];
+  /** Paths answered with a 200 liveness/readiness response. Defaults to `/healthz`, `/readyz`. */
+  healthPaths?: string[];
+  /** CORS for browser MCP clients. Defaults to the scope's `http.cors`. */
+  cors?: WebFetchCorsOptions;
+  /** Optional Durable-Object session router (stateful sessions); falls through to stateless when it returns no `Response`. */
+  sessionRouter?: WebFetchSessionRouter;
+}
 ```
 
-Inside the Worker the values are available as `env.<NAME>`.
+Unlike the Express/Node host (`@FrontMcp({ http })` + `serve`), this handler has
+no server to start — the runtime owns the listener and just hands each
+`Request` to it. It runs the **same** `http:request` flow (auth, quota, audit,
+routing) as the Express adapter, so behavior is identical across runtimes; only
+the transport translation differs. `FrontMcp.fetch()` and `createEdgeMcp` are
+thin wrappers that build a scope and call this.
 
-## Wrangler config
+## Current status & limitations
 
-Most binding shapes mirror `wrangler.toml` field names verbatim (camelCased in the YAML). The Action can emit a wrangler.toml from your manifest so you don't have to maintain both:
+FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missing:
 
-```bash
-frontmcp deploy emit-wrangler --env production > wrangler.toml
-```
+**Works today (verified on real Cloudflare):**
+- The decorator build path (`frontmcp build --target cloudflare`) boots on real workerd and serves MCP over `/mcp` with a `/healthz` liveness probe.
+- **`createEdgeMcp` also deploys + serves on real Cloudflare** — bundled with esbuild + a small set of stubs (see the next bullet). Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
+- **The worker runs the real `http:request` flow** — the same hookable pipeline every transport runs: `session:verify` (auth), router, audit, metrics + plugin/user hooks all execute on the worker. The MCP response is produced by the SDK's web-standard Streamable HTTP transport (`WebStandardStreamableHTTPServerTransport`) — which **is** the standard transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it). Configure transparent auth and the flow's `checkAuthorization` stage returns `401` + `WWW-Authenticate` on the worker, just like Node.
+- **Stateful sessions via a Durable Object** (`sessions: {}` + the bound `SessionDurableObject`): the Streamable HTTP standalone `GET` notification stream stays open across requests and requests for a session route back to the same DO — so server→client notifications work. Verified live.
+- `CloudflareKvStorageAdapter` (KV only, with the honest limits above).
 
-Then either keep that file or feed it directly into a `wrangler deploy` step in your workflow.
+**Deploying `createEdgeMcp` today needs two things:**
+- It must run with `serve: false` (now the default inside `createEdgeMcp`) so the scope doesn't construct the Node Express host.
+- Three Node-only transports that are statically bundled but **never used on the edge** must be stubbed in your bundler: `express` (pulls `node:tty`), `raw-body` (pulls `safer-buffer`, which crashes at module-eval on workerd), and `cross-spawn` (pulls `node:child_process`, via the MCP stdio client). See `cloudflare-sandbox/build-edge.mjs` for a working esbuild config.
 
-## Sample `.github/workflows/deploy.yml`
+<Note>
+The miniflare-based local e2e is stricter than production — it rejects `node:http2`/`node:fs` that **real Cloudflare `nodejs_compat` actually provides**. So the edge package runs on real Cloudflare even though the local managed e2e is skipped. The **worker-conditioned SDK build** (swapping those Node-only transports for the browser variants the SDK + protocol already ship) is the roadmap item that removes the manual stubs.
+</Note>
 
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-      - uses: frontmcp/deploy-action@v1
-        with:
-          # Builds + signs + POSTs the bundle to the Worker.
-          environment: production
-          signingKey: ${{ secrets.FRONTMCP_SIGNING_KEY }}
-          # Forwards the names through to `wrangler secret` if changed.
-          secrets: |
-            TRUSTED_PUBKEY_PROD
-            FRONTEGG_ISSUER_URL
-            ACME_API_TOKEN
-        env:
-          TRUSTED_PUBKEY_PROD: ${{ secrets.TRUSTED_PUBKEY_PROD }}
-          FRONTEGG_ISSUER_URL: ${{ secrets.FRONTEGG_ISSUER_URL }}
-          ACME_API_TOKEN: ${{ secrets.ACME_API_TOKEN }}
-```
-
-The action emits two outputs you can chain on:
-
-- `deployment-url` — the Worker URL the bundle was pushed to.
-- `bundle-sha256` — the content-addressed digest of the envelope. Pin in your release notes / audit trail.
-
-## Limits & known gaps
-
-- **`@enclave-vm/core` (full VM)** runs only on the Node target. The Worker target uses the AST-preflight + frozen-scope strategy instead. If your skills need the full enclave VM's pause/rerun semantics, host on Node (and watch the v1.7 roadmap for a Worker-compatible answer via CF Containers).
-- **`scripts/` skill execution** (Anthropic Agent Skills `scripts/` directory) ships in v1.7. The v1.3 Worker honours skill bundles structurally but doesn't execute `scripts/` blobs yet.
-- **Vault-backed credential resolver** isn't on the Worker yet — use CF secret bindings (`wrangler secret put`) for v1.3.
+**Known gaps (roadmap):**
+- **Stateless mode has no server push.** Without `sessions`, the worker is stateless and the standalone `GET` notification stream can't deliver server→client notifications (each request is a fresh isolate) — enable `sessions` (the Durable Object) for that.
+- **DO session eviction.** A Durable Object is evicted when idle; an in-flight session then needs to re-`initialize`. WebSocket-hibernation-style persistence is a follow-up.
+- **KV only.** No R2 (blobs) or D1 (relational) stores, and no `@frontmcp/adapters/cloudflare` subpath yet.
+- **No worker observability sink, no deploy CLI / GitHub Action / push webhook**, and the declarative [`frontmcp.deploy.yaml`](/frontmcp/deployment/deploy-manifest) manifest is schema-only (no runtime consumer yet).
 
 <CardGroup cols={2}>
-  <Card title="Deploy manifest reference" icon="file-code" href="/frontmcp/deployment/deploy-manifest">
-    Every field of `frontmcp.deploy.yaml`, with examples.
+  <Card title="Deployment targets" icon="layer-group" href="/frontmcp/features/deployment-targets">
+    All build targets (node / cloudflare / vercel / browser).
   </Card>
   <Card title="Skills-Only Deployment" icon="rocket-launch" href="/frontmcp/features/skills-only-deployment">
-    The concept behind the runtime.
+    The skilled-OpenAPI model managed mode pulls.
   </Card>
-  <Card title="High Availability" icon="server" href="/frontmcp/deployment/high-availability">
-    Session HA primitives the Worker integrates with.
+  <Card title="Deploy manifest reference" icon="file-code" href="/frontmcp/deployment/deploy-manifest">
+    The `frontmcp.deploy.yaml` schema (forward-looking).
   </Card>
-  <Card title="Skill-Based Workflows" icon="graduation-cap" href="/frontmcp/features/skill-based-workflows">
-    The skill primitive that powers everything.
+  <Card title="Production build" icon="box" href="/frontmcp/deployment/production-build">
+    Bundling + production hardening.
   </Card>
 </CardGroup>

@@ -105,6 +105,9 @@ const operationDescriptorSchema = z
     mapper: z.array(parameterMapperSchema).max(256),
     authBindingRef: z.string().min(1).max(128),
     requiredAuthorities: authoritiesPolicySchema.optional(),
+    // Explicit opt-in that a policy-less op is intentionally public — consulted
+    // only when the deployment runs the executor with `unprotectedOps: 'deny'`.
+    public: z.boolean().optional(),
     maxResponseBytes: z
       .number()
       .int()

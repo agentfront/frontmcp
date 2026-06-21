@@ -24,6 +24,7 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
+import { createWebFetchHandler, type WebFetchHandler } from '../transport/web-fetch-handler';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 
 /**
@@ -252,6 +253,57 @@ export class FrontMcpInstance implements FrontMcpInterface {
     server.prepare();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
     return server.getHandler();
+  }
+
+  /**
+   * Creates and initializes a FrontMCP instance and returns a Web-standard
+   * `fetch` handler — `(request: Request) => Promise<Response>` — backed by the
+   * MCP WebStandard transport. Unlike {@link createHandler} this needs no
+   * Express / Node `req`/`res` and runs on V8-isolate targets (Cloudflare
+   * Workers, Deno Deploy, Bun).
+   *
+   * @example
+   * // worker entry
+   * const handler = await FrontMcpInstance.createFetchHandler(config);
+   * export default { fetch: (request) => handler(request) };
+   */
+  public static async createFetchHandler(options: FrontMcpConfigType): Promise<WebFetchHandler> {
+    // Defer ALL instance/scope construction to the first request. On V8 isolates
+    // (Cloudflare Workers) the @FrontMcp decorator runs this at module-eval
+    // (global) scope, where timers / random / I-O are forbidden — yet scope
+    // initialization legitimately does those (e.g. ProviderRegistry's session
+    // cleanup interval). Building lazily inside the returned handler moves that
+    // work into a request context, where it is allowed. The build runs once and
+    // is memoized; concurrent first requests share the same in-flight build.
+    let inner: WebFetchHandler | undefined;
+    let building: Promise<WebFetchHandler> | undefined;
+
+    const build = async (): Promise<WebFetchHandler> => {
+      const frontMcp = new FrontMcpInstance(options);
+      await frontMcp.ready;
+      const scope = frontMcp.getScopes()[0] as Scope | undefined;
+      if (!scope) {
+        throw new ServerNotFoundError();
+      }
+      frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
+      return createWebFetchHandler(scope);
+    };
+
+    return async (request: Request): Promise<Response> => {
+      if (!inner) {
+        // Reset the memo if build() rejects, so one transient init error doesn't
+        // poison the isolate — without this, every later request would reuse the
+        // rejected promise with no retry path.
+        if (!building) {
+          building = build().catch((err) => {
+            building = undefined;
+            throw err;
+          });
+        }
+        inner = await building;
+      }
+      return inner(request);
+    };
   }
 
   /**

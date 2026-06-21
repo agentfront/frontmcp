@@ -1,6 +1,7 @@
 // file: libs/adapters/src/skills/audit/audit-writer.ts
 //
-// High-level service that the ExecuteActionTool calls into at three points
+// High-level service that the skill-action executor (`executeSkillAction`,
+// used by `run_workflow`) calls into at three points
 // of every skill action invocation. The writer:
 //   - Builds the typed record (hash inputs/outputs, capture subject).
 //   - Serializes per-process appends through a Promise queue so two
@@ -136,7 +137,8 @@ export interface SkillAuditWriterOptions {
 
 /**
  * Audit writer service. Constructed once per scope and resolved out of DI
- * by the ExecuteActionTool. Calls return a promise that resolves after the
+ * by the skill-action executor (`executeSkillAction`, used by `run_workflow`).
+ * Calls return a promise that resolves after the
  * chained store work completes — but the tool detaches that promise so a
  * slow audit backend never directly slows every skill invocation.
  */

@@ -60,6 +60,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import {
+  allowsPublicAccess,
   computeResource,
   Flow,
   FlowBase,
@@ -293,8 +294,11 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     if (body?.grant_type !== 'authorization_code') return;
 
-    // For default auth provider with "anonymous" code, just issue anonymous tokens
-    if (isDefaultAuthProvider && body.code === 'anonymous') {
+    // For default auth provider with "anonymous" code, issue anonymous tokens —
+    // but ONLY when the server permits anonymous access. With allowDefaultPublic:false
+    // the magic `code=anonymous` would otherwise mint a token with no login/PKCE.
+    const authOptions = this.scope.auth?.options;
+    if (isDefaultAuthProvider && body.code === 'anonymous' && !!authOptions && allowsPublicAccess(authOptions)) {
       const localAuth = this.scope.auth as LocalPrimaryAuth;
       const accessToken = await localAuth.signAnonymousJwt();
 
@@ -342,8 +346,21 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     if (body?.grant_type !== 'refresh_token') return;
 
-    // For default auth provider, just issue new anonymous tokens
+    // For default auth provider, issue new anonymous tokens — but ONLY when the
+    // server permits anonymous access. Otherwise a `grant_type=refresh_token`
+    // request (with ANY refresh_token value) would mint a fresh anonymous token,
+    // bypassing login/PKCE the same way the anonymous grant did.
     if (isDefaultAuthProvider) {
+      const authOptions = this.scope.auth?.options;
+      if (!authOptions || !allowsPublicAccess(authOptions)) {
+        this.respond(
+          httpRespond.json(
+            { error: 'invalid_grant', error_description: 'Refresh requires re-authentication on this server' },
+            { status: 400 },
+          ),
+        );
+        return;
+      }
       const localAuth = this.scope.auth as LocalPrimaryAuth;
       const accessToken = await localAuth.signAnonymousJwt();
 
@@ -388,6 +405,26 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
   })
   async handleAnonymousGrant() {
     const { body } = this.state.required;
+
+    // SECURITY: only mint anonymous tokens when the server actually permits
+    // public/anonymous access (public mode, transparent+allowAnonymous, or
+    // local/remote with allowDefaultPublic). Without this gate the public
+    // `/oauth/token` endpoint hands out valid access tokens for
+    // `grant_type=anonymous` even when `allowDefaultPublic:false` — a full
+    // bypass of the login + PKCE flow. Reject otherwise.
+    const authOptions = this.scope.auth?.options;
+    if (!authOptions || !allowsPublicAccess(authOptions)) {
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'unsupported_grant_type',
+            error_description: 'Anonymous access is not enabled on this server',
+          },
+          { status: 400 },
+        ),
+      );
+      return;
+    }
 
     // Validate resource parameter against server's canonical URI (RFC 8707)
     if (body?.grant_type === 'anonymous' && body.resource) {

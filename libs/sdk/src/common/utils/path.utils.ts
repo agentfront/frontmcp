@@ -19,7 +19,48 @@ export function normalizeScopeBase(scopeBase?: string): string {
   return t ? `/${t}` : '';
 }
 
+/**
+ * Read the operator-pinned canonical public origin, if configured.
+ *
+ * Set `FRONTMCP_PUBLIC_URL` (e.g. `https://mcp.example.com`) to derive the
+ * issuer / resource / OAuth-discovery URLs from a fixed origin instead of the
+ * incoming request headers. `process.env` is read behind a guard so this is a
+ * no-op on V8-isolate runtimes (Cloudflare Worker) where `process` is absent.
+ */
+function readPublicUrlPin(): string | undefined {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      const v = process.env['FRONTMCP_PUBLIC_URL'];
+      if (typeof v === 'string' && v.trim()) {
+        return v.trim().replace(/\/+$/, '');
+      }
+    }
+  } catch {
+    // No process env (e.g. Worker isolate) — fall through to request-derived host.
+  }
+  return undefined;
+}
+
+/**
+ * Build the public base URL for issuer / resource / discovery URLs.
+ *
+ * SECURITY (SECURITY-REVIEW A4): `X-Forwarded-Host` / `X-Forwarded-Proto` are
+ * ATTACKER-CONTROLLABLE request headers. Deriving the OAuth issuer, AS-metadata
+ * endpoints, PRM `resource`, and the `WWW-Authenticate` URL from them lets an
+ * attacker poison discovery and steer a victim client's OAuth flow to a
+ * malicious authorization server.
+ *
+ * When `FRONTMCP_PUBLIC_URL` is set, those URLs are pinned to that fixed origin
+ * and the request headers are IGNORED — this fully closes the poisoning vector.
+ * Production deployments (especially behind a proxy/CDN that forwards client
+ * headers) SHOULD set it. When unset we fall back to the request-derived host
+ * for backward compatibility.
+ */
 export function getRequestBaseUrl(req: ServerRequest, entryPath?: string) {
+  const pin = readPublicUrlPin();
+  if (pin) {
+    return `${pin}${entryPath ?? ''}`;
+  }
   const proto = (req.headers['x-forwarded-proto'] as string) || (req as any).protocol || 'http';
   const host = (req.headers['x-forwarded-host'] as string) || req.headers['host'];
   return `${proto}://${host}${entryPath ?? ''}`;

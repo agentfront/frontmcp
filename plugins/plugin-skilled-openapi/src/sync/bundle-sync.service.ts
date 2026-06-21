@@ -40,7 +40,7 @@ export interface BundleSyncOptions {
    * other tools / agents / CodeCall scripts / jobs can compose with it via
    * `this.callTool(name, args)` from `ExecutionContextBase`. Internal tools
    * are excluded from `tools/list` and rejected for external `tools/call`.
-   * The existing meta-tools (`search_skill` / `load_skill` / `execute_action`)
+   * The existing meta-tools (`search_skill` / `load_skill` / `run_workflow`)
    * are unaffected.
    */
   exposeOperationsAsInternalTools: boolean;
@@ -368,6 +368,11 @@ export class BundleSyncService {
         }
         const entry: HiddenOpEntry = {
           skillId: skill.id,
+          // Pin the skill-level policy so it is AND-ed with the op-level policy
+          // at execution time (C2 — previously this was silently dropped).
+          ...(skill.requiredAuthorities !== undefined && {
+            skillRequiredAuthorities: skill.requiredAuthorities,
+          }),
           op,
           service,
           authBinding,

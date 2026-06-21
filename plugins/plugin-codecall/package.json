@@ -49,10 +49,10 @@
     }
   },
   "dependencies": {
-    "@enclave-vm/core": "^2.13.0",
+    "@enclave-vm/core": "^2.14.1",
     "@frontmcp/protocol": "1.4.0",
     "@frontmcp/sdk": "1.4.0",
-    "vectoriadb": "^2.2.0"
+    "vectoriadb": "^2.3.2"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.4.0",

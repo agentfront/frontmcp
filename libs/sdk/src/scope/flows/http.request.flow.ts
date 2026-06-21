@@ -10,6 +10,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
+import { type Scope } from '../scope.instance';
 import {
   decideIntent,
   decisionSchema,
@@ -45,6 +46,11 @@ const plan = {
     'router',
   ],
   execute: [
+    // Web-fetch (V8-isolate / Cloudflare Worker) MCP handling. Runs FIRST and,
+    // in web mode only, responds with a Web `Response` (short-circuiting the
+    // Node handle stages below). On the Node/Express path it's a no-op and falls
+    // through to the runtime-coupled stages.
+    'handleWebFetch',
     'handleLegacySse',
     'handleSse',
     'handleStreamableHttp',
@@ -329,6 +335,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         accept: request.headers?.['accept'],
       });
       const decision = decideIntent(request, { ...legacyFlags, tolerateMissingAccept: true });
+
+      // Web mode (V8-isolate / worker): every request is handled independently by
+      // the WebStandard transport — there is no session handshake. If intent
+      // decoding came back 'unknown' only because no session was presented (the
+      // common case under the session-oriented `legacy`/`modern` presets), treat
+      // it as stateless so it still routes to `handleWebFetch`. Auth is unaffected
+      // — the authorized/unauthorized/forbidden branches below still run, so a
+      // missing/invalid token on a real MCP request still yields 401/403.
+      const isWebMode = !!(request as unknown as Record<PropertyKey, unknown>)[ServerRequestTokens.webRequest];
+      if (isWebMode && decision.intent === 'unknown') {
+        decision.intent = 'stateless-http';
+      }
+
       this.logger.debug(`[${this.requestId}] decision result`, {
         intent: decision.intent,
         reasons: decision.reasons,
@@ -504,6 +523,86 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // FlowControl is expected control flow, not an error
       if (!(error instanceof FlowControl)) {
         this.logError(error, 'router');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Web-fetch (V8-isolate) MCP execute stage. The worker carries its native Web
+   * `Request` on the normalized `ServerRequest` under {@link
+   * ServerRequestTokens.webRequest}; its presence is the web-mode signal. When
+   * present, this stage runs the MCP request through the SDK's
+   * `WebStandardStreamableHTTPServerTransport` (via {@link runWebStandardMcp})
+   * and responds with the resulting Web `Response` — so the worker runs the SAME
+   * `http:request` flow (auth, quota, router, audit, metrics + hooks all apply)
+   * and only the transport rendering differs per runtime.
+   *
+   * On the Node/Express path there is no `webRequest`, so this is a no-op and the
+   * request falls through to the Node-`ServerResponse`-coupled handle stages.
+   * Auth has already been enforced by `router` (a 401/403 short-circuits before
+   * execute), and the verified authorization is read from the request token.
+   */
+  @Stage('handleWebFetch')
+  async handleWebFetch() {
+    const { request } = this.rawInput;
+    const req = request as unknown as Record<PropertyKey, unknown>;
+    const webRequest = req[ServerRequestTokens.webRequest] as Request | undefined;
+    if (!webRequest) return; // Node/Express path — defer to the Node handle stages.
+
+    try {
+      const webCtx = req[ServerRequestTokens.webCtx] as
+        | { waitUntil?(promise: Promise<unknown>): void }
+        | undefined;
+
+      const { runWebStandardMcp } = await import('../../transport/web-standard-mcp.js');
+      const { buildScopedServerOptions } = await import('../../transport/build-scoped-server-options.js');
+      const { expandProtocolConfig } = await import('../../common/types/options/transport/schema.js');
+
+      // `FlowBase` types `this.scope` as the narrow `ScopeEntry`, but the concrete
+      // runtime value is the full `Scope` the MCP wiring helpers need.
+      const scope = this.scope as unknown as Scope;
+
+      // SSE streaming on POST mirrors the transport protocol: stream when
+      // Streamable HTTP is on and JSON-only buffering is off.
+      const proto = expandProtocolConfig(scope.metadata.transport?.protocol);
+      const sse = proto.streamable && !proto.json;
+
+      // The verified authorization the `router` stage attached. Project it to the
+      // MCP `AuthInfo` shape the handlers expect (same mapping as checkAuthorization).
+      const authorization = req[ServerRequestTokens.auth] as Authorization | undefined;
+      const authInfo = authorization
+        ? {
+            token: authorization.token,
+            clientId: authorization.user?.sub,
+            scopes: [] as string[],
+            expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
+            extra: {
+              user: authorization.user,
+              sessionId: authorization.session?.id,
+              sessionPayload: authorization.session?.payload,
+            },
+          }
+        : undefined;
+
+      // Stateful sessions: a Durable Object threads its persistent server +
+      // transport here so the GET notification stream stays open across requests.
+      const persistent = req[ServerRequestTokens.webTransport] as
+        | Parameters<typeof runWebStandardMcp>[2]['persistent']
+        | undefined;
+
+      const response = await runWebStandardMcp(scope, webRequest, {
+        serverOptions: buildScopedServerOptions(scope),
+        authInfo,
+        sse,
+        ctx: webCtx,
+        persistent,
+      });
+      this.respond(httpRespond.webResponse(response));
+    } catch (error) {
+      // FlowControl is expected control flow, not an error
+      if (!(error instanceof FlowControl)) {
+        this.logError(error, 'handleWebFetch');
       }
       throw error;
     }

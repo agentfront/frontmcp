@@ -35,8 +35,52 @@ export interface SkillBundleSource {
    */
   onChange(listener: BundleSourceListener): () => void;
 
+  /**
+   * Pull a fresh bundle on demand and notify listeners — the manual,
+   * externally-driven counterpart to background polling. Optional: only
+   * remote/pulling sources implement it. On runtimes with no background
+   * execution (Cloudflare Workers) a Cron Trigger / Durable Object alarm
+   * calls this instead of relying on an internal timer. Resolves to the new
+   * bundle, or `undefined` if a pull is already in flight / the source is
+   * stopped.
+   */
+  refresh?(): Promise<ResolvedBundle | undefined>;
+
   /** Halt background work; idempotent. */
   stop(): Promise<void>;
 }
 
 export type BundleSourceListener = (bundle: ResolvedBundle) => void;
+
+/**
+ * Pluggable last-good bundle cache. The default (Node) implementation writes to
+ * disk; V8-isolate runtimes (Cloudflare Workers) inject a KV-backed store
+ * instead — there is no filesystem on a Worker.
+ */
+export interface BundleCacheStore {
+  read(): Promise<ResolvedBundle | undefined>;
+  write(bundle: ResolvedBundle): Promise<void>;
+}
+
+/**
+ * Optional runtime dependencies any pulling bundle source can accept. NOT
+ * SaaS-specific — these are the knobs a host injects to make a source run on a
+ * constrained runtime:
+ *   - `cache` replaces the on-disk last-good cache (no filesystem on a Worker),
+ *   - `disablePolling` turns off the internal `setInterval` loop (no background
+ *     execution on a Worker; a Cron Trigger / DO alarm drives {@link
+ *     SkillBundleSource.refresh} instead).
+ */
+export interface BundleSourceDeps {
+  /**
+   * Override the on-disk cache with a custom store (e.g. KV on Cloudflare).
+   * When provided, NO filesystem APIs are touched — required on V8 isolates.
+   */
+  cache?: BundleCacheStore;
+  /**
+   * Disable the internal `setInterval` poll loop. Use on runtimes with no
+   * background execution where a Cron Trigger / Durable Object alarm drives
+   * {@link SkillBundleSource.refresh} instead.
+   */
+  disablePolling?: boolean;
+}

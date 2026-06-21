@@ -27,6 +27,7 @@ import {
 } from './errors/skill-validation.error';
 import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
 import { MemorySkillProvider } from './providers/memory-skill.provider';
+import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
 import { SEP_2640_EXTENSION_ID, type SkillIndexEntry } from './sep-2640';
 import {
   type MutableSkillStorageProvider,
@@ -76,6 +77,20 @@ export interface SkillRegistryOptions {
    * @default false
    */
   failOnInvalidSkills?: boolean;
+
+  /**
+   * Ranking function for the in-memory search index (forwarded to the storage
+   * provider's vector DB). `bm25` for stronger keyword relevance; defaults to
+   * `cosine`.
+   */
+  scoring?: SkillIndexScoring;
+
+  /**
+   * Optional snapshot cache for the search index so a cold start can restore it
+   * instead of recomputing. Typically supplied later via {@link SkillRegistry.setIndexCache}
+   * when the cache binding only exists at request time (e.g. Cloudflare KV).
+   */
+  indexCache?: SkillIndexCache;
 }
 
 /**
@@ -336,6 +351,8 @@ export default class SkillRegistry
     this.storageProvider = new MemorySkillProvider({
       defaultTopK: 10,
       defaultMinScore: 0.1,
+      ...(this.options.scoring ? { scoring: this.options.scoring } : {}),
+      ...(this.options.indexCache ? { indexCache: this.options.indexCache } : {}),
     });
 
     // Build dependency graph
@@ -614,6 +631,33 @@ export default class SkillRegistry
    * provider update lagged or failed) would mask the newer dynamic content.
    * Provider-only rows pass through unchanged; overlay-only rows are appended.
    */
+  /**
+   * Attach (or replace) the snapshot cache used to persist/restore the search
+   * index — for runtimes where the cache binding only exists at request time
+   * (e.g. a Cloudflare KV namespace on `env`). No-op if the storage provider
+   * doesn't support index caching. Pair with {@link warmIndex} to build/restore
+   * the index off the first request's critical path.
+   */
+  setIndexCache(cache: SkillIndexCache | undefined): void {
+    const provider = this.storageProvider as MemorySkillProvider;
+    if (typeof provider.setIndexCache === 'function') {
+      provider.setIndexCache(cache);
+    }
+  }
+
+  /**
+   * Eagerly build (or restore from the cache) the search index now. Called by a
+   * host after registration so the one-time index build (or a KV restore) is
+   * paid here rather than inside the first `search`. No-op if unsupported.
+   */
+  async warmIndex(): Promise<void> {
+    await this.ready;
+    const provider = this.storageProvider as MemorySkillProvider;
+    if (typeof provider.warm === 'function') {
+      await provider.warm();
+    }
+  }
+
   async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const baseResults = await this.storageProvider.search(query, options);
     if (this.dynamicContents.size === 0) return baseResults;

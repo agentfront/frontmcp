@@ -6,7 +6,7 @@ icon: cloud-arrow-down
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'extension', 'skilled openapi', 'openapi', 'skills', 'sources', 'typescript']
 ---
 
-The plugin loads bundles through a `SkillBundleSource` interface. Three implementations ship in v1.2.0; you choose by setting `source.type` in the plugin options.
+The plugin loads bundles through a `SkillBundleSource` interface. Three implementations are available; you choose by setting `source.type` in the plugin options.
 
 | Source | Refresh | Production-ready | Use when |
 | --- | --- | --- | --- |
@@ -44,17 +44,12 @@ SkilledOpenApiPlugin.init({
     type: 'npm',
     packageName: '@acme/frontmcp-billing-bundle',
     exportName: 'frontmcpBundle',  // optional; default is the package's default export
-    verifyProvenance: true,        // logs a warning until v1.2.x ships verification
   },
   // ...
 })
 ```
 
-The package's exported value must conform to the `ResolvedBundle` shape; the plugin parses it through the same Zod validator the static source uses.
-
-<Note>
-  v1.2.0 honors `verifyProvenance: true` by emitting a startup warning when no GitHub artifact attestation / Sigstore provenance is found. Actual provenance verification ships in v1.2.x. Do not rely on this flag as your only supply-chain control yet — sign your bundles via the `integrity` envelope and pin the npm version.
-</Note>
+The package's exported value must conform to the `ResolvedBundle` shape; the plugin parses it through the same Zod validator the static source uses. Pin the package version in your `package.json` and sign your bundles via the `integrity` envelope as your supply-chain controls.
 
 ## `saas`
 
@@ -70,7 +65,6 @@ SkilledOpenApiPlugin.init({
     expectedIssuer: 'https://cloud.frontmcp.dev',
     jwksUrl: 'https://cloud.frontmcp.dev/.well-known/jwks.json',
     pollIntervalMs: 300_000,                       // 5 min default
-    enableWebhook: false,                          // v1.2.x — interval-only in v1.2.0
   },
   bundleCacheDir: '.frontmcp/skilled-openapi',     // last-good bundle persisted here
   // ...
@@ -84,15 +78,11 @@ SkilledOpenApiPlugin.init({
 3. If the pull **fails** AND a cached bundle exists, the cache is loaded with a startup warning. The server stays healthy.
 4. If the pull fails AND no cache exists, the source throws — the plugin reports a startup error but does not kill the server.
 
-This prevents a SaaS outage at boot from killing every customer's MCP server. The trade-off is that a long-broken SaaS will leave the server serving an old bundle indefinitely; monitor `lastPullAt` from `/healthz` (planned in v1.2.x) and your own SaaS-side metrics.
+This prevents a SaaS outage at boot from killing every customer's MCP server. The trade-off is that a long-broken SaaS will leave the server serving an old bundle indefinitely; monitor your SaaS-side metrics to catch a stalled pipeline.
 
 ### Polling
 
 Default `pollIntervalMs: 300_000` (5 min). Overlapping polls are skipped via a single-flight gate — if a previous poll is still in flight when the next interval fires, the new poll is dropped (not queued).
-
-### Webhook channel
-
-`enableWebhook: true` declares intent but is a no-op in v1.2.0 — the plugin's HTTP route extension hook lands in v1.2.x. Until then, the plugin only refreshes via the configured `pollIntervalMs`.
 
 ## Source-conflict policy
 
@@ -110,4 +100,4 @@ Values:
 - `'last-wins'`: most recent apply wins (use with caution; race-prone)
 - `'reject'`: fail to apply when a conflict is detected
 
-In v1.2.0 the plugin only constructs **one** source instance from `options.source`, so this policy is documented for future use when multi-source configurations land.
+The plugin constructs a single source from `options.source`, so this policy only takes effect when more than one source registers the same `bundleId`.

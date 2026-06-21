@@ -85,21 +85,38 @@ describe('Build Adapters', () => {
   });
 
   describe('cloudflareAdapter', () => {
-    it('should have commonjs module format', () => {
-      expect(cloudflareAdapter.moduleFormat).toBe('commonjs');
+    it('uses ES Module format (Module Worker — required for nodejs_compat)', () => {
+      // CommonJS `module.exports` is read as a Service Worker, where
+      // nodejs_compat cannot externalize Node builtins and the build fails.
+      expect(cloudflareAdapter.moduleFormat).toBe('esnext');
     });
 
-    it('should generate entry template with FRONTMCP_SERVERLESS', () => {
-      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
-      expect(entry).toContain("process.env.FRONTMCP_SERVERLESS = '1'");
+    it('sets serverless + worker env flags in the setup template (imported first)', () => {
+      const setup = cloudflareAdapter.getSetupTemplate?.();
+      expect(setup).toContain("process.env.FRONTMCP_SERVERLESS = '1'");
+      // FRONTMCP_WORKER selects the Web fetch handler; it MUST be set before the
+      // @FrontMcp decorator evaluates, hence the dedicated setup module.
+      expect(setup).toContain("process.env.FRONTMCP_WORKER = '1'");
     });
 
-    it('should generate entry template with Cloudflare fetch handler', () => {
+    it('generates an ES Module worker entry that imports setup first', () => {
       const entry = cloudflareAdapter.getEntryTemplate('./main.js');
-      expect(entry).toContain('./main.js');
+      expect(entry).toContain("import './serverless-setup.js'");
+      expect(entry).toContain("import './main.js'");
       expect(entry).toContain('getServerlessHandlerAsync');
-      expect(entry).toContain('module.exports');
-      expect(entry).toContain('fetch');
+      // Module Worker shape, not Service Worker.
+      expect(entry).toContain('export default');
+      expect(entry).not.toContain('module.exports');
+    });
+
+    it('invokes the handler Web-natively and ships no Node req/res shim', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
+      // The handler is called with the Web Request — no Node req/res.
+      expect(entry).toContain('handler(request)');
+      // Guard against the old hand-rolled shim creeping back.
+      expect(entry).not.toContain('statusCode');
+      expect(entry).not.toContain('setHeader');
+      expect(entry).not.toContain('app(req, res)');
     });
 
     it('should have getConfig method', () => {
@@ -112,6 +129,34 @@ describe('Build Adapters', () => {
       // #374: main now points at the path the build actually emits.
       expect(config).toContain('main = "dist/cloudflare/index.js"');
       expect(config).toContain('compatibility_date');
+    });
+
+    it('always emits the nodejs_compat flag (the worker imports @frontmcp/sdk → Node builtins)', () => {
+      const config = cloudflareAdapter.getConfig?.('/test');
+      // Without this the deployed Worker cannot boot — node:* builtins are
+      // only available behind nodejs_compat.
+      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
+    });
+
+    it('defaults compatibility_date to one that enables full nodejs_compat (>= 2024-09-23)', () => {
+      const config = cloudflareAdapter.getConfig?.('/test');
+      expect(config).toContain('compatibility_date = "2024-09-23"');
+    });
+
+    it('merges user compatibilityFlags while always keeping nodejs_compat first', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: { compatibilityFlags: ['nodejs_compat_populate_process_env'] },
+      });
+      expect(config).toContain('compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]');
+    });
+
+    it('dedupes nodejs_compat when the user also lists it explicitly', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: { compatibilityFlags: ['nodejs_compat'] },
+      });
+      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
     });
 
     it('should have configFileName as wrangler.toml', () => {
@@ -231,13 +276,13 @@ describe('Build Adapters', () => {
       };
       const config = cloudflareAdapter.getConfig?.('/tmp', deployment);
       expect(config).toContain('name = "just-a-name"');
-      expect(config).toContain('compatibility_date = "2024-01-01"');
+      expect(config).toContain('compatibility_date = "2024-09-23"');
     });
 
     it('round-2: falls back to defaults when no deployment is supplied', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp');
       expect(config).toContain('name = "frontmcp-worker"');
-      expect(config).toContain('compatibility_date = "2024-01-01"');
+      expect(config).toContain('compatibility_date = "2024-09-23"');
     });
   });
 
