@@ -181,6 +181,22 @@ jobs:
           echo "Updating all synchronized libraries to v$VERSION..."
           npx nx release version "$VERSION" --git-tag=false --git-commit=false
 
+      - name: Refresh yarn.lock to match bumped versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The normalize + nx release version steps above rewrite every internal
+          # @frontmcp/* version pin across libs/*/package.json and plugins/*/package.json.
+          # Yarn stores those exact pins in yarn.lock (workspace peerDependencies are
+          # recorded verbatim), so the lockfile is now stale. Commit it as-is and the
+          # first push to the new release branch runs `yarn install --immutable`
+          # (package-e2e and others) and fails with YN0028 "The lockfile would have been
+          # modified by this install, which is explicitly forbidden." --mode=update-lockfile
+          # resolves offline (bumped packages are workspace soft-links) and only rewrites
+          # the recorded pins so the committed lockfile is consistent.
+          yarn install --mode=update-lockfile
+
       - name: Update CHANGELOG.md files
         shell: bash
         run: |

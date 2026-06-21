@@ -2699,7 +2699,7 @@ __metadata:
   peerDependencies:
     "@anthropic-ai/sdk": ^0.30.0 || ^0.78.0
     "@enclave-vm/core": ^2.14.0
-    "@frontmcp/observability": 1.5.0
+    "@frontmcp/observability": 1.5.0-rc.1
     "@frontmcp/storage-sqlite": 1.5.0-rc.1
     "@opentelemetry/api": ^1.9.0
     "@opentelemetry/sdk-trace-base": ^2.8.0
