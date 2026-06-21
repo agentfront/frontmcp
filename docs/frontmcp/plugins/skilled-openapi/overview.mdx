@@ -77,7 +77,7 @@ The two are designed to coexist in the same FrontMCP server. See [Coexistence](/
 
 ---
 
-## What ships in v1.2.0
+## What's included
 
 - **Three bundle sources**: static (filesystem with optional `fs.watch`), npm (dynamic import of a published bundle package), saas-pull (HTTPS GET against a configured endpoint with JWT, interval polling, last-good cache fallback).
 - **OpenAPI Overlay + custom JSON** wire formats, both validated by Zod and cross-referenced for service / authBinding / operationId integrity.
@@ -86,8 +86,6 @@ The two are designed to coexist in the same FrontMCP server. See [Coexistence](/
 - **Layered SSRF defenses**: scheme allowlist, host allowlist, post-DNS IPv4/IPv6 blocklist (RFC 1918, link-local incl. AWS/GCP/Azure metadata 169.254.169.254, loopback, ULA), cloud-metadata hostname blocklist.
 - **ABAC integration** via `@frontmcp/auth`'s `AuthoritiesEngine` (RBAC + ABAC + custom evaluators).
 - **`notifications/skills/list_changed`** broadcast on every bundle swap, with `bundleVersion` on every skill so polling clients can detect changes regardless of client `list_changed` support.
-
-Deferred to v1.2.x: Sigstore Cosign keyless verification, GitHub artifact attestations for npm-source, the webhook push channel, content-sanitizer hooks. See [Security](/frontmcp/plugins/skilled-openapi/security#deferred-to-v12x) for the full list.
 
 ---
 
