@@ -2143,13 +2143,13 @@
             },
             {
               "name": "ref-security-and-filtering",
-              "description": "Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.",
+              "description": "Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF attacks (GHSA-65h7-9wrw-629c) and filtering which API operations become MCP tools.",
               "level": "intermediate",
               "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
               "features": [
-                "Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers",
-                "Using `allowedHosts` to restrict $refs to trusted schema servers",
-                "Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols",
+                "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0",
+                "Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`",
+                "Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)",
                 "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
                 "Combining security hardening with operation filtering for a production-ready setup"
               ]
