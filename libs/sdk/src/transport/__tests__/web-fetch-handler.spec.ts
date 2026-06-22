@@ -62,10 +62,10 @@ const INITIALIZE = {
 
 /**
  * Read an MCP JSON-RPC response, transparently handling both buffered JSON and
- * an SSE stream. The worker streams SSE by default (the SDK's
- * `enableJsonResponse: false`, matching the Express host), so a POST that the
- * client accepts `text/event-stream` for comes back as `event: message` /
- * `data: {…}` rather than a JSON body.
+ * an SSE stream. A stateless POST comes back as buffered `application/json` (no
+ * session → no server-push, and an unclosed SSE reply would hang the worker); a
+ * standalone GET notification stream or a stateful Durable-Object session comes
+ * back as `event: message` / `data: {…}` SSE instead.
  */
 async function readMcpResult<T = Record<string, unknown>>(res: Response): Promise<T> {
   const text = await res.text();
@@ -128,9 +128,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
   });
 
   it('serves tools/list statelessly (fresh transport per request, no session)', async () => {
-    const res = await handler(
-      mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
-    );
+    const res = await handler(mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
 
     expect(res.status).toBe(200);
     const json = await readMcpResult<{ result?: { tools?: Array<{ name: string }> } }>(res);
@@ -238,13 +236,17 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  it('derives SSE streaming from the transport protocol (legacy streams, stateless-api buffers)', async () => {
-    // Default (legacy): streamable + no JSON-buffering → POST streams SSE.
+  it('stateless POST buffers JSON regardless of protocol (no session → no SSE; avoids a hung worker)', async () => {
+    // Streamable protocol: a STATELESS POST still buffers JSON. With no session
+    // there are no server-initiated notifications to stream, and an SSE POST
+    // reply would never close — its `ctx.waitUntil` teardown would never settle
+    // and the Worker would "hang" until the runtime cancels the request. Only a
+    // standalone GET (or a stateful Durable-Object session) opens an SSE stream.
     const streaming = createWebFetchHandler(await scopeFor({}));
-    const sseRes = await streaming(mcpRequestAt('/', INITIALIZE));
-    expect(sseRes.headers.get('content-type')).toContain('text/event-stream');
+    const streamingRes = await streaming(mcpRequestAt('/', INITIALIZE));
+    expect(streamingRes.headers.get('content-type')).toContain('application/json');
 
-    // stateless-api: streamable:false → POST returns buffered JSON.
+    // stateless-api: streamable:false → POST returns buffered JSON too.
     const buffered = createWebFetchHandler(await scopeFor({ transport: { protocol: 'stateless-api' } }));
     const jsonRes = await buffered(mcpRequestAt('/', INITIALIZE));
     expect(jsonRes.headers.get('content-type')).toContain('application/json');

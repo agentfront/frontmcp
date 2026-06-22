@@ -121,7 +121,16 @@ type JsonRpcResponse = {
   error?: { code: number; message: string };
 };
 
-// NOTE: skipped — gated on the worker-conditioned SDK build (see the file header).
+// NOTE: still skipped, but the blocker has MOVED. The original gate (the
+// worker-conditioned SDK build) landed in 1.5.0 (the `worker` export condition on
+// @frontmcp/protocol + @frontmcp/utils) and is no longer the problem. What blocks
+// it now is a MINIFLARE limitation: its in-process `ModuleLocator` rejects the
+// bundle's dynamic `import()` (the lazy plugin / enclave imports) at
+// `#visitModule` → `ImportExpression`. Real workerd via `wrangler dev` handles
+// these fine — the worker boots and serves the full skilled-openapi mechanism
+// (search_skill → load_skill → run_workflow) end-to-end; only Miniflare's bundler
+// chokes. Re-enable when Miniflare supports dynamic import in the entry module, or
+// migrate this suite to a `wrangler dev` subprocess (as cloudflare-worker.e2e does).
 describe.skip('managed edge auto-update on workerd (miniflare)', () => {
   let server: Server;
   let mf: Miniflare;

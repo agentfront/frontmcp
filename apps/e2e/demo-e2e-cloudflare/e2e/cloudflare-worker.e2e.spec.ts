@@ -10,8 +10,8 @@
  * `nodejs_compat` flag, or a Node `req`/`res` shim), this fails.
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const FIXTURE_DIR = path.resolve(__dirname, '..', 'fixture');
@@ -65,7 +65,7 @@ async function mcp(body: unknown): Promise<{ status: number; json: JsonRpcRespon
   return { status: res.status, json: await readMcp(res) };
 }
 
-/** Read an MCP response, handling both buffered JSON and the SSE stream the worker emits by default. */
+/** Read an MCP response, handling both buffered JSON (the stateless worker default) and an SSE stream. */
 async function readMcp(res: Response): Promise<JsonRpcResponse> {
   const text = await res.text();
   if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) {
@@ -163,5 +163,23 @@ describe('FrontMCP on Cloudflare Workers (workerd)', () => {
     });
     expect(status).toBe(200);
     expect(json.result?.content?.[0]?.text).toBe('Echo: hi');
+  });
+
+  it('replies to a stateless POST with buffered JSON, not an unclosed SSE stream', async () => {
+    // Regression guard for the stateless SSE→JSON fix. A stateless worker has no
+    // session, so it can't deliver server-initiated notifications; an SSE POST
+    // reply would never be closed (nothing terminates a sessionless stream), so
+    // its `ctx.waitUntil` teardown would never settle and workerd would cancel
+    // the request ("Worker ... had hung"). The reply must be `application/json`.
+    const res = await fetch(`${BASE_URL}/mcp`, {
+      method: 'POST',
+      headers: MCP_HEADERS,
+      body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} }),
+      signal: AbortSignal.timeout(10000),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(res.headers.get('content-type')).not.toContain('text/event-stream');
+    await res.text();
   });
 });

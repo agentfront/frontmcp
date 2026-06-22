@@ -105,18 +105,17 @@ export async function runWebStandardMcp(
 
   // Stateless mode — fresh server + transport for this one request.
   const sessionId = `web:${randomUUID()}`;
-  // A GET opens the server→client SSE stream; a POST may stream SSE when allowed
-  // AND the client accepts text/event-stream. Otherwise the POST is buffered JSON.
+  // A standalone GET opens the server→client SSE stream when streaming is enabled
+  // and the client accepts it. A POST is ALWAYS buffered as JSON in stateless
+  // mode: with no session there are no server-initiated notifications to stream,
+  // and an SSE POST reply would never close (nothing terminates a sessionless
+  // stream) — so its `ctx.waitUntil` teardown below never settles and the Worker
+  // "hangs" until the runtime cancels the request. The client accepts
+  // `application/json`, so a buffered reply is fully MCP-compliant.
   const accept = request.headers.get('accept') ?? '';
-  const wantsStream = request.method === 'GET' || (options.sse && accept.includes('text/event-stream'));
+  const wantsStream = request.method === 'GET' && options.sse && accept.includes('text/event-stream');
 
-  const { mcpServer, transport } = await wireServer(
-    scope,
-    options.serverOptions,
-    sessionId,
-    undefined,
-    !wantsStream,
-  );
+  const { mcpServer, transport } = await wireServer(scope, options.serverOptions, sessionId, undefined, !wantsStream);
   const response = await transport.handleRequest(request, {
     authInfo: options.authInfo as AuthInfo | undefined,
   });

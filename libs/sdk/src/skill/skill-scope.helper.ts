@@ -78,7 +78,62 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   // disable audit logging in that scenario.
   registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
 
-  // Early exit if no skills registered
+  // The skills feature is "in use" when skills are already present OR the feature
+  // is explicitly enabled (so a bundle mounted later still counts). A bare server
+  // with no skills and no skillsConfig registers nothing here, keeping
+  // `resources/list` empty (#407).
+  const skillsInUse = skillRegistry.hasAny() || skillsConfig?.enabled === true;
+  const shouldRegisterResources = skillsInUse && skillsConfig?.mcpResources !== false;
+
+  // Register the STATIC SEP-2640 `skill://` resources FIRST — and crucially NOT
+  // gated on `skillRegistry.hasAny()`. The discovery `skill://index.json`
+  // enumerates the registry at READ time, and the `SKILL.md`/file entries are URI
+  // TEMPLATES; neither depends on any skill being present right now. Plugins that
+  // mount skills AFTER boot (e.g. plugin-skilled-openapi syncing a bundle on a
+  // stateless V8 worker, where the registry is empty at scope-init) would
+  // otherwise have their `skill://` resources permanently hidden from
+  // `resources/list` / `resources/templates/list` even once the bundle loads.
+  if (shouldRegisterResources) {
+    await registerSep2640Resources({ resourceRegistry, logger });
+
+    // Keep the per-skill concrete `resources/list` entries in sync with skills
+    // that mount AFTER scope-init — a lazily-synced bundle on a stateless worker
+    // (the registry is empty here, then fills on the first `ensureReady()`), or a
+    // hot-swap. `registerDynamicResource` is idempotent (re-registering an
+    // existing `skill://<name>/SKILL.md` is a no-op) AND emits the change event
+    // that drives `resources/listChanged`, so re-running it on every skill change
+    // simply adds the new entries. Registration runs SYNCHRONOUSLY (no
+    // `resolveLastModified`): the callback fires inside the change-emitting
+    // context (the bundle apply, a request on a worker), where a deferred
+    // microtask may never complete after the response. Skills present at
+    // scope-init are registered (with the `lastModified` hint) just below.
+    skillRegistry.subscribe({ immediate: false }, () => {
+      // Defensive: the subscriber runs synchronously inside the skill registry's
+      // emit (i.e. inside `bundle apply`); a throw here must NOT abort the apply.
+      try {
+        const visibleSkills = skillRegistry.getSkills({ visibility: 'mcp' });
+        if (visibleSkills.length === 0) return;
+        void registerPerSkillResources({
+          scope: providers.getActiveScope(),
+          resourceRegistry,
+          skills: visibleSkills,
+          logger,
+        });
+      } catch (err) {
+        logger.warn(
+          `Failed to sync SEP-2640 per-skill resources on skill change: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    });
+  } else if (skillsInUse) {
+    logger.verbose('SEP-2640 skill:// resources disabled via skillsConfig.mcpResources=false');
+  }
+
+  // Everything below operates on skills PRESENT at scope-init — skip when the
+  // registry is still empty (skills that mount later are handled by the
+  // subscription above).
   if (!skillRegistry.hasAny()) {
     return;
   }
@@ -86,11 +141,7 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   // Always register MCP flows for skills
   await flowRegistry.registryFlows([SearchSkillsFlow, LoadSkillFlow]);
 
-  // Register SEP-2640 `skill://` resources unless explicitly disabled.
-  const shouldRegisterResources = skillsConfig?.mcpResources !== false;
   if (shouldRegisterResources) {
-    await registerSep2640Resources({ resourceRegistry, logger });
-
     // SEP-2640 §Resource Metadata: each `skill://<skill-path>/SKILL.md`
     // SHOULD surface in `resources/list` with frontmatter-derived `name`
     // and `description`. The template alone covers `resources/read` but
@@ -106,8 +157,6 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
         resolveLastModified: resolveLastModifiedForSkill,
       });
     }
-  } else {
-    logger.verbose('SEP-2640 skill:// resources disabled via skillsConfig.mcpResources=false');
   }
 
   // Register HTTP flows if skillsConfig is enabled
