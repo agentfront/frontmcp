@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-skilled-openapi",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "FrontMCP plugin: serve a customer's OpenAPI spec as skill bundles (signed, OpenAPI-Overlay-based) with hidden per-operation tools mediated by three meta-tools (search_skill / load_skill / run_workflow — the last runs an enclave-sandboxed AgentScript that orchestrates the loaded skills' operations).",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -49,14 +49,14 @@
     }
   },
   "dependencies": {
-    "@frontmcp/adapters": "1.5.0",
-    "@frontmcp/auth": "1.5.0",
-    "@frontmcp/sdk": "1.5.0"
+    "@frontmcp/adapters": "1.5.1",
+    "@frontmcp/auth": "1.5.1",
+    "@frontmcp/sdk": "1.5.1"
   },
   "peerDependencies": {
     "@enclave-vm/ast": "*",
     "@enclave-vm/core": "*",
-    "@frontmcp/lazy-zod": "1.5.0"
+    "@frontmcp/lazy-zod": "1.5.1"
   },
   "peerDependenciesMeta": {
     "@enclave-vm/ast": {
