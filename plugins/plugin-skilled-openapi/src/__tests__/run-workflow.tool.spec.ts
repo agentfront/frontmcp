@@ -14,6 +14,8 @@ import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.regi
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
+// eslint-disable-next-line import/first -- must import AFTER the jest.mock calls above
+import RunWorkflowTool from '../tools/run-workflow.tool';
 
 // ── Controllable mocks (factories may only reference `mock`-prefixed vars) ──
 
@@ -49,9 +51,6 @@ const mockExecuteSkillAction = jest.fn();
 jest.mock('../executor/execute-skill-action', () => ({
   executeSkillAction: (...args: unknown[]) => mockExecuteSkillAction(...args),
 }));
-
-// eslint-disable-next-line import/first -- must import AFTER the jest.mock calls above
-import RunWorkflowTool from '../tools/run-workflow.tool';
 
 const fakeLogger = {
   warn: jest.fn(),
@@ -108,7 +107,9 @@ function makeRunWorkflowThis(
 ) {
   const resolver = { resolve: jest.fn(async () => ({ token: 'sk_x' })) };
   const map = new Map<unknown, unknown>();
-  map.set(BundleSyncService, {});
+  // run_workflow `await`s ensureReady() before resolving actions; the hidden-op
+  // registry here is pre-seeded, so the sync is a no-op in this unit test.
+  map.set(BundleSyncService, { ensureReady: async () => {} });
   map.set(SkilledOpenApiConfig, args.config ?? baseConfig());
   map.set(HiddenOpRegistry, args.hiddenOps ?? new HiddenOpRegistry());
   map.set(AuthorityGuard, new AuthorityGuard());
@@ -131,8 +132,7 @@ function makeRunWorkflowThis(
   } as unknown as RunWorkflowTool;
 }
 
-const run = (ctx: RunWorkflowTool, script: string) =>
-  RunWorkflowTool.prototype.execute.call(ctx, { script });
+const run = (ctx: RunWorkflowTool, script: string) => RunWorkflowTool.prototype.execute.call(ctx, { script });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -291,7 +291,9 @@ describe('run_workflow', () => {
 
     await run(makeRunWorkflowThis({ hiddenOps, auditWriter, omitAuthInfo: true }), 'x');
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
-      expect.objectContaining({ deps: expect.objectContaining({ audit: { writer: auditWriter, subject: 'anonymous' } }) }),
+      expect.objectContaining({
+        deps: expect.objectContaining({ audit: { writer: auditWriter, subject: 'anonymous' } }),
+      }),
     );
   });
 
@@ -323,9 +325,10 @@ describe('run_workflow — enclave sandbox unavailable', () => {
     const { default: IsolatedTool } = await import('../tools/run-workflow.tool');
     // Re-importing gives the tool fresh DI token identities, so a key-matched
     // map would miss. The tool returns at the enclave-import catch BEFORE it
-    // uses any of these singletons, so a permissive `get()` is enough.
+    // uses any of these singletons, so a permissive `get()` is enough — it just
+    // needs an `ensureReady()` for the bundle-sync await at the top of execute().
     const ctx = {
-      get: () => ({}),
+      get: () => ({ ensureReady: async () => {} }),
       tryGet: () => undefined,
       logger: fakeLogger,
       authInfo: { user: { sub: 'u' } },

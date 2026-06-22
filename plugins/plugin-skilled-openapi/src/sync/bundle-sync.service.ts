@@ -67,8 +67,18 @@ export interface BundleApplyResult {
  * Listeners can subscribe via the underlying BundleStore for downstream
  * effects (audit log, OTel attributes, /healthz updates).
  */
+/** Minimal slice of a bundle source that {@link BundleSyncService} drives. */
+interface StartableBundleSource {
+  start(): Promise<void>;
+  onChange(listener: (bundle: ResolvedBundle) => void): () => void;
+}
+
 export class BundleSyncService {
   private skillUnregisterByBundleId = new Map<string, () => Promise<void>>();
+
+  /** The configured bundle source; wired by the DI factory via {@link attachSource}. */
+  private source?: StartableBundleSource;
+  private readyPromise?: Promise<void>;
 
   constructor(
     private readonly skillRegistry: SkillRegistryInterface,
@@ -85,6 +95,92 @@ export class BundleSyncService {
      */
     private readonly operationToolFactory?: OperationToolFactory,
   ) {}
+
+  /**
+   * Wired by the plugin's DI factory. Stores the bundle source so {@link
+   * ensureReady} can start it and await the first apply lazily, inside the
+   * request that needs the catalog. Does NOT start the source — see the context
+   * note on {@link bootstrap}.
+   */
+  attachSource(source: StartableBundleSource): void {
+    this.source = source;
+  }
+
+  /**
+   * Ensure the source has started and its FIRST bundle has been applied, so
+   * `scope.skills` and the hidden-op registry are populated before a meta-tool
+   * (search_skill / load_skill / run_workflow) reads them. Memoized — the
+   * underlying start + apply runs at most once per service instance.
+   */
+  async ensureReady(): Promise<void> {
+    if (!this.source) return;
+    this.readyPromise ??= this.bootstrap(this.source);
+    return this.readyPromise;
+  }
+
+  /**
+   * Start the source and await its FIRST bundle apply.
+   *
+   * CRITICAL — every promise here (the `apply()`, the `firstApply` latch, and
+   * the `onChange` wiring) is created inside the FIRST caller's context, which
+   * is a request context (the meta-tools / list-tools hook call `ensureReady()`
+   * while handling a request). On a stateless V8-isolate runtime (Cloudflare
+   * Workers) this is mandatory two ways over:
+   *   1. workerd cancels promise continuations that cross a request boundary, so
+   *      a `firstApply` created in the scope-init/factory context would never
+   *      resolve when awaited from a later request — it must be created here.
+   *   2. There is no background event loop, so a deferred/fire-and-forget apply
+   *      (the old `setImmediate(source.start())`) can never complete after the
+   *      response is sent — the awaiting tool drives it to completion inline.
+   * A failed first sync is swallowed (logged) so it degrades to "no skills"
+   * instead of hanging or 500-ing every call.
+   */
+  private async bootstrap(source: StartableBundleSource): Promise<void> {
+    let resolveFirst!: () => void;
+    let firstSettled = false;
+    const firstApply = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    // SERIALIZE applies: emissions can arrive back-to-back (an initial pull + a
+    // Cron-driven refresh / hot-swap) and apply() mutates the registry, the
+    // bundle store, and unregister handles — overlapping applies would interleave
+    // and leave that state inconsistent. Chaining through `applyTail` keeps them
+    // ordered. Each link swallows its own failure so the chain never breaks.
+    let applyTail: Promise<void> = Promise.resolve();
+    // Wire onChange HERE (request context). The first emit drives `firstApply`;
+    // later emits re-apply in order.
+    source.onChange((bundle) => {
+      applyTail = applyTail.then(async () => {
+        try {
+          const result = await this.apply(bundle);
+          if (!result.applied) {
+            this.logger.warn(`[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
+          }
+        } catch (e) {
+          this.logger.error(
+            `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`,
+          );
+        }
+      });
+      if (!firstSettled) {
+        firstSettled = true;
+        void applyTail.then(() => resolveFirst());
+      }
+    });
+    try {
+      await source.start();
+      // Only await the first apply when the source actually emitted during
+      // start() — inline/static/npm and a normal SaaS pull do (start() awaits
+      // the pull + notifies before returning). A source that returns from
+      // start() WITHOUT emitting must NOT hang the request: `SaasPullSource`
+      // short-circuits when a Cron refresh is already in-flight, and that
+      // in-flight pull still applies via the listener above. Worst case this
+      // first request sees an as-yet-unpopulated registry (the pre-fix behavior).
+      if (firstSettled) await firstApply;
+    } catch (e) {
+      this.logger.error(`[skilled-openapi] initial bundle sync failed: ${(e as Error).message}`);
+    }
+  }
 
   /**
    * Validate signature and apply the bundle. Returns a structured result;
