@@ -8,6 +8,10 @@
  *  - `isLazy`, `forceMaterialize`: runtime escape hatches.
  */
 
+import { toJSONSchema as zodToJSONSchema, type ZodType } from 'zod';
+
+import { forceMaterialize } from './utils';
+
 export { z } from './lazy-z';
 // Default export mirrors zod's own `export default z` so existing code
 // like `import type z from 'zod'` (namespace-default import) keeps working
@@ -19,10 +23,24 @@ export { eagerZ } from './eager-z';
 export { lazyZ, LazyZodSchema, LAZY_BRAND, LAZY_TARGET, type InferLazy } from './lazy-schema';
 export { isLazy, forceMaterialize } from './utils';
 
-// JSON-Schema conversion helpers from zod itself. Kept here so consumer
-// code never reaches past the `@frontmcp/lazy-zod` boundary into `zod/v4`
-// directly — one place to swap the upstream package if we ever fork.
-export { toJSONSchema } from 'zod';
+// JSON-Schema conversion. Kept here so consumer code never reaches past the
+// `@frontmcp/lazy-zod` boundary into `zod/v4` directly — one place to swap the
+// upstream package if we ever fork.
+//
+// IMPORTANT: zod's `toJSONSchema` walks and MUTATES the schema tree via internal
+// `_def` nodes (it writes a `ref` onto each visited node). A lazy-zod Proxy
+// sitting anywhere in that tree — e.g. a `z.union([...])` option or an
+// `.optional()` inner type — intercepts `_def` in a way that breaks those
+// writes, surfacing as `TypeError: Cannot set properties of undefined (setting
+// 'ref')`. We `forceMaterialize` first so the converter always sees real zod
+// nodes. Doing it HERE keeps the lazy Proxy fully transparent to every consumer
+// (tool/job/agent/elicitation schema conversion) instead of relying on each
+// call site remembering to materialize.
+export const toJSONSchema = ((schema: ZodType, params?: unknown) =>
+  (zodToJSONSchema as (s: ZodType, p?: unknown) => unknown)(
+    forceMaterialize(schema),
+    params,
+  )) as typeof zodToJSONSchema;
 export type { JSONSchema } from 'zod/v4/core';
 
 // Class values — Zod v4 exports these as classes (callable + `instanceof`).
