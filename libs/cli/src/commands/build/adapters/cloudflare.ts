@@ -44,9 +44,24 @@ import '${mainModulePath}';
 import { getServerlessHandlerAsync } from '@frontmcp/sdk';
 
 let handlerPromise = null;
+let envBridged = false;
 
 export default {
   async fetch(request, env, ctx) {
+    // Bridge Worker bindings (vars + secrets) into process.env ONCE per isolate.
+    // The SDK reads config like MCP_SESSION_SECRET from process.env, but Cloudflare
+    // passes bindings as the \`env\` argument — and workerd only auto-populates
+    // process.env from them at a recent compatibility_date. Without this bridge a
+    // deployed worker 500s with SessionSecretRequiredError on real workerd (even in
+    // public/no-auth mode, which still needs the secret to encrypt the anonymous
+    // session id) — and local \`wrangler dev\` hides it by inheriting the host env.
+    // String-only so KV / Durable Object / R2 bindings (objects) are skipped.
+    if (!envBridged && env && typeof env === 'object') {
+      for (const key of Object.keys(env)) {
+        if (typeof env[key] === 'string') process.env[key] = env[key];
+      }
+      envBridged = true;
+    }
     if (!handlerPromise) {
       handlerPromise = getServerlessHandlerAsync();
     }

@@ -119,6 +119,17 @@ describe('Build Adapters', () => {
       expect(entry).not.toContain('app(req, res)');
     });
 
+    it('bridges Worker bindings (vars + secrets) into process.env so the SDK can read them', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
+      // The fetch handler receives `env`; copy its string bindings into
+      // process.env (string-only, so KV/DO/R2 object bindings are skipped) — the
+      // SDK reads MCP_SESSION_SECRET et al. from process.env, which workerd does
+      // NOT auto-populate from bindings at the adapter's compat date. Without this
+      // a deployed worker 500s with SessionSecretRequiredError.
+      expect(entry).toContain('process.env[key] = env[key]');
+      expect(entry).toContain("typeof env[key] === 'string'");
+    });
+
     it('should have getConfig method', () => {
       expect(cloudflareAdapter.getConfig).toBeDefined();
     });
