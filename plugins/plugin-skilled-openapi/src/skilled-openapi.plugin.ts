@@ -10,12 +10,12 @@ import {
   type SkillBundleSource,
 } from '@frontmcp/adapters/skills';
 import {
+  buildSkillsCatalogSummary,
   DynamicPlugin,
   FrontMcpLogger,
   ListToolsHook,
   Plugin,
   ScopeEntry,
-  buildSkillsCatalogSummary,
   type FlowCtxOf,
   type ProviderRegistry,
   type ProviderType,
@@ -34,8 +34,8 @@ import { BundleSyncService } from './sync/bundle-sync.service';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
 import RunWorkflowTool from './tools/run-workflow.tool';
-import SearchSkillTool from './tools/search-skill.tool';
 import { searchSkillDescription } from './tools/search-skill.schema';
+import SearchSkillTool from './tools/search-skill.tool';
 
 /**
  * Symbol used by `@frontmcp/observability` to register the GLOBAL-scoped
@@ -185,9 +185,11 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     const target = tools.find((item) => item.tool?.metadata?.name === 'search_skill');
     if (!target) return;
 
-    // Ensure the bundle source has booted so the catalog reflects loaded skills.
+    // Ensure the bundle source has booted AND its first bundle is applied so the
+    // injected catalog reflects loaded skills — on a stateless worker this is the
+    // only thing that drives the sync to completion within the request.
     try {
-      this.get(BundleSyncService);
+      await this.get(BundleSyncService).ensureReady();
     } catch {
       // sync service not available yet — fall back to whatever is registered
     }
@@ -334,30 +336,34 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               logger.warn(`runtime-deps attach threw: ${(e as Error).message}`);
             }
           }
-          // BundleSourceListener is invoked synchronously by the source, so any
-          // rejection from sync.apply() must be caught here — passing an async
-          // arrow directly would surface failures as unhandled promise
-          // rejections instead of structured warn/error log lines.
-          source.onChange((bundle) => {
-            void sync
-              .apply(bundle)
-              .then((result) => {
-                if (!result.applied) {
-                  logger.warn(`bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
-                }
-              })
-              .catch((e: unknown) => {
-                logger.error(`bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`);
-              });
-          });
-          // Defer source.start() to a microtask so scope-init can finish
-          // wiring scope.skills before the first bundle apply runs.
-          const startedSource = source;
-          setImmediate(() => {
-            startedSource.start().catch((e: unknown) => {
-              logger.error(`bundle source failed to start: ${(e as Error).message}`);
+          // Hand the source to the service. The service starts it + awaits the
+          // first apply LAZILY, on the first `ensureReady()` (driven by the
+          // meta-tools / list-tools hook at REQUEST time). The factory must NOT
+          // start it or wire its onChange here:
+          //   - this factory can run during scope-init (eager provider
+          //     instantiation), when `scope.skills` is not yet wired — a
+          //     premature apply would throw via the lazy registry proxy;
+          //   - on a stateless worker, promise continuations created in this
+          //     (scope-init) context are canceled when later awaited from a
+          //     request context, and there is no background event loop to finish
+          //     a deferred apply. Driving start+apply from inside `ensureReady`
+          //     (request context) is what makes the catalog load on workerd.
+          // (This replaces the old `setImmediate(source.start())` + fire-and-
+          // forget `onChange` apply, which never completed on a stateless worker.)
+          sync.attachSource(source);
+          // Proactively boot on runtimes WITH a background event loop (Node) so
+          // the catalog is ready without an explicit meta-tool call (preserves
+          // startup-time sync + skill:// resources). Deferred via setImmediate so
+          // scope.skills is wired first. SKIPPED on stateless workers
+          // (`disablePolling`): setImmediate never fires there, and a promise
+          // created in this scope-init context is canceled when later awaited from
+          // a request context — the meta-tools / list-tools hook drive
+          // `ensureReady()` in-request instead.
+          if (!runtimeDeps?.disablePolling) {
+            setImmediate(() => {
+              void sync.ensureReady();
             });
-          });
+          }
           return sync;
         },
       },

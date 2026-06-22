@@ -23,9 +23,10 @@ import {
 })
 export default class SearchSkillTool extends ToolContext {
   async execute(input: SearchSkillInput): Promise<SearchSkillOutput> {
-    // Touching BundleSyncService triggers its factory which lazily starts
-    // the configured bundle source on first call.
-    this.get(BundleSyncService);
+    // Drive the bundle source to apply its first bundle (and await it) so the
+    // skill registry is populated before we search. On a stateless worker this
+    // is the only thing that loads the catalog within the request lifecycle.
+    await this.get(BundleSyncService).ensureReady();
     const scope = this.get(ScopeEntry);
     const skillRegistry = scope.skills;
     if (!skillRegistry || !skillRegistry.hasAny()) {
