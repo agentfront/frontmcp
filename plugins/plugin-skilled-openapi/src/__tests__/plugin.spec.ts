@@ -383,7 +383,7 @@ describe('SkilledOpenApiPlugin', () => {
       while (Date.now() < deadline && fakeLogger.error.mock.calls.length === 0) {
         await new Promise((r) => setTimeout(r, 25));
       }
-      expect(fakeLogger.error).toHaveBeenCalledWith(expect.stringMatching(/bundle source failed to start/));
+      expect(fakeLogger.error).toHaveBeenCalledWith(expect.stringMatching(/initial bundle sync failed/));
     });
   });
 

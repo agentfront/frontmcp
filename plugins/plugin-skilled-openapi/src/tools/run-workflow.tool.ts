@@ -41,8 +41,10 @@ const TIMEOUT_MS = 8_000;
 })
 export default class RunWorkflowTool extends ToolContext {
   async execute(input: RunWorkflowInput): Promise<RunWorkflowOutput> {
-    // Lazy-boot the bundle sync so loaded skills' operations are registered.
-    this.get(BundleSyncService);
+    // Await the bundle sync so the hidden-op registry is populated before the
+    // sandboxed script resolves actions via callTool (stateless workers have no
+    // background loop to finish a deferred sync).
+    await this.get(BundleSyncService).ensureReady();
     const config = this.get(SkilledOpenApiConfig);
     const hiddenOps = this.get(HiddenOpRegistry);
     const guard = this.get(AuthorityGuard);
@@ -79,7 +81,9 @@ export default class RunWorkflowTool extends ToolContext {
     const toolHandler = async (actionId: string, actionInput: Record<string, unknown>): Promise<unknown> => {
       const entry = hiddenOps.getByActionId(actionId);
       if (!entry) {
-        throw new Error(`unknown action "${actionId}" — run search_skill then load_skill to discover available actions`);
+        throw new Error(
+          `unknown action "${actionId}" — run search_skill then load_skill to discover available actions`,
+        );
       }
       const res = await executeSkillAction({ entry, input: actionInput ?? {}, authInfo: this.authInfo, deps });
       if (!res.ok) {
@@ -95,7 +99,10 @@ export default class RunWorkflowTool extends ToolContext {
     try {
       transformed = transformAgentScript(input.script, { transformLoops: false });
     } catch (error) {
-      return { success: false, error: `AgentScript rejected: ${error instanceof Error ? error.message : String(error)}` };
+      return {
+        success: false,
+        error: `AgentScript rejected: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
 
     const adapter = new InterpreterAdapter({ maxSteps: MAX_STEPS });
