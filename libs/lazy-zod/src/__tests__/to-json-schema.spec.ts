@@ -1,4 +1,6 @@
-import { toJSONSchema, z } from '../index';
+import { eagerZ, toJSONSchema, z } from '../index';
+
+type JsonObject = Record<string, unknown>;
 
 // Regression guard for the lazy-Proxy ↔ zod `toJSONSchema` interaction.
 //
@@ -23,13 +25,15 @@ describe('toJSONSchema (lazy-aware)', () => {
         .describe('Anti-query'),
     });
 
-    const json = toJSONSchema(schema) as Record<string, any>;
+    const json = toJSONSchema(schema) as JsonObject;
+    const properties = json['properties'] as Record<string, JsonObject>;
+    const notQuery = properties['notQuery'];
 
     expect(json['type']).toBe('object');
-    expect(Object.keys(json['properties'])).toEqual(['query', 'limit', 'notQuery']);
+    expect(Object.keys(properties)).toEqual(['query', 'limit', 'notQuery']);
     // The union must serialize to anyOf with both branches.
-    expect(json['properties']['notQuery']['description']).toBe('Anti-query');
-    expect(json['properties']['notQuery']['anyOf']).toHaveLength(2);
+    expect(notQuery['description']).toBe('Anti-query');
+    expect(notQuery['anyOf']).toHaveLength(2);
     // Only `query` is required (the others are .optional()).
     expect(json['required']).toEqual(['query']);
   });
@@ -46,10 +50,12 @@ describe('toJSONSchema (lazy-aware)', () => {
       ),
     });
 
-    const json = toJSONSchema(schema) as Record<string, any>;
+    const json = toJSONSchema(schema) as JsonObject;
+    const properties = json['properties'] as Record<string, JsonObject>;
+    const skills = properties['skills'];
+    const item = skills['items'] as JsonObject;
 
     expect(json['type']).toBe('object');
-    const item = json['properties']['skills']['items'];
     expect(item['type']).toBe('object');
     expect(item['required']).toEqual(['skillId', 'name', 'score']);
   });
@@ -67,7 +73,7 @@ describe('toJSONSchema (lazy-aware)', () => {
   });
 
   it('still converts plain (already-real) zod schemas', () => {
-    const json = toJSONSchema(z.string().min(2)) as Record<string, any>;
+    const json = toJSONSchema(eagerZ.string().min(2)) as JsonObject;
     expect(json['type']).toBe('string');
     expect(json['minLength']).toBe(2);
   });
