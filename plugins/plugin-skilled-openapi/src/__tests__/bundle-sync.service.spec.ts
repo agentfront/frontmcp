@@ -13,6 +13,10 @@ const fakeLogger = {
   child: jest.fn().mockReturnThis(),
 } as unknown as never;
 
+// Typed handle to the jest mocks for assertions (`fakeLogger` is cast to `never`
+// so it can stand in for `FrontMcpLogger` at the constructor call sites).
+const loggerMocks = fakeLogger as unknown as { error: jest.Mock; warn: jest.Mock };
+
 class FakeRegistry implements Partial<SkillRegistryInterface> {
   public registered: SkillContent[] = [];
   public unregistered: string[] = [];
@@ -162,6 +166,24 @@ describe('BundleSyncService', () => {
         },
       });
       await expect(sync.ensureReady()).resolves.toBeUndefined();
+      expect(loggerMocks.error).toHaveBeenCalledWith(expect.stringMatching(/initial bundle sync failed.*boom/));
+    });
+
+    it('does not hang when start() returns without emitting (SaaS pull already in-flight)', async () => {
+      const reg = new FakeRegistry();
+      const sync = makeSync(reg);
+      // Mimics SaasPullSource short-circuiting when a Cron refresh holds inFlight:
+      // start() returns without notifying. ensureReady() must resolve, not hang.
+      sync.attachSource({
+        async start() {
+          /* no emit */
+        },
+        onChange() {
+          return () => {};
+        },
+      });
+      await expect(sync.ensureReady()).resolves.toBeUndefined();
+      expect(reg.registered).toHaveLength(0);
     });
   });
 

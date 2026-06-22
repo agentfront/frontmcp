@@ -141,29 +141,42 @@ export class BundleSyncService {
     const firstApply = new Promise<void>((resolve) => {
       resolveFirst = resolve;
     });
+    // SERIALIZE applies: emissions can arrive back-to-back (an initial pull + a
+    // Cron-driven refresh / hot-swap) and apply() mutates the registry, the
+    // bundle store, and unregister handles — overlapping applies would interleave
+    // and leave that state inconsistent. Chaining through `applyTail` keeps them
+    // ordered. Each link swallows its own failure so the chain never breaks.
+    let applyTail: Promise<void> = Promise.resolve();
     // Wire onChange HERE (request context). The first emit drives `firstApply`;
-    // later emits (source refreshes / hot-swaps on runtimes that poll) re-apply
-    // fire-and-forget.
+    // later emits re-apply in order.
     source.onChange((bundle) => {
-      const applied = this.apply(bundle)
-        .then((result) => {
+      applyTail = applyTail.then(async () => {
+        try {
+          const result = await this.apply(bundle);
           if (!result.applied) {
             this.logger.warn(`[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
           }
-        })
-        .catch((e: unknown) => {
+        } catch (e) {
           this.logger.error(
             `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`,
           );
-        });
+        }
+      });
       if (!firstSettled) {
         firstSettled = true;
-        void applied.then(() => resolveFirst());
+        void applyTail.then(() => resolveFirst());
       }
     });
     try {
       await source.start();
-      await firstApply;
+      // Only await the first apply when the source actually emitted during
+      // start() — inline/static/npm and a normal SaaS pull do (start() awaits
+      // the pull + notifies before returning). A source that returns from
+      // start() WITHOUT emitting must NOT hang the request: `SaasPullSource`
+      // short-circuits when a Cron refresh is already in-flight, and that
+      // in-flight pull still applies via the listener above. Worst case this
+      // first request sees an as-yet-unpopulated registry (the pre-fix behavior).
+      if (firstSettled) await firstApply;
     } catch (e) {
       this.logger.error(`[skilled-openapi] initial bundle sync failed: ${(e as Error).message}`);
     }
