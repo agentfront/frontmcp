@@ -100,7 +100,9 @@ function makeToolThis(args: {
   const scope = fakeScopeEntry(skills);
   const map = new Map<unknown, unknown>();
   // Use class identity as the DI key; each meta-tool calls this.get(Token).
-  map.set(BundleSyncService, {});
+  // Meta-tools `await this.get(BundleSyncService).ensureReady()` before reading
+  // the registry; the registry here is pre-seeded, so the sync is a no-op.
+  map.set(BundleSyncService, { ensureReady: async () => {} });
   map.set(SkilledOpenApiConfig, args.config ?? baseConfig());
   map.set(HiddenOpRegistry, args.hiddenOps ?? new HiddenOpRegistry());
   map.set(BundleStore, args.bundleStore ?? new BundleStore());

@@ -13,6 +13,10 @@ const fakeLogger = {
   child: jest.fn().mockReturnThis(),
 } as unknown as never;
 
+// Typed handle to the jest mocks for assertions (`fakeLogger` is cast to `never`
+// so it can stand in for `FrontMcpLogger` at the constructor call sites).
+const loggerMocks = fakeLogger as unknown as { error: jest.Mock; warn: jest.Mock };
+
 class FakeRegistry implements Partial<SkillRegistryInterface> {
   public registered: SkillContent[] = [];
   public unregistered: string[] = [];
@@ -92,6 +96,95 @@ describe('BundleSyncService', () => {
     expect(hiddenOps.size).toBe(1);
     expect(hiddenOps.get('invoices', 'createInvoice')?.op.pathTemplate).toBe('/v1/invoices');
     expect(store.current()).toBe(bundle);
+  });
+
+  describe('ensureReady (worker-safe lazy boot)', () => {
+    // Guards the stateless-worker fix: the catalog must load when a meta-tool
+    // awaits ensureReady() — driving the source start + first apply inline,
+    // memoized — rather than relying on a background-loop-deferred boot.
+    const makeSource = (bundle: ResolvedBundle) => {
+      const listeners = new Set<(b: ResolvedBundle) => void>();
+      const calls = { start: 0 };
+      return {
+        calls,
+        source: {
+          async start() {
+            calls.start++;
+            for (const fn of listeners) fn(bundle);
+          },
+          onChange(fn: (b: ResolvedBundle) => void) {
+            listeners.add(fn);
+            return () => listeners.delete(fn);
+          },
+        },
+      };
+    };
+
+    const makeSync = (reg: FakeRegistry) =>
+      new BundleSyncService(
+        reg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+        fakeLogger,
+      );
+
+    it('starts the source once and applies the first bundle; memoized across calls', async () => {
+      const reg = new FakeRegistry();
+      const sync = makeSync(reg);
+      const { calls, source } = makeSource(buildBundle());
+      sync.attachSource(source);
+
+      // Not booted until ensureReady() is called.
+      expect(calls.start).toBe(0);
+      expect(reg.registered).toHaveLength(0);
+
+      await sync.ensureReady();
+      expect(calls.start).toBe(1);
+      expect(reg.registered).toHaveLength(1);
+      expect(reg.registered[0].id).toBe('invoices');
+
+      // Memoized: a second call neither restarts the source nor re-applies.
+      await sync.ensureReady();
+      expect(calls.start).toBe(1);
+      expect(reg.registered).toHaveLength(1);
+    });
+
+    it('is a no-op when no source is attached', async () => {
+      const sync = makeSync(new FakeRegistry());
+      await expect(sync.ensureReady()).resolves.toBeUndefined();
+    });
+
+    it('does not throw (swallows + logs) when the source fails to start', async () => {
+      const sync = makeSync(new FakeRegistry());
+      sync.attachSource({
+        async start() {
+          throw new Error('boom');
+        },
+        onChange() {
+          return () => {};
+        },
+      });
+      await expect(sync.ensureReady()).resolves.toBeUndefined();
+      expect(loggerMocks.error).toHaveBeenCalledWith(expect.stringMatching(/initial bundle sync failed.*boom/));
+    });
+
+    it('does not hang when start() returns without emitting (SaaS pull already in-flight)', async () => {
+      const reg = new FakeRegistry();
+      const sync = makeSync(reg);
+      // Mimics SaasPullSource short-circuiting when a Cron refresh holds inFlight:
+      // start() returns without notifying. ensureReady() must resolve, not hang.
+      sync.attachSource({
+        async start() {
+          /* no emit */
+        },
+        onChange() {
+          return () => {};
+        },
+      });
+      await expect(sync.ensureReady()).resolves.toBeUndefined();
+      expect(reg.registered).toHaveLength(0);
+    });
   });
 
   it('rejects bundles missing integrity when requireSignature=true', async () => {

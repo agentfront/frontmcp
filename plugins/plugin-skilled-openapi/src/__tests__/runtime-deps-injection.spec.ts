@@ -79,9 +79,11 @@ function getSyncFactory() {
     requireSignature: false,
     dev: true,
   });
-  return (providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
-    useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
-  }).useFactory;
+  return (
+    providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+      useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+    }
+  ).useFactory;
 }
 
 async function waitFor(predicate: () => boolean, ms = 1000): Promise<void> {
@@ -114,10 +116,12 @@ describe('skilled-openapi runtime-deps injection', () => {
     };
 
     const store = new BundleStore();
-    await getSyncFactory()(scopeWith(controller), new HiddenOpRegistry(), store);
+    const sync = await getSyncFactory()(scopeWith(controller), new HiddenOpRegistry(), store);
 
-    // The deferred source.start() pulls (fails) → reads the injected cache →
-    // applies it through the plugin's sync service.
+    // Worker path (disablePolling): no proactive setImmediate boot — a meta-tool
+    // drives `ensureReady()`, which starts the source. start() pulls (fails) →
+    // reads the injected cache → applies it through the sync service.
+    await sync.ensureReady();
     await waitFor(() => store.current() != null);
     expect(store.current()?.bundleId).toBe('plugin:cached');
     expect(controller.cache?.read).toHaveBeenCalled();
@@ -143,7 +147,9 @@ describe('skilled-openapi runtime-deps injection', () => {
     };
 
     const store = new BundleStore();
-    await getSyncFactory()(scopeWith(controller), new HiddenOpRegistry(), store);
+    const sync = await getSyncFactory()(scopeWith(controller), new HiddenOpRegistry(), store);
+    // Worker path (disablePolling): drive the first start+apply via ensureReady().
+    await sync.ensureReady();
     await waitFor(() => store.current() != null);
     expect(store.current()?.bundleId).toBe('plugin:cached');
 
