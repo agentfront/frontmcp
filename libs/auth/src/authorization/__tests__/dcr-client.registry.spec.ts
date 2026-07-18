@@ -129,6 +129,33 @@ describe('DcrClientRegistry', () => {
       // A lone `*` matches anything.
       expect(registry.isRedirectUriAllowed('custom://whatever')).toBe(true);
     });
+
+    it('does not let a host wildcard cross delimiters into an attacker host', () => {
+      const registry = new DcrClientRegistry({
+        allowedRedirectUris: ['https://*.example.com/cb'],
+      });
+      // Legit subdomain still allowed.
+      expect(registry.isRedirectUriAllowed('https://a.example.com/cb')).toBe(true);
+      // Attacker host with the expected suffix hidden in the PATH / QUERY /
+      // FRAGMENT / USERINFO must all be rejected (the `*` cannot cross the
+      // delimiters `/`, `?`, `#`, `@`).
+      expect(registry.isRedirectUriAllowed('https://evil.com/.example.com/cb')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://evil.com/cb?.example.com/cb')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://evil.com/cb#.example.com/cb')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://a.example.com@evil.com/cb')).toBe(false);
+      // Attacker host that merely embeds the pattern host as a subdomain label.
+      expect(registry.isRedirectUriAllowed('https://a.example.com.evil.com/cb')).toBe(false);
+    });
+
+    it('does not let a port wildcard cross into the host or path', () => {
+      const registry = new DcrClientRegistry({
+        allowedRedirectUris: ['http://localhost:*/callback'],
+      });
+      expect(registry.isRedirectUriAllowed('http://localhost:8080/callback')).toBe(true);
+      // `*` is the PORT only — it cannot absorb a different host or a path segment.
+      expect(registry.isRedirectUriAllowed('http://localhost.evil.com:8080/callback')).toBe(false);
+      expect(registry.isRedirectUriAllowed('http://evil.com:8080/callback')).toBe(false);
+    });
   });
 
   describe('client_id allowlist', () => {

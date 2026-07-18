@@ -78,8 +78,10 @@ const DEFAULT_MAX_DYNAMIC_CLIENTS = 1000;
 
 /**
  * Match `input` against a simple glob where `*` = any run of characters and
- * every other character is matched literally (so a plain URL with no `*` is an
- * exact match). Full-string match.
+ * every other character is matched literally (so a plain string with no `*` is
+ * an exact match). Full-string match. Used per-URI-COMPONENT by
+ * {@link globMatchRedirectUri} — on its own a `*` here still crosses any
+ * character, so it must only ever be applied within a single component.
  *
  * Implemented as a linear two-pointer scan (the classic wildcard-match
  * algorithm) rather than compiling to a RegExp — this avoids the regex engine's
@@ -111,6 +113,78 @@ function globMatch(pattern: string, input: string): boolean {
   // Consume any trailing `*` in the pattern.
   while (p < pattern.length && pattern[p] === '*') p++;
   return p === pattern.length;
+}
+
+/**
+ * Split a redirect-URI (or a redirect-URI glob pattern) into components. The
+ * authority ends at the FIRST `/`, `?`, or `#`, so nothing after those
+ * delimiters is part of scheme/userinfo/host/port. Returns `null` for a
+ * non-hierarchical value (no `://`) so the caller can fall back to a
+ * whole-string match (e.g. a bare `*` or an opaque `urn:` pattern).
+ */
+function splitRedirectUri(
+  s: string,
+): { scheme: string; userinfo: string; host: string; port: string; rest: string } | null {
+  const schemeSep = s.indexOf('://');
+  if (schemeSep === -1) return null;
+  const scheme = s.slice(0, schemeSep);
+  const afterScheme = s.slice(schemeSep + 3);
+  let boundary = afterScheme.length;
+  for (let i = 0; i < afterScheme.length; i++) {
+    const ch = afterScheme[i];
+    if (ch === '/' || ch === '?' || ch === '#') {
+      boundary = i;
+      break;
+    }
+  }
+  const authority = afterScheme.slice(0, boundary);
+  const rest = afterScheme.slice(boundary); // path + query + fragment (may be '')
+  const at = authority.lastIndexOf('@');
+  const userinfo = at === -1 ? '' : authority.slice(0, at);
+  const hostport = at === -1 ? authority : authority.slice(at + 1);
+  let host = hostport;
+  let port = '';
+  if (hostport.startsWith('[')) {
+    // IPv6 literal `[::1]` (optionally `[::1]:port`).
+    const close = hostport.indexOf(']');
+    if (close !== -1) {
+      host = hostport.slice(0, close + 1);
+      if (hostport[close + 1] === ':') port = hostport.slice(close + 2);
+    }
+  } else {
+    const colon = hostport.indexOf(':');
+    if (colon !== -1) {
+      host = hostport.slice(0, colon);
+      port = hostport.slice(colon + 1);
+    }
+  }
+  return { scheme, userinfo, host, port, rest };
+}
+
+/**
+ * Match a `redirect_uri` against an allowlist glob COMPONENT-BY-COMPONENT so a
+ * `*` cannot cross a URI delimiter (`/`, `@`, `?`, `#`, or the host/port `:`).
+ *
+ * SECURITY: a single whole-string glob lets an attacker satisfy a HOST wildcard
+ * with content placed later in the URL — `https://*.example.com/cb` would match
+ * `https://evil.com/.example.com/cb` (real host `evil.com`, expected suffix in
+ * the path) or the `@`/`?`/`#` variants. Matching scheme / userinfo / host /
+ * port / path separately blocks that while preserving subdomain wildcards
+ * (`*.example.com`, matched within the single host component) and path
+ * wildcards (`/*`, matched within the single path component).
+ */
+function globMatchRedirectUri(pattern: string, input: string): boolean {
+  const p = splitRedirectUri(pattern);
+  if (!p) return globMatch(pattern, input); // non-hierarchical pattern (e.g. a lone `*`)
+  const u = splitRedirectUri(input);
+  if (!u) return false; // a hierarchical pattern requires a hierarchical redirect_uri
+  return (
+    globMatch(p.scheme, u.scheme) &&
+    globMatch(p.userinfo, u.userinfo) &&
+    globMatch(p.host, u.host) &&
+    globMatch(p.port, u.port) &&
+    globMatch(p.rest, u.rest)
+  );
 }
 
 /**
@@ -245,7 +319,7 @@ export class DcrClientRegistry {
     if (!this.redirectGlobs || this.redirectGlobs.length === 0) {
       return true;
     }
-    return this.redirectGlobs.some((glob) => globMatch(glob, redirectUri));
+    return this.redirectGlobs.some((glob) => globMatchRedirectUri(glob, redirectUri));
   }
 
   /** Whether a client-id allowlist is configured. */
