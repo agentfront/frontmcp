@@ -16,7 +16,10 @@ const DEFAULT_EXTERNALS = [
   'esbuild',
   '@vercel/kv',
   '@frontmcp/storage-sqlite',
-  '@enclave-vm/core',
+  // NOTE: `@enclave-vm/core` (the Node-only full sandbox) is externalized via
+  // `enclaveCoreExactExternalPlugin()` instead of this list, so that its
+  // bundle-safe `@enclave-vm/core/worker` subpath still gets BUNDLED. Listing
+  // the bare package here would externalize the subpath too.
   // Externalize FrontMCP packages for single-copy semantics
   // (required for schema extraction — bundled copies create separate Symbol tokens)
   '@frontmcp/sdk',
@@ -31,6 +34,25 @@ const DEFAULT_EXTERNALS = [
 export interface BundleResult {
   bundlePath: string;
   bundleSize: number;
+}
+
+/**
+ * esbuild plugin that externalizes the EXACT `@enclave-vm/core` package while
+ * leaving `@enclave-vm/core/worker` to be resolved and BUNDLED.
+ *
+ * `@enclave-vm/core` is the Node-only full sandbox (worker_threads / node:vm
+ * adapters) that cannot be bundled; its `/worker` subpath is a dependency-free
+ * interpreter that IS safe (and, on isolate/Worker deploys where node_modules is
+ * absent, REQUIRED) to bundle. Adding the bare package to esbuild's `external`
+ * array would externalize the subpath too — hence this exact-match plugin.
+ */
+export function enclaveCoreExactExternalPlugin(): import('esbuild').Plugin {
+  return {
+    name: 'frontmcp-enclave-core-exact-external',
+    setup(build) {
+      build.onResolve({ filter: /^@enclave-vm\/core$/ }, (args) => ({ path: args.path, external: true }));
+    },
+  };
 }
 
 export async function bundleWithEsbuild(
@@ -73,6 +95,7 @@ export async function bundleWithEsbuild(
     target: config.esbuild?.target || 'node22',
     outfile: bundlePath,
     external,
+    plugins: [enclaveCoreExactExternalPlugin()],
     keepNames: true, // preserve class names for decorator metadata
     treeShaking: true,
     minify: config.esbuild?.minify ?? false,
