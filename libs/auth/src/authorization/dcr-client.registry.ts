@@ -77,18 +77,40 @@ export interface DcrRegistryConfig {
 const DEFAULT_MAX_DYNAMIC_CLIENTS = 1000;
 
 /**
- * Compile a simple-glob (`*` = any run of characters) or exact pattern into a
- * RegExp. Every other character is matched literally, so a plain URL with no
- * `*` becomes an exact match.
+ * Match `input` against a simple glob where `*` = any run of characters and
+ * every other character is matched literally (so a plain URL with no `*` is an
+ * exact match). Full-string match.
+ *
+ * Implemented as a linear two-pointer scan (the classic wildcard-match
+ * algorithm) rather than compiling to a RegExp — this avoids the regex engine's
+ * backtracking entirely (no `.*.*` ReDoS surface) on the attacker-supplied
+ * `redirect_uri` we test allowlist patterns against.
  */
-function globToRegExp(pattern: string): RegExp {
-  // Split on the `*` wildcard, regex-escape each literal segment (so real
-  // spaces and other characters are matched literally), then join the segments
-  // with `.*`. This avoids using an in-band sentinel character (a space) that
-  // could collide with a literal space in the pattern.
-  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const body = pattern.split('*').map(escapeRegex).join('.*');
-  return new RegExp(`^${body}$`);
+function globMatch(pattern: string, input: string): boolean {
+  let p = 0;
+  let i = 0;
+  let starIdx = -1; // index in `pattern` of the last `*` seen
+  let matchIdx = 0; // index in `input` that the last `*` is currently absorbing up to
+  while (i < input.length) {
+    if (p < pattern.length && pattern[p] === input[i]) {
+      p++;
+      i++;
+    } else if (p < pattern.length && pattern[p] === '*') {
+      starIdx = p;
+      matchIdx = i;
+      p++;
+    } else if (starIdx !== -1) {
+      // Backtrack to the last `*` and have it absorb one more input char.
+      p = starIdx + 1;
+      matchIdx++;
+      i = matchIdx;
+    } else {
+      return false;
+    }
+  }
+  // Consume any trailing `*` in the pattern.
+  while (p < pattern.length && pattern[p] === '*') p++;
+  return p === pattern.length;
 }
 
 /**
@@ -97,10 +119,11 @@ function globToRegExp(pattern: string): RegExp {
  */
 export class DcrClientRegistry {
   private readonly clients = new Map<string, RegisteredClient>();
-  private readonly redirectMatchers: RegExp[] | undefined;
+  /** Configured redirect_uri allowlist globs (matched via `globMatch`). */
+  private readonly redirectGlobs: string[] | undefined;
 
   constructor(private readonly config: DcrRegistryConfig = {}) {
-    this.redirectMatchers = config.allowedRedirectUris?.map(globToRegExp);
+    this.redirectGlobs = config.allowedRedirectUris;
     this.seedPreRegisteredClients();
   }
 
@@ -211,7 +234,7 @@ export class DcrClientRegistry {
 
   /** Whether a redirect_uri allowlist is configured. */
   hasRedirectAllowlist(): boolean {
-    return !!this.redirectMatchers && this.redirectMatchers.length > 0;
+    return !!this.redirectGlobs && this.redirectGlobs.length > 0;
   }
 
   /**
@@ -219,10 +242,10 @@ export class DcrClientRegistry {
    * `true` when no allowlist is configured (preserves default behavior).
    */
   isRedirectUriAllowed(redirectUri: string): boolean {
-    if (!this.redirectMatchers || this.redirectMatchers.length === 0) {
+    if (!this.redirectGlobs || this.redirectGlobs.length === 0) {
       return true;
     }
-    return this.redirectMatchers.some((re) => re.test(redirectUri));
+    return this.redirectGlobs.some((glob) => globMatch(glob, redirectUri));
   }
 
   /** Whether a client-id allowlist is configured. */

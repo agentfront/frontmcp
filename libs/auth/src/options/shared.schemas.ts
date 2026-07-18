@@ -380,6 +380,15 @@ export const localDcrConfigSchema = z.object({
    * lets you disable DCR entirely while still shipping known clients.
    */
   clients: z.array(localDcrClientSchema).optional(),
+  /**
+   * Maximum number of DYNAMICALLY-registered (DCR) clients kept in memory.
+   * Once reached, further dynamic registrations are REJECTED (existing clients,
+   * including confidential ones, are preserved — never evicted). A cap of `0`
+   * disables dynamic registration entirely. Pre-registered / declarative
+   * `clients` never count toward this cap. Defaults to 1000; guards against
+   * unbounded memory growth from unauthenticated DCR.
+   */
+  maxDynamicClients: z.number().int().min(0).optional(),
 });
 
 export type LocalDcrConfig = z.infer<typeof localDcrConfigSchema>;

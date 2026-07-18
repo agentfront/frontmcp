@@ -116,6 +116,19 @@ describe('DcrClientRegistry', () => {
       // The dot must be literal: "appXexample" must NOT match.
       expect(registry.isRedirectUriAllowed('https://appXexample.com/cb')).toBe(false);
     });
+
+    it('handles multiple and trailing wildcards (linear glob matcher)', () => {
+      const registry = new DcrClientRegistry({
+        allowedRedirectUris: ['https://*.example.com/*', 'https://app.example.com/*', '*'],
+      });
+      // Two wildcards: subdomain + any trailing path (incl. deep paths).
+      expect(registry.isRedirectUriAllowed('https://a.example.com/cb')).toBe(true);
+      expect(registry.isRedirectUriAllowed('https://a.b.example.com/deep/path?x=1')).toBe(true);
+      // Trailing wildcard requires the literal prefix to match exactly.
+      expect(registry.isRedirectUriAllowed('https://app.example.com/anything')).toBe(true);
+      // A lone `*` matches anything.
+      expect(registry.isRedirectUriAllowed('custom://whatever')).toBe(true);
+    });
   });
 
   describe('client_id allowlist', () => {

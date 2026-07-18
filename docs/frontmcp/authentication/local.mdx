@@ -671,6 +671,7 @@ export class Server {}
 | `allowedClientIds`    | `string[]`                 | _(none)_              | Only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by CIMD instead and are exempt. |
 | `initialAccessToken`  | `string`                   | _(none)_              | When set, `/oauth/register` requires a matching `Authorization: Bearer <token>` (constant-time compared) → `401` otherwise.  |
 | `clients`             | `LocalDcrClient[]`         | _(none)_              | Pre-registered trusted clients seeded at startup; accepted by authorize/token **without** a DCR round-trip.                  |
+| `maxDynamicClients`   | `number`                   | `1000`                | Cap on **dynamically-registered** clients kept in memory. Once reached, further DCR registrations are **rejected** (`503 temporarily_unavailable`) — existing clients (including confidential ones) are preserved, never evicted. `0` disables dynamic registration. Pre-registered `clients` don't count toward it. Guards against unbounded memory growth from unauthenticated DCR. |
 
 <Note>
   This `dcr` block governs the **local Authorization Server**. It is unrelated to the

@@ -478,6 +478,13 @@ export interface LocalDcrConfig {
    * authorize/token flows without a DCR round-trip.
    */
   clients?: LocalDcrClient[];
+  /**
+   * Maximum number of dynamically-registered (DCR) clients kept in memory.
+   * Once reached, further dynamic registrations are rejected (existing clients,
+   * including confidential ones, are preserved — never evicted); `0` disables
+   * dynamic registration. Pre-registered `clients` are exempt. Default: 1000.
+   */
+  maxDynamicClients?: number;
 }
 
 /**

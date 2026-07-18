@@ -54,6 +54,13 @@ To keep DCR open but authenticated instead of closed, drop `enabled: false` and 
 `Authorization: Bearer <token>` header that matches it (constant-time compared), and
 requests without it get `401 invalid_token`.
 
+`dcr.maxDynamicClients` (default `1000`) caps how many dynamically-registered clients
+are kept in memory: once the cap is reached, further DCR registrations are **rejected**
+(`503 temporarily_unavailable`) rather than evicting an existing client, so already-registered
+clients — including confidential ones — are preserved. Pre-registered `dcr.clients` never
+count toward it, and `0` disables dynamic registration entirely. This bounds memory growth
+from unauthenticated DCR (pair it with `initialAccessToken` for authenticated admission).
+
 ## What This Demonstrates
 
 - Setting `dcr.enabled: false` so `POST /oauth/register` returns 404 and `registration_endpoint` is dropped from AS metadata
