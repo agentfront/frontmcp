@@ -81,6 +81,17 @@ export const httpRequestStateSchema = z.object({
 const name = 'http:request' as const;
 const { Stage } = FlowHooksOf('http:request');
 
+/**
+ * Parse a verified user claim's space-delimited `scope` (RFC 6749 §3.3) into a
+ * scopes array. Shared by the Node and web-transport `authInfo` mappings so
+ * both surface the same grant; the `scope` claim is present at runtime but not
+ * declared on the `UserClaim` type, so it is read through a narrow cast.
+ */
+function parseUserScopes(user: { scope?: unknown } | undefined): string[] {
+  const s = user?.scope;
+  return typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : [];
+}
+
 declare global {
   interface ExtendFlows {
     'http:request': FlowRunOptions<
@@ -228,10 +239,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           ctx.updateAuthInfo({
             token,
             clientId: user.sub,
-            // Populate scopes from the verified token's `scope` claim (space-
-            // delimited per RFC 6749 §3.3) instead of hardcoding `[]`, so any
-            // consumer that authorizes on `authInfo.scopes` sees the real grant.
-            scopes: typeof user['scope'] === 'string' ? user['scope'].split(/\s+/).filter(Boolean) : [],
+            // Populate scopes from the verified token's `scope` claim instead of
+            // hardcoding `[]`, so any consumer that authorizes on
+            // `authInfo.scopes` sees the real grant (same accessor as the web path).
+            scopes: parseUserScopes(user as { scope?: unknown } | undefined),
             // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
             expiresAt: user.exp ? user.exp * 1000 : undefined,
             extra: {
@@ -611,13 +622,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         ? {
             token: authorization.token,
             clientId: authorization.user?.sub,
-            // Same scope parsing as the Node path (checkAuthorization) so
-            // scope-aware handlers behave identically on the web transport. The
-            // `scope` claim is present at runtime but not on the `UserClaim`
-            // type, so read it through a narrow cast.
-            scopes: ((s) => (typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : ([] as string[])))(
-              (authorization.user as { scope?: unknown } | undefined)?.scope,
-            ),
+            // Same scope parsing as the Node path so scope-aware handlers behave
+            // identically on the web transport.
+            scopes: parseUserScopes(authorization.user as { scope?: unknown } | undefined),
             expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
             extra: {
               user: authorization.user,

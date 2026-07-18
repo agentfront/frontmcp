@@ -218,6 +218,12 @@ export async function resolveAndCheckHostname(hostname: string): Promise<SsrfChe
     return { allowed: false, reason: `DNS resolution failed for "${hostname}"; refusing to fetch an unvalidated host` };
   }
 
+  // An empty resolution means we validated nothing — fail closed rather than
+  // letting the subsequent fetch() resolve the name unchecked.
+  if (addresses.length === 0) {
+    return { allowed: false, reason: `Host "${hostname}" resolved to no addresses` };
+  }
+
   for (const { address } of addresses) {
     if (!address) continue;
     const ipCheck = checkIpAddress(address);

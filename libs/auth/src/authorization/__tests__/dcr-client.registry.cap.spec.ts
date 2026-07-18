@@ -81,11 +81,14 @@ describe('DcrClientRegistry — dynamic registration cap', () => {
     expect(registry.has('dyn2')).toBe(false);
   });
 
-  it('falls back to the default cap when maxDynamicClients is invalid (negative/NaN)', () => {
+  it('falls back to the 1000 default cap for every invalid maxDynamicClients (negative/NaN/fractional/infinite)', () => {
     for (const bad of [-1, NaN, 1.5, Infinity]) {
       const registry = new DcrClientRegistry({ maxDynamicClients: bad as number });
-      // With the safe default (1000), the first registration is accepted.
-      expect(registry.register(mkClient('c0', 0))).toBe(true);
+      // The default fallback (1000) must apply exactly: 1000 accepted, 1001st rejected.
+      for (let i = 0; i < 1000; i++) {
+        expect(registry.register(mkClient(`c${i}`, i))).toBe(true);
+      }
+      expect(registry.register(mkClient('c1000', 1000))).toBe(false);
     }
   });
 });

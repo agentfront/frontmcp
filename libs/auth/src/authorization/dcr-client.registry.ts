@@ -64,9 +64,11 @@ export interface DcrRegistryConfig {
   clients?: PreRegisteredClientInput[];
   /**
    * Maximum number of DYNAMICALLY-registered (DCR) clients kept in memory.
-   * When exceeded, the oldest dynamic clients are evicted (FIFO). Pre-registered
-   * / declarative clients never count toward this cap and are never evicted.
-   * Defaults to 1000. Guards against unbounded growth from unauthenticated DCR.
+   * Once the cap is reached, further dynamic registrations are REJECTED (rather
+   * than evicting an existing client), so every already-registered client —
+   * including confidential ones — is preserved. Pre-registered / declarative
+   * clients never count toward this cap and are never rejected. Defaults to
+   * 1000. Guards against unbounded growth from unauthenticated DCR.
    */
   maxDynamicClients?: number;
 }
@@ -80,9 +82,13 @@ const DEFAULT_MAX_DYNAMIC_CLIENTS = 1000;
  * `*` becomes an exact match.
  */
 function globToRegExp(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === '*' ? ' ' : `\\${ch}`));
-  const withWildcards = escaped.split(' ').join('.*');
-  return new RegExp(`^${withWildcards}$`);
+  // Split on the `*` wildcard, regex-escape each literal segment (so real
+  // spaces and other characters are matched literally), then join the segments
+  // with `.*`. This avoids using an in-band sentinel character (a space) that
+  // could collide with a literal space in the pattern.
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = pattern.split('*').map(escapeRegex).join('.*');
+  return new RegExp(`^${body}$`);
 }
 
 /**
