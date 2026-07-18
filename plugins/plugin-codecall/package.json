@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-codecall",
-  "version": "1.4.0",
+  "version": "1.5.2",
   "description": "CodeCall plugin for FrontMCP - AgentScript-based meta-tools for orchestrating MCP tools",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -49,14 +49,14 @@
     }
   },
   "dependencies": {
-    "@enclave-vm/core": "^2.14.1",
-    "@frontmcp/protocol": "1.4.0",
-    "@frontmcp/sdk": "1.4.0",
+    "@enclave-vm/core": "^2.15.0",
+    "@frontmcp/protocol": "1.5.2",
+    "@frontmcp/sdk": "1.5.2",
     "vectoriadb": "^2.3.2"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.4.0",
-    "@frontmcp/plugin-cache": "1.4.0"
+    "@frontmcp/lazy-zod": "1.5.2",
+    "@frontmcp/plugin-cache": "1.5.2"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"
