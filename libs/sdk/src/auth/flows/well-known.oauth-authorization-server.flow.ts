@@ -47,6 +47,10 @@ const AuthServerMetadataSchema = z.object({
   kind: z.literal('json'),
   status: z.literal(200),
   contentType: z.literal('application/json; charset=utf-8'),
+  // Response headers (e.g. `Cache-Control: no-store`). This flow uses a custom
+  // output schema rather than `HttpJsonSchema`, so `headers` must be declared
+  // explicitly for the renderer to emit it.
+  headers: z.record(z.string(), z.string()).optional(),
   body: z
     .object({
       issuer: z.string().min(1),
@@ -179,6 +183,10 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
         kind: 'json',
         contentType: 'application/json; charset=utf-8',
         status: 200,
+        // Never cache: the advertised endpoints are derived from the request
+        // origin, so a shared cache could serve a poisoned authorization/token
+        // endpoint to another client (OAuth mix-up).
+        headers: { 'cache-control': 'no-store' },
         body: {
           issuer: baseIssuer,
           authorization_endpoint: `${oauthBaseUrl}/oauth/authorize`,

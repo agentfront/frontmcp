@@ -4,7 +4,7 @@
  * Validates client_id URLs per CIMD specification and provides
  * Server-Side Request Forgery (SSRF) protection.
  */
-import { InvalidClientIdUrlError, CimdSecurityError } from './cimd.errors';
+import { CimdSecurityError, InvalidClientIdUrlError } from './cimd.errors';
 import type { CimdSecurityConfig } from './cimd.types';
 
 /**
@@ -166,6 +166,93 @@ export function checkSsrfProtection(hostname: string): SsrfCheckResult {
 }
 
 /**
+ * Resolve a hostname via DNS and validate EVERY resolved address against the
+ * private/reserved-range blocklist — the DNS-aware complement to
+ * {@link checkSsrfProtection}.
+ *
+ * SECURITY (SSRF): `checkSsrfProtection` alone only inspects literal-IP and
+ * localhost-string hostnames; a hostname like `metadata.attacker.example` whose
+ * A-record points at `169.254.169.254` / `10.x` / `127.x` passes it untouched
+ * and the subsequent `fetch()` then connects to the internal address. This
+ * function closes that gap by resolving the name and rejecting if ANY resolved
+ * address is internal.
+ *
+ * Residual risk (documented, not yet closed here): DNS rebinding — the resolver
+ * used here and the resolver used by `fetch()` are distinct, so a TOCTOU
+ * attacker could return a public IP to this check and an internal IP to the
+ * fetch. Fully closing it requires pinning the socket to the validated IP
+ * (custom undici `lookup`/dispatcher), which is left to the caller/runtime.
+ *
+ * Degrades gracefully when `node:dns` is unavailable (e.g. a V8-isolate runtime)
+ * or the name fails to resolve: an unresolvable name cannot be reached by
+ * `fetch()` either, so we fall back to the literal-IP checks that already ran.
+ */
+export async function resolveAndCheckHostname(hostname: string): Promise<SsrfCheckResult> {
+  // Fast path: literal-IP + localhost-string checks (no DNS required).
+  const literal = checkSsrfProtection(hostname);
+  if (!literal.allowed) return literal;
+
+  // A literal IP was already authoritatively checked above — nothing to resolve.
+  if (isIpAddress(hostname)) return { allowed: true, reason: '' };
+
+  // Lazy require so browser/worker bundles never eagerly pull in node:dns.
+  let dns: typeof import('node:dns');
+  try {
+    dns = require('node:dns') as typeof import('node:dns');
+  } catch {
+    // node:dns is unavailable (non-Node runtime, e.g. a V8-isolate Worker). We
+    // cannot resolve to validate, so degrade to the literal-IP checks already
+    // performed and rely on the runtime's own egress controls.
+    return { allowed: true, reason: '' };
+  }
+
+  let addresses: Array<{ address: string }>;
+  try {
+    const result = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+    addresses = Array.isArray(result) ? result : [result as unknown as { address: string }];
+  } catch {
+    // node:dns IS available but resolution failed. Fail CLOSED: a transient
+    // lookup failure here does NOT prove the host is unreachable — the fetch()
+    // performs its own DNS resolution and could still connect to a private
+    // address, so refuse to fetch an unvalidated destination.
+    return { allowed: false, reason: `DNS resolution failed for "${hostname}"; refusing to fetch an unvalidated host` };
+  }
+
+  // An empty resolution means we validated nothing — fail closed rather than
+  // letting the subsequent fetch() resolve the name unchecked.
+  if (addresses.length === 0) {
+    return { allowed: false, reason: `Host "${hostname}" resolved to no addresses` };
+  }
+
+  for (const { address } of addresses) {
+    if (!address) continue;
+    const ipCheck = checkIpAddress(address);
+    if (!ipCheck.allowed) {
+      return {
+        allowed: false,
+        reason: `Host "${hostname}" resolves to a blocked address (${address}): ${ipCheck.reason}`,
+      };
+    }
+  }
+  return { allowed: true, reason: '' };
+}
+
+/**
+ * Throwing wrapper around {@link resolveAndCheckHostname} for CIMD fetch paths.
+ * Must be called immediately before each outbound `fetch` (initial URL AND every
+ * redirect hop) so an attacker-supplied `client_id` host cannot resolve to an
+ * internal address.
+ *
+ * @throws CimdSecurityError if the host (or any resolved address) is internal.
+ */
+export async function assertHostNotSsrf(hostname: string, clientId: string): Promise<void> {
+  const check = await resolveAndCheckHostname(hostname);
+  if (!check.allowed) {
+    throw new CimdSecurityError(clientId, check.reason);
+  }
+}
+
+/**
  * Check if a string is an IP address (IPv4 or IPv6).
  */
 function isIpAddress(hostname: string): boolean {
@@ -233,9 +320,20 @@ function checkIpv4(ip: string): SsrfCheckResult {
     return { allowed: false, reason: 'Private IP addresses (192.168.x.x) are not allowed' };
   }
 
-  // Link-local: 169.254.0.0/16
+  // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
   if (a === 169 && b === 254) {
     return { allowed: false, reason: 'Link-local addresses (169.254.x.x) are not allowed' };
+  }
+
+  // Carrier-grade NAT: 100.64.0.0/10 (100.64.0.0 - 100.127.255.255)
+  if (a === 100 && b >= 64 && b <= 127) {
+    return { allowed: false, reason: 'Carrier-grade NAT addresses (100.64-127.x.x) are not allowed' };
+  }
+
+  // IETF protocol assignments / benchmarking / TEST-NET blocks that commonly
+  // front internal infrastructure.
+  if (a === 192 && b === 0 && c === 0) {
+    return { allowed: false, reason: 'IETF protocol-assignment addresses (192.0.0.0/24) are not allowed' };
   }
 
   // Current network (0.0.0.0/8)

@@ -95,6 +95,27 @@ export const providerConfigSchema = z.object({
   jwksUri: z.string().url().optional(),
 
   /**
+   * Additional `iss` values to trust beyond the provider issuer URL.
+   *
+   * SECURITY: trusted verbatim — set only to issuers you control (e.g. a
+   * gateway that re-mints tokens), never derived from request or token data.
+   * Entries are trimmed and blank values are rejected (a blank issuer would
+   * otherwise be trusted as `''`/`'/'`).
+   */
+  additionalIssuers: z.array(z.string().trim().min(1, 'additionalIssuers entries must be non-empty')).optional(),
+
+  /**
+   * Validate the token's `iss` claim against the provider issuer (and
+   * {@link additionalIssuers}). Defaults to `true`.
+   *
+   * SECURITY: `false` disables issuer verification entirely — any token signed
+   * by a provider JWKS key is accepted regardless of issuer. Only for a trusted
+   * gateway whose re-minted issuer cannot be enumerated; prefer
+   * `additionalIssuers` when the issuer set is known.
+   */
+  verifyIssuer: z.boolean().optional(),
+
+  /**
    * Enable Dynamic Client Registration (DCR)
    * @default false
    */
@@ -359,6 +380,15 @@ export const localDcrConfigSchema = z.object({
    * lets you disable DCR entirely while still shipping known clients.
    */
   clients: z.array(localDcrClientSchema).optional(),
+  /**
+   * Maximum number of DYNAMICALLY-registered (DCR) clients kept in memory.
+   * Once reached, further dynamic registrations are REJECTED (existing clients,
+   * including confidential ones, are preserved — never evicted). A cap of `0`
+   * disables dynamic registration entirely. Pre-registered / declarative
+   * `clients` never count toward this cap. Defaults to 1000; guards against
+   * unbounded memory growth from unauthenticated DCR.
+   */
+  maxDynamicClients: z.number().int().min(0).optional(),
 });
 
 export type LocalDcrConfig = z.infer<typeof localDcrConfigSchema>;

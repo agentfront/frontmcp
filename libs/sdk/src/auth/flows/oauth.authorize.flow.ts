@@ -379,7 +379,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     if (!result.success) {
       const errors = this.formatZodErrors(result.error);
       this.logger.warn(`Authorization request validation failed: ${errors.join(', ')}`);
-      this.respondWithError(errors, rawRedirectUri, rawState);
+      // SECURITY: the request failed schema validation, so `redirect_uri` has
+      // NOT been validated against any client — do NOT 302 the OAuth error to it
+      // (that is an open redirect with `state` reflection). Show an error page.
+      this.respondWithError(errors, undefined, rawState);
       return;
     }
 
@@ -470,6 +473,31 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
         this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
         return;
+      }
+
+      // SECURITY: an UNREGISTERED, non-CIMD client id has no trusted
+      // `redirect_uris` to validate against, so accepting its attacker-chosen
+      // redirect_uri lets a real authorization code be delivered to an attacker
+      // (auth-code interception → account takeover in real-IdP modes). When
+      // `requireRegisteredClients` is enabled, reject an unknown client id
+      // unless a `dcr.allowedRedirectUris` allowlist already validated the
+      // redirect_uri (checkDcrAllowlist above). Show an error PAGE — never
+      // redirect an unvalidated redirect_uri (open-redirect guard).
+      if (!registered) {
+        const authOptions = this.scope.auth?.options as { requireRegisteredClients?: boolean } | undefined;
+        const requireRegistered = authOptions?.requireRegisteredClients === true;
+        const redirectAllowlisted = registry?.hasRedirectAllowlist?.() === true;
+        if (requireRegistered && !redirectAllowlisted) {
+          this.logger.warn(
+            `OAuth authorize: rejecting unregistered client_id "${client_id}" (requireRegisteredClients)`,
+          );
+          this.respondWithError(
+            ['Unknown client_id: register the client (DCR / pre-registered) or use a CIMD client-id URL'],
+            undefined,
+            rawState,
+          );
+          return;
+        }
       }
     }
   }

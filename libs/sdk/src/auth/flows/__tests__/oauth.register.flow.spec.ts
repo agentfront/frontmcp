@@ -86,6 +86,46 @@ describe('OAuth Register Flow (#462 DCR)', () => {
       expect(output.status).toBe(400);
       expect(output.body.error).toBe('invalid_redirect_uri');
     });
+
+    // SECURITY: the old substring regex accepted these attacker hosts. The
+    // URL-parsed loopback check must reject every one of them.
+    it.each([
+      'http://localhost.evil.com/cb',
+      'http://localhostevil.com/cb',
+      'https://localhost.attacker.io/steal',
+      'http://1.2.3.4.evil.com/cb',
+      'http://127.0.0.1.evil.com/cb',
+      'http://127.0.0.1@evil.com/cb',
+      'https://8.8.8.8/cb',
+    ])('rejects redirect_uri bypass %s', async (uri) => {
+      const { scope } = createDcrScope();
+      const flow = new OauthRegisterFlow(
+        createRegisterMetadata(),
+        registerInput({ redirect_uris: [uri] }),
+        scope,
+        jest.fn(),
+        new Map(),
+      );
+
+      const { output } = await runFlowStages(flow, STAGES);
+      expect(output.status).toBe(400);
+      expect(output.body.error).toBe('invalid_redirect_uri');
+    });
+
+    it('still accepts genuine loopback redirect_uris (localhost, 127.0.0.1, [::1])', async () => {
+      for (const uri of ['http://localhost:3000/cb', 'http://127.0.0.1:8080/cb', 'http://[::1]:9000/cb']) {
+        const { scope } = createDcrScope();
+        const flow = new OauthRegisterFlow(
+          createRegisterMetadata(),
+          registerInput({ redirect_uris: [uri] }),
+          scope,
+          jest.fn(),
+          new Map(),
+        );
+        const { output } = await runFlowStages(flow, STAGES);
+        expect(output.status).toBe(201);
+      }
+    });
   });
 
   describe('dcr.enabled === false', () => {

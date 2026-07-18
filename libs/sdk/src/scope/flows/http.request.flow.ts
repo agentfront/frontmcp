@@ -10,8 +10,8 @@ import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
-import { type Scope } from '../scope.instance';
 import {
+  authorizeSessionTermination,
   decideIntent,
   decisionSchema,
   Flow,
@@ -33,6 +33,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { SessionVerificationFailedError } from '../../errors';
+import { type Scope } from '../scope.instance';
 
 const plan = {
   pre: [
@@ -79,6 +80,17 @@ export const httpRequestStateSchema = z.object({
 
 const name = 'http:request' as const;
 const { Stage } = FlowHooksOf('http:request');
+
+/**
+ * Parse a verified user claim's space-delimited `scope` (RFC 6749 §3.3) into a
+ * scopes array. Shared by the Node and web-transport `authInfo` mappings so
+ * both surface the same grant; the `scope` claim is present at runtime but not
+ * declared on the `UserClaim` type, so it is read through a narrow cast.
+ */
+function parseUserScopes(user: { scope?: unknown } | undefined): string[] {
+  const s = user?.scope;
+  return typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : [];
+}
 
 declare global {
   interface ExtendFlows {
@@ -227,7 +239,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           ctx.updateAuthInfo({
             token,
             clientId: user.sub,
-            scopes: [],
+            // Populate scopes from the verified token's `scope` claim instead of
+            // hardcoding `[]`, so any consumer that authorizes on
+            // `authInfo.scopes` sees the real grant (same accessor as the web path).
+            scopes: parseUserScopes(user as { scope?: unknown } | undefined),
             // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
             expiresAt: user.exp ? user.exp * 1000 : undefined,
             extra: {
@@ -401,6 +416,40 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           this.next();
           return;
         }
+
+        // SECURITY: session termination MUST be authenticated and scoped to the
+        // caller's OWN session. Previously the DELETE branch returned here
+        // before the authorization result was ever consulted, so an
+        // unauthenticated attacker who knew a session id could terminate ANY
+        // session (cross-session DoS). Delegate the decision to the pure,
+        // unit-tested `authorizeSessionTermination`.
+        const deleteVerify = this.state.required.verifyResult;
+        const requestedSessionId =
+          (request[ServerRequestTokens.sessionId] as string | undefined) ??
+          (request.headers['mcp-session-id'] as string | undefined) ??
+          (request.query?.['sessionId'] as string | undefined);
+        const deleteAuthz = authorizeSessionTermination(deleteVerify, requestedSessionId);
+        if (deleteAuthz.kind === 'unauthorized') {
+          this.logger.warn(`[${this.requestId}] DELETE session denied: request is not authenticated`);
+          this.respond(
+            httpRespond.unauthorized({
+              headers: {
+                'WWW-Authenticate': (deleteVerify as { prmMetadataHeader?: string }).prmMetadataHeader ?? 'Bearer',
+              },
+            }),
+          );
+          return;
+        }
+        if (deleteAuthz.kind === 'forbidden') {
+          this.logger.warn(`[${this.requestId}] DELETE session denied: caller does not own the requested session id`);
+          // Never terminate (or confirm the existence of) another caller's session.
+          this.respond(httpRespond.notFound('Session not found'));
+          return;
+        }
+        // Bind the VERIFIED authorization + session id so handleDeleteSession
+        // terminates the caller's own session and can clean up its transport.
+        request[ServerRequestTokens.auth] = (deleteVerify as { authorization: unknown }).authorization;
+        request[ServerRequestTokens.sessionId] = deleteAuthz.sessionId;
         this.state.set('intent', decision.intent);
         return;
       }
@@ -551,9 +600,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     if (!webRequest) return; // Node/Express path — defer to the Node handle stages.
 
     try {
-      const webCtx = req[ServerRequestTokens.webCtx] as
-        | { waitUntil?(promise: Promise<unknown>): void }
-        | undefined;
+      const webCtx = req[ServerRequestTokens.webCtx] as { waitUntil?(promise: Promise<unknown>): void } | undefined;
 
       const { runWebStandardMcp } = await import('../../transport/web-standard-mcp.js');
       const { buildScopedServerOptions } = await import('../../transport/build-scoped-server-options.js');
@@ -575,7 +622,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         ? {
             token: authorization.token,
             clientId: authorization.user?.sub,
-            scopes: [] as string[],
+            // Same scope parsing as the Node path so scope-aware handlers behave
+            // identically on the web transport.
+            scopes: parseUserScopes(authorization.user as { scope?: unknown } | undefined),
             expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
             extra: {
               user: authorization.user,

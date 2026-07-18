@@ -795,6 +795,70 @@ describe('OAuth Authorize Flow', () => {
       expectOAuthHtmlPage(output, { status: 400, contains: ['Authorization Error', 'allowlist'] });
     });
 
+    it('rejects an UNREGISTERED client_id when requireRegisteredClients is enabled (error page, no redirect)', async () => {
+      const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {});
+      (scope.auth as unknown as Record<string, unknown>)['options'] = {
+        mode: 'local',
+        requireRegisteredClients: true,
+      };
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({
+        client_id: 'unknown-client',
+        redirect_uri: 'https://evil.example.com/cb',
+      });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+      expectOAuthHtmlPage(output, { status: 400, contains: ['Authorization Error', 'Unknown client_id'] });
+    });
+
+    it('accepts a REGISTERED client + matching redirect_uri when requireRegisteredClients is enabled', async () => {
+      const registry = new DcrClientRegistry({});
+      registry.register({
+        client_id: 'known-client',
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code'],
+        response_types: ['code'],
+        redirect_uris: ['https://client.example.com/callback'],
+        created_at: Math.floor(Date.now() / 1000),
+        dev: true,
+      });
+      const scope = createMockScopeEntry({ auth: { mode: 'local' } as never });
+      (scope.auth as unknown as Record<string, unknown>)['options'] = {
+        mode: 'local',
+        requireRegisteredClients: true,
+      };
+      (scope.auth as unknown as Record<string, unknown>)['dcrClientRegistry'] = registry;
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({
+        client_id: 'known-client',
+        redirect_uri: 'https://client.example.com/callback',
+        scope: 'openid',
+      });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+      // No rejection from validateInput.
+      expect(output).toBeUndefined();
+    });
+
+    it('accepts an UNREGISTERED client by default (requireRegisteredClients unset — back-compat)', async () => {
+      const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {});
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({
+        client_id: 'unknown-client',
+        redirect_uri: 'https://client.example.com/callback',
+        scope: 'openid',
+      });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+      expect(output).toBeUndefined();
+    });
+
     it('accepts an authorize request whose redirect_uri is on the allowlist', async () => {
       const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {
         allowedRedirectUris: ['https://client.example.com/callback'],
@@ -1299,8 +1363,11 @@ describe('OAuth Authorize Flow', () => {
       const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
       const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
 
-      // With valid redirect_uri, errors are redirected per OAuth 2.1 spec
-      expectOAuthRedirect(output, { error: 'invalid_request', errorContains: 'code_challenge' });
+      // SECURITY: a schema-validation failure means redirect_uri was never
+      // validated against a client, so the OAuth error is shown as an error PAGE
+      // rather than 302'd to the (unvalidated) redirect_uri (open-redirect guard).
+      expect(output.kind).toBe('html');
+      expect(output.status).toBe(400);
     });
 
     it('should reject challenge longer than 128 characters', () => {

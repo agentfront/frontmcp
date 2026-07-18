@@ -8,6 +8,7 @@ features:
   - "Using `mode: 'transparent'` to validate tokens from an external identity provider"
   - 'Setting `expectedAudience` to restrict which tokens are accepted'
   - 'The server fetches JWKS from `{provider}/.well-known/jwks.json` automatically'
+  - 'Issuer (`iss`) is validated against `provider` by default; opt out or extend with `providerConfig.verifyIssuer` / `additionalIssuers`'
 ---
 
 # Transparent JWT Validation
@@ -56,6 +57,37 @@ class Server {}
 - Using `mode: 'transparent'` to validate tokens from an external identity provider
 - Setting `expectedAudience` to restrict which tokens are accepted
 - The server fetches JWKS from `{provider}/.well-known/jwks.json` automatically
+- Issuer (`iss`) is validated against `provider` by default; opt out or extend with `providerConfig.verifyIssuer` / `additionalIssuers`
+
+## Claim validation
+
+A valid JWKS signature only proves the IdP signed the token — not that it was
+minted for this server. Because every service behind the same IdP shares the
+signing keys, transparent mode also validates two claims:
+
+- **Issuer (`iss`)** — validated against `provider` by default (matched with or
+  without a trailing slash). Add trusted extras with
+  `providerConfig.additionalIssuers: ['https://gateway.example']`. To turn the
+  check off for a trusted gateway whose re-minted issuer you cannot enumerate,
+  set `providerConfig.verifyIssuer: false` — and keep a strict `expectedAudience`
+  when you do.
+- **Audience (`aud`)** — when the token carries one, it must match
+  `expectedAudience`. Tokens without an `aud` are accepted for IdP
+  compatibility; set `expectedAudience` and issue audience-bound tokens for the
+  strictest posture.
+
+```typescript
+auth: {
+  mode: 'transparent',
+  provider: 'https://auth.example.com',
+  expectedAudience: 'my-api',
+  providerConfig: {
+    // trust one extra issuer (e.g. a gateway that re-mints tokens)
+    additionalIssuers: ['https://gateway.example'],
+    // verifyIssuer: false, // ⚠️ disables the iss check entirely — last resort
+  },
+}
+```
 
 ## Related
 

@@ -27,6 +27,12 @@ export const transparentAuthOptionsSchema = z.object({
   expectedAudience: z.union([z.string(), z.array(z.string())]).optional(),
 
   /**
+   * Require an `aud` claim (reject audience-less tokens). Defaults to `false`
+   * for IdP compatibility; set `true` to reject tokens with no audience.
+   */
+  requireAudience: z.boolean().optional(),
+
+  /**
    * Required scopes for access
    * Empty array means any valid token is accepted
    * @default []

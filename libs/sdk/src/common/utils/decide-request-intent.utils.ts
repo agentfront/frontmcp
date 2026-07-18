@@ -472,3 +472,33 @@ export function decideIntent(req: ServerRequest, cfg: Config): Decision {
     debug: { key, channel, flags },
   };
 }
+
+/* ----------------------- Session termination authorization ---------------- */
+
+/**
+ * Authorization decision for an HTTP `DELETE` session-termination request.
+ *
+ * SECURITY: session termination must be authenticated AND scoped to the
+ * caller's OWN session. An unauthenticated caller — or an authenticated caller
+ * naming a session id that `session:verify` did not bind to their token — must
+ * be refused, otherwise anyone who learns a session id can terminate it
+ * (cross-session DoS). Kept pure so it is unit-testable without booting a scope.
+ */
+export type SessionTerminationDecision =
+  | { kind: 'unauthorized' }
+  | { kind: 'forbidden' }
+  | { kind: 'ok'; sessionId: string };
+
+export function authorizeSessionTermination(
+  verifyResult: { kind?: string; authorization?: { session?: { id?: string } } } | undefined,
+  requestedSessionId: string | undefined,
+): SessionTerminationDecision {
+  if (!verifyResult || verifyResult.kind !== 'authorized' || !verifyResult.authorization) {
+    return { kind: 'unauthorized' };
+  }
+  const ownedSessionId = verifyResult.authorization.session?.id;
+  if (!ownedSessionId || !requestedSessionId || requestedSessionId !== ownedSessionId) {
+    return { kind: 'forbidden' };
+  }
+  return { kind: 'ok', sessionId: ownedSessionId };
+}

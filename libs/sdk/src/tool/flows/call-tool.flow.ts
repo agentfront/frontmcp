@@ -592,11 +592,30 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const consentCtx = this.input.ctx as { internalCall?: boolean } | undefined;
     if (!consentCtx?.internalCall) {
       const consentedToolIds = getConsentedToolIds(authInfo);
-      if (consentedToolIds && tool && !isToolConsented(consentedToolIds, tool.name, tool.fullName)) {
-        this.logger.info(
-          `checkToolAuthorization: tool "${tool.fullName || tool.name}" not in consented set — rejecting`,
-        );
-        throw new ToolNotConsentedError(tool.fullName || tool.name);
+      if (consentedToolIds && tool) {
+        // SECURITY: the consent claim keys tools by their bare effective id
+        // (`metadata.id ?? name`), which is NOT unique across apps. Matching on
+        // the bare name would let consent granted for AppA's `search` authorize
+        // AppB's same-named `search`. When the bare name is AMBIGUOUS (more than
+        // one app exposes it), require the app-qualified `fullName` instead —
+        // which a bare-id claim never contains — so the ambiguous tool is denied
+        // (fail closed) rather than cross-app authorized. Unambiguous tools keep
+        // matching on either id (back-compat).
+        // Count the ACTIVE callable set (getTools(true), incl. hidden/internal)
+        // — the same set tool resolution uses — so a hidden same-named tool in
+        // another app is still detected as an ambiguity and cannot be reached
+        // via the lenient bare-name consent path.
+        const bareNameCount = this.scope.tools.getTools(true).filter((t) => t.name === tool.name).length;
+        const consented =
+          bareNameCount > 1
+            ? isToolConsented(consentedToolIds, tool.fullName)
+            : isToolConsented(consentedToolIds, tool.name, tool.fullName);
+        if (!consented) {
+          this.logger.info(
+            `checkToolAuthorization: tool "${tool.fullName || tool.name}" not in consented set — rejecting`,
+          );
+          throw new ToolNotConsentedError(tool.fullName || tool.name);
+        }
       }
     }
 
@@ -617,10 +636,27 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         }
       | undefined;
 
-    // No app set from either source = no app-level gating, skip the check.
+    // No app set from either source. Normally this means "no app-level gating"
+    // (default allow-all). BUT if incremental/progressive authorization is
+    // explicitly enabled for this scope, a verified token with NO
+    // `authorized_apps` claim is anomalous (e.g. the claim was stripped by a
+    // token refresh): fail CLOSED by falling through to the per-app check below
+    // (which denies and returns an auth_url) instead of allowing every app.
     if (!claimAuthorizedApps && !legacyAuthorization) {
-      this.logger.verbose('checkToolAuthorization:skip (no auth context)');
-      return;
+      const incrementalEnabled =
+        !consentCtx?.internalCall &&
+        !!authInfo?.token &&
+        (this.scope.auth?.options as { incrementalAuth?: { enabled?: boolean } } | undefined)?.incrementalAuth
+          ?.enabled === true;
+      if (!incrementalEnabled) {
+        this.logger.verbose('checkToolAuthorization:skip (no auth context)');
+        return;
+      }
+      this.logger.warn(
+        'checkToolAuthorization: incrementalAuth enabled but the verified token carries no authorized_apps claim — failing closed',
+      );
+      // Fall through: claimAuthorizedApps is empty, so isAppAuthorized will be
+      // false and the request is denied with a progressive-auth challenge.
     }
 
     // Get app ID from tool owner (uses existing lineage system)
