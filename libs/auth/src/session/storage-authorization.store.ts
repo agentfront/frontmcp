@@ -99,10 +99,11 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     return record;
   }
 
-  async markCodeUsed(code: string): Promise<void> {
+  async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
     const record = await this.getAuthorizationCode(code);
     if (record) {
       record.used = true;
+      if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
       await this.codeStore.set(this.key('code', code), record, this.ttl(record.expiresAt));
     }
   }

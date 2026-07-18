@@ -76,6 +76,21 @@ const sharedAuthFields = {
   refresh: tokenRefreshConfigSchema.optional(),
   expectedAudience: z.union([z.string(), z.array(z.string())]).optional(),
   incrementalAuth: incrementalAuthConfigSchema.optional(),
+  /**
+   * Require the OAuth client to be KNOWN (registered via DCR / pre-registered,
+   * or a CIMD client-id URL) before an authorization request is accepted.
+   *
+   * @default false (backward compatible — unknown client ids are accepted).
+   *
+   * SECURITY: with the default, an unregistered client id has no trusted
+   * `redirect_uris` to validate against, so its (attacker-chosen) redirect_uri
+   * is accepted and a real authorization code can be delivered to an attacker
+   * (auth-code interception → account takeover in real-IdP modes). Set this to
+   * `true` (recommended for production) to enforce OAuth 2.1 exact redirect-uri
+   * matching for every client. Clients on a configured
+   * `dcr.allowedRedirectUris` allowlist still pass.
+   */
+  requireRegisteredClients: z.boolean().default(false),
   cimd: cimdConfigSchema.optional(),
   // #469 — custom auth UI as a slot→file map + extras name→handler map (per-app
   // under splitByApp). Both optional; omitting them serves the built-in pages.

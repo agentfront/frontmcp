@@ -200,19 +200,24 @@ export function deriveExpectedAudience(resourceUrl: string): string[] {
     // Full URL (most specific)
     audiences.push(resourceUrl.replace(/\/$/, ''));
 
-    // Origin only (e.g., https://api.example.com)
+    // Origin only (e.g., https://api.example.com) — a common `aud` shape where
+    // an IdP scopes the token to the API base rather than the exact path.
     if (url.pathname !== '/' && url.pathname !== '') {
       audiences.push(url.origin);
     }
 
-    // Host only (e.g., api.example.com)
-    audiences.push(url.host);
+    // SECURITY: the bare, scheme-less host form (e.g. `api.example.com`) was
+    // intentionally removed. It let a token bound only to a host — with no
+    // scheme and no path — authorize at EVERY scheme and path on that host,
+    // which breaks per-resource audience binding on multi-tenant/multi-app hosts
+    // (two path-scoped resources on one host would accept each other's tokens).
+    // For strict per-path binding, configure `expectedAudience` explicitly.
   } catch {
     // If not a valid URL, use as-is
     audiences.push(resourceUrl);
   }
 
-  return audiences;
+  return [...new Set(audiences)];
 }
 
 /**

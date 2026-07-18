@@ -41,6 +41,36 @@ function readPublicUrlPin(): string | undefined {
   return undefined;
 }
 
+/** True when the operator has pinned a canonical public origin. */
+export function isPublicUrlPinned(): boolean {
+  return readPublicUrlPin() !== undefined;
+}
+
+/**
+ * Whether `X-Forwarded-Host` / `X-Forwarded-Proto` may be trusted.
+ *
+ * SECURITY: these headers are attacker-controllable on any request that reaches
+ * the app directly. Deriving the issuer / resource / OAuth-discovery URLs — or,
+ * worse, the EXPECTED audience used to authorize a token — from them lets an
+ * attacker poison discovery and (in transparent mode) satisfy the audience gate
+ * with a token minted for another service. We therefore ignore forwarded
+ * headers by default and use the direct `Host`. Set `FRONTMCP_TRUST_PROXY`
+ * (1/true/yes/on) ONLY when a trusted reverse proxy strips client-supplied
+ * forwarded headers and sets its own. Prefer pinning `FRONTMCP_PUBLIC_URL`,
+ * which takes precedence over everything and is the safest option.
+ */
+function isProxyTrusted(): boolean {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      const v = process.env['FRONTMCP_TRUST_PROXY'];
+      return typeof v === 'string' && /^(1|true|yes|on)$/i.test(v.trim());
+    }
+  } catch {
+    // No process env — treat as untrusted.
+  }
+  return false;
+}
+
 /**
  * Build the public base URL for issuer / resource / discovery URLs.
  *
@@ -61,8 +91,15 @@ export function getRequestBaseUrl(req: ServerRequest, entryPath?: string) {
   if (pin) {
     return `${pin}${entryPath ?? ''}`;
   }
-  const proto = (req.headers['x-forwarded-proto'] as string) || (req as any).protocol || 'http';
-  const host = (req.headers['x-forwarded-host'] as string) || req.headers['host'];
+  // SECURITY: `X-Forwarded-*` are honored ONLY when a trusted proxy is declared
+  // (`FRONTMCP_TRUST_PROXY`). Otherwise they are attacker-controlled and must
+  // not drive issuer/resource/discovery/audience derivation — fall back to the
+  // direct `Host`. Pin `FRONTMCP_PUBLIC_URL` for the strongest guarantee.
+  const trustProxy = isProxyTrusted();
+  const fwdProto = trustProxy ? (req.headers['x-forwarded-proto'] as string | undefined) : undefined;
+  const fwdHost = trustProxy ? (req.headers['x-forwarded-host'] as string | undefined) : undefined;
+  const proto = fwdProto || (req as any).protocol || 'http';
+  const host = fwdHost || req.headers['host'];
   return `${proto}://${host}${entryPath ?? ''}`;
 }
 

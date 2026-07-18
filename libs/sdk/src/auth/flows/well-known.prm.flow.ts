@@ -101,6 +101,10 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
         kind: 'json',
         contentType: 'application/json; charset=utf-8',
         status: 200,
+        // Never cache: the body embeds the request-derived origin, so a shared
+        // cache keyed only on (Host, path) could otherwise serve a poisoned
+        // `authorization_servers` value to another client (OAuth mix-up).
+        headers: { 'cache-control': 'no-store' },
         body: {
           resource,
           authorization_servers: [baseUrl],
@@ -120,6 +124,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       kind: 'json',
       status: 200,
       contentType: 'application/json; charset=utf-8',
+      headers: { 'cache-control': 'no-store' },
       body: {
         resource,
         authorization_servers: [baseUrl],

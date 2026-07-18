@@ -122,20 +122,47 @@ sequenceDiagram
     Client->>FrontMCP: Request + Bearer token
     FrontMCP->>IdP: Fetch JWKS (cached)
     FrontMCP->>FrontMCP: Verify JWT signature
-    FrontMCP->>FrontMCP: Validate claims (aud, exp, scopes)
+    FrontMCP->>FrontMCP: Validate claims (iss, aud, exp, scopes)
     FrontMCP-->>Client: Authorized response
 ```
 
 ### Configuration Options
 
-| Option                   | Type                 | Default         | Description                          |
-| ------------------------ | -------------------- | --------------- | ------------------------------------ |
-| `provider`               | `string`             | Required        | Base URL of the IdP                  |
-| `providerConfig.jwksUri` | `string`             | Auto-discovered | Custom JWKS endpoint                 |
-| `providerConfig.jwks`    | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
-| `expectedAudience`       | `string \| string[]` | Required        | Required audience claim value(s) — typically the protected resource URL |
-| `requiredScopes`         | `string[]`           | `[]`            | Scopes that must be present          |
-| `allowAnonymous`         | `boolean`            | `false`         | Allow requests without tokens        |
+| Option                            | Type                 | Default         | Description                          |
+| --------------------------------- | -------------------- | --------------- | ------------------------------------ |
+| `provider`                        | `string`             | Required        | Base URL of the IdP                  |
+| `providerConfig.jwksUri`          | `string`             | Auto-discovered | Custom JWKS endpoint                 |
+| `providerConfig.jwks`             | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `providerConfig.additionalIssuers`| `string[]`           | -               | Extra `iss` values to trust beyond `provider` (e.g. a gateway that re-mints tokens). Trusted verbatim — set only to issuers you control |
+| `providerConfig.verifyIssuer`     | `boolean`            | `true`          | Validate the token `iss` claim. Setting `false` **disables issuer checking entirely** — see the security note below |
+| `expectedAudience`                | `string \| string[]` | Resource URL    | Required audience claim value(s) — typically the protected resource URL. Defaults to the derived resource URL when omitted |
+| `requiredScopes`                  | `string[]`           | `[]`            | Scopes that must be present          |
+| `allowAnonymous`                  | `boolean`            | `false`         | Allow requests without tokens        |
+
+### Claim validation
+
+A valid signature only proves the IdP's key signed the token — not that the token
+was minted for **this** server. Because every service behind the same IdP shares
+the same signing keys, FrontMCP enforces two claims on top of the signature:
+
+- **Issuer (`iss`)** — must equal `provider` (matched with or without a trailing
+  slash) or one of `providerConfig.additionalIssuers`. Enabled by default. This
+  stops a token minted by the same IdP for a **different issuer** from being
+  replayed here.
+- **Audience (`aud`)** — if the token carries an `aud`, it must match
+  `expectedAudience` (or the derived resource URL). This stops a token issued for
+  **service A** from being replayed against **service B**. Tokens with no `aud`
+  claim are accepted for IdP compatibility; set `expectedAudience` and issue
+  audience-bound tokens for the strictest posture.
+
+<Warning>
+  **`providerConfig.verifyIssuer: false` disables issuer validation entirely.**
+  Any token signed by a key in the provider JWKS is then accepted regardless of
+  its `iss`. Only use it for a trusted gateway that re-mints tokens under an
+  issuer you cannot enumerate with `additionalIssuers`, and always pair it with a
+  strict `expectedAudience`. Whenever the issuer set is known, prefer
+  `additionalIssuers` over disabling the check.
+</Warning>
 
 ### Provider Examples
 

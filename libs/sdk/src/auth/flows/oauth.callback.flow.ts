@@ -299,6 +299,23 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }
     }
 
+    // CSRF defense-in-depth for the BUILT-IN login/consent submission. The
+    // built-in pages are served by THIS server and submit back to
+    // `/oauth/callback`, so a legitimate submission is always same-origin.
+    // A cross-site login-CSRF/fixation attempt carries the attacker page's
+    // `Origin` (set by the browser, unforgeable by script), so we reject a
+    // state-changing submission whose present `Origin`/`Referer` names a
+    // different host. This backstops the built-in path, which — unlike the
+    // custom `@AuthUi` path above — carries no browser-bound CSRF token yet.
+    // (When neither header is present we do NOT block, to avoid breaking
+    // header-stripped GET navigations; the complete fix additionally embeds a
+    // per-request token in the built-in login form — see security notes.)
+    if (this.isCrossOriginSubmission()) {
+      this.logger.warn('Cross-origin login submission rejected (CSRF)');
+      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Cross-origin request blocked'), 400));
+      return;
+    }
+
     // Generate a user sub from email (in production, this would come from a user database)
     // For incremental auth, we might need to use existing session's user sub.
     // #468 — when email is opted out (requireEmail=false) and none was provided
@@ -1016,6 +1033,46 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return strings.length > 0 ? strings : undefined;
     }
     return undefined;
+  }
+
+  /**
+   * Same-origin (CSRF) check for a state-changing login/consent submission.
+   *
+   * Returns true when the request carries an `Origin` or `Referer` header whose
+   * host does NOT match the request's own host — the signature of a cross-site
+   * login-CSRF/fixation. `Origin`/`Referer` are set by the browser and cannot
+   * be forged by a malicious page, so this reliably distinguishes a legitimate
+   * same-origin submission (the built-in form is served by THIS server) from a
+   * cross-site one. Returns false (do NOT block) when neither header is present
+   * or the request's own host cannot be determined — defense-in-depth, not a
+   * hard gate, so header-stripped GET navigations and existing flows keep working.
+   */
+  private isCrossOriginSubmission(): boolean {
+    const headers = (this.rawInput?.request?.headers ?? {}) as Record<string, string | string[] | undefined>;
+    const first = (v: string | string[] | undefined): string | undefined =>
+      Array.isArray(v) ? v[0] : typeof v === 'string' ? v : undefined;
+
+    const source = first(headers['origin']) ?? first(headers['referer']);
+    if (!source) return false; // no Origin/Referer to compare — don't block
+
+    let sourceHost: string;
+    try {
+      sourceHost = new URL(source).host.toLowerCase();
+    } catch {
+      // A malformed Origin/Referer on a state-changing submission is suspicious.
+      return true;
+    }
+
+    // Match against EITHER the direct Host or a proxy-forwarded host so the
+    // check holds for direct exposure and behind a reverse proxy. The victim's
+    // browser sets these on ITS OWN request, so an attacker cannot align them
+    // with their cross-site Origin.
+    const selfHosts = [first(headers['host']), first(headers['x-forwarded-host'])]
+      .filter((h): h is string => !!h)
+      .map((h) => h.toLowerCase());
+    if (selfHosts.length === 0) return false; // can't determine self-origin — don't block
+
+    return !selfHosts.includes(sourceHost);
   }
 
   private collectLoginFields(request: { query?: Record<string, unknown>; body?: unknown }): Record<string, string> {

@@ -10,6 +10,7 @@ import {
   CimdClientIdMismatchError,
   CimdFetchError,
   CimdResponseTooLargeError,
+  CimdSecurityError,
   CimdValidationError,
   RedirectUriMismatchError,
 } from './cimd.errors';
@@ -28,7 +29,7 @@ import {
   type CimdSecurityConfig,
   type ClientMetadataDocument,
 } from './cimd.types';
-import { hasOnlyLocalhostRedirectUris, isCimdClientId, validateClientIdUrl } from './cimd.validator';
+import { assertHostNotSsrf, hasOnlyLocalhostRedirectUris, isCimdClientId, validateClientIdUrl } from './cimd.validator';
 
 /**
  * CIMD Service for resolving and validating client metadata documents.
@@ -216,6 +217,18 @@ export class CimdService {
       let isFirstRequest = true;
 
       while (true) {
+        // SSRF guard (DNS-aware): resolve the current host and reject if it (or
+        // any resolved address) is internal. Runs for the initial URL AND every
+        // redirect hop, immediately before the fetch, so an attacker-supplied
+        // client_id host cannot reach cloud-metadata / private addresses via a
+        // DNS record or a 3xx to an internal target. `validateClientIdUrl`
+        // (literal-IP checks) already ran for the initial URL and each redirect
+        // target; this adds the resolved-address check. Skipped for localhost
+        // testing (allowInsecureForTesting) and when blockPrivateIPs is off.
+        if (this.securityConfig.blockPrivateIPs && !this.securityConfig.allowInsecureForTesting) {
+          await assertHostNotSsrf(new URL(currentUrl).hostname, clientId);
+        }
+
         const headers: Record<string, string> = {
           Accept: 'application/json',
         };
@@ -329,7 +342,12 @@ export class CimdService {
         return { document, headers: response.headers };
       }
     } catch (error) {
-      if (error instanceof CimdFetchError || error instanceof CimdResponseTooLargeError) {
+      if (
+        error instanceof CimdFetchError ||
+        error instanceof CimdResponseTooLargeError ||
+        error instanceof CimdSecurityError
+      ) {
+        // Propagate SSRF blocks verbatim (do not re-wrap as a generic fetch error).
         throw error;
       }
 

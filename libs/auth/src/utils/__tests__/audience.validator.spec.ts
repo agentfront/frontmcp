@@ -4,10 +4,10 @@
  * Tests for JWT audience validation per RFC 7519 and MCP Authorization spec.
  */
 import {
-  validateAudience,
+  AudienceValidator,
   createAudienceValidator,
   deriveExpectedAudience,
-  AudienceValidator,
+  validateAudience,
 } from '../audience.validator';
 
 describe('validateAudience', () => {
@@ -217,29 +217,34 @@ describe('createAudienceValidator', () => {
 });
 
 describe('deriveExpectedAudience', () => {
-  it('should derive audiences from URL with path', () => {
+  // SECURITY: the bare, scheme-less host form (e.g. `api.example.com`) is no
+  // longer emitted — it let a token bound only to a host authorize at every
+  // scheme/path on that host (cross-resource confusion). Only the full URL and
+  // the scheme+host origin are derived.
+  it('should derive audiences from URL with path (full URL + origin, no bare host)', () => {
     const audiences = deriveExpectedAudience('https://api.example.com/v1/mcp');
-    expect(audiences).toEqual(['https://api.example.com/v1/mcp', 'https://api.example.com', 'api.example.com']);
+    expect(audiences).toEqual(['https://api.example.com/v1/mcp', 'https://api.example.com']);
   });
 
   it('should derive audiences from URL without path (just origin)', () => {
     const audiences = deriveExpectedAudience('https://api.example.com');
-    // pathname is '/' so no origin-only entry
-    expect(audiences).toEqual(['https://api.example.com', 'api.example.com']);
+    // pathname is '/' so only the full URL entry; no bare-host form
+    expect(audiences).toEqual(['https://api.example.com']);
   });
 
   it('should derive audiences from URL with trailing slash', () => {
     const audiences = deriveExpectedAudience('https://api.example.com/');
-    // Trailing slash is stripped, pathname is '/' so origin is not duplicated
-    expect(audiences).toContain('https://api.example.com');
-    expect(audiences).toContain('api.example.com');
+    // Trailing slash is stripped, pathname is '/' so only the origin remains
+    expect(audiences).toEqual(['https://api.example.com']);
+    expect(audiences).not.toContain('api.example.com');
   });
 
   it('should handle URL with port', () => {
     const audiences = deriveExpectedAudience('https://api.example.com:8443/mcp');
     expect(audiences).toContain('https://api.example.com:8443/mcp');
     expect(audiences).toContain('https://api.example.com:8443');
-    expect(audiences).toContain('api.example.com:8443');
+    // bare host:port form is intentionally NOT included
+    expect(audiences).not.toContain('api.example.com:8443');
   });
 
   it('should return string as-is for non-URL input', () => {
@@ -342,7 +347,8 @@ describe('AudienceValidator class', () => {
 
       expect(validator.validate('https://api.example.com/v1/mcp').valid).toBe(true);
       expect(validator.validate('https://api.example.com').valid).toBe(true);
-      expect(validator.validate('api.example.com').valid).toBe(true);
+      // bare, scheme-less host is no longer accepted (security hardening)
+      expect(validator.validate('api.example.com').valid).toBe(false);
       expect(validator.validate('https://wrong.com').valid).toBe(false);
     });
 

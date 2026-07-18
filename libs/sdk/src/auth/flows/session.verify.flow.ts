@@ -6,6 +6,7 @@ import {
   getRequestBaseUrl,
   httpRequestInputSchema,
   isPublicMode,
+  isPublicUrlPinned,
   isTransparentMode,
   normalizeEntryPrefix,
   normalizeScopeBase,
@@ -23,11 +24,13 @@ import {
   buildInsufficientScopeHeader,
   buildInvalidTokenHeader,
   buildUnauthorizedHeader,
+  deriveExpectedAudience,
   deriveTypedUser,
   encryptJson,
   extractBearerToken,
   isJwt,
   JwksService,
+  validateAudience,
   type ProviderVerifyRef,
   type VerifyResult,
 } from '@frontmcp/auth';
@@ -97,6 +100,13 @@ declare global {
 const name = 'session:verify' as const;
 const Stage = StageHookOf(name);
 
+/**
+ * Emit the "audience is not pinned" warning at most once per process, so a
+ * misconfigured transparent deployment is surfaced without spamming the log on
+ * every request.
+ */
+let warnedUnpinnedAudience = false;
+
 /** Auth mode for session payload - distinguishes between anonymous session types */
 type AuthMode = 'public' | 'transparent-anon';
 
@@ -137,27 +147,35 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
     const machineId = getMachineId();
 
-    // If client sent session ID, use it for transport lookup
+    // If the client sent a session id, ONLY honor it when it decrypts to a
+    // payload THIS server minted for THIS node (valid AES-256-GCM tag). All
+    // anonymous sessions share `token: ''`, so the transport registry separates
+    // them by session id alone — echoing an arbitrary client-supplied id back
+    // verbatim let an attacker fixate a chosen id or, by presenting a victim's
+    // leaked id, resolve the victim's live transport (notifications/elicitations).
+    // An unrecognized / forged id is IGNORED and a fresh server-minted id is
+    // issued below, so the client cannot choose its own anonymous identity.
     if (sessionIdHeader) {
       const existingPayload = decryptPublicSession(sessionIdHeader);
-      const user = existingPayload
-        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') }
-        : { sub: `anon:${randomUUID()}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
-
-      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
-
-      this.respond({
-        kind: 'authorized',
-        authorization: {
-          token: '',
-          user,
-          session: {
-            id: sessionIdHeader,
-            payload: finalPayload,
+      if (existingPayload && existingPayload.nodeId === machineId) {
+        // Derive the anonymous `sub` from the session's unique `uuid` (not its
+        // one-second `iat`, which collided for sessions minted in the same
+        // second and shared a `sub`-keyed partition, e.g. the rate limiter).
+        const anonId = existingPayload.uuid ?? `${existingPayload.iat * 1000}`;
+        const user = { sub: `anon:${anonId}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
+        this.respond({
+          kind: 'authorized',
+          authorization: {
+            token: '',
+            user,
+            session: { id: sessionIdHeader, payload: existingPayload },
           },
-        },
-      });
-      return;
+        });
+        return;
+      }
+      // Fall through: mint a fresh, server-controlled anonymous session and
+      // ignore the untrusted client-supplied id.
+      this.logger.verbose('createAnonymousSession: ignoring unrecognized client session id; minting a fresh one');
     }
 
     // Create new anonymous session
@@ -396,6 +414,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         {
           id: primary.providerConfig?.id ?? 'default',
           issuerUrl: issuer,
+          additionalIssuers: primary.providerConfig?.additionalIssuers,
+          verifyIssuer: primary.providerConfig?.verifyIssuer,
           jwks: primary.providerConfig?.jwks,
           jwksUri: primary.providerConfig?.jwksUri,
         },
@@ -413,6 +433,62 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (result.ok) {
       this.state.set({ jwtPayload: result.payload });
+
+      // Validate audience (RFC 8707 / MCP Authorization spec) in transparent
+      // mode. Transparent tokens are verified against an EXTERNAL IdP's shared
+      // JWKS, so a valid signature only proves the IdP minted the token — not
+      // that it was minted for THIS resource. The `aud` claim is the sole
+      // binding to this server; without this gate a token issued to the same
+      // IdP for a different service authenticates here unchanged
+      // (GHSA-hvvp-67p3-j379). Gateway/public tokens are excluded on purpose:
+      // they are HS256-signed with this instance's own secret, so a token from
+      // another service simply fails signature verification — an audience gate
+      // there would add no security and risks rejecting legitimate
+      // resource-scoped tokens whose `aud` is the OAuth `resource` indicator.
+      if (isTransparentMode(authOptions)) {
+        const configuredAudience = (authOptions as TransparentAuthOptions).expectedAudience;
+        // SECURITY: when `expectedAudience` is not configured we derive it from
+        // `baseUrl`. `baseUrl` comes from `getRequestBaseUrl`, which now ignores
+        // `X-Forwarded-*` unless a trusted proxy / `FRONTMCP_PUBLIC_URL` is set —
+        // so an attacker can no longer set `X-Forwarded-Host` to make the
+        // expected audience match a token minted for another service. For the
+        // strongest binding, operators should pin `FRONTMCP_PUBLIC_URL` or set
+        // `expectedAudience`; warn once when neither is present.
+        if (!configuredAudience && !isPublicUrlPinned() && !warnedUnpinnedAudience) {
+          warnedUnpinnedAudience = true;
+          this.logger.warn(
+            'transparent audience validation is deriving the expected audience from the request Host: ' +
+              'set auth.expectedAudience or FRONTMCP_PUBLIC_URL to bind tokens to a fixed resource. ' +
+              'X-Forwarded-Host is ignored unless FRONTMCP_TRUST_PROXY is enabled.',
+          );
+        }
+        const expectedAudiences = configuredAudience
+          ? Array.isArray(configuredAudience)
+            ? configuredAudience
+            : [configuredAudience]
+          : deriveExpectedAudience(this.state.required.baseUrl);
+        const audResult = validateAudience(result.payload?.['aud'] as string | string[] | undefined, {
+          expectedAudiences,
+          // By default accept tokens with no `aud` claim: many IdPs omit it, and
+          // rejecting them here would break existing transparent deployments.
+          // Tokens that DO carry an `aud` for another service are still rejected,
+          // which blocks the cross-service replay in GHSA-hvvp-67p3-j379.
+          // Operators whose IdP always sets `aud` can flip `requireAudience:true`
+          // to reject audience-less tokens outright.
+          allowNoAudience: (authOptions as TransparentAuthOptions).requireAudience !== true,
+        });
+        if (!audResult.valid) {
+          this.logger.warn('verifyIfJwt: audience validation failed', { error: audResult.error });
+          this.respond({
+            kind: 'unauthorized',
+            prmMetadataHeader: buildInvalidTokenHeader(
+              this.state.required.prmUrl,
+              audResult.error ?? 'Token audience is not valid for this resource',
+            ),
+          });
+          return;
+        }
+      }
 
       // Check required scopes (RFC 6750 §3.1 — insufficient_scope → 403)
       const requiredScopes = (authOptions as Record<string, unknown> | undefined)?.['requiredScopes'] as

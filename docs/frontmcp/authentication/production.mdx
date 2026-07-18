@@ -107,10 +107,13 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**PKCE enforcement** - OAuth 2.1 requires PKCE (S256 only)</Check>
 <Check>**Refresh token rotation** - Always rotate refresh tokens on use</Check>
 <Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` (supported in transparent, local, and remote modes)</Check>
+<Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the transparent-mode expected audience — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers.</Check>
 
 ### Recommended
 
 <Check>**Machine ID** - Set `MACHINE_ID` env var for multi-instance session portability</Check>
+<Check>**Require registered clients** - Set `auth.requireRegisteredClients: true` (local/remote) so every OAuth client must be registered (DCR / pre-registered) or use a CIMD client-id URL. This enforces exact `redirect_uri` matching and prevents auth-code interception via an unregistered client's attacker-chosen redirect_uri.</Check>
+<Check>**Confidential clients** - Clients registered with `client_secret_basic`/`client_secret_post` are authenticated with a constant-time secret check on both the code-exchange and refresh grants.</Check>
 <Check>**Rate limiting** - Protect token endpoints from brute force</Check>
 <Check>**Monitoring** - Alert on auth failures, unusual patterns</Check>
 <Check>**Key rotation** - Rotate signing keys periodically (30-90 days)</Check>
@@ -169,6 +172,15 @@ REDIS_PASSWORD=your-redis-password
 
 # Required for token signing
 JWT_SIGNING_KEY='{"kty":"RSA","kid":"prod-key-1",...}'
+
+# Pin the canonical public origin (issuer / resource / discovery / audience are
+# derived from it instead of request headers). Strongly recommended.
+FRONTMCP_PUBLIC_URL=https://mcp.example.com
+
+# Only when behind a reverse proxy that STRIPS client-supplied X-Forwarded-*
+# headers and sets its own — otherwise these headers are ignored (secure default).
+# Prefer FRONTMCP_PUBLIC_URL over trusting the proxy.
+# FRONTMCP_TRUST_PROXY=1
 
 # For remote/transparent mode
 IDP_PROVIDER_URL=https://auth.example.com

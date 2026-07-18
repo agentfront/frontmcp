@@ -1,24 +1,40 @@
-import { computeIssuer, getRequestBaseUrl, normalizeResourceUri, resourceUriMatches } from '../path.utils';
 import type { ServerRequest } from '../../interfaces';
+import { computeIssuer, getRequestBaseUrl, normalizeResourceUri, resourceUriMatches } from '../path.utils';
 
-const mkReq = (headers: Record<string, string>): ServerRequest =>
-  ({ headers } as unknown as ServerRequest);
+const mkReq = (headers: Record<string, string>): ServerRequest => ({ headers }) as unknown as ServerRequest;
 
-describe('getRequestBaseUrl — FRONTMCP_PUBLIC_URL pin (SECURITY-REVIEW A4)', () => {
-  const ORIGINAL = process.env['FRONTMCP_PUBLIC_URL'];
+describe('getRequestBaseUrl — FRONTMCP_PUBLIC_URL pin + trust-proxy gating (SECURITY-REVIEW A4)', () => {
+  const ORIGINAL_PIN = process.env['FRONTMCP_PUBLIC_URL'];
+  const ORIGINAL_TRUST = process.env['FRONTMCP_TRUST_PROXY'];
   afterEach(() => {
-    if (ORIGINAL === undefined) delete process.env['FRONTMCP_PUBLIC_URL'];
-    else process.env['FRONTMCP_PUBLIC_URL'] = ORIGINAL;
+    if (ORIGINAL_PIN === undefined) delete process.env['FRONTMCP_PUBLIC_URL'];
+    else process.env['FRONTMCP_PUBLIC_URL'] = ORIGINAL_PIN;
+    if (ORIGINAL_TRUST === undefined) delete process.env['FRONTMCP_TRUST_PROXY'];
+    else process.env['FRONTMCP_TRUST_PROXY'] = ORIGINAL_TRUST;
   });
 
-  it('derives from request headers when no pin is set (back-compat)', () => {
+  it('IGNORES X-Forwarded-* by default and uses the direct Host (secure default)', () => {
     delete process.env['FRONTMCP_PUBLIC_URL'];
-    const url = getRequestBaseUrl(mkReq({ host: 'real.example.com', 'x-forwarded-proto': 'https' }));
-    expect(url).toBe('https://real.example.com');
+    delete process.env['FRONTMCP_TRUST_PROXY'];
+    // Attacker-supplied forwarded headers must NOT influence derivation.
+    const url = getRequestBaseUrl(
+      mkReq({ host: 'real.example.com', 'x-forwarded-host': 'evil.attacker.com', 'x-forwarded-proto': 'https' }),
+    );
+    expect(url).toBe('http://real.example.com');
   });
 
-  it('ignores attacker-controlled X-Forwarded-Host when the pin is set', () => {
+  it('honors X-Forwarded-* only when FRONTMCP_TRUST_PROXY is enabled', () => {
+    delete process.env['FRONTMCP_PUBLIC_URL'];
+    process.env['FRONTMCP_TRUST_PROXY'] = '1';
+    const url = getRequestBaseUrl(
+      mkReq({ host: 'internal:3000', 'x-forwarded-host': 'mcp.example.com', 'x-forwarded-proto': 'https' }),
+    );
+    expect(url).toBe('https://mcp.example.com');
+  });
+
+  it('ignores attacker-controlled X-Forwarded-Host even when FRONTMCP_TRUST_PROXY is enabled, if the pin is set', () => {
     process.env['FRONTMCP_PUBLIC_URL'] = 'https://mcp.example.com';
+    process.env['FRONTMCP_TRUST_PROXY'] = '1';
     const url = getRequestBaseUrl(
       mkReq({ host: 'real.example.com', 'x-forwarded-host': 'evil.attacker.com', 'x-forwarded-proto': 'http' }),
     );

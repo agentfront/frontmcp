@@ -754,7 +754,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     clientId: string,
     redirectUri: string,
     codeVerifier: string,
+    clientSecret?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
+    // Authenticate confidential clients (RFC 6749 §2.3 / §3.2.1). Public and
+    // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
+    // unaffected; a registered confidential client MUST present a matching
+    // secret (timing-safe) — previously the secret was never checked.
+    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
+      this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     // Get the authorization code record
     const codeRecord = await this.authorizationStore.getAuthorizationCode(code);
 
@@ -769,7 +779,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // Verify code hasn't been used (single-use)
     if (codeRecord.used) {
       this.logger.warn(`Authorization code already used: ${code.substring(0, 8)}...`);
-      // Security: If a code is reused, revoke all tokens from this code
+      // OAuth 2.1 §4.1.2 breach handling: re-presenting an already-used code is
+      // a strong signal it leaked, so revoke the refresh token minted from it
+      // (previously the code record was merely deleted, leaving the issued
+      // tokens live).
+      if (codeRecord.issuedRefreshToken) {
+        try {
+          await this.authorizationStore.revokeRefreshToken(codeRecord.issuedRefreshToken);
+        } catch (err) {
+          this.logger.warn(`Failed to revoke refresh token on authorization-code replay: ${err}`);
+        }
+      }
       await this.authorizationStore.deleteAuthorizationCode(code);
       return {
         error: 'invalid_grant',
@@ -853,14 +873,29 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       }
     }
 
-    // Create refresh token
+    // Create refresh token — carry the grant's consent / progressive-auth /
+    // custom-claim metadata so a later refresh re-mints an access token with
+    // the SAME claims (otherwise refresh silently drops `consent` /
+    // `authorized_apps` and the claim-driven tool gate fails open).
     const refreshTokenRecord = this.authorizationStore.createRefreshTokenRecord({
       clientId,
       userSub: user.sub,
       scopes: codeRecord.scopes,
       resource: codeRecord.resource,
+      userEmail: user.email,
+      userName: user.name,
+      consentEnabled: codeRecord.consentEnabled,
+      selectedToolIds: codeRecord.selectedToolIds,
+      authorizedAppIds: codeRecord.authorizedAppIds,
+      customClaims: codeRecord.customClaims,
+      federatedLoginUsed: codeRecord.federatedLoginUsed,
+      selectedProviderIds: codeRecord.selectedProviderIds,
+      skippedProviderIds: codeRecord.skippedProviderIds,
     });
     await this.authorizationStore.storeRefreshToken(refreshTokenRecord);
+    // Bind the issued refresh token to the (already used-marked) code so a later
+    // replay of this code can revoke the token family it minted.
+    await this.authorizationStore.markCodeUsed(code, refreshTokenRecord.token);
 
     this.logger.info(`Tokens issued for user: ${user.sub}`);
 
@@ -879,7 +914,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   async refreshAccessToken(
     refreshToken: string,
     clientId: string,
+    clientSecret?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
+    // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
+    // refresh token must not be redeemable with just the public client_id.
+    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
+      this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     const tokenRecord = await this.authorizationStore.getRefreshToken(refreshToken);
 
     if (!tokenRecord) {
@@ -898,16 +941,47 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       };
     }
 
-    // Generate new access token
-    const user: UserInfo = { sub: tokenRecord.userSub };
-    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, tokenRecord.resource);
+    // Generate new access token — rebuild the identity + consent/progressive-
+    // auth metadata from the stored refresh record so the refreshed token keeps
+    // its `consent` / `authorized_apps` / custom claims. Without this the tool
+    // gate (which authorizes purely from token claims and fails OPEN on a
+    // missing claim) would grant every tool/app after a single refresh.
+    const user: UserInfo = {
+      sub: tokenRecord.userSub,
+      email: tokenRecord.userEmail,
+      name: tokenRecord.userName,
+    };
+    const hasAuthorizedApps = Array.isArray(tokenRecord.authorizedAppIds);
+    const hasCustomClaims = !!tokenRecord.customClaims && Object.keys(tokenRecord.customClaims).length > 0;
+    const consentMetadata: ConsentMetadata | undefined =
+      tokenRecord.consentEnabled || tokenRecord.federatedLoginUsed || hasCustomClaims || hasAuthorizedApps
+        ? {
+            selectedToolIds: tokenRecord.selectedToolIds,
+            selectedProviderIds: tokenRecord.selectedProviderIds,
+            skippedProviderIds: tokenRecord.skippedProviderIds,
+            consentEnabled: tokenRecord.consentEnabled,
+            federatedLoginUsed: tokenRecord.federatedLoginUsed,
+            authorizedAppIds: tokenRecord.authorizedAppIds,
+            customClaims: tokenRecord.customClaims,
+          }
+        : undefined;
+    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, tokenRecord.resource, consentMetadata);
 
-    // Rotate refresh token
+    // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
       clientId,
       userSub: tokenRecord.userSub,
       scopes: tokenRecord.scopes,
       resource: tokenRecord.resource,
+      userEmail: tokenRecord.userEmail,
+      userName: tokenRecord.userName,
+      consentEnabled: tokenRecord.consentEnabled,
+      selectedToolIds: tokenRecord.selectedToolIds,
+      authorizedAppIds: tokenRecord.authorizedAppIds,
+      customClaims: tokenRecord.customClaims,
+      federatedLoginUsed: tokenRecord.federatedLoginUsed,
+      selectedProviderIds: tokenRecord.selectedProviderIds,
+      skippedProviderIds: tokenRecord.skippedProviderIds,
     });
     await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
 
@@ -1329,20 +1403,35 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   ): Promise<{ sub: string; email?: string; name?: string; picture?: string; claims?: Record<string, unknown> }> {
     const config = this.providerConfigs.get(providerId);
 
-    // If ID token is provided, extract user info from it
+    // If ID token is provided, extract user info from it.
+    //
+    // NOTE (defense-in-depth): the id_token is obtained on the server-to-server
+    // token back-channel over TLS (see `exchangeProviderCode`), NOT the browser
+    // front-channel, so OIDC Core §3.1.3.7 permits skipping JWS signature
+    // verification here. We still validate expiry and require a non-empty `sub`
+    // so a malformed/expired token is not trusted as identity.
     if (idToken) {
       try {
-        // Decode ID token (without verification - verification should happen separately)
         const [, payloadB64] = idToken.split('.');
         const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64))) as Record<string, unknown>;
 
-        return {
-          sub: payload['sub'] as string,
-          email: payload['email'] as string | undefined,
-          name: payload['name'] as string | undefined,
-          picture: payload['picture'] as string | undefined,
-          claims: payload,
-        };
+        const exp = typeof payload['exp'] === 'number' ? (payload['exp'] as number) : undefined;
+        if (exp !== undefined && exp * 1000 < Date.now()) {
+          this.logger.warn(`ID token for ${providerId} is expired; falling back to userinfo`);
+        } else {
+          const sub =
+            typeof payload['sub'] === 'string' && payload['sub'].trim() ? (payload['sub'] as string) : undefined;
+          if (sub) {
+            return {
+              sub,
+              email: payload['email'] as string | undefined,
+              name: payload['name'] as string | undefined,
+              picture: payload['picture'] as string | undefined,
+              claims: payload,
+            };
+          }
+          this.logger.warn(`ID token for ${providerId} has no usable sub; falling back to userinfo`);
+        }
       } catch (err) {
         this.logger.warn(`Failed to parse ID token for ${providerId}: ${err}`);
         // Fall through to userinfo endpoint
@@ -1361,23 +1450,33 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
         if (response.ok) {
           const userInfo = (await response.json()) as Record<string, unknown>;
-          return {
-            sub: userInfo['sub'] as string,
-            email: userInfo['email'] as string | undefined,
-            name: userInfo['name'] as string | undefined,
-            picture: userInfo['picture'] as string | undefined,
-            claims: userInfo,
-          };
+          const sub =
+            typeof userInfo['sub'] === 'string' && userInfo['sub'].trim() ? (userInfo['sub'] as string) : undefined;
+          if (sub) {
+            return {
+              sub,
+              email: userInfo['email'] as string | undefined,
+              name: userInfo['name'] as string | undefined,
+              picture: userInfo['picture'] as string | undefined,
+              claims: userInfo,
+            };
+          }
+          this.logger.warn(`userinfo for ${providerId} returned no usable sub`);
         }
       } catch (err) {
         this.logger.warn(`Failed to get userinfo from ${providerId}: ${err}`);
       }
     }
 
-    // Return minimal user info
-    return {
-      sub: `${providerId}:unknown`,
-    };
+    // SECURITY: no stable identity could be determined. Previously this returned
+    // a DETERMINISTIC placeholder `"${providerId}:unknown"`, so every user who
+    // authenticated via such a provider collapsed to ONE shared FrontMCP
+    // identity (shared session / credential vault → cross-user exposure). Fail
+    // closed instead: the caller must abort the federated login.
+    throw new Error(
+      `Unable to determine a stable user identity from provider "${providerId}" ` +
+        `(no id_token sub and no usable userinfo endpoint)`,
+    );
   }
 
   /**
