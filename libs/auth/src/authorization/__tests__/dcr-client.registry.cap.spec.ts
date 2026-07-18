@@ -3,8 +3,10 @@
  *
  * DCR (`POST /oauth/register`) may be unauthenticated; without a bound an
  * attacker can register unlimited clients and exhaust memory. The registry caps
- * dynamic clients (FIFO eviction of the oldest) while never evicting
- * pre-registered / declarative clients.
+ * dynamic clients and REJECTS new registrations once the cap is reached (rather
+ * than evicting an existing client), preserving every already-registered client
+ * — including confidential ones — and never counting pre-registered /
+ * declarative clients toward the cap.
  */
 import { DcrClientRegistry, type RegisteredClient } from '../dcr-client.registry';
 
@@ -22,45 +24,68 @@ function mkClient(id: string, createdAt: number, opts: Partial<RegisteredClient>
 }
 
 describe('DcrClientRegistry — dynamic registration cap', () => {
-  it('evicts the oldest dynamic clients once the cap is exceeded', () => {
+  it('rejects new registrations once the cap is reached and retains existing clients', () => {
     const registry = new DcrClientRegistry({ maxDynamicClients: 3 });
-    registry.register(mkClient('c1', 100));
-    registry.register(mkClient('c2', 200));
-    registry.register(mkClient('c3', 300));
-    registry.register(mkClient('c4', 400)); // exceeds cap → evict oldest (c1)
+    expect(registry.register(mkClient('c1', 100))).toBe(true);
+    expect(registry.register(mkClient('c2', 200))).toBe(true);
+    expect(registry.register(mkClient('c3', 300))).toBe(true);
 
-    expect(registry.has('c1')).toBe(false);
+    // Cap reached → the 4th registration is rejected.
+    expect(registry.register(mkClient('c4', 400))).toBe(false);
+
+    // c1..c3 are all retained; c4 was never stored.
+    expect(registry.has('c1')).toBe(true);
     expect(registry.has('c2')).toBe(true);
     expect(registry.has('c3')).toBe(true);
-    expect(registry.has('c4')).toBe(true);
+    expect(registry.has('c4')).toBe(false);
   });
 
-  it('keeps only `cap` dynamic clients after many registrations', () => {
+  it('preserves an existing confidential client instead of evicting it', () => {
+    const registry = new DcrClientRegistry({ maxDynamicClients: 2 });
+    registry.register(mkClient('conf', 100, { token_endpoint_auth_method: 'client_secret_post', client_secret: 's' }));
+    registry.register(mkClient('c2', 200));
+
+    // Cap reached — a new registration is rejected, and the confidential client stays.
+    expect(registry.register(mkClient('c3', 300))).toBe(false);
+    expect(registry.has('conf')).toBe(true);
+    expect((registry.get('conf') as RegisteredClient).client_secret).toBe('s');
+  });
+
+  it('keeps at most `cap` dynamic clients across many attempts (the FIRST cap survive)', () => {
     const registry = new DcrClientRegistry({ maxDynamicClients: 5 });
-    for (let i = 0; i < 100; i++) registry.register(mkClient(`c${i}`, i));
+    let accepted = 0;
+    for (let i = 0; i < 100; i++) if (registry.register(mkClient(`c${i}`, i))) accepted++;
+    expect(accepted).toBe(5);
     const remaining = Array.from({ length: 100 }, (_, i) => `c${i}`).filter((id) => registry.has(id));
-    expect(remaining.length).toBe(5);
-    // The survivors are the most-recent five.
-    expect(remaining).toEqual(['c95', 'c96', 'c97', 'c98', 'c99']);
+    expect(remaining).toEqual(['c0', 'c1', 'c2', 'c3', 'c4']);
   });
 
-  it('never evicts pre-registered/declarative clients', () => {
+  it('allows re-registering (updating) an existing dynamic client id even at capacity', () => {
+    const registry = new DcrClientRegistry({ maxDynamicClients: 1 });
+    expect(registry.register(mkClient('c1', 100))).toBe(true);
+    // Same id → update, not growth → allowed even though the cap is reached.
+    expect(registry.register(mkClient('c1', 100, { client_name: 'renamed' }))).toBe(true);
+    expect((registry.get('c1') as RegisteredClient).client_name).toBe('renamed');
+  });
+
+  it('never counts pre-registered/declarative clients toward the cap', () => {
     const registry = new DcrClientRegistry({
       maxDynamicClients: 1,
       clients: [{ clientId: 'trusted', redirectUris: ['http://localhost/cb'] }],
     });
-    registry.register(mkClient('dyn1', 100));
-    registry.register(mkClient('dyn2', 200)); // evicts dyn1, not the pre-registered client
+    expect(registry.register(mkClient('dyn1', 100))).toBe(true); // 1 dynamic → at cap
+    expect(registry.register(mkClient('dyn2', 200))).toBe(false); // rejected
 
     expect(registry.has('trusted')).toBe(true);
-    expect(registry.has('dyn2')).toBe(true);
-    expect(registry.has('dyn1')).toBe(false);
+    expect(registry.has('dyn1')).toBe(true);
+    expect(registry.has('dyn2')).toBe(false);
   });
 
-  it('defaults to a generous cap (1000) when unconfigured', () => {
-    const registry = new DcrClientRegistry();
-    for (let i = 0; i < 1001; i++) registry.register(mkClient(`c${i}`, i));
-    expect(registry.has('c0')).toBe(false); // oldest evicted at 1001
-    expect(registry.has('c1000')).toBe(true);
+  it('falls back to the default cap when maxDynamicClients is invalid (negative/NaN)', () => {
+    for (const bad of [-1, NaN, 1.5, Infinity]) {
+      const registry = new DcrClientRegistry({ maxDynamicClients: bad as number });
+      // With the safe default (1000), the first registration is accepted.
+      expect(registry.register(mkClient('c0', 0))).toBe(true);
+    }
   });
 });

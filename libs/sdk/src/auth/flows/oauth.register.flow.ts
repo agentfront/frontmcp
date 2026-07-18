@@ -329,7 +329,23 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
       dev: true,
     };
 
-    this.localAuth.dcrClientRegistry.register(this.registered);
+    // Reject when the dynamic-client capacity is reached, rather than evicting
+    // an existing registration. Existing clients (incl. confidential ones) are
+    // preserved; the caller should retry later.
+    const accepted = this.localAuth.dcrClientRegistry.register(this.registered);
+    if (!accepted) {
+      this.scopeLogger.warn('OAuth register: dynamic client capacity reached — rejecting registration');
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'temporarily_unavailable',
+            error_description: 'Client registration capacity reached; please try again later.',
+          },
+          { status: 503 },
+        ),
+      );
+      return;
+    }
   }
 
   @Stage('respondRegistration')

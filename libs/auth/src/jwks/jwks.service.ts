@@ -192,6 +192,10 @@ export class JwksService {
     const issuers = new Set<string>();
     for (const candidate of [p.issuerUrl, ...(p.additionalIssuers ?? [])]) {
       const normalized = normalizeIssuer(candidate);
+      // Skip blank entries: adding '' (and '/') to the trust set would accept a
+      // token whose `iss` claim is empty or "/" — a bypass if a misconfigured
+      // `additionalIssuers` (or issuerUrl) contains a blank value.
+      if (!normalized) continue;
       issuers.add(normalized);
       issuers.add(`${normalized}/`);
     }
@@ -278,14 +282,24 @@ export class JwksService {
         }
       }
 
-      // Check expiration
-      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      // Check expiration. Validate the claim when PRESENT (a truthiness check
+      // would skip `exp: 0` — an epoch-expired token — and silently accept a
+      // malformed non-numeric `exp`).
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (
+        payload.exp !== undefined &&
+        (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp < nowSec)
+      ) {
         return { ok: false, error: 'token_expired' };
       }
 
       // Check not-before — reject not-yet-valid tokens, matching jose's primary
-      // path (the fallback previously skipped `nbf`).
-      if (payload.nbf && payload.nbf > Math.floor(Date.now() / 1000)) {
+      // path (the fallback previously skipped `nbf`). Same present-and-valid
+      // rule as `exp`.
+      if (
+        payload.nbf !== undefined &&
+        (typeof payload.nbf !== 'number' || !Number.isFinite(payload.nbf) || payload.nbf > nowSec)
+      ) {
         return { ok: false, error: 'token_not_yet_valid' };
       }
 
@@ -451,8 +465,13 @@ export class JwksService {
         // SSRF: reject internal hosts / hosts resolving to internal addresses.
         // The issuer/jwksUri is config-derived, but a compromised or spoofable
         // IdP metadata document (or a 3xx) can still steer the fetch internal.
-        const ssrf = await resolveAndCheckHostname(parsed.hostname);
-        if (!ssrf.allowed) throw new Error(`blocked host: ${ssrf.reason}`);
+        // Preserve the localhost dev exception: a local IdP at localhost passes
+        // the scheme check above, so it must not be blocked by the SSRF check in
+        // non-production (in production, localhost is still rejected).
+        if (!(isLocalhost && !isProduction())) {
+          const ssrf = await resolveAndCheckHostname(parsed.hostname);
+          if (!ssrf.allowed) throw new Error(`blocked host: ${ssrf.reason}`);
+        }
 
         const res = await fetch(currentUrl, {
           method: 'GET',

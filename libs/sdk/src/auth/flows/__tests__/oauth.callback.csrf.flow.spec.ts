@@ -32,7 +32,7 @@ function createCallbackMetadata(): FlowMetadata<'oauth:callback'> {
   } as FlowMetadata<'oauth:callback'>;
 }
 
-async function seedPendingAuth(scope: any): Promise<string> {
+async function seedPendingAuth(scope: ReturnType<typeof createMockScopeEntry>): Promise<string> {
   const store = scope.auth.authorizationStore;
   const pkce = generatePkceChallenge('a'.repeat(64));
   const pending = store.createPendingRecord({

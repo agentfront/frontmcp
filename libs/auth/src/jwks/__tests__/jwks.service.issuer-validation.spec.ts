@@ -181,4 +181,18 @@ describe('JwksService — transparent issuer validation (GHSA-hvvp-67p3-j379)', 
 
     expect(result.ok).toBe(false);
   });
+
+  it('does NOT trust a blank additionalIssuers entry (no iss="" / "/" bypass)', async () => {
+    const service = new JwksService();
+    const { privateKey, jwks } = await createProviderKey();
+    // A token minted with an EMPTY issuer must not be accepted just because a
+    // misconfigured additionalIssuers contains a blank string.
+    const jwt = await signToken(privateKey, '');
+
+    const result = await service.verifyTransparentToken(jwt, [
+      { id: 'idp', issuerUrl: 'https://idp.example', additionalIssuers: ['', '  '] as never, jwks: jwks as never },
+    ]);
+
+    expect(result.ok).toBe(false);
+  });
 });

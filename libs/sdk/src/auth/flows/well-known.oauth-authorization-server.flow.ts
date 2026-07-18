@@ -47,6 +47,10 @@ const AuthServerMetadataSchema = z.object({
   kind: z.literal('json'),
   status: z.literal(200),
   contentType: z.literal('application/json; charset=utf-8'),
+  // Response headers (e.g. `Cache-Control: no-store`). This flow uses a custom
+  // output schema rather than `HttpJsonSchema`, so `headers` must be declared
+  // explicitly for the renderer to emit it.
+  headers: z.record(z.string(), z.string()).optional(),
   body: z
     .object({
       issuer: z.string().min(1),

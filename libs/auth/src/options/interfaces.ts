@@ -820,6 +820,17 @@ export interface TransparentAuthOptionsInterface {
   scopes?: string[];
   providerConfig?: ProviderConfig;
   expectedAudience?: string | string[];
+  /**
+   * Require the token to carry an `aud` claim that matches this resource.
+   *
+   * @default false — tokens with NO `aud` are accepted (many IdPs omit it).
+   *
+   * SECURITY: with the default, a signed token minted by the same IdP for a
+   * different service that omits `aud` is accepted here (cross-service replay is
+   * only blocked for tokens that DO carry an `aud`). Set to `true` to reject
+   * audience-less tokens outright — recommended when your IdP always sets `aud`.
+   */
+  requireAudience?: boolean;
   requiredScopes?: string[];
   allowAnonymous?: boolean;
   anonymousScopes?: string[];

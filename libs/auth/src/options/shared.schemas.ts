@@ -99,8 +99,10 @@ export const providerConfigSchema = z.object({
    *
    * SECURITY: trusted verbatim — set only to issuers you control (e.g. a
    * gateway that re-mints tokens), never derived from request or token data.
+   * Entries are trimmed and blank values are rejected (a blank issuer would
+   * otherwise be trusted as `''`/`'/'`).
    */
-  additionalIssuers: z.array(z.string()).optional(),
+  additionalIssuers: z.array(z.string().trim().min(1, 'additionalIssuers entries must be non-empty')).optional(),
 
   /**
    * Validate the token's `iss` claim against the provider issuer (and

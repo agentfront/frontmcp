@@ -469,11 +469,13 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
           : deriveExpectedAudience(this.state.required.baseUrl);
         const audResult = validateAudience(result.payload?.['aud'] as string | string[] | undefined, {
           expectedAudiences,
-          // Accept tokens with no `aud` claim: many IdPs omit it, and rejecting
-          // them here would break existing transparent deployments. Tokens that
-          // DO carry an `aud` for another service are still rejected, which is
-          // what blocks the cross-service replay in GHSA-hvvp-67p3-j379.
-          allowNoAudience: true,
+          // By default accept tokens with no `aud` claim: many IdPs omit it, and
+          // rejecting them here would break existing transparent deployments.
+          // Tokens that DO carry an `aud` for another service are still rejected,
+          // which blocks the cross-service replay in GHSA-hvvp-67p3-j379.
+          // Operators whose IdP always sets `aud` can flip `requireAudience:true`
+          // to reject audience-less tokens outright.
+          allowNoAudience: (authOptions as TransparentAuthOptions).requireAudience !== true,
         });
         if (!audResult.valid) {
           this.logger.warn('verifyIfJwt: audience validation failed', { error: audResult.error });

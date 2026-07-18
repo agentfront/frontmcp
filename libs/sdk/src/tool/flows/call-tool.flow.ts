@@ -601,7 +601,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // which a bare-id claim never contains — so the ambiguous tool is denied
         // (fail closed) rather than cross-app authorized. Unambiguous tools keep
         // matching on either id (back-compat).
-        const bareNameCount = this.scope.tools.getTools().filter((t) => t.name === tool.name).length;
+        // Count the ACTIVE callable set (getTools(true), incl. hidden/internal)
+        // — the same set tool resolution uses — so a hidden same-named tool in
+        // another app is still detected as an ambiguity and cannot be reached
+        // via the lenient bare-name consent path.
+        const bareNameCount = this.scope.tools.getTools(true).filter((t) => t.name === tool.name).length;
         const consented =
           bareNameCount > 1
             ? isToolConsented(consentedToolIds, tool.fullName)

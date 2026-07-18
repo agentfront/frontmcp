@@ -37,13 +37,18 @@ function createMetadata(): FlowMetadata<'session:verify'> {
  * Build a transparent-mode scope whose provider verifies against `providerJwks`
  * and whose JwksService is injected through the flow deps map.
  */
-function createTransparentScope(providerJwks: { keys: JWK[] }, expectedAudience?: string | string[]) {
+function createTransparentScope(
+  providerJwks: { keys: JWK[] },
+  expectedAudience?: string | string[],
+  requireAudience?: boolean,
+) {
   const scope = createMockScopeEntry({ auth: { mode: 'transparent' } as never });
   const auth = scope.auth as unknown as Record<string, unknown>;
   auth['issuer'] = ISSUER;
   auth['options'] = {
     mode: 'transparent',
     ...(expectedAudience !== undefined ? { expectedAudience } : {}),
+    ...(requireAudience !== undefined ? { requireAudience } : {}),
     providerConfig: { id: 'idp', jwks: providerJwks },
   };
   return scope;
@@ -53,9 +58,10 @@ async function runVerify(opts: {
   jwt: string;
   providerJwks: { keys: JWK[] };
   expectedAudience?: string | string[];
+  requireAudience?: boolean;
   forwardedHost?: string;
 }) {
-  const scope = createTransparentScope(opts.providerJwks, opts.expectedAudience);
+  const scope = createTransparentScope(opts.providerJwks, opts.expectedAudience, opts.requireAudience);
   const input = createMockHttpRequest({
     method: 'POST',
     path: '/',
@@ -131,6 +137,21 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
   it('accepts a token with no aud claim (allowNoAudience — IdP compatibility)', async () => {
     const jwt = await mint({ sub: 'user123' });
     const { output, error } = await runVerify({ jwt, providerJwks });
+
+    expect(output).toBeUndefined();
+    expect(error).toBeUndefined();
+  });
+
+  it('rejects a token with no aud claim when requireAudience is true', async () => {
+    const jwt = await mint({ sub: 'user123' });
+    const { output } = await runVerify({ jwt, providerJwks, requireAudience: true });
+
+    expect(output?.kind).toBe('unauthorized');
+  });
+
+  it('still accepts a token whose aud matches when requireAudience is true', async () => {
+    const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+    const { output, error } = await runVerify({ jwt, providerJwks, requireAudience: true });
 
     expect(output).toBeUndefined();
     expect(error).toBeUndefined();

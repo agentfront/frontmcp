@@ -195,17 +195,27 @@ export async function resolveAndCheckHostname(hostname: string): Promise<SsrfChe
   // A literal IP was already authoritatively checked above — nothing to resolve.
   if (isIpAddress(hostname)) return { allowed: true, reason: '' };
 
+  // Lazy require so browser/worker bundles never eagerly pull in node:dns.
+  let dns: typeof import('node:dns');
+  try {
+    dns = require('node:dns') as typeof import('node:dns');
+  } catch {
+    // node:dns is unavailable (non-Node runtime, e.g. a V8-isolate Worker). We
+    // cannot resolve to validate, so degrade to the literal-IP checks already
+    // performed and rely on the runtime's own egress controls.
+    return { allowed: true, reason: '' };
+  }
+
   let addresses: Array<{ address: string }>;
   try {
-    // Lazy require so browser/worker bundles never eagerly pull in node:dns.
-    const dns = require('node:dns') as typeof import('node:dns');
     const result = await dns.promises.lookup(hostname, { all: true, verbatim: true });
     addresses = Array.isArray(result) ? result : [result as unknown as { address: string }];
   } catch {
-    // node:dns absent (non-Node runtime) or resolution failed. A name that does
-    // not resolve here cannot be reached by fetch() either, so the literal
-    // checks that already passed are sufficient — do not fail closed.
-    return { allowed: true, reason: '' };
+    // node:dns IS available but resolution failed. Fail CLOSED: a transient
+    // lookup failure here does NOT prove the host is unreachable — the fetch()
+    // performs its own DNS resolution and could still connect to a private
+    // address, so refuse to fetch an unvalidated destination.
+    return { allowed: false, reason: `DNS resolution failed for "${hostname}"; refusing to fetch an unvalidated host` };
   }
 
   for (const { address } of addresses) {

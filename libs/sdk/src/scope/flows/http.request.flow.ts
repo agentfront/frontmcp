@@ -231,7 +231,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
             // Populate scopes from the verified token's `scope` claim (space-
             // delimited per RFC 6749 §3.3) instead of hardcoding `[]`, so any
             // consumer that authorizes on `authInfo.scopes` sees the real grant.
-            scopes: typeof user.scope === 'string' ? user.scope.split(/\s+/).filter(Boolean) : [],
+            scopes: typeof user['scope'] === 'string' ? user['scope'].split(/\s+/).filter(Boolean) : [],
             // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
             expiresAt: user.exp ? user.exp * 1000 : undefined,
             extra: {
@@ -611,7 +611,13 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         ? {
             token: authorization.token,
             clientId: authorization.user?.sub,
-            scopes: [] as string[],
+            // Same scope parsing as the Node path (checkAuthorization) so
+            // scope-aware handlers behave identically on the web transport. The
+            // `scope` claim is present at runtime but not on the `UserClaim`
+            // type, so read it through a narrow cast.
+            scopes: ((s) => (typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : ([] as string[])))(
+              (authorization.user as { scope?: unknown } | undefined)?.scope,
+            ),
             expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
             extra: {
               user: authorization.user,
