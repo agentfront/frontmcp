@@ -70,6 +70,11 @@ describe('CIMD SSRF — DNS-aware hostname validation', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
+  it('fails CLOSED when DNS resolves to no addresses (nothing was validated)', async () => {
+    mockLookup.mockResolvedValue([]);
+    expect((await resolveAndCheckHostname('empty.attacker.example')).allowed).toBe(false);
+  });
+
   it('fails CLOSED when DNS resolution fails (node:dns is available but lookup errored)', async () => {
     // A transient lookup failure does not prove the host is unreachable — the
     // fetch() would resolve independently and could still reach a private IP.
