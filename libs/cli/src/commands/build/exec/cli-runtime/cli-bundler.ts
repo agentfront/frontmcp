@@ -4,7 +4,8 @@
  */
 
 import * as path from 'path';
-import { FrontmcpExecConfig } from '../config';
+import { type FrontmcpExecConfig } from '../config';
+import { enclaveCoreExactExternalPlugin } from '../esbuild-bundler';
 
 export interface CliBundleResult {
   bundlePath: string;
@@ -39,6 +40,9 @@ export async function bundleCliWithEsbuild(
   // unless selfContained mode where everything is inlined for SEA
   const serverBundleName = `${config.name}.bundle.js`;
 
+  // NOTE: `@enclave-vm/core` (Node-only full sandbox) is externalized via
+  // `enclaveCoreExactExternalPlugin()` rather than these lists, so its
+  // bundle-safe `@enclave-vm/core/worker` subpath still gets bundled.
   const external = selfContained
     ? [
         // Only true native addons and optional peer deps stay external in self-contained mode
@@ -47,7 +51,6 @@ export async function bundleCliWithEsbuild(
         'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
-        '@enclave-vm/core',
         ...(config.dependencies?.nativeAddons || []),
       ]
     : [
@@ -58,7 +61,6 @@ export async function bundleCliWithEsbuild(
         'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
-        '@enclave-vm/core',
         ...(config.dependencies?.nativeAddons || []),
         ...(config.esbuild?.external || []),
       ];
@@ -71,6 +73,7 @@ export async function bundleCliWithEsbuild(
     target: config.esbuild?.target || 'node22',
     outfile: bundlePath,
     external,
+    plugins: [enclaveCoreExactExternalPlugin()],
     keepNames: true,
     treeShaking: true,
     minify: config.esbuild?.minify ?? false,

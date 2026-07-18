@@ -1900,7 +1900,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@enclave-vm/ast@npm:2.14.1, @enclave-vm/ast@npm:^2.14.1":
+"@enclave-vm/ast@npm:2.15.0, @enclave-vm/ast@npm:^2.15.0":
+  version: 2.15.0
+  resolution: "@enclave-vm/ast@npm:2.15.0"
+  dependencies:
+    "@types/estree": "npm:1.0.8"
+    acorn: "npm:8.15.0"
+    acorn-walk: "npm:8.3.4"
+    astring: "npm:1.9.0"
+  checksum: 10c0/85de7f5ca0f6266cf59a36108960cea835fb73594a47dd62543ac27ec42e3df430befd934a6678ac5557d0fd18378dab7cf40e88981f4d1952add6727096e5fb
+  languageName: node
+  linkType: hard
+
+"@enclave-vm/ast@npm:^2.14.1":
   version: 2.14.1
   resolution: "@enclave-vm/ast@npm:2.14.1"
   dependencies:
@@ -1912,13 +1924,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@enclave-vm/core@npm:^2.14.1":
-  version: 2.14.1
-  resolution: "@enclave-vm/core@npm:2.14.1"
+"@enclave-vm/core@npm:^2.13.0, @enclave-vm/core@npm:^2.15.0":
+  version: 2.15.0
+  resolution: "@enclave-vm/core@npm:2.15.0"
   dependencies:
     "@babel/standalone": "npm:^7.29.0"
-    "@enclave-vm/ast": "npm:2.14.1"
-    "@enclave-vm/types": "npm:2.14.1"
+    "@enclave-vm/ast": "npm:2.15.0"
+    "@enclave-vm/types": "npm:2.15.0"
     "@types/estree": "npm:1.0.8"
     acorn: "npm:8.15.0"
     acorn-walk: "npm:8.3.4"
@@ -1932,16 +1944,16 @@ __metadata:
       optional: true
     vectoriadb:
       optional: true
-  checksum: 10c0/dfab4524b31954566f053852bfdf80ad84e9c9846cd62cbf56a022a53aed2693d2161fac1509575d0abbf73feb6558b10b1446cb136a40dc4a177562cf566354
+  checksum: 10c0/f8c366dda22030e128446c2009b3c9e80e8c42e1d02443385f9b423cd09174657bdb129a895c9e719b3f296c9c8d97214228aa1c200c7a03e2ea01ab976c3c64
   languageName: node
   linkType: hard
 
-"@enclave-vm/types@npm:2.14.1":
-  version: 2.14.1
-  resolution: "@enclave-vm/types@npm:2.14.1"
+"@enclave-vm/types@npm:2.15.0":
+  version: 2.15.0
+  resolution: "@enclave-vm/types@npm:2.15.0"
   dependencies:
     zod: "npm:^4.3.6"
-  checksum: 10c0/dce2c779c35ab30517e58547a3562cfa50d97369dbb87af67d317a2aeee72b4e61c7da2af3c4c90d476129edd1fdfa20376972d22385e11fee4957267247c003
+  checksum: 10c0/5fb750afd68924e3bd3b8e95d131f6dcf34143ee79a7fb19994d7ac5dc23f89ca4f4d4fd623891b380800d9db5b6e9dbe798c4c4af77eb3b7366b01fbc03fae6
   languageName: node
   linkType: hard
 
@@ -2424,6 +2436,29 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/auth@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/auth@npm:1.5.2"
+  dependencies:
+    "@frontmcp/di": "npm:1.5.2"
+    "@frontmcp/utils": "npm:1.5.2"
+    jose: "npm:^6.0.0"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+    "@frontmcp/storage-sqlite": 1.5.2
+    "@vercel/kv": ^3.0.0
+    ioredis: ^5.0.0
+  peerDependenciesMeta:
+    "@frontmcp/storage-sqlite":
+      optional: true
+    "@vercel/kv":
+      optional: true
+    ioredis:
+      optional: true
+  checksum: 10c0/44ab8d4a20e492b7ae65b1d1043ec1ec10859aed4dd178e06fd78a02c6c08ca11717066cb7970771a9e3f983c5652a26c3c73daf2efa976052ade1f8610433cd
+  languageName: node
+  linkType: hard
+
 "@frontmcp/di@npm:1.4.0, @frontmcp/di@workspace:libs/di":
   version: 0.0.0-use.local
   resolution: "@frontmcp/di@workspace:libs/di"
@@ -2437,6 +2472,16 @@ __metadata:
     reflect-metadata: ^0.2.0
   languageName: unknown
   linkType: soft
+
+"@frontmcp/di@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/di@npm:1.5.2"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+    reflect-metadata: ^0.2.0
+  checksum: 10c0/c114cf5c3dd22cb86d6ea10553a0d162dbd0bcdab87ad3f9ea0951792d860d755776d2ff83d629570f23545c3efebeae97379e81c2c3113505c25ca9de32145c
+  languageName: node
+  linkType: hard
 
 "@frontmcp/edge@workspace:libs/edge":
   version: 0.0.0-use.local
@@ -2466,6 +2511,17 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/guard@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/guard@npm:1.5.2"
+  dependencies:
+    "@frontmcp/utils": "npm:1.5.2"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+  checksum: 10c0/d2306a1e51e1547b50c2cbe21a380d5158b8515424724fdaf8d0bdb5b5f7608a62ef0a085282b24f9fed03cc6ef0300100dfc25bdb55d9aaed9a6b8aa98949b8
+  languageName: node
+  linkType: hard
+
 "@frontmcp/lazy-zod@npm:1.4.0, @frontmcp/lazy-zod@workspace:libs/lazy-zod":
   version: 0.0.0-use.local
   resolution: "@frontmcp/lazy-zod@workspace:libs/lazy-zod"
@@ -2477,6 +2533,15 @@ __metadata:
     zod: ^4.0.0
   languageName: unknown
   linkType: soft
+
+"@frontmcp/lazy-zod@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/lazy-zod@npm:1.5.2"
+  peerDependencies:
+    zod: ^4.0.0
+  checksum: 10c0/4ad963675cbe998216d7c019a690f8e4f8e45620035647b6bc7891d374fe68b0b62dad7d18ad26cc084eff3a95c26d356a3e1d035624427b5b69f6da11e29736
+  languageName: node
+  linkType: hard
 
 "@frontmcp/nx@workspace:libs/nx-plugin":
   version: 0.0.0-use.local
@@ -2552,18 +2617,33 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-codecall@npm:1.4.0, @frontmcp/plugin-codecall@workspace:plugins/plugin-codecall":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
+"@frontmcp/plugin-codecall@npm:1.4.0":
+  version: 1.4.0
+  resolution: "@frontmcp/plugin-codecall@npm:1.4.0"
   dependencies:
-    "@enclave-vm/core": "npm:^2.14.1"
+    "@enclave-vm/core": "npm:^2.13.0"
     "@frontmcp/protocol": "npm:1.4.0"
     "@frontmcp/sdk": "npm:1.4.0"
-    reflect-metadata: "npm:^0.2.2"
-    vectoriadb: "npm:^2.3.2"
+    vectoriadb: "npm:^2.2.0"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.4.0
     "@frontmcp/plugin-cache": 1.4.0
+  checksum: 10c0/88f9d549f00d516c7291a3293338f42c0158cd7ab97ea6fdbd4503e440f51bad1e1545eed8c9b25aa4c5cad121b0d1567250bd951894789699af4e117770fb41
+  languageName: node
+  linkType: hard
+
+"@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
+  dependencies:
+    "@enclave-vm/core": "npm:^2.15.0"
+    "@frontmcp/protocol": "npm:1.5.2"
+    "@frontmcp/sdk": "npm:1.5.2"
+    reflect-metadata: "npm:^0.2.2"
+    vectoriadb: "npm:^2.3.2"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+    "@frontmcp/plugin-cache": 1.5.2
   languageName: unknown
   linkType: soft
 
@@ -2656,6 +2736,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/protocol@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/protocol@npm:1.5.2"
+  dependencies:
+    "@modelcontextprotocol/sdk": "npm:1.29.0"
+  checksum: 10c0/1833092665681399c90043018a0acd7fc441cd4b9147d20b4d306f3e3a4799a0763d03ac624a4fb107c8549cfb338c76aaaaabe207bf761cfdc97baa049e0639
+  languageName: node
+  linkType: hard
+
 "@frontmcp/react@workspace:libs/react":
   version: 0.0.0-use.local
   resolution: "@frontmcp/react@workspace:libs/react"
@@ -2678,9 +2767,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/sdk@npm:1.4.0, @frontmcp/sdk@workspace:libs/sdk":
-  version: 0.0.0-use.local
-  resolution: "@frontmcp/sdk@workspace:libs/sdk"
+"@frontmcp/sdk@npm:1.4.0":
+  version: 1.4.0
+  resolution: "@frontmcp/sdk@npm:1.4.0"
   dependencies:
     "@frontmcp/auth": "npm:1.4.0"
     "@frontmcp/di": "npm:1.4.0"
@@ -2695,12 +2784,66 @@ __metadata:
     js-yaml: "npm:^4.1.1"
     reflect-metadata: "npm:^0.2.2"
     semver: "npm:^7.6.0"
+  peerDependencies:
+    "@anthropic-ai/sdk": ^0.30.0 || ^0.78.0
+    "@enclave-vm/core": ^2.13.0
+    "@frontmcp/observability": 1.4.0
+    "@frontmcp/storage-sqlite": 1.4.0
+    "@opentelemetry/api": ^1.9.0
+    "@opentelemetry/sdk-trace-base": ^1.25.0
+    "@vercel/kv": ^3.0.0
+    content-type: ^1.0.5
+    cors: ^2.8.5
+    express: ^4.18.0 || ^5.0.0
+    openai: ^4.0.0 || ^5.0.0 || ^6.0.0
+    raw-body: ^3.0.0
+    vectoriadb: ^2.2.0
+  peerDependenciesMeta:
+    "@anthropic-ai/sdk":
+      optional: true
+    "@enclave-vm/core":
+      optional: true
+    "@frontmcp/observability":
+      optional: true
+    "@frontmcp/storage-sqlite":
+      optional: true
+    "@opentelemetry/api":
+      optional: true
+    "@opentelemetry/sdk-trace-base":
+      optional: true
+    "@vercel/kv":
+      optional: true
+    openai:
+      optional: true
+    vectoriadb:
+      optional: true
+  checksum: 10c0/419e68863e5e0556133030b46486bdf2752f3a5ad241e1ebdf4d36f8c5a685ad5d5ffa94654169cd7255ba1e8ec2e316216235f2caaa3402b511d8e5f6e0619e
+  languageName: node
+  linkType: hard
+
+"@frontmcp/sdk@npm:1.5.2, @frontmcp/sdk@workspace:libs/sdk":
+  version: 0.0.0-use.local
+  resolution: "@frontmcp/sdk@workspace:libs/sdk"
+  dependencies:
+    "@frontmcp/auth": "npm:1.5.2"
+    "@frontmcp/di": "npm:1.5.2"
+    "@frontmcp/guard": "npm:1.5.2"
+    "@frontmcp/lazy-zod": "npm:1.5.2"
+    "@frontmcp/protocol": "npm:1.5.2"
+    "@frontmcp/uipack": "npm:1.5.2"
+    "@frontmcp/utils": "npm:1.5.2"
+    "@types/cors": "npm:^2.8.17"
+    ioredis: "npm:^5.8.0"
+    jose: "npm:^6.1.3"
+    js-yaml: "npm:^4.1.1"
+    reflect-metadata: "npm:^0.2.2"
+    semver: "npm:^7.6.0"
     typescript: "npm:^5.9.3"
   peerDependencies:
     "@anthropic-ai/sdk": ^0.30.0 || ^0.78.0
-    "@enclave-vm/core": ^2.14.0
-    "@frontmcp/observability": 1.4.0
-    "@frontmcp/storage-sqlite": 1.4.0
+    "@enclave-vm/core": ^2.15.0
+    "@frontmcp/observability": 1.5.2
+    "@frontmcp/storage-sqlite": 1.5.2
     "@opentelemetry/api": ^1.9.0
     "@opentelemetry/sdk-trace-base": ^2.8.0
     "@vercel/kv": ^3.0.0
@@ -2747,7 +2890,7 @@ __metadata:
     "@anthropic-ai/sdk": "npm:^0.104.1"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
-    "@enclave-vm/core": "npm:^2.14.1"
+    "@enclave-vm/core": "npm:^2.15.0"
     "@eslint/js": "npm:^10.0.1"
     "@huggingface/transformers": "npm:^3.2.2"
     "@ianvs/prettier-plugin-sort-imports": "npm:^4.7.1"
@@ -2961,11 +3104,22 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@frontmcp/uipack@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/uipack@npm:1.5.2"
+  dependencies:
+    zod: "npm:^4.0.0"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+  checksum: 10c0/f9f5cd1bcbe7b18692cccb9010abfee99bd1a2f41bb4b95dfb0498e21fb9f7ae19590d8a894048ab4c5929cec9ff64f447eb446aab7a69111b7b83a38af4b5c5
+  languageName: node
+  linkType: hard
+
 "@frontmcp/utils@npm:1.4.0, @frontmcp/utils@workspace:libs/utils":
   version: 0.0.0-use.local
   resolution: "@frontmcp/utils@workspace:libs/utils"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.14.1"
+    "@enclave-vm/ast": "npm:^2.15.0"
     "@noble/ciphers": "npm:^2.1.1"
     "@noble/hashes": "npm:^2.0.1"
     "@types/node": "npm:^24.0.0"
@@ -2981,6 +3135,26 @@ __metadata:
       optional: true
   languageName: unknown
   linkType: soft
+
+"@frontmcp/utils@npm:1.5.2":
+  version: 1.5.2
+  resolution: "@frontmcp/utils@npm:1.5.2"
+  dependencies:
+    "@enclave-vm/ast": "npm:^2.14.1"
+    "@noble/ciphers": "npm:^2.1.1"
+    "@noble/hashes": "npm:^2.0.1"
+  peerDependencies:
+    "@frontmcp/lazy-zod": 1.5.2
+    "@vercel/kv": ^2.0.0 || ^3.0.0
+    ioredis: ^5.0.0
+  peerDependenciesMeta:
+    "@vercel/kv":
+      optional: true
+    ioredis:
+      optional: true
+  checksum: 10c0/f40dc9cc9498cba2ac1727c76a51390668c4a68a6c308397fb41eb6685863815ab09e35d76fd1b1c145d097e7934c80a642c0244eaa0a4100217362eeaef7c9e
+  languageName: node
+  linkType: hard
 
 "@grpc/grpc-js@npm:^1.11.1":
   version: 1.14.3
@@ -22689,7 +22863,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vectoriadb@npm:^2.3.2":
+"vectoriadb@npm:^2.2.0, vectoriadb@npm:^2.3.2":
   version: 2.3.2
   resolution: "vectoriadb@npm:2.3.2"
   peerDependencies:
