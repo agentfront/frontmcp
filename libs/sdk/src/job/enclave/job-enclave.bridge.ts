@@ -42,16 +42,29 @@ export class JobEnclaveBridge {
    */
   private async getEnclaveCore(): Promise<EnclaveCore> {
     if (!this.enclaveCore) {
+      let mod: (EnclaveCore & { default?: EnclaveCore }) | undefined;
       try {
-        // CJS/ESM interop: the namespace exposes `Sandbox` directly (ESM) or
-        // under `default` (CJS default-interop).
-        const mod = (await import('@enclave-vm/core')) as unknown as EnclaveCore & { default?: EnclaveCore };
-        this.enclaveCore = mod.Sandbox ? mod : (mod.default as EnclaveCore);
+        mod = (await import('@enclave-vm/core')) as unknown as EnclaveCore & { default?: EnclaveCore };
       } catch {
+        // Only a genuine module-resolution failure lands here — keep the
+        // "not installed" message scoped to it (a validation error below must
+        // NOT be swallowed and reported as a missing dependency).
         throw new Error(
           'Missing optional dependency: dynamic jobs require @enclave-vm/core. Install it with: npm install @enclave-vm/core',
         );
       }
+
+      // CJS/ESM interop: `Sandbox` sits on the namespace (ESM) or under
+      // `default` (CJS default-interop). Validate a usable Sandbox constructor
+      // BEFORE caching so getEnclaveCore() can never return an unusable module.
+      const core = typeof mod?.Sandbox === 'function' ? mod : mod?.default;
+      if (!core || typeof core.Sandbox !== 'function') {
+        throw new Error(
+          'The installed @enclave-vm/core did not export a usable `Sandbox` constructor. ' +
+            'Ensure a compatible @enclave-vm/core version is installed.',
+        );
+      }
+      this.enclaveCore = core;
     }
     return this.enclaveCore;
   }
