@@ -33,12 +33,20 @@ export class JobEnclaveBridge {
 
   /**
    * Lazy-load @enclave-vm/core.
+   *
+   * Uses a dynamic `import()` (not `require`) so the SDK's ESM build stays
+   * runtime-agnostic and the bundler can treat the enclave sandbox as a lazy
+   * optional dependency, matching the rest of the codebase. The full
+   * `@enclave-vm/core` is Node-only (it pulls in the `worker_threads`/`node:vm`
+   * adapters); the isolate-safe interpreter lives behind `@enclave-vm/core/worker`.
    */
-  private getEnclaveCore(): EnclaveCore {
+  private async getEnclaveCore(): Promise<EnclaveCore> {
     if (!this.enclaveCore) {
       try {
-        const loaded: EnclaveCore = require('@enclave-vm/core');
-        this.enclaveCore = loaded;
+        // CJS/ESM interop: the namespace exposes `Sandbox` directly (ESM) or
+        // under `default` (CJS default-interop).
+        const mod = (await import('@enclave-vm/core')) as unknown as EnclaveCore & { default?: EnclaveCore };
+        this.enclaveCore = mod.Sandbox ? mod : (mod.default as EnclaveCore);
       } catch {
         throw new Error(
           'Missing optional dependency: dynamic jobs require @enclave-vm/core. Install it with: npm install @enclave-vm/core',
@@ -60,7 +68,7 @@ export class JobEnclaveBridge {
       mcpLog?: (level: string, message: string) => void;
     },
   ): Promise<unknown> {
-    const enclave = this.getEnclaveCore();
+    const enclave = await this.getEnclaveCore();
     const { Sandbox } = enclave;
 
     const sandbox = new Sandbox({
