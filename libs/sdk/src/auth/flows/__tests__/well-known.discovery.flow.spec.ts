@@ -84,7 +84,31 @@ describe('Well-known PRM flow — authorization_servers host-derivation (#467a)'
     expect(output.body.authorization_servers[0]).not.toContain('localhost');
   });
 
-  it('honors X-Forwarded-Host/Proto for authorization_servers', async () => {
+  it('honors X-Forwarded-Host/Proto for authorization_servers ONLY when FRONTMCP_TRUST_PROXY is set', async () => {
+    const prev = process.env['FRONTMCP_TRUST_PROXY'];
+    process.env['FRONTMCP_TRUST_PROXY'] = '1';
+    try {
+      const scope = createMockScopeEntry({ auth: { mode: 'local' } as any });
+      (scope.auth as any).issuer = 'http://localhost:3001';
+      (scope as any).getAllSupportedScopes = () => ['openid'];
+
+      const input = createMockHttpRequest({
+        method: 'GET',
+        path: '/.well-known/oauth-protected-resource',
+        headers: { host: 'internal:3001', 'x-forwarded-host': 'public.example.com', 'x-forwarded-proto': 'https' },
+      });
+
+      const flow = new WellKnownPrmFlow(createPrmMetadata(), input as any, scope, jest.fn(), new Map());
+      const output = await runStageCaptureRespond(flow, ['parseInput', 'collectData']);
+
+      expect(output.body.authorization_servers).toEqual(['https://public.example.com']);
+    } finally {
+      if (prev === undefined) delete process.env['FRONTMCP_TRUST_PROXY'];
+      else process.env['FRONTMCP_TRUST_PROXY'] = prev;
+    }
+  });
+
+  it('IGNORES attacker X-Forwarded-Host for authorization_servers by default (secure default)', async () => {
     const scope = createMockScopeEntry({ auth: { mode: 'local' } as any });
     (scope.auth as any).issuer = 'http://localhost:3001';
     (scope as any).getAllSupportedScopes = () => ['openid'];
@@ -92,13 +116,14 @@ describe('Well-known PRM flow — authorization_servers host-derivation (#467a)'
     const input = createMockHttpRequest({
       method: 'GET',
       path: '/.well-known/oauth-protected-resource',
-      headers: { host: 'internal:3001', 'x-forwarded-host': 'public.example.com', 'x-forwarded-proto': 'https' },
+      headers: { host: 'real:3001', 'x-forwarded-host': 'evil.attacker.com', 'x-forwarded-proto': 'https' },
     });
 
     const flow = new WellKnownPrmFlow(createPrmMetadata(), input as any, scope, jest.fn(), new Map());
     const output = await runStageCaptureRespond(flow, ['parseInput', 'collectData']);
 
-    expect(output.body.authorization_servers).toEqual(['https://public.example.com']);
+    // No trust-proxy, no pin → derived from the direct Host, not the forwarded one.
+    expect(output.body.authorization_servers).toEqual(['http://real:3001']);
   });
 });
 

@@ -37,6 +37,7 @@ import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/uti
 import {
   Flow,
   FlowBase,
+  FlowControl,
   HttpHtmlSchema,
   httpInputSchema,
   HttpRedirectSchema,
@@ -257,19 +258,30 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const stateValidation = this.getStateValidation();
-    if (stateValidation === 'strict') {
-      const expectedState = session.currentProviderState;
-      if (!expectedState || expectedState !== providerState) {
-        this.logger.warn('State mismatch for provider callback');
-        this.respond(
-          httpRespond.html(
-            this.renderErrorPage('invalid_request', 'Invalid state parameter. Please restart authentication.'),
-            400,
-          ),
+    // SECURITY: the upstream `state` nonce is the ONLY cryptographic binding
+    // between this provider callback and the local federated session, so it
+    // MUST be verified in EVERY mode. Previously `stateValidation: 'format'`
+    // skipped this equality check (only the `federated:` prefix/arity was
+    // validated above), which let an attacker who completes their OWN upstream
+    // login replay their valid provider `code` with
+    // `state = federated:<victimSessionId>:<nonce>` and inject their provider
+    // account/tokens into the victim's federated session. The nonce check is
+    // now unconditional; `stateValidation` can no longer relax it.
+    const expectedState = session.currentProviderState;
+    if (!expectedState || expectedState !== providerState) {
+      if (this.getStateValidation() === 'format') {
+        this.logger.warn(
+          'federatedAuth.stateValidation:"format" no longer skips provider-state nonce verification (security hardening) — the callback state must match the value issued for this session',
         );
-        return;
       }
+      this.logger.warn('State mismatch for provider callback');
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('invalid_request', 'Invalid state parameter. Please restart authentication.'),
+          400,
+        ),
+      );
+      return;
     }
 
     this.state.set('federatedSession', session);
@@ -378,20 +390,34 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
       this.state.set('providerTokens', tokens);
 
-      // Try to get user info from provider
+      // Resolve the upstream identity. SECURITY: this is REQUIRED for a
+      // federated login — the provider is the identity source. If no stable
+      // `sub` can be determined, `getProviderUserInfo` throws; abort the flow
+      // with an error page rather than continuing with a missing/placeholder
+      // identity (which previously collapsed distinct users to one shared sub).
       if (result.id_token || result.access_token) {
         try {
           const userInfo = await localAuth.getProviderUserInfo(providerId, result.access_token, result.id_token);
           this.state.set('providerUserInfo', userInfo);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : 'Unknown error';
-          this.logger.warn(`Failed to get user info from provider ${providerId}: ${errMsg}`);
-          // Continue without user info
+          this.logger.warn(`Failed to resolve user identity from provider ${providerId}: ${errMsg}`);
+          this.respond(
+            httpRespond.html(
+              this.renderErrorPage('access_denied', 'Could not determine your identity from the provider'),
+              400,
+            ),
+          );
+          return;
         }
       }
 
       this.logger.info(`Successfully exchanged code for tokens with provider: ${providerId}`);
     } catch (err) {
+      // A `respond()` inside the try (e.g. the identity-failure error page
+      // above) throws FlowControl — that is control flow, not an error, so let
+      // it propagate instead of masking it with a generic 500.
+      if (err instanceof FlowControl) throw err;
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error(`Provider token exchange error: ${errMsg}`);
       this.respond(

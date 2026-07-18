@@ -1,12 +1,22 @@
+import * as dns from 'node:dns';
+
 import {
   CimdClientIdMismatchError,
   CimdFetchError,
+  CimdSecurityError,
   CimdValidationError,
   RedirectUriMismatchError,
 } from '../cimd.errors';
 import type { CimdLogger } from '../cimd.logger';
 import { CimdService } from '../cimd.service';
 import type { ClientMetadataDocument } from '../cimd.types';
+
+// Mock node:dns so the DNS-aware SSRF guard is hermetic. Default: resolve every
+// host to a public address (so existing tests using example.com are allowed);
+// individual tests override the resolution to exercise the SSRF block.
+jest.mock('node:dns', () => ({ promises: { lookup: jest.fn() } }));
+
+const mockDnsLookup = dns.promises.lookup as unknown as jest.Mock;
 
 // Mock logger implementing CimdLogger interface
 const createMockLogger = (): jest.Mocked<CimdLogger> => ({
@@ -36,6 +46,9 @@ describe('CimdService', () => {
     mockLogger = createMockLogger();
     service = new CimdService(mockLogger);
     mockFetch = jest.spyOn(global, 'fetch');
+    // Default: hosts resolve to a public address so the SSRF guard allows them.
+    mockDnsLookup.mockReset();
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
   });
 
   afterEach(() => {
@@ -95,6 +108,39 @@ describe('CimdService', () => {
       });
       expect(testingService.isCimdClientId('http://localhost/client')).toBe(true);
       expect(testingService.isCimdClientId('http://127.0.0.1/client')).toBe(true);
+    });
+  });
+
+  describe('SSRF (DNS-aware) — attacker-controlled client_id host', () => {
+    it('rejects a CIMD client_id whose host resolves to an internal address', async () => {
+      // Host is not a literal IP, so the literal checks pass — but it resolves to
+      // cloud metadata. The DNS-aware guard must block the fetch (no fetch call).
+      mockDnsLookup.mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
+      await expect(
+        service.resolveClientMetadata('https://metadata.attacker.example/oauth/client-metadata.json'),
+      ).rejects.toBeInstanceOf(CimdSecurityError);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('allows a CIMD client_id whose host resolves to a public address', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        body: null,
+        arrayBuffer: async () =>
+          new TextEncoder().encode(
+            JSON.stringify({
+              client_id: 'https://good.example/oauth/client-metadata.json',
+              client_name: 'Good',
+              redirect_uris: ['https://good.example/cb'],
+            }),
+          ).buffer,
+      } as unknown as Response);
+      const result = await service.resolveClientMetadata('https://good.example/oauth/client-metadata.json');
+      expect(result.isCimdClient).toBe(true);
+      expect(mockFetch).toHaveBeenCalled();
     });
   });
 

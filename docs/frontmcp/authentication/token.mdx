@@ -351,7 +351,7 @@ sequenceDiagram
     end
 
     FrontMCP->>FrontMCP: Verify signature
-    FrontMCP->>FrontMCP: Check exp, iat, aud claims
+    FrontMCP->>FrontMCP: Check exp, iat, iss, aud claims
     FrontMCP->>FrontMCP: Validate required scopes
 
     alt Valid
@@ -371,6 +371,15 @@ auth: {
   requiredScopes: ['openid', 'profile'],
 }
 ```
+
+In transparent mode the token's `iss` claim is validated against `provider`
+(and any `providerConfig.additionalIssuers`) by default, and its `aud` — when
+present — against `expectedAudience`. This is what stops a token minted by the
+same IdP for a **different issuer or audience** from being replayed against this
+server. Only disable the issuer check (`providerConfig.verifyIssuer: false`) for
+a trusted gateway whose re-minted issuer you cannot enumerate, and keep a strict
+`expectedAudience` when you do. See [Auth Modes → Transparent](/frontmcp/authentication/modes#transparent-mode)
+for the full option table.
 
 ---
 

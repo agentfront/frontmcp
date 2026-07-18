@@ -45,6 +45,27 @@ export function createHostValidationMiddleware(
         });
         return;
       }
+
+      // SECURITY: also validate `X-Forwarded-Host` when present. The issuer /
+      // resource / OAuth-discovery URLs may be derived from it (when
+      // FRONTMCP_TRUST_PROXY is enabled), so a poisoned forwarded host must be
+      // rejected here too — otherwise a request with a valid `Host` but a
+      // spoofed `X-Forwarded-Host` slips past this allowlist and poisons
+      // discovery. A forwarded host may include a comma-separated proxy chain.
+      const forwardedHost = req.headers?.['x-forwarded-host'] as string | undefined;
+      if (forwardedHost) {
+        const candidates = forwardedHost
+          .split(',')
+          .map((h) => h.trim())
+          .filter(Boolean);
+        if (candidates.some((h) => !allowedHostsSet.has(h))) {
+          res.status(403).json({
+            error: 'Forbidden',
+            message: 'Invalid X-Forwarded-Host header',
+          });
+          return;
+        }
+      }
     }
 
     // Validate Origin header (only if present and allowedOrigins configured)

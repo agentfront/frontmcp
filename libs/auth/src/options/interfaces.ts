@@ -86,6 +86,35 @@ export interface ProviderConfig {
   jwksUri?: string;
 
   /**
+   * Additional issuer (`iss`) values to trust beyond the provider's issuer URL.
+   *
+   * By default a transparent-mode token is accepted only when its `iss` claim
+   * equals the configured provider issuer. Some deployments front the IdP with
+   * a gateway that re-mints tokens under a different issuer; list those exact
+   * issuer strings here to trust them (each is matched with and without a
+   * trailing slash).
+   *
+   * SECURITY: every value is trusted verbatim. Set it ONLY to issuers you
+   * control — never derive it from request data or the token itself.
+   */
+  additionalIssuers?: string[];
+
+  /**
+   * Whether to validate the token's `iss` claim against the provider issuer
+   * (and {@link additionalIssuers}).
+   *
+   * @default true — the issuer is always checked unless you opt out here.
+   *
+   * SECURITY: setting this to `false` DISABLES issuer verification entirely, so
+   * any token signed by a key in the provider JWKS is accepted regardless of
+   * who issued it. Only use it for a trusted gateway that re-mints tokens under
+   * an unpredictable issuer you cannot enumerate with {@link additionalIssuers},
+   * and compensate with strict audience/scope checks. Prefer
+   * {@link additionalIssuers} whenever the set of issuers is known.
+   */
+  verifyIssuer?: boolean;
+
+  /**
    * Enable Dynamic Client Registration (DCR)
    * @default false
    */
@@ -818,6 +847,15 @@ export interface LocalAuthOptionsInterface {
   refresh?: TokenRefreshConfig;
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
+  /**
+   * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD
+   * client-id URL before an authorization request is accepted, so its
+   * redirect_uri can be validated (OAuth 2.1). Defaults to `false` for
+   * backward compatibility; recommended `true` in production to prevent
+   * auth-code interception via an unregistered client's attacker-chosen
+   * redirect_uri.
+   */
+  requireRegisteredClients?: boolean;
   cimd?: CimdConfigInput;
   /**
    * Require an email at the `/oauth/callback` login step.
@@ -937,6 +975,13 @@ export interface RemoteAuthOptionsInterface {
   refresh?: TokenRefreshConfig;
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
+  /**
+   * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD
+   * client-id URL before an authorization request is accepted (OAuth 2.1
+   * exact redirect-uri matching). Defaults to `false`; recommended `true` in
+   * production. See {@link LocalAuthOptionsInterface.requireRegisteredClients}.
+   */
+  requireRegisteredClients?: boolean;
   cimd?: CimdConfigInput;
   /**
    * Custom authorization-UI slots (#469), scoped to this auth config.

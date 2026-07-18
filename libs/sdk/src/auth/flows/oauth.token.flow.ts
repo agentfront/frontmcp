@@ -87,6 +87,29 @@ const inputSchema = httpInputSchema;
  * Returns an empty object when nothing usable is present so the caller's zod
  * validation produces a precise field error rather than throwing.
  */
+/**
+ * Parse an `Authorization: Basic base64(client_id:client_secret)` header
+ * (RFC 6749 §2.3.1) into its credentials. Runtime-safe base64 decode (Node
+ * `Buffer` or Web `atob`). Returns `undefined` when absent/malformed.
+ */
+function parseBasicAuthorization(header: string | undefined): { clientId: string; clientSecret: string } | undefined {
+  if (typeof header !== 'string') return undefined;
+  const m = /^Basic\s+(.+)$/i.exec(header.trim());
+  if (!m) return undefined;
+  let decoded: string;
+  try {
+    const b64 = m[1].trim();
+    if (typeof Buffer !== 'undefined') decoded = Buffer.from(b64, 'base64').toString('utf8');
+    else if (typeof atob === 'function') decoded = atob(b64);
+    else return undefined;
+  } catch {
+    return undefined;
+  }
+  const idx = decoded.indexOf(':');
+  if (idx < 0) return undefined;
+  return { clientId: decoded.slice(0, idx), clientSecret: decoded.slice(idx + 1) };
+}
+
 function coerceTokenRequestBody(request: ServerRequest): Record<string, unknown> {
   const body: unknown = request.body;
 
@@ -141,6 +164,8 @@ const authorizationCodeGrant = z.object({
   redirect_uri: z.string().url(),
   /** Public client identifier */
   client_id: z.string().min(1),
+  /** Client secret (confidential clients; also accepted via HTTP Basic). */
+  client_secret: z.string().optional(),
   /** PKCE verifier bound to the code */
   code_verifier: z
     .string()
@@ -153,6 +178,8 @@ const refreshTokenGrant = z.object({
   refresh_token: z.string().min(1, 'refresh_token is required'),
   /** Public client identifier */
   client_id: z.string().min(1),
+  /** Client secret (confidential clients; also accepted via HTTP Basic). */
+  client_secret: z.string().optional(),
 });
 
 const anonymousGrant = z.object({
@@ -245,6 +272,17 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     // not parse it). This keeps clean single-type bodies working unchanged.
     const rawBody = coerceTokenRequestBody(request);
 
+    // RFC 6749 §2.3.1 — a confidential client may authenticate via HTTP Basic
+    // (`Authorization: Basic base64(client_id:client_secret)`) instead of body
+    // params. Merge those credentials into the body so downstream client
+    // authentication sees them. Body params take precedence for client_id.
+    const basic = parseBasicAuthorization(request.headers?.['authorization'] as string | undefined);
+    if (basic && rawBody && typeof rawBody === 'object') {
+      const b = rawBody as Record<string, unknown>;
+      if (b['client_id'] === undefined) b['client_id'] = basic.clientId;
+      if (b['client_secret'] === undefined) b['client_secret'] = basic.clientSecret;
+    }
+
     const parsed = tokenRequestSchema.safeParse(rawBody);
     if (parsed.success) {
       this.state.set({
@@ -313,7 +351,13 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     // Real authorization code exchange
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const result = await localAuth.exchangeCode(body.code, body.client_id, body.redirect_uri, body.code_verifier);
+    const result = await localAuth.exchangeCode(
+      body.code,
+      body.client_id,
+      body.redirect_uri,
+      body.code_verifier,
+      body.client_secret,
+    );
 
     if ('error' in result) {
       this.logger.warn(`Code exchange failed: ${result.error}`);
@@ -375,7 +419,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     // Real refresh token exchange
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const result = await localAuth.refreshAccessToken(body.refresh_token, body.client_id);
+    const result = await localAuth.refreshAccessToken(body.refresh_token, body.client_id, body.client_secret);
 
     if ('error' in result) {
       this.logger.warn(`Refresh token failed: ${result.error}`);

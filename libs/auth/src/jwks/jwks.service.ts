@@ -10,9 +10,34 @@ import {
   type KeyPersistence,
 } from '@frontmcp/utils';
 
+import { resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
 import { type JwksServiceOptions, type ProviderVerifyRef, type VerifyResult } from './jwks.types';
-import { decodeJwtPayloadSafe, normalizeIssuer, trimSlash } from './jwks.utils';
+import { normalizeIssuer, trimSlash } from './jwks.utils';
+
+/**
+ * Asymmetric JWS algorithms accepted for transparent-mode (provider-JWKS)
+ * verification. Pinned so a provider JWKS that (mis)publishes a symmetric
+ * (`oct`) key can never let a token select an HMAC algorithm, and `none` is
+ * always rejected (jose rejects it too, but pinning makes the intent explicit).
+ */
+const TRANSPARENT_JWT_ALGS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+] as const;
+
+/** Hard cap on discovery / JWKS document size (defends against hostile bodies). */
+const MAX_JWKS_FETCH_BYTES = 1_048_576; // 1 MiB
+/** Max redirect hops followed during a discovery/JWKS fetch (each re-validated). */
+const MAX_JWKS_FETCH_HOPS = 3;
 
 // Warning message for weak RSA keys (shown only once per provider)
 const WEAK_KEY_WARNING = `
@@ -109,12 +134,16 @@ export class JwksService {
       try {
         jwks = await this.getJwksForProvider(p);
         if (!jwks?.keys?.length) continue;
-        const draftPayload = decodeJwtPayloadSafe(token);
         const JWKS = createLocalJWKSet(jwks);
+        // `undefined` when the provider opts out of issuer validation
+        // (`verifyIssuer: false`); omit the `issuer` option so `jose` skips the
+        // `iss` check entirely rather than comparing against a bogus value.
+        const issuerConstraint = this.issuerConstraintFor(p);
         const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
-          issuer: [normalizeIssuer(p.issuerUrl)].concat(
-            (draftPayload?.['iss'] ? [draftPayload['iss']] : []) as string[],
-          ), // used because current cloud gateway have invalid issuer
+          // Pin to asymmetric algorithms so a symmetric key in the provider JWKS
+          // can't be used to accept an HMAC-signed token, and `none` is refused.
+          algorithms: [...TRANSPARENT_JWT_ALGS],
+          ...(issuerConstraint ? { issuer: issuerConstraint } : {}),
         });
 
         return {
@@ -142,6 +171,31 @@ export class JwksService {
     }
 
     return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
+  }
+
+  /**
+   * Issuer constraint passed to `jose` for a provider: the configured issuer
+   * URL plus any explicitly configured `additionalIssuers`, each accepted with
+   * and without a trailing slash (`jose` compares `iss` byte-for-byte and IdPs
+   * differ on the trailing slash).
+   *
+   * Returns `undefined` ONLY when the provider explicitly opts out via
+   * `verifyIssuer: false`, which disables issuer checking entirely. Otherwise
+   * the set is derived ONLY from configuration — the token's own `iss` claim
+   * must never be appended, since an allowlist that contains the unverified
+   * claim accepts every issuer (GHSA-hvvp-67p3-j379). An empty/whitespace
+   * `issuerUrl` yields a set that no real token can satisfy (safe fail), never
+   * a silent bypass.
+   */
+  private issuerConstraintFor(p: ProviderVerifyRef): string[] | undefined {
+    if (p.verifyIssuer === false) return undefined;
+    const issuers = new Set<string>();
+    for (const candidate of [p.issuerUrl, ...(p.additionalIssuers ?? [])]) {
+      const normalized = normalizeIssuer(candidate);
+      issuers.add(normalized);
+      issuers.add(`${normalized}/`);
+    }
+    return [...issuers];
   }
 
   /**
@@ -208,20 +262,31 @@ export class JwksService {
         return { ok: false, error: 'signature_invalid' };
       }
 
-      // Validate issuer
-      const payloadIssuerRaw = typeof payload.iss === 'string' ? payload.iss : undefined;
-      if (!payloadIssuerRaw) {
-        return { ok: false, error: 'issuer_mismatch' };
-      }
-      const trustedIssuers = new Set([normalizeIssuer(provider.issuerUrl)]);
-      const payloadIssuer = normalizeIssuer(payloadIssuerRaw);
-      if (!trustedIssuers.has(payloadIssuer)) {
-        return { ok: false, error: 'issuer_mismatch' };
+      // Validate issuer unless the provider explicitly opts out
+      // (`verifyIssuer: false`) — mirrors the primary `jose` path above.
+      if (provider.verifyIssuer !== false) {
+        const payloadIssuerRaw = typeof payload.iss === 'string' ? payload.iss : undefined;
+        if (!payloadIssuerRaw) {
+          return { ok: false, error: 'issuer_mismatch' };
+        }
+        const trustedIssuers = new Set(
+          [provider.issuerUrl, ...(provider.additionalIssuers ?? [])].map((issuer) => normalizeIssuer(issuer)),
+        );
+        const payloadIssuer = normalizeIssuer(payloadIssuerRaw);
+        if (!trustedIssuers.has(payloadIssuer)) {
+          return { ok: false, error: 'issuer_mismatch' };
+        }
       }
 
       // Check expiration
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
         return { ok: false, error: 'token_expired' };
+      }
+
+      // Check not-before — reject not-yet-valid tokens, matching jose's primary
+      // path (the fallback previously skipped `nbf`).
+      if (payload.nbf && payload.nbf > Math.floor(Date.now() / 1000)) {
+        return { ok: false, error: 'token_not_yet_valid' };
       }
 
       // Emit warning (once per provider)
@@ -249,19 +314,21 @@ export class JwksService {
    * Find a matching key from JWKS based on token header
    */
   private findMatchingKey(jwks: JSONWebKeySet, header: { kid?: string; alg?: string }): JWK | undefined {
-    // First try exact kid match
+    // When the token carries a `kid`, require an EXACT match — never fall back to
+    // another key. Falling back (to an alg match or "first RSA key") when the kid
+    // is unknown is key-confusion-prone and lets a token whose kid names a
+    // rotated/foreign key be verified against a different one.
     if (header.kid) {
-      const byKid = jwks.keys.find((k) => k.kid === header.kid);
-      if (byKid) return byKid;
+      return jwks.keys.find((k) => k.kid === header.kid);
     }
 
-    // Fall back to matching by algorithm
+    // No kid: match by algorithm.
     if (header.alg) {
       const byAlg = jwks.keys.find((k) => k.alg === header.alg || (k.kty === 'RSA' && header.alg?.startsWith('RS')));
       if (byAlg) return byAlg;
     }
 
-    // Last resort: return first RSA key
+    // Last resort (still no kid): first RSA key.
     return jwks.keys.find((k) => k.kty === 'RSA');
   }
 
@@ -309,7 +376,15 @@ export class JwksService {
       if (fromMeta?.keys?.length) return fromMeta;
     }
 
-    return cached?.jwks; // return stale if we had anything, else undefined
+    // Bounded stale-serving: when a refetch fails, keep serving the cached keys
+    // only within a grace window, then fail closed (return undefined). Otherwise
+    // a revoked/rotated key would be trusted forever whenever the JWKS endpoint
+    // is unreachable (e.g. an attacker DoS-ing it after a key compromise).
+    const maxStaleMs = Math.max(this.opts.providerJwksTtlMs * 4, 60_000);
+    if (cached && Date.now() - cached.fetchedAt < maxStaleMs) {
+      return cached.jwks;
+    }
+    return undefined;
   }
 
   // ===========================================================================
@@ -357,13 +432,57 @@ export class JwksService {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timer = setTimeout(() => ctl?.abort(), this.opts.networkTimeoutMs);
     try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { accept: 'application/json' },
-        signal: ctl?.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as T;
+      let currentUrl = url;
+      for (let hop = 0; ; hop++) {
+        const parsed = new URL(currentUrl);
+
+        // Scheme: require https; allow http only for localhost or in development.
+        const host = parsed.hostname.toLowerCase();
+        const isLocalhost =
+          host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host === '::1' ||
+          host === '[::1]' ||
+          host.endsWith('.localhost');
+        if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && (isLocalhost || !isProduction()))) {
+          throw new Error(`insecure scheme "${parsed.protocol}"`);
+        }
+
+        // SSRF: reject internal hosts / hosts resolving to internal addresses.
+        // The issuer/jwksUri is config-derived, but a compromised or spoofable
+        // IdP metadata document (or a 3xx) can still steer the fetch internal.
+        const ssrf = await resolveAndCheckHostname(parsed.hostname);
+        if (!ssrf.allowed) throw new Error(`blocked host: ${ssrf.reason}`);
+
+        const res = await fetch(currentUrl, {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+          signal: ctl?.signal,
+          // Follow redirects manually so each hop is re-validated (scheme + SSRF).
+          redirect: 'manual',
+        });
+
+        if (res.status >= 300 && res.status < 400) {
+          const location = res.headers.get('location');
+          if (!location || hop >= MAX_JWKS_FETCH_HOPS) {
+            throw new Error('too many redirects');
+          }
+          currentUrl = new URL(location, currentUrl).toString();
+          continue;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        // Size cap: reject by Content-Length up front, then bound the read.
+        const contentLength = res.headers.get('content-length');
+        if (contentLength && Number(contentLength) > MAX_JWKS_FETCH_BYTES) {
+          throw new Error('response too large');
+        }
+        const text = await res.text();
+        if (text.length > MAX_JWKS_FETCH_BYTES) {
+          throw new Error('response too large');
+        }
+        return JSON.parse(text) as T;
+      }
     } finally {
       clearTimeout(timer);
     }

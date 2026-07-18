@@ -95,6 +95,25 @@ export const providerConfigSchema = z.object({
   jwksUri: z.string().url().optional(),
 
   /**
+   * Additional `iss` values to trust beyond the provider issuer URL.
+   *
+   * SECURITY: trusted verbatim — set only to issuers you control (e.g. a
+   * gateway that re-mints tokens), never derived from request or token data.
+   */
+  additionalIssuers: z.array(z.string()).optional(),
+
+  /**
+   * Validate the token's `iss` claim against the provider issuer (and
+   * {@link additionalIssuers}). Defaults to `true`.
+   *
+   * SECURITY: `false` disables issuer verification entirely — any token signed
+   * by a provider JWKS key is accepted regardless of issuer. Only for a trusted
+   * gateway whose re-minted issuer cannot be enumerated; prefer
+   * `additionalIssuers` when the issuer set is known.
+   */
+  verifyIssuer: z.boolean().optional(),
+
+  /**
    * Enable Dynamic Client Registration (DCR)
    * @default false
    */

@@ -39,6 +39,8 @@ auth: {
 
 > Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope. `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
+> **Claim validation (transparent):** a valid JWKS signature alone does not bind a token to this server — every service behind the same IdP shares the signing keys. FrontMCP therefore validates the token `iss` against `provider` (plus any `providerConfig.additionalIssuers`, each matched with/without a trailing slash) **by default**, and validates `aud` against `expectedAudience` when the token carries one. This blocks replay of a token minted by the same IdP for a different issuer or audience. Set `providerConfig.additionalIssuers: ['https://gateway.example']` to trust a known extra issuer. `providerConfig.verifyIssuer: false` **disables the issuer check entirely** (accepts any issuer signed by the JWKS) — only for a trusted gateway whose re-minted issuer you cannot enumerate, and always paired with a strict `expectedAudience`.
+
 ## Local Mode
 
 Built-in OAuth 2.1 server that signs its own JWT tokens. Full control over token lifecycle.
@@ -60,6 +62,10 @@ auth: {
 Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `JWT_SECRET` or tokens are invalidated on every restart. For a single operator (e.g. Claude Code), add `requireEmail: false` to skip the email prompt (a stable `sub` is derived from `anonymousSubject`, default `'local-operator'`).
 
 Local mode also accepts `allowDefaultPublic` (default `false` — set `true` to admit tokenless requests as anonymous instead of returning 401), `anonymousScopes` (default `['anonymous']` — scopes for those anonymous sessions), and `expectedAudience` (reject tokens minted for a different `aud`).
+
+> **Client registration (security):** by default an unregistered `client_id` is accepted with whatever `redirect_uri` it presents. Set `requireRegisteredClients: true` (local/remote) to require every client to be registered (DCR / `dcr.clients`) or a CIMD client-id URL, so `redirect_uri` is exact-matched (OAuth 2.1) — this prevents auth-code interception via an attacker-chosen redirect. Confidential clients (`token_endpoint_auth_method: client_secret_basic`/`client_secret_post`) are authenticated with a constant-time `client_secret` check on both the code-exchange and refresh grants (Basic header or body param).
+
+> **Public origin (security):** pin `FRONTMCP_PUBLIC_URL` in production. The issuer / resource / OAuth-discovery URLs and the transparent expected audience derive from it rather than from request headers; `X-Forwarded-Host`/`X-Forwarded-Proto` are ignored unless `FRONTMCP_TRUST_PROXY=1` (a trusted proxy that strips client-supplied forwarded headers).
 
 **Progressive / incremental authorization** (opt-in via `incrementalAuth`): when enabled, the minted token carries an `authorized_apps` claim and a `tools/call` for an app NOT in that claim resolves to a `CallToolResult` with `isError: true` and `_meta.code === 'AUTHORIZATION_REQUIRED'` (fields: `authorization_required: true`, `app`, `tool`, `auth_url`, `required_scopes`, `session_mode`, `supports_incremental`). The client declares the initial grant on `/oauth/authorize?…&apps=crm` (omit `apps` to grant all apps) and expands it later via an incremental authorize `…&mode=incremental&app=slack&apps=crm` — the new token's claim is the **union** of the prior apps plus the target (the user identity and already-granted apps are preserved; upstream tokens stay server-side). Without an `incrementalAuth` block, no claim is minted and there is **no** app-level gating (allow-all preserved). `consent` (tool-level) and `incrementalAuth` (app-level) are independent.
 

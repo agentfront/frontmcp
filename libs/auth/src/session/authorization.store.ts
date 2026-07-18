@@ -47,6 +47,13 @@ export interface AuthorizationCodeRecord {
   expiresAt: number;
   /** Whether this code has been used (single-use) */
   used: boolean;
+  /**
+   * The refresh token minted from this code. Recorded when the code is consumed
+   * so that a detected REPLAY (re-presenting an already-used code — a strong
+   * signal the code leaked) can revoke the token family issued from it, per
+   * OAuth 2.1 §4.1.2 breach handling.
+   */
+  issuedRefreshToken?: string;
   /** Resource/audience the token will be issued for */
   resource?: string;
 
@@ -187,6 +194,28 @@ export interface RefreshTokenRecord {
   revoked: boolean;
   /** Previous token if rotated */
   previousToken?: string;
+
+  // --- Grant metadata carried across refresh so the re-minted access token
+  // keeps its consent / progressive-authorization claims (otherwise refreshing
+  // silently strips `consent` / `authorized_apps` and the tool gate fails open).
+  /** User email, re-embedded in refreshed access tokens. */
+  userEmail?: string;
+  /** User display name, re-embedded in refreshed access tokens. */
+  userName?: string;
+  /** Whether tool-level consent was enabled for this grant. */
+  consentEnabled?: boolean;
+  /** Consented tool ids (when `consentEnabled`). */
+  selectedToolIds?: string[];
+  /** Granted app ids for incremental/progressive authorization. */
+  authorizedAppIds?: string[];
+  /** Custom claims embedded at authorize time (e.g. from a local authenticate() verifier). */
+  customClaims?: Record<string, unknown>;
+  /** Whether federated login was used for this grant. */
+  federatedLoginUsed?: boolean;
+  /** Selected federated provider ids. */
+  selectedProviderIds?: string[];
+  /** Skipped federated provider ids. */
+  skippedProviderIds?: string[];
 }
 
 /**
@@ -287,6 +316,16 @@ export interface CreateRefreshTokenRecordParams {
   userSub: string;
   scopes: string[];
   resource?: string;
+  // Grant metadata preserved across refresh (see RefreshTokenRecord).
+  userEmail?: string;
+  userName?: string;
+  consentEnabled?: boolean;
+  selectedToolIds?: string[];
+  authorizedAppIds?: string[];
+  customClaims?: Record<string, unknown>;
+  federatedLoginUsed?: boolean;
+  selectedProviderIds?: string[];
+  skippedProviderIds?: string[];
 }
 
 /** Default TTL for authorization codes (60 seconds). */
@@ -382,6 +421,17 @@ export function buildRefreshTokenRecord(params: CreateRefreshTokenRecordParams):
     createdAt: now,
     expiresAt: now + REFRESH_TOKEN_TTL_MS,
     revoked: false,
+    // Preserve grant metadata so a refreshed access token keeps its
+    // consent/authorized_apps/custom claims.
+    userEmail: params.userEmail,
+    userName: params.userName,
+    consentEnabled: params.consentEnabled,
+    selectedToolIds: params.selectedToolIds,
+    authorizedAppIds: params.authorizedAppIds,
+    customClaims: params.customClaims,
+    federatedLoginUsed: params.federatedLoginUsed,
+    selectedProviderIds: params.selectedProviderIds,
+    skippedProviderIds: params.skippedProviderIds,
   };
 }
 
@@ -392,7 +442,7 @@ export interface AuthorizationStore {
   // Authorization code operations
   storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void>;
   getAuthorizationCode(code: string): Promise<AuthorizationCodeRecord | null>;
-  markCodeUsed(code: string): Promise<void>;
+  markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void>;
   deleteAuthorizationCode(code: string): Promise<void>;
 
   // Pending authorization operations
@@ -472,10 +522,11 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
     return record;
   }
 
-  async markCodeUsed(code: string): Promise<void> {
+  async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
     const record = this.codes.get(code);
     if (record) {
       record.used = true;
+      if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
     }
   }
 
@@ -630,10 +681,11 @@ export class RedisAuthorizationStore implements AuthorizationStore {
     return JSON.parse(data) as AuthorizationCodeRecord;
   }
 
-  async markCodeUsed(code: string): Promise<void> {
+  async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
     const record = await this.getAuthorizationCode(code);
     if (record) {
       record.used = true;
+      if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
       const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
       await this.redis.set(this.key('code', code), JSON.stringify(record), 'EX', Math.max(ttl, 1));
     }

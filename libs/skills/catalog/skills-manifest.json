@@ -630,7 +630,8 @@
               "features": [
                 "Using `mode: 'transparent'` to validate tokens from an external identity provider",
                 "Setting `expectedAudience` to restrict which tokens are accepted",
-                "The server fetches JWKS from `{provider}/.well-known/jwks.json` automatically"
+                "The server fetches JWKS from `{provider}/.well-known/jwks.json` automatically",
+                "Issuer (`iss`) is validated against `provider` by default; opt out or extend with `providerConfig.verifyIssuer` / `additionalIssuers`"
               ]
             }
           ]

@@ -179,6 +179,10 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
         kind: 'json',
         contentType: 'application/json; charset=utf-8',
         status: 200,
+        // Never cache: the advertised endpoints are derived from the request
+        // origin, so a shared cache could serve a poisoned authorization/token
+        // endpoint to another client (OAuth mix-up).
+        headers: { 'cache-control': 'no-store' },
         body: {
           issuer: baseIssuer,
           authorization_endpoint: `${oauthBaseUrl}/oauth/authorize`,
