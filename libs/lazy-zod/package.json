@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/lazy-zod",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Drop-in zod replacement that lazily constructs compound schemas for dramatic cold-start speedups. Exports `z` (lazy, drop-in), `eagerZ` (real zod, zero overhead), and `lazyZ` (explicit factory wrapper).",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
