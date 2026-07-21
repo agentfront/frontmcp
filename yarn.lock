@@ -2394,7 +2394,7 @@ __metadata:
     "@frontmcp/sdk": "npm:1.5.4"
     "@frontmcp/utils": "npm:1.5.4"
     js-yaml: "npm:^4.1.0"
-    mcp-from-openapi: "npm:2.5.0"
+    mcp-from-openapi: "npm:2.5.1"
     openapi-types: "npm:^12.1.3"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.5.4
@@ -2802,7 +2802,7 @@ __metadata:
     katex: "npm:^0.17.0"
     leaflet: "npm:^1.9.4"
     lint-staged: "npm:^17.0.7"
-    mcp-from-openapi: "npm:2.5.0"
+    mcp-from-openapi: "npm:2.5.1"
     mermaid: "npm:^11.15.0"
     nx: "npm:22.7.5"
     nyc: "npm:^18.0.0"
@@ -16140,16 +16140,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mcp-from-openapi@npm:2.5.0":
-  version: 2.5.0
-  resolution: "mcp-from-openapi@npm:2.5.0"
+"mcp-from-openapi@npm:2.5.1":
+  version: 2.5.1
+  resolution: "mcp-from-openapi@npm:2.5.1"
   dependencies:
     "@apidevtools/json-schema-ref-parser": "npm:^15.3.5"
     openapi-types: "npm:^12.1.3"
     yaml: "npm:^2.8.3"
   peerDependencies:
     zod: ^4.0.0
-  checksum: 10c0/a50999f619f4f4fbf0484c3325223d6b7443941ab98e353ca69beb01c584ce531c50778621fede4ce3a28c5f0567f54e472fc78781e6157999c39d3a63d3a8ea
+  checksum: 10c0/acf8bfd24c9c83349361d06f1ac2407593e59d66b63b370e142744c9ff3990d9dab7fad8a1fea78a9c8967a2c9f8c48320e7853ba8d3e04b466f544e47a19d66
   languageName: node
   linkType: hard
 
