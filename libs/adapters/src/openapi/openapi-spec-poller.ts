@@ -8,13 +8,16 @@
  * @packageDocumentation
  */
 
+import { normalizeSsrfOptions, safeFetch, type ResolvedSsrfOptions } from 'mcp-from-openapi';
+
 import { sha256Hex } from '@frontmcp/utils';
+
 import type {
-  SpecPollerOptions,
-  SpecPollerCallbacks,
-  SpecPollerStats,
-  SpecPollerRetryConfig,
   PollerHealthStatus,
+  SpecPollerCallbacks,
+  SpecPollerOptions,
+  SpecPollerRetryConfig,
+  SpecPollerStats,
 } from './openapi-spec-poller.types';
 import { OpenAPIFetchError } from './openapi.errors';
 
@@ -37,6 +40,8 @@ export class OpenApiSpecPoller {
   private readonly retry: Required<SpecPollerRetryConfig>;
   private readonly unhealthyThreshold: number;
   private readonly headers: Record<string, string>;
+  private readonly ssrf: ResolvedSsrfOptions;
+  private readonly followRedirects: boolean;
   private readonly callbacks: SpecPollerCallbacks;
 
   private intervalTimer: ReturnType<typeof setInterval> | null = null;
@@ -56,6 +61,8 @@ export class OpenApiSpecPoller {
     this.retry = { ...DEFAULT_RETRY, ...options.retry };
     this.unhealthyThreshold = options.unhealthyThreshold ?? 3;
     this.headers = options.headers ?? {};
+    this.ssrf = options.ssrf ?? normalizeSsrfOptions(undefined);
+    this.followRedirects = options.followRedirects ?? false;
     this.callbacks = callbacks;
   }
 
@@ -158,44 +165,40 @@ export class OpenApiSpecPoller {
       }
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+    // SECURITY (GHSA-65h7-9wrw-629c): guard the polled spec URL like fromURL() instead of raw fetch.
+    const response = await safeFetch(this.url, {
+      headers,
+      timeoutMs: this.fetchTimeoutMs,
+      followRedirects: this.followRedirects,
+      ssrf: this.ssrf,
+    });
 
-    try {
-      const response = await fetch(this.url, {
-        headers,
-        signal: controller.signal,
-      });
-
-      // HTTP 304: Not Modified
-      if (response.status === 304) {
-        this.callbacks.onUnchanged?.();
-        return;
-      }
-
-      if (!response.ok) {
-        throw new OpenAPIFetchError(this.url, response.status, response.statusText);
-      }
-
-      // Store ETag and Last-Modified for next request
-      const etag = response.headers.get('etag');
-      const lastModified = response.headers.get('last-modified');
-      if (etag) this.lastEtag = etag;
-      if (lastModified) this.lastModified = lastModified;
-
-      const body = await response.text();
-      const hash = sha256Hex(body);
-
-      if (this.lastHash && this.lastHash === hash) {
-        this.callbacks.onUnchanged?.();
-        return;
-      }
-
-      this.lastHash = hash;
-      this.callbacks.onChanged?.(body, hash);
-    } finally {
-      clearTimeout(timeout);
+    // HTTP 304: Not Modified
+    if (response.status === 304) {
+      this.callbacks.onUnchanged?.();
+      return;
     }
+
+    if (!response.ok) {
+      throw new OpenAPIFetchError(this.url, response.status, response.statusText);
+    }
+
+    // Store ETag and Last-Modified for next request
+    const etag = response.headers.get('etag');
+    const lastModified = response.headers.get('last-modified');
+    if (etag) this.lastEtag = etag;
+    if (lastModified) this.lastModified = lastModified;
+
+    const body = await response.text();
+    const hash = sha256Hex(body);
+
+    if (this.lastHash && this.lastHash === hash) {
+      this.callbacks.onUnchanged?.();
+      return;
+    }
+
+    this.lastHash = hash;
+    this.callbacks.onChanged?.(body, hash);
   }
 
   /**
