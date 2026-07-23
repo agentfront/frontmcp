@@ -6,6 +6,8 @@
  * @packageDocumentation
  */
 
+import type { ResolvedSsrfOptions } from 'mcp-from-openapi';
+
 /**
  * Change detection strategy.
  */
@@ -46,6 +48,18 @@ export interface SpecPollerOptions {
   unhealthyThreshold?: number;
   /** Additional headers for fetch requests */
   headers?: Record<string, string>;
+  /**
+   * SSRF policy applied to the spec URL on every poll, matching the guard used
+   * for the initial `OPENAPIToolGenerator.fromURL()` load. The adapter injects
+   * this from `loadOptions.refResolution`; standalone callers may set it
+   * directly. Defaults to blocking internal/private addresses.
+   */
+  ssrf?: ResolvedSsrfOptions;
+  /**
+   * Follow (and re-validate) redirect hops when polling. Mirrors the adapter's
+   * spec-load redirect policy. @default false
+   */
+  followRedirects?: boolean;
 }
 
 /**

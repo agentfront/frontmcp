@@ -1,4 +1,4 @@
-import { OpenAPIToolGenerator, type McpOpenAPITool } from 'mcp-from-openapi';
+import { normalizeSsrfOptions, OpenAPIToolGenerator, type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
 
@@ -914,7 +914,14 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     const polling = this.options.polling;
     if (!polling?.enabled || !('url' in this.options)) return;
 
-    this.poller = new OpenApiSpecPoller(this.options.url, polling, {
+    // SECURITY (GHSA-65h7-9wrw-629c): poller re-fetches the same URL, so carry fromURL()'s SSRF policy.
+    const pollingOptions: typeof polling = {
+      ...polling,
+      ssrf: normalizeSsrfOptions(this.resolveRefResolution()),
+      followRedirects: this.options.loadOptions?.followRedirects ?? false,
+    };
+
+    this.poller = new OpenApiSpecPoller(this.options.url, pollingOptions, {
       onChanged: (_spec: string, _hash: string) => {
         // Serialize rebuilds to prevent races
         this.rebuildChain = this.rebuildChain.then(async () => {

@@ -8,21 +8,29 @@
  */
 
 import * as http from 'node:http';
+
+import { FrontMcpToolTokens, type FrontMcpAdapterResponse } from '@frontmcp/sdk';
+
+import { OpenApiSpecPoller } from '../openapi-spec-poller';
 import OpenapiAdapter from '../openapi.adapter';
 import { createMockLogger, spyOnConsole } from './fixtures';
-import { FrontMcpToolTokens, FrontMcpAdapterResponse } from '@frontmcp/sdk';
 
-// Mock mcp-from-openapi (same pattern as openapi-adapter.spec.ts)
-jest.mock('mcp-from-openapi', () => ({
-  OpenAPIToolGenerator: {
-    fromURL: jest.fn(),
-    fromJSON: jest.fn(),
-  },
-  SecurityResolver: jest.fn().mockImplementation(() => ({
-    resolve: jest.fn().mockResolvedValue({ headers: {}, query: {}, cookies: {} }),
-  })),
-  createSecurityContext: jest.fn((context) => context),
-}));
+// Mock only the tool generator; keep the real SSRF guard (safeFetch /
+// normalizeSsrfOptions) so the poller's fetch path is exercised for real.
+jest.mock('mcp-from-openapi', () => {
+  const actual = jest.requireActual('mcp-from-openapi');
+  return {
+    ...actual,
+    OpenAPIToolGenerator: {
+      fromURL: jest.fn(),
+      fromJSON: jest.fn(),
+    },
+    SecurityResolver: jest.fn().mockImplementation(() => ({
+      resolve: jest.fn().mockResolvedValue({ headers: {}, query: {}, cookies: {} }),
+    })),
+    createSecurityContext: jest.fn((context) => context),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -246,6 +254,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -304,6 +313,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -346,6 +356,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -388,6 +399,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -448,6 +460,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -532,6 +545,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -612,6 +626,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -663,6 +678,7 @@ describe('OpenAPI Adapter — Polling E2E', () => {
           baseUrl: url,
           url: `${url}/openapi.json`,
           polling: { enabled: true, intervalMs: 100 },
+          loadOptions: { refResolution: { allowInternalIPs: true } },
           logger: createMockLogger(),
         });
 
@@ -695,6 +711,87 @@ describe('OpenAPI Adapter — Polling E2E', () => {
         expect(tracker.allUpdates).toHaveLength(countBefore);
 
         adapter.stopPolling();
+      } finally {
+        await specServer.stop();
+      }
+    });
+  });
+
+  // ---------- SSRF Protection ----------
+
+  describe('SSRF Protection', () => {
+    it('fails closed on a loopback spec URL by default (never fetches, onChanged not called)', async () => {
+      const onChanged = jest.fn();
+      const onError = jest.fn();
+
+      const poller = new OpenApiSpecPoller(
+        'http://127.0.0.1:9/openapi.json',
+        { retry: { maxRetries: 0 } },
+        { onChanged, onError },
+      );
+
+      await poller.poll();
+
+      expect(onChanged).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledTimes(1);
+      const error = onError.mock.calls[0][0] as Error;
+      expect(error.message).toMatch(/blocked internal address|not in the allowed-hosts/i);
+    });
+
+    it('fetches an internal spec URL only when allowInternalIPs is opted in', async () => {
+      const specServer = createSpecServer();
+      const url = await specServer.start();
+
+      try {
+        specServer.setSpec(makeSpec([{ method: 'get', path: '/users', operationId: 'listUsers' }]));
+
+        const onChanged = jest.fn();
+        const onError = jest.fn();
+
+        const poller = new OpenApiSpecPoller(
+          `${url}/openapi.json`,
+          { retry: { maxRetries: 0 }, ssrf: { allowedHosts: [], blockedHosts: [], allowInternalIPs: true } },
+          { onChanged, onError },
+        );
+
+        await poller.poll();
+
+        expect(onError).not.toHaveBeenCalled();
+        expect(onChanged).toHaveBeenCalledTimes(1);
+      } finally {
+        await specServer.stop();
+      }
+    });
+
+    it('surfaces the SSRF block through the adapter poller when internal IPs are not allowed', async () => {
+      const specServer = createSpecServer();
+      const url = await specServer.start();
+
+      try {
+        specServer.setSpec(makeSpec([{ method: 'get', path: '/users', operationId: 'listUsers' }]));
+        configureMockGenerator([createMockTool('listUsers', 'get', '/users')]);
+
+        const logger = createMockLogger();
+        const adapter = new OpenapiAdapter({
+          name: 'test-api',
+          baseUrl: url,
+          url: `${url}/openapi.json`,
+          polling: { enabled: true, intervalMs: 100, retry: { maxRetries: 0 } },
+          logger,
+        });
+
+        const tracker = createUpdateTracker(adapter);
+        adapter.startPolling();
+
+        await delay(400);
+
+        expect(tracker.allUpdates).toHaveLength(0);
+        expect(logger.warn).toHaveBeenCalled();
+        const warned = logger.warn.mock.calls.map((call) => String(call[0])).join('\n');
+        expect(warned).toMatch(/blocked internal address|SSRF|allowed-hosts/i);
+
+        adapter.stopPolling();
+        tracker.unsubscribe();
       } finally {
         await specServer.stop();
       }
