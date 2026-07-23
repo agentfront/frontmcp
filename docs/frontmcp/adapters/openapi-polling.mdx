@@ -158,6 +158,10 @@ The polling pipeline has two independent concerns:
 
 1. **Change detection** — The `OpenApiSpecPoller` fetches raw spec text from the URL and computes a SHA-256 content hash. If the hash differs from the last known hash, it fires `onChanged`.
 
+<Warning>
+  **The poll re-fetch is SSRF-guarded (GHSA-65h7-9wrw-629c).** Because polling re-fetches the same attacker-influenceable spec `url` on a timer, it runs through the exact same SSRF guard as the initial load — it inherits your `loadOptions.refResolution` policy, validates the *resolved IP* (not just the hostname), pins the connection to it, and re-validates redirect hops (`followRedirects` defaults to `false`). By default, loopback / private / internal targets are blocked; a poll to a blocked host fails closed (no fetch, no update) and is logged. To poll an internal or localhost spec server, opt in with `loadOptions.refResolution: { allowInternalIPs: true }` — trusted/local environments only. See [Spec Loading & $ref Resolution Security](/frontmcp/adapters/openapi-adapter#spec-loading--ref-resolution-security-ssrf).
+</Warning>
+
 2. **Tool rebuild** — When `onChanged` fires, the adapter resets its internal generator, calls `fetch()` to regenerate all tools from scratch, and notifies subscribers via the `updateCallback`.
 
 ```
@@ -330,6 +334,8 @@ export default class MultiApiApp {}
 
   <Accordion title="Test polling in CI">
     Use short intervals (100ms) and real HTTP servers in integration tests to verify the full pipeline. See the [Testing OpenAPI Adapter](/frontmcp/guides/testing-openapi-adapter) guide for patterns.
+
+    Test servers bind to `localhost`, which the SSRF guard blocks by default. Add `loadOptions: { refResolution: { allowInternalIPs: true } }` to the adapter under test so the poller can reach the local spec server.
   </Accordion>
 </AccordionGroup>
 
@@ -382,6 +388,13 @@ export default class MultiApiApp {}
     2. Check if authentication headers are needed in `polling.headers`
     3. Increase `fetchTimeoutMs` if the server is slow
     4. Increase `retry.maxRetries` for transient failures
+
+  </Accordion>
+
+  <Accordion title="Poll errors: host maps to a blocked internal address">
+    **Cause:** The spec `url` is a loopback / private / internal target (or a DNS name that resolves to one). The SSRF guard blocks it on every poll — the same guard that protects the initial spec load — so no fetch happens and no updates fire.
+
+    **Solution:** For a genuinely internal or localhost spec server in a trusted environment, opt in with `loadOptions: { refResolution: { allowInternalIPs: true } }`. Never enable this for untrusted spec URLs in production — it re-exposes SSRF.
 
   </Accordion>
 </AccordionGroup>

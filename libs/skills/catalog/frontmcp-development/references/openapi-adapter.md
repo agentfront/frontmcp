@@ -137,6 +137,13 @@ OpenapiAdapter.init({
 });
 ```
 
+> **SSRF (GHSA-65h7-9wrw-629c):** the poll re-fetches the same attacker-influenceable
+> spec `url` on a timer, so it runs through the **same SSRF guard** as the initial load —
+> it inherits `loadOptions.refResolution` (validates the resolved IP, pins the connection,
+> re-validates redirects). Loopback/private/internal spec servers are blocked by default;
+> a blocked poll fails closed (no fetch, no update) and is logged. To poll an internal or
+> localhost spec, set `loadOptions.refResolution.allowInternalIPs: true` — trusted/local only.
+
 ## Inline Spec
 
 Provide the OpenAPI spec directly instead of fetching from URL:
@@ -292,7 +299,7 @@ OpenapiAdapter.init({
 > vector. Hostname-string denylists are bypassable via DNS names that resolve to
 > internal IPs (e.g. `http://127.0.0.1.nip.io/`), redirects, and IPv4-mapped IPv6.
 > **Use `mcp-from-openapi` ≥ 2.5.0**, which resolves DNS and validates the
-> *resolved IP*, guards the spec-URL fetch (not just `$ref`s), and re-validates
+> _resolved IP_, guards the spec-URL fetch (not just `$ref`s), and re-validates
 > every redirect hop.
 
 FrontMCP's secure defaults:
@@ -350,12 +357,12 @@ OpenapiAdapter.init({
 
 These apply to **both** the spec-URL fetch and external `$ref` resolution (`mcp-from-openapi` ≥ 2.5.0):
 
-| Option             | Type       | Default (FrontMCP) | Description                                                                                         |
-| ------------------ | ---------- | ------------------ | -------------------------------------------------------------------------------------------------- |
+| Option             | Type       | Default (FrontMCP) | Description                                                                                                                           |
+| ------------------ | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `allowedProtocols` | `string[]` | `[]`               | Protocols allowed for external `$ref` resolution. **FrontMCP defaults to `[]`** (external refs off); set `['http','https']` to enable |
-| `allowedHosts`     | `string[]` | `undefined`        | When set, only the spec URL / `$ref` URLs to these hostnames are allowed                            |
-| `blockedHosts`     | `string[]` | `undefined`        | Additional hostnames/IPs to block beyond the built-in internal-address list                        |
-| `allowInternalIPs` | `boolean`  | `false`            | Allow loopback/private/internal targets for the spec URL **and** `$ref`s (skips ranges + DNS recheck). Trusted/local only |
+| `allowedHosts`     | `string[]` | `undefined`        | When set, only the spec URL / `$ref` URLs to these hostnames are allowed                                                              |
+| `blockedHosts`     | `string[]` | `undefined`        | Additional hostnames/IPs to block beyond the built-in internal-address list                                                           |
+| `allowInternalIPs` | `boolean`  | `false`            | Allow loopback/private/internal targets for the spec URL **and** `$ref`s (skips ranges + DNS recheck). Trusted/local only             |
 
 > `followRedirects` (a `loadOptions` field, not `refResolution`) defaults to `false` in FrontMCP.
 
@@ -379,15 +386,15 @@ OpenapiAdapter.init({
 
 ## Common Patterns
 
-| Pattern              | Correct                                                    | Incorrect                                           | Why                                             |
-| -------------------- | ---------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------- |
-| Adapter registration | `OpenapiAdapter.init({ ... })` in `adapters` array         | Placing adapter in `plugins` array                  | Adapters go in `adapters`, not `plugins`        |
-| Tool naming          | Tools auto-named as `<name>:<operationId>`                 | Expecting flat names like `listPets`                | Adapter name prevents collisions                |
-| Auth configuration   | `staticAuth: { jwt: process.env.API_TOKEN! }`              | Hardcoding secrets: `staticAuth: { jwt: 'sk-xxx' }` | Always use environment variables                |
-| Spec source          | Use `url` for hosted specs or `spec` for inline            | Using both `url` and `spec` simultaneously          | Only one source; `spec` takes precedence        |
-| Multiple APIs        | Separate `OpenapiAdapter.init()` with unique `name` values | Same `name` for different adapters                  | Duplicate names cause tool collisions           |
-| Spec/$ref SSRF       | Keep secure defaults (external refs off, redirects off, internal targets blocked) on `mcp-from-openapi` ≥ 2.5.0 | Setting `allowInternalIPs: true` in production; forwarding untrusted spec URLs without an `allowedHosts` allow-list | Defaults protect against SSRF (incl. DNS-name-to-internal) |
-| Format resolution    | `generateOptions: { resolveFormats: true }`                | Writing manual patterns for standard formats        | Built-in resolvers handle uuid, date-time, etc. |
+| Pattern              | Correct                                                                                                         | Incorrect                                                                                                           | Why                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Adapter registration | `OpenapiAdapter.init({ ... })` in `adapters` array                                                              | Placing adapter in `plugins` array                                                                                  | Adapters go in `adapters`, not `plugins`                                                                |
+| Tool naming          | Tools auto-named as `<name>:<operationId>`                                                                      | Expecting flat names like `listPets`                                                                                | Adapter name prevents collisions                                                                        |
+| Auth configuration   | `staticAuth: { jwt: process.env.API_TOKEN! }`                                                                   | Hardcoding secrets: `staticAuth: { jwt: 'sk-xxx' }`                                                                 | Always use environment variables                                                                        |
+| Spec source          | Use `url` for hosted specs or `spec` for inline                                                                 | Using both `url` and `spec` simultaneously                                                                          | Only one source; `spec` takes precedence                                                                |
+| Multiple APIs        | Separate `OpenapiAdapter.init()` with unique `name` values                                                      | Same `name` for different adapters                                                                                  | Duplicate names cause tool collisions                                                                   |
+| Spec/$ref SSRF       | Keep secure defaults (external refs off, redirects off, internal targets blocked) on `mcp-from-openapi` ≥ 2.5.0 | Setting `allowInternalIPs: true` in production; forwarding untrusted spec URLs without an `allowedHosts` allow-list | Defaults protect against SSRF (incl. DNS-name-to-internal); the spec **poller inherits the same guard** |
+| Format resolution    | `generateOptions: { resolveFormats: true }`                                                                     | Writing manual patterns for standard formats                                                                        | Built-in resolvers handle uuid, date-time, etc.                                                         |
 
 ## Verification Checklist
 
@@ -414,26 +421,27 @@ OpenapiAdapter.init({
 
 ## Troubleshooting
 
-| Problem                            | Cause                                                  | Solution                                                                                                  |
-| ---------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| No tools generated from spec       | Spec URL returns non-OpenAPI content or is unreachable | Verify URL returns valid OpenAPI 3.x JSON; check network access                                           |
-| Authentication errors on API calls | Wrong auth config or missing credentials               | Configure `staticAuth`, `securityResolver`, `authProviderMapper`, or `additionalHeaders`; verify env vars |
-| Duplicate tool name error          | Two adapters with the same `name`                      | Give each adapter a unique `name`                                                                         |
-| Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }`                                                                     |
-| External $refs not resolving       | External refs are **disabled by default** in FrontMCP  | Set `loadOptions.refResolution.allowedProtocols: ['http','https']` (add `allowedHosts` to restrict)        |
-| Spec URL / $ref to internal host blocked | Target is loopback/private, or a DNS name resolving to one (SSRF guard) | Use `refResolution.allowInternalIPs: true` only in trusted/local environments              |
-| Spec URL redirect not followed     | `followRedirects` defaults to `false`                  | Set `loadOptions.followRedirects: true` (each hop is re-validated on `mcp-from-openapi` ≥ 2.5.0)           |
-| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`                                                                          |
+| Problem                                                      | Cause                                                                    | Solution                                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| No tools generated from spec                                 | Spec URL returns non-OpenAPI content or is unreachable                   | Verify URL returns valid OpenAPI 3.x JSON; check network access                                           |
+| Authentication errors on API calls                           | Wrong auth config or missing credentials                                 | Configure `staticAuth`, `securityResolver`, `authProviderMapper`, or `additionalHeaders`; verify env vars |
+| Duplicate tool name error                                    | Two adapters with the same `name`                                        | Give each adapter a unique `name`                                                                         |
+| Stale tools after API update                                 | Spec polling not configured                                              | Add `polling: { intervalMs: 300000 }`                                                                     |
+| External $refs not resolving                                 | External refs are **disabled by default** in FrontMCP                    | Set `loadOptions.refResolution.allowedProtocols: ['http','https']` (add `allowedHosts` to restrict)       |
+| Spec URL / $ref to internal host blocked                     | Target is loopback/private, or a DNS name resolving to one (SSRF guard)  | Use `refResolution.allowInternalIPs: true` only in trusted/local environments                             |
+| Polling never updates from an internal/localhost spec server | The poll re-fetch is SSRF-guarded and blocks internal targets by default | Set `loadOptions.refResolution.allowInternalIPs: true` (trusted/local only)                               |
+| Spec URL redirect not followed                               | `followRedirects` defaults to `false`                                    | Set `loadOptions.followRedirects: true` (each hop is re-validated on `mcp-from-openapi` ≥ 2.5.0)          |
+| TypeScript error importing adapter                           | Wrong import path                                                        | Import from `@frontmcp/adapters`                                                                          |
 
 ## Examples
 
-| Example                                                                                                           | Level        | Description                                                                                                                                                   |
-| ----------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-openapi-adapter`](../examples/openapi-adapter/basic-openapi-adapter.md)                                   | Basic        | Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.                              |
-| [`authenticated-adapter-with-polling`](../examples/openapi-adapter/authenticated-adapter-with-polling.md)         | Intermediate | Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.                                           |
-| [`format-resolution-and-custom-resolvers`](../examples/openapi-adapter/format-resolution-and-custom-resolvers.md) | Intermediate | Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.                    |
-| [`ref-security-and-filtering`](../examples/openapi-adapter/ref-security-and-filtering.md)                         | Intermediate | Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF attacks (GHSA-65h7-9wrw-629c) and filtering which API operations become MCP tools.                                |
-| [`multi-api-hub-with-inline-spec`](../examples/openapi-adapter/multi-api-hub-with-inline-spec.md)                 | Advanced     | Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL. |
+| Example                                                                                                           | Level        | Description                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-openapi-adapter`](../examples/openapi-adapter/basic-openapi-adapter.md)                                   | Basic        | Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.                                |
+| [`authenticated-adapter-with-polling`](../examples/openapi-adapter/authenticated-adapter-with-polling.md)         | Intermediate | Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.                                             |
+| [`format-resolution-and-custom-resolvers`](../examples/openapi-adapter/format-resolution-and-custom-resolvers.md) | Intermediate | Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.                      |
+| [`ref-security-and-filtering`](../examples/openapi-adapter/ref-security-and-filtering.md)                         | Intermediate | Demonstrates configuring $ref / spec-URL resolution security to prevent SSRF attacks (GHSA-65h7-9wrw-629c) and filtering which API operations become MCP tools. |
+| [`multi-api-hub-with-inline-spec`](../examples/openapi-adapter/multi-api-hub-with-inline-spec.md)                 | Advanced     | Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL.   |
 
 > See all examples in [`examples/openapi-adapter/`](../examples/openapi-adapter/)
 

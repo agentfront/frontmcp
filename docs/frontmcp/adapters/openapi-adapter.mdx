@@ -1019,6 +1019,10 @@ When a spec change is detected (via content hash, ETag, or auto strategy), the a
 2. Calls `fetch()` to regenerate all tools
 3. Notifies subscribers via `onUpdate()`
 
+<Note>
+  Polling re-fetches the same spec `url` on a timer through the **same SSRF guard** as the initial load (GHSA-65h7-9wrw-629c) — it inherits your `loadOptions.refResolution` policy, so internal/loopback spec servers stay blocked unless you set `refResolution.allowInternalIPs: true`. See [Spec Loading & $ref Resolution Security](#spec-loading--ref-resolution-security-ssrf).
+</Note>
+
 Subscribe to updates for logging, metrics, or downstream notifications:
 
 ```ts
