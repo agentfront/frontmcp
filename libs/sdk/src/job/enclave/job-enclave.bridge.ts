@@ -112,19 +112,23 @@ export class JobEnclaveBridge {
       },
     };
 
-    if (context.callTool) {
+    // Capture the callbacks up front so the sandbox bindings keep calling the implementations
+    // that were present when the run started, even if `context` is mutated afterwards.
+    const { callTool, getTool } = context;
+
+    if (callTool) {
       globals['callTool'] = async (name: string, args: unknown) => {
         try {
-          return toSandboxValue(await context.callTool!(name, args));
+          return toSandboxValue(await callTool(name, args));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }
       };
     }
-    if (context.getTool) {
+    if (getTool) {
       globals['getTool'] = (name: string) => {
         try {
-          return toSandboxValue(context.getTool!(name));
+          return toSandboxValue(getTool(name));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }

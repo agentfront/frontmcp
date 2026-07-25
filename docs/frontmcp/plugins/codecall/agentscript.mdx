@@ -67,12 +67,23 @@ if (result.success) {
 
 ### getTool(name)
 
-Get metadata about a tool (name, description, schemas) without calling it.
+Get metadata about a tool (name, description, schemas) without calling it. Schemas come back
+as plain JSON Schema documents, and are `null` when the tool declares none.
 
 ```ts
 const meta = getTool('users:list');
 console.log(meta.description);    // "List users with optional filtering"
 console.log(meta.inputSchema);    // { type: "object", properties: { ... } }
+```
+
+Returns `undefined` when the tool cannot be described — an unknown name, a CodeCall meta-tool
+(same rule as [`callTool`](/frontmcp/plugins/codecall/security#self-reference-guard)), or a
+tool outside the `allowedTools` whitelist the script was invoked with. Guard the result before
+reading from it:
+
+```ts
+const meta = getTool('billing:charge');
+if (!meta) return { skipped: 'billing:charge is not available to this script' };
 ```
 
 ---

@@ -40,7 +40,7 @@ describe('toPlainJson', () => {
     expect(toPlainJson(circular)).toBeUndefined();
   });
 
-  it('flattens pinned non-configurable properties into ordinary data', () => {
+  it('returns undefined for a pinned property that closes a reference cycle', () => {
     const source = { type: 'object' };
     Object.defineProperty(source, 'internal', {
       value: { owner: source },
@@ -49,10 +49,7 @@ describe('toPlainJson', () => {
       enumerable: true,
     });
 
-    const copy = toPlainJson(source) as Record<string, unknown>;
-
-    // Circular back-reference makes this unrepresentable, so nothing crosses at all.
-    expect(copy).toBeUndefined();
+    expect(toPlainJson(source)).toBeUndefined();
   });
 
   it('copies a pinned property as a plain, reconfigurable value when it is acyclic', () => {

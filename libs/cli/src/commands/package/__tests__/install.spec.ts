@@ -72,6 +72,9 @@ beforeEach(() => {
   fs.mkdirSync(packageDir, { recursive: true });
   jest.spyOn(console, 'log').mockImplementation(() => undefined);
   jest.clearAllMocks();
+  // Drop any per-test implementation (the build-from-config case installs one); the other
+  // mocks keep the implementations their module factories provide.
+  (runCmd as jest.Mock).mockReset();
 });
 
 afterEach(() => {

@@ -2,7 +2,7 @@
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
-import type { CodeCallVmEnvironment } from '../codecall.symbol';
+import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
   createToolCallError,
   TOOL_CALL_ERROR_CODES,
@@ -155,16 +155,17 @@ export default class ExecuteTool extends ToolContext {
 
       getTool: (name: string) => {
         try {
-          // Same visibility rule as callTool and codecall:describe — CodeCall's own tools are
-          // not introspectable from inside a script.
+          // Introspection follows the same visibility rules as callTool: CodeCall's own tools
+          // are never described, and a script that declared a whitelist only sees those tools.
           if (isBlockedSelfReference(name)) return undefined;
+          if (allowedToolSet && !allowedToolSet.has(name)) return undefined;
 
           const tools = this.scope.tools.getTools(true);
           const tool = tools.find((t) => t.name === name || t.fullName === name);
 
           if (!tool) return undefined;
 
-          return toPlainJson({
+          return toPlainJson<CodeCallToolDescription>({
             name: tool.name,
             description: tool.metadata?.description,
             inputSchema: tool.getInputJsonSchema?.() ?? null,

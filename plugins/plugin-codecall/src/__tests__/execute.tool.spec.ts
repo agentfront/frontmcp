@@ -693,6 +693,49 @@ describe('ExecuteTool', () => {
       },
     );
 
+    it('should not describe tools outside the declared allowedTools whitelist', async () => {
+      const mockTools = [
+        {
+          name: 'users:list',
+          fullName: 'users:list',
+          metadata: { description: 'List users' },
+          getInputJsonSchema: () => ({ type: 'object' }),
+          getOutputJsonSchema: () => ({ type: 'object' }),
+        },
+        {
+          name: 'billing:charge',
+          fullName: 'billing:charge',
+          metadata: { description: 'Charge a card' },
+          getInputJsonSchema: () => ({ type: 'object' }),
+          getOutputJsonSchema: () => ({ type: 'object' }),
+        },
+      ];
+
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+      let capturedEnv: any;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+        capturedEnv = env;
+        return {
+          success: true,
+          result: {
+            allowed: capturedEnv.getTool('users:list')?.name,
+            denied: capturedEnv.getTool('billing:charge'),
+          },
+          logs: [],
+          timedOut: false,
+        };
+      });
+
+      const result = await tool.execute({
+        script: 'return getTool("billing:charge");',
+        allowedTools: ['users:list'],
+      });
+
+      expect(result.status).toBe('ok');
+      expect(result.result).toEqual({ allowed: 'users:list' });
+    });
+
     it('should return undefined when tool not found', async () => {
       const { tool, mockEnclave } = createExecuteTool({ tools: [] });
 
@@ -761,7 +804,7 @@ describe('ExecuteTool', () => {
       expect(result.result.inputSchema['parse']).toBeUndefined();
     });
 
-    it('should return undefined when a tool entry has no schema accessors', async () => {
+    it('should report null schemas when a tool entry has no schema accessors', async () => {
       const mockTools = [{ name: 'legacy:tool', fullName: 'legacy:tool', metadata: { description: 'Legacy' } }];
 
       const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });

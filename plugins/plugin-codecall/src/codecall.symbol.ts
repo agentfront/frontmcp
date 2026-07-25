@@ -43,6 +43,18 @@ export interface ResolvedCodeCallVmOptions {
 }
 
 /**
+ * A tool's public description as handed to sandboxed scripts. Schemas are plain JSON Schema
+ * documents, never the registry's declared schema objects, and are `null` when the tool has
+ * no schema to advertise.
+ */
+export interface CodeCallToolDescription {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown> | null;
+  outputSchema: Record<string, unknown> | null;
+}
+
+/**
  * Environment available to code running inside the VM.
  * The plugin is responsible for wiring this to the underlying tool pipeline.
  */
@@ -67,15 +79,11 @@ export interface CodeCallVmEnvironment {
     options?: CallToolOptions,
   ) => Promise<TResult | ToolCallResult<TResult>>;
 
-  /** Look up a tool's public description. Schemas are plain JSON Schema documents. */
-  getTool: (name: string) =>
-    | {
-        name: string;
-        description?: string;
-        inputSchema: Record<string, unknown> | null;
-        outputSchema: Record<string, unknown> | null;
-      }
-    | undefined;
+  /**
+   * Look up a tool's public description. Returns `undefined` when the tool is unknown, is a
+   * CodeCall meta-tool, or falls outside the script's `allowedTools` whitelist.
+   */
+  getTool: (name: string) => CodeCallToolDescription | undefined;
 
   console?: Console;
 

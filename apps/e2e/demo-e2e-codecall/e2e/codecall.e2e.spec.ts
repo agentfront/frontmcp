@@ -446,9 +446,10 @@ test.describe('CodeCall Plugin E2E', () => {
 
       expect(execResult.result.name).toBe('users-list');
       expect(execResult.result.inputType).toBe('object');
-      // Schema instance internals and methods must not be reachable from the script.
-      expect(execResult.result.internal).not.toBe('object');
-      expect(execResult.result.parse).not.toBe('function');
+      // Plain JSON Schema carries no schema-instance internals or methods, so both reads
+      // resolve to undefined rather than an object, a function, or a denied access.
+      expect(execResult.result.internal).toBe('undefined');
+      expect(execResult.result.parse).toBe('undefined');
     });
 
     test('should not reach a host constructor through a tool schema', async ({ mcp }) => {
