@@ -673,8 +673,8 @@ declare function callTool<TInput, TResult>(name: string, input: TInput): Promise
 declare function getTool(name: string): {
   name: string;
   description: string;
-  inputSchema: unknown;
-  outputSchema?: unknown | null;
+  inputSchema: Record<string, unknown> | null;
+  outputSchema: Record<string, unknown> | null;
 };
 
 declare const codecallContext: Readonly<Record<string, unknown>>;

@@ -15,6 +15,19 @@ interface EnclaveCore {
 }
 
 /**
+ * Copy a value the sandbox is about to receive into a fresh structure, mirroring how `input`
+ * is passed. Anything that cannot be represented as plain data (functions, class instances
+ * holding behaviour) fails here rather than being handed across the sandbox boundary.
+ */
+function toSandboxValue(value: unknown): unknown {
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new Error('Value returned to the sandbox is not serializable');
+  }
+}
+
+/**
  * Bridge to @enclave-vm/core for executing dynamic job scripts in a sandbox.
  * Lazy-requires the enclave package (peerDependency).
  */
@@ -102,7 +115,7 @@ export class JobEnclaveBridge {
     if (context.callTool) {
       globals['callTool'] = async (name: string, args: unknown) => {
         try {
-          return await context.callTool!(name, args);
+          return toSandboxValue(await context.callTool!(name, args));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }
@@ -111,7 +124,7 @@ export class JobEnclaveBridge {
     if (context.getTool) {
       globals['getTool'] = (name: string) => {
         try {
-          return context.getTool!(name);
+          return toSandboxValue(context.getTool!(name));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }

@@ -11,9 +11,9 @@ import {
   type ToolCallResult,
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
-import { assertNotSelfReference } from '../security';
+import { assertNotSelfReference, isBlockedSelfReference } from '../security';
 import EnclaveService from '../services/enclave.service';
-import { buildToolNamespaces, extractResultFromCallToolResult } from '../utils';
+import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
 import {
   executeToolDescription,
   executeToolInputSchema,
@@ -155,17 +155,21 @@ export default class ExecuteTool extends ToolContext {
 
       getTool: (name: string) => {
         try {
+          // Same visibility rule as callTool and codecall:describe — CodeCall's own tools are
+          // not introspectable from inside a script.
+          if (isBlockedSelfReference(name)) return undefined;
+
           const tools = this.scope.tools.getTools(true);
           const tool = tools.find((t) => t.name === name || t.fullName === name);
 
           if (!tool) return undefined;
 
-          return {
+          return toPlainJson({
             name: tool.name,
             description: tool.metadata?.description,
-            inputSchema: tool.rawInputSchema,
-            outputSchema: tool.outputSchema,
-          };
+            inputSchema: tool.getInputJsonSchema?.() ?? null,
+            outputSchema: tool.getOutputJsonSchema?.() ?? null,
+          });
         } catch {
           return undefined;
         }

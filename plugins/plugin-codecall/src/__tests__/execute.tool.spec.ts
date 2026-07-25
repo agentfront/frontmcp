@@ -1,9 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/execute.tool.spec.ts
 
-import ExecuteTool from '../tools/execute.tool';
-import EnclaveService from '../services/enclave.service';
 import CodeCallConfig from '../providers/code-call.config';
-import type { EnclaveExecutionResult } from '../services/enclave.service';
+import EnclaveService, { type EnclaveExecutionResult } from '../services/enclave.service';
+import ExecuteTool from '../tools/execute.tool';
 
 // Mock the SDK - ToolContext with dependency injection
 jest.mock('@frontmcp/sdk', () => ({
@@ -65,6 +64,7 @@ jest.mock('@frontmcp/sdk', () => ({
 
 // Mock extractResultFromCallToolResult
 jest.mock('../utils', () => ({
+  ...jest.requireActual('../utils'),
   extractResultFromCallToolResult: jest.fn((result) => {
     if (result.isError) {
       const text = result.content?.[0]?.text;
@@ -141,6 +141,8 @@ function createExecuteTool(
       metadata?: unknown;
       rawInputSchema?: unknown;
       outputSchema?: unknown;
+      getInputJsonSchema?: () => unknown;
+      getOutputJsonSchema?: () => unknown;
     }>;
   } = {},
 ) {
@@ -560,13 +562,15 @@ describe('ExecuteTool', () => {
 
   describe('getTool Environment Function', () => {
     it('should find tool by name', async () => {
+      const inputJsonSchema = { type: 'object', properties: { limit: { type: 'number' } } };
+      const outputJsonSchema = { type: 'object', properties: { users: { type: 'array' } } };
       const mockTools = [
         {
           name: 'users:list',
           fullName: 'users:list',
           metadata: { description: 'List all users' },
-          rawInputSchema: { type: 'object', properties: { limit: { type: 'number' } } },
-          outputSchema: { type: 'array' },
+          getInputJsonSchema: () => inputJsonSchema,
+          getOutputJsonSchema: () => outputJsonSchema,
         },
       ];
 
@@ -589,8 +593,45 @@ describe('ExecuteTool', () => {
       expect(result.result).toEqual({
         name: 'users:list',
         description: 'List all users',
-        inputSchema: mockTools[0].rawInputSchema,
-        outputSchema: mockTools[0].outputSchema,
+        inputSchema: inputJsonSchema,
+        outputSchema: outputJsonSchema,
+      });
+      expect(result.result.inputSchema).not.toBe(inputJsonSchema);
+      expect(result.result.outputSchema).not.toBe(outputJsonSchema);
+    });
+
+    it('should expose null schemas when the tool declares none', async () => {
+      const mockTools = [
+        {
+          name: 'ping',
+          fullName: 'ping',
+          metadata: { description: 'Ping' },
+          getInputJsonSchema: () => null,
+          getOutputJsonSchema: () => null,
+        },
+      ];
+
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+      let capturedEnv: any;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+        capturedEnv = env;
+        return {
+          success: true,
+          result: capturedEnv.getTool('ping'),
+          logs: [],
+          timedOut: false,
+        };
+      });
+
+      const result = await tool.execute({ script: 'return getTool("ping");' });
+
+      expect(result.status).toBe('ok');
+      expect(result.result).toEqual({
+        name: 'ping',
+        description: 'Ping',
+        inputSchema: null,
+        outputSchema: null,
       });
     });
 
@@ -600,8 +641,8 @@ describe('ExecuteTool', () => {
           name: 'list',
           fullName: 'users:list',
           metadata: { description: 'List users' },
-          rawInputSchema: {},
-          outputSchema: {},
+          getInputJsonSchema: () => ({}),
+          getOutputJsonSchema: () => ({}),
         },
       ];
 
@@ -624,6 +665,34 @@ describe('ExecuteTool', () => {
       expect(result.result.name).toBe('list');
     });
 
+    it.each(['codecall:invoke', 'codecall:execute', 'CodeCall:Search'])(
+      'should not describe the CodeCall tool %p',
+      async (name: string) => {
+        const mockTools = [
+          {
+            name,
+            fullName: name,
+            metadata: { description: 'CodeCall meta-tool' },
+            getInputJsonSchema: () => ({ type: 'object' }),
+            getOutputJsonSchema: () => ({ type: 'object' }),
+          },
+        ];
+
+        const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+        let capturedEnv: any;
+        mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+          capturedEnv = env;
+          return { success: true, result: capturedEnv.getTool(name), logs: [], timedOut: false };
+        });
+
+        const result = await tool.execute({ script: `return getTool("${name}");` });
+
+        expect(result.status).toBe('ok');
+        expect(result.result).toBeUndefined();
+      },
+    );
+
     it('should return undefined when tool not found', async () => {
       const { tool, mockEnclave } = createExecuteTool({ tools: [] });
 
@@ -639,6 +708,103 @@ describe('ExecuteTool', () => {
       });
 
       const result = await tool.execute({ script: 'return getTool("nonexistent:tool");' });
+
+      expect(result.status).toBe('ok');
+      expect(result.result).toBeUndefined();
+    });
+
+    it('should expose only plain schema data for a registry entry holding live schemas', async () => {
+      // A registry entry keeps its declared schemas as live objects with behaviour and
+      // pinned internals. Only the JSON Schema projection may reach the sandbox.
+      class LiveSchema {
+        constructor() {
+          Object.defineProperty(this, '_zod', {
+            value: { constr: LiveSchema },
+            configurable: false,
+            writable: false,
+            enumerable: true,
+          });
+        }
+        parse(value: unknown): unknown {
+          return value;
+        }
+      }
+
+      const mockTools = [
+        {
+          name: 'users:list',
+          fullName: 'users:list',
+          metadata: { description: 'List users' },
+          rawInputSchema: new LiveSchema(),
+          outputSchema: new LiveSchema(),
+          getInputJsonSchema: () => ({ type: 'object', properties: {} }),
+          getOutputJsonSchema: () => ({ type: 'object', properties: { users: { type: 'array' } } }),
+        },
+      ];
+
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+      let capturedEnv: any;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+        capturedEnv = env;
+        return { success: true, result: capturedEnv.getTool('users:list'), logs: [], timedOut: false };
+      });
+
+      const result = await tool.execute({ script: 'return getTool("users:list");' });
+
+      expect(result.status).toBe('ok');
+      expect(result.result.inputSchema).toEqual({ type: 'object', properties: {} });
+      expect(result.result.inputSchema).not.toBeInstanceOf(LiveSchema);
+      expect(result.result.outputSchema).not.toBeInstanceOf(LiveSchema);
+      expect(result.result.inputSchema['_zod']).toBeUndefined();
+      expect(result.result.outputSchema['_zod']).toBeUndefined();
+      expect(result.result.inputSchema['parse']).toBeUndefined();
+    });
+
+    it('should return undefined when a tool entry has no schema accessors', async () => {
+      const mockTools = [{ name: 'legacy:tool', fullName: 'legacy:tool', metadata: { description: 'Legacy' } }];
+
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+      let capturedEnv: any;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+        capturedEnv = env;
+        return { success: true, result: capturedEnv.getTool('legacy:tool'), logs: [], timedOut: false };
+      });
+
+      const result = await tool.execute({ script: 'return getTool("legacy:tool");' });
+
+      expect(result.status).toBe('ok');
+      expect(result.result).toEqual({
+        name: 'legacy:tool',
+        description: 'Legacy',
+        inputSchema: null,
+        outputSchema: null,
+      });
+    });
+
+    it('should return undefined when the schema projection cannot be represented as plain data', async () => {
+      const circular: Record<string, unknown> = { type: 'object' };
+      circular['self'] = circular;
+      const mockTools = [
+        {
+          name: 'cyclic:tool',
+          fullName: 'cyclic:tool',
+          metadata: { description: 'Cyclic' },
+          getInputJsonSchema: () => circular,
+          getOutputJsonSchema: () => null,
+        },
+      ];
+
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+
+      let capturedEnv: any;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
+        capturedEnv = env;
+        return { success: true, result: capturedEnv.getTool('cyclic:tool'), logs: [], timedOut: false };
+      });
+
+      const result = await tool.execute({ script: 'return getTool("cyclic:tool");' });
 
       expect(result.status).toBe('ok');
       expect(result.result).toBeUndefined();

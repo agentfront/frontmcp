@@ -67,12 +67,13 @@ export interface CodeCallVmEnvironment {
     options?: CallToolOptions,
   ) => Promise<TResult | ToolCallResult<TResult>>;
 
+  /** Look up a tool's public description. Schemas are plain JSON Schema documents. */
   getTool: (name: string) =>
     | {
         name: string;
         description?: string;
-        inputSchema: unknown;
-        outputSchema?: unknown | null;
+        inputSchema: Record<string, unknown> | null;
+        outputSchema: Record<string, unknown> | null;
       }
     | undefined;
 

@@ -3,3 +3,4 @@
 export * from './build-tool-namespaces';
 export * from './describe.utils';
 export * from './mcp-result';
+export * from './plain-json';

@@ -5,7 +5,7 @@
  * - Meta-tools are exposed (search, describe, execute, invoke)
  * - Tool discovery and execution via CodeCall
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 // Expected seed data from crm.store.ts
 const SEED_USERS = [
@@ -414,6 +414,103 @@ test.describe('CodeCall Plugin E2E', () => {
 
       expect(result).toBeSuccessful();
       expect(result.description).toBe('Analyze 2 activities'); // user-1 has 2 activities
+    });
+  });
+
+  test.describe('Sandbox Boundary', () => {
+    test('should expose tool schemas as inert JSON Schema documents', async ({ mcp }) => {
+      const result = await mcp.tools.call('codecall:execute', {
+        script: `
+          const meta = getTool('users-list');
+          const out = { name: meta.name, inputType: typeof meta.inputSchema };
+          const internalKey = ['_','z','o','d'].join('');
+          try {
+            out.internal = typeof meta.outputSchema[internalKey];
+          } catch (err) {
+            out.internal = 'denied';
+          }
+          try {
+            out.parse = typeof meta.outputSchema['parse'];
+          } catch (err) {
+            out.parse = 'denied';
+          }
+          return out;
+        `,
+      });
+
+      expect(result).toBeSuccessful();
+      const execResult =
+        result.json<CodeCallExecuteResult<{ name: string; inputType: string; internal: string; parse: string }>>();
+      expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
+
+      expect(execResult.result.name).toBe('users-list');
+      expect(execResult.result.inputType).toBe('object');
+      // Schema instance internals and methods must not be reachable from the script.
+      expect(execResult.result.internal).not.toBe('object');
+      expect(execResult.result.parse).not.toBe('function');
+    });
+
+    test('should not reach a host constructor through a tool schema', async ({ mcp }) => {
+      const result = await mcp.tools.call('codecall:execute', {
+        script: `
+          const k = ['con','struc','tor'].join('');
+          const internalKey = ['_','z','o','d'].join('');
+          const schema = getTool('users-list').outputSchema;
+          try {
+            const raw = schema[internalKey];
+            const F = raw['constr'][k];
+            const proc = F('return process')();
+            return { escaped: true, pid: proc.pid };
+          } catch (err) {
+            return { escaped: false, message: String(err && err.message) };
+          }
+        `,
+      });
+
+      expect(result).toBeSuccessful();
+      const execResult = result.json<CodeCallExecuteResult<{ escaped: boolean }>>();
+      // Either the script threw inside the sandbox or the run was rejected outright — the one
+      // outcome that must never happen is a completed escape.
+      if (execResult.status === 'ok') {
+        expect(execResult.result?.escaped).toBe(false);
+      } else {
+        expect(['runtime_error', 'illegal_access', 'tool_error']).toContain(execResult.status);
+      }
+    });
+
+    test('should not describe CodeCall meta-tools from inside a script', async ({ mcp }) => {
+      const result = await mcp.tools.call('codecall:execute', {
+        script: `
+          return {
+            invoke: typeof getTool('codecall:invoke'),
+            execute: typeof getTool('codecall:execute'),
+            search: typeof getTool('codecall:search'),
+            hostTool: typeof getTool('users-list'),
+          };
+        `,
+      });
+
+      expect(result).toBeSuccessful();
+      const execResult =
+        result.json<CodeCallExecuteResult<{ invoke: string; execute: string; search: string; hostTool: string }>>();
+      expect(execResult.status).toBe('ok');
+      expect(execResult.result).toEqual({
+        invoke: 'undefined',
+        execute: 'undefined',
+        search: 'undefined',
+        hostTool: 'object',
+      });
+    });
+
+    test('should keep the direct constructor escape blocked', async ({ mcp }) => {
+      const result = await mcp.tools.call('codecall:execute', {
+        script: `return ({}).constructor.constructor('return process')().pid;`,
+      });
+
+      expect(result).toBeSuccessful();
+      const execResult = result.json<CodeCallExecuteResult<number>>();
+      expect(execResult.status).toBe('illegal_access');
     });
   });
 });

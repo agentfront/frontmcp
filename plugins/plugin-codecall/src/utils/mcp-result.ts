@@ -2,6 +2,8 @@
 
 import type { CallToolResult } from '@frontmcp/protocol';
 
+import { toPlainJson } from './plain-json';
+
 /**
  * Extract the actual result from a CallToolResult.
  * MCP returns results wrapped in content array format.
@@ -32,6 +34,6 @@ export function extractResultFromCallToolResult(mcpResult: CallToolResult): unkn
     }
   }
 
-  // Return the raw content for complex results
-  return content;
+  // Return the content for complex results
+  return toPlainJson(content);
 }

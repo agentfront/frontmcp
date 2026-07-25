@@ -10,6 +10,7 @@ import { runCmd } from '@frontmcp/utils';
 
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
+import { assertValidPluginName, isPluginContainedPath } from '../build/exec/cli-runtime/plugin-emitter';
 import { type ExecManifest } from '../build/exec/manifest';
 import { appDir, ensurePmDirs } from '../pm/paths';
 import { runQuestionnaire, writeEnvFile } from './questionnaire';
@@ -79,8 +80,17 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 
     const { data: manifestData, dir: manifestDir } = manifest;
 
+    assertValidPluginName(manifestData.name, 'frontmcp install');
+
     // 4. Install to ~/.frontmcp/apps/{name}/
     const installDir = appDir(manifestData.name);
+
+    if (!isPluginContainedPath(installDir, manifestData.bundle)) {
+      throw new Error(
+        `Invalid manifest bundle "${String(manifestData.bundle)}": must be a relative path inside the app directory.`,
+      );
+    }
+
     ensurePmDirs();
     fs.mkdirSync(installDir, { recursive: true });
 
@@ -174,6 +184,8 @@ function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
 }
 
 function copyIfExists(fromDir: string, toDir: string, filename: string): void {
+  if (!isPluginContainedPath(toDir, filename)) return;
+
   const src = path.join(fromDir, filename);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, path.join(toDir, filename));
