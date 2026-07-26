@@ -15,6 +15,22 @@ interface EnclaveCore {
 }
 
 /**
+ * Copy a value the sandbox is about to receive into a fresh structure.
+ *
+ * These are structured-clone semantics, not JSON: reference cycles are preserved, `Date` /
+ * `Map` / `Set` survive as themselves, and a class instance arrives as a plain object with its
+ * prototype dropped rather than being rejected. Only genuinely non-cloneable values — a
+ * function or symbol, for example — throw here instead of crossing the sandbox boundary.
+ */
+function toSandboxValue(value: unknown): unknown {
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new Error('Value crossing the sandbox boundary is not structured-cloneable');
+  }
+}
+
+/**
  * Bridge to @enclave-vm/core for executing dynamic job scripts in a sandbox.
  * Lazy-requires the enclave package (peerDependency).
  */
@@ -84,6 +100,10 @@ export class JobEnclaveBridge {
     const enclave = await this.getEnclaveCore();
     const { Sandbox } = enclave;
 
+    // Copy the input before the sandbox exists: a non-cloneable input throws, and there is no
+    // sandbox to leak while nothing has been constructed yet.
+    const clonedInput = toSandboxValue(input ?? null);
+
     const sandbox = new Sandbox({
       timeout: this.options.timeout,
       maxIterations: this.options.maxIterations,
@@ -91,7 +111,7 @@ export class JobEnclaveBridge {
 
     // Inject sandbox-safe APIs
     const globals: Record<string, unknown> = {
-      input: structuredClone(input ?? null),
+      input: clonedInput,
       console: {
         log: (...args: unknown[]) => context.mcpLog?.('info', args.map(String).join(' ')),
         warn: (...args: unknown[]) => context.mcpLog?.('warning', args.map(String).join(' ')),
@@ -99,19 +119,23 @@ export class JobEnclaveBridge {
       },
     };
 
-    if (context.callTool) {
+    // Capture the callbacks up front so the sandbox bindings keep calling the implementations
+    // that were present when the run started, even if `context` is mutated afterwards.
+    const { callTool, getTool } = context;
+
+    if (callTool) {
       globals['callTool'] = async (name: string, args: unknown) => {
         try {
-          return await context.callTool!(name, args);
+          return toSandboxValue(await callTool(name, args));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }
       };
     }
-    if (context.getTool) {
+    if (getTool) {
       globals['getTool'] = (name: string) => {
         try {
-          return context.getTool!(name);
+          return toSandboxValue(getTool(name));
         } catch (err) {
           throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
         }
