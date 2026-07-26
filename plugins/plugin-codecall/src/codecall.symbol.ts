@@ -80,8 +80,11 @@ export interface CodeCallVmEnvironment {
   ) => Promise<TResult | ToolCallResult<TResult>>;
 
   /**
-   * Look up a tool's public description. Returns `undefined` when the tool is unknown, is a
-   * CodeCall meta-tool, or falls outside the script's `allowedTools` whitelist.
+   * Look up a tool's public description.
+   *
+   * Returns `undefined` when the tool is unknown, is a CodeCall meta-tool, falls outside the
+   * script's `allowedTools` whitelist, or when its schemas have no plain JSON form (a circular
+   * schema, for example) — callers cannot distinguish "not visible" from "not projectable".
    */
   getTool: (name: string) => CodeCallToolDescription | undefined;
 

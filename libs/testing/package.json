@@ -93,7 +93,7 @@
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.5.2",
-    "@frontmcp/sdk": "1.4.0",
+    "@frontmcp/sdk": "1.5.2",
     "@frontmcp/ui": "1.5.2",
     "@jest/globals": "^29.0.0 || ^30.0.0",
     "@playwright/test": "^1.40.0",
