@@ -183,11 +183,32 @@ function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
   return null;
 }
 
+/**
+ * Resolve `filename` inside `baseDir`, returning the real path only when it is a regular file
+ * that stays within the directory. Both operands are resolved, so a symlink in the fetched
+ * package cannot make the copy read a file elsewhere on the host, and a device or fifo cannot
+ * make it read forever.
+ */
+function resolveContainedFile(baseDir: string, filename: string): string | null {
+  try {
+    const base = fs.realpathSync(baseDir);
+    const resolved = fs.realpathSync(path.join(base, filename));
+
+    if (!isPluginContainedPath(base, path.relative(base, resolved))) return null;
+
+    return fs.statSync(resolved).isFile() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
 function copyIfExists(fromDir: string, toDir: string, filename: string): void {
   if (!isPluginContainedPath(toDir, filename)) return;
 
-  const src = path.join(fromDir, filename);
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, path.join(toDir, filename));
-  }
+  const src = resolveContainedFile(fromDir, filename);
+  if (!src) return;
+
+  const dest = path.join(toDir, filename);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
 }

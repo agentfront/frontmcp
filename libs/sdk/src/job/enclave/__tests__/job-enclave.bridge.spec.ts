@@ -1,15 +1,19 @@
 import { JobEnclaveBridge } from '../job-enclave.bridge';
 
 const runCalls: Array<{ script: string; globals: Record<string, unknown> }> = [];
+const sandboxLifecycle: string[] = [];
 
 jest.mock('@enclave-vm/core', () => ({
   Sandbox: class MockSandbox {
+    constructor() {
+      sandboxLifecycle.push('constructed');
+    }
     async run(script: string, globals: Record<string, unknown>): Promise<unknown> {
       runCalls.push({ script, globals });
       return 'done';
     }
     dispose(): void {
-      /* noop */
+      sandboxLifecycle.push('disposed');
     }
   },
 }));
@@ -31,6 +35,7 @@ async function capturedGlobals(context: Parameters<JobEnclaveBridge['execute']>[
 
 beforeEach(() => {
   runCalls.length = 0;
+  sandboxLifecycle.length = 0;
 });
 
 describe('JobEnclaveBridge', () => {
@@ -44,6 +49,42 @@ describe('JobEnclaveBridge', () => {
     expect(passed).toEqual(input);
     expect(passed).not.toBe(input);
     expect(passed.nested).not.toBe(input.nested);
+  });
+
+  it('rejects a non-cloneable input without constructing a sandbox', async () => {
+    const bridge = new JobEnclaveBridge(createLogger());
+
+    // A function cannot be structured-cloned. Failing before the sandbox exists means there is
+    // nothing left undisposed.
+    await expect(bridge.execute('return input;', { callback: () => 1 }, {})).rejects.toThrow(
+      /not structured-cloneable/,
+    );
+    expect(sandboxLifecycle).toEqual([]);
+  });
+
+  it('preserves cycles and Map/Set in the input (structured-clone, not JSON)', async () => {
+    const bridge = new JobEnclaveBridge(createLogger());
+    const input: Record<string, unknown> = { tags: new Set(['a']), lookup: new Map([['k', 1]]) };
+    input['self'] = input;
+
+    await bridge.execute('return input;', input, {});
+
+    const passed = runCalls[0].globals['input'] as Record<string, unknown>;
+    expect(passed['self']).toBe(passed);
+    // structuredClone returns cross-realm objects under jest, so assert the behaviour rather
+    // than identity against this realm's constructors.
+    expect(Object.prototype.toString.call(passed['tags'])).toBe('[object Set]');
+    expect(Object.prototype.toString.call(passed['lookup'])).toBe('[object Map]');
+    expect((passed['tags'] as Set<string>).has('a')).toBe(true);
+    expect((passed['lookup'] as Map<string, number>).get('k')).toBe(1);
+  });
+
+  it('disposes the sandbox after a successful run', async () => {
+    const bridge = new JobEnclaveBridge(createLogger());
+
+    await bridge.execute('return 1;', { a: 1 }, {});
+
+    expect(sandboxLifecycle).toEqual(['constructed', 'disposed']);
   });
 
   it('hands callTool results to the sandbox as plain copies', async () => {

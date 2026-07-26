@@ -34,6 +34,7 @@ export function extractResultFromCallToolResult(mcpResult: CallToolResult): unkn
     }
   }
 
-  // Return the content for complex results
+  // Complex results come back as a plain-JSON projection of the content array, or undefined
+  // when the content has no JSON representation.
   return toPlainJson(content);
 }

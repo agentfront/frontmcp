@@ -186,6 +186,59 @@ describe('runInstall', () => {
     });
   });
 
+  describe('copied files', () => {
+    it('does not follow a symlink that points outside the package', async () => {
+      const hostSecret = path.join(homeDir, 'host-secret.txt');
+      fs.writeFileSync(hostSecret, 'HOST-ONLY', 'utf-8');
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' });
+      fs.symlinkSync(hostSecret, path.join(packageDir, 'bundle.js'));
+
+      await install();
+
+      const copied = path.join(appsDir, 'demo-app', 'bundle.js');
+      expect(fs.existsSync(copied)).toBe(false);
+      expect(registerApp).toHaveBeenCalled();
+    });
+
+    it('does not follow a symlinked directory on the way to the bundle', async () => {
+      const hostDir = path.join(homeDir, 'outside');
+      fs.mkdirSync(hostDir, { recursive: true });
+      fs.writeFileSync(path.join(hostDir, 'bundle.js'), 'HOST-ONLY', 'utf-8');
+      writePackage({ name: 'demo-app', bundle: 'nested/bundle.js' });
+      fs.symlinkSync(hostDir, path.join(packageDir, 'nested'));
+
+      await install();
+
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'nested', 'bundle.js'))).toBe(false);
+    });
+
+    it('follows a symlink that stays inside the package', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'real-bundle.js': 'inside();' });
+      fs.symlinkSync(path.join(packageDir, 'real-bundle.js'), path.join(packageDir, 'bundle.js'));
+
+      await install();
+
+      expect(fs.readFileSync(path.join(appsDir, 'demo-app', 'bundle.js'), 'utf-8')).toBe('inside();');
+    });
+
+    it('creates intermediate directories for a nested bundle path', async () => {
+      writePackage({ name: 'demo-app', bundle: 'nested/bundle.js' }, { 'nested/bundle.js': 'nested();' });
+
+      await install();
+
+      expect(fs.readFileSync(path.join(appsDir, 'demo-app', 'nested', 'bundle.js'), 'utf-8')).toBe('nested();');
+    });
+
+    it('skips a bundle that is not a regular file', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' });
+      fs.mkdirSync(path.join(packageDir, 'bundle.js'), { recursive: true });
+
+      await install();
+
+      expect(fs.existsSync(path.join(appsDir, 'demo-app', 'bundle.js'))).toBe(false);
+    });
+  });
+
   describe('post-copy steps', () => {
     it('marks the runner executable', async () => {
       writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;', 'demo-app': '#!/bin/sh\n' });
