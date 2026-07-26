@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { runCmd } from '@frontmcp/utils';
+import { copyFile, ensureDir, realpath, runCmd, stat } from '@frontmcp/utils';
 
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
@@ -97,9 +97,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     console.log(`${c('cyan', '[install]')} installing "${manifestData.name}" to ${installDir}`);
 
     // Copy bundle + manifest + runner
-    copyIfExists(manifestDir, installDir, manifestData.bundle);
-    copyIfExists(manifestDir, installDir, `${manifestData.name}.manifest.json`);
-    copyIfExists(manifestDir, installDir, manifestData.name);
+    await copyIfExists(manifestDir, installDir, manifestData.bundle);
+    await copyIfExists(manifestDir, installDir, `${manifestData.name}.manifest.json`);
+    await copyIfExists(manifestDir, installDir, manifestData.name);
 
     // Make runner executable
     const runnerPath = path.join(installDir, manifestData.name);
@@ -189,26 +189,26 @@ function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
  * package cannot make the copy read a file elsewhere on the host, and a device or fifo cannot
  * make it read forever.
  */
-function resolveContainedFile(baseDir: string, filename: string): string | null {
+async function resolveContainedFile(baseDir: string, filename: string): Promise<string | null> {
   try {
-    const base = fs.realpathSync(baseDir);
-    const resolved = fs.realpathSync(path.join(base, filename));
+    const base = await realpath(baseDir);
+    const resolved = await realpath(path.join(base, filename));
 
     if (!isPluginContainedPath(base, path.relative(base, resolved))) return null;
 
-    return fs.statSync(resolved).isFile() ? resolved : null;
+    return (await stat(resolved)).isFile() ? resolved : null;
   } catch {
     return null;
   }
 }
 
-function copyIfExists(fromDir: string, toDir: string, filename: string): void {
+async function copyIfExists(fromDir: string, toDir: string, filename: string): Promise<void> {
   if (!isPluginContainedPath(toDir, filename)) return;
 
-  const src = resolveContainedFile(fromDir, filename);
+  const src = await resolveContainedFile(fromDir, filename);
   if (!src) return;
 
   const dest = path.join(toDir, filename);
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(src, dest);
+  await ensureDir(path.dirname(dest));
+  await copyFile(src, dest);
 }
