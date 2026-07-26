@@ -6,10 +6,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { runCmd } from '@frontmcp/utils';
+import { copyFile, ensureDir, realpath, runCmd, stat } from '@frontmcp/utils';
 
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
+import { assertValidPluginName, isPluginContainedPath } from '../build/exec/cli-runtime/plugin-emitter';
 import { type ExecManifest } from '../build/exec/manifest';
 import { appDir, ensurePmDirs } from '../pm/paths';
 import { runQuestionnaire, writeEnvFile } from './questionnaire';
@@ -79,17 +80,26 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 
     const { data: manifestData, dir: manifestDir } = manifest;
 
+    assertValidPluginName(manifestData.name, 'frontmcp install');
+
     // 4. Install to ~/.frontmcp/apps/{name}/
     const installDir = appDir(manifestData.name);
+
+    if (!isPluginContainedPath(installDir, manifestData.bundle)) {
+      throw new Error(
+        `Invalid manifest bundle "${String(manifestData.bundle)}": must be a relative path inside the app directory.`,
+      );
+    }
+
     ensurePmDirs();
     fs.mkdirSync(installDir, { recursive: true });
 
     console.log(`${c('cyan', '[install]')} installing "${manifestData.name}" to ${installDir}`);
 
     // Copy bundle + manifest + runner
-    copyIfExists(manifestDir, installDir, manifestData.bundle);
-    copyIfExists(manifestDir, installDir, `${manifestData.name}.manifest.json`);
-    copyIfExists(manifestDir, installDir, manifestData.name);
+    await copyIfExists(manifestDir, installDir, manifestData.bundle);
+    await copyIfExists(manifestDir, installDir, `${manifestData.name}.manifest.json`);
+    await copyIfExists(manifestDir, installDir, manifestData.name);
 
     // Make runner executable
     const runnerPath = path.join(installDir, manifestData.name);
@@ -173,9 +183,32 @@ function findManifest(dir: string): { data: ExecManifest; dir: string } | null {
   return null;
 }
 
-function copyIfExists(fromDir: string, toDir: string, filename: string): void {
-  const src = path.join(fromDir, filename);
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, path.join(toDir, filename));
+/**
+ * Resolve `filename` inside `baseDir`, returning the real path only when it is a regular file
+ * that stays within the directory. Both operands are resolved, so a symlink in the fetched
+ * package cannot make the copy read a file elsewhere on the host, and a device or fifo cannot
+ * make it read forever.
+ */
+async function resolveContainedFile(baseDir: string, filename: string): Promise<string | null> {
+  try {
+    const base = await realpath(baseDir);
+    const resolved = await realpath(path.join(base, filename));
+
+    if (!isPluginContainedPath(base, path.relative(base, resolved))) return null;
+
+    return (await stat(resolved)).isFile() ? resolved : null;
+  } catch {
+    return null;
   }
+}
+
+async function copyIfExists(fromDir: string, toDir: string, filename: string): Promise<void> {
+  if (!isPluginContainedPath(toDir, filename)) return;
+
+  const src = await resolveContainedFile(fromDir, filename);
+  if (!src) return;
+
+  const dest = path.join(toDir, filename);
+  await ensureDir(path.dirname(dest));
+  await copyFile(src, dest);
 }

@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/__tests__/mcp-result.spec.ts
 
 import type { CallToolResult } from '@frontmcp/protocol';
+
 import { extractResultFromCallToolResult } from '../utils';
 
 describe('extractResultFromCallToolResult', () => {
@@ -370,6 +371,53 @@ describe('extractResultFromCallToolResult', () => {
       const result = extractResultFromCallToolResult(mcpResult);
 
       expect(result).toEqual({ data: 'test' });
+    });
+  });
+
+  describe('Multi-Content Isolation', () => {
+    it('should return a copy of the content array, not the array itself', () => {
+      const mcpResult: CallToolResult = {
+        content: [
+          { type: 'text', text: 'one' },
+          { type: 'text', text: 'two' },
+        ],
+        isError: false,
+      };
+
+      const result = extractResultFromCallToolResult(mcpResult) as unknown[];
+
+      expect(result).toEqual(mcpResult.content);
+      expect(result).not.toBe(mcpResult.content);
+      expect(result[0]).not.toBe(mcpResult.content[0]);
+    });
+
+    it('should flatten class instances embedded in content into plain data', () => {
+      class HostResource {
+        readonly uri = 'file:///x';
+        read(): string {
+          return 'host';
+        }
+      }
+      const mcpResult = {
+        content: [
+          { type: 'resource', resource: new HostResource() },
+          { type: 'text', text: 'trailing' },
+        ],
+        isError: false,
+      } as unknown as CallToolResult;
+
+      const result = extractResultFromCallToolResult(mcpResult) as Array<Record<string, unknown>>;
+
+      expect(result[0]['resource']).toEqual({ uri: 'file:///x' });
+      expect(result[0]['resource'] instanceof HostResource).toBe(false);
+    });
+
+    it('should return undefined when the content array cannot be represented as plain data', () => {
+      const circular: Record<string, unknown> = { type: 'text', text: 'x' };
+      circular['self'] = circular;
+      const mcpResult = { content: [circular, circular], isError: false } as unknown as CallToolResult;
+
+      expect(extractResultFromCallToolResult(mcpResult)).toBeUndefined();
     });
   });
 });

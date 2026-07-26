@@ -670,12 +670,14 @@ Inside the VM, injected globals (conceptual):
 ```ts
 declare function callTool<TInput, TResult>(name: string, input: TInput): Promise<TResult>;
 
-declare function getTool(name: string): {
-  name: string;
-  description: string;
-  inputSchema: unknown;
-  outputSchema?: unknown | null;
-};
+declare function getTool(name: string):
+  | {
+      name: string;
+      description?: string;
+      inputSchema: Record<string, unknown> | null;
+      outputSchema: Record<string, unknown> | null;
+    }
+  | undefined;
 
 declare const codecallContext: Readonly<Record<string, unknown>>;
 
