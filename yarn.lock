@@ -1912,18 +1912,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@enclave-vm/ast@npm:^2.14.1":
-  version: 2.14.1
-  resolution: "@enclave-vm/ast@npm:2.14.1"
-  dependencies:
-    "@types/estree": "npm:1.0.8"
-    acorn: "npm:8.15.0"
-    acorn-walk: "npm:8.3.4"
-    astring: "npm:1.9.0"
-  checksum: 10c0/88269a0afb8b47d24ebf70997ee70597899a0429f7da963c955c56b0137fca426bfa6bfae80900cc90b80d2b181be70c9113174d938ad50893e64951f95d293a
-  languageName: node
-  linkType: hard
-
 "@enclave-vm/core@npm:^2.15.1":
   version: 2.15.1
   resolution: "@enclave-vm/core@npm:2.15.1"
@@ -2413,30 +2401,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/auth@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/auth@npm:1.5.2"
-  dependencies:
-    "@frontmcp/di": "npm:1.5.2"
-    "@frontmcp/utils": "npm:1.5.2"
-    jose: "npm:^6.0.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.5.2
-    "@frontmcp/storage-sqlite": 1.5.2
-    "@vercel/kv": ^3.0.0
-    ioredis: ^5.0.0
-  peerDependenciesMeta:
-    "@frontmcp/storage-sqlite":
-      optional: true
-    "@vercel/kv":
-      optional: true
-    ioredis:
-      optional: true
-  checksum: 10c0/44ab8d4a20e492b7ae65b1d1043ec1ec10859aed4dd178e06fd78a02c6c08ca11717066cb7970771a9e3f983c5652a26c3c73daf2efa976052ade1f8610433cd
-  languageName: node
-  linkType: hard
-
-"@frontmcp/auth@workspace:libs/auth":
+"@frontmcp/auth@npm:1.5.2, @frontmcp/auth@workspace:libs/auth":
   version: 0.0.0-use.local
   resolution: "@frontmcp/auth@workspace:libs/auth"
   dependencies:
@@ -2459,17 +2424,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/di@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/di@npm:1.5.2"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.5.2
-    reflect-metadata: ^0.2.0
-  checksum: 10c0/c114cf5c3dd22cb86d6ea10553a0d162dbd0bcdab87ad3f9ea0951792d860d755776d2ff83d629570f23545c3efebeae97379e81c2c3113505c25ca9de32145c
-  languageName: node
-  linkType: hard
-
-"@frontmcp/di@workspace:libs/di":
+"@frontmcp/di@npm:1.5.2, @frontmcp/di@workspace:libs/di":
   version: 0.0.0-use.local
   resolution: "@frontmcp/di@workspace:libs/di"
   dependencies:
@@ -2498,18 +2453,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/guard@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/guard@npm:1.5.2"
-  dependencies:
-    "@frontmcp/utils": "npm:1.5.2"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.5.2
-  checksum: 10c0/d2306a1e51e1547b50c2cbe21a380d5158b8515424724fdaf8d0bdb5b5f7608a62ef0a085282b24f9fed03cc6ef0300100dfc25bdb55d9aaed9a6b8aa98949b8
-  languageName: node
-  linkType: hard
-
-"@frontmcp/guard@workspace:libs/guard":
+"@frontmcp/guard@npm:1.5.2, @frontmcp/guard@workspace:libs/guard":
   version: 0.0.0-use.local
   resolution: "@frontmcp/guard@workspace:libs/guard"
   dependencies:
@@ -2522,16 +2466,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/lazy-zod@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/lazy-zod@npm:1.5.2"
-  peerDependencies:
-    zod: ^4.0.0
-  checksum: 10c0/4ad963675cbe998216d7c019a690f8e4f8e45620035647b6bc7891d374fe68b0b62dad7d18ad26cc084eff3a95c26d356a3e1d035624427b5b69f6da11e29736
-  languageName: node
-  linkType: hard
-
-"@frontmcp/lazy-zod@workspace:libs/lazy-zod":
+"@frontmcp/lazy-zod@npm:1.5.2, @frontmcp/lazy-zod@workspace:libs/lazy-zod":
   version: 0.0.0-use.local
   resolution: "@frontmcp/lazy-zod@workspace:libs/lazy-zod"
   dependencies:
@@ -2711,16 +2646,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/protocol@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/protocol@npm:1.5.2"
-  dependencies:
-    "@modelcontextprotocol/sdk": "npm:1.29.0"
-  checksum: 10c0/1833092665681399c90043018a0acd7fc441cd4b9147d20b4d306f3e3a4799a0763d03ac624a4fb107c8549cfb338c76aaaaabe207bf761cfdc97baa049e0639
-  languageName: node
-  linkType: hard
-
-"@frontmcp/protocol@workspace:libs/protocol":
+"@frontmcp/protocol@npm:1.5.2, @frontmcp/protocol@workspace:libs/protocol":
   version: 0.0.0-use.local
   resolution: "@frontmcp/protocol@workspace:libs/protocol"
   dependencies:
@@ -3024,18 +2950,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/uipack@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/uipack@npm:1.5.2"
-  dependencies:
-    zod: "npm:^4.0.0"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.5.2
-  checksum: 10c0/f9f5cd1bcbe7b18692cccb9010abfee99bd1a2f41bb4b95dfb0498e21fb9f7ae19590d8a894048ab4c5929cec9ff64f447eb446aab7a69111b7b83a38af4b5c5
-  languageName: node
-  linkType: hard
-
-"@frontmcp/uipack@workspace:libs/uipack":
+"@frontmcp/uipack@npm:1.5.2, @frontmcp/uipack@workspace:libs/uipack":
   version: 0.0.0-use.local
   resolution: "@frontmcp/uipack@workspace:libs/uipack"
   dependencies:
@@ -3046,27 +2961,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/utils@npm:1.5.2":
-  version: 1.5.2
-  resolution: "@frontmcp/utils@npm:1.5.2"
-  dependencies:
-    "@enclave-vm/ast": "npm:^2.14.1"
-    "@noble/ciphers": "npm:^2.1.1"
-    "@noble/hashes": "npm:^2.0.1"
-  peerDependencies:
-    "@frontmcp/lazy-zod": 1.5.2
-    "@vercel/kv": ^2.0.0 || ^3.0.0
-    ioredis: ^5.0.0
-  peerDependenciesMeta:
-    "@vercel/kv":
-      optional: true
-    ioredis:
-      optional: true
-  checksum: 10c0/f40dc9cc9498cba2ac1727c76a51390668c4a68a6c308397fb41eb6685863815ab09e35d76fd1b1c145d097e7934c80a642c0244eaa0a4100217362eeaef7c9e
-  languageName: node
-  linkType: hard
-
-"@frontmcp/utils@workspace:libs/utils":
+"@frontmcp/utils@npm:1.5.2, @frontmcp/utils@workspace:libs/utils":
   version: 0.0.0-use.local
   resolution: "@frontmcp/utils@workspace:libs/utils"
   dependencies:
