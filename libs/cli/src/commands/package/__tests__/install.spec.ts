@@ -22,6 +22,9 @@ jest.mock('../registry', () => ({
 }));
 
 jest.mock('@frontmcp/utils', () => ({
+  // Keep the real filesystem helpers — these tests drive a real temp directory — and stub only
+  // the child-process runner.
+  ...jest.requireActual('@frontmcp/utils'),
   runCmd: jest.fn(),
 }));
 
