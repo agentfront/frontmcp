@@ -3,28 +3,40 @@
  *
  * ## How a round trip works
  *
- * 1. The tool calls `this.elicit(...)`. No response is recorded for that call
- *    yet, so the exchange records the pending request and throws
- *    {@link InputRequiredSignal}.
+ * 1. The tool calls `this.elicit(...)` / `this.sample(...)` / `this.listRoots()`.
+ *    No response is recorded for that call yet, so the exchange records the
+ *    pending request and throws {@link InputRequiredSignal}.
  * 2. The dispatcher turns the signal into an `InputRequiredResult`
- *    (`resultType: "input_required"`) carrying `inputRequests` and an opaque
- *    `requestState`.
- * 3. The client gathers the input and re-issues the SAME request with
- *    `inputResponses` + `requestState`.
- * 4. The tool runs again from the top. This time `elicit()` finds a recorded
- *    answer for its call and returns it inline, so execution proceeds.
+ *    (`resultType: "input_required"`) carrying `inputRequests` and an opaque,
+ *    integrity-protected `requestState`.
+ * 3. The client gathers the input and re-issues the SAME request (with a NEW
+ *    JSON-RPC id) carrying `inputResponses` + the echoed `requestState`.
+ * 4. The entry runs again from the top. This time each call finds a recorded
+ *    answer and returns it inline, so execution proceeds.
  *
- * Tools are therefore replayed, not resumed — which is why the keys are derived
- * from the call ORDER (`elicit-1`, `elicit-2`, …) rather than randomly: the
- * second run must line its calls up with the first run's answers.
+ * Entries are therefore replayed, not resumed — which is why keys are derived
+ * from the call ORDER (`elicit-1`, `sampling-1`, `roots-1`, …) rather than
+ * randomly: the second run must line its calls up with the first run's answers.
  *
  * `requestState` accumulates every answer gathered so far, so a multi-step tool
  * converges even if the client only echoes the most recent `inputResponses`.
+ * It is signed and bound to the caller and the originating request — see
+ * {@link ./request-state}.
  */
 import type { InputRequests, InputResponses } from '@frontmcp/protocol';
 
 import { type ElicitStatus } from '../../elicitation';
 import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors';
+import { encodeRequestState, type RequestStateBinding } from './request-state';
+
+/** Requests the client may be asked to fulfil, and the capability each needs. */
+const CAPABILITY_FOR_KIND = {
+  elicitation: { capability: 'elicitation', required: { elicitation: { form: {} } } },
+  sampling: { capability: 'sampling', required: { sampling: {} } },
+  roots: { capability: 'roots', required: { roots: {} } },
+} as const;
+
+export type MrtrRequestKind = keyof typeof CAPABILITY_FOR_KIND;
 
 /** Shape recorded for a pending elicitation before it becomes an input request. */
 export interface PendingElicitation {
@@ -32,6 +44,31 @@ export interface PendingElicitation {
   requestedSchema: Record<string, unknown>;
   mode?: 'form' | 'url';
   url?: string;
+}
+
+/** Parameters for a `sampling/createMessage` input request. */
+export interface PendingSampling {
+  messages: unknown[];
+  maxTokens: number;
+  systemPrompt?: string;
+  modelPreferences?: Record<string, unknown>;
+  temperature?: number;
+  stopSequences?: string[];
+  includeContext?: 'none' | 'thisServer' | 'allServers';
+  metadata?: Record<string, unknown>;
+}
+
+/** The client's answer to a `sampling/createMessage` request. */
+export interface SamplingAnswer {
+  role: string;
+  content: unknown;
+  model?: string;
+  stopReason?: string;
+}
+
+/** The client's answer to a `roots/list` request. */
+export interface RootsAnswer {
+  roots: Array<{ uri: string; name?: string }>;
 }
 
 /**
@@ -49,39 +86,12 @@ function toElicitResult(response: Record<string, unknown>): { status: ElicitStat
   };
 }
 
-interface DecodedRequestState {
-  responses: InputResponses;
-}
-
-/** Encode accumulated answers into the opaque blob the client echoes back. */
-export function encodeRequestState(responses: InputResponses): string {
-  return Buffer.from(JSON.stringify({ responses } satisfies DecodedRequestState), 'utf8').toString('base64url');
-}
-
-/**
- * Decode a client-echoed `requestState`.
- *
- * A malformed blob is treated as "no prior answers" rather than an error: the
- * value is opaque to the client, so the only way it can be wrong is if it was
- * tampered with or truncated, and restarting the exchange is safer than failing
- * the call.
- */
-export function decodeRequestState(state: unknown): InputResponses {
-  if (typeof state !== 'string' || state.length === 0) return {};
-  try {
-    const parsed = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as DecodedRequestState;
-    return parsed && typeof parsed.responses === 'object' && parsed.responses !== null ? parsed.responses : {};
-  } catch {
-    return {};
-  }
-}
-
 /**
  * Per-request bookkeeping for one MRTR exchange.
  *
  * Lives on the `FrontMcpContext` for the duration of a single dispatch, so
- * `elicit()` deep inside a tool can reach it without threading it through
- * every flow stage.
+ * `elicit()` / `sample()` / `listRoots()` deep inside an entry can reach it
+ * without threading it through every flow stage.
  */
 export class MrtrExchange {
   /** Answers already supplied by the client, keyed by input-request key. */
@@ -90,63 +100,111 @@ export class MrtrExchange {
   /** Requests raised during THIS run that the client still has to answer. */
   private readonly pending: InputRequests = {};
 
-  /** Number of `elicit()` calls seen so far, used to derive stable keys. */
-  private elicitCount = 0;
+  /** Per-kind call counters, used to derive stable keys across a replay. */
+  private readonly counters: Record<MrtrRequestKind, number> = { elicitation: 0, sampling: 0, roots: 0 };
+
+  readonly clientCapabilities: Record<string, unknown>;
+
+  private readonly binding: RequestStateBinding;
 
   constructor(params: {
     /** `inputResponses` from the request params. */
     inputResponses?: InputResponses;
-    /** Answers carried over from earlier rounds via `requestState`. */
+    /** Answers carried over from earlier rounds via a verified `requestState`. */
     carriedResponses?: InputResponses;
     /** Capabilities the client declared for this request. */
     clientCapabilities: Record<string, unknown>;
+    /** Principal + request digest that new state will be bound to. */
+    binding: RequestStateBinding;
   }) {
     // Fresh `inputResponses` win over carried ones for the same key: the client
     // is answering the question we just asked.
     this.responses = { ...(params.carriedResponses ?? {}), ...(params.inputResponses ?? {}) };
     this.clientCapabilities = params.clientCapabilities;
+    this.binding = params.binding;
   }
 
-  readonly clientCapabilities: Record<string, unknown>;
+  /** True when the client declared the capability a given request kind needs. */
+  supports(kind: MrtrRequestKind): boolean {
+    const declared = this.clientCapabilities[CAPABILITY_FOR_KIND[kind].capability];
+    return typeof declared === 'object' && declared !== null;
+  }
 
   /** True when the client declared support for elicitation in this request. */
   supportsElicitation(): boolean {
-    return (
-      typeof this.clientCapabilities['elicitation'] === 'object' && this.clientCapabilities['elicitation'] !== null
-    );
+    return this.supports('elicitation');
   }
 
   /**
-   * Resolve the next `elicit()` call.
+   * Look up a recorded answer for the next call of `kind`, or record the
+   * request and unwind.
    *
-   * Returns the recorded answer when the client already supplied one, otherwise
-   * records the request and throws so the dispatcher can ask for it.
+   * The spec forbids asking for something the client never said it supports, so
+   * an undeclared capability fails fast with `-32021` rather than emitting an
+   * `inputRequests` entry the client cannot honor.
    */
-  resolveElicitation(pending: PendingElicitation): { status: ElicitStatus; content?: unknown } {
-    this.elicitCount += 1;
-    const key = `elicit-${this.elicitCount}`;
+  private resolve<T>(
+    kind: MrtrRequestKind,
+    method: string,
+    params: Record<string, unknown>,
+    map: (raw: Record<string, unknown>) => T,
+  ): T {
+    this.counters[kind] += 1;
+    const key = `${kind}-${this.counters[kind]}`;
 
     const recorded = this.responses[key];
-    if (recorded) return toElicitResult(recorded);
+    if (recorded) return map(recorded);
 
-    if (!this.supportsElicitation()) {
+    if (!this.supports(kind)) {
       throw new MissingClientCapabilityError(
-        { elicitation: { form: {} } },
-        'This request requires the `elicitation` client capability',
+        CAPABILITY_FOR_KIND[kind].required,
+        `This request requires the \`${CAPABILITY_FOR_KIND[kind].capability}\` client capability`,
       );
     }
 
-    this.pending[key] = {
-      method: 'elicitation/create',
-      params: {
+    this.pending[key] = { method, params };
+    throw new InputRequiredSignal(this.pending, encodeRequestState(this.responses, this.binding));
+  }
+
+  /** Resolve the next `elicit()` call. */
+  resolveElicitation(pending: PendingElicitation): { status: ElicitStatus; content?: unknown } {
+    return this.resolve(
+      'elicitation',
+      'elicitation/create',
+      {
         message: pending.message,
         requestedSchema: pending.requestedSchema,
         ...(pending.mode ? { mode: pending.mode } : {}),
         ...(pending.url ? { url: pending.url } : {}),
       },
-    };
+      toElicitResult,
+    );
+  }
 
-    throw new InputRequiredSignal(this.pending, encodeRequestState(this.responses));
+  /** Resolve the next `sample()` call. */
+  resolveSampling(pending: PendingSampling): SamplingAnswer {
+    const params: Record<string, unknown> = {
+      messages: pending.messages,
+      maxTokens: pending.maxTokens,
+    };
+    for (const key of ['systemPrompt', 'modelPreferences', 'temperature', 'stopSequences', 'metadata'] as const) {
+      if (pending[key] !== undefined) params[key] = pending[key];
+    }
+    // `thisServer` / `allServers` are deprecated in this revision; only forward
+    // `includeContext` when the client declared it supports context inclusion.
+    const samplingCaps = this.clientCapabilities['sampling'] as { context?: unknown } | undefined;
+    if (pending.includeContext !== undefined && (pending.includeContext === 'none' || samplingCaps?.context)) {
+      params['includeContext'] = pending.includeContext;
+    }
+
+    return this.resolve('sampling', 'sampling/createMessage', params, (raw) => raw as unknown as SamplingAnswer);
+  }
+
+  /** Resolve the next `listRoots()` call. */
+  resolveRoots(): RootsAnswer {
+    return this.resolve('roots', 'roots/list', {}, (raw) => ({
+      roots: Array.isArray(raw['roots']) ? (raw['roots'] as RootsAnswer['roots']) : [],
+    }));
   }
 }
 

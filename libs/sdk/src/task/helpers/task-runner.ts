@@ -21,6 +21,7 @@
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import type { FrontMcpLogger } from '../../common';
+import { InputRequiredSignal } from '../../errors';
 import type { TaskStore } from '../store';
 import type { TaskRegistry } from '../task.registry';
 import { isTerminal, type TaskJsonRpcError, type TaskRecord } from '../task.types';
@@ -94,6 +95,24 @@ async function executeTask(params: RunTaskParams): Promise<void> {
         ctx: taskCtx,
       });
     } catch (err) {
+      // Tasks extension (protocol 2026-07-28): a tool that needs client input
+      // parks the task in `input_required` rather than failing. The client
+      // reads `inputRequests` from `tasks/get` and answers with `tasks/update`,
+      // which resumes execution. This is NOT a terminal state, so return before
+      // the terminal write below.
+      if (err instanceof InputRequiredSignal) {
+        const paused = await store.update(taskId, sessionId, {
+          status: 'input_required',
+          statusMessage: 'The task is waiting for additional input.',
+          inputRequests: err.inputRequests,
+        });
+        logger?.info('[task-runner] task paused awaiting input', {
+          taskId,
+          keys: Object.keys(err.inputRequests),
+        });
+        if (paused) notifier.sendStatus(paused);
+        return;
+      }
       outcomeErr = toJsonRpcError(err);
     }
 

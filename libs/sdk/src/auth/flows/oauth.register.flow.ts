@@ -63,6 +63,17 @@ const registrationRequestSchema = z
     response_types: z.array(z.enum(['code'])).default(['code']),
     client_name: z.string().optional(),
     scope: z.string().optional(),
+    /**
+     * OpenID Connect client type (SEP-837).
+     *
+     * MCP 2026-07-28 requires clients to state this during Dynamic Client
+     * Registration, because an OIDC authorization server applies different
+     * redirect-URI rules per type — a `native` client registering without it
+     * can be handed `web` rules and have its loopback/custom-scheme redirect
+     * rejected. Defaults to `web`, matching the OIDC registration default, so
+     * pre-2026 clients keep working unchanged.
+     */
+    application_type: z.enum(['web', 'native']).default('web'),
   })
   .passthrough();
 
@@ -372,6 +383,9 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
           redirect_uris: c.redirect_uris,
           ...(c.client_name ? { client_name: c.client_name } : {}),
           ...(c.scope ? { scope: c.scope } : {}),
+          // Echo the negotiated client type so the client can confirm which
+          // redirect-URI rules the server applied.
+          application_type: this.state.required.body.application_type,
         },
         { status: 201 },
       ),

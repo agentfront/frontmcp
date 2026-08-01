@@ -200,6 +200,50 @@ export interface UpstreamProviderConfig {
   scopes: string[];
   /** Callback URL for this provider */
   callbackUrl: string;
+  /**
+   * The provider's issuer identifier, as recorded at configuration time.
+   *
+   * Used for two things added by MCP 2026-07-28:
+   * - RFC 9207 validation — an `iss` present on the authorization response MUST
+   *   match this before the code is redeemed (SEP-2468).
+   * - Credential scoping — persisted client credentials are keyed by issuer and
+   *   MUST NOT be reused with a different authorization server (SEP-2352).
+   *
+   * Optional because a provider may be configured by raw endpoints alone; when
+   * absent the `iss` check is skipped (the parameter is only SHOULD-sent).
+   */
+  issuer?: string;
+}
+
+/**
+ * Validate an RFC 9207 `iss` authorization-response parameter.
+ *
+ * MCP 2026-07-28 (SEP-2468) makes this a client-side MUST: when the
+ * authorization server returns `iss`, it has to match the issuer recorded for
+ * the provider before the code is redeemed. Without it a mix-up attack can
+ * swap in a code minted by a different (attacker-controlled) AS.
+ *
+ * A missing `iss` is accepted — the AS is only SHOULD-required to send it, so
+ * rejecting would break every AS that has not adopted RFC 9207 yet.
+ */
+export function validateAuthorizationIssuer(
+  received: string | undefined,
+  expected: string | undefined,
+): { ok: true } | { ok: false; reason: string } {
+  if (received === undefined) return { ok: true };
+  if (!expected) return { ok: true };
+
+  // Compare on origin + path with a trailing slash normalized away: issuer
+  // identifiers are URLs, and `https://idp.example.com` and
+  // `https://idp.example.com/` denote the same issuer.
+  const normalize = (value: string): string => value.replace(/\/+$/, '');
+  if (normalize(received) !== normalize(expected)) {
+    return {
+      ok: false,
+      reason: `Authorization response issuer "${received}" does not match the configured issuer "${expected}"`,
+    };
+  }
+  return { ok: true };
 }
 
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
@@ -1142,8 +1186,42 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * Register an upstream OAuth provider configuration
    */
   registerProvider(config: UpstreamProviderConfig): void {
+    // Credentials are bound to the authorization server that issued them
+    // (MCP 2026-07-28, SEP-2352). Re-registering a provider under a DIFFERENT
+    // issuer means the counterparty changed, so anything cached for the old one
+    // must be dropped rather than silently reused against the new AS.
+    const previous = this.providerConfigs.get(config.id);
+    if (previous && previous.issuer && config.issuer && previous.issuer !== config.issuer) {
+      this.logger.warn(
+        `Upstream provider "${config.id}" changed issuer (${previous.issuer} → ${config.issuer}); ` +
+          `discarding credentials bound to the previous authorization server`,
+      );
+      void this.discardProviderCredentials(config.id);
+    }
+
     this.providerConfigs.set(config.id, config);
     this.logger.info(`Registered upstream provider: ${config.id}`);
+  }
+
+  /**
+   * Drop every stored credential for a provider whose authorization server changed.
+   *
+   * Best-effort: the token store may be memory-backed and already empty. Failing
+   * here must not block re-registration, but the credentials MUST NOT survive,
+   * so a failure is logged loudly rather than swallowed.
+   */
+  private async discardProviderCredentials(providerId: string): Promise<void> {
+    try {
+      const store = this.orchestratedTokenStoreImpl as {
+        deleteTokensForProvider?: (providerId: string) => Promise<void>;
+      };
+      await store.deleteTokensForProvider?.(providerId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to discard credentials for provider "${providerId}" after an issuer change`,
+        error instanceof Error ? { message: error.message } : { error },
+      );
+    }
   }
 
   /**

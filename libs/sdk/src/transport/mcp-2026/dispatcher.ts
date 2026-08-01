@@ -12,12 +12,23 @@ import { MCP_2026_ERROR_CODES, MCP_2026_REMOVED_METHODS, McpError, type Implemen
 import { type FrontMcpContext } from '../../context';
 import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors';
 import { type Scope } from '../../scope';
+import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
 import { createMcpHandlers } from '../mcp-handlers';
 import { buildDiscoverResult } from './discover';
-import { buildInputRequiredResult, decodeRequestState, MrtrExchange } from './mrtr';
+import { buildInputRequiredResult, MrtrExchange } from './mrtr';
+import { type RequestNotificationSink } from './request-notifications';
+import { computeRequestBinding, decodeRequestState, type RequestStateBinding } from './request-state';
 import { type JsonRpcErrorPayload } from './request-validation';
-import { decorateResult, resolveCacheScope } from './result-decorator';
+import { decorateResult, orderListResult, resolveCacheScope } from './result-decorator';
+import {
+  buildCreateTaskResult,
+  clientSupportsTasks,
+  dispatchTasksMethod,
+  resolveTaskOwner,
+  TASKS_EXTENSION_ID,
+  TASKS_EXTENSION_METHODS,
+} from './tasks-extension';
 
 export interface DispatchOptions {
   scope: Scope;
@@ -34,11 +45,148 @@ export interface DispatchOptions {
   signal?: AbortSignal;
   /** Lazily composed instructions for `server/discover`. */
   composeInstructions?: () => string | undefined;
+  /** Collects `notifications/message` + `notifications/progress` for this request. */
+  notificationSink?: RequestNotificationSink;
+  /** OpenTelemetry context echoed back on the result (SEP-414). */
+  traceContext?: Record<string, string>;
 }
 
 export type DispatchResult =
   | { kind: 'result'; result: Record<string, unknown> }
   | { kind: 'error'; status: number; error: JsonRpcErrorPayload };
+
+/**
+ * Requests that MAY return an `InputRequiredResult`.
+ *
+ * The spec enumerates these three and adds "Servers MUST NOT send
+ * `InputRequiredResult` responses on any other client requests."
+ */
+export const MRTR_CAPABLE_METHODS = ['tools/call', 'prompts/get', 'resources/read'];
+
+/**
+ * Identify the caller for `requestState` binding.
+ *
+ * Falls back to a fixed anonymous marker rather than a random value: public
+ * servers must still be able to redeem their own state on the retry, and there
+ * is no principal to separate anonymous callers by.
+ */
+export function resolvePrincipal(authInfo: Record<string, unknown> | undefined): string {
+  const clientId = authInfo?.['clientId'];
+  if (typeof clientId === 'string' && clientId.length > 0) return clientId;
+  const token = authInfo?.['token'];
+  if (typeof token === 'string' && token.length > 0) return `tok:${token.slice(0, 16)}`;
+  return 'anonymous';
+}
+
+/**
+ * Identify the caller for TASK ownership.
+ *
+ * Stricter than {@link resolvePrincipal}: a public-mode server mints an
+ * anonymous bootstrap token per request, which is a fine binding for a
+ * short-lived `requestState` but must NOT be mistaken for an identity that can
+ * own a durable task. Anonymous callers resolve to `'anonymous'` so task
+ * creation is refused rather than pooled across unrelated users.
+ */
+export function resolveTaskPrincipal(authInfo: Record<string, unknown> | undefined, isAnonymous = false): string {
+  // A public-mode server mints an anonymous session — complete with a synthetic
+  // subject — for every unauthenticated caller. That subject is fine for binding
+  // a short-lived `requestState`, but treating it as a task OWNER would pool
+  // unrelated anonymous users into one task namespace, so it is rejected here.
+  if (isAnonymous) return 'anonymous';
+
+  const clientId = authInfo?.['clientId'];
+  return typeof clientId === 'string' && clientId.length > 0 ? clientId : 'anonymous';
+}
+
+type TaskDecision = { kind: 'skip' } | { kind: 'create'; owner: string } | { kind: 'refuse'; reason: string };
+
+/**
+ * Decide whether this `tools/call` should be answered with a task handle.
+ *
+ * Three things must line up: the tool has to declare task support, the client
+ * has to declare the extension, and the caller has to be identifiable (a task
+ * outlives the request, and this revision has no session to scope it by).
+ */
+function shouldCreateTask(params: {
+  scope: Scope;
+  method: string;
+  params: Record<string, unknown>;
+  clientCapabilities: Record<string, unknown>;
+  authInfo: Record<string, unknown> | undefined;
+  isAnonymous: boolean;
+}): TaskDecision {
+  if (params.method !== 'tools/call') return { kind: 'skip' };
+  if (!params.scope.taskStore) return { kind: 'skip' };
+
+  const toolName = params.params['name'];
+  if (typeof toolName !== 'string') return { kind: 'skip' };
+
+  const tool = params.scope.tools
+    .getTools(true)
+    .find((entry) => entry.fullName === toolName || entry.metadata.name === toolName);
+  const taskSupport = tool?.metadata.execution?.taskSupport;
+  if (taskSupport !== 'required' && taskSupport !== 'optional') return { kind: 'skip' };
+
+  if (!clientSupportsTasks(params.clientCapabilities)) {
+    // A tool that can ONLY run as a task cannot serve a client that has no way
+    // to poll for the outcome, so say so rather than silently blocking.
+    if (taskSupport === 'required') {
+      return {
+        kind: 'refuse',
+        reason: `Tool "${toolName}" runs as a task; declare the ${TASKS_EXTENSION_ID} extension in clientCapabilities`,
+      };
+    }
+    return { kind: 'skip' };
+  }
+
+  const ownership = resolveTaskOwner(resolveTaskPrincipal(params.authInfo, params.isAnonymous));
+  if (!ownership.ok) return { kind: 'refuse', reason: ownership.reason };
+
+  return { kind: 'create', owner: ownership.owner };
+}
+
+/**
+ * Re-run a task that `tasks/update` moved back to `working`.
+ *
+ * The accumulated `inputResponses` are replayed into the tool through a fresh
+ * MRTR exchange, so a tool that asked for input resolves it inline this time —
+ * exactly the replay model the request-scoped MRTR path uses.
+ */
+async function resumeTask(params: {
+  scope: Scope;
+  record: TaskRecord;
+  authInfo: Record<string, unknown>;
+  clientCapabilities: Record<string, unknown>;
+  frontmcpContext?: FrontMcpContext;
+}): Promise<void> {
+  const { scope, record, authInfo, clientCapabilities, frontmcpContext } = params;
+  const registry = scope.tasks;
+  const runner = registry?.runner;
+  if (!runner) {
+    scope.logger.warn('mcp-2026: cannot resume task, no runner configured', { taskId: record.taskId });
+    return;
+  }
+
+  // The resumed run needs its own MRTR exchange, seeded with everything the
+  // client has answered so far. Without it `elicit()` would fall through to the
+  // legacy fallback path and ask again instead of consuming the answer that
+  // `tasks/update` just supplied.
+  frontmcpContext?.setMrtrExchange(
+    new MrtrExchange({
+      carriedResponses: record.inputResponses ?? {},
+      clientCapabilities,
+      binding: {
+        principal: resolveTaskPrincipal(authInfo),
+        binding: computeRequestBinding('tasks/resume', { name: record.taskId }),
+      },
+    }),
+  );
+
+  await runner.run(record, {
+    cleanedRequestParams: record.request.params,
+    ctx: { authInfo },
+  });
+}
 
 /** Read the JSON-RPC method literal a handler's request schema is bound to. */
 function methodOfSchema(schema: unknown): string | undefined {
@@ -93,13 +241,25 @@ export function toJsonRpcError(error: unknown): { status: number; error: JsonRpc
  * response as a stream, so the flow handles it before calling in.
  */
 export async function dispatch2026(options: DispatchOptions): Promise<DispatchResult> {
-  const { scope, body, clientCapabilities, frontmcpContext, authInfo, isAnonymous, signal, composeInstructions } =
-    options;
+  const {
+    scope,
+    body,
+    clientCapabilities,
+    frontmcpContext,
+    authInfo,
+    isAnonymous,
+    signal,
+    composeInstructions,
+    notificationSink,
+    traceContext,
+  } = options;
 
   const method = body['method'] as string;
   const params = (body['params'] as Record<string, unknown> | undefined) ?? {};
   const cacheScope = resolveCacheScope(isAnonymous);
   const serverInfo = scope.metadata.info as Implementation;
+  const decorate = (raw: Record<string, unknown>): Record<string, unknown> =>
+    decorateResult(orderListResult(method, raw), { method, serverInfo, cacheScope, traceContext });
 
   if ((MCP_2026_REMOVED_METHODS as readonly string[]).includes(method)) {
     return {
@@ -109,14 +269,47 @@ export async function dispatch2026(options: DispatchOptions): Promise<DispatchRe
     };
   }
 
+  // ── io.modelcontextprotocol/tasks extension ────────────────────────────────
+  if (TASKS_EXTENSION_METHODS.includes(method)) {
+    if (!clientSupportsTasks(clientCapabilities)) {
+      return {
+        kind: 'error',
+        status: 400,
+        error: {
+          code: MCP_2026_ERROR_CODES.missingRequiredClientCapability,
+          message: `${method} requires the ${TASKS_EXTENSION_ID} extension`,
+          data: { requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } } },
+        },
+      };
+    }
+
+    const ownership = resolveTaskOwner(resolveTaskPrincipal(authInfo, isAnonymous));
+    if (!ownership.ok) {
+      return { kind: 'error', status: 200, error: { code: -32602, message: ownership.reason } };
+    }
+
+    const outcome = await dispatchTasksMethod({
+      scope,
+      method,
+      params,
+      owner: ownership.owner,
+      resume: (record) =>
+        resumeTask({
+          scope,
+          record,
+          authInfo: { ...(authInfo ?? {}), sessionId: ownership.owner },
+          clientCapabilities,
+          frontmcpContext,
+        }),
+    });
+
+    return outcome.kind === 'result' ? { kind: 'result', result: decorate(outcome.result) } : outcome;
+  }
+
   if (method === 'server/discover') {
     return {
       kind: 'result',
-      result: decorateResult(buildDiscoverResult(scope, composeInstructions?.()) as Record<string, unknown>, {
-        method,
-        serverInfo,
-        cacheScope,
-      }),
+      result: decorate(buildDiscoverResult(scope, composeInstructions?.()) as Record<string, unknown>),
     };
   }
 
@@ -130,17 +323,48 @@ export async function dispatch2026(options: DispatchOptions): Promise<DispatchRe
 
   // Every request carries its own MRTR exchange: capabilities are per-request in
   // this revision, so an exchange must never outlive the request that made it.
+  //
+  // `requestState` is attacker-controlled — it round-trips through the client —
+  // so it is verified against the caller's principal and this exact request
+  // before its contents are trusted. A blob that fails verification is treated
+  // as "no prior answers", which restarts the exchange rather than failing a
+  // caller whose state merely expired.
+  const binding: RequestStateBinding = {
+    principal: resolvePrincipal(authInfo),
+    binding: computeRequestBinding(method, params),
+  };
+  const carried = decodeRequestState(params['requestState'], binding);
+  if (!carried.ok && carried.reason !== 'absent') {
+    scope.logger.warn('mcp-2026: rejected requestState', { method, reason: carried.reason });
+  }
+
   const exchange = new MrtrExchange({
     inputResponses: params['inputResponses'] as Record<string, Record<string, unknown>> | undefined,
-    carriedResponses: decodeRequestState(params['requestState']),
+    carriedResponses: carried.ok ? carried.responses : {},
     clientCapabilities,
+    binding,
   });
   frontmcpContext?.setMrtrExchange(exchange);
+  if (notificationSink) frontmcpContext?.setRequestNotificationSink(notificationSink);
+
+  // Tasks are no longer opted into per request (`params.task` is gone). A server
+  // MAY hand back a task handle whenever the work is long-running, gated only on
+  // the CLIENT declaring the extension. Reuse the existing task-creation stage by
+  // supplying the augmentation it still keys off internally.
+  const taskDecision = shouldCreateTask({ scope, method, params, clientCapabilities, authInfo, isAnonymous });
+  if (taskDecision.kind === 'refuse') {
+    return { kind: 'error', status: 200, error: { code: -32602, message: taskDecision.reason } };
+  }
+
+  const dispatchBody = taskDecision.kind === 'create' ? { ...body, params: { ...params, task: {} } } : body;
 
   const ctx = {
     signal: signal ?? new AbortController().signal,
     requestId: body['id'] as string | number,
-    authInfo,
+    // Tasks outlive the request, so they are stored under the caller's stable
+    // principal rather than a per-request identifier that would never be found
+    // again by `tasks/get`.
+    authInfo: taskDecision.kind === 'create' ? { ...(authInfo ?? {}), sessionId: taskDecision.owner } : authInfo,
     sendNotification: async () => undefined,
     sendRequest: async () => {
       // 2026-07-28 removed the server→client request direction outright. A
@@ -150,14 +374,33 @@ export async function dispatch2026(options: DispatchOptions): Promise<DispatchRe
   };
 
   try {
-    const raw = (await handler.handler(body as never, ctx as never)) as Record<string, unknown>;
-    return { kind: 'result', result: decorateResult(raw, { method, serverInfo, cacheScope }) };
+    const raw = (await handler.handler(dispatchBody as never, ctx as never)) as Record<string, unknown>;
+
+    // The shared stage answers with a 2025-shaped `{ task }` result; project it
+    // onto this revision's `resultType: "task"` envelope.
+    if (taskDecision.kind === 'create' && raw['task']) {
+      const created = await scope.taskStore?.get((raw['task'] as { taskId: string }).taskId, taskDecision.owner);
+      if (created) return { kind: 'result', result: decorate(buildCreateTaskResult(created)) };
+    }
+
+    return { kind: 'result', result: decorate(raw) };
   } catch (error) {
     if (error instanceof InputRequiredSignal) {
-      return {
-        kind: 'result',
-        result: decorateResult(buildInputRequiredResult(error), { method, serverInfo, cacheScope }),
-      };
+      // The spec restricts interim results to prompts/get, resources/read and
+      // tools/call. Anywhere else an `input_required` result would be a protocol
+      // violation the client is not expecting, so surface it as a server error
+      // instead of emitting a response no conforming client can act on.
+      if (!MRTR_CAPABLE_METHODS.includes(method)) {
+        return {
+          kind: 'error',
+          status: 200,
+          error: {
+            code: -32603,
+            message: `Internal error: ${method} cannot return an input_required result under protocol 2026-07-28`,
+          },
+        };
+      }
+      return { kind: 'result', result: decorate(buildInputRequiredResult(error)) };
     }
     const mapped = toJsonRpcError(error);
     return { kind: 'error', status: mapped.status, error: mapped.error };

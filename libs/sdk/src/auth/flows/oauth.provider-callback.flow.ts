@@ -49,7 +49,7 @@ import {
 } from '../../common';
 import { InternalMcpError } from '../../errors';
 import { projectConsentTools } from '../consent-tools.helper';
-import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 
@@ -61,6 +61,8 @@ const stateSchema = z.object({
   error: z.string().optional(),
   errorDescription: z.string().optional(),
   providerState: z.string().optional(),
+  /** RFC 9207 `iss` from the authorization response, when the AS sent one. */
+  responseIssuer: z.string().optional(),
   // Federated session
   federatedSessionId: z.string().optional(),
   federatedSession: z.unknown().optional(), // FederatedAuthSession
@@ -134,6 +136,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const error = request.query['error'] as string | undefined;
     const errorDescription = request.query['error_description'] as string | undefined;
     const providerState = request.query['state'] as string | undefined;
+    // RFC 9207: the authorization server SHOULD name itself here so the client
+    // can detect a mix-up before redeeming the code.
+    const responseIssuer = request.query['iss'] as string | undefined;
 
     // Consent round-trip params (set when the consent screen GETs back here
     // after all providers are linked). `consent_session` identifies the still
@@ -149,6 +154,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       error,
       errorDescription,
       providerState,
+      responseIssuer,
       consentSessionId,
       consentSubmitted,
       selectedTools,
@@ -335,6 +341,28 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         httpRespond.html(this.renderErrorPage('invalid_request', 'Missing authorization code from provider'), 400),
       );
       return;
+    }
+
+    // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468).
+    //
+    // When the authorization server names itself on the authorization response,
+    // that name MUST match the issuer we recorded for this provider BEFORE the
+    // code is redeemed — otherwise a mix-up attack can hand us a code minted by
+    // a different, attacker-controlled AS and we would redeem it against the
+    // real one.
+    if (code) {
+      const expectedIssuer = this.getLocalAuth().getProviderConfig(providerId as string)?.issuer;
+      const check = validateAuthorizationIssuer(this.state.responseIssuer, expectedIssuer);
+      if (!check.ok) {
+        this.logger.error(`Provider ${providerId} callback rejected: ${check.reason}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('invalid_request', 'Authorization response came from an unexpected issuer.'),
+            400,
+          ),
+        );
+        return;
+      }
     }
   }
 
@@ -728,6 +756,10 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (session.state) {
       url.searchParams.set('state', session.state);
     }
+    // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468): name ourselves
+    // on the authorization response so the client can detect an AS mix-up before
+    // it redeems the code.
+    url.searchParams.set('iss', this.getLocalAuth().issuer);
 
     this.logger.info(
       `Federated auth complete: ${selectedProviderIds.length} providers authenticated, redirecting to client`,

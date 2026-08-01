@@ -427,11 +427,23 @@ export type {
   FetchHandlerCtx,
 } from './transport';
 
+// MCP protocol 2026-07-28 — client + protocol helpers.
+//
+// Exported because the upstream `@modelcontextprotocol/sdk` client cannot speak
+// this revision, so consumers building a 2026 client (remote proxies, tests,
+// tooling) need FrontMCP's implementation.
+export { Mcp2026Client, Mcp2026Error, TASKS_CLIENT_CAPABILITY } from './transport/mcp-2026';
+export type { Mcp2026ClientOptions, Mcp2026InputHandlers } from './transport/mcp-2026';
+export { validateHeaderParams, buildParamHeaders } from './transport/mcp-2026';
+export { SUPPORTED_PROTOCOL_VERSIONS_2026, TASKS_EXTENSION_ID } from './transport/mcp-2026';
+// Remote-proxy adapter so a FrontMCP server can proxy a 2026-07-28 remote.
+export { Mcp2026ClientAdapter, negotiateRemoteProtocol } from './remote-mcp/mcp-2026-client.adapter';
+export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
+
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable
 // Object) session builder, for the Cloudflare DO session host.
 export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport';
 export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport';
-
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';

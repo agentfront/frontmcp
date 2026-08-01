@@ -1,7 +1,7 @@
 import { MCP_2026_META } from '@frontmcp/protocol';
 
 import { DEFAULT_CACHE_TTL_MS } from '../protocol-2026.constants';
-import { decorateResult, resolveCacheScope } from '../result-decorator';
+import { decorateResult, orderListResult, resolveCacheScope } from '../result-decorator';
 
 const serverInfo = { name: 'test-server', version: '1.0.0' };
 
@@ -62,5 +62,53 @@ describe('resolveCacheScope', () => {
 
   it('marks authenticated traffic private', () => {
     expect(resolveCacheScope(false)).toBe('private');
+  });
+});
+
+describe('orderListResult', () => {
+  it('sorts tools by name', () => {
+    const out = orderListResult('tools/list', { tools: [{ name: 'b' }, { name: 'a' }, { name: 'c' }] });
+    expect((out['tools'] as Array<{ name: string }>).map((t) => t.name)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('sorts prompts, resources and templates', () => {
+    expect(orderListResult('prompts/list', { prompts: [{ name: 'z' }, { name: 'a' }] })['prompts']).toEqual([
+      { name: 'a' },
+      { name: 'z' },
+    ]);
+    expect(orderListResult('resources/list', { resources: [{ uri: 'b://x' }, { uri: 'a://x' }] })['resources']).toEqual(
+      [{ uri: 'a://x' }, { uri: 'b://x' }],
+    );
+    expect(
+      orderListResult('resources/templates/list', { resourceTemplates: [{ name: 'y' }, { name: 'x' }] })[
+        'resourceTemplates'
+      ],
+    ).toEqual([{ name: 'x' }, { name: 'y' }]);
+  });
+
+  it('falls back to uri when an entry has no name', () => {
+    const out = orderListResult('resources/list', { resources: [{ uri: 'b://x' }, { name: 'a' }] });
+    expect(out['resources']).toEqual([{ name: 'a' }, { uri: 'b://x' }]);
+  });
+
+  it('leaves non-list methods untouched', () => {
+    const input = {
+      content: [
+        { type: 'text', text: 'z' },
+        { type: 'text', text: 'a' },
+      ],
+    };
+    expect(orderListResult('tools/call', input)).toBe(input);
+  });
+
+  it('leaves a malformed list untouched', () => {
+    const input = { tools: 'not-an-array' };
+    expect(orderListResult('tools/list', input)).toBe(input);
+  });
+
+  it('does not mutate the input', () => {
+    const input = { tools: [{ name: 'b' }, { name: 'a' }] };
+    orderListResult('tools/list', input);
+    expect(input.tools.map((t) => t.name)).toEqual(['b', 'a']);
   });
 });

@@ -13,7 +13,7 @@
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
 import { z } from '@frontmcp/lazy-zod';
-import { MCP_2026_META, type SubscriptionFilter } from '@frontmcp/protocol';
+import { MCP_2026_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
 
 import {
   Flow,
@@ -27,6 +27,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
+import { FrontMcpContextStorage } from '../../context';
 import { type Scope } from '../../scope';
 import {
   createSubscriptionStream,
@@ -34,6 +35,8 @@ import {
   isProtocol2026Request,
   MCP_HEADERS,
   readHeader,
+  RequestNotificationSink,
+  toJsonRpcError,
   validate2026Request,
   type JsonRpcErrorPayload,
 } from '../mcp-2026';
@@ -65,6 +68,91 @@ declare global {
       typeof stateSchema
     >;
   }
+}
+
+const encoder = new TextEncoder();
+
+/** Serialize one JSON-RPC message as an SSE `message` event. */
+function frame(message: unknown): Uint8Array {
+  return encoder.encode(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+}
+
+/** True when the client is willing to receive an SSE response stream. */
+function acceptsEventStream(headers: Record<string, unknown> | undefined): boolean {
+  const accept = readHeader(headers, 'accept');
+  return typeof accept === 'string' && accept.includes('text/event-stream');
+}
+
+/**
+ * OpenTelemetry context carried on `_meta` (SEP-414).
+ *
+ * The W3C names are used verbatim and echoed back on the result, so a client can
+ * stitch its span to the server's without an out-of-band correlation id.
+ */
+const TRACE_META_KEYS = ['traceparent', 'tracestate', 'baggage'] as const;
+
+export function extractTraceContext(meta: Record<string, unknown>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const key of TRACE_META_KEYS) {
+    if (typeof meta[key] === 'string') out[key] = meta[key] as string;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Stream a request's notifications followed by its final response.
+ *
+ * The dispatch runs concurrently with the drain loop so a long tool can report
+ * progress while it works; the final JSON-RPC response terminates the stream,
+ * as the transport spec prescribes.
+ */
+async function* streamMessageResponse(
+  options: Parameters<typeof dispatch2026>[0],
+  sink: RequestNotificationSink,
+  requestId: unknown,
+  runInContext: (fn: () => Promise<void>) => Promise<void>,
+): AsyncIterable<Uint8Array> {
+  let outcome: Awaited<ReturnType<typeof dispatch2026>> | undefined;
+  let failure: unknown;
+
+  // The stream body is drained by the response renderer, which runs AFTER the
+  // flow has unwound out of its AsyncLocalStorage scope. Re-entering the
+  // captured context is what keeps `this.tryGetContext()` — and therefore
+  // `notify()` / `progress()` / `elicit()` — working inside the entry.
+  const running = runInContext(async () => {
+    try {
+      outcome = await dispatch2026(options);
+    } catch (error: unknown) {
+      failure = error;
+    }
+  }).finally(() => sink.close());
+
+  while (!sink.closed) {
+    await sink.waitForActivity();
+    for (const notification of sink.drain()) {
+      yield frame({ jsonrpc: '2.0', method: notification.method, params: notification.params });
+    }
+  }
+
+  await running;
+
+  // Anything queued between the last drain and close still belongs to this
+  // request, so flush it before the terminating response.
+  for (const notification of sink.drain()) {
+    yield frame({ jsonrpc: '2.0', method: notification.method, params: notification.params });
+  }
+
+  const id = requestId ?? null;
+  if (failure !== undefined) {
+    const mapped = toJsonRpcError(failure);
+    yield frame({ jsonrpc: '2.0', id, error: mapped.error });
+    return;
+  }
+  if (outcome?.kind === 'error') {
+    yield frame({ jsonrpc: '2.0', id, error: outcome.error });
+    return;
+  }
+  yield frame({ jsonrpc: '2.0', id, result: outcome?.result });
 }
 
 /** Build the JSON-RPC error envelope for a failed 2026-07-28 request. */
@@ -158,6 +246,28 @@ export default class HandleMcp2026Flow extends FlowBase<typeof name> {
    * header-validated call and the call that actually executes disagree about
    * which tool they mean.
    */
+  /**
+   * Re-enter this request's `FrontMcpContext` for work deferred past the flow.
+   *
+   * A streamed response is drained by the renderer after the flow has unwound,
+   * so anything that runs there has lost the AsyncLocalStorage scope. Capturing
+   * the context here and re-entering it keeps every context-dependent API
+   * (`notify`, `progress`, `elicit`, provider resolution) behaving identically
+   * whether the response was buffered or streamed.
+   */
+  private buildContextRunner(): (fn: () => Promise<void>) => Promise<void> {
+    // Both the context and the storage are resolved NOW, while the stage is
+    // still inside the AsyncLocalStorage scope. Reading them lazily from inside
+    // the generator would find no active context and silently drop it.
+    const context = this.tryGetContext();
+    if (!context) return (fn) => fn();
+
+    const storage = this.scope.providers.get(FrontMcpContextStorage);
+    return async (fn) => {
+      await storage.runWithContext(context, fn);
+    };
+  }
+
   private findToolSchema(scope: Scope, toolName: string): Record<string, unknown> | null {
     const match = scope.tools
       .getTools(true)
@@ -251,7 +361,15 @@ export default class HandleMcp2026Flow extends FlowBase<typeof name> {
 
     const clientCapabilities = (meta[MCP_2026_META.clientCapabilities] as Record<string, unknown> | undefined) ?? {};
 
-    const outcome = await dispatch2026({
+    // `logging/setLevel` is gone: the client opts into log messages per request,
+    // and a request that omits `logLevel` MUST receive none. Progress is opted
+    // into the same way, via `progressToken`.
+    const logLevel =
+      typeof meta[MCP_2026_META.logLevel] === 'string' ? (meta[MCP_2026_META.logLevel] as LoggingLevel) : undefined;
+    const progressToken = meta['progressToken'] as string | number | undefined;
+    const sink = new RequestNotificationSink(logLevel, progressToken);
+
+    const dispatchOptions = {
       scope: this.scope as unknown as Scope,
       body,
       clientCapabilities,
@@ -269,7 +387,32 @@ export default class HandleMcp2026Flow extends FlowBase<typeof name> {
         : undefined,
       isAnonymous: this.state.required.isAnonymous,
       composeInstructions: () => this.scope.metadata.instructions,
-    });
+      notificationSink: sink,
+      traceContext: extractTraceContext(meta),
+    } satisfies Parameters<typeof dispatch2026>[0];
+
+    // When the client opted into request-scoped notifications AND accepts SSE,
+    // the response becomes a stream so log/progress frames can arrive while the
+    // work is still running. Otherwise the answer is a single JSON object —
+    // both framings are required to be supported by the client.
+    if (sink.active && acceptsEventStream(request.headers as Record<string, unknown> | undefined)) {
+      this.respond({
+        kind: 'sse',
+        status: 200,
+        stream: streamMessageResponse(dispatchOptions, sink, body['id'], this.buildContextRunner()),
+        contentType: 'text/event-stream',
+        disposition: 'inline',
+        headers: {
+          'X-Accel-Buffering': 'no',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+        },
+      });
+      return;
+    }
+
+    const outcome = await dispatch2026(dispatchOptions);
+    sink.close();
 
     if (outcome.kind === 'error') {
       this.respond(errorResponse(outcome.status, outcome.error, body['id']));

@@ -37,6 +37,7 @@ import {
   TransportNotConnectedError,
   UnsupportedTransportTypeError,
 } from '../errors/transport.errors';
+import { Mcp2026ClientAdapter, negotiateRemoteProtocol } from './mcp-2026-client.adapter';
 import type {
   McpCapabilityChangeCallback,
   McpCapabilityChangeEvent,
@@ -191,6 +192,23 @@ export class McpClientService {
     this.updateConnectionStatus(appId, 'connecting');
 
     try {
+      // Protocol 2026-07-28 remotes are stateless and have no `initialize`, so
+      // the upstream SDK client cannot drive them. When selected (or discovered
+      // via `auto`), swap in FrontMCP's own client behind an adapter that
+      // presents the same surface to everything downstream.
+      const connection2026 = await this.tryConnect2026(request);
+      if (connection2026) {
+        this.connections.set(appId, connection2026);
+        await this.discoverCapabilities(appId);
+        if (this.options.capabilityRefreshInterval > 0) this.startCapabilityRefresh(appId);
+        this.startHealthCheck(appId);
+        this.reconnectAttempts.delete(appId);
+        this.cancelAutoReconnect(appId);
+        this.updateConnectionStatus(appId, 'connected');
+        this.logger.info(`Connected to remote MCP server ${appId} using protocol 2026-07-28`);
+        return connection2026;
+      }
+
       // Create transport based on type
       let transport = this.createTransport(request);
 
@@ -771,6 +789,39 @@ export class McpClientService {
    * Note: For HTTP transport with fallback, the initial transport is Streamable HTTP.
    * If connection fails with Streamable HTTP, use createFallbackTransport() to get SSE.
    */
+  /**
+   * Build a 2026-07-28 connection when the remote is on that revision.
+   *
+   * Returns `undefined` for every other case so the legacy path below runs
+   * completely untouched — the default for an unconfigured remote.
+   */
+  private async tryConnect2026(request: McpConnectRequest): Promise<McpClientConnection | undefined> {
+    if (request.transportType !== 'http') return undefined;
+
+    const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
+    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, httpOptions?.headers);
+    if (negotiated !== '2026-07-28') return undefined;
+
+    const adapter = new Mcp2026ClientAdapter({
+      url: request.url,
+      clientInfo: { name: this.options.clientName, version: this.options.clientVersion },
+      headers: httpOptions?.headers,
+    });
+    await adapter.connect();
+
+    return {
+      // The adapter implements the subset of `Client` this service uses; the
+      // cast keeps `McpClientConnection` from having to become a union type
+      // that every consumer would then have to narrow.
+      client: adapter as unknown as McpClientConnection['client'],
+      transport: undefined as unknown as Transport,
+      status: 'connected',
+      connectedAt: new Date(),
+      lastHeartbeat: new Date(),
+      capabilities: adapter.getServerCapabilities(),
+    };
+  }
+
   private createTransport(request: McpConnectRequest): Transport {
     const { transportType, url, transportOptions } = request;
     const httpOptions = transportOptions as McpHttpTransportOptions | undefined;

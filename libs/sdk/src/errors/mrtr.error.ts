@@ -38,6 +38,23 @@ export class InputRequiredSignal extends PublicMcpError {
  * Under 2026-07-28 capabilities are per-request, so this is a plain validation
  * failure (`400` + `-32021`) rather than a session-level negotiation problem.
  */
+/**
+ * Raised when sampling or roots is requested outside protocol 2026-07-28.
+ *
+ * Both features are only reachable through MRTR in FrontMCP: earlier revisions
+ * delivered them as server-initiated requests, a direction this SDK has never
+ * implemented. Failing loudly beats hanging on a request no one will answer.
+ */
+export class SamplingNotAvailableError extends PublicMcpError {
+  constructor(feature = 'sampling/createMessage') {
+    super(
+      `${feature} requires an MCP client speaking protocol 2026-07-28 (Multi Round-Trip Requests)`,
+      'MRTR_REQUIRED',
+      400,
+    );
+  }
+}
+
 export class MissingClientCapabilityError extends PublicMcpError {
   constructor(
     /** The capability set the server needs, in `ClientCapabilities` shape. */

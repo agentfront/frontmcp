@@ -143,6 +143,18 @@ const Stage = StageHookOf(name);
 export default class OauthCallbackFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthCallbackFlow');
 
+  /**
+   * The issuer identifier to advertise on an authorization response (RFC 9207).
+   *
+   * Returns `undefined` when the configured auth instance has no issuer, so the
+   * parameter is simply omitted rather than emitted empty — a client validating
+   * `iss` treats absence as "not supported" and proceeds.
+   */
+  private resolveIssuer(): string | undefined {
+    const issuer = (this.scope.auth as { issuer?: unknown } | undefined)?.issuer;
+    return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
+  }
+
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
@@ -968,6 +980,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (originalState) {
       url.searchParams.set('state', originalState);
     }
+    // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468): name ourselves
+    // on the authorization response so the client can detect an AS mix-up before
+    // it redeems the code.
+    const issuer = this.resolveIssuer();
+    if (issuer) url.searchParams.set('iss', issuer);
 
     // For incremental auth, include the app ID in the redirect
     // This allows the client to know which app was just authorized

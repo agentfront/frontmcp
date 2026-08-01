@@ -106,7 +106,7 @@ export {
 } from './elicitation.error';
 
 // Export MRTR signals (protocol 2026-07-28)
-export { InputRequiredSignal, MissingClientCapabilityError } from './mrtr.error';
+export { InputRequiredSignal, MissingClientCapabilityError, SamplingNotAvailableError } from './mrtr.error';
 
 // Export remote MCP errors
 export {

@@ -28,6 +28,20 @@ const PRE_RESOLVED_ELICIT_KEY = Symbol.for('frontmcp:pre-resolved-elicit');
 /** Symbol key for the in-flight MRTR exchange (protocol 2026-07-28) */
 const MRTR_EXCHANGE_KEY = Symbol.for('frontmcp:mrtr-exchange');
 
+/** Symbol key for the request-scoped notification sink (protocol 2026-07-28) */
+const REQUEST_NOTIFICATION_SINK_KEY = Symbol.for('frontmcp:request-notification-sink');
+
+/**
+ * Structural view of the request-scoped notification sink.
+ *
+ * Typed structurally rather than by importing the transport class so the
+ * context module stays free of a dependency on the transport layer.
+ */
+export interface RequestNotificationSinkRef {
+  log(level: string, logger: string | undefined, data: unknown): boolean;
+  progress(progress: number, total?: number, message?: string): boolean;
+}
+
 /**
  * Structural view of the MRTR exchange stored on the context.
  *
@@ -41,6 +55,19 @@ export interface MrtrExchangeRef {
     mode?: 'form' | 'url';
     url?: string;
   }): ElicitResult<unknown>;
+
+  resolveSampling(pending: {
+    messages: unknown[];
+    maxTokens: number;
+    systemPrompt?: string;
+    modelPreferences?: Record<string, unknown>;
+    temperature?: number;
+    stopSequences?: string[];
+    includeContext?: 'none' | 'thisServer' | 'allServers';
+    metadata?: Record<string, unknown>;
+  }): { role: string; content: unknown; model?: string; stopReason?: string };
+
+  resolveRoots(): { roots: Array<{ uri: string; name?: string }> };
 }
 
 /**
@@ -492,6 +519,29 @@ export class FrontMcpContext {
    */
   getMrtrExchange(): MrtrExchangeRef | undefined {
     return this.store.get(MRTR_EXCHANGE_KEY) as MrtrExchangeRef | undefined;
+  }
+
+  /**
+   * Attach the request-scoped notification sink.
+   *
+   * Set by the 2026-07-28 dispatcher. Its presence routes `notify()` and
+   * `progress()` onto THIS request's response stream instead of a session
+   * channel, which this revision no longer has.
+   *
+   * @internal
+   */
+  setRequestNotificationSink(sink: RequestNotificationSinkRef): void {
+    this.store.set(REQUEST_NOTIFICATION_SINK_KEY, sink);
+  }
+
+  /**
+   * Get the request-scoped notification sink, if this request is running under
+   * protocol 2026-07-28.
+   *
+   * @internal
+   */
+  getRequestNotificationSink(): RequestNotificationSinkRef | undefined {
+    return this.store.get(REQUEST_NOTIFICATION_SINK_KEY) as RequestNotificationSinkRef | undefined;
   }
 
   /**

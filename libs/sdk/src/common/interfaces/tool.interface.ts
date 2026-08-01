@@ -1,7 +1,16 @@
 import { type FuncType, type Type } from '@frontmcp/di';
 import { type ZodType } from '@frontmcp/lazy-zod';
 
-import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
+import {
+  performElicit,
+  performListRoots,
+  performSample,
+  type ElicitOptions,
+  type ElicitResult,
+  type Root,
+  type SampleOptions,
+  type SampleResult,
+} from '../../elicitation';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';
@@ -145,13 +154,21 @@ export abstract class ToolContext<
    * ```
    */
   protected async notify(message: string | Record<string, unknown>, level: McpLoggingLevel = 'info'): Promise<boolean> {
+    const data = typeof message === 'string' ? { message } : message;
+
+    // Protocol 2026-07-28: log messages ride this request's own response
+    // stream, gated on the per-request `logLevel` the client opted in with.
+    // There is no session to address, so this must be checked before the
+    // session lookup below.
+    const sink = this.tryGetContext()?.getRequestNotificationSink?.();
+    if (sink) return sink.log(level, this.toolName, data);
+
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       this.logger.warn('Cannot send notification: no session ID');
       return false;
     }
 
-    const data = typeof message === 'string' ? { message } : message;
     return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.toolName, data);
   }
 
@@ -181,6 +198,12 @@ export abstract class ToolContext<
    * ```
    */
   protected async progress(progress: number, total?: number, message?: string): Promise<boolean> {
+    // Protocol 2026-07-28: progress rides this request's own response stream.
+    // The sink owns the progressToken check, so it is consulted before the
+    // session-oriented path below.
+    const sink = this.tryGetContext()?.getRequestNotificationSink?.();
+    if (sink) return sink.progress(progress, total, message);
+
     if (!this._progressToken) {
       this.logger.debug('Cannot send progress: no progressToken in request');
       return false;
@@ -285,6 +308,44 @@ export abstract class ToolContext<
       requestedSchema,
       options,
     );
+  }
+
+  /**
+   * Ask the client's LLM to complete a conversation (`sampling/createMessage`).
+   *
+   * Travels via Multi Round-Trip Requests, so the first call answers the
+   * caller's `tools/call` with an `InputRequiredResult` and the tool re-runs
+   * once the client supplies the completion.
+   *
+   * Requires protocol 2026-07-28 and a client declaring the `sampling`
+   * capability.
+   *
+   * @deprecated Sampling is deprecated as of protocol 2026-07-28 (SEP-2577).
+   * Prefer integrating with an LLM provider API directly.
+   *
+   * @example
+   * ```ts
+   * const reply = await this.sample({
+   *   messages: [{ role: 'user', content: { type: 'text', text: 'Summarize this.' } }],
+   *   maxTokens: 200,
+   * });
+   * ```
+   */
+  protected async sample(options: SampleOptions): Promise<SampleResult> {
+    return performSample(this.tryGetContext(), options);
+  }
+
+  /**
+   * Ask the client which filesystem roots it exposes (`roots/list`).
+   *
+   * Travels via Multi Round-Trip Requests, like {@link sample}. Requires
+   * protocol 2026-07-28 and a client declaring the `roots` capability.
+   *
+   * @deprecated Roots is deprecated as of protocol 2026-07-28 (SEP-2577).
+   * Prefer passing directories via tool parameters or server configuration.
+   */
+  protected async listRoots(): Promise<Root[]> {
+    return performListRoots(this.tryGetContext());
   }
 
   // ============================================
