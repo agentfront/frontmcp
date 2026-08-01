@@ -14,6 +14,7 @@ import {
   META_PROTOCOL_VERSION,
   PROTOCOL_2026,
   UNSUPPORTED_PROTOCOL_VERSION,
+  type ListedTool,
 } from './helpers/mcp-2026-client';
 
 test.describe('protocol 2026-07-28 — request metadata headers', () => {
@@ -188,9 +189,9 @@ test.describe('protocol 2026-07-28 — request metadata headers', () => {
 
   test('advertises x-mcp-header in the tool inputSchema', async ({ server }) => {
     const res = await mcp2026Fetch(server.info.baseUrl, { method: 'tools/list', id: 15 });
-    const tool = res.json().result.tools.find((t: any) => t.name === 'region-query');
+    const tool = (res.json().result.tools as ListedTool[]).find((t) => t.name === 'region-query');
 
-    expect(tool.inputSchema.properties.region['x-mcp-header']).toBe('Region');
+    expect(tool?.inputSchema?.['properties']?.region?.['x-mcp-header']).toBe('Region');
   });
 
   test('treats header names case-insensitively', async ({ server }) => {

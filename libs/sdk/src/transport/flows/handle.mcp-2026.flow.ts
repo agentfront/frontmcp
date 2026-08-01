@@ -366,7 +366,12 @@ export default class HandleMcp2026Flow extends FlowBase<typeof name> {
     // into the same way, via `progressToken`.
     const logLevel =
       typeof meta[MCP_2026_META.logLevel] === 'string' ? (meta[MCP_2026_META.logLevel] as LoggingLevel) : undefined;
-    const progressToken = meta['progressToken'] as string | number | undefined;
+    // Only a string or number is a usable progress token. An object or array
+    // from a hostile client must not activate the sink, nor be echoed back
+    // inside every progress notification.
+    const rawProgressToken = meta['progressToken'];
+    const progressToken =
+      typeof rawProgressToken === 'string' || typeof rawProgressToken === 'number' ? rawProgressToken : undefined;
     const sink = new RequestNotificationSink(logLevel, progressToken);
 
     const dispatchOptions = {

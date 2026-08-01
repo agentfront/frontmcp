@@ -49,11 +49,20 @@ export function encodeHeaderValue(value: string): string {
   return `${SENTINEL_PREFIX}${Buffer.from(value, 'utf8').toString('base64')}${SENTINEL_SUFFIX}`;
 }
 
+/** Horizontal tab — the one control character RFC 9110 permits in a field value. */
+const HTAB = 0x09;
+
 /** True when a raw header value contains octets HTTP does not permit. */
 export function hasInvalidHeaderChars(value: string): boolean {
-  // RFC 9110: field values are visible ASCII (0x21-0x7E), SP (0x20) and HTAB (0x09).
-  // eslint-disable-next-line no-control-regex
-  return /[^\x09\x20-\x7e]/.test(value);
+  // RFC 9110: field values are visible ASCII (0x21-0x7E), SP (0x20) and HTAB.
+  // Scanned by code point rather than a character class so the literal never
+  // embeds a control character — which lint rules (rightly) flag in regexes.
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code === HTAB) continue;
+    if (code < 0x20 || code > 0x7e) return true;
+  }
+  return false;
 }
 
 /**

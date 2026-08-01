@@ -131,8 +131,16 @@ export class MrtrExchange {
   }
 
   /** True when the client declared support for elicitation in this request. */
-  supportsElicitation(): boolean {
-    return this.supports('elicitation');
+  supportsElicitation(mode: 'form' | 'url' = 'form'): boolean {
+    const declared = this.clientCapabilities['elicitation'];
+    if (typeof declared !== 'object' || declared === null) return false;
+
+    // `elicitation: {}` means form support implicitly (the schema's
+    // "form mode only (implicit)" case). URL mode is never implicit — it sends
+    // the user out of band, so the client has to opt in explicitly.
+    const modes = declared as { form?: unknown; url?: unknown };
+    if (mode === 'url') return modes.url !== undefined;
+    return modes.form !== undefined || modes.url === undefined;
   }
 
   /**
@@ -148,6 +156,8 @@ export class MrtrExchange {
     method: string,
     params: Record<string, unknown>,
     map: (raw: Record<string, unknown>) => T,
+    /** Overrides the default capability gate (elicitation narrows it by mode). */
+    gate?: { supported: boolean; required: Record<string, unknown> },
   ): T {
     this.counters[kind] += 1;
     const key = `${kind}-${this.counters[kind]}`;
@@ -155,9 +165,10 @@ export class MrtrExchange {
     const recorded = this.responses[key];
     if (recorded) return map(recorded);
 
-    if (!this.supports(kind)) {
+    const supported = gate ? gate.supported : this.supports(kind);
+    if (!supported) {
       throw new MissingClientCapabilityError(
-        CAPABILITY_FOR_KIND[kind].required,
+        gate ? gate.required : CAPABILITY_FOR_KIND[kind].required,
         `This request requires the \`${CAPABILITY_FOR_KIND[kind].capability}\` client capability`,
       );
     }
@@ -168,6 +179,10 @@ export class MrtrExchange {
 
   /** Resolve the next `elicit()` call. */
   resolveElicitation(pending: PendingElicitation): { status: ElicitStatus; content?: unknown } {
+    // Gate on the MODE actually being asked for. A client that declared only
+    // `form` cannot service a `url` elicitation, and the spec forbids emitting
+    // an input request the client never said it supports.
+    const mode = pending.mode ?? 'form';
     return this.resolve(
       'elicitation',
       'elicitation/create',
@@ -178,6 +193,7 @@ export class MrtrExchange {
         ...(pending.url ? { url: pending.url } : {}),
       },
       toElicitResult,
+      { supported: this.supportsElicitation(mode), required: { elicitation: { [mode]: {} } } },
     );
   }
 

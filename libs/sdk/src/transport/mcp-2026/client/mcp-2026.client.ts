@@ -53,6 +53,14 @@ export interface Mcp2026ClientOptions {
   handlers?: Mcp2026InputHandlers;
   /** Maximum MRTR round trips before giving up, guarding against a server that never settles. */
   maxInputRounds?: number;
+  /**
+   * Per-request timeout in milliseconds.
+   *
+   * Without one an unreachable or hung remote leaves every call pending
+   * forever — including the `server/discover` probe used to negotiate the
+   * protocol, which would then never fall back.
+   */
+  requestTimeoutMs?: number;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -83,7 +91,13 @@ export class Mcp2026Client {
   private toolSchemas = new Map<string, unknown>();
 
   constructor(options: Mcp2026ClientOptions) {
-    this.options = { maxInputRounds: 8, ...options };
+    // Normalize AFTER the spread: `{ maxInputRounds: undefined }` is a legal
+    // caller shape and spreading it would otherwise wipe out the default.
+    this.options = {
+      ...options,
+      maxInputRounds: options.maxInputRounds ?? 8,
+      requestTimeoutMs: options.requestTimeoutMs ?? 30_000,
+    };
   }
 
   private get fetchImpl(): typeof fetch {
@@ -219,8 +233,12 @@ export class Mcp2026Client {
   private async awaitTask(task: Record<string, unknown>): Promise<Record<string, unknown>> {
     const taskId = String(task['taskId']);
     const interval = typeof task['pollIntervalMs'] === 'number' ? (task['pollIntervalMs'] as number) : 250;
-    const ttl = typeof task['ttlMs'] === 'number' ? (task['ttlMs'] as number) : 60_000;
-    const deadline = Date.now() + ttl;
+    // `ttlMs: null` means "unlimited" per the tasks extension; only a numeric
+    // TTL bounds the poll loop. Anything else falls back to a finite default so
+    // a malformed handle cannot spin forever.
+    const rawTtl = task['ttlMs'];
+    const ttl = rawTtl === null ? Number.POSITIVE_INFINITY : typeof rawTtl === 'number' ? rawTtl : 60_000;
+    const deadline = ttl === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Date.now() + ttl;
 
     let current = task;
     while (Date.now() < deadline) {
@@ -280,8 +298,14 @@ export class Mcp2026Client {
     }
 
     let resolveAck: ((value: Record<string, unknown>) => void) | undefined;
-    const acknowledged = new Promise<Record<string, unknown>>((resolve) => {
-      resolveAck = resolve;
+    let rejectAck: ((reason: Error) => void) | undefined;
+    let settled = false;
+    const acknowledged = new Promise<Record<string, unknown>>((resolve, reject) => {
+      resolveAck = (value) => {
+        settled = true;
+        resolve(value);
+      };
+      rejectAck = reject;
     });
 
     void this.pumpSse(response.body, (message) => {
@@ -291,9 +315,22 @@ export class Mcp2026Client {
         return;
       }
       if (message['method']) onNotification(message as { method: string; params?: Record<string, unknown> });
-    }).catch(() => {
-      // Stream aborted by close() — expected.
-    });
+    })
+      .then(() => {
+        // The stream ended without ever acknowledging. Settle rather than leave
+        // `await acknowledged` pending for the life of the process.
+        if (!settled) {
+          rejectAck?.(new Mcp2026Error(-32603, 'subscriptions/listen stream closed before acknowledgement'));
+        }
+      })
+      .catch((error: unknown) => {
+        if (settled) return; // Aborted by close() after a successful ack — expected.
+        rejectAck?.(
+          error instanceof Mcp2026Error
+            ? error
+            : new Mcp2026Error(-32603, `subscriptions/listen stream failed: ${String(error)}`),
+        );
+      });
 
     return { acknowledged: await acknowledged, close: () => controller.abort() };
   }
@@ -305,13 +342,25 @@ export class Mcp2026Client {
     const id = this.nextId++;
     const { body, headers } = this.buildRequest(method, params, id);
 
-    const response = await this.fetchImpl(this.options.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeoutMs = this.options.requestTimeoutMs ?? 30_000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const payload = await this.readResponse(response);
+    let payload: JsonRpcResponse;
+    try {
+      const response = await this.fetchImpl(this.options.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      payload = await this.readResponse(response);
+    } finally {
+      // Cleared on BOTH paths, or a rejected request would keep the timer (and
+      // the event loop) alive until it fires.
+      clearTimeout(timer);
+    }
 
     if (payload.error) {
       throw new Mcp2026Error(payload.error.code, payload.error.message, payload.error.data);
@@ -393,7 +442,7 @@ export class Mcp2026Client {
   /** Drain an SSE body, handing each decoded JSON message to `onMessage`. */
   private async pumpSse(
     body: ReadableStream<Uint8Array>,
-    onMessage: (message: Record<string, any>) => void,
+    onMessage: (message: Record<string, unknown>) => void,
   ): Promise<void> {
     const reader = body.getReader();
     const decoder = new TextDecoder();

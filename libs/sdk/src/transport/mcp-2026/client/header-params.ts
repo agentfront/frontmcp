@@ -6,8 +6,6 @@
  * REJECT tool definitions whose `x-mcp-header` values break the rules, and to
  * exclude just those tools from `tools/list` rather than failing the whole list.
  */
-import { collectHeaderParams } from '../request-validation';
-
 /** RFC 9110 field-name token characters. */
 const TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
@@ -30,18 +28,24 @@ export interface HeaderParamValidation {
 export function validateHeaderParams(inputSchema: unknown): HeaderParamValidation {
   if (!inputSchema || typeof inputSchema !== 'object') return { valid: true };
 
-  const annotated = collectHeaderParams(inputSchema);
+  // Walk the RAW annotations rather than `collectHeaderParams`, which lowercases
+  // into a Map and so silently discards both empty names and case-insensitive
+  // duplicates — the two things this function exists to reject.
+  const annotated = collectRawHeaderParams(inputSchema);
   const seen = new Set<string>();
 
-  for (const [name, path] of annotated) {
+  for (const { name, path } of annotated) {
     if (name.length === 0) return { valid: false, reason: 'x-mcp-header must not be empty' };
     if (!TOKEN_RE.test(name)) {
       return { valid: false, reason: `x-mcp-header "${name}" is not a valid HTTP field-name token` };
     }
-    if (seen.has(name)) {
+    // Uniqueness is case-INSENSITIVE: HTTP field names are, so `Region` and
+    // `region` would collide into one header.
+    const normalized = name.toLowerCase();
+    if (seen.has(normalized)) {
       return { valid: false, reason: `x-mcp-header "${name}" is declared more than once` };
     }
-    seen.add(name);
+    seen.add(normalized);
 
     const type = readTypeAtPath(inputSchema, path);
     if (type === 'number') {
@@ -53,6 +57,32 @@ export function validateHeaderParams(inputSchema: unknown): HeaderParamValidatio
   }
 
   return { valid: true };
+}
+
+/**
+ * Collect every `x-mcp-header` annotation verbatim, including duplicates and
+ * empty names, in `properties`-chain order.
+ *
+ * Deliberately lossless, unlike {@link collectHeaderParams}: validation has to
+ * see what the tool author actually wrote before anything is normalized away.
+ */
+function collectRawHeaderParams(
+  schema: unknown,
+  path: string[] = [],
+  out: Array<{ name: string; path: string[] }> = [],
+): Array<{ name: string; path: string[] }> {
+  if (!schema || typeof schema !== 'object') return out;
+  const properties = (schema as { properties?: Record<string, unknown> }).properties;
+  if (!properties || typeof properties !== 'object') return out;
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (!value || typeof value !== 'object') continue;
+    const annotation = (value as Record<string, unknown>)['x-mcp-header'];
+    const nextPath = [...path, key];
+    if (typeof annotation === 'string') out.push({ name: annotation, path: nextPath });
+    collectRawHeaderParams(value, nextPath, out);
+  }
+  return out;
 }
 
 /** Read the declared `type` of a property reachable through a `properties` chain. */
@@ -82,13 +112,17 @@ export function buildParamHeaders(
   const headers: Record<string, string> = {};
   if (!inputSchema || typeof inputSchema !== 'object') return headers;
 
-  for (const [name, path] of collectHeaderParams(inputSchema)) {
+  // Raw collector, so the header carries the casing the tool author declared
+  // (`Mcp-Param-Region`, matching the spec's example). Lookup stays
+  // case-insensitive on the server, so either spelling interoperates.
+  for (const { name, path } of collectRawHeaderParams(inputSchema)) {
+    if (name.length === 0) continue;
     const value = readValueAtPath(args, path);
     if (value === undefined || value === null) continue;
 
     if (typeof value === 'number' && (!Number.isInteger(value) || Math.abs(value) > MAX_SAFE)) continue;
 
-    const asString = typeof value === 'boolean' ? String(value) : String(value);
+    const asString = String(value);
     headers[`Mcp-Param-${name}`] = encode(asString);
   }
 

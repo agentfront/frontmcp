@@ -7,7 +7,13 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch, META_SERVER_INFO } from './helpers/mcp-2026-client';
+import {
+  mcp2026Fetch,
+  META_SERVER_INFO,
+  MISSING_REQUIRED_CLIENT_CAPABILITY,
+  type ListedTool,
+  type Mcp2026Response,
+} from './helpers/mcp-2026-client';
 
 test.describe('protocol 2026-07-28 — stateless requests', () => {
   test.use({
@@ -22,7 +28,9 @@ test.describe('protocol 2026-07-28 — stateless requests', () => {
     expect(res.status).toBe(200);
     const { result, error } = res.json();
     expect(error).toBeUndefined();
-    expect(result.tools.map((t: any) => t.name)).toEqual(expect.arrayContaining(['echo', 'region-query', 'confirm']));
+    expect((result.tools as ListedTool[]).map((t) => t.name)).toEqual(
+      expect.arrayContaining(['echo', 'region-query', 'confirm']),
+    );
   });
 
   test('never mints an Mcp-Session-Id', async ({ server }) => {
@@ -130,17 +138,18 @@ test.describe('protocol 2026-07-28 — stateless requests', () => {
     });
 
     const { result, error } = res.json();
-    // With no elicitation capability declared the server cannot silently
-    // succeed — it must either ask via MRTR or refuse. What it must NOT do is
-    // behave as if the earlier request's capabilities still apply.
-    expect(error?.code === -32021 || result?.resultType === 'input_required' || result !== undefined).toBe(true);
+    // With no elicitation capability declared the server must either refuse with
+    // -32021 or ask via MRTR. A plain `complete` result would mean the earlier
+    // request's declaration leaked into this one.
+    const outcome = error ? `error:${error.code}` : `result:${result?.resultType}`;
+    expect([`error:${MISSING_REQUIRED_CLIENT_CAPABILITY}`, 'result:input_required']).toContain(outcome);
   });
 
   test('returns tools/list in a deterministic order across calls', async ({ server }) => {
     const first = await mcp2026Fetch(server.info.baseUrl, { method: 'tools/list', id: 8 });
     const second = await mcp2026Fetch(server.info.baseUrl, { method: 'tools/list', id: 9 });
 
-    const names = (r: any) => r.json().result.tools.map((t: any) => t.name);
+    const names = (r: Mcp2026Response) => (r.json().result.tools as ListedTool[]).map((t) => t.name);
     expect(names(first)).toEqual(names(second));
   });
 });

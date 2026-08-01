@@ -7,7 +7,7 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch, MISSING_REQUIRED_CLIENT_CAPABILITY } from './helpers/mcp-2026-client';
+import { mcp2026Fetch, MISSING_REQUIRED_CLIENT_CAPABILITY, type InputRequest } from './helpers/mcp-2026-client';
 
 const SAMPLING_CALL = {
   method: 'tools/call' as const,
@@ -36,7 +36,7 @@ test.describe('protocol 2026-07-28 — MRTR for sampling and roots', () => {
       expect(error).toBeUndefined();
       expect(result.resultType).toBe('input_required');
 
-      const [, request] = Object.entries(result.inputRequests)[0] as [string, any];
+      const [, request] = Object.entries(result.inputRequests)[0] as [string, InputRequest];
       expect(request.method).toBe('sampling/createMessage');
       expect(request.params.maxTokens).toBe(100);
       expect(request.params.systemPrompt).toBe('You are a concise summarizer.');
@@ -94,7 +94,7 @@ test.describe('protocol 2026-07-28 — MRTR for sampling and roots', () => {
       const { result } = res.json();
       expect(result.resultType).toBe('input_required');
 
-      const [, request] = Object.entries(result.inputRequests)[0] as [string, any];
+      const [, request] = Object.entries(result.inputRequests)[0] as [string, InputRequest];
       expect(request.method).toBe('roots/list');
     });
 
@@ -159,26 +159,24 @@ test.describe('protocol 2026-07-28 — MRTR for sampling and roots', () => {
     test('rejects a requestState replayed onto a different tool call', async ({ server }) => {
       const first = await mcp2026Fetch(server.info.baseUrl, { ...SAMPLING_CALL, id: 11 });
       const { result: interim } = first.json();
-      const [key] = Object.keys(interim.inputRequests);
+      expect(interim.resultType).toBe('input_required');
 
-      // Same signed blob, different arguments — the binding must not verify.
+      // Replay the signed blob against DIFFERENT arguments, and deliberately send
+      // no `inputResponses` — the carried state is then the only thing that could
+      // complete the call. If the server honoured the mismatched binding it would
+      // answer `complete`; rejecting it means asking again.
       const res = await mcp2026Fetch(server.info.baseUrl, {
         ...SAMPLING_CALL,
         id: 12,
         params: {
           name: 'summarize',
           arguments: { text: 'a DIFFERENT document' },
-          inputResponses: { [key]: { role: 'assistant', content: { type: 'text', text: 'replayed' } } },
           requestState: interim.requestState,
         },
       });
 
-      // `inputResponses` still resolves this round (it is sent explicitly), but
-      // the carried state must not have been trusted — assert the server did not
-      // silently accept the mismatched blob by checking it completes from the
-      // explicit response only.
       const { result } = res.json();
-      expect(['complete', 'input_required']).toContain(result.resultType);
+      expect(result.resultType).toBe('input_required');
     });
 
     test('accepts a legitimately signed requestState', async ({ server }) => {

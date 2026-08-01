@@ -8,6 +8,7 @@
  * and result decoration.
  */
 import { MCP_2026_ERROR_CODES, MCP_2026_REMOVED_METHODS, McpError, type Implementation } from '@frontmcp/protocol';
+import { sha256Hex } from '@frontmcp/utils';
 
 import { type FrontMcpContext } from '../../context';
 import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors';
@@ -61,7 +62,7 @@ export type DispatchResult =
  * The spec enumerates these three and adds "Servers MUST NOT send
  * `InputRequiredResult` responses on any other client requests."
  */
-export const MRTR_CAPABLE_METHODS = ['tools/call', 'prompts/get', 'resources/read'];
+export const MRTR_CAPABLE_METHODS = ['tools/call', 'prompts/get', 'resources/read'] as const;
 
 /**
  * Identify the caller for `requestState` binding.
@@ -73,8 +74,13 @@ export const MRTR_CAPABLE_METHODS = ['tools/call', 'prompts/get', 'resources/rea
 export function resolvePrincipal(authInfo: Record<string, unknown> | undefined): string {
   const clientId = authInfo?.['clientId'];
   if (typeof clientId === 'string' && clientId.length > 0) return clientId;
+
   const token = authInfo?.['token'];
-  if (typeof token === 'string' && token.length > 0) return `tok:${token.slice(0, 16)}`;
+  // Hash the WHOLE token. A prefix would collide: every HS256 JWT starts with
+  // the same base64url-encoded header, so truncating would map all such callers
+  // onto one principal and let them redeem each other's `requestState`.
+  if (typeof token === 'string' && token.length > 0) return `tok:${sha256Hex(token)}`;
+
   return 'anonymous';
 }
 
@@ -390,7 +396,7 @@ export async function dispatch2026(options: DispatchOptions): Promise<DispatchRe
       // tools/call. Anywhere else an `input_required` result would be a protocol
       // violation the client is not expecting, so surface it as a server error
       // instead of emitting a response no conforming client can act on.
-      if (!MRTR_CAPABLE_METHODS.includes(method)) {
+      if (!(MRTR_CAPABLE_METHODS as readonly string[]).includes(method)) {
         return {
           kind: 'error',
           status: 200,

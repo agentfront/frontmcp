@@ -103,7 +103,8 @@
                   "frontmcp/features/esm-dynamic-loading"
                 ]
               },
-              "frontmcp/fundamentals/schemas"
+              "frontmcp/fundamentals/schemas",
+              "frontmcp/fundamentals/protocol-versions"
             ]
           },
           {

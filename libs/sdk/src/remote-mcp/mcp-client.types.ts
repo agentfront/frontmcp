@@ -32,8 +32,14 @@ export type McpConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 
 export interface McpClientConnection {
   /** The MCP client instance */
   client: Client;
-  /** The transport used for communication */
-  transport: Transport;
+  /**
+   * The transport used for communication.
+   *
+   * Absent for protocol 2026-07-28 connections: that revision is stateless, so
+   * the adapter issues an independent HTTP request per call and there is no
+   * long-lived transport object to hold.
+   */
+  transport?: Transport;
   /** Session ID assigned by the remote server (if any) */
   sessionId?: string;
   /** Current connection status */

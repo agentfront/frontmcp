@@ -241,3 +241,39 @@ describe('buildInputRequiredResult', () => {
     });
   });
 });
+
+describe('MrtrExchange — elicitation modes', () => {
+  const URL_PENDING = { ...PENDING, mode: 'url' as const, url: 'https://example.com/approve' };
+
+  it('treats a bare `elicitation: {}` as implicit form support', () => {
+    const signal = capture(() => exchange({ clientCapabilities: { elicitation: {} } }).resolveElicitation(PENDING));
+    expect(signal.inputRequests['elicitation-1']?.method).toBe('elicitation/create');
+  });
+
+  it('refuses url mode when the client declared only form', () => {
+    // URL elicitation sends the user out of band, so it is never implicit — a
+    // form-only client cannot service it.
+    let error: unknown;
+    try {
+      exchange({ clientCapabilities: { elicitation: { form: {} } } }).resolveElicitation(URL_PENDING);
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(MissingClientCapabilityError);
+    expect((error as MissingClientCapabilityError).requiredCapabilities).toEqual({ elicitation: { url: {} } });
+  });
+
+  it('allows url mode when the client declared it', () => {
+    const signal = capture(() =>
+      exchange({ clientCapabilities: { elicitation: { url: {} } } }).resolveElicitation(URL_PENDING),
+    );
+    expect(signal.inputRequests['elicitation-1']?.params?.['mode']).toBe('url');
+  });
+
+  it('refuses form mode when the client declared only url', () => {
+    expect(() => exchange({ clientCapabilities: { elicitation: { url: {} } } }).resolveElicitation(PENDING)).toThrow(
+      MissingClientCapabilityError,
+    );
+  });
+});

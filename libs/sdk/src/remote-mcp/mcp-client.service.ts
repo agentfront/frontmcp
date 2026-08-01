@@ -19,6 +19,7 @@ import {
 } from '@frontmcp/protocol';
 
 import { type FrontMcpLogger } from '../common';
+import { InternalMcpError } from '../errors/mcp.error';
 import {
   RemoteAuthError,
   RemoteCapabilityDiscoveryError,
@@ -796,9 +797,20 @@ export class McpClientService {
    * completely untouched — the default for an unconfigured remote.
    */
   private async tryConnect2026(request: McpConnectRequest): Promise<McpClientConnection | undefined> {
-    if (request.transportType !== 'http') return undefined;
-
     const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
+
+    if (request.transportType !== 'http') {
+      // 2026-07-28 is defined only over Streamable HTTP. Silently falling back
+      // to the legacy client would leave the caller believing it negotiated a
+      // revision it never got, so an explicit request is refused.
+      if (httpOptions?.protocolVersion === '2026-07-28') {
+        throw new InternalMcpError(
+          `protocolVersion "2026-07-28" requires transportType "http", got "${request.transportType}"`,
+          'UNSUPPORTED_TRANSPORT_TYPE',
+        );
+      }
+      return undefined;
+    }
     const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, httpOptions?.headers);
     if (negotiated !== '2026-07-28') return undefined;
 
@@ -814,7 +826,7 @@ export class McpClientService {
       // cast keeps `McpClientConnection` from having to become a union type
       // that every consumer would then have to narrow.
       client: adapter as unknown as McpClientConnection['client'],
-      transport: undefined as unknown as Transport,
+      // No `transport`: this revision is stateless, so there is nothing to keep.
       status: 'connected',
       connectedAt: new Date(),
       lastHeartbeat: new Date(),

@@ -8,7 +8,13 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch, METHOD_NOT_FOUND, MISSING_REQUIRED_CLIENT_CAPABILITY } from './helpers/mcp-2026-client';
+import {
+  mcp2026Fetch,
+  METHOD_NOT_FOUND,
+  MISSING_REQUIRED_CLIENT_CAPABILITY,
+  type InputRequest,
+  type TaskWire,
+} from './helpers/mcp-2026-client';
 
 const JWT_SECRET = 'protocol-2026-tasks-e2e-secret-0123456789';
 const TASKS_EXT = { extensions: { 'io.modelcontextprotocol/tasks': {} } };
@@ -18,11 +24,11 @@ async function pollUntil(
   baseUrl: string,
   token: string,
   taskId: string,
-  predicate: (task: any) => boolean,
+  predicate: (task: TaskWire) => boolean,
   timeoutMs = 15_000,
-): Promise<any> {
+): Promise<TaskWire> {
   const deadline = Date.now() + timeoutMs;
-  let last: any;
+  let last: TaskWire | undefined;
   let id = 9000;
   while (Date.now() < deadline) {
     const res = await mcp2026Fetch(baseUrl, {
@@ -220,7 +226,7 @@ test.describe('protocol 2026-07-28 — tasks extension', () => {
 
       const entries = Object.entries(paused.inputRequests ?? {});
       expect(entries.length).toBeGreaterThan(0);
-      const [, request] = entries[0] as [string, any];
+      const [, request] = entries[0] as [string, InputRequest];
       expect(request.method).toBe('elicitation/create');
       expect(request.params.message).toContain('deploy v2');
     });

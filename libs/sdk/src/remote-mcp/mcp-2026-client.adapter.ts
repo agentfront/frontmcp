@@ -87,10 +87,12 @@ export class Mcp2026ClientAdapter implements RemoteClientLike {
 /**
  * Decide which revision to speak to a remote server.
  *
- * `'auto'` runs the spec's own backward-compatibility probe: try a modern
- * request first, and only fall back when the failure is NOT a recognised modern
- * error. Anything else is an explicit choice by the operator, and the default
- * stays on the legacy path so existing deployments are untouched.
+ * `'auto'` runs the spec's own backward-compatibility probe: ask for
+ * `server/discover` first. ANY failure — a transport error, a timeout, a
+ * non-2026 server, or a response that does not advertise `2026-07-28` — selects
+ * the legacy path. Anything other than `'auto'` is an explicit choice by the
+ * operator, and the default stays on the legacy path so existing deployments are
+ * untouched.
  */
 export async function negotiateRemoteProtocol(
   url: string,

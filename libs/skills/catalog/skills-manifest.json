@@ -4,7 +4,7 @@
     {
       "name": "create-tool",
       "category": "development/create",
-      "description": "ALWAYS use this skill when the user asks to build, modify, or audit a FrontMCP tool. Covers @Tool({...}) end-to-end: class and function-style tools, Zod input/output schemas with derived execute() types, dependency injection, error handling, throttling (rate-limit / concurrency / timeout), auth providers, availability constraints, elicitation, interactive UI widgets (MCP Apps / SEP-1865 — including .tsx FileSource, CSP, window.FrontMcpBridge, host-detect resourceMode), annotations, examples metadata, registration in @App, and per-tool unit testing.",
+      "description": "ALWAYS use this skill when the user asks to build, modify, or audit a FrontMCP tool. Covers @Tool({...}) end-to-end: class and function-style tools, Zod input/output schemas with derived execute() types, dependency injection, error handling, throttling (rate-limit / concurrency / timeout), auth providers, availability constraints, elicitation, interactive UI widgets (MCP Apps / SEP-1865 \u2014 including .tsx FileSource, CSP, window.FrontMcpBridge, host-detect resourceMode), annotations, examples metadata, registration in @App, and per-tool unit testing.",
       "path": "create-tool",
       "targets": ["all"],
       "hasResources": true,
@@ -30,19 +30,19 @@
       "references": [
         {
           "name": "quick-start",
-          "description": "60-second tour — minimal tool, schemas, registration, calling it."
+          "description": "60-second tour \u2014 minimal tool, schemas, registration, calling it."
         },
         {
           "name": "decorator-options",
-          "description": "Every field on `@Tool({...})` — what it does, default, when to set it."
+          "description": "Every field on `@Tool({...})` \u2014 what it does, default, when to set it."
         },
         {
           "name": "input-schema",
-          "description": "Define the tool's input contract — raw Zod shapes, refinements, defaults, optional fields."
+          "description": "Define the tool's input contract \u2014 raw Zod shapes, refinements, defaults, optional fields."
         },
         {
           "name": "output-schema",
-          "description": "Define the tool's output contract — Zod shape, primitives, media, multi-content arrays."
+          "description": "Define the tool's output contract \u2014 Zod shape, primitives, media, multi-content arrays."
         },
         {
           "name": "derived-types",
@@ -50,15 +50,15 @@
         },
         {
           "name": "execution-context",
-          "description": "What ToolContext provides at runtime — this.get, this.fetch, this.notify, this.context."
+          "description": "What ToolContext provides at runtime \u2014 this.get, this.fetch, this.notify, this.context."
         },
         {
           "name": "error-handling",
-          "description": "this.fail, MCP error classes, error flow — when to throw vs fail."
+          "description": "this.fail, MCP error classes, error flow \u2014 when to throw vs fail."
         },
         {
           "name": "throttling",
-          "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults."
+          "description": "rateLimit, concurrency, timeout \u2014 semantics, interaction, defaults."
         },
         {
           "name": "auth-providers",
@@ -70,23 +70,23 @@
         },
         {
           "name": "elicitation",
-          "description": "this.elicit — request interactive input mid-execution. Server enable + accept/decline/cancel flow."
+          "description": "this.elicit \u2014 request interactive input mid-execution. Server enable + accept/decline/cancel flow."
         },
         {
           "name": "ui-widgets",
-          "description": "@Tool({ ui }) — template formats, servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
+          "description": "@Tool({ ui }) \u2014 template formats, servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
         },
         {
           "name": "annotations",
-          "description": "readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title — behavioral hints for clients."
+          "description": "readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title \u2014 behavioral hints for clients."
         },
         {
           "name": "function-style-builder",
-          "description": "tool({...})(handler) — when to pick over a class, register, ctx parameter."
+          "description": "tool({...})(handler) \u2014 when to pick over a class, register, ctx parameter."
         },
         {
           "name": "remote-and-esm",
-          "description": "Tool.esm / Tool.remote — load tools from ESM URLs or remote MCP servers."
+          "description": "Tool.esm / Tool.remote \u2014 load tools from ESM URLs or remote MCP servers."
         },
         {
           "name": "registration",
@@ -98,7 +98,7 @@
         },
         {
           "name": "testing",
-          "description": "Per-tool unit tests — @frontmcp/testing, mocking DI, asserting output validation."
+          "description": "Per-tool unit tests \u2014 @frontmcp/testing, mocking DI, asserting output validation."
         }
       ],
       "examples": [
@@ -119,7 +119,7 @@
         {
           "name": "02-basic-function-tool",
           "level": "basic",
-          "description": "Function-style `tool({...})(handler)` for a tiny pure-input tool — pick this over a class only when the tool needs no DI / lifecycle / UI.",
+          "description": "Function-style `tool({...})(handler)` for a tiny pure-input tool \u2014 pick this over a class only when the tool needs no DI / lifecycle / UI.",
           "tags": ["foundation", "function-tool", "tool-builder"],
           "features": [
             "Using the `tool({...})(handler)` builder for a one-liner",
@@ -131,10 +131,10 @@
         {
           "name": "03-tool-with-zod-shape-output",
           "level": "basic",
-          "description": "Tool returning structured JSON declared via a Zod raw shape outputSchema — the recommended pattern for any complex output.",
+          "description": "Tool returning structured JSON declared via a Zod raw shape outputSchema \u2014 the recommended pattern for any complex output.",
           "tags": ["output-schema", "zod-shape", "structured-output"],
           "features": [
-            "Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), … }`",
+            "Declaring `outputSchema` as a Zod raw shape `{ field: z.string(), \u2026 }`",
             "Constraining values with `.int().min(0)` so invalid output is rejected at the boundary",
             "Letting unrelated fields returned by the implementation (e.g. an upstream API's extras) be stripped silently",
             "Deriving `OrderSummaryOutput` once so the type and runtime contract can't drift"
@@ -143,7 +143,7 @@
         {
           "name": "04-tool-with-zod-schema-output",
           "level": "advanced",
-          "description": "Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema — for outputs that branch on a kind field.",
+          "description": "Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema \u2014 for outputs that branch on a kind field.",
           "tags": ["output-schema", "zod-schema", "discriminated-union"],
           "features": [
             "Using a full Zod schema (`z.discriminatedUnion(...)`) as `outputSchema` instead of a raw shape",
@@ -155,7 +155,7 @@
         {
           "name": "05-tool-with-primitive-output",
           "level": "basic",
-          "description": "Tool returning a single primitive — `outputSchema: 'string' | 'number' | 'boolean' | 'date'` for single-value outputs.",
+          "description": "Tool returning a single primitive \u2014 `outputSchema: 'string' | 'number' | 'boolean' | 'date'` for single-value outputs.",
           "tags": ["output-schema", "primitive-output"],
           "features": [
             "Using a primitive literal (`'string'`, `'number'`, `'boolean'`, `'date'`) for `outputSchema`",
@@ -167,19 +167,19 @@
         {
           "name": "06-tool-with-media-output",
           "level": "intermediate",
-          "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` — for outputs that aren't plain JSON.",
+          "description": "Tool returning binary content (image / audio) or a multi-content array of `[text, image]` \u2014 for outputs that aren't plain JSON.",
           "tags": ["output-schema", "media-output", "image", "multi-content"],
           "features": [
             "Returning a base64-encoded image with `outputSchema: 'image'` and `{ type: 'image', data, mimeType }`",
             "Returning audio with `outputSchema: 'audio'` (same `{ type: 'audio', data, mimeType }` shape, audio MIME types)",
-            "Returning multi-content via `outputSchema: ['string', 'image']` — text summary + annotated image in one response",
+            "Returning multi-content via `outputSchema: ['string', 'image']` \u2014 text summary + annotated image in one response",
             "When to pick a media literal vs `'resource_link'` (host-fetched URI)"
           ]
         },
         {
           "name": "08-tool-with-provider-injection",
           "level": "intermediate",
-          "description": "Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` — the standard pattern for tools that talk to a database or external API.",
+          "description": "Tool that resolves a DI-registered service via `this.get(TOKEN)` and uses it to power `execute()` \u2014 the standard pattern for tools that talk to a database or external API.",
           "tags": ["di", "provider", "this.get", "error-handling"],
           "features": [
             "Defining a typed DI token with `Symbol('UserService')` and `Token<UserService>`",
@@ -191,11 +191,11 @@
         {
           "name": "09-tool-with-multiple-providers",
           "level": "intermediate",
-          "description": "Tool composing three DI services — config (env-only), cache (optional, `tryGet`), and database (required) — the realistic shape for a production tool.",
+          "description": "Tool composing three DI services \u2014 config (env-only), cache (optional, `tryGet`), and database (required) \u2014 the realistic shape for a production tool.",
           "tags": ["di", "multiple-providers", "cache-aside", "tryGet"],
           "features": [
             "Resolving multiple providers via `this.get(TOKEN)` and `this.tryGet(TOKEN)`",
-            "Cache-aside pattern — check `tryGet(CACHE)` first, fall back to the database",
+            "Cache-aside pattern \u2014 check `tryGet(CACHE)` first, fall back to the database",
             "Reading typed config from a `CONFIG` token vs `process.env` directly",
             "Letting the tool work in production (with cache) AND in test (without it)"
           ]
@@ -203,12 +203,12 @@
         {
           "name": "11-tool-with-fetch",
           "level": "intermediate",
-          "description": "Tool calling an external HTTP API with `this.fetch` — context propagation, status-code handling, and bounding the call with a tool `timeout`.",
+          "description": "Tool calling an external HTTP API with `this.fetch` \u2014 context propagation, status-code handling, and bounding the call with a tool `timeout`.",
           "tags": ["fetch", "http", "external-api", "error-handling"],
           "features": [
             "Using `this.fetch(url, init?)` so trace context propagates to the upstream service",
             "Translating non-2xx HTTP responses into `PublicMcpError` so the MCP client gets a clean error",
-            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) — without relying on a non-existent context abort signal",
+            "Bounding the call with a tool `timeout` (and `this.fetch`'s built-in per-request timeout) \u2014 without relying on a non-existent context abort signal",
             "Letting genuine network errors (DNS failure, ECONNREFUSED) propagate to the framework's error flow"
           ]
         },
@@ -227,36 +227,36 @@
         {
           "name": "13-tool-with-single-auth-provider",
           "level": "intermediate",
-          "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand — credentials loaded before `execute()` runs.",
+          "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand \u2014 credentials loaded before `execute()` runs.",
           "tags": ["auth-providers", "oauth", "github", "this.authProviders"],
           "features": [
             "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
             "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
-            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
+            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs \u2014 a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
             "Trusting the framework to handle token refresh, expiration, and the connect/authorize URL"
           ]
         },
         {
           "name": "14-tool-with-multiple-auth-providers",
           "level": "advanced",
-          "description": "Tool with the full `authProviders` mapping form — one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
+          "description": "Tool with the full `authProviders` mapping form \u2014 one required provider with explicit scopes, one optional provider with an alias, and graceful degradation when the optional creds are missing.",
           "tags": ["auth-providers", "oauth", "scopes", "optional-auth", "this.authProviders.headers"],
           "features": [
             "Using the object form of `authProviders` to set `required`, `scopes`, and `alias`",
             "Declaring required OAuth scopes that the server advertises in its Protected Resource Metadata (`scopes_supported`) so clients request them",
             "Resolving an optional provider via `await this.authProviders.headers('cloud')` (returns an empty object `{}` when absent)",
-            "Branching the tool's behavior — full deploy when both providers are present; preview-only when the cloud provider is missing",
+            "Branching the tool's behavior \u2014 full deploy when both providers are present; preview-only when the cloud provider is missing",
             "The required `github` provider gating the call: when its credential is missing the framework aborts before `execute()` with `-32001` and `data: { tool, providers: ['github'], authUrl }`; the optional `aws`/`cloud` provider never gates"
           ]
         },
         {
           "name": "15-tool-with-credential-vault",
           "level": "advanced",
-          "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth.",
+          "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault \u2014 the pattern for credentials that aren't OAuth.",
           "tags": ["auth-providers", "credential-vault", "slack-webhook", "encryption-at-rest"],
           "features": [
             "Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`",
-            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth",
+            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` \u2014 same API as OAuth",
             "Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)",
             "Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)"
           ]
@@ -264,19 +264,19 @@
         {
           "name": "16-tool-with-rate-limit",
           "level": "intermediate",
-          "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute — the protection for expensive / external-API-billed operations.",
+          "description": "Tool with `rateLimit: { maxRequests, windowMs }` capping invocations per session per minute \u2014 the protection for expensive / external-API-billed operations.",
           "tags": ["throttling", "rate-limit", "abuse-protection"],
           "features": [
             "Capping the tool to N invocations per windowMs, partitioned per session via `partitionBy: 'session'`",
             "Letting the framework reject over-limit calls with `RateLimitError` (code `'RATE_LIMIT_EXCEEDED'`, HTTP status 429) carrying a retry-after hint in its message that clients can back off against",
             "Combining `rateLimit` with `annotations.openWorldHint: true` so clients know the tool talks to billed external services",
-            "Sizing the limit against upstream quota / billing — not just \"what feels reasonable\""
+            "Sizing the limit against upstream quota / billing \u2014 not just \"what feels reasonable\""
           ]
         },
         {
           "name": "17-tool-with-concurrency-and-timeout",
           "level": "advanced",
-          "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) — caps simultaneous in-flight work AND hard-caps per-call duration.",
+          "description": "Tool with `concurrency` + `timeout` for a real bottleneck (PDF rendering) \u2014 caps simultaneous in-flight work AND hard-caps per-call duration.",
           "tags": ["throttling", "concurrency", "timeout"],
           "features": [
             "Capping simultaneous in-flight executions with `concurrency: { maxConcurrent }` (server-wide by default)",
@@ -288,7 +288,7 @@
         {
           "name": "18-tool-with-progress-and-notify",
           "level": "intermediate",
-          "description": "Long-running tool emitting progress updates (`this.progress`), log notifications (`this.notify`), and stage markers (`this.mark`) — the standard pattern for jobs you don't want to feel hung.",
+          "description": "Long-running tool emitting progress updates (`this.progress`), log notifications (`this.notify`), and stage markers (`this.mark`) \u2014 the standard pattern for jobs you don't want to feel hung.",
           "tags": ["progress", "notifications", "mark", "long-running"],
           "features": [
             "Emitting per-item progress with `await this.progress(current, total, message)`",
@@ -300,19 +300,19 @@
         {
           "name": "19-tool-with-elicitation",
           "level": "advanced",
-          "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` — the safe pattern for destructive or expensive actions.",
+          "description": "Tool that pauses mid-execution to ask the user for confirmation + extra input via `this.elicit(...)` \u2014 the safe pattern for destructive or expensive actions.",
           "tags": ["elicitation", "this.elicit", "destructive-action", "confirmation"],
           "features": [
             "Calling `this.elicit(message, z.object({ ... }))` to request interactive input mid-`execute()`",
-            "Branching on `result.status` — `accept` / `decline` / `cancel` — and matching the early returns against `outputSchema`",
+            "Branching on `result.status` \u2014 `accept` / `decline` / `cancel` \u2014 and matching the early returns against `outputSchema`",
             "Pairing elicitation with `annotations.destructiveHint: true` so clients know to render the confirmation prominently",
-            "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level — and what fails when it isn't"
+            "Requiring `elicitation: { enabled: true }` at the `@FrontMcp({...})` server level \u2014 and what fails when it isn't"
           ]
         },
         {
           "name": "20-tool-with-annotations",
           "level": "basic",
-          "description": "Four tools showing the standard annotation combinations — read-only query, destructive delete, send-email side-effecting, external-API search — and the client behavior each combination opts into.",
+          "description": "Four tools showing the standard annotation combinations \u2014 read-only query, destructive delete, send-email side-effecting, external-API search \u2014 and the client behavior each combination opts into.",
           "tags": ["annotations", "readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"],
           "features": [
             "Setting `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` to opt into specific client behaviors (auto-retry, confirmation gating, parallelization)",
@@ -324,43 +324,43 @@
         {
           "name": "21-tool-with-availability-constraints",
           "level": "advanced",
-          "description": "Three tools showing the `availableWhen` axes — macOS-only OS gate, production+Node runtime gate, and a `surface` gate that allows agent + job invocation but blocks direct MCP-client calls.",
+          "description": "Three tools showing the `availableWhen` axes \u2014 macOS-only OS gate, production+Node runtime gate, and a `surface` gate that allows agent + job invocation but blocks direct MCP-client calls.",
           "tags": ["availableWhen", "os", "runtime", "surface", "EntryUnavailableError"],
           "features": [
             "Restricting a tool to macOS with `availableWhen: { os: ['darwin'] }`",
-            "Composing constraints — `runtime: ['node']` AND `env: ['production']` — both must match for the tool to be available",
+            "Composing constraints \u2014 `runtime: ['node']` AND `env: ['production']` \u2014 both must match for the tool to be available",
             "Using the `surface` axis to expose an internal tool to agents and jobs while hiding it from direct user invocation",
-            "Knowing what happens on mismatch — `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
+            "Knowing what happens on mismatch \u2014 `EntryUnavailableError` (`-32003` FORBIDDEN) with `data.missingAxes` so clients show the right \"not available here\" reason"
           ]
         },
         {
           "name": "22-tool-with-ui-html-template",
           "level": "intermediate",
-          "description": "Tool with an inline HTML function template — `ui: { template: (ctx) => '<div>…</div>' }` — for a quick widget that doesn't need a separate `.tsx` file.",
+          "description": "Tool with an inline HTML function template \u2014 `ui: { template: (ctx) => '<div>\u2026</div>' }` \u2014 for a quick widget that doesn't need a separate `.tsx` file.",
           "tags": ["ui", "ui-widgets", "html-template", "escapeHtml", "TemplateContext"],
           "features": [
             "Adding a `ui:` block with a function template `(ctx: TemplateContext<In, Out>) => string`",
             "Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type",
             "Always escaping user-controlled output with `ctx.helpers.escapeHtml(...)` so the widget can't XSS itself",
-            "Reading from `ctx.output` and `ctx.helpers` — the typed runtime context the template renderer hands you"
+            "Reading from `ctx.output` and `ctx.helpers` \u2014 the typed runtime context the template renderer hands you"
           ]
         },
         {
           "name": "23-tool-with-ui-filesource-tsx",
           "level": "advanced",
-          "description": "Tool with a `.tsx` widget in a separate file via the `FileSource` form — the recommended pattern for any React widget. Path anchored with `import.meta.url` so it survives any cwd.",
+          "description": "Tool with a `.tsx` widget in a separate file via the `FileSource` form \u2014 the recommended pattern for any React widget. Path anchored with `import.meta.url` so it survives any cwd.",
           "tags": ["ui", "ui-widgets", "FileSource", "tsx", "import.meta.url", "host-detect"],
           "features": [
             "Pointing `template` at a sibling `.tsx` file via the `FileSource` form `{ file: ... }`",
             "Anchoring the path to the tool source with `fileURLToPath(new URL('./...widget.tsx', import.meta.url))` so `process.cwd()` doesn't matter",
-            "Leaving `resourceMode` unset — the framework host-detects (`'inline'` for Claude, `'cdn'` for others)",
+            "Leaving `resourceMode` unset \u2014 the framework host-detects (`'inline'` for Claude, `'cdn'` for others)",
             "Naming the widget `*.widget.tsx` so the scaffolded `tsconfig.json`'s `exclude` keeps it out of the server typecheck"
           ]
         },
         {
           "name": "24-tool-with-ui-csp-and-bridge",
           "level": "advanced",
-          "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` — the full pattern for live-data widgets that need cross-tool composition.",
+          "description": "Interactive tool widget that fetches from an allow-listed CSP origin and invokes another tool via `window.FrontMcpBridge.callTool` \u2014 the full pattern for live-data widgets that need cross-tool composition.",
           "tags": ["ui", "csp", "widgetAccessible", "FrontMcpBridge", "interactive-widget"],
           "features": [
             "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
@@ -372,7 +372,7 @@
         {
           "name": "25-tool-handing-off-to-job",
           "level": "advanced",
-          "description": "Thin tool that validates input and enqueues a `@Job` to do the heavy lifting — the right pattern for any operation that takes more than a few seconds.",
+          "description": "Thin tool that validates input and enqueues a `@Job` to do the heavy lifting \u2014 the right pattern for any operation that takes more than a few seconds.",
           "tags": ["composition", "jobs", "job-handoff", "hideFromDiscovery"],
           "features": [
             "Splitting a long-running operation into a thin tool (validates, enqueues, returns a tracking handle) plus a `@Job` (does the work)",
@@ -384,10 +384,10 @@
         {
           "name": "26-tool-with-resource-link-output",
           "level": "advanced",
-          "description": "Tool returning `outputSchema: 'resource_link'` — the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
+          "description": "Tool returning `outputSchema: 'resource_link'` \u2014 the URI is sent to the client; the client fetches the body via `resources/read`. The right pattern for large or cacheable payloads.",
           "tags": ["output-schema", "resource_link", "large-payload", "caching"],
           "features": [
-            "Returning `outputSchema: 'resource_link'` from a tool — `{ type: 'resource_link', uri }`, body fetched separately",
+            "Returning `outputSchema: 'resource_link'` from a tool \u2014 `{ type: 'resource_link', uri }`, body fetched separately",
             "Pairing the tool with a matching `@Resource({ uri: 'export://{exportId}.csv' })` URI template that resolves to the actual body",
             "When `'resource_link'` beats `'image'` / `'audio'` / a raw byte response (large payloads, cacheable URIs, deferred fetch)",
             "Cross-linking to the `create-resource` skill for the URI-template resource on the other end"
@@ -396,13 +396,13 @@
         {
           "name": "27-tool-with-examples-metadata",
           "level": "basic",
-          "description": "Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
+          "description": "Tool with the `examples: [...]` field on `@Tool({...})` \u2014 concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.",
           "tags": ["examples-metadata", "codecall", "describe"],
           "features": [
             "Adding `examples: [{ description, input, output? }]` to `@Tool({...})` so `codecall:describe` surfaces canned invocations",
             "Writing realistic example inputs so the generated describe output is concrete, not abstract",
             "Including `output?` for examples where showing the expected result helps an agent understand the tool",
-            "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
+            "Why `examples` are advisory metadata \u2014 not emitted in `tools/list`, only consumed by `codecall:describe`"
           ]
         }
       ],
@@ -414,7 +414,7 @@
         },
         {
           "name": "derive-execute-types",
-          "constraint": "`execute()` parameter and return types come from `ToolInputOf<>` / `ToolOutputOf<>` — never duplicated inline.",
+          "constraint": "`execute()` parameter and return types come from `ToolInputOf<>` / `ToolOutputOf<>` \u2014 never duplicated inline.",
           "severity": "required"
         },
         {
@@ -424,7 +424,7 @@
         },
         {
           "name": "no-toolcontext-generics",
-          "constraint": "`class MyTool extends ToolContext` — never `extends ToolContext<typeof inputSchema>`.",
+          "constraint": "`class MyTool extends ToolContext` \u2014 never `extends ToolContext<typeof inputSchema>`.",
           "severity": "required"
         },
         {
@@ -444,7 +444,7 @@
         },
         {
           "name": "use-this-fail-for-business-errors",
-          "constraint": "`this.fail(new SomeMcpError(...))` for business-logic errors — never raw `throw new Error(...)`.",
+          "constraint": "`this.fail(new SomeMcpError(...))` for business-logic errors \u2014 never raw `throw new Error(...)`.",
           "severity": "required"
         },
         {
@@ -454,7 +454,7 @@
         },
         {
           "name": "widget-resource-mode-host-detect",
-          "constraint": "Leave `ui.resourceMode` unset — the framework host-detects (`inline` for Claude, `cdn` for others).",
+          "constraint": "Leave `ui.resourceMode` unset \u2014 the framework host-detects (`inline` for Claude, `cdn` for others).",
           "severity": "recommended"
         }
       ]
@@ -471,7 +471,7 @@
       "references": [
         {
           "name": "custom-auth-ui",
-          "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot→file map and auth.extras name→handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
+          "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot\u2192file map and auth.extras name\u2192handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
           "examples": [
             {
               "name": "login-slot",
@@ -480,7 +480,7 @@
               "tags": ["auth", "auth-ui", "login", "custom-ui", "react", "client-rendered"],
               "features": [
                 "Mapping a slot to a `.tsx` file with `auth.ui: { login: './login.tsx' }` (the supported render path)",
-                "Using a RELATIVE path auto-anchored to the config file — no `fileURLToPath`, no decorator, no class",
+                "Using a RELATIVE path auto-anchored to the config file \u2014 no `fileURLToPath`, no decorator, no class",
                 "Reading the injected `AuthFlowState` via `useAuthFlow()` and submitting with `<form onSubmit={submitFinish}>`",
                 "Letting `<AuthPageWrapper>` render the enclosing finish `<form>` with the `pending_auth_id` + `csrf` hidden fields",
                 "The SDK transpiling the `.tsx` server-side and inlining it as an ES module (deps from esm.sh via an import-map) + appending the `mountAuthPage` call automatically"
@@ -488,7 +488,7 @@
             },
             {
               "name": "multi-step-auth-extra",
-              "description": "Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems — accepted rows accumulate server-side and reflect back without a reload.",
+              "description": "Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems \u2014 accepted rows accumulate server-side and reflect back without a reload.",
               "level": "advanced",
               "tags": ["auth", "auth-ui", "auth-extras", "useExtraField", "useAddedItems", "multi-step", "react"],
               "features": [
@@ -693,7 +693,7 @@
               "features": [
                 "Selecting the secure-store backing via `auth.secureStore` (memory / sqlite / redis / custom backend) plus a namespace `scope`",
                 "Reading/writing arbitrary user-typed secrets from a tool via `this.secureStore.set/get/list/delete` (JSON-serialized, scoped to the session/subject)",
-                "Backing the store with an OS keychain by supplying a `SecureStoreBackend` — no native dependency is bundled by the framework",
+                "Backing the store with an OS keychain by supplying a `SecureStoreBackend` \u2014 no native dependency is bundled by the framework",
                 "Understanding scope: `user` (keyed by sub, default), `session` (keyed by sessionId), `global` (server-wide)"
               ]
             }
@@ -793,7 +793,7 @@
               "level": "intermediate",
               "tags": ["config", "http", "routes", "custom", "webhook", "download", "auth"],
               "features": [
-                "Registering custom HTTP endpoints with `http.routes` — no tool/resource/prompt needed",
+                "Registering custom HTTP endpoints with `http.routes` \u2014 no tool/resource/prompt needed",
                 "A POST endpoint that validates a user-entered secret server-side (the `/connect-env` pattern)",
                 "Overriding the default `application/json` Content-Type for binary/HTML delivery",
                 "Gating a route behind the MCP `session:verify` flow with `auth: true`",
@@ -1058,7 +1058,7 @@
         },
         {
           "name": "configure-skills-http",
-          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "description": "Full reference for skillsConfig \u2014 HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
           "examples": [
             {
               "name": "inject-instructions",
@@ -1079,7 +1079,7 @@
               "tags": ["config", "skills", "audit", "hs256", "development"],
               "features": [
                 "Bootstraps the audit subsystem via setSkillAuditFactory(...) before FrontMcp registers",
-                "MemoryAuditStore keeps records in-process — perfect for tests, lost on restart",
+                "MemoryAuditStore keeps records in-process \u2014 perfect for tests, lost on restart",
                 "Hs256AuditSigner refuses to start when NODE_ENV === production with a random key",
                 "subjectMode: 'hash' redacts user identifiers while keeping them correlatable"
               ]
@@ -1103,11 +1103,24 @@
     {
       "name": "frontmcp-deployment",
       "category": "deployment",
-      "description": "Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, and MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP. Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.",
+      "description": "Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP, and MCP protocol revisions (serving 2026-07-28 alongside 2024-11-05 through 2025-11-25). Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.",
       "path": "frontmcp-deployment",
       "targets": ["all"],
       "hasResources": true,
-      "tags": ["router", "deployment", "node", "vercel", "lambda", "cloudflare", "cli", "browser", "sdk", "guide"],
+      "tags": [
+        "router",
+        "deployment",
+        "node",
+        "vercel",
+        "lambda",
+        "cloudflare",
+        "cli",
+        "browser",
+        "sdk",
+        "guide",
+        "protocol",
+        "mcp-2026"
+      ],
       "bundle": ["recommended", "minimal", "full"],
       "references": [
         {
@@ -1116,7 +1129,7 @@
           "examples": [
             {
               "name": "browser-build-with-custom-entry",
-              "description": "Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) — `useTools`/`useResources` do not exist.",
+              "description": "Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports. Re-export the real `@frontmcp/react` symbols (`useListTools`, `useListResources`, `useCallTool`) \u2014 `useTools`/`useResources` do not exist.",
               "level": "intermediate",
               "tags": ["deployment", "browser", "custom", "entry"],
               "features": [
@@ -1138,7 +1151,7 @@
             },
             {
               "name": "react-provider-setup",
-              "description": "Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop — there is no `serverUrl` option.",
+              "description": "Connect a React application to a FrontMCP server using `@frontmcp/react`. `FrontMcpProvider` takes a `DirectMcpServer` instance via the `server` prop \u2014 there is no `serverUrl` option.",
               "level": "basic",
               "tags": ["deployment", "react", "browser", "provider", "setup"],
               "features": [
@@ -1235,11 +1248,11 @@
         },
         {
           "name": "deploy-to-cloudflare-skills-only",
-          "description": "Deploy a FrontMCP server to Cloudflare Workers using the v1.3 skills-only model — OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, hot-reload via GitHub Action and a signed-bundle webhook."
+          "description": "Deploy a FrontMCP server to Cloudflare Workers using the v1.3 skills-only model \u2014 OpenAPI as capability inventory, AgentScript with namespaced bindings, four meta-tools, hot-reload via GitHub Action and a signed-bundle webhook."
         },
         {
           "name": "deploy-manifest-yaml",
-          "description": "The frontmcp.deploy.yaml v1 schema — declarative manifest the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker."
+          "description": "The frontmcp.deploy.yaml v1 schema \u2014 declarative manifest the GitHub Action consumes on every push to build, sign, and hot-reload the Cloudflare Worker."
         },
         {
           "name": "deploy-to-cloudflare",
@@ -1297,7 +1310,7 @@
             },
             {
               "name": "lambda-handler-with-cors",
-              "description": "CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` — your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.",
+              "description": "CORS for a FrontMCP Lambda is configured at the API Gateway HTTP API level, not in the handler. `frontmcp build --target lambda` writes `dist/lambda/handler.cjs` \u2014 your `@FrontMcp` server is wrapped automatically with `@codegenie/serverless-express`, so CORS belongs on the gateway.",
               "level": "intermediate",
               "tags": ["deployment", "lambda", "handler", "cors"],
               "features": [
@@ -1396,14 +1409,14 @@
               "level": "basic",
               "tags": ["deployment", "vercel", "serverless", "config", "minimal"],
               "features": [
-                "The exact shape of the auto-generated `vercel.json` — three keys, nothing else",
+                "The exact shape of the auto-generated `vercel.json` \u2014 three keys, nothing else",
                 "That routing and function configuration live in `.vercel/output/`, not `vercel.json`",
                 "That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys"
               ]
             },
             {
               "name": "vercel-config-with-security-headers",
-              "description": "The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build — but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory).",
+              "description": "The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + installCommand). You can layer extra Vercel-supported keys on top after the build \u2014 but never add `functions: { 'api/frontmcp.ts': ... }` or `rewrites` to `/api/frontmcp` (the build does not produce an `api/` directory).",
               "level": "intermediate",
               "tags": ["deployment", "vercel", "security", "config", "headers"],
               "features": [
@@ -1420,18 +1433,18 @@
           "examples": [
             {
               "name": "vercel-mcp-endpoint-test",
-              "description": "Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure — there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.",
+              "description": "Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation. The CLI emits the Build Output API v3 structure \u2014 there is no `api/frontmcp.ts` to test against; the function lives at `.vercel/output/functions/index.func/handler.cjs` and is routed via `.vercel/output/config.json`.",
               "level": "advanced",
               "tags": ["deployment", "json-rpc", "vercel", "mcp", "endpoint"],
               "features": [
                 "Testing the health endpoint (`/healthz`) and MCP JSON-RPC API of a deployed Vercel function",
                 "Using preview deployments to validate changes before promoting to production",
-                "Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) — configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`"
+                "Vercel plan limits for `maxDuration` (Hobby: 10s, Pro: 60s, Enterprise: 900s) \u2014 configure these in the Vercel dashboard, not via `functions: { 'api/frontmcp.ts': ... }`"
               ]
             },
             {
               "name": "vercel-with-kv",
-              "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you — you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.",
+              "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. The CLI emits the full Build Output API v3 structure for you \u2014 you do **not** author `api/frontmcp.ts` and you do **not** add a `rewrites` block.",
               "level": "basic",
               "tags": ["deployment", "vercel-kv", "vercel", "session", "performance", "serverless"],
               "features": [
@@ -1442,7 +1455,7 @@
             },
             {
               "name": "vercel-with-skills-cache",
-              "description": "Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you — your job is to configure the server and provision Vercel KV.",
+              "description": "Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching. The CLI handles the Build Output API v3 emission for you \u2014 your job is to configure the server and provision Vercel KV.",
               "level": "intermediate",
               "tags": ["deployment", "vercel-kv", "vercel", "cache", "skills"],
               "features": [
@@ -1494,6 +1507,10 @@
               ]
             }
           ]
+        },
+        {
+          "name": "protocol-versions",
+          "description": "Serve MCP protocol revision 2026-07-28 alongside every earlier revision, and connect to a 2026 server as a client"
         }
       ]
     },
@@ -1803,7 +1820,7 @@
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
                 "A configuration provider using `readonly` properties from environment variables (sync construction)",
-                "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
+                "An API client provider that reads credentials in the constructor (no `onInit` \u2014 `@Provider` has no lifecycle hooks)",
                 "Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`",
                 "Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
@@ -2024,7 +2041,7 @@
               "tags": ["development", "database", "multi-app", "decorators", "multi", "app"],
               "features": [
                 "Organizing a server into multiple `@App` modules (`analytics` and `admin`)",
-                "Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` — use `AsyncProvider` for those)",
+                "Decorating a service class with `@Provider({ name, scope })` so it acts as its own DI token (the strict schema rejects `useFactory`/`useClass`/`provide` \u2014 use `AsyncProvider` for those)",
                 "Accessing injected dependencies via `this.get(DatabaseClient)` in tools and resources",
                 "Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources",
                 "Registering a `@Plugin` at the server level so it applies across all apps",
@@ -2148,7 +2165,7 @@
               "level": "intermediate",
               "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
               "features": [
-                "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) — on `mcp-from-openapi` >= 2.5.0",
+                "Secure defaults: external `$ref` resolution off, spec-URL redirects not followed, internal/private targets blocked (DNS-resolved) \u2014 on `mcp-from-openapi` >= 2.5.0",
                 "Opting back into external refs with `allowedProtocols`, and restricting the spec URL + `$ref`s with `allowedHosts`",
                 "Using `allowInternalIPs` for trusted internal/local targets (governs the spec URL and `$ref`s)",
                 "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
@@ -2218,7 +2235,7 @@
         },
         {
           "name": "skill-audit-log",
-          "description": "Tamper-evident, hash-chained audit log for skill action executions — pluggable signer, pluggable store, offline verification.",
+          "description": "Tamper-evident, hash-chained audit log for skill action executions \u2014 pluggable signer, pluggable store, offline verification.",
           "examples": [
             {
               "name": "verify-chain",
@@ -2228,7 +2245,7 @@
               "features": [
                 "verifyChain returns { ok, breakAt?, reason? } and exits with the first detected break",
                 "defaultAuditSignatureVerifier dispatches on record.signatureAlg (HS256 or RS256)",
-                "Trusted-keys registry maps signatureKeyId → public key PEM",
+                "Trusted-keys registry maps signatureKeyId \u2192 public key PEM",
                 "iterate() reads the chain in order from any SkillAuditStore implementation"
               ]
             },
@@ -2341,7 +2358,7 @@
               "features": [
                 "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
                 "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
-                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook",
+                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) \u2014 `@Provider` has no `onDestroy` hook",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -2418,7 +2435,7 @@
                 "Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds",
                 "Using Redis-backed cache for multi-instance consistency",
                 "Configuring connection pool limits and timeouts to prevent resource exhaustion",
-                "Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup"
+                "Providers do not implement `onInit` / `onDestroy` \u2014 initialize in the constructor and let framework shutdown handle cleanup"
               ]
             },
             {
@@ -2597,12 +2614,12 @@
               "level": "intermediate",
               "tags": ["production", "unix-socket", "cli", "database", "daemon", "graceful"],
               "features": [
-                "The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
+                "The framework already wires SIGTERM/SIGINT \u2014 daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
                 "Using `server.dispose()` (the only real method) instead of fictional `server.close()`",
                 "Removing the Unix socket file to prevent stale `.sock` files on restart",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
-                "Providers initialize in the constructor — there is no `onInit` / `onDestroy`"
+                "Providers initialize in the constructor \u2014 there is no `onInit` / `onDestroy`"
               ]
             },
             {
@@ -2651,14 +2668,14 @@
             },
             {
               "name": "wrangler-config",
-              "description": "Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-cloudflare.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the `wrangler.toml` produced by `frontmcp build --target cloudflare` is production-ready. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-cloudflare.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "cloudflare", "cache", "session", "wrangler", "checklist"],
               "features": [
-                "Verify `main = \"dist/cloudflare/index.js\"` (the build adapter writes this — never override)",
+                "Verify `main = \"dist/cloudflare/index.js\"` (the build adapter writes this \u2014 never override)",
                 "Verify KV bindings for sessions and cache exist",
                 "Verify staging / production environment configs are separated",
-                "Verify secrets are NOT in `wrangler.toml` — use `wrangler secret put`"
+                "Verify secrets are NOT in `wrangler.toml` \u2014 use `wrangler secret put`"
               ]
             }
           ]
@@ -2675,13 +2692,13 @@
               "features": [
                 "Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw",
                 "Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load",
-                "Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)",
+                "Not closing connections on shutdown for Lambda (they survive freeze/thaw \u2014 and providers have no `onDestroy` hook anyway)",
                 "Keeping module scope lightweight with no heavy initialization"
               ]
             },
             {
               "name": "sam-template",
-              "description": "Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-lambda.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the SAM template pairs correctly with the bundle produced by `frontmcp build --target lambda`. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-lambda.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "lambda", "session", "sam", "checklist"],
               "features": [
@@ -2725,7 +2742,7 @@
             },
             {
               "name": "multi-instance-cleanup",
-              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners \u2014 given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose an explicit `stop()` method, and have the host app call it before `server.dispose()`.",
               "level": "advanced",
               "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
               "features": [
@@ -2773,7 +2790,7 @@
               "level": "intermediate",
               "tags": ["production", "redis", "database", "node", "graceful", "shutdown"],
               "features": [
-                "The framework already handles SIGTERM/SIGINT — never call `server.close()` (no such method) or `process.exit()` on top of it",
+                "The framework already handles SIGTERM/SIGINT \u2014 never call `server.close()` (no such method) or `process.exit()` on top of it",
                 "Use `server.dispose()` if you need explicit cleanup in non-server (SDK) contexts",
                 "Add a _drain probe_ on `/healthz` so load balancers stop sending traffic during the framework's drain window",
                 "Avoid handler conflicts: registering a second SIGTERM that calls `process.exit(0)` races the framework's own exit path"
@@ -2824,12 +2841,12 @@
             },
             {
               "name": "vercel-edge-config",
-              "description": "Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment → references/deploy-to-vercel.md`; this file is checklist-only.",
+              "description": "Checklist for verifying the Vercel Build Output API v3 artifact and edge config produced by `frontmcp build --target vercel`. **Note:** configuration authoring lives in `frontmcp-deployment \u2192 references/deploy-to-vercel.md`; this file is checklist-only.",
               "level": "basic",
               "tags": ["production", "vercel-kv", "vercel", "session", "serverless", "checklist"],
               "features": [
                 "Verify `frontmcp build --target vercel` produced `.vercel/output/functions/index.func/handler.cjs`",
-                "No hand-written `vercel.json` `builds`/`routes` — the build adapter uses Build Output API v3",
+                "No hand-written `vercel.json` `builds`/`routes` \u2014 the build adapter uses Build Output API v3",
                 "Verify Vercel KV (`provider: 'vercel-kv'`) is configured for session/cache state",
                 "Verify CORS origins include `VERCEL_URL` and any custom production domain"
               ]
@@ -3517,7 +3534,7 @@
             },
             {
               "name": "production-tracing",
-              "description": "Full production observability — traces to OTLP, structured logs to stdout, per-request log collection.",
+              "description": "Full production observability \u2014 traces to OTLP, structured logs to stdout, per-request log collection.",
               "level": "intermediate",
               "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
               "features": [
@@ -3541,7 +3558,7 @@
               "features": [
                 "NDJSON format for stdout (Docker/K8s log collection)",
                 "Automatic trace context enrichment (trace_id, span_id)",
-                "Sensitive field redaction (token → [REDACTED])"
+                "Sensitive field redaction (token \u2192 [REDACTED])"
               ]
             },
             {
@@ -3638,7 +3655,7 @@
               "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
               "features": [
                 "Traces and logs both sent to Coralogix via OTLP",
-                "Automatic trace_id correlation — click a trace, see its logs",
+                "Automatic trace_id correlation \u2014 click a trace, see its logs",
                 "Environment variable configuration for production"
               ]
             }

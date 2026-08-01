@@ -101,6 +101,18 @@ async function executeTask(params: RunTaskParams): Promise<void> {
       // which resumes execution. This is NOT a terminal state, so return before
       // the terminal write below.
       if (err instanceof InputRequiredSignal) {
+        // Never overwrite a terminal state. A concurrent `tasks/cancel` may have
+        // already settled this record, and the spec requires a cancelled task to
+        // STAY cancelled even if execution continued past the signal.
+        const beforePause = await store.get(taskId, sessionId);
+        if (!beforePause || isTerminal(beforePause.status)) {
+          logger?.debug('[task-runner] input required but task already terminal; leaving as-is', {
+            taskId,
+            status: beforePause?.status,
+          });
+          return;
+        }
+
         const paused = await store.update(taskId, sessionId, {
           status: 'input_required',
           statusMessage: 'The task is waiting for additional input.',

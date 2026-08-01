@@ -185,7 +185,17 @@ export async function dispatchTasksMethod(options: TasksDispatchOptions): Promis
     inputRequests: undefined,
   });
 
-  if (resumed) await resume(resumed);
+  // Do NOT await execution: `tasks/update` acknowledges immediately and the
+  // task resumes in the background. Awaiting would turn the whole point of the
+  // extension — non-blocking long-running work — back into a blocking call.
+  if (resumed) {
+    void resume(resumed).catch((error: unknown) => {
+      scope.logger.error('mcp-2026: resumed task failed', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 
   return { kind: 'result', result: {} };
 }

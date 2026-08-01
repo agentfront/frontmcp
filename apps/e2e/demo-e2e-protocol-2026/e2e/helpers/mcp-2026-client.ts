@@ -40,6 +40,31 @@ export function encodeHeaderValue(value: string): string {
   return `=?base64?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 }
 
+/** A server→client request embedded in an `InputRequiredResult` (MRTR). */
+export interface InputRequest {
+  method: string;
+  params?: Record<string, any>;
+}
+
+/** A tool as returned by `tools/list`. */
+export interface ListedTool {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, any>;
+}
+
+/** A task handle / state as returned by the tasks extension. */
+export interface TaskWire {
+  taskId: string;
+  status: string;
+  ttlMs?: number | null;
+  pollIntervalMs?: number;
+  statusMessage?: string;
+  result?: Record<string, any>;
+  error?: { code: number; message: string };
+  inputRequests?: Record<string, InputRequest>;
+}
+
 export interface JsonRpcRequestBody {
   jsonrpc: '2.0';
   id?: string | number;

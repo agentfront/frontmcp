@@ -8,7 +8,7 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch, MISSING_REQUIRED_CLIENT_CAPABILITY } from './helpers/mcp-2026-client';
+import { mcp2026Fetch, MISSING_REQUIRED_CLIENT_CAPABILITY, type InputRequest } from './helpers/mcp-2026-client';
 
 const ELICITING_CALL = {
   method: 'tools/call' as const,
@@ -39,7 +39,7 @@ test.describe('protocol 2026-07-28 — MRTR', () => {
     const entries = Object.entries(result.inputRequests ?? {});
     expect(entries.length).toBeGreaterThan(0);
 
-    const [, request] = entries[0] as [string, any];
+    const [, request] = entries[0] as [string, InputRequest];
     expect(request.method).toBe('elicitation/create');
     expect(request.params.message).toContain('deploy to prod');
     expect(request.params.requestedSchema.type).toBe('object');
@@ -151,7 +151,7 @@ test.describe('protocol 2026-07-28 — MRTR', () => {
   test('does not leak an elicitationId field', async ({ server }) => {
     const res = await mcp2026Fetch(server.info.baseUrl, { ...ELICITING_CALL, id: 11 });
     const { result } = res.json();
-    const [, request] = Object.entries(result.inputRequests)[0] as [string, any];
+    const [, request] = Object.entries(result.inputRequests)[0] as [string, InputRequest];
 
     // `elicitationId` was removed alongside the completion notification.
     expect(request.params.elicitationId).toBeUndefined();

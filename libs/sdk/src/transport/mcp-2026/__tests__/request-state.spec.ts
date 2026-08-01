@@ -1,3 +1,6 @@
+import { hmacSha256 } from '@frontmcp/utils';
+
+import { resolvePrincipal } from '../dispatcher';
 import {
   computeRequestBinding,
   decodeRequestState,
@@ -105,7 +108,6 @@ describe('requestState integrity', () => {
 
   it('rejects a signed blob whose payload is not JSON', () => {
     // Signed by us, so the signature passes — the payload check must still catch it.
-    const { hmacSha256 } = require('@frontmcp/utils');
     const body = Buffer.from('not json', 'utf8').toString('base64url');
     const mac = Buffer.from(hmacSha256(getRequestStateKey(), new TextEncoder().encode(body))).toString('base64url');
     expect(decodeRequestState(`${body}.${mac}`, BINDING)).toEqual({ ok: false, reason: 'malformed' });
@@ -146,5 +148,43 @@ describe('getRequestStateKey', () => {
     // Cached, so repeated reads within a process agree — otherwise a retry
     // could never verify state minted moments earlier.
     expect(getRequestStateKey()).toBe(key);
+  });
+});
+
+describe('resolvePrincipal (token collision)', () => {
+  it('distinguishes tokens that share a long prefix', () => {
+    // Every HS256 JWT begins with the same base64url-encoded header, so a
+    // truncating principal would map unrelated callers onto one identity and
+    // let them redeem each other's requestState.
+    const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+    const a = `${header}.payload-one.sig-one`;
+    const b = `${header}.payload-two.sig-two`;
+
+    expect(a.slice(0, 16)).toBe(b.slice(0, 16));
+    expect(resolvePrincipal({ token: a })).not.toBe(resolvePrincipal({ token: b }));
+  });
+
+  it('prefers a verified clientId over the token', () => {
+    expect(resolvePrincipal({ clientId: 'user-1', token: 'anything' })).toBe('user-1');
+  });
+
+  it('falls back to anonymous with neither', () => {
+    expect(resolvePrincipal({})).toBe('anonymous');
+    expect(resolvePrincipal(undefined)).toBe('anonymous');
+  });
+
+  it('binds requestState to the hashed token, so a different token cannot redeem it', () => {
+    const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+    const binding = computeRequestBinding('tools/call', { name: 'confirm' });
+
+    const minted = encodeRequestState(RESPONSES, {
+      principal: resolvePrincipal({ token: `${header}.a.a` }),
+      binding,
+    });
+
+    expect(decodeRequestState(minted, { principal: resolvePrincipal({ token: `${header}.b.b` }), binding })).toEqual({
+      ok: false,
+      reason: 'principal-mismatch',
+    });
   });
 });

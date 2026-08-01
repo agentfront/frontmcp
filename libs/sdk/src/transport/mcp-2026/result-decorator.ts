@@ -83,6 +83,10 @@ const ORDERED_LIST_FIELDS: Record<string, string> = {
  * registered dynamically — sorting makes the guarantee explicit.
  *
  * Applied only on the 2026 path; older revisions keep their existing order.
+ *
+ * Ordering is guaranteed WITHIN a page. Concatenating paginated pages does not
+ * yield a globally sorted list — the cursor defines page boundaries, and this
+ * sorts each page as it is returned.
  */
 export function orderListResult(method: string, result: Record<string, unknown>): Record<string, unknown> {
   const field = ORDERED_LIST_FIELDS[method];

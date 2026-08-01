@@ -8,7 +8,7 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch, META_SERVER_INFO, parseSseEvents } from './helpers/mcp-2026-client';
+import { mcp2026Fetch, META_SERVER_INFO, parseSseEvents, type ListedTool } from './helpers/mcp-2026-client';
 
 const CHATTY = {
   method: 'tools/call' as const,
@@ -168,7 +168,7 @@ test.describe('protocol 2026-07-28 — deterministic list ordering', () => {
 
   test('returns tools sorted by name', async ({ server }) => {
     const res = await mcp2026Fetch(server.info.baseUrl, { method: 'tools/list', id: 11 });
-    const names = res.json().result.tools.map((t: any) => t.name);
+    const names = (res.json().result.tools as ListedTool[]).map((t) => t.name);
 
     expect(names).toEqual([...names].sort());
   });

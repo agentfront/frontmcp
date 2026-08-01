@@ -9,6 +9,8 @@
 import { Mcp2026Client, Mcp2026ClientAdapter, Mcp2026Error, negotiateRemoteProtocol } from '@frontmcp/sdk';
 import { expect, test } from '@frontmcp/testing';
 
+import type { ListedTool } from './helpers/mcp-2026-client';
+
 test.describe('protocol 2026-07-28 — Mcp2026Client', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-protocol-2026/src/main.ts',
@@ -186,7 +188,7 @@ test.describe('protocol 2026-07-28 — remote-proxy adapter', () => {
     expect(adapter.getServerCapabilities()).toBeDefined();
 
     const { tools } = await adapter.listTools();
-    expect(tools.map((t: any) => t.name)).toContain('echo');
+    expect((tools as ListedTool[]).map((t) => t.name)).toContain('echo');
 
     const called = await adapter.callTool({ name: 'echo', arguments: { message: 'proxied' } });
     expect(JSON.stringify(called)).toContain('proxied');

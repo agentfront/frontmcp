@@ -12,7 +12,7 @@
  */
 import { expect, test } from '@frontmcp/testing';
 
-import { mcp2026Fetch } from './helpers/mcp-2026-client';
+import { INVALID_PARAMS, mcp2026Fetch } from './helpers/mcp-2026-client';
 
 const TASKS_EXT = { extensions: { 'io.modelcontextprotocol/tasks': {} } };
 
@@ -31,6 +31,7 @@ test.describe('protocol 2026-07-28 — tasks require an identified caller', () =
       clientCapabilities: TASKS_EXT,
     });
 
+    expect(res.json().error.code).toBe(INVALID_PARAMS);
     expect(res.json().error.message).toContain('authenticated caller');
   });
 
@@ -42,6 +43,7 @@ test.describe('protocol 2026-07-28 — tasks require an identified caller', () =
       clientCapabilities: TASKS_EXT,
     });
 
+    expect(res.json().error.code).toBe(INVALID_PARAMS);
     expect(res.json().error.message).toContain('authenticated caller');
   });
 });

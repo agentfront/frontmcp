@@ -13,7 +13,7 @@
 
 import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type ZodType } from '@frontmcp/lazy-zod';
-import { type AuthInfo } from '@frontmcp/protocol';
+import { type AuthInfo, type LoggingLevel } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
@@ -38,7 +38,7 @@ const REQUEST_NOTIFICATION_SINK_KEY = Symbol.for('frontmcp:request-notification-
  * context module stays free of a dependency on the transport layer.
  */
 export interface RequestNotificationSinkRef {
-  log(level: string, logger: string | undefined, data: unknown): boolean;
+  log(level: LoggingLevel, logger: string | undefined, data: unknown): boolean;
   progress(progress: number, total?: number, message?: string): boolean;
 }
 

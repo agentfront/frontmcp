@@ -216,6 +216,16 @@ export interface UpstreamProviderConfig {
 }
 
 /**
+ * Normalize an issuer identifier for comparison.
+ *
+ * Issuer identifiers are URLs, so `https://idp.example.com` and
+ * `https://idp.example.com/` denote the same issuer.
+ */
+function normalizeIssuer(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+/**
  * Validate an RFC 9207 `iss` authorization-response parameter.
  *
  * MCP 2026-07-28 (SEP-2468) makes this a client-side MUST: when the
@@ -233,11 +243,7 @@ export function validateAuthorizationIssuer(
   if (received === undefined) return { ok: true };
   if (!expected) return { ok: true };
 
-  // Compare on origin + path with a trailing slash normalized away: issuer
-  // identifiers are URLs, and `https://idp.example.com` and
-  // `https://idp.example.com/` denote the same issuer.
-  const normalize = (value: string): string => value.replace(/\/+$/, '');
-  if (normalize(received) !== normalize(expected)) {
+  if (normalizeIssuer(received) !== normalizeIssuer(expected)) {
     return {
       ok: false,
       reason: `Authorization response issuer "${received}" does not match the configured issuer "${expected}"`,
@@ -1191,7 +1197,14 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // issuer means the counterparty changed, so anything cached for the old one
     // must be dropped rather than silently reused against the new AS.
     const previous = this.providerConfigs.get(config.id);
-    if (previous && previous.issuer && config.issuer && previous.issuer !== config.issuer) {
+    // Compare normalized, exactly as `validateAuthorizationIssuer` does — a bare
+    // trailing-slash difference names the SAME issuer and must not throw away
+    // working credentials.
+    const issuerChanged =
+      previous?.issuer !== undefined &&
+      config.issuer !== undefined &&
+      normalizeIssuer(previous.issuer) !== normalizeIssuer(config.issuer);
+    if (issuerChanged) {
       this.logger.warn(
         `Upstream provider "${config.id}" changed issuer (${previous.issuer} → ${config.issuer}); ` +
           `discarding credentials bound to the previous authorization server`,
@@ -1215,7 +1228,21 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       const store = this.orchestratedTokenStoreImpl as {
         deleteTokensForProvider?: (providerId: string) => Promise<void>;
       };
-      await store.deleteTokensForProvider?.(providerId);
+
+      if (typeof store.deleteTokensForProvider !== 'function') {
+        // The `TokenStore` interface has no provider-wide delete, and there is no
+        // way to enumerate authorization ids to call `deleteTokens` per entry.
+        // Say so loudly instead of reporting a purge that did not happen —
+        // an operator changing an issuer needs to know to rotate manually.
+        this.logger.warn(
+          `Cannot auto-discard credentials for provider "${providerId}": the configured token store does not ` +
+            `support provider-wide deletion. Rotate or clear the store manually so credentials issued by the ` +
+            `previous authorization server are not reused.`,
+        );
+        return;
+      }
+
+      await store.deleteTokensForProvider(providerId);
     } catch (error) {
       this.logger.error(
         `Failed to discard credentials for provider "${providerId}" after an issuer change`,
