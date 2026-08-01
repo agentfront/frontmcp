@@ -127,8 +127,6 @@ jobs:
 
       - name: Normalize internal @frontmcp/* dep ranges
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.initial_version }}
         run: |
           set -euo pipefail
 
@@ -137,40 +135,7 @@ jobs:
           # nx release (preserveMatchingDependencyRanges), but they do NOT satisfy prereleases
           # like 1.1.0-beta.1 per semver — which breaks the publish-release workflow downstream.
           # Exact pins make later nx release version bumps replace cleanly for both stable and beta.
-          node <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-          const VERSION = process.env.VERSION;
-          const SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
-          const dirs = ['libs', 'plugins'];
-          let totalChanged = 0;
-          for (const dir of dirs) {
-            if (!fs.existsSync(dir)) continue;
-            for (const entry of fs.readdirSync(dir)) {
-              const f = path.join(dir, entry, 'package.json');
-              if (!fs.existsSync(f)) continue;
-              const raw = fs.readFileSync(f, 'utf8');
-              const p = JSON.parse(raw);
-              let changed = false;
-              for (const s of SECTIONS) {
-                if (!p[s]) continue;
-                for (const k of Object.keys(p[s])) {
-                  if (k.startsWith('@frontmcp/') && p[s][k] !== VERSION) {
-                    console.log(`  ${f} :: ${s}.${k}: ${p[s][k]} -> ${VERSION}`);
-                    p[s][k] = VERSION;
-                    changed = true;
-                  }
-                }
-              }
-              if (changed) {
-                const trailingNewline = raw.endsWith('\n') ? '\n' : '';
-                fs.writeFileSync(f, JSON.stringify(p, null, 2) + trailingNewline);
-                totalChanged++;
-              }
-            }
-          }
-          console.log(`Normalized ${totalChanged} package.json file(s) to v${VERSION}`);
-          NODE
+          node scripts/normalize-internal-versions.mjs "${{ steps.version.outputs.initial_version }}"
 
       - name: Update package versions
         shell: bash

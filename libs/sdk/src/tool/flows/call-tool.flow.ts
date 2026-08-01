@@ -37,10 +37,12 @@ import {
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
   EntryUnavailableError,
+  InputRequiredSignal,
   InternalMcpError,
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  MissingClientCapabilityError,
   RateLimitError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
@@ -1079,6 +1081,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Direct / CLI) can extract the originating error from `originalError`
       // and surface its public message instead of a generic "Unknown error".
       if (error instanceof FlowControl) {
+        throw error;
+      }
+      // MRTR signals (protocol 2026-07-28) are control flow, not failures: the
+      // tool is asking the client for input. Wrapping them in ToolExecutionError
+      // would turn a legitimate `input_required` round trip into a tool crash.
+      if (error instanceof InputRequiredSignal || error instanceof MissingClientCapabilityError) {
         throw error;
       }
       // Re-throw timeout errors without wrapping

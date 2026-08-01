@@ -85,13 +85,35 @@ export async function performElicit<S extends ZodType>(
     throw new ElicitationDisabledError();
   }
 
-  // 1. Validate session
+  const ctx = tryGetContext();
+
+  // 1. Multi Round-Trip Requests (protocol 2026-07-28).
+  //
+  // This revision removed the server→client request direction entirely, so the
+  // inline round trip below cannot happen. The exchange either hands back an
+  // answer the client already supplied, or throws `InputRequiredSignal` so the
+  // dispatcher can return an `InputRequiredResult` and let the client retry.
+  //
+  // Checked BEFORE the session guard: 2026-07-28 has no protocol-level
+  // sessions, so `sessionId` is not meaningful on that path.
+  const mrtr = ctx?.getMrtrExchange?.();
+  if (mrtr) {
+    const zodSchema =
+      requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
+    const answer = mrtr.resolveElicitation({
+      message,
+      requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
+      ...(options?.mode ? { mode: options.mode } : {}),
+    });
+    return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+  }
+
+  // 2. Validate session
   if (!sessionId) {
     throw new ElicitationNotSupportedError('No session available for elicitation');
   }
 
-  // 2. Check for pre-resolved result (fallback re-invocation case)
-  const ctx = tryGetContext();
+  // 3. Check for pre-resolved result (fallback re-invocation case)
   const preResolved = ctx?.getPreResolvedElicitResult?.();
   if (preResolved) {
     // Clear the pre-resolved result to prevent reuse
@@ -99,12 +121,12 @@ export async function performElicit<S extends ZodType>(
     return preResolved as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
   }
 
-  // 3. Check client capabilities
+  // 4. Check client capabilities
   const capabilities = getClientCapabilities(sessionId);
   const mode = options?.mode ?? 'form';
 
   if (!supportsElicitation(capabilities, mode)) {
-    // 4. Fallback: throw error with context for re-invocation
+    // 5. Fallback: throw error with context for re-invocation
     // This triggers the fallback flow handled by CallToolFlow/CallAgentFlow
     const elicitId = options?.elicitationId ?? generateElicitationId();
     const ttl = options?.ttl ?? DEFAULT_ELICIT_TTL;

@@ -8,7 +8,9 @@ import {
 import { FlowControl } from '../../common';
 import {
   formatMcpErrorResponse,
+  InputRequiredSignal,
   InternalMcpError,
+  MissingClientCapabilityError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
   ToolCredentialsRequiredError,
@@ -66,6 +68,16 @@ export default function callToolRequestHandler({
           // For handled, next, abort (and `fail` with no original error) — return appropriate response
           logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type, output: e.output });
           return formatMcpErrorResponse(new InternalMcpError(`Flow ended with: ${e.type}`));
+        }
+
+        // MRTR signals (protocol 2026-07-28) are protocol-level control flow, not
+        // tool failures: the tool is asking the client for input, or telling it
+        // which capability it must declare. Flattening them into a CallToolResult
+        // with `isError` would hide the `input_required` round trip from the
+        // dispatcher and strand the exchange. Re-throw so it can shape the
+        // `InputRequiredResult` / `-32021` response.
+        if (e instanceof InputRequiredSignal || e instanceof MissingClientCapabilityError) {
+          throw e;
         }
 
         // Task augmentation rejections are protocol-level errors per MCP spec §Tool-Level

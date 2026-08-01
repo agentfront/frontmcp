@@ -25,6 +25,24 @@ import { generateTraceContext, type TraceContext } from './trace-context';
 /** Symbol key for storing pre-resolved elicit result in context store */
 const PRE_RESOLVED_ELICIT_KEY = Symbol.for('frontmcp:pre-resolved-elicit');
 
+/** Symbol key for the in-flight MRTR exchange (protocol 2026-07-28) */
+const MRTR_EXCHANGE_KEY = Symbol.for('frontmcp:mrtr-exchange');
+
+/**
+ * Structural view of the MRTR exchange stored on the context.
+ *
+ * Typed structurally rather than by importing `MrtrExchange` so the context
+ * module stays free of a dependency on the transport layer.
+ */
+export interface MrtrExchangeRef {
+  resolveElicitation(pending: {
+    message: string;
+    requestedSchema: Record<string, unknown>;
+    mode?: 'form' | 'url';
+    url?: string;
+  }): ElicitResult<unknown>;
+}
+
 /**
  * Request metadata extracted from HTTP headers.
  */
@@ -447,6 +465,33 @@ export class FrontMcpContext {
    */
   setPreResolvedElicitResult(result: ElicitResult<unknown>): void {
     this.store.set(PRE_RESOLVED_ELICIT_KEY, result);
+  }
+
+  // =====================
+  // MRTR (protocol 2026-07-28)
+  // =====================
+
+  /**
+   * Attach the request's MRTR exchange.
+   *
+   * Set by the 2026-07-28 dispatcher before running a request. Its presence is
+   * what switches `elicit()` from the inline server→client round trip (removed
+   * in this revision) to the `InputRequiredResult` round trip.
+   *
+   * @internal
+   */
+  setMrtrExchange(exchange: MrtrExchangeRef): void {
+    this.store.set(MRTR_EXCHANGE_KEY, exchange);
+  }
+
+  /**
+   * Get the request's MRTR exchange, if this request is running under
+   * protocol 2026-07-28.
+   *
+   * @internal
+   */
+  getMrtrExchange(): MrtrExchangeRef | undefined {
+    return this.store.get(MRTR_EXCHANGE_KEY) as MrtrExchangeRef | undefined;
   }
 
   /**

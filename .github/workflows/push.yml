@@ -35,6 +35,29 @@ jobs:
         id: node-version
         run: echo "version=$(cat .nvmrc)" >> $GITHUB_OUTPUT
 
+  # Guards against a release branch's version pins leaking onto another line (the
+  # usual source is a cherry-pick from release/* onto main). When they do, the very
+  # first `yarn install --immutable` in every other job dies with a bare YN0028
+  # "The lockfile would have been modified by this install" — which says nothing
+  # about the actual cause. This job needs no install, so it fails first and names
+  # the drifted pins. See scripts/normalize-internal-versions.mjs.
+  version-consistency:
+    name: "Internal Version Consistency"
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+          install: "false"
+
+      - name: Check internal @frontmcp/* version pins agree
+        run: node scripts/normalize-internal-versions.mjs --check
+
   # Lint and format checks (fast, independent)
   lint:
     name: "Lint & Format Checks"

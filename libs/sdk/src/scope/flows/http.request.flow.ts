@@ -33,6 +33,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { SessionVerificationFailedError } from '../../errors';
+import { isProtocol2026Request } from '../../transport/mcp-2026';
 import { type Scope } from '../scope.instance';
 
 const plan = {
@@ -52,6 +53,9 @@ const plan = {
     // Node handle stages below). On the Node/Express path it's a no-op and falls
     // through to the runtime-coupled stages.
     'handleWebFetch',
+    // Protocol 2026-07-28. Runs before the session-era handlers because it is
+    // claimed by an explicit per-request version declaration, never by fallback.
+    'handleMcp2026',
     'handleLegacySse',
     'handleSse',
     'handleStreamableHttp',
@@ -369,6 +373,35 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         debug: decision.debug,
       });
 
+      // ── MCP protocol 2026-07-28 ────────────────────────────────────────────
+      // This revision is stateless: no `initialize`, no `Mcp-Session-Id`, and
+      // version negotiation happens per-request. None of the session-oriented
+      // branches below apply to it, and several would actively misroute it
+      // (a sessionless POST becomes "send initialize first", a DELETE becomes
+      // session termination), so the claim is made here — before any of them.
+      //
+      // Detection is explicit: only a request that declares 2026-07-28 (or uses
+      // a method introduced by it) is claimed, which is what leaves every
+      // earlier revision on its original path.
+      if (isProtocol2026Request({ headers: request.headers, body: request.body })) {
+        const verify = this.state.required.verifyResult;
+        if (verify.kind === 'authorized') {
+          request[ServerRequestTokens.auth] = verify.authorization;
+        } else if (verify.kind === 'forbidden') {
+          this.logger.warn(`[${this.requestId}] mcp-2026: forbidden, insufficient scope`);
+          this.respond(httpRespond.forbidden({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
+          return;
+        } else {
+          this.logger.warn(`[${this.requestId}] mcp-2026: unauthorized`);
+          this.respond(httpRespond.unauthorized({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
+          return;
+        }
+
+        this.logger.verbose(`[${this.requestId}] routing to mcp-2026 pipeline`);
+        this.state.set('intent', 'mcp-2026');
+        return;
+      }
+
       // #380 — Detect JSON-RPC POST/GET requests without a session/initialize
       // and surface a structured JSON-RPC error envelope instead of letting
       // them fall through to Express's default 404 (which returns HTML and
@@ -652,6 +685,34 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // FlowControl is expected control flow, not an error
       if (!(error instanceof FlowControl)) {
         this.logError(error, 'handleWebFetch');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * MCP protocol 2026-07-28. Delegates to `handle:mcp-2026`, which owns header
+   * validation, `server/discover`, `subscriptions/listen`, MRTR, and result
+   * decoration for that revision.
+   */
+  @Stage('handleMcp2026', {
+    filter: ({
+      state: {
+        required: { intent },
+      },
+    }) => intent === 'mcp-2026',
+  })
+  async handleMcp2026() {
+    try {
+      const response = await this.scope.runFlow('handle:mcp-2026', this.rawInput);
+      if (response) {
+        this.respond(response);
+      }
+      this.handled();
+    } catch (error) {
+      // FlowControl is expected control flow, not an error
+      if (!(error instanceof FlowControl)) {
+        this.logError(error, 'handleMcp2026');
       }
       throw error;
     }
