@@ -1,0 +1,338 @@
+---
+title: 'Protocol Versions'
+description: 'How FrontMCP serves MCP 2026-07-28 alongside every earlier revision'
+icon: 'code-branch'
+---
+
+FrontMCP speaks **every MCP revision from `2024-11-05` through `2026-07-28`** on
+the same endpoint. There is no configuration switch: the revision is selected
+per request, from what the client presents.
+
+<Info>
+  `2026-07-28` is a large breaking revision — it removes sessions, the
+  `initialize` handshake, and the server→client request direction. Existing
+  clients are unaffected: a request that does not declare `2026-07-28` takes the
+  exact same code path it always did.
+</Info>
+
+## How a revision is selected
+
+A request is served as `2026-07-28` when **any** of these is true:
+
+- its `params._meta` carries `io.modelcontextprotocol/protocolVersion` (a key
+  that exists only in this revision);
+- its `MCP-Protocol-Version` header names a version the session-based pipeline
+  does not know (so an unknown or future version gets a proper `-32022` instead
+  of a confusing session error);
+- its method is `server/discover` or `subscriptions/listen`.
+
+Everything else — including every request carrying `Mcp-Session-Id`, and every
+`initialize` — is served by the session pipeline unchanged.
+
+### Default for unversioned requests
+
+A client that names a revision always gets that revision. For a bare JSON-RPC
+call that names none — no `initialize`, no `Mcp-Session-Id`, no
+`MCP-Protocol-Version` — the fallback is configurable:
+
+```ts
+@FrontMcp({
+  transport: {
+    // '2026-07-28' | 'legacy'
+    defaultProtocolVersion: '2026-07-28',
+  },
+})
+```
+
+| Runtime                                | Default        | Why                                                                       |
+| -------------------------------------- | -------------- | ------------------------------------------------------------------------- |
+| Cloudflare Workers / other V8 isolates | `'2026-07-28'` | Stateless fits the runtime; no session means no Durable Object is needed. |
+| Node (and everything else)             | `'legacy'`     | Existing deployments keep their exact behaviour.                          |
+
+<Note>
+  When the SERVER defaults a request to this revision, the mirrored-header rules
+  are **not** enforced — the client never opted into SEP-2243, so requiring
+  `Mcp-Method` / `Mcp-Name` would turn a working call into a `400`. Headers that
+  ARE present are still validated. Once a client declares `2026-07-28` itself,
+  the full contract applies.
+</Note>
+
+## What changed in 2026-07-28
+
+### Statelessness
+
+There is no `initialize` and no `Mcp-Session-Id`. Every request carries its own
+protocol version, client capabilities, and (optionally) client identity:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_weather",
+    "arguments": { "location": "Seattle, WA" },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": { "name": "ExampleClient", "version": "1.0.0" },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+```
+
+Capabilities are **per request**. FrontMCP never carries a declaration from one
+request to the next.
+
+### `server/discover`
+
+Replaces `initialize` as the (optional) up-front negotiation step:
+
+```bash
+curl -X POST https://example.com/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+The result lists `supportedVersions`, `capabilities` (including `extensions`),
+and `instructions`.
+
+### Mirrored request headers
+
+Streamable HTTP mirrors body fields into headers so intermediaries can route
+without parsing the body. FrontMCP **validates** that the two agree and rejects
+a mismatch with `400` + `-32020`:
+
+| Header                 | Source                       | Required for                                  |
+| ---------------------- | ---------------------------- | --------------------------------------------- |
+| `MCP-Protocol-Version` | `_meta` protocol version     | all requests                                  |
+| `Mcp-Method`           | `method`                     | all requests                                  |
+| `Mcp-Name`             | `params.name` / `params.uri` | `tools/call`, `prompts/get`, `resources/read` |
+| `Mcp-Param-{Name}`     | an `x-mcp-header` argument   | tool calls that supply the argument           |
+
+Values that are not header-safe travel Base64-wrapped as `=?base64?…?=`;
+FrontMCP decodes before comparing.
+
+To mirror a tool argument into a header, annotate it in the schema:
+
+```ts
+const inputSchema = {
+  region: z.string().describe('Region to query').meta({ 'x-mcp-header': 'Region' }),
+  query: z.string(),
+};
+```
+
+### Result envelope
+
+Every result carries `resultType` (`"complete"`, `"input_required"`, or
+`"task"`) plus `_meta["io.modelcontextprotocol/serverInfo"]`. List and read
+results additionally carry caching hints:
+
+```json
+{
+  "resultType": "complete",
+  "tools": [],
+  "ttlMs": 60000,
+  "cacheScope": "private",
+  "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "My Server", "version": "1.0.0" } }
+}
+```
+
+`cacheScope` is `public` for anonymous traffic and `private` whenever the result
+could vary by caller.
+
+### Multi Round-Trip Requests (MRTR)
+
+The server→client request direction is gone. When a tool calls `this.elicit()`,
+`this.sample()`, or `this.listRoots()`, FrontMCP answers the **original**
+request with an interim result:
+
+```json
+{
+  "resultType": "input_required",
+  "inputRequests": {
+    "elicitation-1": {
+      "method": "elicitation/create",
+      "params": { "message": "Proceed?", "requestedSchema": { "type": "object" } }
+    }
+  },
+  "requestState": "<opaque>"
+}
+```
+
+The client gathers the input and re-issues the same request — with a **new**
+JSON-RPC id — carrying `inputResponses` and the echoed `requestState`.
+
+<Warning>
+  `requestState` round-trips through the client, so FrontMCP signs it (HMAC-SHA256)
+  and binds it to the authenticated principal, the originating request, and a
+  10-minute expiry. A tampered, replayed, or expired blob is discarded and the
+  exchange restarts.
+</Warning>
+
+Tools are **replayed**, not resumed: the tool runs again from the top and the
+recorded answers resolve inline. Keep tool bodies idempotent up to the point
+they ask for input.
+
+### Request-scoped notifications
+
+`logging/setLevel` is gone. A client opts in per request:
+
+```json
+"_meta": {
+  "io.modelcontextprotocol/logLevel": "info",
+  "progressToken": "tok-1"
+}
+```
+
+FrontMCP then answers with an SSE stream carrying `notifications/message` and
+`notifications/progress` for that request, terminated by the final response. A
+request that omits `logLevel` receives no log notifications at all.
+
+### `subscriptions/listen`
+
+Replaces the standalone GET stream and `resources/subscribe`/`unsubscribe`:
+
+```json
+{
+  "method": "subscriptions/listen",
+  "params": {
+    "notifications": {
+      "toolsListChanged": true,
+      "resourceSubscriptions": ["proto://config"]
+    }
+  }
+}
+```
+
+The response is a long-lived SSE stream. Its first message is
+`notifications/subscriptions/acknowledged`, reporting which types the server
+actually honors; every message carries
+`_meta["io.modelcontextprotocol/subscriptionId"]`.
+
+### Removed methods and verbs
+
+`initialize`, `notifications/initialized`, `ping`, `logging/setLevel`,
+`notifications/roots/list_changed`, `resources/subscribe`,
+`resources/unsubscribe`, `tasks/list`, and `tasks/result` return
+`404` + `-32601`. HTTP `GET` and `DELETE` on the MCP endpoint return `405`.
+
+### Error codes
+
+| Code     | Meaning                                                        |
+| -------- | -------------------------------------------------------------- |
+| `-32020` | `HeaderMismatch` — headers disagree with the body              |
+| `-32021` | `MissingRequiredClientCapability`                              |
+| `-32022` | `UnsupportedProtocolVersion` (carries `supported`/`requested`) |
+| `-32602` | Resource not found (was `-32002` before this revision)         |
+
+## Tasks extension
+
+Tasks moved out of the core protocol into `io.modelcontextprotocol/tasks`. A
+client declares it per request:
+
+```json
+"io.modelcontextprotocol/clientCapabilities": {
+  "extensions": { "io.modelcontextprotocol/tasks": {} }
+}
+```
+
+A tool declaring `execution: { taskSupport: 'optional' }` then answers with a
+handle instead of running inline:
+
+```json
+{ "resultType": "task", "task": { "taskId": "…", "status": "working", "ttlMs": 60000, "pollIntervalMs": 50 } }
+```
+
+Poll `tasks/get` until terminal. If the task reports `input_required`, answer its
+`inputRequests` with `tasks/update`. `tasks/cancel` still works.
+
+<Warning>
+  Tasks require an **authenticated** caller under `2026-07-28`. With no protocol
+  sessions, an anonymous task could not be scoped to its creator, so FrontMCP
+  refuses to create one on a public server rather than pooling unrelated callers
+  into a shared namespace.
+</Warning>
+
+## Client support
+
+The upstream `@modelcontextprotocol/sdk` client does not speak this revision, so
+FrontMCP ships its own:
+
+```ts
+import { McpStatelessClient } from '@frontmcp/sdk';
+
+const client = new McpStatelessClient({
+  url: 'https://example.com/mcp',
+  capabilities: { elicitation: { form: {} } },
+  handlers: {
+    onElicit: async (params) => ({ action: 'accept', content: { confirmed: true } }),
+  },
+});
+
+await client.discover();
+await client.listTools();
+const result = await client.callTool('confirm', { action: 'deploy' });
+```
+
+The client handles the MRTR retry loop and task polling internally, so
+`callTool` resolves with the final result either way. It also drops tools whose
+`x-mcp-header` annotations are invalid, as the spec requires.
+
+### Proxying a 2026 remote
+
+A remote app can negotiate the revision:
+
+```ts
+transportOptions: {
+  // 'legacy' (default) | '2026-07-28' | 'auto'
+  protocolVersion: 'auto',
+}
+```
+
+`auto` probes `server/discover` and falls back to the session transports when
+the remote does not answer it.
+
+## Authorization changes
+
+- Authorization responses now carry the RFC 9207 `iss` parameter, and FrontMCP
+  **validates** a present `iss` against the provider's recorded issuer before
+  redeeming the code.
+- Dynamic Client Registration accepts `application_type` (`web` | `native`,
+  defaulting to `web`).
+- Re-registering an upstream provider under a different issuer discards
+  credentials bound to the previous authorization server.
+- DCR is **deprecated** in favour of
+  [Client ID Metadata Documents](/frontmcp/authentication/cimd); it remains
+  available for authorization servers that have not adopted CIMD.
+
+## Deprecations
+
+Still functional, but new servers should not adopt them:
+
+- **Roots** — pass directories via tool parameters or server configuration.
+- **Sampling** — integrate with an LLM provider API directly.
+- **Logging** — log to `stderr` or use OpenTelemetry.
+- **HTTP+SSE transport** — migrate to Streamable HTTP.
+
+## Cloudflare Workers
+
+A Worker serves this revision natively and defaults to it: `server/discover`,
+stateless `tools/call`, `subscriptions/listen` and the mirrored-header rules all
+work through the same `fetch` handler, and no session is minted. Legacy clients
+that send `initialize` keep working on the same endpoint.
+
+Skills served over MCP (`skill://` resources, `skills/search` / `skills/load` /
+`skills/list`) go through the shared handler set, so they are available under
+2026-07-28 without extra configuration.
+
+## Observability
+
+OpenTelemetry context propagates through `_meta` (SEP-414). Send `traceparent`,
+`tracestate`, or `baggage` and FrontMCP echoes them on the result so a client can
+stitch its span to the server's.

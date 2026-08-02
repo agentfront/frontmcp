@@ -12,6 +12,10 @@ export const intentSchema = z.union([
   z.literal('stateful-http'),
   z.literal('stateless-http'),
   z.literal('delete-session'),
+  // Protocol 2026-07-28: stateless, sessionless, per-request version negotiation.
+  // Decided by the router from the request's headers/`_meta`, not by the bitmap
+  // rules below — those describe the session-oriented transports only.
+  z.literal('mcp-20260728'),
   z.literal('unknown'),
 ]);
 
@@ -40,7 +44,8 @@ export type HttpRequestIntent =
   | 'streamable-http'
   | 'stateful-http'
   | 'stateless-http'
-  | 'delete-session';
+  | 'delete-session'
+  | 'mcp-20260728';
 
 export type Intent = HttpRequestIntent | 'unknown';
 

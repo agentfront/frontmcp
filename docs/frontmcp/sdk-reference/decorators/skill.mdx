@@ -93,13 +93,13 @@ function Skill(providedMetadata: SkillMetadata): ClassDecorator
 
 These properties align with the [Anthropic Agent Skills specification](https://agentskills.io/specification):
 
-| Property        | Type                     | Description                                                       |
-| --------------- | ------------------------ | ----------------------------------------------------------------- |
-| `license`       | `string`                 | License name or reference (e.g. `'MIT'`, `'Apache-2.0'`)          |
-| `compatibility` | `string`                 | Environment requirements (max 500 chars)                          |
-| `specMetadata`  | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`)            |
-| `allowedTools`  | `string`                 | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
-| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `examples`, `assets`)  |
+| Property        | Type                     | Description                                                                  |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------- |
+| `license`       | `string`                 | License name or reference (e.g. `'MIT'`, `'Apache-2.0'`)                     |
+| `compatibility` | `string`                 | Environment requirements (max 500 chars)                                     |
+| `specMetadata`  | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`)                       |
+| `allowedTools`  | `string`                 | Space-delimited pre-approved tools (maps to spec `allowed-tools`)            |
+| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `examples`, `assets`) |
 
 ## Instruction Sources
 

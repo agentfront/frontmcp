@@ -180,14 +180,14 @@ with the user's answers as environment variables — matching FrontMCP's existin
 
 Type resolution:
 
-| FrontMCP schema                               | MCPB `type`           |
-| --------------------------------------------- | --------------------- |
-| `z.string()`                                  | `string`              |
-| `z.number()` / `z.number().int()`             | `number`              |
-| `z.boolean()`                                 | `boolean`             |
-| `z.array(z.string())`                         | `string` + `multiple` |
-| `userConfig.key.type: 'directory'` override   | `directory`           |
-| `userConfig.key.type: 'file'` override        | `file`                |
+| FrontMCP schema                             | MCPB `type`           |
+| ------------------------------------------- | --------------------- |
+| `z.string()`                                | `string`              |
+| `z.number()` / `z.number().int()`           | `number`              |
+| `z.boolean()`                               | `boolean`             |
+| `z.array(z.string())`                       | `string` + `multiple` |
+| `userConfig.key.type: 'directory'` override | `directory`           |
+| `userConfig.key.type: 'file'` override      | `file`                |
 
 Defaults are stripped automatically when `sensitive: true` so secrets never
 leak into the manifest.
@@ -268,16 +268,16 @@ jobs:
 
 ## CLI flags
 
-| Flag                   | Description                                                              |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `--target mcpb`        | Selects the MCPB target                                                  |
-| `-o, --out-dir <dir>`  | Output root — the archive lands at `{out-dir}/mcpb/{name}-{version}.mcpb`|
-| `-e, --entry <path>`   | Manually specify the server entry file                                   |
-| `--sea`                | Also build an SEA binary for the host platform                           |
-| `--merge-from <dir>`   | Merge pre-built cross-platform binaries from `{dir}/{platform}/{name}`   |
-| `--icon <path>`        | Override the icon path                                                   |
-| `--no-deterministic`   | Disable deterministic archive output (use for diagnostics only)          |
-| `--stage-only`         | Leave the staging directory intact and skip zipping                      |
+| Flag                  | Description                                                               |
+| --------------------- | ------------------------------------------------------------------------- |
+| `--target mcpb`       | Selects the MCPB target                                                   |
+| `-o, --out-dir <dir>` | Output root — the archive lands at `{out-dir}/mcpb/{name}-{version}.mcpb` |
+| `-e, --entry <path>`  | Manually specify the server entry file                                    |
+| `--sea`               | Also build an SEA binary for the host platform                            |
+| `--merge-from <dir>`  | Merge pre-built cross-platform binaries from `{dir}/{platform}/{name}`    |
+| `--icon <path>`       | Override the icon path                                                    |
+| `--no-deterministic`  | Disable deterministic archive output (use for diagnostics only)           |
+| `--stage-only`        | Leave the staging directory intact and skip zipping                       |
 
 ## Validate an archive
 
@@ -308,14 +308,14 @@ and for absolute paths that should probably be `${__dirname}/…`.
 
 ## Troubleshooting
 
-| Symptom                                            | Cause / Fix                                                                                                           |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `@frontmcp/sdk is required for schema extraction` | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                              |
-| Archive > 100 MB                                   | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                             |
-| `Unknown substitution variable`                    | Only the allow-listed variables above and declared `user_config` keys are valid.                                      |
-| `entry_point is not present in the archive`        | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.           |
-| `platform_overrides.darwin-arm64.command` missing  | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.     |
-| Two builds produce different SHA-256s              | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content. |
+| Symptom                                           | Cause / Fix                                                                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/sdk is required for schema extraction` | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                               |
+| Archive > 100 MB                                  | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                              |
+| `Unknown substitution variable`                   | Only the allow-listed variables above and declared `user_config` keys are valid.                                       |
+| `entry_point is not present in the archive`       | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.           |
+| `platform_overrides.darwin-arm64.command` missing | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.     |
+| Two builds produce different SHA-256s             | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content. |
 
 ## Reference
 

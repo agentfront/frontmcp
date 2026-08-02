@@ -14,12 +14,12 @@ Guard is powered by the `@frontmcp/guard` library and integrates directly into t
 
 ## Why Guard?
 
-| Threat | Without Guard | With Guard |
-| ------ | ------------- | ---------- |
-| **Client flooding requests** | Server overwhelmed | Rate-limited per user/IP |
-| **Tool running forever** | Hangs, resource leak | Timeout protection |
-| **Unbounded parallelism** | Resource exhaustion | Controlled concurrency |
-| **Malicious IPs** | Open access | IP allow/deny filtering |
+| Threat                       | Without Guard        | With Guard               |
+| ---------------------------- | -------------------- | ------------------------ |
+| **Client flooding requests** | Server overwhelmed   | Rate-limited per user/IP |
+| **Tool running forever**     | Hangs, resource leak | Timeout protection       |
+| **Unbounded parallelism**    | Resource exhaustion  | Controlled concurrency   |
+| **Malicious IPs**            | Open access          | IP allow/deny filtering  |
 
 ---
 
@@ -33,18 +33,19 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
 @Tool({
-  name: 'search',
-  description: 'Search documents',
-  inputSchema: { query: z.string() },
-  rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
-  timeout: { executeMs: 10_000 },
+name: 'search',
+description: 'Search documents',
+inputSchema: { query: z.string() },
+rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
+timeout: { executeMs: 10_000 },
 })
 class SearchTool extends ToolContext {
-  async execute({ query }: { query: string }) {
-    return { results: await this.get(SearchService).search(query) };
-  }
+async execute({ query }: { query: string }) {
+return { results: await this.get(SearchService).search(query) };
 }
-```
+}
+
+````
 
 ```typescript Function Style
 import { tool } from '@frontmcp/sdk';
@@ -59,7 +60,8 @@ const SearchTool = tool({
 })(async ({ query }, ctx) => {
   return { results: await ctx.get(SearchService).search(query) };
 });
-```
+````
+
 </CodeGroup>
 
 ---
@@ -131,13 +133,13 @@ The global rate limit is checked **before** per-entity limits. Both must pass fo
 
 Partition keys determine how rate limits are bucketed:
 
-| Strategy | Description | Use Case |
-| -------- | ----------- | -------- |
-| `'global'` | Single shared bucket | Server-wide limits |
-| `'ip'` | Per client IP address | Prevent IP-based abuse |
-| `'session'` | Per MCP session ID | Per-connection limits |
-| `'userId'` | Per authenticated user | Per-user quotas |
-| Custom function | `(ctx) => string` | Tenant, org, or custom grouping |
+| Strategy        | Description            | Use Case                        |
+| --------------- | ---------------------- | ------------------------------- |
+| `'global'`      | Single shared bucket   | Server-wide limits              |
+| `'ip'`          | Per client IP address  | Prevent IP-based abuse          |
+| `'session'`     | Per MCP session ID     | Per-connection limits           |
+| `'userId'`      | Per authenticated user | Per-user quotas                 |
+| Custom function | `(ctx) => string`      | Tenant, org, or custom grouping |
 
 **Custom partition key example:**
 
@@ -274,12 +276,12 @@ class MyApp {}
 
 ### Supported IP Formats
 
-| Format | Example |
-| ------ | ------- |
-| IPv4 address | `192.168.1.1` |
-| IPv4 CIDR | `10.0.0.0/8` |
-| IPv6 address | `2001:db8::1` |
-| IPv6 CIDR | `2001:db8::/32` |
+| Format           | Example              |
+| ---------------- | -------------------- |
+| IPv4 address     | `192.168.1.1`        |
+| IPv4 CIDR        | `10.0.0.0/8`         |
+| IPv6 address     | `2001:db8::1`        |
+| IPv6 CIDR        | `2001:db8::/32`      |
 | IPv4-mapped IPv6 | `::ffff:192.168.1.1` |
 
 ### Proxy Configuration
@@ -334,13 +336,13 @@ class ProductionApp {}
 
 ### Configuration Precedence
 
-| Guard Type | Per-Entity Config | App Default | Fallback |
-| ---------- | ---------------- | ----------- | -------- |
-| Rate limit | `@Tool({ rateLimit })` | `throttle.defaultRateLimit` | No limit |
-| Concurrency | `@Tool({ concurrency })` | `throttle.defaultConcurrency` | No limit |
-| Timeout | `@Tool({ timeout })` | `throttle.defaultTimeout` | No timeout |
-| IP filter | N/A (app-level only) | `throttle.ipFilter` | No filter |
-| Global rate limit | N/A (app-level only) | `throttle.global` | No limit |
+| Guard Type        | Per-Entity Config        | App Default                   | Fallback   |
+| ----------------- | ------------------------ | ----------------------------- | ---------- |
+| Rate limit        | `@Tool({ rateLimit })`   | `throttle.defaultRateLimit`   | No limit   |
+| Concurrency       | `@Tool({ concurrency })` | `throttle.defaultConcurrency` | No limit   |
+| Timeout           | `@Tool({ timeout })`     | `throttle.defaultTimeout`     | No timeout |
+| IP filter         | N/A (app-level only)     | `throttle.ipFilter`           | No filter  |
+| Global rate limit | N/A (app-level only)     | `throttle.global`             | No limit   |
 
 ---
 
@@ -403,14 +405,14 @@ throttle: {
 
 Guard throws specific error classes when limits are exceeded:
 
-| Error Class | Code | HTTP Status | When Thrown |
-| ----------- | ---- | ----------- | ---------- |
-| `RateLimitError` | `RATE_LIMIT_EXCEEDED` | 429 | Request exceeds rate limit |
-| `ConcurrencyLimitError` | `CONCURRENCY_LIMIT` | 429 | No concurrency slot available |
-| `QueueTimeoutError` | `QUEUE_TIMEOUT` | 429 | Queue wait time exceeded |
-| `ExecutionTimeoutError` | `EXECUTION_TIMEOUT` | 408 | Execution exceeded deadline |
-| `IpBlockedError` | `IP_BLOCKED` | 403 | Client IP is on deny list |
-| `IpNotAllowedError` | `IP_NOT_ALLOWED` | 403 | Client IP not on allow list |
+| Error Class             | Code                  | HTTP Status | When Thrown                   |
+| ----------------------- | --------------------- | ----------- | ----------------------------- |
+| `RateLimitError`        | `RATE_LIMIT_EXCEEDED` | 429         | Request exceeds rate limit    |
+| `ConcurrencyLimitError` | `CONCURRENCY_LIMIT`   | 429         | No concurrency slot available |
+| `QueueTimeoutError`     | `QUEUE_TIMEOUT`       | 429         | Queue wait time exceeded      |
+| `ExecutionTimeoutError` | `EXECUTION_TIMEOUT`   | 408         | Execution exceeded deadline   |
+| `IpBlockedError`        | `IP_BLOCKED`          | 403         | Client IP is on deny list     |
+| `IpNotAllowedError`     | `IP_NOT_ALLOWED`      | 403         | Client IP not on allow list   |
 
 These errors are automatically serialized to appropriate MCP error responses by the transport layer.
 
@@ -443,46 +445,46 @@ The agent flow follows the same stage ordering: `acquireQuota` → `acquireSemap
 
 ### `RateLimitConfig`
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `maxRequests` | `number` | *required* | Maximum requests allowed in the window |
-| `windowMs` | `number` | `60000` | Time window in milliseconds |
-| `partitionBy` | `PartitionKey` | `'global'` | Partition strategy for bucketing |
+| Field         | Type           | Default    | Description                            |
+| ------------- | -------------- | ---------- | -------------------------------------- |
+| `maxRequests` | `number`       | _required_ | Maximum requests allowed in the window |
+| `windowMs`    | `number`       | `60000`    | Time window in milliseconds            |
+| `partitionBy` | `PartitionKey` | `'global'` | Partition strategy for bucketing       |
 
 ### `ConcurrencyConfig`
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `maxConcurrent` | `number` | *required* | Maximum simultaneous executions |
-| `queueTimeoutMs` | `number` | `0` | Max wait time for a slot (0 = no wait) |
-| `partitionBy` | `PartitionKey` | `'global'` | Partition strategy for bucketing |
+| Field            | Type           | Default    | Description                            |
+| ---------------- | -------------- | ---------- | -------------------------------------- |
+| `maxConcurrent`  | `number`       | _required_ | Maximum simultaneous executions        |
+| `queueTimeoutMs` | `number`       | `0`        | Max wait time for a slot (0 = no wait) |
+| `partitionBy`    | `PartitionKey` | `'global'` | Partition strategy for bucketing       |
 
 ### `TimeoutConfig`
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `executeMs` | `number` | *required* | Maximum execution time in milliseconds |
+| Field       | Type     | Default    | Description                            |
+| ----------- | -------- | ---------- | -------------------------------------- |
+| `executeMs` | `number` | _required_ | Maximum execution time in milliseconds |
 
 ### `IpFilterConfig`
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `allowList` | `string[]` | `[]` | IPs or CIDR ranges to always allow |
-| `denyList` | `string[]` | `[]` | IPs or CIDR ranges to always block |
-| `defaultAction` | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy` | `boolean` | `false` | Trust `X-Forwarded-For` header |
-| `trustedProxyDepth` | `number` | `1` | Max proxy hops to trust |
+| Field               | Type                | Default   | Description                         |
+| ------------------- | ------------------- | --------- | ----------------------------------- |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow  |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block  |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
+| `trustProxy`        | `boolean`           | `false`   | Trust `X-Forwarded-For` header      |
+| `trustedProxyDepth` | `number`            | `1`       | Max proxy hops to trust             |
 
 ### `GuardConfig` (App-Level)
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `enabled` | `boolean` | *required* | Enable or disable all guard features |
-| `storage` | `StorageConfig` | in-memory | Storage backend configuration |
-| `keyPrefix` | `string` | `'mcp:guard:'` | Prefix for all storage keys |
-| `global` | `RateLimitConfig` | — | Global rate limit for all requests |
-| `globalConcurrency` | `ConcurrencyConfig` | — | Global concurrency limit |
-| `defaultRateLimit` | `RateLimitConfig` | — | Default per-entity rate limit |
-| `defaultConcurrency` | `ConcurrencyConfig` | — | Default per-entity concurrency |
-| `defaultTimeout` | `TimeoutConfig` | — | Default per-entity timeout |
-| `ipFilter` | `IpFilterConfig` | — | IP filtering configuration |
+| Field                | Type                | Default        | Description                          |
+| -------------------- | ------------------- | -------------- | ------------------------------------ |
+| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features |
+| `storage`            | `StorageConfig`     | in-memory      | Storage backend configuration        |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys          |
+| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests   |
+| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit             |
+| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default per-entity rate limit        |
+| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default per-entity concurrency       |
+| `defaultTimeout`     | `TimeoutConfig`     | —              | Default per-entity timeout           |
+| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration           |

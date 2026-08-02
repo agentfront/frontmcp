@@ -11,12 +11,12 @@ When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP support
 
 ## Auth Modes
 
-| Mode | Header | Validation | Use Case |
-| ---- | ------ | ---------- | -------- |
-| `inherit` (default) | Same as parent server | Same as parent server | Reuse the server's primary auth |
-| `public` | None | None | Development, internal networks |
-| `api-key` | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality | Machine-to-machine, server-to-server |
-| `bearer` | `Authorization: Bearer <jwt>` | JWT signature via JWKS | User-scoped access, IdP integration |
+| Mode                | Header                                       | Validation             | Use Case                             |
+| ------------------- | -------------------------------------------- | ---------------------- | ------------------------------------ |
+| `inherit` (default) | Same as parent server                        | Same as parent server  | Reuse the server's primary auth      |
+| `public`            | None                                         | None                   | Development, internal networks       |
+| `api-key`           | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality   | Machine-to-machine, server-to-server |
+| `bearer`            | `Authorization: Bearer <jwt>`                | JWT signature via JWKS | User-scoped access, IdP integration  |
 
 ## Configuration
 
@@ -121,10 +121,10 @@ When a skill session is active, the **Tool Authorization Guard** enforces which 
 
 ### Policy Modes
 
-| Mode | Behavior |
-| ---- | -------- |
-| `strict` | Tool must be in the skill's allowlist. Denied tools throw `ToolNotAllowedError`. |
-| `approval` | Unlisted tools trigger an approval flow. Throws `ToolApprovalRequiredError` until approved. |
+| Mode         | Behavior                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `strict`     | Tool must be in the skill's allowlist. Denied tools throw `ToolNotAllowedError`.                                         |
+| `approval`   | Unlisted tools trigger an approval flow. Throws `ToolApprovalRequiredError` until approved.                              |
 | `permissive` | Unlisted tools are **allowed with a warning** (logging only) — not silently unenforced. This is the default policy mode. |
 
 ### Usage
@@ -162,20 +162,20 @@ const hasSkill = guard.hasActiveSkill(); // true/false
 
 Thrown when a tool is not in the skill's allowlist (strict mode).
 
-| Property | Type | Description |
-| -------- | ---- | ----------- |
-| `toolName` | `string` | The denied tool name |
-| `skillId` | `string \| undefined` | Active skill session ID |
-| `reason` | `string` | The **denial** reason carried by this error: `not_in_allowlist`, `denied`, `rate_limited`, or `no_active_skill`. (The underlying `ToolAuthorizationResult['reason']` enum also includes the *grant* reasons `skill_allowlist` and `dynamically_approved`, which appear on a successful `guard.check()` result rather than on this error.) |
-| `allowedTools` | `string[]` | List of allowed tool names |
-| `mcpErrorCode` | `number` | MCP error code (`INVALID_REQUEST`) |
+| Property       | Type                  | Description                                                                                                                                                                                                                                                                                                                               |
+| -------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolName`     | `string`              | The denied tool name                                                                                                                                                                                                                                                                                                                      |
+| `skillId`      | `string \| undefined` | Active skill session ID                                                                                                                                                                                                                                                                                                                   |
+| `reason`       | `string`              | The **denial** reason carried by this error: `not_in_allowlist`, `denied`, `rate_limited`, or `no_active_skill`. (The underlying `ToolAuthorizationResult['reason']` enum also includes the _grant_ reasons `skill_allowlist` and `dynamically_approved`, which appear on a successful `guard.check()` result rather than on this error.) |
+| `allowedTools` | `string[]`            | List of allowed tool names                                                                                                                                                                                                                                                                                                                |
+| `mcpErrorCode` | `number`              | MCP error code (`INVALID_REQUEST`)                                                                                                                                                                                                                                                                                                        |
 
 #### ToolApprovalRequiredError
 
 Thrown when a tool requires approval but has not been approved yet.
 
-| Property | Type | Description |
-| -------- | ---- | ----------- |
-| `toolName` | `string` | The tool requiring approval |
-| `skillId` | `string \| undefined` | Active skill session ID |
-| `mcpErrorCode` | `number` | MCP error code (`INVALID_REQUEST`) |
+| Property       | Type                  | Description                        |
+| -------------- | --------------------- | ---------------------------------- |
+| `toolName`     | `string`              | The tool requiring approval        |
+| `skillId`      | `string \| undefined` | Active skill session ID            |
+| `mcpErrorCode` | `number`              | MCP error code (`INVALID_REQUEST`) |

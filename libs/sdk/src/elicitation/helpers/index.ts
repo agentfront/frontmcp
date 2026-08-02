@@ -7,6 +7,14 @@
  */
 
 export { performElicit, generateElicitationId, type ElicitHelperDeps, type ElicitTransport } from './elicit.helper';
+export {
+  performListRoots,
+  performSample,
+  type Root,
+  type SampleOptions,
+  type SampleResult,
+  type SamplingMessage,
+} from './mrtr-request.helper';
 export { extendOutputSchemaForElicitation } from './extend-output-schema';
 export { validateElicitationContent, type ElicitationValidationResult } from './validate-elicitation-content';
 export {

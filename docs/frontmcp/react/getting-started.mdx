@@ -102,12 +102,12 @@ const [callTool, state] = useCallTool('track_event', { server: 'analytics' });
 
 The provider status progresses through:
 
-| Status | Description |
-|--------|-------------|
-| `idle` | Not connected yet (`autoConnect={false}`) |
-| `connecting` | `server.connect()` in progress |
-| `connected` | Client ready, tools/resources/prompts populated |
-| `error` | Connection failed — see `error` field |
+| Status       | Description                                     |
+| ------------ | ----------------------------------------------- |
+| `idle`       | Not connected yet (`autoConnect={false}`)       |
+| `connecting` | `server.connect()` in progress                  |
+| `connected`  | Client ready, tools/resources/prompts populated |
+| `error`      | Connection failed — see `error` field           |
 
 Monitor status with `useFrontMcp()`:
 

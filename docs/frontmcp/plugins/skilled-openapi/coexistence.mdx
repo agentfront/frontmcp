@@ -10,15 +10,15 @@ The [OpenAPI adapter](/frontmcp/adapters/openapi-adapter) and the Skilled OpenAP
 
 ## At a glance
 
-| | OpenAPI Adapter | Skilled OpenAPI Plugin |
-| --- | --- | --- |
-| **Discovery unit** | One MCP tool per `operationId` | One MCP **skill** bundling many ops |
-| **Visible to MCP client** | Every operation (in `tools/list`) | Three meta-tools only; per-op tools hidden |
-| **When the spec changes** | Server redeploy | Bundle hot-swap (signed, atomic) |
-| **Bundle origin trust** | None — spec is local | Signed bundles from CI / SaaS |
-| **ABAC per operation** | Via `@FrontMcp({ authorities })` on the adapter-mounted tools | Native; `requiredAuthorities` on the bundle's operations |
-| **Runtime cost** | `mcp-from-openapi` parser at boot | Pre-parsed bundle (parsing happens in your CI) |
-| **Sweet spot** | 5–20 hand-curated endpoints | 50+ endpoints, multi-service, customer-facing |
+|                           | OpenAPI Adapter                                               | Skilled OpenAPI Plugin                                   |
+| ------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| **Discovery unit**        | One MCP tool per `operationId`                                | One MCP **skill** bundling many ops                      |
+| **Visible to MCP client** | Every operation (in `tools/list`)                             | Three meta-tools only; per-op tools hidden               |
+| **When the spec changes** | Server redeploy                                               | Bundle hot-swap (signed, atomic)                         |
+| **Bundle origin trust**   | None — spec is local                                          | Signed bundles from CI / SaaS                            |
+| **ABAC per operation**    | Via `@FrontMcp({ authorities })` on the adapter-mounted tools | Native; `requiredAuthorities` on the bundle's operations |
+| **Runtime cost**          | `mcp-from-openapi` parser at boot                             | Pre-parsed bundle (parsing happens in your CI)           |
+| **Sweet spot**            | 5–20 hand-curated endpoints                                   | 50+ endpoints, multi-service, customer-facing            |
 
 ## When to use each
 

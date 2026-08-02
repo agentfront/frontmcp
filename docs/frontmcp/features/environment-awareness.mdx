@@ -56,53 +56,53 @@ availableWhen: {
 
 Operating system, matching [`process.platform`](https://nodejs.org/api/process.html#processplatform) values. Renamed from `platform` in issue #417 — the old name still works as a deprecated alias.
 
-| Value       | OS              |
-| ----------- | --------------- |
-| `'darwin'`  | macOS           |
-| `'linux'`   | Linux           |
-| `'win32'`   | Windows         |
-| `'freebsd'` | FreeBSD         |
+| Value       | OS      |
+| ----------- | ------- |
+| `'darwin'`  | macOS   |
+| `'linux'`   | Linux   |
+| `'win32'`   | Windows |
+| `'freebsd'` | FreeBSD |
 
 ### `runtime`
 
 JavaScript runtime:
 
-| Value        | Runtime                     |
-| ------------ | --------------------------- |
-| `'node'`     | Node.js                     |
-| `'bun'`      | Bun                         |
-| `'deno'`     | Deno                        |
-| `'edge'`     | Edge runtime (Vercel, CF)   |
-| `'browser'`  | Browser                     |
+| Value       | Runtime                   |
+| ----------- | ------------------------- |
+| `'node'`    | Node.js                   |
+| `'bun'`     | Bun                       |
+| `'deno'`    | Deno                      |
+| `'edge'`    | Edge runtime (Vercel, CF) |
+| `'browser'` | Browser                   |
 
 ### `deployment`
 
 Coarse deployment mode:
 
-| Value           | Description                  |
-| --------------- | ---------------------------- |
-| `'standalone'`  | Standard server              |
-| `'serverless'`  | Serverless (Lambda, Vercel)  |
-| `'distributed'` | Multi-pod HA mode            |
-| `'browser'`     | Browser bundle               |
+| Value           | Description                 |
+| --------------- | --------------------------- |
+| `'standalone'`  | Standard server             |
+| `'serverless'`  | Serverless (Lambda, Vercel) |
+| `'distributed'` | Multi-pod HA mode           |
+| `'browser'`     | Browser bundle              |
 
 ### `provider` (issue #417)
 
 Discriminated deploy provider. Lets `@Tool({ availableWhen: { provider: ['vercel'] } })` express provider-specific rules where `deployment: ['serverless']` is too coarse.
 
-| Value           | Detected via env var                 |
-| --------------- | ------------------------------------ |
-| `'bare'`        | No discriminating env var (default)  |
-| `'docker'`      | `/.dockerenv` exists                 |
-| `'vercel'`      | `VERCEL`                             |
-| `'lambda'`      | `AWS_LAMBDA_FUNCTION_NAME`           |
-| `'cloudflare'`  | `CF_PAGES`                           |
-| `'netlify'`     | `NETLIFY`                            |
-| `'azure'`       | `AZURE_FUNCTIONS_ENVIRONMENT`        |
-| `'gcp'`         | `K_SERVICE`                          |
-| `'fly'`         | `FLY_APP_NAME`                       |
-| `'render'`      | `RENDER`                             |
-| `'railway'`     | `RAILWAY_ENVIRONMENT`                |
+| Value          | Detected via env var                |
+| -------------- | ----------------------------------- |
+| `'bare'`       | No discriminating env var (default) |
+| `'docker'`     | `/.dockerenv` exists                |
+| `'vercel'`     | `VERCEL`                            |
+| `'lambda'`     | `AWS_LAMBDA_FUNCTION_NAME`          |
+| `'cloudflare'` | `CF_PAGES`                          |
+| `'netlify'`    | `NETLIFY`                           |
+| `'azure'`      | `AZURE_FUNCTIONS_ENVIRONMENT`       |
+| `'gcp'`        | `K_SERVICE`                         |
+| `'fly'`        | `FLY_APP_NAME`                      |
+| `'render'`     | `RENDER`                            |
+| `'railway'`    | `RAILWAY_ENVIRONMENT`               |
 
 Override the detection with `FRONTMCP_PROVIDER=<name>` (useful for tests, Docker images without a discriminating env var, etc.).
 
@@ -110,18 +110,18 @@ Override the detection with `FRONTMCP_PROVIDER=<name>` (useful for tests, Docker
 
 Build target produced by `frontmcp build --target <x>`. Always `'unknown'` in dev (`frontmcp dev`).
 
-| Value           | Source                                                |
-| --------------- | ----------------------------------------------------- |
-| `'unknown'`     | Dev mode (no build) or unrecognized value             |
-| `'node'`        | `frontmcp build --target node`                        |
-| `'distributed'` | `frontmcp build --target distributed`                 |
-| `'cli'`         | `frontmcp build --target cli`                         |
-| `'vercel'`      | `frontmcp build --target vercel`                      |
-| `'lambda'`      | `frontmcp build --target lambda`                      |
-| `'cloudflare'`  | `frontmcp build --target cloudflare`                  |
-| `'browser'`     | `frontmcp build --target browser`                     |
-| `'sdk'`         | `frontmcp build --target sdk`                         |
-| `'mcpb'`        | `frontmcp build --target mcpb`                        |
+| Value           | Source                                    |
+| --------------- | ----------------------------------------- |
+| `'unknown'`     | Dev mode (no build) or unrecognized value |
+| `'node'`        | `frontmcp build --target node`            |
+| `'distributed'` | `frontmcp build --target distributed`     |
+| `'cli'`         | `frontmcp build --target cli`             |
+| `'vercel'`      | `frontmcp build --target vercel`          |
+| `'lambda'`      | `frontmcp build --target lambda`          |
+| `'cloudflare'`  | `frontmcp build --target cloudflare`      |
+| `'browser'`     | `frontmcp build --target browser`         |
+| `'sdk'`         | `frontmcp build --target sdk`             |
+| `'mcpb'`        | `frontmcp build --target mcpb`            |
 
 Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` (inlined by the adapter) → `process.env.FRONTMCP_BUILD_TARGET` → `'unknown'`.
 
@@ -129,13 +129,13 @@ Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` (inlined by the adapter) �
 
 Per-call axis — set by the transport adapter / dispatcher on the request `ctx` to discriminate "who is calling this tool." Unlike the other axes (which are constant for the process lifetime), `surface` varies per request.
 
-| Value            | Source                                         |
-| ---------------- | ---------------------------------------------- |
-| `'mcp'`          | MCP `tools/call` (set by the MCP handler)      |
-| `'cli'`          | A `frontmcp <verb>` subcommand router (issue #409) |
+| Value            | Source                                                   |
+| ---------------- | -------------------------------------------------------- |
+| `'mcp'`          | MCP `tools/call` (set by the MCP handler)                |
+| `'cli'`          | A `frontmcp <verb>` subcommand router (issue #409)       |
 | `'agent'`        | Agent-to-tool dispatch (`ExecutionContextBase.callTool`) |
-| `'job'`          | Job runner                                     |
-| `'http-trigger'` | `@Channel` HTTP triggers                       |
+| `'job'`          | Job runner                                               |
+| `'http-trigger'` | `@Channel` HTTP triggers                                 |
 
 Example — block external MCP calls but allow agent dispatch:
 
@@ -151,11 +151,11 @@ Example — block external MCP calls but allow agent dispatch:
 
 `NODE_ENV` value:
 
-| Value            | Description                  |
-| ---------------- | ---------------------------- |
-| `'production'`   | Production                   |
-| `'development'`  | Development                  |
-| `'test'`         | Testing                      |
+| Value           | Description |
+| --------------- | ----------- |
+| `'production'`  | Production  |
+| `'development'` | Development |
+| `'test'`        | Testing     |
 
 ### Structured errors
 
@@ -266,9 +266,9 @@ class SystemCommandTool extends ToolContext {
 
 `RuntimeContext` exposes the operating system via the `os` property; `platform` remains as a deprecated alias for backward compatibility (issue #417) and resolves to the same value. New code should read `this.runtimeContext.os` directly.
 
-| Method                            | Returns          | Description                                                                                              |
-| --------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
-| `this.runtimeContext.os`          | `string`         | Modern OS axis access — same values as `process.platform` (`'darwin'`, `'linux'`, `'win32'`, …)         |
+| Method                            | Returns          | Description                                                                                               |
+| --------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `this.runtimeContext.os`          | `string`         | Modern OS axis access — same values as `process.platform` (`'darwin'`, `'linux'`, `'win32'`, …)           |
 | `this.isPlatform('darwin')`       | `boolean`        | **Deprecated alias** — checks the legacy `.platform` field. Prefer `this.runtimeContext.os === 'darwin'`. |
 | `this.isRuntime('node')`          | `boolean`        | Check JavaScript runtime                                                                                  |
 | `this.isDeployment('serverless')` | `boolean`        | Check deployment mode                                                                                     |
@@ -363,14 +363,15 @@ This is distinct from a `ToolNotFoundError` (404), helping clients understand wh
 `availableWhen` is **not** the same as authorization or rule-based filtering. It is evaluated at the **registry level** during server boot, not in HTTP request flows.
 </Warning>
 
-| Concern | Layer | When | Scope |
-| --- | --- | --- | --- |
-| **`availableWhen`** | Registry (boot) | Server startup | Process-wide, immutable |
-| **Authorization** | HTTP flow (request) | Per request | Per session/user |
-| **Rule-based filtering** | HTTP flow (request) | Per request | Dynamic, policy-driven |
-| **`hideFromDiscovery`** | Registry (listing) | Per list call | Soft hide (entry still callable) |
+| Concern                  | Layer               | When           | Scope                            |
+| ------------------------ | ------------------- | -------------- | -------------------------------- |
+| **`availableWhen`**      | Registry (boot)     | Server startup | Process-wide, immutable          |
+| **Authorization**        | HTTP flow (request) | Per request    | Per session/user                 |
+| **Rule-based filtering** | HTTP flow (request) | Per request    | Dynamic, policy-driven           |
+| **`hideFromDiscovery`**  | Registry (listing)  | Per list call  | Soft hide (entry still callable) |
 
 Key differences:
+
 - `availableWhen` is a **hard constraint** — filtered entries cannot be listed OR called
 - It runs at **registry initialization**, not in HTTP flows — no per-request overhead
 - The runtime context (OS, runtime, deployment, NODE_ENV) is detected once and cached
@@ -387,6 +388,7 @@ When entries have `availableWhen` constraints, the SDK logs a summary at startup
 ```
 
 Empty constraint arrays trigger a warning (likely a configuration bug):
+
 ```
 [ToolRegistry] "broken_tool" has empty availableWhen arrays for [platform] — this entry will never be available.
 ```

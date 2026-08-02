@@ -378,6 +378,21 @@ export interface TransportOptionsInterface {
    */
   protocol?: ProtocolPreset | ProtocolConfig;
 
+  /**
+   * Which MCP revision to serve a request that does not identify its own.
+   *
+   * A client that names a revision always gets that revision — this only
+   * decides the fallback for a bare JSON-RPC call carrying no `initialize`, no
+   * `Mcp-Session-Id`, and no `MCP-Protocol-Version`.
+   *
+   * - `'2026-07-28'` — serve it statelessly. No session is minted, so the
+   *   deployment needs no session storage (on Cloudflare, no Durable Object).
+   * - `'legacy'` — the session/`initialize` pipeline, as before.
+   *
+   * @default '2026-07-28' on V8-isolate runtimes (Cloudflare Workers), `'legacy'` elsewhere
+   */
+  defaultProtocolVersion?: '2026-07-28' | 'legacy';
+
   // ============================================
   // Persistence Configuration
   // ============================================

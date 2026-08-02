@@ -109,6 +109,21 @@ export interface TaskRecord {
   progressToken?: string | number;
 
   /**
+   * Server→client requests the task is blocked on, set when `status` is
+   * `input_required` (tasks extension, protocol 2026-07-28).
+   *
+   * The client reads these from `tasks/get` and answers them with
+   * `tasks/update` — the task equivalent of the MRTR round trip.
+   */
+  inputRequests?: Record<string, { method: string; params?: Record<string, unknown> }>;
+
+  /**
+   * Answers accumulated from `tasks/update` calls, keyed the same way as
+   * {@link inputRequests}. Replayed into the tool when the task resumes.
+   */
+  inputResponses?: Record<string, Record<string, unknown>>;
+
+  /**
    * Identifies the runtime executing the task so we can orphan-detect and
    * cross-process cancel.
    *

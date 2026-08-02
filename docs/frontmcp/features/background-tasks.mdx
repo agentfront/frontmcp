@@ -52,11 +52,11 @@ export default class BigReportTool extends ToolContext {
 
 `execution.taskSupport` is surfaced on `tools/list` items so clients know which code path to use:
 
-| Value         | Semantics                                                                 | Default |
-|---------------|---------------------------------------------------------------------------|---------|
-| `'forbidden'` | Task-augmented calls rejected with `-32601` (spec-mandated default)       | ✓       |
-| `'optional'`  | Client MAY augment — synchronous calls still work                          |         |
-| `'required'`  | Synchronous calls rejected with `-32601` — task invocation is mandatory    |         |
+| Value         | Semantics                                                               | Default |
+| ------------- | ----------------------------------------------------------------------- | ------- |
+| `'forbidden'` | Task-augmented calls rejected with `-32601` (spec-mandated default)     | ✓       |
+| `'optional'`  | Client MAY augment — synchronous calls still work                       |         |
+| `'required'`  | Synchronous calls rejected with `-32601` — task invocation is mandatory |         |
 
 ### 2. Enable the task subsystem
 
@@ -239,11 +239,11 @@ FrontMCP emits one on initial creation (on the same SSE stream as the `CreateTas
 
 The task store ships with three backends. Pick based on your deployment topology:
 
-| Backend        | Config field                 | Pub/sub mechanism                              | Use when…                                                                      |
-|----------------|------------------------------|------------------------------------------------|-------------------------------------------------------------------------------|
-| **Memory**     | (default, no config)         | In-process `EventEmitter`                      | Single-node dev / test. Tasks are ephemeral — a server restart wipes them.    |
-| **Redis / Upstash** | `tasks.redis: {...}`     | Native `PUBLISH`/`SUBSCRIBE`                   | Multi-node deployments that need `tasks/cancel` and blocking `tasks/result` to route to whichever node is running the task. |
-| **SQLite**     | `tasks.sqlite: { path }`     | In-process `EventEmitter` (same-process only)  | Single-host persistence across invocations. **Required** for `runner: 'cli'` — the detached worker and the host share a database file. |
+| Backend             | Config field             | Pub/sub mechanism                             | Use when…                                                                                                                              |
+| ------------------- | ------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Memory**          | (default, no config)     | In-process `EventEmitter`                     | Single-node dev / test. Tasks are ephemeral — a server restart wipes them.                                                             |
+| **Redis / Upstash** | `tasks.redis: {...}`     | Native `PUBLISH`/`SUBSCRIBE`                  | Multi-node deployments that need `tasks/cancel` and blocking `tasks/result` to route to whichever node is running the task.            |
+| **SQLite**          | `tasks.sqlite: { path }` | In-process `EventEmitter` (same-process only) | Single-host persistence across invocations. **Required** for `runner: 'cli'` — the detached worker and the host share a database file. |
 
 ### Redis / Upstash example
 
@@ -300,7 +300,7 @@ CREATE INDEX idx_mcp_tasks_expires ON mcp_tasks (expires_at);
 Pub/sub on SQLite is a **Node `EventEmitter` scoped to the process that opened the file** — not a SQLite feature. In practice:
 
 - When the same process creates the task, runs the worker, and reads the result, `tasks/result` unblocks via the EventEmitter immediately. ✅
-- When a *different* process reads the same database (a later CLI invocation, a sibling host), there's no cross-process notification — that caller's `tasks/result` falls back to polling the record via `tasks/get`. The built-in re-check after `subscribeTerminal` catches the terminal state on the next tick.
+- When a _different_ process reads the same database (a later CLI invocation, a sibling host), there's no cross-process notification — that caller's `tasks/result` falls back to polling the record via `tasks/get`. The built-in re-check after `subscribeTerminal` catches the terminal state on the next tick.
 
 For truly cross-process blocking across a fleet, use Redis/Upstash.
 
@@ -358,19 +358,19 @@ interface TasksConfig {
 
 ## Error reference
 
-| Scenario                                                           | JSON-RPC code | Error name                         |
-|--------------------------------------------------------------------|---------------|------------------------------------|
-| `tools/call` with `task` field on a tool with `taskSupport: 'forbidden'` or unset | `-32601` | `TaskAugmentationNotSupportedError` |
-| `tools/call` without `task` field on a tool with `taskSupport: 'required'`        | `-32601` | `TaskAugmentationRequiredError`     |
-| `tasks/get` / `tasks/result` / `tasks/cancel` with unknown or foreign `taskId`    | `-32602` | `TaskNotFoundError`                 |
-| `tasks/cancel` on a task already in a terminal state                              | `-32602` | `TaskAlreadyTerminalError`          |
-| `tasks` subsystem not initialized (misconfiguration)                              | `-32603` | `TaskStoreNotInitializedError`      |
+| Scenario                                                                          | JSON-RPC code | Error name                          |
+| --------------------------------------------------------------------------------- | ------------- | ----------------------------------- |
+| `tools/call` with `task` field on a tool with `taskSupport: 'forbidden'` or unset | `-32601`      | `TaskAugmentationNotSupportedError` |
+| `tools/call` without `task` field on a tool with `taskSupport: 'required'`        | `-32601`      | `TaskAugmentationRequiredError`     |
+| `tasks/get` / `tasks/result` / `tasks/cancel` with unknown or foreign `taskId`    | `-32602`      | `TaskNotFoundError`                 |
+| `tasks/cancel` on a task already in a terminal state                              | `-32602`      | `TaskAlreadyTerminalError`          |
+| `tasks` subsystem not initialized (misconfiguration)                              | `-32603`      | `TaskStoreNotInitializedError`      |
 
 All errors are thrown from the flow layer and translated to MCP SDK `McpError` instances in the transport handlers — consumers see the exact codes above on the wire.
 
 ## Security
 
-- **Session binding** — task records are keyed by `sessionId`. A `tasks/get`/`result`/`cancel` from a different session returns `-32602` with the *same* message as an unknown taskId, so attackers cannot enumerate valid task IDs via disambiguating errors.
+- **Session binding** — task records are keyed by `sessionId`. A `tasks/get`/`result`/`cancel` from a different session returns `-32602` with the _same_ message as an unknown taskId, so attackers cannot enumerate valid task IDs via disambiguating errors.
 - **Authorities enforced before task creation** — task-augmented `tools/call` runs the tool's `authorities` check synchronously, BEFORE any `CreateTaskResult` is returned. Unauthorized callers never see a taskId and no record is written. The `createTaskIfRequested` stage sits between `checkEntryAuthorities` and `createToolCallContext` in the `tools:call-tool` flow plan.
 - **Cryptographic task IDs** — generated via `randomUUID()` from `@frontmcp/utils` (≥ 122 bits of entropy). Guessing another session's taskId is not a viable attack even before the session binding check.
 - **SQLite store encryption** — when `tasks.sqlite.encryption.secret` is configured, the `record_json` column is encrypted at rest with AES-256-GCM (indexed columns stay plaintext so `list`/`get` queries remain fast).
@@ -393,14 +393,14 @@ Run it locally with `yarn nx test:e2e demo-e2e-security` — a failure there mea
 
 FrontMCP ships **two runners** for task execution: an in-process runner (default, for long-lived servers) and a CLI runner that spawns **detached child processes** backed by a shared SQLite database. Pick whichever matches the process lifecycle guarantees of your target.
 
-| Runtime                                        | Status           | Runner                | Notes                                                                                                                                                               |
-|------------------------------------------------|------------------|-----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Node.js (streamable-http server, Bun, Deno)    | ✅ Fully supported | `in-process` (default) | Primary target. Covered by `demo-e2e-tasks`.                                                                                                                        |
-| Node.js (stdio)                                 | ✅ Supported       | `in-process` or `cli`  | For stdio hosts that want tasks to survive session disconnect, switch to `runner: 'cli'` + `tasks.sqlite`.                                                           |
-| CLI hosts (short-lived MCP endpoints)           | ✅ Fully supported | `cli`                  | Each task runs in a detached worker process that writes its outcome to SQLite. `tasks/cancel` sends SIGTERM to the worker. Covered by `demo-e2e-cli-tasks`.          |
-| Browser bundle                                   | ✅ Supported        | `in-process` (memory)  | SQLite and detached spawn aren't available in the browser. Use the default in-process runner with the memory store.                                                   |
-| Serverless (AWS Lambda, Vercel Node functions)  | ❌ Not supported     | —                      | The `in-process` runner is killed when the Lambda returns; the `cli` runner can't spawn detached processes from most serverless sandboxes. Set `tasks.strict: true` to fail startup instead of silently accepting tasks that will never run. Move long work to a queue worker. |
-| Edge runtime (Vercel Edge, Cloudflare Workers)   | ❌ Not supported     | —                      | No spawn; no long-lived runtime. FrontMCP logs a warning at startup (throws when `tasks.strict: true`).                                                              |
+| Runtime                                        | Status             | Runner                 | Notes                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------- | ------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Node.js (streamable-http server, Bun, Deno)    | ✅ Fully supported | `in-process` (default) | Primary target. Covered by `demo-e2e-tasks`.                                                                                                                                                                                                                                   |
+| Node.js (stdio)                                | ✅ Supported       | `in-process` or `cli`  | For stdio hosts that want tasks to survive session disconnect, switch to `runner: 'cli'` + `tasks.sqlite`.                                                                                                                                                                     |
+| CLI hosts (short-lived MCP endpoints)          | ✅ Fully supported | `cli`                  | Each task runs in a detached worker process that writes its outcome to SQLite. `tasks/cancel` sends SIGTERM to the worker. Covered by `demo-e2e-cli-tasks`.                                                                                                                    |
+| Browser bundle                                 | ✅ Supported       | `in-process` (memory)  | SQLite and detached spawn aren't available in the browser. Use the default in-process runner with the memory store.                                                                                                                                                            |
+| Serverless (AWS Lambda, Vercel Node functions) | ❌ Not supported   | —                      | The `in-process` runner is killed when the Lambda returns; the `cli` runner can't spawn detached processes from most serverless sandboxes. Set `tasks.strict: true` to fail startup instead of silently accepting tasks that will never run. Move long work to a queue worker. |
+| Edge runtime (Vercel Edge, Cloudflare Workers) | ❌ Not supported   | —                      | No spawn; no long-lived runtime. FrontMCP logs a warning at startup (throws when `tasks.strict: true`).                                                                                                                                                                        |
 
 ### Why the CLI runner exists
 

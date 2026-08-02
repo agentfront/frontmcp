@@ -41,6 +41,7 @@ function CartControls() {
 ```
 
 When a zod `schema` is provided:
+
 - The schema is converted to JSON Schema automatically via `toJSONSchema` from `zod/v4`
 - Input is validated via `safeParse` before reaching your `execute` callback
 - Invalid input returns an error `CallToolResult` with issue details
@@ -69,15 +70,15 @@ useDynamicTool({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | — | **Required.** MCP tool name |
-| `description` | `string` | — | **Required.** Description for agents |
-| `schema` | `z.ZodObject` | — | Zod schema (mutually exclusive with `inputSchema`) |
-| `inputSchema` | `Record<string, unknown>` | — | JSON Schema (mutually exclusive with `schema`) |
-| `execute` | `(args) => Promise<CallToolResult>` | — | **Required.** Tool handler |
-| `enabled` | `boolean` | `true` | Conditionally enable/disable |
-| `server` | `string` | — | Target a named server |
+| Option        | Type                                | Default | Description                                        |
+| ------------- | ----------------------------------- | ------- | -------------------------------------------------- |
+| `name`        | `string`                            | —       | **Required.** MCP tool name                        |
+| `description` | `string`                            | —       | **Required.** Description for agents               |
+| `schema`      | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`) |
+| `inputSchema` | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)     |
+| `execute`     | `(args) => Promise<CallToolResult>` | —       | **Required.** Tool handler                         |
+| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable                       |
+| `server`      | `string`                            | —       | Target a named server                              |
 
 ### Conditional Registration
 
@@ -136,15 +137,15 @@ function UserPreferences({ preferences }: { preferences: UserPrefs }) {
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `uri` | `string` | — | **Required.** Resource URI |
-| `name` | `string` | — | **Required.** Human-readable name |
-| `description` | `string` | — | Description for agents |
-| `mimeType` | `string` | — | Content MIME type |
-| `read` | `() => Promise<ReadResourceResult>` | — | **Required.** Read handler |
-| `enabled` | `boolean` | `true` | Conditionally enable/disable |
-| `server` | `string` | — | Target a named server |
+| Option        | Type                                | Default | Description                       |
+| ------------- | ----------------------------------- | ------- | --------------------------------- |
+| `uri`         | `string`                            | —       | **Required.** Resource URI        |
+| `name`        | `string`                            | —       | **Required.** Human-readable name |
+| `description` | `string`                            | —       | Description for agents            |
+| `mimeType`    | `string`                            | —       | Content MIME type                 |
+| `read`        | `() => Promise<ReadResourceResult>` | —       | **Required.** Read handler        |
+| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable      |
+| `server`      | `string`                            | —       | Target a named server             |
 
 ---
 
@@ -177,13 +178,13 @@ function Dashboard() {
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `rootRef` | `RefObject<HTMLElement \| null>` | — | **Required.** Root element ref |
-| `uri` | `string` | `'react://component-tree'` | Resource URI |
-| `maxDepth` | `number` | `10` | Maximum traversal depth |
-| `includeProps` | `boolean` | `false` | Include `data-*` attributes as props |
-| `server` | `string` | — | Target a named server |
+| Option         | Type                             | Default                    | Description                          |
+| -------------- | -------------------------------- | -------------------------- | ------------------------------------ |
+| `rootRef`      | `RefObject<HTMLElement \| null>` | —                          | **Required.** Root element ref       |
+| `uri`          | `string`                         | `'react://component-tree'` | Resource URI                         |
+| `maxDepth`     | `number`                         | `10`                       | Maximum traversal depth              |
+| `includeProps` | `boolean`                        | `false`                    | Include `data-*` attributes as props |
+| `server`       | `string`                         | —                          | Target a named server                |
 
 ### Output Format
 

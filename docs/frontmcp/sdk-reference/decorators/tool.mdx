@@ -77,24 +77,24 @@ class BadTool extends ToolContext {
 
 ### Optional Properties
 
-| Property         | Type                        | Description                                                                       |
-| ---------------- | --------------------------- | --------------------------------------------------------------------------------- |
-| `description`    | `string`                    | Tool description for AI                                                            |
-| `outputSchema`   | `ZodType`                   | Output validation schema                                                           |
-| `id`             | `string`                    | Stable identifier for tracking                                                     |
-| `tags`           | `string[]`                  | Categorization tags                                                                |
-| `visibility`     | `'public' \| 'hidden' \| 'internal'` | Discovery visibility. `hidden` hides from public lists; `internal` keeps it for in-process callers only |
-| `rateLimit`      | `RateLimitConfig`           | Per-tool rate limit (`maxRequests`, `windowMs`, `partitionBy`)                     |
-| `concurrency`    | `ConcurrencyConfig`         | Per-tool concurrency cap (`maxConcurrent`, optional queue config)                  |
-| `timeout`        | `TimeoutConfig`             | Per-tool execution timeout (`executeMs`)                                           |
-| `availableWhen`  | `EntryAvailability`         | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
-| `execution`      | `{ taskSupport?: 'required' \| 'optional' \| 'forbidden' }` | MCP 2025-11-25 task-execution mode for `tools/list` items |
-| `authProviders`  | `ToolAuthProviderRef[]`     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`) |
-| `annotations`    | `ToolAnnotations`           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) |
-| `examples`       | `ToolExample[]`             | Usage examples (`description`, `input`, optional `output`)                          |
-| `ui`             | `ToolUIConfig`              | UI widget configuration (`template`, `csp`, sanitization options)                   |
-| `output`         | `OutputPolicy`              | Output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Resolved Tool > App > server > default. See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
-| `hideFromDiscovery` | `boolean`                | Deprecated alias for `visibility: 'hidden'`                                         |
+| Property            | Type                                                        | Description                                                                                                                                                                                                                         |
+| ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`       | `string`                                                    | Tool description for AI                                                                                                                                                                                                             |
+| `outputSchema`      | `ZodType`                                                   | Output validation schema                                                                                                                                                                                                            |
+| `id`                | `string`                                                    | Stable identifier for tracking                                                                                                                                                                                                      |
+| `tags`              | `string[]`                                                  | Categorization tags                                                                                                                                                                                                                 |
+| `visibility`        | `'public' \| 'hidden' \| 'internal'`                        | Discovery visibility. `hidden` hides from public lists; `internal` keeps it for in-process callers only                                                                                                                             |
+| `rateLimit`         | `RateLimitConfig`                                           | Per-tool rate limit (`maxRequests`, `windowMs`, `partitionBy`)                                                                                                                                                                      |
+| `concurrency`       | `ConcurrencyConfig`                                         | Per-tool concurrency cap (`maxConcurrent`, optional queue config)                                                                                                                                                                   |
+| `timeout`           | `TimeoutConfig`                                             | Per-tool execution timeout (`executeMs`)                                                                                                                                                                                            |
+| `availableWhen`     | `EntryAvailability`                                         | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness)                                                                                                |
+| `execution`         | `{ taskSupport?: 'required' \| 'optional' \| 'forbidden' }` | MCP 2025-11-25 task-execution mode for `tools/list` items                                                                                                                                                                           |
+| `authProviders`     | `ToolAuthProviderRef[]`                                     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`)                                                                                                                                       |
+| `annotations`       | `ToolAnnotations`                                           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)                                                                                                                                           |
+| `examples`          | `ToolExample[]`                                             | Usage examples (`description`, `input`, optional `output`)                                                                                                                                                                          |
+| `ui`                | `ToolUIConfig`                                              | UI widget configuration (`template`, `csp`, sanitization options)                                                                                                                                                                   |
+| `output`            | `OutputPolicy`                                              | Output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Resolved Tool > App > server > default. See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
+| `hideFromDiscovery` | `boolean`                                                   | Deprecated alias for `visibility: 'hidden'`                                                                                                                                                                                         |
 
 ### Output Types
 

@@ -18,21 +18,21 @@ const [callTool, state, reset] = useCallTool<InputType, OutputType>(toolName, op
 
 ### Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `toolName` | `string` | Name of the MCP tool |
-| `options.server` | `string` | Target a named server |
-| `options.onSuccess` | `(data) => void` | Success callback |
-| `options.onError` | `(error) => void` | Error callback |
-| `options.resetOnToolChange` | `boolean` | Reset state when `toolName` changes (default: `true`) |
+| Parameter                   | Type              | Description                                           |
+| --------------------------- | ----------------- | ----------------------------------------------------- |
+| `toolName`                  | `string`          | Name of the MCP tool                                  |
+| `options.server`            | `string`          | Target a named server                                 |
+| `options.onSuccess`         | `(data) => void`  | Success callback                                      |
+| `options.onError`           | `(error) => void` | Error callback                                        |
+| `options.resetOnToolChange` | `boolean`         | Reset state when `toolName` changes (default: `true`) |
 
 ### Return Value
 
-| Index | Type | Description |
-|-------|------|-------------|
-| `[0]` | `(args: TInput) => Promise<TOutput \| null>` | Call function |
-| `[1]` | `ToolState<TOutput>` | `{ data, loading, error, called }` |
-| `[2]` | `() => void` | Reset state |
+| Index | Type                                         | Description                        |
+| ----- | -------------------------------------------- | ---------------------------------- |
+| `[0]` | `(args: TInput) => Promise<TOutput \| null>` | Call function                      |
+| `[1]` | `ToolState<TOutput>`                         | `{ data, loading, error, called }` |
+| `[2]` | `() => void`                                 | Reset state                        |
 
 ### Example
 
@@ -254,15 +254,15 @@ useDynamicTool({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | — | **Required.** Tool name |
-| `description` | `string` | — | **Required.** Description for agents |
-| `schema` | `z.ZodObject` | — | Zod schema (mutually exclusive with `inputSchema`) |
-| `inputSchema` | `Record<string, unknown>` | — | JSON Schema (mutually exclusive with `schema`) |
-| `execute` | `(args) => Promise<CallToolResult>` | — | **Required.** Handler |
-| `enabled` | `boolean` | `true` | Conditionally enable/disable |
-| `server` | `string` | — | Target a named server |
+| Option        | Type                                | Default | Description                                        |
+| ------------- | ----------------------------------- | ------- | -------------------------------------------------- |
+| `name`        | `string`                            | —       | **Required.** Tool name                            |
+| `description` | `string`                            | —       | **Required.** Description for agents               |
+| `schema`      | `z.ZodObject`                       | —       | Zod schema (mutually exclusive with `inputSchema`) |
+| `inputSchema` | `Record<string, unknown>`           | —       | JSON Schema (mutually exclusive with `schema`)     |
+| `execute`     | `(args) => Promise<CallToolResult>` | —       | **Required.** Handler                              |
+| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable                       |
+| `server`      | `string`                            | —       | Target a named server                              |
 
 ---
 
@@ -286,15 +286,15 @@ useDynamicResource({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `uri` | `string` | — | **Required.** Resource URI |
-| `name` | `string` | — | **Required.** Human-readable name |
-| `description` | `string` | — | Description for agents |
-| `mimeType` | `string` | — | Content MIME type |
-| `read` | `() => Promise<ReadResourceResult>` | — | **Required.** Handler |
-| `enabled` | `boolean` | `true` | Conditionally enable/disable |
-| `server` | `string` | — | Target a named server |
+| Option        | Type                                | Default | Description                       |
+| ------------- | ----------------------------------- | ------- | --------------------------------- |
+| `uri`         | `string`                            | —       | **Required.** Resource URI        |
+| `name`        | `string`                            | —       | **Required.** Human-readable name |
+| `description` | `string`                            | —       | Description for agents            |
+| `mimeType`    | `string`                            | —       | Content MIME type                 |
+| `read`        | `() => Promise<ReadResourceResult>` | —       | **Required.** Handler             |
+| `enabled`     | `boolean`                           | `true`  | Conditionally enable/disable      |
+| `server`      | `string`                            | —       | Target a named server             |
 
 ---
 
@@ -318,13 +318,13 @@ useComponentTree({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `rootRef` | `RefObject<HTMLElement \| null>` | — | **Required.** Root element ref |
-| `uri` | `string` | `'react://component-tree'` | Resource URI |
-| `maxDepth` | `number` | `10` | Max traversal depth |
-| `includeProps` | `boolean` | `false` | Include `data-*` attributes |
-| `server` | `string` | — | Target a named server |
+| Option         | Type                             | Default                    | Description                    |
+| -------------- | -------------------------------- | -------------------------- | ------------------------------ |
+| `rootRef`      | `RefObject<HTMLElement \| null>` | —                          | **Required.** Root element ref |
+| `uri`          | `string`                         | `'react://component-tree'` | Resource URI                   |
+| `maxDepth`     | `number`                         | `10`                       | Max traversal depth            |
+| `includeProps` | `boolean`                        | `false`                    | Include `data-*` attributes    |
+| `server`       | `string`                         | —                          | Target a named server          |
 
 ---
 

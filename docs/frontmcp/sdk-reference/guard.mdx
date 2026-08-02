@@ -24,57 +24,57 @@ When using `@frontmcp/sdk`, guard features are integrated automatically via the 
 
 Top-level configuration for the guard system. Passed to `@FrontMcp({ throttle: ... })` or `createGuardManager()`.
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `enabled` | `boolean` | *required* | Enable or disable all guard features |
-| `storage` | `StorageConfig` | in-memory | Storage backend configuration |
-| `keyPrefix` | `string` | `'mcp:guard:'` | Prefix for all storage keys |
-| `global` | `RateLimitConfig` | — | Global rate limit for all requests |
-| `globalConcurrency` | `ConcurrencyConfig` | — | Global concurrency limit |
-| `defaultRateLimit` | `RateLimitConfig` | — | Default rate limit for entities without explicit config |
-| `defaultConcurrency` | `ConcurrencyConfig` | — | Default concurrency for entities without explicit config |
-| `defaultTimeout` | `TimeoutConfig` | — | Default timeout for entity execution |
-| `ipFilter` | `IpFilterConfig` | — | IP filtering configuration |
+| Field                | Type                | Default        | Description                                              |
+| -------------------- | ------------------- | -------------- | -------------------------------------------------------- |
+| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features                     |
+| `storage`            | `StorageConfig`     | in-memory      | Storage backend configuration                            |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys                              |
+| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests                       |
+| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit                                 |
+| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default rate limit for entities without explicit config  |
+| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default concurrency for entities without explicit config |
+| `defaultTimeout`     | `TimeoutConfig`     | —              | Default timeout for entity execution                     |
+| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration                               |
 
 ### `RateLimitConfig`
 
 Configuration for sliding window rate limiting.
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `maxRequests` | `number` | *required* | Maximum requests allowed in the window |
-| `windowMs` | `number` | `60000` | Time window in milliseconds |
-| `partitionBy` | `PartitionKey` | `'global'` | How to bucket rate limits |
+| Field         | Type           | Default    | Description                            |
+| ------------- | -------------- | ---------- | -------------------------------------- |
+| `maxRequests` | `number`       | _required_ | Maximum requests allowed in the window |
+| `windowMs`    | `number`       | `60000`    | Time window in milliseconds            |
+| `partitionBy` | `PartitionKey` | `'global'` | How to bucket rate limits              |
 
 ### `ConcurrencyConfig`
 
 Configuration for distributed semaphore concurrency control.
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `maxConcurrent` | `number` | *required* | Maximum simultaneous executions |
-| `queueTimeoutMs` | `number` | `0` | Max time (ms) to wait for a slot. `0` = reject immediately |
-| `partitionBy` | `PartitionKey` | `'global'` | How to bucket concurrency limits |
+| Field            | Type           | Default    | Description                                                |
+| ---------------- | -------------- | ---------- | ---------------------------------------------------------- |
+| `maxConcurrent`  | `number`       | _required_ | Maximum simultaneous executions                            |
+| `queueTimeoutMs` | `number`       | `0`        | Max time (ms) to wait for a slot. `0` = reject immediately |
+| `partitionBy`    | `PartitionKey` | `'global'` | How to bucket concurrency limits                           |
 
 ### `TimeoutConfig`
 
 Configuration for execution timeout.
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `executeMs` | `number` | *required* | Maximum execution time in milliseconds |
+| Field       | Type     | Default    | Description                            |
+| ----------- | -------- | ---------- | -------------------------------------- |
+| `executeMs` | `number` | _required_ | Maximum execution time in milliseconds |
 
 ### `IpFilterConfig`
 
 Configuration for IP-based access control.
 
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `allowList` | `string[]` | `[]` | IPs or CIDR ranges to always allow |
-| `denyList` | `string[]` | `[]` | IPs or CIDR ranges to always block |
-| `defaultAction` | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy` | `boolean` | `false` | Trust `X-Forwarded-For` header |
-| `trustedProxyDepth` | `number` | `1` | Max proxy hops to trust |
+| Field               | Type                | Default   | Description                         |
+| ------------------- | ------------------- | --------- | ----------------------------------- |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow  |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block  |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
+| `trustProxy`        | `boolean`           | `false`   | Trust `X-Forwarded-For` header      |
+| `trustedProxyDepth` | `number`            | `1`       | Max proxy hops to trust             |
 
 ### `PartitionKey`
 
@@ -90,11 +90,11 @@ type CustomPartitionKeyFn = (ctx: PartitionKeyContext) => string;
 
 **`PartitionKeyContext`:**
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `sessionId` | `string` | MCP session identifier |
-| `clientIp` | `string \| undefined` | Client IP address |
-| `userId` | `string \| undefined` | Authenticated user identifier |
+| Field       | Type                  | Description                   |
+| ----------- | --------------------- | ----------------------------- |
+| `sessionId` | `string`              | MCP session identifier        |
+| `clientIp`  | `string \| undefined` | Client IP address             |
+| `userId`    | `string \| undefined` | Authenticated user identifier |
 
 ---
 
@@ -124,11 +124,11 @@ async checkRateLimit(
 ): Promise<RateLimitResult>
 ```
 
-| Parameter | Description |
-| --------- | ----------- |
-| `entityName` | Tool or agent name |
+| Parameter      | Description                                                                           |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `entityName`   | Tool or agent name                                                                    |
 | `entityConfig` | Per-entity rate limit config. Falls back to `config.defaultRateLimit` if not provided |
-| `context` | Partition key context for key resolution |
+| `context`      | Partition key context for key resolution                                              |
 
 Returns `{ allowed: true, remaining: Infinity, resetMs: 0 }` if no config applies.
 
@@ -156,11 +156,11 @@ async acquireSemaphore(
 ): Promise<SemaphoreTicket | null>
 ```
 
-| Parameter | Description |
-| --------- | ----------- |
-| `entityName` | Tool or agent name |
+| Parameter      | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `entityName`   | Tool or agent name                                                       |
 | `entityConfig` | Per-entity concurrency config. Falls back to `config.defaultConcurrency` |
-| `context` | Partition key context for key resolution |
+| `context`      | Partition key context for key resolution                                 |
 
 Returns `SemaphoreTicket` on success, `null` if no config applies. May throw `QueueTimeoutError` if queue timeout expires.
 
@@ -238,11 +238,11 @@ If `estimatedCount < maxRequests`, the request is allowed and the current window
 
 **`RateLimitResult`:**
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `allowed` | `boolean` | Whether the request is allowed |
-| `remaining` | `number` | Requests remaining in the window |
-| `resetMs` | `number` | Milliseconds until window resets |
+| Field          | Type                  | Description                               |
+| -------------- | --------------------- | ----------------------------------------- |
+| `allowed`      | `boolean`             | Whether the request is allowed            |
+| `remaining`    | `number`              | Requests remaining in the window          |
+| `resetMs`      | `number`              | Milliseconds until window resets          |
 | `retryAfterMs` | `number \| undefined` | Recommended retry time (only when denied) |
 
 #### `reset()`
@@ -288,9 +288,9 @@ Uses pub/sub when available for efficient slot release detection, falls back to 
 
 **`SemaphoreTicket`:**
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `ticket` | `string` | Unique ticket identifier (UUID) |
+| Field       | Type                  | Description                       |
+| ----------- | --------------------- | --------------------------------- |
+| `ticket`    | `string`              | Unique ticket identifier (UUID)   |
 | `release()` | `() => Promise<void>` | Release the slot back to the pool |
 
 #### `getActiveCount()`
@@ -332,17 +332,18 @@ check(clientIp: string): IpFilterResult
 ```
 
 **Evaluation order:**
+
 1. Deny list (takes precedence)
 2. Allow list
 3. Default action
 
 **`IpFilterResult`:**
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `allowed` | `boolean` | Whether the IP is allowed |
-| `reason` | `'allowlisted' \| 'denylisted' \| 'default' \| undefined` | Reason for the decision |
-| `matchedRule` | `string \| undefined` | Specific IP or CIDR that matched |
+| Field         | Type                                                      | Description                      |
+| ------------- | --------------------------------------------------------- | -------------------------------- |
+| `allowed`     | `boolean`                                                 | Whether the IP is allowed        |
+| `reason`      | `'allowlisted' \| 'denylisted' \| 'default' \| undefined` | Reason for the decision          |
+| `matchedRule` | `string \| undefined`                                     | Specific IP or CIDR that matched |
 
 #### `isAllowListed()`
 
@@ -366,12 +367,13 @@ async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardMa
 
 **`CreateGuardManagerArgs`:**
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `config` | `GuardConfig` | Full guard configuration |
+| Field    | Type                       | Description                           |
+| -------- | -------------------------- | ------------------------------------- |
+| `config` | `GuardConfig`              | Full guard configuration              |
 | `logger` | `GuardLogger \| undefined` | Optional logger for diagnostic output |
 
 **Behavior:**
+
 1. Creates storage backend from `config.storage` (or in-memory if not set)
 2. Connects the storage backend
 3. Creates namespaced storage with `config.keyPrefix`
@@ -404,11 +406,11 @@ async function withTimeout<T>(
 ): Promise<T>
 ```
 
-| Parameter | Type | Description |
-| --------- | ---- | ----------- |
-| `fn` | `() => Promise<T>` | Async function to execute |
-| `timeoutMs` | `number` | Maximum execution time in milliseconds |
-| `entityName` | `string` | Name included in error message |
+| Parameter    | Type               | Description                            |
+| ------------ | ------------------ | -------------------------------------- |
+| `fn`         | `() => Promise<T>` | Async function to execute              |
+| `timeoutMs`  | `number`           | Maximum execution time in milliseconds |
+| `entityName` | `string`           | Name included in error message         |
 
 Throws `ExecutionTimeoutError` if the deadline is exceeded. Uses `AbortController` + `Promise.race` internally.
 
@@ -435,14 +437,14 @@ function resolvePartitionKey(
 ): string
 ```
 
-| Strategy | Resolved Value |
-| -------- | -------------- |
-| `undefined` | `'global'` |
-| `'global'` | `'global'` |
-| `'ip'` | `context.clientIp` or `'unknown-ip'` |
-| `'session'` | `context.sessionId` |
-| `'userId'` | `context.userId` or `'anonymous'` |
-| Custom function | `fn(context)` |
+| Strategy        | Resolved Value                       |
+| --------------- | ------------------------------------ |
+| `undefined`     | `'global'`                           |
+| `'global'`      | `'global'`                           |
+| `'ip'`          | `context.clientIp` or `'unknown-ip'` |
+| `'session'`     | `context.sessionId`                  |
+| `'userId'`      | `context.userId` or `'anonymous'`    |
+| Custom function | `fn(context)`                        |
 
 ---
 
@@ -485,54 +487,54 @@ class GuardError extends Error {
 
 Thrown when execution exceeds the configured timeout.
 
-| Property | Type | Value |
-| -------- | ---- | ----- |
-| `code` | `string` | `'EXECUTION_TIMEOUT'` |
-| `statusCode` | `number` | `408` |
-| `entityName` | `string` | Name of the tool/agent |
-| `timeoutMs` | `number` | Configured timeout value |
+| Property     | Type     | Value                    |
+| ------------ | -------- | ------------------------ |
+| `code`       | `string` | `'EXECUTION_TIMEOUT'`    |
+| `statusCode` | `number` | `408`                    |
+| `entityName` | `string` | Name of the tool/agent   |
+| `timeoutMs`  | `number` | Configured timeout value |
 
 ### `ConcurrencyLimitError`
 
 Thrown when no concurrency slot is available and `queueTimeoutMs` is 0.
 
-| Property | Type | Value |
-| -------- | ---- | ----- |
-| `code` | `string` | `'CONCURRENCY_LIMIT'` |
-| `statusCode` | `number` | `429` |
-| `entityName` | `string` | Name of the tool/agent |
+| Property        | Type     | Value                        |
+| --------------- | -------- | ---------------------------- |
+| `code`          | `string` | `'CONCURRENCY_LIMIT'`        |
+| `statusCode`    | `number` | `429`                        |
+| `entityName`    | `string` | Name of the tool/agent       |
 | `maxConcurrent` | `number` | Configured concurrency limit |
 
 ### `QueueTimeoutError`
 
 Thrown when a queued request exceeds its wait time.
 
-| Property | Type | Value |
-| -------- | ---- | ----- |
-| `code` | `string` | `'QUEUE_TIMEOUT'` |
-| `statusCode` | `number` | `429` |
-| `entityName` | `string` | Name of the tool/agent |
+| Property         | Type     | Value                    |
+| ---------------- | -------- | ------------------------ |
+| `code`           | `string` | `'QUEUE_TIMEOUT'`        |
+| `statusCode`     | `number` | `429`                    |
+| `entityName`     | `string` | Name of the tool/agent   |
 | `queueTimeoutMs` | `number` | Configured queue timeout |
 
 ### `IpBlockedError`
 
 Thrown when a client IP matches the deny list.
 
-| Property | Type | Value |
-| -------- | ---- | ----- |
-| `code` | `string` | `'IP_BLOCKED'` |
-| `statusCode` | `number` | `403` |
-| `clientIp` | `string` | The blocked IP address |
+| Property     | Type     | Value                  |
+| ------------ | -------- | ---------------------- |
+| `code`       | `string` | `'IP_BLOCKED'`         |
+| `statusCode` | `number` | `403`                  |
+| `clientIp`   | `string` | The blocked IP address |
 
 ### `IpNotAllowedError`
 
 Thrown when a client IP is not on the allow list and `defaultAction` is `'deny'`.
 
-| Property | Type | Value |
-| -------- | ---- | ----- |
-| `code` | `string` | `'IP_NOT_ALLOWED'` |
-| `statusCode` | `number` | `403` |
-| `clientIp` | `string` | The rejected IP address |
+| Property     | Type     | Value                   |
+| ------------ | -------- | ----------------------- |
+| `code`       | `string` | `'IP_NOT_ALLOWED'`      |
+| `statusCode` | `number` | `403`                   |
+| `clientIp`   | `string` | The rejected IP address |
 
 ---
 
@@ -551,11 +553,11 @@ import {
 } from '@frontmcp/guard';
 ```
 
-| Schema | Validates |
-| ------ | --------- |
-| `guardConfigSchema` | `GuardConfig` |
-| `rateLimitConfigSchema` | `RateLimitConfig` |
-| `concurrencyConfigSchema` | `ConcurrencyConfig` |
-| `timeoutConfigSchema` | `TimeoutConfig` |
-| `ipFilterConfigSchema` | `IpFilterConfig` |
-| `partitionKeySchema` | `PartitionKey` (string strategy or function) |
+| Schema                    | Validates                                    |
+| ------------------------- | -------------------------------------------- |
+| `guardConfigSchema`       | `GuardConfig`                                |
+| `rateLimitConfigSchema`   | `RateLimitConfig`                            |
+| `concurrencyConfigSchema` | `ConcurrencyConfig`                          |
+| `timeoutConfigSchema`     | `TimeoutConfig`                              |
+| `ipFilterConfigSchema`    | `IpFilterConfig`                             |
+| `partitionKeySchema`      | `PartitionKey` (string strategy or function) |

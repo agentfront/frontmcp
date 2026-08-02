@@ -11,11 +11,11 @@ FrontMCP bundles three ready-to-serve authentication demos under `apps/e2e/**`. 
 
 ## Projects at a glance
 
-| Project                 | Mode                   | Default port | Highlights                                                                      | Serve command                                     |
-| ----------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `demo-e2e-public`       | `public`               | `3100`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `PORT=3100 yarn nx serve demo-e2e-public`         |
-| `demo-e2e-orchestrated` | `orchestrated` (local) | `3121`       | Stateful sessions, consent UI, incremental auth controls                        | `PORT=3121 yarn nx serve demo-e2e-orchestrated`   |
-| `demo-e2e-transparent`  | `transparent`          | `3109`       | Proxies tokens to a remote IdP while keeping local transport policies           | `PORT=3109 yarn nx serve demo-e2e-transparent`    |
+| Project                 | Mode                   | Default port | Highlights                                                            | Serve command                                   |
+| ----------------------- | ---------------------- | ------------ | --------------------------------------------------------------------- | ----------------------------------------------- |
+| `demo-e2e-public`       | `public`               | `3100`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback | `PORT=3100 yarn nx serve demo-e2e-public`       |
+| `demo-e2e-orchestrated` | `orchestrated` (local) | `3121`       | Stateful sessions, consent UI, incremental auth controls              | `PORT=3121 yarn nx serve demo-e2e-orchestrated` |
+| `demo-e2e-transparent`  | `transparent`          | `3109`       | Proxies tokens to a remote IdP while keeping local transport policies | `PORT=3109 yarn nx serve demo-e2e-transparent`  |
 
 <Note>
 All commands assume `yarn install` has already been run at the repo root. The serve target runs the prebuilt `dist/.../main.js`, so it does **not** forward an `--port` flag — set the port via the `PORT` environment variable (`PORT=<n> yarn nx serve <project>`).

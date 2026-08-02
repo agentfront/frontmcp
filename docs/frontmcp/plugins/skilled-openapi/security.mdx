@@ -146,24 +146,24 @@ The check happens on each `callTool` the `run_workflow` script issues, with the 
 
 ## OWASP MCP Top 10 (2026) coverage
 
-| OWASP MCP risk | This plugin's defense |
-| --- | --- |
-| MCP-1 Tool poisoning | Bundle signing + bundle-diff log on every swap (rug-pull detection) |
-| MCP-2 Prompt injection (direct) | Inbound auth + meta-tool input schema strict validation |
-| MCP-3 Indirect prompt injection | Enclave-sandboxed `run_workflow` (script reaches upstream data only via `callTool`); output schema enforcement on each action |
-| MCP-4 Excessive agency | Per-skill ABAC + credential scoping + structured ABAC denial path |
-| MCP-5 Sensitive info disclosure | Outbound allowlist + audit log + no credential echo in logs/traces |
-| MCP-6 Insecure tool description | Signed-bundle origin + bundle-diff log surfaces description changes |
-| MCP-7 Confused deputy | RFC 8707 enforcement on every inbound JWT (caller-token passthrough) |
-| MCP-8 Supply chain | Bundle signing (RS256/Ed25519 JWT-of-hashes) + signed `integrity` envelope + pinned npm version |
-| MCP-9 Excessive permissions | Per-bundle credential allowlist + per-skill scoping |
-| MCP-10 Insufficient observability | OTel spans + audit log + bundle-diff log on every swap |
+| OWASP MCP risk                    | This plugin's defense                                                                                                         |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| MCP-1 Tool poisoning              | Bundle signing + bundle-diff log on every swap (rug-pull detection)                                                           |
+| MCP-2 Prompt injection (direct)   | Inbound auth + meta-tool input schema strict validation                                                                       |
+| MCP-3 Indirect prompt injection   | Enclave-sandboxed `run_workflow` (script reaches upstream data only via `callTool`); output schema enforcement on each action |
+| MCP-4 Excessive agency            | Per-skill ABAC + credential scoping + structured ABAC denial path                                                             |
+| MCP-5 Sensitive info disclosure   | Outbound allowlist + audit log + no credential echo in logs/traces                                                            |
+| MCP-6 Insecure tool description   | Signed-bundle origin + bundle-diff log surfaces description changes                                                           |
+| MCP-7 Confused deputy             | RFC 8707 enforcement on every inbound JWT (caller-token passthrough)                                                          |
+| MCP-8 Supply chain                | Bundle signing (RS256/Ed25519 JWT-of-hashes) + signed `integrity` envelope + pinned npm version                               |
+| MCP-9 Excessive permissions       | Per-bundle credential allowlist + per-skill scoping                                                                           |
+| MCP-10 Insufficient observability | OTel spans + audit log + bundle-diff log on every swap                                                                        |
 
 ## Indirect prompt injection mitigations
 
 The customer's REST API can return content (CRM names, ticket bodies, user-supplied fields) that contains instructions targeting the LLM. Defenses:
 
-- **Structural separation**: upstream responses never reach the LLM directly. Each `callTool` returns the action's `data` *into the sandboxed AgentScript*, and only the script's final `return <value>` (surfaced as `run_workflow`'s `{ success, value, error, stats }`) is handed back to the LLM. Raw response bodies are opaque to the model unless the script explicitly extracts and returns them.
+- **Structural separation**: upstream responses never reach the LLM directly. Each `callTool` returns the action's `data` _into the sandboxed AgentScript_, and only the script's final `return <value>` (surfaced as `run_workflow`'s `{ success, value, error, stats }`) is handed back to the LLM. Raw response bodies are opaque to the model unless the script explicitly extracts and returns them.
 - **Output schema validation as a bottleneck**: every response validated against the bundle's declared `outputSchema`.
 - **Response size cap** (`defaultMaxResponseBytes`, default 256KB; per-op override via `op.maxResponseBytes`).
 
@@ -175,7 +175,7 @@ Before flipping to production:
 
 - [ ] `dev: false` (default) and `requireSignature: true` (default)
 - [ ] At least one entry in `trustedKeys[]`
-- [ ] Credentials wired via the [auth vault](/frontmcp/authentication/auth) instead of the in-memory `MemoryCredentialResolver` for any non-trivial deployment
+- [ ] Credentials wired via the [auth vault](/frontmcp/authentication/overview) instead of the in-memory `MemoryCredentialResolver` for any non-trivial deployment
 - [ ] `allowHttp: false` (default) unless your upstream is on `localhost`
 - [ ] `allowPrivateNetworks: false` (default) unless self-hosted on a private network
 - [ ] `outbound.maxConcurrencyPerHost` tuned to match your upstream's rate-limit budget

@@ -40,22 +40,22 @@ function StoreProvider() {
 
 ### What Gets Registered
 
-| MCP Entity | URI / Name | Description |
-|------------|-----------|-------------|
-| Resource | `state://{name}` | Full state snapshot |
-| Resource | `state://{name}/{selectorKey}` | Each selector as a sub-resource |
-| Tool | `{name}_{actionKey}` | Each action as a callable tool |
+| MCP Entity | URI / Name                     | Description                     |
+| ---------- | ------------------------------ | ------------------------------- |
+| Resource   | `state://{name}`               | Full state snapshot             |
+| Resource   | `state://{name}/{selectorKey}` | Each selector as a sub-resource |
+| Tool       | `{name}_{actionKey}`           | Each action as a callable tool  |
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | — | **Required.** Name prefix for resources and tools |
-| `getState` | `() => unknown` | — | **Required.** Returns current state snapshot |
-| `subscribe` | `(cb: () => void) => () => void` | — | **Required.** Subscribe to changes, return unsubscribe |
-| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors, each becomes a sub-resource |
-| `actions` | `Record<string, (...args) => unknown>` | — | Named actions, each becomes a tool |
-| `server` | `string` | — | Target a named server |
+| Option      | Type                                   | Default | Description                                            |
+| ----------- | -------------------------------------- | ------- | ------------------------------------------------------ |
+| `name`      | `string`                               | —       | **Required.** Name prefix for resources and tools      |
+| `getState`  | `() => unknown`                        | —       | **Required.** Returns current state snapshot           |
+| `subscribe` | `(cb: () => void) => () => void`       | —       | **Required.** Subscribe to changes, return unsubscribe |
+| `selectors` | `Record<string, (state) => unknown>`   | —       | Named selectors, each becomes a sub-resource           |
+| `actions`   | `Record<string, (...args) => unknown>` | —       | Named actions, each becomes a tool                     |
+| `server`    | `string`                               | —       | Target a named server                                  |
 
 ### Live Updates
 
@@ -92,13 +92,13 @@ function ReduxBridge() {
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `store` | `{ getState, dispatch, subscribe }` | — | **Required.** Redux store |
-| `name` | `string` | `'redux'` | Name prefix |
-| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
-| `actions` | `Record<string, (...args) => action>` | — | Action creators (auto-dispatched) |
-| `server` | `string` | — | Target a named server |
+| Option      | Type                                  | Default   | Description                       |
+| ----------- | ------------------------------------- | --------- | --------------------------------- |
+| `store`     | `{ getState, dispatch, subscribe }`   | —         | **Required.** Redux store         |
+| `name`      | `string`                              | `'redux'` | Name prefix                       |
+| `selectors` | `Record<string, (state) => unknown>`  | —         | Named selectors                   |
+| `actions`   | `Record<string, (...args) => action>` | —         | Action creators (auto-dispatched) |
+| `server`    | `string`                              | —         | Target a named server             |
 
 ---
 
@@ -137,14 +137,14 @@ function ValtioBridge() {
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `proxy` | `Record<string, unknown>` | — | **Required.** Valtio proxy object |
-| `subscribe` | `(proxy, cb) => () => void` | — | **Required.** Valtio's subscribe function |
-| `name` | `string` | `'valtio'` | Name prefix |
-| `paths` | `Record<string, string>` | — | Deep path selectors (dot notation) |
-| `mutations` | `Record<string, (...args) => void>` | — | Named mutations (each becomes a tool) |
-| `server` | `string` | — | Target a named server |
+| Option      | Type                                | Default    | Description                               |
+| ----------- | ----------------------------------- | ---------- | ----------------------------------------- |
+| `proxy`     | `Record<string, unknown>`           | —          | **Required.** Valtio proxy object         |
+| `subscribe` | `(proxy, cb) => () => void`         | —          | **Required.** Valtio's subscribe function |
+| `name`      | `string`                            | `'valtio'` | Name prefix                               |
+| `paths`     | `Record<string, string>`            | —          | Deep path selectors (dot notation)        |
+| `mutations` | `Record<string, (...args) => void>` | —          | Named mutations (each becomes a tool)     |
+| `server`    | `string`                            | —          | Target a named server                     |
 
 <Note>
 You must pass valtio's `subscribe` function yourself since valtio is an optional peer dependency. Import it from `valtio/utils`.
@@ -198,12 +198,12 @@ reduxStore({
 })
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `store` | `{ getState, dispatch, subscribe }` | — | **Required.** Redux store |
-| `name` | `string` | `'redux'` | Logical name |
-| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
-| `actions` | `Record<string, (...args) => action>` | — | Action creators (auto-dispatched) |
+| Option      | Type                                  | Default   | Description                       |
+| ----------- | ------------------------------------- | --------- | --------------------------------- |
+| `store`     | `{ getState, dispatch, subscribe }`   | —         | **Required.** Redux store         |
+| `name`      | `string`                              | `'redux'` | Logical name                      |
+| `selectors` | `Record<string, (state) => unknown>`  | —         | Named selectors                   |
+| `actions`   | `Record<string, (...args) => action>` | —         | Action creators (auto-dispatched) |
 
 ### valtioStore
 
@@ -222,13 +222,13 @@ valtioStore({
 })
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `proxy` | `Record<string, unknown>` | — | **Required.** Valtio proxy |
-| `subscribe` | `(proxy, cb) => () => void` | — | **Required.** Valtio subscribe |
-| `name` | `string` | `'valtio'` | Logical name |
-| `paths` | `Record<string, string>` | — | Deep path selectors (dot notation) |
-| `mutations` | `Record<string, (...args) => void>` | — | Named mutations |
+| Option      | Type                                | Default    | Description                        |
+| ----------- | ----------------------------------- | ---------- | ---------------------------------- |
+| `proxy`     | `Record<string, unknown>`           | —          | **Required.** Valtio proxy         |
+| `subscribe` | `(proxy, cb) => () => void`         | —          | **Required.** Valtio subscribe     |
+| `name`      | `string`                            | `'valtio'` | Logical name                       |
+| `paths`     | `Record<string, string>`            | —          | Deep path selectors (dot notation) |
+| `mutations` | `Record<string, (...args) => void>` | —          | Named mutations                    |
 
 ### createStore
 
@@ -246,13 +246,13 @@ createStore({
 })
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | — | **Required.** Logical name |
-| `getState` | `() => unknown` | — | **Required.** Returns state snapshot |
-| `subscribe` | `(cb) => () => void` | — | **Required.** Subscribe to changes |
-| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
-| `actions` | `Record<string, (...args) => unknown>` | — | Named actions |
+| Option      | Type                                   | Default | Description                          |
+| ----------- | -------------------------------------- | ------- | ------------------------------------ |
+| `name`      | `string`                               | —       | **Required.** Logical name           |
+| `getState`  | `() => unknown`                        | —       | **Required.** Returns state snapshot |
+| `subscribe` | `(cb) => () => void`                   | —       | **Required.** Subscribe to changes   |
+| `selectors` | `Record<string, (state) => unknown>`   | —       | Named selectors                      |
+| `actions`   | `Record<string, (...args) => unknown>` | —       | Named actions                        |
 
 ### StoreAdapter Interface
 

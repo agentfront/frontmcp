@@ -16,14 +16,14 @@ nx g @frontmcp/nx:lib my-lib
 
 ## Options
 
-| Option        | Type                                                  | Default       | Description                                          |
-| ------------- | ----------------------------------------------------- | ------------- | ---------------------------------------------------- |
-| `name`        | `string`                                              | —             | **Required.** The name of the library                |
-| `directory`   | `string`                                              | `libs/<name>` | The directory of the library                         |
-| `libType`     | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic`     | The type of library to generate                      |
-| `publishable` | `boolean`                                             | `false`       | Generate a publishable library with package.json     |
+| Option        | Type                                                  | Default            | Description                                          |
+| ------------- | ----------------------------------------------------- | ------------------ | ---------------------------------------------------- |
+| `name`        | `string`                                              | —                  | **Required.** The name of the library                |
+| `directory`   | `string`                                              | `libs/<name>`      | The directory of the library                         |
+| `libType`     | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic`          | The type of library to generate                      |
+| `publishable` | `boolean`                                             | `false`            | Generate a publishable library with package.json     |
 | `importPath`  | `string`                                              | `@frontmcp/<name>` | The npm scope/import path (required for publishable) |
-| `tags`        | `string`                                              | —             | Comma-separated tags for the project                 |
+| `tags`        | `string`                                              | —                  | Comma-separated tags for the project                 |
 
 ## Library Types
 

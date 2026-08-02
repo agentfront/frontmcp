@@ -149,17 +149,17 @@ export default class GatewayServer {}
 
 `App.remote(url, options?)` accepts the MCP server URL as the first argument and an optional options object:
 
-| Option             | Type                              | Description                                                             |
-| ------------------ | --------------------------------- | ----------------------------------------------------------------------- |
-| `name`             | `string`                          | Override the auto-derived app name (defaults to hostname)               |
-| `namespace`        | `string`                          | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
-| `description`      | `string`                          | Human-readable description                                              |
-| `standalone`       | `boolean \| 'includeInParent'`    | Isolation mode (default: `false`)                                       |
-| `transportOptions` | `object`                          | Connection settings (timeout, retry attempts)                           |
-| `remoteAuth`       | `RemoteAuthConfig`                | Authentication config for the remote server                             |
-| `refreshInterval`  | `number`                          | Interval (ms) to refresh capabilities from the remote server            |
-| `cacheTTL`         | `number`                          | TTL (ms) for cached capabilities                                        |
-| `filter`           | `AppFilterConfig`                 | Include/exclude filter for selectively importing primitives              |
+| Option             | Type                           | Description                                                             |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------------- |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)               |
+| `namespace`        | `string`                       | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
+| `description`      | `string`                       | Human-readable description                                              |
+| `standalone`       | `boolean \| 'includeInParent'` | Isolation mode (default: `false`)                                       |
+| `transportOptions` | `object`                       | Connection settings (timeout, retry attempts)                           |
+| `remoteAuth`       | `RemoteAuthConfig`             | Authentication config for the remote server                             |
+| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from the remote server            |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities                                        |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for selectively importing primitives             |
 
 ### Transport Options
 

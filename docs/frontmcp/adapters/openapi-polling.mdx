@@ -336,6 +336,7 @@ export default class MultiApiApp {}
     Use short intervals (100ms) and real HTTP servers in integration tests to verify the full pipeline. See the [Testing OpenAPI Adapter](/frontmcp/guides/testing-openapi-adapter) guide for patterns.
 
     Test servers bind to `localhost`, which the SSRF guard blocks by default. Add `loadOptions: { refResolution: { allowInternalIPs: true } }` to the adapter under test so the poller can reach the local spec server.
+
   </Accordion>
 </AccordionGroup>
 

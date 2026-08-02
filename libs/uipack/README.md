@@ -218,6 +218,7 @@ Annotated output of `buildShell` with `withShell: true` and `includeBridge: true
     <div id="root"></div>
     <script type="module">
       import { WeatherCard } from 'https://esm.sh/my-weather-widget';
+
       /* mount logic */
     </script>
   </body>

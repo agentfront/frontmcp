@@ -267,14 +267,14 @@ execute(uri: string) {
 
 **Field descriptions:**
 
-| Field                 | Description                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| `name`                | Programmatic identifier used internally and in MCP responses |
-| `uri` / `uriTemplate` | The address clients use to request this resource             |
-| `title`               | Human-friendly name for UI display                           |
-| `description`         | Helps the model understand when to use this resource         |
-| `mimeType`            | Content type hint; auto-detected for JSON/text if omitted    |
-| `icons`               | Array of icons for visual representation in clients          |
+| Field                 | Description                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `name`                | Programmatic identifier used internally and in MCP responses                                                       |
+| `uri` / `uriTemplate` | The address clients use to request this resource                                                                   |
+| `title`               | Human-friendly name for UI display                                                                                 |
+| `description`         | Helps the model understand when to use this resource                                                               |
+| `mimeType`            | Content type hint; auto-detected for JSON/text if omitted                                                          |
+| `icons`               | Array of icons for visual representation in clients                                                                |
 | `availableWhen`       | Restrict discovery to specific environments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
 
 ---
@@ -542,6 +542,7 @@ notes://note/x-coredata%3A%2F%2F3823FD9C%2FICNote%2Fp216
 ```
 
 When the framework matches this URI back against the template, parameters are automatically decoded to their original values. The round-trip is consistent:
+
 - `expandUriTemplate("notes://note/{noteId}", { noteId: "x-coredata://..." })` → percent-encoded URI
 - `matchUriTemplate("notes://note/{noteId}", encodedUri)` → `{ noteId: "x-coredata://..." }` (decoded)
 

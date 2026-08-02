@@ -8,6 +8,7 @@ import type { RedisOptions } from '../common/types/options/redis';
 import { InvalidTransportSessionError, SessionClaimConflictError } from '../errors/transport.errors';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
+import HandleMcp20260728Flow from './flows/handle.mcp-20260728.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
@@ -188,7 +189,12 @@ export class TransportService {
       }
     }
 
-    await this.scope.registryFlows(HandleStreamableHttpFlow, HandleSseFlow, HandleStatelessHttpFlow);
+    await this.scope.registryFlows(
+      HandleStreamableHttpFlow,
+      HandleSseFlow,
+      HandleStatelessHttpFlow,
+      HandleMcp20260728Flow,
+    );
   }
 
   async destroy() {

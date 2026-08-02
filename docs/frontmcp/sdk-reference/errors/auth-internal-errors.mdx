@@ -324,11 +324,11 @@ new OrchestratorJwksNotAvailableError()
 
 Thrown when an auth API receives malformed input (e.g., invalid JWK, malformed scope string).
 
-| Property     | Type      | Value                  |
-| ------------ | --------- | ---------------------- |
-| `code`       | `string`  | `AUTH_INVALID_INPUT`   |
-| `statusCode` | `number`  | `500`                  |
-| `isPublic`   | `boolean` | `false`                |
+| Property     | Type      | Value                |
+| ------------ | --------- | -------------------- |
+| `code`       | `string`  | `AUTH_INVALID_INPUT` |
+| `statusCode` | `number`  | `500`                |
+| `isPublic`   | `boolean` | `false`              |
 
 ```typescript
 new AuthInvalidInputError(message: string)
@@ -340,11 +340,11 @@ new AuthInvalidInputError(message: string)
 
 Thrown when a credential storage operation fails (vault read/write, key persistence).
 
-| Property     | Type      | Value                       |
-| ------------ | --------- | --------------------------- |
-| `code`       | `string`  | `CREDENTIAL_STORAGE_ERROR`  |
-| `statusCode` | `number`  | `500`                       |
-| `isPublic`   | `boolean` | `false`                     |
+| Property     | Type      | Value                      |
+| ------------ | --------- | -------------------------- |
+| `code`       | `string`  | `CREDENTIAL_STORAGE_ERROR` |
+| `statusCode` | `number`  | `500`                      |
+| `isPublic`   | `boolean` | `false`                    |
 
 ```typescript
 new CredentialStorageError(message: string)
@@ -356,11 +356,11 @@ new CredentialStorageError(message: string)
 
 Thrown when a federated auth flow encounters an error (state mismatch, callback failure, etc.).
 
-| Property     | Type      | Value             |
-| ------------ | --------- | ----------------- |
+| Property     | Type      | Value                                           |
+| ------------ | --------- | ----------------------------------------------- |
 | `code`       | `string`  | `AUTH_FLOW_ERROR` (or override via constructor) |
-| `statusCode` | `number`  | `500`                 |
-| `isPublic`   | `boolean` | `false`               |
+| `statusCode` | `number`  | `500`                                           |
+| `isPublic`   | `boolean` | `false`                                         |
 
 ```typescript
 new AuthFlowError(message: string, code?: string)

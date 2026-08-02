@@ -45,12 +45,12 @@ The Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset
 
 When enabled, every scrape returns:
 
-| Category | Examples | Source |
-| --- | --- | --- |
-| Process gauges | `frontmcp_process_resident_memory_bytes`, `frontmcp_process_heap_bytes`, `frontmcp_process_uptime_seconds`, `frontmcp_process_cpu_seconds_total{mode="user"\|"system"}` | Built-in `ProcessStatsCollector` |
-| Node.js gauges | `frontmcp_nodejs_eventloop_lag_seconds{quantile="mean"\|"p99"}`, `frontmcp_nodejs_active_handles`, `frontmcp_nodejs_active_requests`, `frontmcp_nodejs_open_fds` (Linux only) | `perf_hooks` + `process._getActiveHandles()` |
-| Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total` | `@frontmcp/observability`'s in-memory counter snapshot store |
-| Custom counters | Anything emitted via `createCounter('my_counter_total').inc()` | Same snapshot store |
+| Category           | Examples                                                                                                                                                                      | Source                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Process gauges     | `frontmcp_process_resident_memory_bytes`, `frontmcp_process_heap_bytes`, `frontmcp_process_uptime_seconds`, `frontmcp_process_cpu_seconds_total{mode="user"\|"system"}`       | Built-in `ProcessStatsCollector`                             |
+| Node.js gauges     | `frontmcp_nodejs_eventloop_lag_seconds{quantile="mean"\|"p99"}`, `frontmcp_nodejs_active_handles`, `frontmcp_nodejs_active_requests`, `frontmcp_nodejs_open_fds` (Linux only) | `perf_hooks` + `process._getActiveHandles()`                 |
+| Framework counters | `frontmcp_skills_bundle_pulls_total`, `frontmcp_skills_signature_*_total`, `frontmcp_skills_replay_*_total`, `frontmcp_skills_audit_*_total`                                  | `@frontmcp/observability`'s in-memory counter snapshot store |
+| Custom counters    | Anything emitted via `createCounter('my_counter_total').inc()`                                                                                                                | Same snapshot store                                          |
 
 `createCounter()` from `@frontmcp/observability` writes into the same store the scrape reads from — no extra wiring needed.
 
@@ -102,6 +102,7 @@ metrics: {
 ```
 
 Behaviour:
+
 - Missing `Authorization` header → **401**
 - `Authorization: Bearer <wrong>` → **403**
 - `Authorization: Bearer <correct>` → **200**
@@ -119,16 +120,16 @@ metrics: {
 
 Each category maps to a counter-name prefix:
 
-| Category | Prefix matched |
-| --- | --- |
-| `process` | `frontmcp_process_`, `frontmcp_nodejs_` |
-| `skills` | `frontmcp_skills_` |
-| `tools` | `frontmcp_tool_` |
-| `resources` | `frontmcp_resource_` |
-| `http` | `frontmcp_http_` |
-| `storage` | `frontmcp_storage_` |
-| `auth` | `frontmcp_auth_` |
-| `sessions` | `frontmcp_session_` |
+| Category    | Prefix matched                          |
+| ----------- | --------------------------------------- |
+| `process`   | `frontmcp_process_`, `frontmcp_nodejs_` |
+| `skills`    | `frontmcp_skills_`                      |
+| `tools`     | `frontmcp_tool_`                        |
+| `resources` | `frontmcp_resource_`                    |
+| `http`      | `frontmcp_http_`                        |
+| `storage`   | `frontmcp_storage_`                     |
+| `auth`      | `frontmcp_auth_`                        |
+| `sessions`  | `frontmcp_session_`                     |
 
 Omit `include` to emit every category.
 

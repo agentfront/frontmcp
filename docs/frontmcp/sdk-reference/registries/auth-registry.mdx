@@ -248,30 +248,30 @@ import type { FrontMcpAuthContext } from '@frontmcp/auth';
 
 ### Properties
 
-| Property        | Type                                  | Description                                                  |
-| --------------- | ------------------------------------- | ------------------------------------------------------------ |
-| `user`          | `FrontMcpAuthUser`                    | Resolved user identity (`sub`, `name`, `email`, `picture`)   |
-| `isAnonymous`   | `boolean`                             | True when `sub` starts with `anon:` or is empty              |
-| `mode`          | `string`                              | Authentication mode (`public`, `transparent`, `local`, `remote`) |
-| `sessionId`     | `string`                              | Session identifier (empty string if no session)              |
-| `scopes`        | `readonly string[]`                   | OAuth scopes granted to this session                         |
-| `claims`        | `Readonly<Record<string, unknown>>`   | Raw JWT claims                                               |
-| `roles`         | `readonly string[]`                   | Resolved roles (via `claimsMapping` or direct extraction)    |
-| `permissions`   | `readonly string[]`                   | Resolved permissions (via `claimsMapping` or direct)         |
+| Property      | Type                                | Description                                                      |
+| ------------- | ----------------------------------- | ---------------------------------------------------------------- |
+| `user`        | `FrontMcpAuthUser`                  | Resolved user identity (`sub`, `name`, `email`, `picture`)       |
+| `isAnonymous` | `boolean`                           | True when `sub` starts with `anon:` or is empty                  |
+| `mode`        | `string`                            | Authentication mode (`public`, `transparent`, `local`, `remote`) |
+| `sessionId`   | `string`                            | Session identifier (empty string if no session)                  |
+| `scopes`      | `readonly string[]`                 | OAuth scopes granted to this session                             |
+| `claims`      | `Readonly<Record<string, unknown>>` | Raw JWT claims                                                   |
+| `roles`       | `readonly string[]`                 | Resolved roles (via `claimsMapping` or direct extraction)        |
+| `permissions` | `readonly string[]`                 | Resolved permissions (via `claimsMapping` or direct)             |
 
 ### Methods
 
-| Method               | Signature                                      | Description                                  |
-| -------------------- | ---------------------------------------------- | -------------------------------------------- |
-| `hasRole`            | `(role: string) => boolean`                    | Check if user has a specific role             |
-| `hasAllRoles`        | `(roles: readonly string[]) => boolean`        | Check if user has ALL specified roles         |
-| `hasAnyRole`         | `(roles: readonly string[]) => boolean`        | Check if user has at least one role           |
-| `hasPermission`      | `(permission: string) => boolean`              | Check if user has a specific permission       |
-| `hasAllPermissions`  | `(permissions: readonly string[]) => boolean`  | Check if user has ALL specified permissions   |
-| `hasAnyPermission`   | `(permissions: readonly string[]) => boolean`  | Check if user has at least one permission     |
-| `hasScope`           | `(scope: string) => boolean`                   | Check if session has a specific OAuth scope   |
-| `hasAllScopes`       | `(scopes: readonly string[]) => boolean`       | Check if session has ALL specified scopes     |
-| `hasAnyScope`        | `(scopes: readonly string[]) => boolean`       | Check if session has at least one scope       |
+| Method              | Signature                                     | Description                                 |
+| ------------------- | --------------------------------------------- | ------------------------------------------- |
+| `hasRole`           | `(role: string) => boolean`                   | Check if user has a specific role           |
+| `hasAllRoles`       | `(roles: readonly string[]) => boolean`       | Check if user has ALL specified roles       |
+| `hasAnyRole`        | `(roles: readonly string[]) => boolean`       | Check if user has at least one role         |
+| `hasPermission`     | `(permission: string) => boolean`             | Check if user has a specific permission     |
+| `hasAllPermissions` | `(permissions: readonly string[]) => boolean` | Check if user has ALL specified permissions |
+| `hasAnyPermission`  | `(permissions: readonly string[]) => boolean` | Check if user has at least one permission   |
+| `hasScope`          | `(scope: string) => boolean`                  | Check if session has a specific OAuth scope |
+| `hasAllScopes`      | `(scopes: readonly string[]) => boolean`      | Check if session has ALL specified scopes   |
+| `hasAnyScope`       | `(scopes: readonly string[]) => boolean`      | Check if session has at least one scope     |
 
 ### Extension
 

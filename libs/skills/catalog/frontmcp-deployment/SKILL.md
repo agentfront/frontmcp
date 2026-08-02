@@ -1,6 +1,6 @@
 ---
 name: frontmcp-deployment
-description: 'Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, and MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP. Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.'
+description: 'Use when deploying, building for production, packaging, or shipping a FrontMCP server. Covers build targets (node, cli SEA binary, browser, embeddable SDK, mcpb archive for Claude Desktop, serverless) and deploying to Vercel (with Vercel KV), AWS Lambda (API Gateway, SAM, CDK), Cloudflare Workers (KV, D1, Durable Objects, v1.3 skills-only), and Node (multi-stage Docker, docker-compose, PM2, nginx). Also the frontmcp.deploy.yaml manifest plus GitHub Action push-resync, MCP client integration / .mcp.json for Claude Desktop, Claude Code, Cursor, and VS Code over stdio or HTTP, and MCP protocol revisions (serving 2026-07-28 alongside 2024-11-05 through 2025-11-25). Triggers: deploy, build for production, dockerize, containerize, serverless, edge runtime, go live, ship it.'
 tags: [router, deployment, node, vercel, lambda, cloudflare, cli, browser, sdk, guide]
 category: deployment
 targets: [all]
@@ -67,6 +67,7 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 | Write a Dockerfile for Node.js deployment         | `deploy-to-node-dockerfile`        | Dockerfile configuration for Node.js deployment                                                                                                  |
 | Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`          | Vercel-specific configuration (vercel.json)                                                                                                      |
 | Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`           | Configure .mcp.json for stdio, HTTP, or Unix socket transport                                                                                    |
+| Serve or consume MCP protocol `2026-07-28`        | `protocol-versions`                | Stateless requests, `server/discover`, mirrored headers, MRTR, tasks extension, and the `McpStatelessClient`                                     |
 
 ### CLI Commands for Deployment and Operations
 

@@ -66,22 +66,22 @@ That's enough for the Worker to boot and accept signed bundles. Below: every fie
 
 ## Top-level shape
 
-| Field | Required | Notes |
-| --- | --- | --- |
-| `$schema` | optional | URL pointer for editor autocomplete. Conventionally `https://schemas.agentfront.dev/frontmcp-deploy/v1.json`. |
-| `version` | yes | Must equal the literal `1` in v1.3. |
-| `name` | yes | Project name. Identifier: starts with a letter, then `[A-Za-z0-9_-]*`. |
-| `runtime` | yes | Target runtime + compatibility date. |
-| `server` | yes | Server identity (`info`) + optional `instructions` injected at MCP `initialize`. |
-| `specs` | yes | OpenAPI specs to ingest. Either a directory string or an array of `{ id, spec, baseUrl?, bindingName? }`. |
-| `skills` | optional (defaults to `{ source: './skills/' }`) | Where to find skills + optional `alwaysLoad` list + tag filter. |
-| `tags` | optional | Declared tag dictionary (OpenAPI-style `[{ name, description? }]`). |
-| `classification` | optional | Override rules on top of the OpenAPI → MCP classifier. |
-| `bindings` | yes | Cloudflare bindings — DO / D1 / KV / R2 / vars. |
-| `signing` | yes | Algorithm + trust roots + replay-guard config. |
-| `auth` | yes | Discriminated union: `none` / `frontegg` / `oauth` / `apiKey`. |
-| `secrets` | optional | Names-only list. Cross-validator enforces every referenced secret appears here. |
-| `environments` | optional | Per-env overlay map (deep-merged at deploy time). |
+| Field            | Required                                         | Notes                                                                                                         |
+| ---------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `$schema`        | optional                                         | URL pointer for editor autocomplete. Conventionally `https://schemas.agentfront.dev/frontmcp-deploy/v1.json`. |
+| `version`        | yes                                              | Must equal the literal `1` in v1.3.                                                                           |
+| `name`           | yes                                              | Project name. Identifier: starts with a letter, then `[A-Za-z0-9_-]*`.                                        |
+| `runtime`        | yes                                              | Target runtime + compatibility date.                                                                          |
+| `server`         | yes                                              | Server identity (`info`) + optional `instructions` injected at MCP `initialize`.                              |
+| `specs`          | yes                                              | OpenAPI specs to ingest. Either a directory string or an array of `{ id, spec, baseUrl?, bindingName? }`.     |
+| `skills`         | optional (defaults to `{ source: './skills/' }`) | Where to find skills + optional `alwaysLoad` list + tag filter.                                               |
+| `tags`           | optional                                         | Declared tag dictionary (OpenAPI-style `[{ name, description? }]`).                                           |
+| `classification` | optional                                         | Override rules on top of the OpenAPI → MCP classifier.                                                        |
+| `bindings`       | yes                                              | Cloudflare bindings — DO / D1 / KV / R2 / vars.                                                               |
+| `signing`        | yes                                              | Algorithm + trust roots + replay-guard config.                                                                |
+| `auth`           | yes                                              | Discriminated union: `none` / `frontegg` / `oauth` / `apiKey`.                                                |
+| `secrets`        | optional                                         | Names-only list. Cross-validator enforces every referenced secret appears here.                               |
+| `environments`   | optional                                         | Per-env overlay map (deep-merged at deploy time).                                                             |
 
 Top-level keys are strict — unknown keys fail validation immediately.
 
@@ -309,13 +309,13 @@ Select an environment at build time with `frontmcp deploy build --env production
 
 Beyond the per-field schema, the parser runs a final cross-validation pass that catches:
 
-| Check | Error |
-| --- | --- |
-| `auth.*Secret` referenced but not declared | `Secret "<NAME>" referenced at <path> is not declared in secrets[]` |
-| `signing.trustRoots[].publicKeySecret` not declared | Same shape |
+| Check                                                     | Error                                                                             |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `auth.*Secret` referenced but not declared                | `Secret "<NAME>" referenced at <path> is not declared in secrets[]`               |
+| `signing.trustRoots[].publicKeySecret` not declared       | Same shape                                                                        |
 | `signing.replay.nonceKv` not in `bindings.kvNamespaces[]` | `signing.replay.nonceKv "<X>" does not match any bindings.kvNamespaces[].binding` |
-| `skills.alwaysLoad[]` entry not kebab-case | `skills.alwaysLoad entry "<X>" is not a valid kebab-case skill id` |
-| Tag filter references an undeclared tag | `skills.tags references unknown tag "<X>" (not in tags[])` |
+| `skills.alwaysLoad[]` entry not kebab-case                | `skills.alwaysLoad entry "<X>" is not a valid kebab-case skill id`                |
+| Tag filter references an undeclared tag                   | `skills.tags references unknown tag "<X>" (not in tags[])`                        |
 
 All errors aggregate into one report — the parser returns `{ ok: false, errors: string[] }` rather than throwing on the first.
 
@@ -337,18 +337,18 @@ if (!cross.ok) {
 
 The classifier output is implicit in the manifest — every OpenAPI operation it discovers is classified by HTTP semantics. The full ruleset:
 
-| Method | Path shape | Matching GET? | Surface | Notify on success |
-| --- | --- | --- | --- | --- |
-| `GET` | path-param (`/users/{id}`) | (the op) | `both` | — |
-| `GET` | no path-param (`/users`) | (the op) | `resource` | — |
-| `POST` | collection (`/users`) | yes | `tool` | `list_changed` on self |
-| `POST` | singular (`/users/{id}`) | yes | `tool` | `updated` on self |
-| `POST` | action (`/users/{id}/reset-pw`) | no | `tool` | `updated` on parent |
-| `POST` | any | no | `tool` | — |
-| `PUT` / `PATCH` | any | yes | `tool` | `updated` on self |
-| `PUT` / `PATCH` | any | no | `tool` | `updated` on parent (if any) |
-| `DELETE` | singular | — | `tool` | `list_changed` on parent |
-| `DELETE` | collection | yes | `tool` | `list_changed` on self |
+| Method          | Path shape                      | Matching GET? | Surface    | Notify on success            |
+| --------------- | ------------------------------- | ------------- | ---------- | ---------------------------- |
+| `GET`           | path-param (`/users/{id}`)      | (the op)      | `both`     | —                            |
+| `GET`           | no path-param (`/users`)        | (the op)      | `resource` | —                            |
+| `POST`          | collection (`/users`)           | yes           | `tool`     | `list_changed` on self       |
+| `POST`          | singular (`/users/{id}`)        | yes           | `tool`     | `updated` on self            |
+| `POST`          | action (`/users/{id}/reset-pw`) | no            | `tool`     | `updated` on parent          |
+| `POST`          | any                             | no            | `tool`     | —                            |
+| `PUT` / `PATCH` | any                             | yes           | `tool`     | `updated` on self            |
+| `PUT` / `PATCH` | any                             | no            | `tool`     | `updated` on parent (if any) |
+| `DELETE`        | singular                        | —             | `tool`     | `list_changed` on parent     |
+| `DELETE`        | collection                      | yes           | `tool`     | `list_changed` on self       |
 
 Override per pattern with `classification.rules`.
 

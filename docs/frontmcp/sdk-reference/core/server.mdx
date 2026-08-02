@@ -212,11 +212,11 @@ curl http://localhost:3001/readyz
 curl http://localhost:3001/health
 ```
 
-| Endpoint | Purpose | I/O | Runtime |
-| --- | --- | --- | --- |
-| `/healthz` | Liveness probe | None | All |
-| `/readyz` | Readiness probe with dependency checks | Yes | Node, Bun, Deno, Browser |
-| `/health` | Legacy alias for `/healthz` | None | All |
+| Endpoint   | Purpose                                | I/O  | Runtime                  |
+| ---------- | -------------------------------------- | ---- | ------------------------ |
+| `/healthz` | Liveness probe                         | None | All                      |
+| `/readyz`  | Readiness probe with dependency checks | Yes  | Node, Bun, Deno, Browser |
+| `/health`  | Legacy alias for `/healthz`            | None | All                      |
 
 The readiness endpoint automatically discovers and probes session stores (Redis/Vercel KV) and remote MCP app connections. Add custom probes for databases and APIs via `health.probes`.
 

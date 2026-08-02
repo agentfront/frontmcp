@@ -30,12 +30,12 @@ function Provider(providedMetadata: ProviderMetadata): ClassDecorator
 
 ## Configuration Options
 
-| Property      | Type                    | Default    | Description                        |
-| ------------- | ----------------------- | ---------- | ---------------------------------- |
-| `name`        | `string` (required)     | —          | Human-readable provider name       |
-| `id`          | `string`                | —          | Optional unique identifier         |
-| `description` | `string`                | —          | Optional description               |
-| `scope`       | `'global' \| 'context'` | `'global'` | Provider lifetime scope            |
+| Property      | Type                    | Default    | Description                  |
+| ------------- | ----------------------- | ---------- | ---------------------------- |
+| `name`        | `string` (required)     | —          | Human-readable provider name |
+| `id`          | `string`                | —          | Optional unique identifier   |
+| `description` | `string`                | —          | Optional description         |
+| `scope`       | `'global' \| 'context'` | `'global'` | Provider lifetime scope      |
 
 `'session'` and `'request'` are kept as deprecated aliases of `'context'`.
 

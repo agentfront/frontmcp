@@ -157,18 +157,19 @@ App.esm('@internal/tools@latest', {
   },
 })
 ```
+
 </CodeGroup>
 
 ---
 
 ## Package Specifier Format
 
-| Pattern | Example | Description |
-|---------|---------|-------------|
-| `@scope/name@range` | `@acme/tools@^1.0.0` | Scoped package with semver range |
-| `@scope/name@tag` | `@acme/tools@latest` | Scoped package with dist-tag |
-| `name@range` | `my-tools@~2.0.0` | Unscoped package with semver range |
-| `name` | `my-tools` | Unscoped package, defaults to `latest` |
+| Pattern             | Example              | Description                            |
+| ------------------- | -------------------- | -------------------------------------- |
+| `@scope/name@range` | `@acme/tools@^1.0.0` | Scoped package with semver range       |
+| `@scope/name@tag`   | `@acme/tools@latest` | Scoped package with dist-tag           |
+| `name@range`        | `my-tools@~2.0.0`    | Unscoped package with semver range     |
+| `name`              | `my-tools`           | Unscoped package, defaults to `latest` |
 
 Supported semver ranges include `^1.0.0`, `~1.0.0`, `>=1.0.0 <2.0.0`, exact versions like `1.2.3`, and dist-tags like `latest`, `next`, `beta`.
 
@@ -198,12 +199,12 @@ Individual apps can override the gateway loader via the `loader` option in `App.
 
 ### PackageLoader Fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | `string` | `https://esm.sh` (bundles), `https://registry.npmjs.org` (registry) | Base URL for both registry API and bundle fetching |
-| `registryUrl` | `string` | Same as `url` | Separate registry URL for version resolution (if different from bundle URL) |
-| `token` | `string` | — | Bearer token for authentication |
-| `tokenEnvVar` | `string` | — | Environment variable name containing the bearer token |
+| Field         | Type     | Default                                                             | Description                                                                 |
+| ------------- | -------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `url`         | `string` | `https://esm.sh` (bundles), `https://registry.npmjs.org` (registry) | Base URL for both registry API and bundle fetching                          |
+| `registryUrl` | `string` | Same as `url`                                                       | Separate registry URL for version resolution (if different from bundle URL) |
+| `token`       | `string` | —                                                                   | Bearer token for authentication                                             |
+| `tokenEnvVar` | `string` | —                                                                   | Environment variable name containing the bearer token                       |
 
 <Note>
 When `url` is set but `registryUrl` is not, both the registry API and bundle downloads use `url`. When `registryUrl` is also set, the registry uses `registryUrl` while bundles use `url`.
@@ -256,10 +257,10 @@ frontmcp package esm-update --all
 
 ESM packages use a **two-tier cache** for fast startup and offline resilience:
 
-| Tier | Environment | Persistence | Speed |
-|------|-------------|-------------|-------|
-| **Memory** | All | Process lifetime | Instant |
-| **Disk** | Node.js only | Survives restarts | Fast (local I/O) |
+| Tier       | Environment  | Persistence       | Speed            |
+| ---------- | ------------ | ----------------- | ---------------- |
+| **Memory** | All          | Process lifetime  | Instant          |
+| **Disk**   | Node.js only | Survives restarts | Fast (local I/O) |
 
 ### Cache Locations (Node.js)
 
@@ -322,6 +323,7 @@ In browser environments, only the in-memory cache is used. Bundles are evaluated
   ],
 })
 ```
+
 </CodeGroup>
 
 <Warning>
@@ -334,16 +336,16 @@ The Bearer token is sent in the `Authorization` header for both registry API cal
 
 ## Comparison: ESM vs Remote vs Local Apps
 
-| Aspect | Local Apps | ESM Packages | Remote Apps |
-|--------|-----------|--------------|-------------|
-| **Declaration** | `@App` class | `App.esm()` | `App.remote()` |
-| **Execution** | In-process | In-process | Out-of-process (HTTP) |
-| **Transport** | None | None | Streamable HTTP / SSE |
-| **Caching** | N/A | Two-tier (memory + disk) | Optional via CachePlugin |
-| **Auth** | N/A | npm registry auth | remoteAuth config |
-| **Hot-Reload** | Requires restart | Version polling | N/A |
-| **Plugins/Adapters** | Full support | Not supported | Not supported |
-| **Best For** | First-party code | Community/npm packages | External MCP servers |
+| Aspect               | Local Apps       | ESM Packages             | Remote Apps              |
+| -------------------- | ---------------- | ------------------------ | ------------------------ |
+| **Declaration**      | `@App` class     | `App.esm()`              | `App.remote()`           |
+| **Execution**        | In-process       | In-process               | Out-of-process (HTTP)    |
+| **Transport**        | None             | None                     | Streamable HTTP / SSE    |
+| **Caching**          | N/A              | Two-tier (memory + disk) | Optional via CachePlugin |
+| **Auth**             | N/A              | npm registry auth        | remoteAuth config        |
+| **Hot-Reload**       | Requires restart | Version polling          | N/A                      |
+| **Plugins/Adapters** | Full support     | Not supported            | Not supported            |
+| **Best For**         | First-party code | Community/npm packages   | External MCP servers     |
 
 ---
 
@@ -351,14 +353,14 @@ The Bearer token is sent in the `Authorization` header for both registry API cal
 
 ESM loading can fail at several stages. FrontMCP provides specific error classes for each:
 
-| Error | When | HTTP |
-|-------|------|------|
-| `EsmInvalidSpecifierError` | Package specifier format is invalid | 400 |
-| `EsmVersionResolutionError` | npm registry query fails or no matching version | 500 |
-| `EsmRegistryAuthError` | Private registry authentication fails | 401 |
-| `EsmPackageLoadError` | Bundle fetch or evaluation fails | 500 |
-| `EsmManifestInvalidError` | Package export doesn't match manifest contract | 400 |
-| `EsmCacheError` | Cache read/write operation fails | 500 |
+| Error                       | When                                            | HTTP |
+| --------------------------- | ----------------------------------------------- | ---- |
+| `EsmInvalidSpecifierError`  | Package specifier format is invalid             | 400  |
+| `EsmVersionResolutionError` | npm registry query fails or no matching version | 500  |
+| `EsmRegistryAuthError`      | Private registry authentication fails           | 401  |
+| `EsmPackageLoadError`       | Bundle fetch or evaluation fails                | 500  |
+| `EsmManifestInvalidError`   | Package export doesn't match manifest contract  | 400  |
+| `EsmCacheError`             | Cache read/write operation fails                | 500  |
 
 See the [ESM Errors reference](/frontmcp/sdk-reference/errors/esm-errors) for full details.
 

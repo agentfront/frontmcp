@@ -17,10 +17,10 @@ FrontMCP's `local` and `remote` OAuth modes serve built-in HTML pages for the lo
 
 There are two halves:
 
-| Half       | Package                              | Responsibility                                                                                         |
-| ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Server** | `@frontmcp/sdk` (`auth.ui` / `auth.extras`) | Transpiles your component's `.tsx` once (server-side, single-file transform — deps stay external), inlines it as an ES module + an import-map, injects the flow state, mints/verifies CSRF, sets CSP. It never bundles or renders your component server-side. |
-| **Client** | `@frontmcp/ui/auth`                  | The framework-free contract (`AuthFlowState`, wire constants) **plus** the React hooks (`useAuthFlow`, …), `<AuthPageWrapper>`, and `mountAuthPage` that read the injected state, render the component in the browser, and drive submits. Loaded in the browser **from esm.sh** via the import-map. |
+| Half       | Package                                     | Responsibility                                                                                                                                                                                                                                                                                      |
+| ---------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Server** | `@frontmcp/sdk` (`auth.ui` / `auth.extras`) | Transpiles your component's `.tsx` once (server-side, single-file transform — deps stay external), inlines it as an ES module + an import-map, injects the flow state, mints/verifies CSRF, sets CSP. It never bundles or renders your component server-side.                                       |
+| **Client** | `@frontmcp/ui/auth`                         | The framework-free contract (`AuthFlowState`, wire constants) **plus** the React hooks (`useAuthFlow`, …), `<AuthPageWrapper>`, and `mountAuthPage` that read the injected state, render the component in the browser, and drive submits. Loaded in the browser **from esm.sh** via the import-map. |
 
 At request time the server serializes an `AuthFlowState` into `window.__FRONTMCP_AUTH__`, serves a page with an **empty** `#frontmcp-auth-root` mount node, an **`<script type="importmap">`** that maps `react`, `react-dom`, and `@frontmcp/ui/auth` to **esm.sh**, and an inline **`<script type="module">`** containing your transpiled component plus a `mountAuthPage(<YourComponent>)` tail. The browser loads the deps from esm.sh, runs the module, and `mountAuthPage` renders your component **client-side** into the empty node; your component (via the hooks) reads the injected state and submits back to the OAuth callback. There is **no bundling and no server-side React** — exactly how a `@Tool({ ui: { file } })` widget loads (server transpiles the single file, the browser loads React from esm.sh via an import-map). This mirrors the `window.FrontMcpBridge` injected-global pattern that tool widgets use.
 
@@ -81,13 +81,13 @@ That is the whole recipe: **write a React component with the hooks (default expo
 
 ### `slot` values
 
-| Slot          | Replaces the built-in…                          | Receives                                  |
-| ------------- | ----------------------------------------------- | ----------------------------------------- |
-| `login`       | Local sign-in page                              | `clientName`, `scopes`, `redirectUri`     |
-| `consent`     | Tool-consent screen                             | `tools[]` (selectable tool cards)         |
-| `incremental` | Single-app incremental authorization screen     | `extras.appId` / `extras.appName`         |
-| `federated`   | Multi-provider selection                        | `providers[]` (selectable provider cards) |
-| `error`       | OAuth error page                                | `error` text                              |
+| Slot          | Replaces the built-in…                      | Receives                                  |
+| ------------- | ------------------------------------------- | ----------------------------------------- |
+| `login`       | Local sign-in page                          | `clientName`, `scopes`, `redirectUri`     |
+| `consent`     | Tool-consent screen                         | `tools[]` (selectable tool cards)         |
+| `incremental` | Single-app incremental authorization screen | `extras.appId` / `extras.appName`         |
+| `federated`   | Multi-provider selection                    | `providers[]` (selectable provider cards) |
+| `error`       | OAuth error page                            | `error` text                              |
 
 A slot not present in the `auth.ui` map keeps its built-in page. Map only the slots you want to customize:
 
@@ -143,20 +143,20 @@ The handler returns `{ ok, error?, addedItems?, sideEffects? }`. On success its 
 
 Your component reads the injected `AuthFlowState` through the hooks. The fields:
 
-| Field          | Type                          | Notes                                                                        |
-| -------------- | ----------------------------- | ---------------------------------------------------------------------------- |
-| `slot`         | `AuthSlot`                    | Which page slot is rendering.                                                |
-| `pendingAuthId`| `string?`                     | Correlation id; round-tripped on every submit. Absent only for `error`.      |
-| `clientName`   | `string?`                     | OAuth client display name (**not** an end user) — CIMD `client_name` or id.  |
-| `clientId`     | `string?`                     | OAuth `client_id`.                                                           |
-| `scopes`       | `string[]`                    | Requested OAuth scopes.                                                      |
-| `redirectUri`  | `string?`                     | Validated `redirect_uri` the code is sent to.                               |
-| `resource`     | `string?`                     | RFC 8707 resource indicator, when supplied.                                  |
-| `error`        | `string?`                     | Error text (error slot, or a re-rendered failed submit).                     |
-| `csrfToken`    | `string?`                     | Server-minted anti-CSRF token. The hooks echo it for you.                    |
-| `providers`    | `AuthProvider[]`              | Selectable providers on the `federated` slot.                                |
-| `tools`        | `AuthTool[]`                  | Selectable tools on the `consent` slot.                                      |
-| `extras`       | `Record<string, unknown>`     | Free-form, slot-specific extras (e.g. logo URI, incremental target app).     |
+| Field           | Type                      | Notes                                                                       |
+| --------------- | ------------------------- | --------------------------------------------------------------------------- |
+| `slot`          | `AuthSlot`                | Which page slot is rendering.                                               |
+| `pendingAuthId` | `string?`                 | Correlation id; round-tripped on every submit. Absent only for `error`.     |
+| `clientName`    | `string?`                 | OAuth client display name (**not** an end user) — CIMD `client_name` or id. |
+| `clientId`      | `string?`                 | OAuth `client_id`.                                                          |
+| `scopes`        | `string[]`                | Requested OAuth scopes.                                                     |
+| `redirectUri`   | `string?`                 | Validated `redirect_uri` the code is sent to.                               |
+| `resource`      | `string?`                 | RFC 8707 resource indicator, when supplied.                                 |
+| `error`         | `string?`                 | Error text (error slot, or a re-rendered failed submit).                    |
+| `csrfToken`     | `string?`                 | Server-minted anti-CSRF token. The hooks echo it for you.                   |
+| `providers`     | `AuthProvider[]`          | Selectable providers on the `federated` slot.                               |
+| `tools`         | `AuthTool[]`              | Selectable tools on the `consent` slot.                                     |
+| `extras`        | `Record<string, unknown>` | Free-form, slot-specific extras (e.g. logo URI, incremental target app).    |
 
 <Warning>
   **No PII is in the contract.** `clientName` / `clientId` are OAuth client identifiers, not end-user identity. Anything the user types (email, name, …) is carried by **your own form fields**, never serialized into `AuthFlowState`.
@@ -170,10 +170,10 @@ The client primitives ship in `@frontmcp/ui` (React is a peer dependency). Insta
 npm install @frontmcp/ui react react-dom
 ```
 
-| Import                       | Use                                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------- |
-| `@frontmcp/ui/auth`          | The framework-free contract types + wire constants (no React) **and** the React hooks (`useAuthFlow`, …) + `<AuthPageWrapper>` + `mountAuthPage`. Single source of truth for the client API. |
-| `@frontmcp/ui/auth/vanilla`  | Framework-free (browser) helpers: `getAuthFlow`, `submitFinish`, `submitExtra`, `getAddedItems` (plus the contract types). |
+| Import                      | Use                                                                                                                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/ui/auth`         | The framework-free contract types + wire constants (no React) **and** the React hooks (`useAuthFlow`, …) + `<AuthPageWrapper>` + `mountAuthPage`. Single source of truth for the client API. |
+| `@frontmcp/ui/auth/vanilla` | Framework-free (browser) helpers: `getAuthFlow`, `submitFinish`, `submitExtra`, `getAddedItems` (plus the contract types).                                                                   |
 
 <Note>
   `@frontmcp/ui/auth` imports only `react` / `react-dom` — it does **not** pull in MUI, so the module the browser loads from esm.sh stays lean. The framework-free contract types (e.g. `AuthFlowState`) live here too, so a non-React page can import them without React. **`@frontmcp/ui` is browser-only and is never imported by `@frontmcp/sdk` / `@frontmcp/uipack`** — the SDK passes `@frontmcp/ui/auth` to the renderer only as an import-map specifier string.
@@ -261,8 +261,8 @@ document.querySelector('#finish')!.addEventListener('submit', (e) => {
 
 When at least one `auth.extras` handler is configured, the scope exposes one endpoint under its OAuth path (it 404s / falls through when nothing is configured, so defaults are untouched):
 
-| Route             | Method | Purpose                                                                                              |
-| ----------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| Route             | Method | Purpose                                                                                                                                                                                                                                                  |
+| ----------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/oauth/ui/extra` | `POST` | Routes an `auth.extras[name]` submission — the `action` field names the extra — to its handler, accumulates accepted items, and returns `{ ok, error?, addedItems?, sideEffects? }`. CSRF is verified against the server-minted token (400 on mismatch). |
 
 There is **no `/oauth/ui/:slot.js` route** — the component is transpiled server-side and **inlined** into the authorize/callback page as a `<script type="module">` (deps from esm.sh via the import-map), so there is no separately-served bundle. The login/consent/federated/incremental pages themselves are served by the existing `/oauth/authorize` and `/oauth/callback` flows; an `auth.ui` slot swaps the served page body (import-map + injected state + the inline transpiled module + empty mount) — the component renders client-side. The finish submit still posts to `/oauth/callback`.

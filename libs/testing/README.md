@@ -15,7 +15,8 @@ Peer dependencies: `@frontmcp/sdk`, `jest`, `@jest/globals`. Optional: `@playwri
 ## Quick Start
 
 ```ts
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import MyServer from './src/main';
 
 test.use({ server: MyServer });
@@ -95,10 +96,10 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 <!-- links -->
 
 [docs-overview]: https://docs.agentfront.dev/frontmcp/testing/overview
-[docs-tools]: https://docs.agentfront.dev/frontmcp/testing/tools
-[docs-tool-ui]: https://docs.agentfront.dev/frontmcp/testing/tool-ui
-[docs-resources]: https://docs.agentfront.dev/frontmcp/testing/resources
-[docs-prompts]: https://docs.agentfront.dev/frontmcp/testing/prompts
+[docs-tools]: https://docs.agentfront.dev/frontmcp/testing/api-reference
+[docs-tool-ui]: https://docs.agentfront.dev/frontmcp/testing/api-reference
+[docs-resources]: https://docs.agentfront.dev/frontmcp/testing/api-reference
+[docs-prompts]: https://docs.agentfront.dev/frontmcp/testing/api-reference
 [docs-auth]: https://docs.agentfront.dev/frontmcp/testing/authentication
-[docs-transports]: https://docs.agentfront.dev/frontmcp/testing/transports
+[docs-transports]: https://docs.agentfront.dev/frontmcp/testing/overview
 [docs-mocking]: https://docs.agentfront.dev/frontmcp/testing/http-mocking

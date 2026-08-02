@@ -93,17 +93,17 @@ Must be called inside a React Router tree (`<BrowserRouter>`, `<MemoryRouter>`, 
 
 MCP tool that navigates to a URL path.
 
-| Field | Value |
-|-------|-------|
-| **Name** | `navigate` |
+| Field           | Value                                     |
+| --------------- | ----------------------------------------- |
+| **Name**        | `navigate`                                |
 | **Description** | Navigate to a URL path in the application |
 
 ### Input Schema
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` | Yes | URL path to navigate to |
-| `replace` | `boolean` | No | Replace history entry instead of pushing |
+| Parameter | Type      | Required | Description                              |
+| --------- | --------- | -------- | ---------------------------------------- |
+| `path`    | `string`  | Yes      | URL path to navigate to                  |
+| `replace` | `boolean` | No       | Replace history entry instead of pushing |
 
 ### Example
 
@@ -119,9 +119,9 @@ Returns: `"Navigated to /dashboard"`
 
 MCP tool that navigates back in browser history.
 
-| Field | Value |
-|-------|-------|
-| **Name** | `go_back` |
+| Field           | Value                                           |
+| --------------- | ----------------------------------------------- |
+| **Name**        | `go_back`                                       |
 | **Description** | Go back to the previous page in browser history |
 
 Takes no input parameters.
@@ -132,10 +132,10 @@ Takes no input parameters.
 
 MCP resource that reads the current URL/path/params.
 
-| Field | Value |
-|-------|-------|
-| **URI** | `route://current` |
-| **Name** | Current Route |
+| Field    | Value             |
+| -------- | ----------------- |
+| **URI**  | `route://current` |
+| **Name** | Current Route     |
 
 ### Response
 
@@ -178,13 +178,13 @@ import {
 } from '@frontmcp/react/router';
 ```
 
-| Function | Description |
-|----------|-------------|
-| `setNavigate(fn)` | Set the navigate function |
-| `setLocation(loc)` | Set the current location |
-| `getNavigate()` | Get the navigate function (or null) |
-| `getLocation()` | Get the current location (or null) |
-| `clearBridge()` | Reset both navigate and location to null |
+| Function           | Description                              |
+| ------------------ | ---------------------------------------- |
+| `setNavigate(fn)`  | Set the navigate function                |
+| `setLocation(loc)` | Set the current location                 |
+| `getNavigate()`    | Get the navigate function (or null)      |
+| `getLocation()`    | Get the current location (or null)       |
+| `clearBridge()`    | Reset both navigate and location to null |
 
 <Warning>
 If the bridge is not connected (e.g., `useRouterBridge()` not called), `NavigateTool` and `GoBackTool` return an error message instead of navigating. `CurrentRouteResource` returns an error JSON object.

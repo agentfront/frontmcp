@@ -195,6 +195,10 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           jwks_uri: `${baseIssuer}/.well-known/jwks.json`,
           // #462 — only advertise registration when DCR is active. When it is
           // disabled, omitting the endpoint signals "no DCR" to clients.
+          // Dynamic Client Registration is DEPRECATED as of MCP 2026-07-28 in
+          // favour of Client ID Metadata Documents (PR #2858). It stays
+          // advertised for authorization servers and clients that have not
+          // adopted CIMD yet; new clients should prefer CIMD.
           ...(dcrEnabled ? { registration_endpoint: `${oauthBaseUrl}/oauth/register` } : {}),
           token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
           response_types_supported: ['code'],

@@ -27,11 +27,11 @@ const result = readDomById('main-content');
 
 ### Return Values
 
-| Scenario | mimeType | text |
-|----------|----------|------|
-| Element found | `application/json` | JSON with `outerHTML`, `textContent`, `tagName` |
-| Element not found | `text/plain` | `'Element with id "..." not found'` |
-| No DOM (SSR) | `text/plain` | `'DOM not available (not in a browser environment)'` |
+| Scenario          | mimeType           | text                                                 |
+| ----------------- | ------------------ | ---------------------------------------------------- |
+| Element found     | `application/json` | JSON with `outerHTML`, `textContent`, `tagName`      |
+| Element not found | `text/plain`       | `'Element with id "..." not found'`                  |
+| No DOM (SSR)      | `text/plain`       | `'DOM not available (not in a browser environment)'` |
 
 ---
 
@@ -54,12 +54,12 @@ const result = readDomBySelector('.card');
 
 ### Return Values
 
-| Scenario | mimeType | text |
-|----------|----------|------|
-| Elements found | `application/json` | JSON array of `{ outerHTML, textContent, tagName }` |
-| No matches | `text/plain` | `'No elements found matching "..."'` |
-| Invalid selector | `text/plain` | `'Invalid selector: "..."'` |
-| No DOM (SSR) | `text/plain` | `'DOM not available (not in a browser environment)'` |
+| Scenario         | mimeType           | text                                                 |
+| ---------------- | ------------------ | ---------------------------------------------------- |
+| Elements found   | `application/json` | JSON array of `{ outerHTML, textContent, tagName }`  |
+| No matches       | `text/plain`       | `'No elements found matching "..."'`                 |
+| Invalid selector | `text/plain`       | `'Invalid selector: "..."'`                          |
+| No DOM (SSR)     | `text/plain`       | `'DOM not available (not in a browser environment)'` |
 
 ---
 

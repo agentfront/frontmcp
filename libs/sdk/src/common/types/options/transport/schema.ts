@@ -266,6 +266,24 @@ export const transportOptionsSchema = z.object({
 
   protocol: protocolSchema.optional().default('legacy'),
 
+  /**
+   * Which MCP revision to serve a request that does not identify its own.
+   *
+   * A client that names a revision always gets that revision — this only
+   * decides the fallback for a bare JSON-RPC call carrying no `initialize`, no
+   * `Mcp-Session-Id`, and no `MCP-Protocol-Version`.
+   *
+   * - `'2026-07-28'` — serve it statelessly. No session is minted, so the
+   *   deployment needs no session storage (on Cloudflare, no Durable Object).
+   * - `'legacy'` — the session/`initialize` pipeline, as before.
+   *
+   * Defaults to `'2026-07-28'` on V8-isolate runtimes (Cloudflare Workers and
+   * friends), where statelessness is the natural fit and sessions cost a
+   * Durable Object; and to `'legacy'` everywhere else, so existing Node
+   * deployments are untouched.
+   */
+  defaultProtocolVersion: z.enum(['2026-07-28', 'legacy']).optional(),
+
   // ============================================
   // Persistence Configuration (SIMPLIFIED)
   // ============================================

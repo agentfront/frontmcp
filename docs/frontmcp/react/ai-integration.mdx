@@ -25,19 +25,19 @@ function AIChat() {
 
 ### Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `platform` | `SupportedPlatform` | `'openai' \| 'claude' \| 'vercel-ai'` |
-| `options.server` | `string` | Target a named server |
+| Parameter        | Type                | Description                           |
+| ---------------- | ------------------- | ------------------------------------- |
+| `platform`       | `SupportedPlatform` | `'openai' \| 'claude' \| 'vercel-ai'` |
+| `options.server` | `string`            | Target a named server                 |
 
 ### Return Value
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `tools` | `PlatformToolsMap[P] \| null` | Tools formatted for the target platform |
-| `callTool` | `(name, args) => Promise<FormattedToolResult>` | Execute a tool and format the result |
-| `loading` | `boolean` | True while formatting tools |
-| `error` | `Error \| null` | Formatting or execution error |
+| Field      | Type                                           | Description                             |
+| ---------- | ---------------------------------------------- | --------------------------------------- |
+| `tools`    | `PlatformToolsMap[P] \| null`                  | Tools formatted for the target platform |
+| `callTool` | `(name, args) => Promise<FormattedToolResult>` | Execute a tool and format the result    |
+| `loading`  | `boolean`                                      | True while formatting tools             |
+| `error`    | `Error \| null`                                | Formatting or execution error           |
 
 ---
 
@@ -58,12 +58,12 @@ function ChatAgent() {
 
 ### Return Value
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `tools` | `PlatformToolsMap[P] \| null` | Formatted tools |
+| Field              | Type                                             | Description              |
+| ------------------ | ------------------------------------------------ | ------------------------ |
+| `tools`            | `PlatformToolsMap[P] \| null`                    | Formatted tools          |
 | `processToolCalls` | `(calls) => Promise<PlatformToolCallsOutput[P]>` | Batch process tool calls |
-| `loading` | `boolean` | Loading state |
-| `error` | `Error \| null` | Error state |
+| `loading`          | `boolean`                                        | Loading state            |
+| `error`            | `Error \| null`                                  | Error state              |
 
 ---
 

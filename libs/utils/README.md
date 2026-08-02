@@ -31,7 +31,7 @@ npm install @frontmcp/utils
 ## Quick Example
 
 ```ts
-import { matchUriTemplate, sha256Hex, fileExists } from '@frontmcp/utils';
+import { fileExists, matchUriTemplate, sha256Hex } from '@frontmcp/utils';
 
 const params = matchUriTemplate('users/{id}/posts/{postId}', 'users/123/posts/456');
 // { id: '123', postId: '456' }

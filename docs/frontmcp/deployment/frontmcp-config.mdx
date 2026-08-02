@@ -62,31 +62,31 @@ Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.p
 
 ## Top-Level Fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | string | Yes | Server name (kebab-case, no spaces) |
-| `version` | string | No | Server version |
-| `entry` | string | No | Custom entry file path (consumed by `dev`, `inspector`, `pm start/socket`) |
-| `nodeVersion` | string | No | Target Node.js version |
-| `deployments` | DeploymentTarget[] | Yes | One or more deployment targets |
-| `build` | object | No | Build-specific options (esbuild config, dependencies) |
-| `transport` | TransportConfig | No | Per-protocol defaults consumed by `dev` / `inspector` / `pm` (issue #400) |
-| `env` | EnvOverlays | No | `shared` ⊕ `dev` / `test` / `ship` overlays merged into the spawned child env (issue #400) |
-| `clients` | ClientsConfig | No | Per-client connection snippets emitted by `frontmcp eject-mcp-config <client>` (issue #400) |
-| `test` | TestConfig | No | `frontmcp test` defaults overridden by CLI flags (issue #400) |
-| `skills` | SkillsCliConfig | No | `frontmcp skills install` / `export` defaults (issue #400) |
+| Field         | Type               | Required | Description                                                                                 |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------- |
+| `name`        | string             | Yes      | Server name (kebab-case, no spaces)                                                         |
+| `version`     | string             | No       | Server version                                                                              |
+| `entry`       | string             | No       | Custom entry file path (consumed by `dev`, `inspector`, `pm start/socket`)                  |
+| `nodeVersion` | string             | No       | Target Node.js version                                                                      |
+| `deployments` | DeploymentTarget[] | Yes      | One or more deployment targets                                                              |
+| `build`       | object             | No       | Build-specific options (esbuild config, dependencies)                                       |
+| `transport`   | TransportConfig    | No       | Per-protocol defaults consumed by `dev` / `inspector` / `pm` (issue #400)                   |
+| `env`         | EnvOverlays        | No       | `shared` ⊕ `dev` / `test` / `ship` overlays merged into the spawned child env (issue #400)  |
+| `clients`     | ClientsConfig      | No       | Per-client connection snippets emitted by `frontmcp eject-mcp-config <client>` (issue #400) |
+| `test`        | TestConfig         | No       | `frontmcp test` defaults overridden by CLI flags (issue #400)                               |
+| `skills`      | SkillsCliConfig    | No       | `frontmcp skills install` / `export` defaults (issue #400)                                  |
 
 ### Per-command consumption (issue #400)
 
-| Command | Config fields consumed |
-| --- | --- |
-| `build` | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion` |
-| `dev` | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev` |
-| `test` | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `env.shared` ⊕ `env.test` |
-| `inspector` | `transport.default`, `transport.http.port`, `transport.stdio.command/args` |
-| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship` |
-| `skills install` / `export` | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget` |
-| `eject-mcp-config <client>` | `clients.<client>`, `name`, `transport`, `env.ship` |
+| Command                           | Config fields consumed                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                |
+| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                         |
+| `test`                            | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `env.shared` ⊕ `env.test` |
+| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio.command/args`                       |
+| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`   |
+| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                      |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                              |
 
 ## Transport defaults
 
@@ -137,51 +137,51 @@ frontmcp eject-mcp-config claude-code --out ~/.config/claude/mcp.json --dry-run
 
 Each entry in `deployments` defines a build target with independent settings:
 
-| Target | Description | Transport | Storage |
-| --- | --- | --- | --- |
-| `node` | Standalone Node.js server | Streamable HTTP, SSE, stdio | Redis, SQLite, memory |
-| `distributed` | Multi-pod with HA | Streamable HTTP | Redis (required) |
-| `vercel` | Vercel Functions | Streamable HTTP | Vercel KV |
-| `lambda` | AWS Lambda | Streamable HTTP | DynamoDB, ElastiCache |
-| `cloudflare` | Cloudflare Workers | Streamable HTTP | KV, Durable Objects |
-| `browser` | Browser bundle | In-memory | Memory only |
-| `cli` | Standalone binary | stdio | SQLite, memory |
-| `sdk` | Library for embedding | Direct (in-process) | Configurable |
-| `mcpb` | MCP Bundle archive (see [MCPB](/frontmcp/deployment/mcpb)) | stdio | SQLite, memory |
+| Target        | Description                                                | Transport                   | Storage               |
+| ------------- | ---------------------------------------------------------- | --------------------------- | --------------------- |
+| `node`        | Standalone Node.js server                                  | Streamable HTTP, SSE, stdio | Redis, SQLite, memory |
+| `distributed` | Multi-pod with HA                                          | Streamable HTTP             | Redis (required)      |
+| `vercel`      | Vercel Functions                                           | Streamable HTTP             | Vercel KV             |
+| `lambda`      | AWS Lambda                                                 | Streamable HTTP             | DynamoDB, ElastiCache |
+| `cloudflare`  | Cloudflare Workers                                         | Streamable HTTP             | KV, Durable Objects   |
+| `browser`     | Browser bundle                                             | In-memory                   | Memory only           |
+| `cli`         | Standalone binary                                          | stdio                       | SQLite, memory        |
+| `sdk`         | Library for embedding                                      | Direct (in-process)         | Configurable          |
+| `mcpb`        | MCP Bundle archive (see [MCPB](/frontmcp/deployment/mcpb)) | stdio                       | SQLite, memory        |
 
 ### Deployment Target Fields
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `target` | string | One of the 9 target types above |
-| `server` | ServerConfig | HTTP, CORS, CSP, and security header settings |
-| `ha` | HaConfig | HA settings (distributed target only) |
-| `cli` | CliConfig | CLI-specific settings (cli target only) |
-| `js` | boolean | Generate .js bundle instead of native binary (cli target) |
-| `env` | Record | Per-target environment variables |
+| Field    | Type         | Description                                               |
+| -------- | ------------ | --------------------------------------------------------- |
+| `target` | string       | One of the 9 target types above                           |
+| `server` | ServerConfig | HTTP, CORS, CSP, and security header settings             |
+| `ha`     | HaConfig     | HA settings (distributed target only)                     |
+| `cli`    | CliConfig    | CLI-specific settings (cli target only)                   |
+| `js`     | boolean      | Generate .js bundle instead of native binary (cli target) |
+| `env`    | Record       | Per-target environment variables                          |
 
 ### MCPB-Only Fields
 
 The `mcpb` target supports additional fields for [MCP Bundle](/frontmcp/deployment/mcpb) metadata:
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `displayName` | string | Human-friendly bundle title shown in the installer |
-| `longDescription` | string | Markdown description for the extension details page |
-| `author` | `{ name, email?, url? }` | Overrides parsed `package.json.author` |
-| `license` | string | SPDX license identifier |
-| `homepage` | string | Project homepage URL |
-| `repository` | string \| `{ type, url }` | Source repository |
-| `documentation` | string | Documentation URL |
-| `support` | string | Support / issues URL |
-| `icon` | string | Icon path relative to project root (PNG) |
-| `keywords` | string[] | Keywords for client search |
-| `privacyPolicies` | string[] | Privacy policy URLs for external services this server talks to |
-| `compatibility` | object | `{ claude_desktop?, platforms?, runtimes? }` constraints |
-| `userConfig` | Record | MCPB `user_config` overrides (type, min/max, etc.) — merged with translated `setup.steps` |
-| `sea` | `{ enabled?, mergeFrom? }` | Build SEA binary for the host and/or merge pre-built binaries |
-| `includeNodeModules` | boolean | Include `server/node_modules/` in the archive (off by default) |
-| `deterministic` | boolean | Produce byte-identical archives across runs (defaults to `true`) |
+| Field                | Type                       | Description                                                                               |
+| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
+| `displayName`        | string                     | Human-friendly bundle title shown in the installer                                        |
+| `longDescription`    | string                     | Markdown description for the extension details page                                       |
+| `author`             | `{ name, email?, url? }`   | Overrides parsed `package.json.author`                                                    |
+| `license`            | string                     | SPDX license identifier                                                                   |
+| `homepage`           | string                     | Project homepage URL                                                                      |
+| `repository`         | string \| `{ type, url }`  | Source repository                                                                         |
+| `documentation`      | string                     | Documentation URL                                                                         |
+| `support`            | string                     | Support / issues URL                                                                      |
+| `icon`               | string                     | Icon path relative to project root (PNG)                                                  |
+| `keywords`           | string[]                   | Keywords for client search                                                                |
+| `privacyPolicies`    | string[]                   | Privacy policy URLs for external services this server talks to                            |
+| `compatibility`      | object                     | `{ claude_desktop?, platforms?, runtimes? }` constraints                                  |
+| `userConfig`         | Record                     | MCPB `user_config` overrides (type, min/max, etc.) — merged with translated `setup.steps` |
+| `sea`                | `{ enabled?, mergeFrom? }` | Build SEA binary for the host and/or merge pre-built binaries                             |
+| `includeNodeModules` | boolean                    | Include `server/node_modules/` in the archive (off by default)                            |
+| `deterministic`      | boolean                    | Produce byte-identical archives across runs (defaults to `true`)                          |
 
 ## Server Configuration
 
@@ -227,40 +227,40 @@ export default defineConfig({
 
 ### HTTP Options
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `port` | number | 3000 | HTTP listen port (node / distributed only) |
-| `socketPath` | string | --- | Unix socket path (alternative to port; node / distributed only) |
-| `entryPath` | string | `''` | Base path for the MCP endpoint (e.g. `'/mcp'`) |
-| `cors` | object | --- | CORS configuration — `{ origins?, credentials?, maxAge? }` |
-| `bodyLimit` | number \| string | `'4mb'` | Max body size for `express.json()`. Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, …). Oversized requests get HTTP 413 with a JSON-RPC envelope. See [Transport Security → Request Body Limits](/frontmcp/deployment/transport-security#request-body-limits). |
-| `urlencodedLimit` | number \| string | falls back to `bodyLimit` | Max body size for `application/x-www-form-urlencoded`. |
+| Field             | Type             | Default                   | Description                                                                                                                                                                                                                                                              |
+| ----------------- | ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `port`            | number           | 3000                      | HTTP listen port (node / distributed only)                                                                                                                                                                                                                               |
+| `socketPath`      | string           | ---                       | Unix socket path (alternative to port; node / distributed only)                                                                                                                                                                                                          |
+| `entryPath`       | string           | `''`                      | Base path for the MCP endpoint (e.g. `'/mcp'`)                                                                                                                                                                                                                           |
+| `cors`            | object           | ---                       | CORS configuration — `{ origins?, credentials?, maxAge? }`                                                                                                                                                                                                               |
+| `bodyLimit`       | number \| string | `'4mb'`                   | Max body size for `express.json()`. Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, …). Oversized requests get HTTP 413 with a JSON-RPC envelope. See [Transport Security → Request Body Limits](/frontmcp/deployment/transport-security#request-body-limits). |
+| `urlencodedLimit` | number \| string | falls back to `bodyLimit` | Max body size for `application/x-www-form-urlencoded`.                                                                                                                                                                                                                   |
 
 ### CSP Options
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enabled` | boolean | false | Enable CSP headers |
-| `directives` | Record | --- | Directive name to value(s) map (e.g., `{ 'default-src': "'self'" }`) |
-| `reportUri` | string | --- | URI for CSP violation reports |
-| `reportOnly` | boolean | false | Use `Content-Security-Policy-Report-Only` header |
+| Field        | Type    | Default | Description                                                          |
+| ------------ | ------- | ------- | -------------------------------------------------------------------- |
+| `enabled`    | boolean | false   | Enable CSP headers                                                   |
+| `directives` | Record  | ---     | Directive name to value(s) map (e.g., `{ 'default-src': "'self'" }`) |
+| `reportUri`  | string  | ---     | URI for CSP violation reports                                        |
+| `reportOnly` | boolean | false   | Use `Content-Security-Policy-Report-Only` header                     |
 
 ### Security Headers
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `hsts` | string | --- | `Strict-Transport-Security` value |
-| `contentTypeOptions` | string | `nosniff` | `X-Content-Type-Options` value |
-| `frameOptions` | string | `DENY` | `X-Frame-Options` value |
+| Field                | Type   | Default   | Description                       |
+| -------------------- | ------ | --------- | --------------------------------- |
+| `hsts`               | string | ---       | `Strict-Transport-Security` value |
+| `contentTypeOptions` | string | `nosniff` | `X-Content-Type-Options` value    |
+| `frameOptions`       | string | `DENY`    | `X-Frame-Options` value           |
 
 ### HA Configuration
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `heartbeatIntervalMs` | number | 10000 | Heartbeat write interval |
-| `heartbeatTtlMs` | number | 30000 | Heartbeat TTL (2-3x interval) |
-| `takeoverGracePeriodMs` | number | 5000 | Grace period before takeover |
-| `redisKeyPrefix` | string | `mcp:ha:` | Redis key prefix |
+| Field                   | Type   | Default   | Description                   |
+| ----------------------- | ------ | --------- | ----------------------------- |
+| `heartbeatIntervalMs`   | number | 10000     | Heartbeat write interval      |
+| `heartbeatTtlMs`        | number | 30000     | Heartbeat TTL (2-3x interval) |
+| `takeoverGracePeriodMs` | number | 5000      | Grace period before takeover  |
+| `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix              |
 
 ## Multi-Target Example
 
@@ -317,13 +317,13 @@ below) are rejected at config load.
 
 Each command entry accepts:
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `entry` | string | yes | Path to the runner module (TS or JS). |
-| `description` | string | no | Shown in `frontmcp --help` and `--list-commands`. |
-| `arguments` | array | no | Positional argument definitions (variadic must be last). |
-| `options` | array | no | Long/short flag definitions with optional defaults. |
-| `hidden` | boolean | no | When `true`, the verb still runs but is omitted from help output and `--list-commands`. Useful for internal scripts you don't want surfaced to end users. |
+| Field         | Type    | Required | Description                                                                                                                                               |
+| ------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entry`       | string  | yes      | Path to the runner module (TS or JS).                                                                                                                     |
+| `description` | string  | no       | Shown in `frontmcp --help` and `--list-commands`.                                                                                                         |
+| `arguments`   | array   | no       | Positional argument definitions (variadic must be last).                                                                                                  |
+| `options`     | array   | no       | Long/short flag definitions with optional defaults.                                                                                                       |
+| `hidden`      | boolean | no       | When `true`, the verb still runs but is omitted from help output and `--list-commands`. Useful for internal scripts you don't want surfaced to end users. |
 
 ```typescript
 // frontmcp.config.ts
@@ -375,10 +375,10 @@ message. Use a project-namespaced prefix (e.g. `project:init`,
 
 ### Runner Selection
 
-| Entry extension | Runner |
-| --------------- | ------ |
+| Entry extension               | Runner                      |
+| ----------------------------- | --------------------------- |
 | `.ts`, `.tsx`, `.mts`, `.cts` | `node --import tsx <entry>` |
-| `.js`, `.mjs`, `.cjs`         | `node <entry>` |
+| `.js`, `.mjs`, `.cjs`         | `node <entry>`              |
 
 The runner receives the parsed positionals as argv plus a
 `FRONTMCP_PROJECT_COMMAND` env var containing a JSON payload with

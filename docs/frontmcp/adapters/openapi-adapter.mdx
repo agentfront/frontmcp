@@ -550,11 +550,11 @@ OpenapiAdapter.init({
 });
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `mode` | `'definition' \| 'description' \| 'both'` | Where to expose the schema. Default: `'definition'`. |
-| `descriptionFormat` | `'jsonSchema' \| 'summary'` | Format used when schema appears in description. Default: `'summary'`. |
-| `descriptionFormatter` | `(schema, ctx) => string \| Promise<string>` | Custom formatter (sync or async, e.g., LLM-generated). |
+| Field                  | Type                                         | Description                                                           |
+| ---------------------- | -------------------------------------------- | --------------------------------------------------------------------- |
+| `mode`                 | `'definition' \| 'description' \| 'both'`    | Where to expose the schema. Default: `'definition'`.                  |
+| `descriptionFormat`    | `'jsonSchema' \| 'summary'`                  | Format used when schema appears in description. Default: `'summary'`. |
+| `descriptionFormatter` | `(schema, ctx) => string \| Promise<string>` | Custom formatter (sync or async, e.g., LLM-generated).                |
 
 #### Custom Schema Formatter
 
@@ -847,11 +847,12 @@ OpenapiAdapter.init({
   },
 });
 ```
+
 </CodeGroup>
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `resolveFormats` | `boolean` | `false` | Enable built-in format resolvers (uuid, date-time, email, int32, etc.) |
+| Option            | Type                             | Default     | Description                                                                                                                           |
+| ----------------- | -------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolveFormats`  | `boolean`                        | `false`     | Enable built-in format resolvers (uuid, date-time, email, int32, etc.)                                                                |
 | `formatResolvers` | `Record<string, FormatResolver>` | `undefined` | Custom format resolvers. When used with `resolveFormats: true`, custom resolvers are merged with built-ins (custom takes precedence). |
 
 <Tip>
@@ -980,6 +981,7 @@ OpenapiAdapter.init({
   },
 });
 ```
+
 </CodeGroup>
 
 <Note>
@@ -990,12 +992,12 @@ OpenapiAdapter.init({
 
 These apply to **both** the spec-URL fetch and external `$ref` resolution (`mcp-from-openapi` &ge; 2.5.0).
 
-| Option | Type | Default (FrontMCP) | Description |
-| --- | --- | --- | --- |
-| `allowedProtocols` | `string[]` | `[]` | Protocols allowed for external `$ref` resolution (http, https, file, …). **FrontMCP defaults this to `[]`** (external refs disabled); set `['http','https']` to enable. |
-| `allowedHosts` | `string[]` | `undefined` | When set, only the spec URL / `$ref` URLs pointing to these hostnames are allowed. All other hosts are blocked. |
-| `blockedHosts` | `string[]` | `undefined` | Additional hostnames/IPs to block, on top of the built-in internal-address block list. |
-| `allowInternalIPs` | `boolean` | `false` | Set to `true` to allow loopback / private / internal targets for the spec URL **and** `$ref`s (skips the internal-address block list and DNS re-check). **Warning:** re-exposes SSRF; use only in trusted/local environments. |
+| Option             | Type       | Default (FrontMCP) | Description                                                                                                                                                                                                                   |
+| ------------------ | ---------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowedProtocols` | `string[]` | `[]`               | Protocols allowed for external `$ref` resolution (http, https, file, …). **FrontMCP defaults this to `[]`** (external refs disabled); set `['http','https']` to enable.                                                       |
+| `allowedHosts`     | `string[]` | `undefined`        | When set, only the spec URL / `$ref` URLs pointing to these hostnames are allowed. All other hosts are blocked.                                                                                                               |
+| `blockedHosts`     | `string[]` | `undefined`        | Additional hostnames/IPs to block, on top of the built-in internal-address block list.                                                                                                                                        |
+| `allowInternalIPs` | `boolean`  | `false`            | Set to `true` to allow loopback / private / internal targets for the spec URL **and** `$ref`s (skips the internal-address block list and DNS re-check). **Warning:** re-exposes SSRF; use only in trusted/local environments. |
 
 ## Polling & Live Updates
 
@@ -1199,14 +1201,14 @@ The adapter automatically validates your security configuration and assigns a ri
 
 Beyond authentication, the adapter includes defense-in-depth protections:
 
-| Protection                | Description                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------------- |
+| Protection                | Description                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | **$ref SSRF Prevention**  | Blocks `file://` protocol and internal/private IPs during `$ref` dereferencing. Configurable via [`refResolution`](#ref-resolution-security). |
-| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
-| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
-| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
-| **Request Size Limits**   | Content-Length validation with integer overflow protection                              |
-| **Query Param Collision** | Detects conflicts between security and user input parameters                            |
+| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`)                                                       |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values                                                                  |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms                                                         |
+| **Request Size Limits**   | Content-Length validation with integer overflow protection                                                                                    |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                                                                                  |
 
 **Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
 

@@ -43,12 +43,12 @@ Build and deploy --- headers are applied automatically on every response.
 
 ## CSP Configuration
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enabled` | boolean | `false` | Enable CSP headers |
-| `directives` | `Record<string, string \| string[]>` | --- | Map of directive name to value(s) |
-| `reportUri` | string | --- | URI for CSP violation reports |
-| `reportOnly` | boolean | `false` | Use `Content-Security-Policy-Report-Only` instead of enforcement |
+| Field        | Type                                 | Default | Description                                                      |
+| ------------ | ------------------------------------ | ------- | ---------------------------------------------------------------- |
+| `enabled`    | boolean                              | `false` | Enable CSP headers                                               |
+| `directives` | `Record<string, string \| string[]>` | ---     | Map of directive name to value(s)                                |
+| `reportUri`  | string                               | ---     | URI for CSP violation reports                                    |
+| `reportOnly` | boolean                              | `false` | Use `Content-Security-Policy-Report-Only` instead of enforcement |
 
 <Tip>
   Value-less CSP directives like `upgrade-insecure-requests` and `block-all-mixed-content` are supported — set the value to an empty string (`''`).
@@ -68,12 +68,12 @@ directives: {
 
 ## Security Headers
 
-| Header | Config Field | Default | Description |
-| --- | --- | --- | --- |
-| `Strict-Transport-Security` | `headers.hsts` | --- | HSTS policy for HTTPS enforcement |
-| `X-Content-Type-Options` | `headers.contentTypeOptions` | `nosniff` | Prevent MIME type sniffing |
-| `X-Frame-Options` | `headers.frameOptions` | `DENY` | Clickjacking protection |
-| Custom headers | `headers.custom` | --- | Record of additional header name-value pairs |
+| Header                      | Config Field                 | Default   | Description                                  |
+| --------------------------- | ---------------------------- | --------- | -------------------------------------------- |
+| `Strict-Transport-Security` | `headers.hsts`               | ---       | HSTS policy for HTTPS enforcement            |
+| `X-Content-Type-Options`    | `headers.contentTypeOptions` | `nosniff` | Prevent MIME type sniffing                   |
+| `X-Frame-Options`           | `headers.frameOptions`       | `DENY`    | Clickjacking protection                      |
+| Custom headers              | `headers.custom`             | ---       | Record of additional header name-value pairs |
 
 <Note>
   `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are applied by default even without explicit configuration. Set them to empty strings to disable.
@@ -83,15 +83,15 @@ directives: {
 
 All settings are injected as environment variables at build time by the deployment adapter:
 
-| Variable | Maps To |
-| --- | --- |
-| `FRONTMCP_CSP_ENABLED` | `server.csp.enabled` |
-| `FRONTMCP_CSP_DIRECTIVES` | `server.csp.directives` |
-| `FRONTMCP_CSP_REPORT_URI` | `server.csp.reportUri` |
-| `FRONTMCP_CSP_REPORT_ONLY` | `server.csp.reportOnly` |
-| `FRONTMCP_HSTS` | `server.headers.hsts` |
+| Variable                        | Maps To                             |
+| ------------------------------- | ----------------------------------- |
+| `FRONTMCP_CSP_ENABLED`          | `server.csp.enabled`                |
+| `FRONTMCP_CSP_DIRECTIVES`       | `server.csp.directives`             |
+| `FRONTMCP_CSP_REPORT_URI`       | `server.csp.reportUri`              |
+| `FRONTMCP_CSP_REPORT_ONLY`      | `server.csp.reportOnly`             |
+| `FRONTMCP_HSTS`                 | `server.headers.hsts`               |
 | `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions` |
-| `FRONTMCP_FRAME_OPTIONS` | `server.headers.frameOptions` |
+| `FRONTMCP_FRAME_OPTIONS`        | `server.headers.frameOptions`       |
 
 You can override these at runtime without rebuilding:
 

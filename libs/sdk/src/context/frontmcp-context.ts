@@ -13,7 +13,7 @@
 
 import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type ZodType } from '@frontmcp/lazy-zod';
-import { type AuthInfo } from '@frontmcp/protocol';
+import { type AuthInfo, type LoggingLevel } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
@@ -24,6 +24,51 @@ import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
 const PRE_RESOLVED_ELICIT_KEY = Symbol.for('frontmcp:pre-resolved-elicit');
+
+/** Symbol key for the in-flight MRTR exchange (protocol 2026-07-28) */
+const MRTR_EXCHANGE_KEY = Symbol.for('frontmcp:mrtr-exchange');
+
+/** Symbol key for the request-scoped notification sink (protocol 2026-07-28) */
+const REQUEST_NOTIFICATION_SINK_KEY = Symbol.for('frontmcp:request-notification-sink');
+
+/**
+ * Structural view of the request-scoped notification sink.
+ *
+ * Typed structurally rather than by importing the transport class so the
+ * context module stays free of a dependency on the transport layer.
+ */
+export interface RequestNotificationSinkRef {
+  log(level: LoggingLevel, logger: string | undefined, data: unknown): boolean;
+  progress(progress: number, total?: number, message?: string): boolean;
+}
+
+/**
+ * Structural view of the MRTR exchange stored on the context.
+ *
+ * Typed structurally rather than by importing `MrtrExchange` so the context
+ * module stays free of a dependency on the transport layer.
+ */
+export interface MrtrExchangeRef {
+  resolveElicitation(pending: {
+    message: string;
+    requestedSchema: Record<string, unknown>;
+    mode?: 'form' | 'url';
+    url?: string;
+  }): ElicitResult<unknown>;
+
+  resolveSampling(pending: {
+    messages: unknown[];
+    maxTokens: number;
+    systemPrompt?: string;
+    modelPreferences?: Record<string, unknown>;
+    temperature?: number;
+    stopSequences?: string[];
+    includeContext?: 'none' | 'thisServer' | 'allServers';
+    metadata?: Record<string, unknown>;
+  }): { role: string; content: unknown; model?: string; stopReason?: string };
+
+  resolveRoots(): { roots: Array<{ uri: string; name?: string }> };
+}
 
 /**
  * Request metadata extracted from HTTP headers.
@@ -447,6 +492,56 @@ export class FrontMcpContext {
    */
   setPreResolvedElicitResult(result: ElicitResult<unknown>): void {
     this.store.set(PRE_RESOLVED_ELICIT_KEY, result);
+  }
+
+  // =====================
+  // MRTR (protocol 2026-07-28)
+  // =====================
+
+  /**
+   * Attach the request's MRTR exchange.
+   *
+   * Set by the 2026-07-28 dispatcher before running a request. Its presence is
+   * what switches `elicit()` from the inline server→client round trip (removed
+   * in this revision) to the `InputRequiredResult` round trip.
+   *
+   * @internal
+   */
+  setMrtrExchange(exchange: MrtrExchangeRef): void {
+    this.store.set(MRTR_EXCHANGE_KEY, exchange);
+  }
+
+  /**
+   * Get the request's MRTR exchange, if this request is running under
+   * protocol 2026-07-28.
+   *
+   * @internal
+   */
+  getMrtrExchange(): MrtrExchangeRef | undefined {
+    return this.store.get(MRTR_EXCHANGE_KEY) as MrtrExchangeRef | undefined;
+  }
+
+  /**
+   * Attach the request-scoped notification sink.
+   *
+   * Set by the 2026-07-28 dispatcher. Its presence routes `notify()` and
+   * `progress()` onto THIS request's response stream instead of a session
+   * channel, which this revision no longer has.
+   *
+   * @internal
+   */
+  setRequestNotificationSink(sink: RequestNotificationSinkRef): void {
+    this.store.set(REQUEST_NOTIFICATION_SINK_KEY, sink);
+  }
+
+  /**
+   * Get the request-scoped notification sink, if this request is running under
+   * protocol 2026-07-28.
+   *
+   * @internal
+   */
+  getRequestNotificationSink(): RequestNotificationSinkRef | undefined {
+    return this.store.get(REQUEST_NOTIFICATION_SINK_KEY) as RequestNotificationSinkRef | undefined;
   }
 
   /**

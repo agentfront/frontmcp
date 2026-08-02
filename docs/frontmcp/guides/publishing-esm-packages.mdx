@@ -99,18 +99,19 @@ export class EchoTool extends ToolContext {
   }
 }
 ```
+
 </CodeGroup>
 
 ### Plain Object Contract
 
 When using plain objects, each tool must have:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | `string` | Yes | Tool name |
-| `description` | `string` | No | Human-readable description |
-| `inputSchema` | `object` | No | JSON Schema for input validation |
-| `execute` | `function` | Yes | `(input) => Promise<CallToolResult>` |
+| Field         | Type       | Required | Description                          |
+| ------------- | ---------- | -------- | ------------------------------------ |
+| `name`        | `string`   | Yes      | Tool name                            |
+| `description` | `string`   | No       | Human-readable description           |
+| `inputSchema` | `object`   | No       | JSON Schema for input validation     |
+| `execute`     | `function` | Yes      | `(input) => Promise<CallToolResult>` |
 
 The `execute` function receives the parsed input and must return a `CallToolResult` with a `content` array.
 
@@ -152,26 +153,27 @@ export const greetingPrompt = {
   }),
 };
 ```
+
 </CodeGroup>
 
 ### Resource Contract
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | `string` | Yes | Resource name |
-| `description` | `string` | No | Human-readable description |
-| `uri` | `string` | Yes | Resource URI (e.g., `my-tools://status`) |
-| `mimeType` | `string` | No | MIME type of the resource content |
-| `read` | `function` | Yes | `() => Promise<ReadResourceResult>` |
+| Field         | Type       | Required | Description                              |
+| ------------- | ---------- | -------- | ---------------------------------------- |
+| `name`        | `string`   | Yes      | Resource name                            |
+| `description` | `string`   | No       | Human-readable description               |
+| `uri`         | `string`   | Yes      | Resource URI (e.g., `my-tools://status`) |
+| `mimeType`    | `string`   | No       | MIME type of the resource content        |
+| `read`        | `function` | Yes      | `() => Promise<ReadResourceResult>`      |
 
 ### Prompt Contract
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | `string` | Yes | Prompt name |
-| `description` | `string` | No | Human-readable description |
-| `arguments` | `array` | No | Array of `{ name, description?, required? }` |
-| `execute` | `function` | Yes | `(args) => Promise<GetPromptResult>` |
+| Field         | Type       | Required | Description                                  |
+| ------------- | ---------- | -------- | -------------------------------------------- |
+| `name`        | `string`   | Yes      | Prompt name                                  |
+| `description` | `string`   | No       | Human-readable description                   |
+| `arguments`   | `array`    | No       | Array of `{ name, description?, required? }` |
+| `execute`     | `function` | Yes      | `(args) => Promise<GetPromptResult>`         |
 
 ---
 
@@ -214,6 +216,7 @@ export const version = '1.0.0';
 export { echoTool, addTool } from './tools';
 export const tools = [echoTool, addTool];
 ```
+
 </CodeGroup>
 
 <Tip>
@@ -308,6 +311,7 @@ FrontMCP's `normalizeEsmExport()` function tries three paths in order:
 3. **Named exports** — Scans the module for named exports matching manifest primitive keys (`tools`, `prompts`, `resources`, etc.) and assembles them into a manifest.
 
 If none of these paths produce a valid manifest, an `EsmManifestInvalidError` is thrown.
+
 </Accordion>
 
 ---

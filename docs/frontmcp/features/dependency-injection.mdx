@@ -47,10 +47,10 @@ class MyApp {}
 
 ## Provider Scopes
 
-| Scope       | Lifetime                                   | Use Case                            |
-| ----------- | ------------------------------------------ | ----------------------------------- |
-| `global`    | One instance per server (default)          | Configuration, database connections |
-| `context`   | One instance per execution context         | Per-request state, logging, caches  |
+| Scope     | Lifetime                           | Use Case                            |
+| --------- | ---------------------------------- | ----------------------------------- |
+| `global`  | One instance per server (default)  | Configuration, database connections |
+| `context` | One instance per execution context | Per-request state, logging, caches  |
 
 `'session'` and `'request'` are kept as deprecated aliases of `'context'`.
 

@@ -70,8 +70,9 @@ class MyApp {}
 ### Redis Client (Reuse Existing)
 
 ```typescript
-import { CachePlugin } from '@frontmcp/plugin-cache';
 import { Redis } from 'ioredis';
+
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 const redis = new Redis({ host: 'localhost', port: 6379 });
 

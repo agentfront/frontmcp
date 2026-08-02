@@ -105,6 +105,7 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
       }
     }
     ```
+
   </Step>
 
   <Step title="Register the plugin">
@@ -143,6 +144,7 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
     })
     export default class Server {}
     ```
+
   </Step>
 
   <Step title="Run a tiny mock REST server (the upstream the bundle points at)">
@@ -190,6 +192,7 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
     ```bash
     npx tsx src/mock-billing.ts
     ```
+
   </Step>
 
   <Step title="Connect MCP Inspector and verify">
@@ -200,6 +203,7 @@ The fastest way to see the plugin in action is to point it at a **static** bundl
     - `search_skill({ query: "create invoice" })` returns `[{ skillId: "invoices", ... }]`.
     - `load_skill({ skillId: "invoices" })` returns the markdown instructions plus three actions with their JSON Schemas (the `actionId`s you'll call from a workflow).
     - `run_workflow({ script: 'const inv = await callTool("createInvoice", { customerId: "cus_1", amount: 4200 }); return inv;' })` returns `{ success: true, value: { id: "inv_1", status: "open" }, stats: { durationMs, toolCalls: 1, steps } }` and the mock server logs the hit. The AgentScript runs inside the enclave sandbox; `callTool` is the only way it reaches an upstream operation.
+
   </Step>
 </Steps>
 

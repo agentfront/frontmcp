@@ -116,6 +116,48 @@ jobs:
             echo "Cherry-pick failed due to conflicts"
           fi
 
+      # A release branch carries bumped @frontmcp/* versions (e.g. 1.5.6) while main is
+      # still on its own line (e.g. 1.4.0) — create-release-branch.yml bumps the release
+      # branch only. Cherry-picking a commit that touched any package.json or yarn.lock
+      # therefore drags those release-line pins onto main, where every sibling package
+      # disagrees. Two things then break:
+      #   1. `yarn install --immutable` fails with YN0028 on the next push to main.
+      #   2. Yarn stops linking the mismatched siblings as workspaces and silently
+      #      resolves them from the npm registry instead — main builds against published
+      #      tarballs rather than local source.
+      # Rewriting the pins back to main's own version and refreshing the lockfile keeps
+      # the genuine change (new external deps, code) and drops only the version drag.
+      - name: Setup Node + Yarn
+        if: steps.prepare.outputs.conflict == 'false'
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version-file: ".nvmrc"
+          install: "false"
+
+      - name: Re-pin internal versions to the target branch line
+        if: steps.prepare.outputs.conflict == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # No explicit version: the script infers the line held by the majority of
+          # workspace packages, which on main is main's line — the handful of manifests
+          # the cherry-pick contaminated are the minority and get corrected.
+          node scripts/normalize-internal-versions.mjs
+
+          # Rewrites the pins recorded in yarn.lock. Resolves offline for internal
+          # packages (they are workspace soft-links); only genuinely new external deps
+          # introduced by the cherry-pick hit the registry.
+          yarn install --mode=update-lockfile
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit --amend --no-edit
+            echo "Re-pinned internal versions and refreshed yarn.lock into the cherry-pick commit."
+          else
+            echo "No version drift introduced by this cherry-pick."
+          fi
+
       - name: Push branch and create PR
         if: steps.prepare.outputs.conflict == 'false'
         env:

@@ -3,19 +3,19 @@
  * @description Types for MCP client connections to remote servers
  */
 
-import type { Client } from '@frontmcp/protocol';
-import type { Transport } from '@frontmcp/protocol';
-import type {
-  Tool,
-  Resource,
-  ResourceTemplate,
-  Prompt,
-  ServerCapabilities,
-  CallToolResult,
-  ReadResourceResult,
-  GetPromptResult,
+import {
+  type AuthInfo,
+  type CallToolResult,
+  type Client,
+  type GetPromptResult,
+  type Prompt,
+  type ReadResourceResult,
+  type Resource,
+  type ResourceTemplate,
+  type ServerCapabilities,
+  type Tool,
+  type Transport,
 } from '@frontmcp/protocol';
-import type { AuthInfo } from '@frontmcp/protocol';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION TYPES
@@ -32,8 +32,14 @@ export type McpConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 
 export interface McpClientConnection {
   /** The MCP client instance */
   client: Client;
-  /** The transport used for communication */
-  transport: Transport;
+  /**
+   * The transport used for communication.
+   *
+   * Absent for protocol 2026-07-28 connections: that revision is stateless, so
+   * the adapter issues an independent HTTP request per call and there is no
+   * long-lived transport object to hold.
+   */
+  transport?: Transport;
   /** Session ID assigned by the remote server (if any) */
   sessionId?: string;
   /** Current connection status */
@@ -84,6 +90,16 @@ export interface McpHttpTransportOptions {
   fallbackToSSE?: boolean;
   /** Additional headers to include in all requests */
   headers?: Record<string, string>;
+  /**
+   * Which MCP revision to speak to this remote.
+   *
+   * - omitted / `'legacy'` — the session + `initialize` transports (default, and
+   *   what every existing deployment keeps doing).
+   * - `'2026-07-28'` — the stateless revision, via FrontMCP's own client.
+   * - `'auto'` — probe `server/discover` first and fall back to legacy when the
+   *   remote does not answer it, per the spec's backward-compatibility guidance.
+   */
+  protocolVersion?: 'legacy' | '2026-07-28' | 'auto';
 }
 
 /**

@@ -66,6 +66,7 @@ observability: {
   requestLogs: true,
 }
 ```
+
 </Tip>
 
 ---
@@ -88,6 +89,7 @@ The `@FrontMcp({ ... })` snippets below show only the `observability` block for 
       exporter: 'console',
     });
     ```
+
   </Tab>
 
   <Tab title="OTLP (Any Backend)">
@@ -110,6 +112,7 @@ The `@FrontMcp({ ... })` snippets below show only the `observability` block for 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
     node server.js
     ```
+
   </Tab>
 
   <Tab title="Coralogix">
@@ -182,6 +185,7 @@ The `@FrontMcp({ ... })` snippets below show only the `observability` block for 
       },
     })
     ```
+
   </Tab>
 
   <Tab title="Pino">
@@ -201,6 +205,7 @@ The `@FrontMcp({ ... })` snippets below show only the `observability` block for 
       },
     })
     ```
+
   </Tab>
 </Tabs>
 
@@ -375,38 +380,38 @@ HTTP Server Span: "POST /mcp"
 
 ### MCP Protocol Attributes (interoperable)
 
-| Attribute | Example | Description |
-| --- | --- | --- |
-| `mcp.method.name` | `tools/call` | MCP protocol method |
-| `mcp.session.id` | `a3f8b2c1d4e5f6a7` | Hashed session ID |
-| `mcp.resource.uri` | `file:///data.txt` | Resource URI |
-| `mcp.component.type` | `tool` | Component type: tool, resource, prompt, agent |
-| `mcp.component.key` | `tool:get_weather` | Fully qualified component key |
+| Attribute            | Example            | Description                                   |
+| -------------------- | ------------------ | --------------------------------------------- |
+| `mcp.method.name`    | `tools/call`       | MCP protocol method                           |
+| `mcp.session.id`     | `a3f8b2c1d4e5f6a7` | Hashed session ID                             |
+| `mcp.resource.uri`   | `file:///data.txt` | Resource URI                                  |
+| `mcp.component.type` | `tool`             | Component type: tool, resource, prompt, agent |
+| `mcp.component.key`  | `tool:get_weather` | Fully qualified component key                 |
 
 ### Standard OTel Attributes
 
-| Attribute | Example | Description |
-| --- | --- | --- |
-| `rpc.system` | `mcp` | RPC system identifier |
-| `rpc.service` | `my-server` | Server name |
-| `rpc.method` | `tools/call` | RPC method |
-| `http.request.method` | `POST` | HTTP method |
-| `http.response.status_code` | `200` | HTTP status |
-| `enduser.id` | `client-42` | Client ID from auth token |
-| `enduser.scope` | `read write admin` | OAuth scopes |
+| Attribute                   | Example            | Description               |
+| --------------------------- | ------------------ | ------------------------- |
+| `rpc.system`                | `mcp`              | RPC system identifier     |
+| `rpc.service`               | `my-server`        | Server name               |
+| `rpc.method`                | `tools/call`       | RPC method                |
+| `http.request.method`       | `POST`             | HTTP method               |
+| `http.response.status_code` | `200`              | HTTP status               |
+| `enduser.id`                | `client-42`        | Client ID from auth token |
+| `enduser.scope`             | `read write admin` | OAuth scopes              |
 
 ### FrontMCP Vendor Attributes
 
-| Attribute | Description |
-| --- | --- |
-| `frontmcp.scope.id` | Scope identifier |
-| `frontmcp.request.id` | Unique request ID |
-| `frontmcp.tool.name` | Tool name |
-| `frontmcp.tool.owner` | Tool owner class |
-| `frontmcp.flow.name` | Flow name (e.g., `tools:call-tool`) |
-| `frontmcp.transport.type` | Transport: `legacy-sse`, `streamable-http` |
-| `frontmcp.auth.mode` | Auth mode: `public`, `transparent`, `orchestrated` |
-| `frontmcp.session.id_hash` | Privacy-safe session hash |
+| Attribute                  | Description                                        |
+| -------------------------- | -------------------------------------------------- |
+| `frontmcp.scope.id`        | Scope identifier                                   |
+| `frontmcp.request.id`      | Unique request ID                                  |
+| `frontmcp.tool.name`       | Tool name                                          |
+| `frontmcp.tool.owner`      | Tool owner class                                   |
+| `frontmcp.flow.name`       | Flow name (e.g., `tools:call-tool`)                |
+| `frontmcp.transport.type`  | Transport: `legacy-sse`, `streamable-http`         |
+| `frontmcp.auth.mode`       | Auth mode: `public`, `transparent`, `orchestrated` |
+| `frontmcp.session.id_hash` | Privacy-safe session hash                          |
 
 ---
 

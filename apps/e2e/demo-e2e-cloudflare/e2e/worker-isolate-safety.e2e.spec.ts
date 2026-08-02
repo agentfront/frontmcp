@@ -8,8 +8,8 @@
  * regression in a cold path is caught here before it can break a real worker.
  */
 import { execFileSync } from 'node:child_process';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const CHECK = path.join(ROOT_DIR, 'scripts', 'check-worker-isolate-safety.mjs');
@@ -21,7 +21,9 @@ describe('worker isolate-safety (no module-eval side effects)', () => {
 
   it('the worker-graph libs have no module-eval random/timer/network calls', () => {
     let exitCode = 0;
-    let output = '';
+    // No initializer: both branches below assign it, so an initial '' would be
+    // dead (and `no-useless-assignment` rightly flags it).
+    let output: string;
     try {
       output = execFileSync('node', [CHECK], { cwd: ROOT_DIR, encoding: 'utf-8' });
     } catch (err: unknown) {
