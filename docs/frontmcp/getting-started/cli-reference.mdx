@@ -16,20 +16,20 @@ frontmcp <command> [options]
 
 Commands for building, testing, and debugging your FrontMCP server.
 
-| Command              | Description                                                   |
-| -------------------- | ------------------------------------------------------------- |
-| `dev`                | Start in development mode (tsx --watch + async type-check)    |
-| `build`              | Build for a deployment target (defaults to `--target node`)   |
-| `build --target node` | Build distributable executable bundle (esbuild + tsc)         |
-| `build --target cli`  | Build CLI executable with subcommands per tool                |
-| `build --target mcpb` | Package server as an `.mcpb` archive for MCPB-aware clients   |
-| `mcpb validate <path>` | Validate a `.mcpb` archive against the MCPB v0.3 spec        |
-| `test`               | Run E2E tests with auto-injected Jest configuration           |
-| `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
-| `doctor`             | Check Node/npm versions and tsconfig requirements             |
-| `inspector`          | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`)  |
-| `create [name]`      | Scaffold a new FrontMCP project (interactive if name omitted) |
-| `socket <entry>`     | Start Unix socket daemon for local MCP server                 |
+| Command                | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `dev`                  | Start in development mode (tsx --watch + async type-check)    |
+| `build`                | Build for a deployment target (defaults to `--target node`)   |
+| `build --target node`  | Build distributable executable bundle (esbuild + tsc)         |
+| `build --target cli`   | Build CLI executable with subcommands per tool                |
+| `build --target mcpb`  | Package server as an `.mcpb` archive for MCPB-aware clients   |
+| `mcpb validate <path>` | Validate a `.mcpb` archive against the MCPB v0.3 spec         |
+| `test`                 | Run E2E tests with auto-injected Jest configuration           |
+| `init`                 | Create or fix a tsconfig.json suitable for FrontMCP           |
+| `doctor`               | Check Node/npm versions and tsconfig requirements             |
+| `inspector`            | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`)  |
+| `create [name]`        | Scaffold a new FrontMCP project (interactive if name omitted) |
+| `socket <entry>`       | Start Unix socket daemon for local MCP server                 |
 
 ---
 
@@ -66,24 +66,24 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 Emit the current FrontMCP server as a plugin for an AI tool. Today supports
 Claude Code (`.claude/plugins/<name>/`) and Codex (`~/.codex/config.toml`).
 
-| Command                                            | Description                                                              |
-| -------------------------------------------------- | ------------------------------------------------------------------------ |
-| `plugin install --claude` / `--codex`              | Emit a Claude Code plugin folder and/or Codex `mcp_servers` entry        |
-| `plugin uninstall --claude` / `--codex`            | Remove what `plugin install` wrote, preserving any user files            |
-| `plugin status --claude` / `--codex`               | Report install state per provider (installed v X / outdated / missing)   |
+| Command                                 | Description                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `plugin install --claude` / `--codex`   | Emit a Claude Code plugin folder and/or Codex `mcp_servers` entry      |
+| `plugin uninstall --claude` / `--codex` | Remove what `plugin install` wrote, preserving any user files          |
+| `plugin status --claude` / `--codex`    | Report install state per provider (installed v X / outdated / missing) |
 
 Flags shared across the three subcommands:
 
-| Flag                | Description                                                                  |
-| ------------------- | ---------------------------------------------------------------------------- |
-| `--scope <s>`       | `project` (default → `./.claude/plugins/`) or `user` (→ `~/.claude/plugins/`) |
-| `--dir <path>`      | Override the plugin destination root (testing or non-standard installs)      |
-| `--no-skills`       | Skip the `skills/` subtree                                                   |
-| `--no-commands`     | Skip the `commands/` subtree                                                 |
-| `--only-mcp`        | Skip the plugin folder; just write the `mcpServers` entry                    |
-| `--command <cmd>`   | Override the MCP server invocation in the plugin manifest                    |
-| `--env <NAME>`      | Surface an env-var placeholder in the plugin (repeatable)                    |
-| `--dry-run`         | Print the plan; do not write                                                 |
+| Flag              | Description                                                                   |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `--scope <s>`     | `project` (default → `./.claude/plugins/`) or `user` (→ `~/.claude/plugins/`) |
+| `--dir <path>`    | Override the plugin destination root (testing or non-standard installs)       |
+| `--no-skills`     | Skip the `skills/` subtree                                                    |
+| `--no-commands`   | Skip the `commands/` subtree                                                  |
+| `--only-mcp`      | Skip the plugin folder; just write the `mcpServers` entry                     |
+| `--command <cmd>` | Override the MCP server invocation in the plugin manifest                     |
+| `--env <NAME>`    | Surface an env-var placeholder in the plugin (repeatable)                     |
+| `--dry-run`       | Print the plan; do not write                                                  |
 
 **End-user path (built bin):** every CLI built with `frontmcp build --target cli`
 inherits `install -p claude|codex` AND `uninstall -p claude|codex`. Pass `-p`
@@ -127,15 +127,15 @@ treated as authoritative.
 
 ### Build Options
 
-| Option                 | Description                                                                      |
-| ---------------------- | -------------------------------------------------------------------------------- |
-| `--target <target>`    | Build target: `node`, `cli`, `sdk`, `browser`, `vercel`, `lambda`, `cloudflare`, `distributed`, `mcpb` |
-| `--js`                 | Emit plain JavaScript bundle instead of SEA (use with `--target cli`)            |
-| `--sea`                | Also build a single-executable binary for the host platform (use with `--target mcpb`) |
-| `--merge-from <dir>`   | Merge cross-platform SEA binaries from `{dir}/{platform}/{name}` (use with `--target mcpb`) |
-| `--icon <path>`        | Override the icon path included in the archive (use with `--target mcpb`)        |
-| `--no-deterministic`   | Disable deterministic archive output (use with `--target mcpb`)                  |
-| `--stage-only`         | Leave the MCPB staging directory intact and skip zipping (use with `--target mcpb`) |
+| Option               | Description                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `--target <target>`  | Build target: `node`, `cli`, `sdk`, `browser`, `vercel`, `lambda`, `cloudflare`, `distributed`, `mcpb` |
+| `--js`               | Emit plain JavaScript bundle instead of SEA (use with `--target cli`)                                  |
+| `--sea`              | Also build a single-executable binary for the host platform (use with `--target mcpb`)                 |
+| `--merge-from <dir>` | Merge cross-platform SEA binaries from `{dir}/{platform}/{name}` (use with `--target mcpb`)            |
+| `--icon <path>`      | Override the icon path included in the archive (use with `--target mcpb`)                              |
+| `--no-deterministic` | Disable deterministic archive output (use with `--target mcpb`)                                        |
+| `--stage-only`       | Leave the MCPB staging directory intact and skip zipping (use with `--target mcpb`)                    |
 
 ### Start Options
 
@@ -170,15 +170,15 @@ treated as authoritative.
 
 ### Create Options
 
-| Option              | Description                                                  |
-| ------------------- | ------------------------------------------------------------ |
-| `-y, --yes`         | Use defaults (non-interactive mode)                          |
-| `--target <target>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare`  |
-| `--redis <setup>`   | Redis setup: `docker`, `existing`, `none` (node target only) |
-| `--pm <pm>`         | Package manager: `npm`, `yarn`, `pnpm`                       |
-| `--cicd`            | Enable GitHub Actions CI/CD                                  |
-| `--no-cicd`         | Disable GitHub Actions CI/CD                                 |
-| `--nx`              | Scaffold an Nx monorepo workspace                            |
+| Option              | Description                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `-y, --yes`         | Use defaults (non-interactive mode)                                              |
+| `--target <target>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare`                      |
+| `--redis <setup>`   | Redis setup: `docker`, `existing`, `none` (node target only)                     |
+| `--pm <pm>`         | Package manager: `npm`, `yarn`, `pnpm`                                           |
+| `--cicd`            | Enable GitHub Actions CI/CD                                                      |
+| `--no-cicd`         | Disable GitHub Actions CI/CD                                                     |
+| `--nx`              | Scaffold an Nx monorepo workspace                                                |
 | `--skills <bundle>` | Skills bundle: `recommended`, `minimal`, `full`, `none` (default: `recommended`) |
 
 <Info>

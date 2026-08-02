@@ -28,23 +28,23 @@ Transform an incoming event payload into a channel notification.
 abstract onEvent(payload: unknown): Promise<ChannelNotification>;
 ```
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type      | Description                                                      |
+| --------- | --------- | ---------------------------------------------------------------- |
 | `payload` | `unknown` | Raw event payload from the source. Shape depends on source type. |
 
 **Returns:** `Promise<ChannelNotification>` — the notification to push to Claude Code sessions.
 
 ### Payload Shapes by Source
 
-| Source | Payload Shape |
-| --- | --- |
-| `webhook` | `WebhookPayload { body, headers, method, query }` |
-| `app-event` | Whatever was passed to `eventBus.emit(event, payload)` |
-| `agent-completion` | `AgentCompletionEvent { agentId, agentName, status, durationMs, output, error }` |
-| `job-completion` | `JobCompletionEvent { jobName, jobId, status, durationMs, output, error, sessionId }` |
-| `service` | Whatever `pushIncoming(payload)` receives from your connection listener |
-| `file-watcher` | Whatever `pushIncoming(payload)` receives from your file watcher |
-| `manual` | Whatever was passed to `handleEvent(payload)` |
+| Source             | Payload Shape                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| `webhook`          | `WebhookPayload { body, headers, method, query }`                                     |
+| `app-event`        | Whatever was passed to `eventBus.emit(event, payload)`                                |
+| `agent-completion` | `AgentCompletionEvent { agentId, agentName, status, durationMs, output, error }`      |
+| `job-completion`   | `JobCompletionEvent { jobName, jobId, status, durationMs, output, error, sessionId }` |
+| `service`          | Whatever `pushIncoming(payload)` receives from your connection listener               |
+| `file-watcher`     | Whatever `pushIncoming(payload)` receives from your file watcher                      |
+| `manual`           | Whatever was passed to `handleEvent(payload)`                                         |
 
 ## Optional Methods
 
@@ -56,10 +56,10 @@ Handle a reply from Claude Code. Only called when the channel has `twoWay: true`
 async onReply(reply: string, meta?: Record<string, string>): Promise<void>
 ```
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `reply` | `string` | The reply text from Claude |
-| `meta` | `Record<string, string>` | Metadata from the `channel-reply` tool call (e.g., `chat_id`) |
+| Parameter | Type                     | Description                                                   |
+| --------- | ------------------------ | ------------------------------------------------------------- |
+| `reply`   | `string`                 | The reply text from Claude                                    |
+| `meta`    | `Record<string, string>` | Metadata from the `channel-reply` tool call (e.g., `chat_id`) |
 
 Default implementation logs a warning. Override to forward replies to external systems.
 
@@ -110,8 +110,8 @@ Push an incoming event from a service connection into the notification pipeline.
 protected pushIncoming(payload: unknown): void
 ```
 
-| Parameter | Type | Description |
-| --- | --- | --- |
+| Parameter | Type      | Description                                      |
+| --------- | --------- | ------------------------------------------------ |
 | `payload` | `unknown` | Raw event payload to process through `onEvent()` |
 
 <Warning>
@@ -122,22 +122,22 @@ Only call `pushIncoming()` inside `onConnect()` event listeners. Calling it befo
 
 From `ExecutionContextBase`:
 
-| Property | Type | Description |
-| --- | --- | --- |
-| `logger` | `FrontMcpLogger` | Scoped logger for this channel |
-| `metadata` | `ChannelMetadata` | The channel's decorator metadata |
-| `channelName` | `string` | The channel name (from metadata) |
+| Property      | Type              | Description                      |
+| ------------- | ----------------- | -------------------------------- |
+| `logger`      | `FrontMcpLogger`  | Scoped logger for this channel   |
+| `metadata`    | `ChannelMetadata` | The channel's decorator metadata |
+| `channelName` | `string`          | The channel name (from metadata) |
 
 ## Inherited Methods
 
 From `ExecutionContextBase`:
 
-| Method | Description |
-| --- | --- |
-| `get<T>(token)` | Resolve a dependency from the DI container |
+| Method             | Description                                |
+| ------------------ | ------------------------------------------ |
+| `get<T>(token)`    | Resolve a dependency from the DI container |
 | `tryGet<T>(token)` | Resolve or return `undefined` if not found |
-| `scope` | Access the parent scope |
-| `fail(error)` | Throw an MCP error |
+| `scope`            | Access the parent scope                    |
+| `fail(error)`      | Throw an MCP error                         |
 
 ## Examples
 

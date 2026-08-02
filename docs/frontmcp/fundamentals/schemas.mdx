@@ -67,7 +67,7 @@ want for virtually everything.
 
 For cases where you already hold a real zod schema (e.g. the return
 value of a third-party library that builds zod internally) and want to
-defer *its* construction, wrap it in `lazyZ`:
+defer _its_ construction, wrap it in `lazyZ`:
 
 ```ts
 import { eagerZ, lazyZ } from '@frontmcp/sdk';
@@ -87,14 +87,14 @@ discriminated unions, records, arrays — see `apps/poc-lazy-zod/` for the
 full benchmark). Each entry is the median over 30 runs, warmup 3,
 interleaved eager/lazy spawns:
 
-| Metric              | Eager zod | Lazy `z` | Delta      |
-| ------------------- | --------- | -------- | ---------- |
-| **Cold-start**      | 387 ms    | 7.1 ms   | **−98.2%** |
-| Cold-start (p95)    | 428 ms    | 7.6 ms   | −98.2%     |
-| First-parse         | 0.45 ms   | 1.47 ms  | +1.02 ms   |
-| Parse-all (1st pass)| 235 ms    | 616 ms   | +162%      |
-| Parse-all (steady)  | 31.0 ms   | 31.0 ms  | **+0.2%**  |
-| Bundle size         | 1.69 MB   | 1.70 MB  | +0.64%     |
+| Metric               | Eager zod | Lazy `z` | Delta      |
+| -------------------- | --------- | -------- | ---------- |
+| **Cold-start**       | 387 ms    | 7.1 ms   | **−98.2%** |
+| Cold-start (p95)     | 428 ms    | 7.6 ms   | −98.2%     |
+| First-parse          | 0.45 ms   | 1.47 ms  | +1.02 ms   |
+| Parse-all (1st pass) | 235 ms    | 616 ms   | +162%      |
+| Parse-all (steady)   | 31.0 ms   | 31.0 ms  | **+0.2%**  |
+| Bundle size          | 1.69 MB   | 1.70 MB  | +0.64%     |
 
 Interpretation:
 
@@ -109,7 +109,7 @@ Interpretation:
 - **Parse-all (1st pass)** is higher for lazy because that pass pays the
   deferred materialization cost for every schema at once. In realistic
   workloads (edge workers that hit a handful of schemas per request)
-  you never see this number — you amortize 1 ms per *actually-used*
+  you never see this number — you amortize 1 ms per _actually-used_
   schema against the 380 ms saved at startup.
 
 ### Per-worker cost model

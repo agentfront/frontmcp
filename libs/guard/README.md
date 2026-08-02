@@ -316,7 +316,7 @@ All errors extend `GuardError`, which carries a machine-readable `code` and an H
 | `IpNotAllowedError`     | `IP_NOT_ALLOWED`    | `403`  | Client IP is not on the allow list                     |
 
 ```typescript
-import { GuardError, ExecutionTimeoutError } from '@frontmcp/guard';
+import { ExecutionTimeoutError, GuardError } from '@frontmcp/guard';
 
 try {
   await withTimeout(() => slowOp(), 5_000, 'slow-op');

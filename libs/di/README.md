@@ -25,7 +25,8 @@ npm install @frontmcp/di reflect-metadata zod
 
 ```ts
 import 'reflect-metadata';
-import { DiContainer, createTokenFactory, ProviderScope } from '@frontmcp/di';
+
+import { createTokenFactory, DiContainer, ProviderScope } from '@frontmcp/di';
 
 const tokens = createTokenFactory({ prefix: 'MyApp' });
 

@@ -21,14 +21,14 @@ import {
 
 ## Overview
 
-| Error | Base Class | Error Code | HTTP | Description |
-|-------|-----------|------------|------|-------------|
-| `EsmPackageLoadError` | `InternalMcpError` | `ESM_PACKAGE_LOAD_ERROR` | 500 | Bundle fetch or module evaluation failed |
-| `EsmVersionResolutionError` | `InternalMcpError` | `ESM_VERSION_RESOLUTION_ERROR` | 500 | npm registry version resolution failed |
-| `EsmManifestInvalidError` | `PublicMcpError` | `-32602` (INVALID_PARAMS) | 400 | Package manifest is invalid or missing required fields |
-| `EsmCacheError` | `InternalMcpError` | `ESM_CACHE_ERROR` | 500 | Cache read/write operation failed |
-| `EsmRegistryAuthError` | `PublicMcpError` | `-32001` (UNAUTHORIZED) | 401 | Private registry authentication failed |
-| `EsmInvalidSpecifierError` | `PublicMcpError` | `-32602` (INVALID_PARAMS) | 400 | Package specifier string is malformed |
+| Error                       | Base Class         | Error Code                     | HTTP | Description                                            |
+| --------------------------- | ------------------ | ------------------------------ | ---- | ------------------------------------------------------ |
+| `EsmPackageLoadError`       | `InternalMcpError` | `ESM_PACKAGE_LOAD_ERROR`       | 500  | Bundle fetch or module evaluation failed               |
+| `EsmVersionResolutionError` | `InternalMcpError` | `ESM_VERSION_RESOLUTION_ERROR` | 500  | npm registry version resolution failed                 |
+| `EsmManifestInvalidError`   | `PublicMcpError`   | `-32602` (INVALID_PARAMS)      | 400  | Package manifest is invalid or missing required fields |
+| `EsmCacheError`             | `InternalMcpError` | `ESM_CACHE_ERROR`              | 500  | Cache read/write operation failed                      |
+| `EsmRegistryAuthError`      | `PublicMcpError`   | `-32001` (UNAUTHORIZED)        | 401  | Private registry authentication failed                 |
+| `EsmInvalidSpecifierError`  | `PublicMcpError`   | `-32602` (INVALID_PARAMS)      | 400  | Package specifier string is malformed                  |
 
 ---
 
@@ -44,11 +44,11 @@ class EsmPackageLoadError extends InternalMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `packageName` | `string` | Full package name (e.g., `@acme/tools`) |
-| `version` | `string?` | Resolved version that failed to load |
-| `originalError` | `Error?` | Underlying fetch or evaluation error |
+| Property        | Type      | Description                             |
+| --------------- | --------- | --------------------------------------- |
+| `packageName`   | `string`  | Full package name (e.g., `@acme/tools`) |
+| `version`       | `string?` | Resolved version that failed to load    |
+| `originalError` | `Error?`  | Underlying fetch or evaluation error    |
 
 ---
 
@@ -64,11 +64,11 @@ class EsmVersionResolutionError extends InternalMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `packageName` | `string` | Full package name |
-| `range` | `string` | Semver range that failed to resolve (e.g., `^3.0.0`) |
-| `originalError` | `Error?` | Underlying registry error |
+| Property        | Type     | Description                                          |
+| --------------- | -------- | ---------------------------------------------------- |
+| `packageName`   | `string` | Full package name                                    |
+| `range`         | `string` | Semver range that failed to resolve (e.g., `^3.0.0`) |
+| `originalError` | `Error?` | Underlying registry error                            |
 
 ---
 
@@ -84,10 +84,10 @@ class EsmManifestInvalidError extends PublicMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `packageName` | `string` | Full package name |
-| `details` | `string?` | Zod validation error details |
+| Property      | Type      | Description                  |
+| ------------- | --------- | ---------------------------- |
+| `packageName` | `string`  | Full package name            |
+| `details`     | `string?` | Zod validation error details |
 
 ---
 
@@ -103,11 +103,11 @@ class EsmCacheError extends InternalMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `operation` | `string` | Cache operation that failed (e.g., `'get'`, `'put'`, `'cleanup'`) |
-| `packageName` | `string?` | Package involved in the operation |
-| `originalError` | `Error?` | Underlying I/O error |
+| Property        | Type      | Description                                                       |
+| --------------- | --------- | ----------------------------------------------------------------- |
+| `operation`     | `string`  | Cache operation that failed (e.g., `'get'`, `'put'`, `'cleanup'`) |
+| `packageName`   | `string?` | Package involved in the operation                                 |
+| `originalError` | `Error?`  | Underlying I/O error                                              |
 
 ---
 
@@ -123,10 +123,10 @@ class EsmRegistryAuthError extends PublicMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property      | Type      | Description                               |
+| ------------- | --------- | ----------------------------------------- |
 | `registryUrl` | `string?` | Registry URL that rejected authentication |
-| `details` | `string?` | Additional error details |
+| `details`     | `string?` | Additional error details                  |
 
 ---
 
@@ -141,6 +141,6 @@ class EsmInvalidSpecifierError extends PublicMcpError {
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property    | Type     | Description                  |
+| ----------- | -------- | ---------------------------- |
 | `specifier` | `string` | The invalid specifier string |

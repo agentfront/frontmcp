@@ -76,10 +76,12 @@ scoped [Providers / DI][docs-providers].
 stateful / stateless [sessions][docs-server] (JWT or UUID transport IDs).
 
 **Connect & operate** — [Streamable HTTP + SSE transport][docs-transport],
-capability [discovery][docs-discovery], [elicitation][docs-elicitation],
-[hooks][docs-hooks], HTTP-discoverable [skills][docs-skills],
-[external MCP sub-apps][docs-ext-apps], an in-process [Direct Client][docs-direct]
-(`connectOpenAI` / `connectClaude`), and first-class [deployment][docs-deploy].
+every [MCP protocol revision][docs-protocol] from `2024-11-05` through
+`2026-07-28` on one endpoint, capability [discovery][docs-discovery],
+[elicitation][docs-elicitation], [hooks][docs-hooks], HTTP-discoverable
+[skills][docs-skills], [tool UI / MCP Apps][docs-ext-apps], an in-process
+[Direct Client][docs-direct] (`connectOpenAI` / `connectClaude`), and
+first-class [deployment][docs-deploy].
 
 **Extend & tooling** — official [plugins][docs-plugins] (Cache, Remember, CodeCall,
 Dashboard), the [OpenAPI adapter][docs-adapters], a [UI library][docs-ui] (HTML/React
@@ -90,18 +92,66 @@ widgets, SSR, MCP Bridge), an [E2E testing framework][docs-testing], and a
 
 ## Packages
 
-| Package                               | Description                                            |
-| ------------------------------------- | ------------------------------------------------------ |
-| [`@frontmcp/sdk`](libs/sdk)           | Core framework — decorators, DI, flows, transport      |
-| [`@frontmcp/cli`](libs/cli)           | CLI tooling (`frontmcp create`, `dev`, `build`)        |
-| [`@frontmcp/auth`](libs/auth)         | Authentication, OAuth, JWKS, credential vault          |
-| [`@frontmcp/adapters`](libs/adapters) | OpenAPI adapter for auto-generating tools              |
-| [`@frontmcp/plugins`](libs/plugins)   | Official plugins: Cache, Remember, CodeCall, Dashboard |
-| [`@frontmcp/testing`](libs/testing)   | E2E test framework with fixtures and matchers          |
-| [`@frontmcp/ui`](libs/ui)             | React components, hooks, SSR renderers                 |
-| [`@frontmcp/uipack`](libs/uipack)     | React-free themes, build tools, platform adapters      |
-| [`@frontmcp/di`](libs/di)             | Dependency injection container (internal)              |
-| [`@frontmcp/utils`](libs/utils)       | Shared utilities — naming, URI, crypto, FS (internal)  |
+You install `frontmcp` (the CLI) and `@frontmcp/sdk`. Everything else is either
+pulled in for you or opt-in.
+
+### Core
+
+| Package                             | Description                                                     |
+| ----------------------------------- | --------------------------------------------------------------- |
+| [`frontmcp`](libs/cli)              | The CLI — `create`, `init`, `dev`, `build`, `inspect`, `doctor` |
+| [`@frontmcp/sdk`](libs/sdk)         | Core framework — decorators, DI, flows, transport, MCP protocol |
+| [`@frontmcp/auth`](libs/auth)       | Authentication, OAuth, JWKS, DCR/CIMD, credential vault         |
+| [`@frontmcp/testing`](libs/testing) | E2E test framework with fixtures and matchers                   |
+
+### Extend
+
+| Package                                         | Description                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| [`@frontmcp/plugins`](libs/plugins)             | Plugin authoring toolkit + official plugin re-exports         |
+| [`@frontmcp/adapters`](libs/adapters)           | OpenAPI adapter — generate tools from an OpenAPI spec         |
+| [`@frontmcp/skills`](libs/skills)               | Curated SKILL.md catalog for scaffolding and `skills install` |
+| [`@frontmcp/guard`](libs/guard)                 | Policy/guard rules for tool inputs and outputs                |
+| [`@frontmcp/observability`](libs/observability) | Structured logging, metrics, and tracing helpers              |
+
+### UI
+
+| Package                           | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| [`@frontmcp/react`](libs/react)   | React hooks + client for talking to a FrontMCP server |
+| [`@frontmcp/ui`](libs/ui)         | React components, SSR renderers, MCP Bridge           |
+| [`@frontmcp/uipack`](libs/uipack) | React-free themes, build tools, platform adapters     |
+
+### Runtime & storage
+
+| Package                                           | Description                                                    |
+| ------------------------------------------------- | -------------------------------------------------------------- |
+| [`@frontmcp/edge`](libs/edge)                     | Run a server on Cloudflare Workers / V8 isolates from a config |
+| [`@frontmcp/storage-sqlite`](libs/storage-sqlite) | SQLite-backed session, task, and elicitation stores            |
+| [`@frontmcp/nx`](libs/nx-plugin)                  | Nx generators and executors for FrontMCP workspaces            |
+
+### Internal
+
+Published so the packages above resolve, but not intended for direct use:
+
+| Package                               | Description                                                  |
+| ------------------------------------- | ------------------------------------------------------------ |
+| [`@frontmcp/protocol`](libs/protocol) | The single boundary to the upstream MCP SDK — protocol types |
+| [`@frontmcp/di`](libs/di)             | Dependency injection container                               |
+| [`@frontmcp/utils`](libs/utils)       | Shared utilities — naming, URI, crypto, FS                   |
+| [`@frontmcp/lazy-zod`](libs/lazy-zod) | Lazily-loaded Zod wrapper that keeps cold starts small       |
+
+### Official plugins
+
+| Package                                                              | Description                                  |
+| -------------------------------------------------------------------- | -------------------------------------------- |
+| [`@frontmcp/plugin-cache`](plugins/plugin-cache)                     | Cache tool results with a TTL                |
+| [`@frontmcp/plugin-remember`](plugins/plugin-remember)               | Per-session memory (`this.remember`)         |
+| [`@frontmcp/plugin-approval`](plugins/plugin-approval)               | Human approval gates before a tool runs      |
+| [`@frontmcp/plugin-codecall`](plugins/plugin-codecall)               | Let the model compose tool calls as code     |
+| [`@frontmcp/plugin-dashboard`](plugins/plugin-dashboard)             | Built-in web dashboard                       |
+| [`@frontmcp/plugin-feature-flags`](plugins/plugin-feature-flags)     | Toggle tools and apps at runtime             |
+| [`@frontmcp/plugin-skilled-openapi`](plugins/plugin-skilled-openapi) | OpenAPI → skills + meta-tools for large APIs |
 
 ## Version Alignment
 
@@ -120,7 +170,7 @@ PRs welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for workflow, coding stand
 [docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
 [docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation 'Installation'
 [docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart 'Quickstart'
-[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/overview 'SDK Reference'
+[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview 'SDK Reference'
 [docs-server]: https://docs.agentfront.dev/frontmcp/servers/server 'The FrontMCP Server'
 [docs-apps]: https://docs.agentfront.dev/frontmcp/servers/apps 'Apps'
 [docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools 'Tools'
@@ -130,15 +180,16 @@ PRs welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for workflow, coding stand
 [docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation 'Elicitation'
 [docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills 'Skills'
 [docs-discovery]: https://docs.agentfront.dev/frontmcp/servers/discovery 'Discovery'
+[docs-protocol]: https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions 'Protocol Versions'
 [docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview 'Authentication'
 [docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client 'Direct Client'
-[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport 'Transport'
-[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/servers/ext-apps 'Ext-Apps'
-[docs-hooks]: https://docs.agentfront.dev/frontmcp/extensibility/hooks 'Hooks'
+[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport-security 'Transport'
+[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/guides/building-tool-ui 'Tool UI / MCP Apps'
+[docs-hooks]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/hooks 'Hooks'
 [docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers 'Providers'
 [docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview 'Plugins'
 [docs-adapters]: https://docs.agentfront.dev/frontmcp/adapters/overview 'Adapters'
 [docs-testing]: https://docs.agentfront.dev/frontmcp/testing/overview 'Testing'
-[docs-ui]: https://docs.agentfront.dev/frontmcp/ui/overview 'UI Library'
+[docs-ui]: https://docs.agentfront.dev/frontmcp/react/overview 'React SDK'
 [docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server 'Deployment'
 [docs-production]: https://docs.agentfront.dev/frontmcp/deployment/production-build 'Production Build'

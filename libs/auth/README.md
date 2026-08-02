@@ -28,7 +28,7 @@ npm install @frontmcp/auth
 ## Quick Example
 
 ```ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'Secure Server', version: '1.0.0' },
@@ -75,11 +75,11 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 [docs-overview]: https://docs.agentfront.dev/frontmcp/authentication/overview
 [docs-remote]: https://docs.agentfront.dev/frontmcp/authentication/remote
 [docs-local]: https://docs.agentfront.dev/frontmcp/authentication/local
-[docs-jwks]: https://docs.agentfront.dev/frontmcp/authentication/jwks
-[docs-stores]: https://docs.agentfront.dev/frontmcp/authentication/session-stores
-[docs-vault]: https://docs.agentfront.dev/frontmcp/authentication/credential-vault
-[docs-pkce]: https://docs.agentfront.dev/frontmcp/authentication/pkce
+[docs-jwks]: https://docs.agentfront.dev/frontmcp/authentication/local
+[docs-stores]: https://docs.agentfront.dev/frontmcp/authentication/production
+[docs-vault]: https://docs.agentfront.dev/frontmcp/authentication/authorities
+[docs-pkce]: https://docs.agentfront.dev/frontmcp/authentication/local
 [docs-cimd]: https://docs.agentfront.dev/frontmcp/authentication/cimd
-[docs-ui]: https://docs.agentfront.dev/frontmcp/authentication/auth-ui
-[docs-audience]: https://docs.agentfront.dev/frontmcp/authentication/audience
-[docs-token-vault]: https://docs.agentfront.dev/frontmcp/authentication/token-vault
+[docs-ui]: https://docs.agentfront.dev/frontmcp/authentication/custom-ui
+[docs-audience]: https://docs.agentfront.dev/frontmcp/authentication/token
+[docs-token-vault]: https://docs.agentfront.dev/frontmcp/authentication/authorities

@@ -9,15 +9,15 @@ Every FrontMCP instance has a stable machine ID used for session ownership, HA h
 
 ## Resolution Order
 
-| Priority | Source | When Used |
-| --- | --- | --- |
-| 1 | `MACHINE_ID` env var | Always (explicit override, highest priority) |
-| 2 | `setMachineIdOverride()` | Programmatic override (testing, direct API) |
-| 3 | `HOSTNAME` env var | Distributed mode (Kubernetes pod name) |
-| 4 | `os.hostname()` | Distributed mode fallback |
-| 5 | Random UUID | Serverless mode (ephemeral, per-invocation) |
-| 6 | `.frontmcp/machine-id` file | Development only (persisted across restarts) |
-| 7 | Random UUID | Production fallback |
+| Priority | Source                      | When Used                                    |
+| -------- | --------------------------- | -------------------------------------------- |
+| 1        | `MACHINE_ID` env var        | Always (explicit override, highest priority) |
+| 2        | `setMachineIdOverride()`    | Programmatic override (testing, direct API)  |
+| 3        | `HOSTNAME` env var          | Distributed mode (Kubernetes pod name)       |
+| 4        | `os.hostname()`             | Distributed mode fallback                    |
+| 5        | Random UUID                 | Serverless mode (ephemeral, per-invocation)  |
+| 6        | `.frontmcp/machine-id` file | Development only (persisted across restarts) |
+| 7        | Random UUID                 | Production fallback                          |
 
 <Note>
   The `.frontmcp/machine-id` file is only created in development (`NODE_ENV !== 'production'`). In production without an env var, a random UUID is generated on each startup.
@@ -80,12 +80,12 @@ This calls `setMachineIdOverride()` internally before initializing the server.
 
 ## Environment Variables
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `MACHINE_ID` | Explicit machine ID override (highest priority) | --- |
-| `MACHINE_ID_PATH` | Custom path for the machine-id file | `.frontmcp/machine-id` |
-| `FRONTMCP_DEPLOYMENT_MODE` | Affects resolution strategy (`distributed` / `serverless` / `standalone`) | `standalone` |
-| `HOSTNAME` | Kubernetes pod name (used in distributed mode) | Set by K8s |
+| Variable                   | Purpose                                                                   | Default                |
+| -------------------------- | ------------------------------------------------------------------------- | ---------------------- |
+| `MACHINE_ID`               | Explicit machine ID override (highest priority)                           | ---                    |
+| `MACHINE_ID_PATH`          | Custom path for the machine-id file                                       | `.frontmcp/machine-id` |
+| `FRONTMCP_DEPLOYMENT_MODE` | Affects resolution strategy (`distributed` / `serverless` / `standalone`) | `standalone`           |
+| `HOSTNAME`                 | Kubernetes pod name (used in distributed mode)                            | Set by K8s             |
 
 <Tip>
   For local development with multiple instances, set `MACHINE_ID` to different values for each process to simulate multi-pod behavior.

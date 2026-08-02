@@ -432,12 +432,12 @@ export type {
 // Exported because the upstream `@modelcontextprotocol/sdk` client cannot speak
 // this revision, so consumers building a 2026 client (remote proxies, tests,
 // tooling) need FrontMCP's implementation.
-export { Mcp2026Client, Mcp2026Error, TASKS_CLIENT_CAPABILITY } from './transport/mcp-2026';
-export type { Mcp2026ClientOptions, Mcp2026InputHandlers } from './transport/mcp-2026';
-export { validateHeaderParams, buildParamHeaders } from './transport/mcp-2026';
-export { SUPPORTED_PROTOCOL_VERSIONS_2026, TASKS_EXTENSION_ID } from './transport/mcp-2026';
+export { McpStatelessClient, McpStatelessError, TASKS_CLIENT_CAPABILITY } from './transport/mcp-20260728';
+export type { McpStatelessClientOptions, McpStatelessInputHandlers } from './transport/mcp-20260728';
+export { validateHeaderParams, buildParamHeaders } from './transport/mcp-20260728';
+export { FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS, TASKS_EXTENSION_ID } from './transport/mcp-20260728';
 // Remote-proxy adapter so a FrontMCP server can proxy a 2026-07-28 remote.
-export { Mcp2026ClientAdapter, negotiateRemoteProtocol } from './remote-mcp/mcp-2026-client.adapter';
+export { McpStatelessClientAdapter, negotiateRemoteProtocol } from './remote-mcp/mcp-stateless-client.adapter';
 export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable

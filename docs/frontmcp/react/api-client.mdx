@@ -41,15 +41,15 @@ useApiClient({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `baseUrl` | `string` | — | **Required.** Base URL for all requests |
-| `operations` | `ApiOperation[]` | — | **Required.** Operations to register as tools |
-| `headers` | `Record<string, string> \| () => Record<string, string>` | — | Static headers or header factory |
-| `prefix` | `string` | `'api'` | Tool name prefix |
-| `client` | `HttpClient` | — | Custom HTTP client (takes precedence over `fetch`) |
-| `fetch` | `typeof globalThis.fetch` | — | **Deprecated.** Use `client` instead |
-| `server` | `string` | — | Target a named server |
+| Option       | Type                                                     | Default | Description                                        |
+| ------------ | -------------------------------------------------------- | ------- | -------------------------------------------------- |
+| `baseUrl`    | `string`                                                 | —       | **Required.** Base URL for all requests            |
+| `operations` | `ApiOperation[]`                                         | —       | **Required.** Operations to register as tools      |
+| `headers`    | `Record<string, string> \| () => Record<string, string>` | —       | Static headers or header factory                   |
+| `prefix`     | `string`                                                 | `'api'` | Tool name prefix                                   |
+| `client`     | `HttpClient`                                             | —       | Custom HTTP client (takes precedence over `fetch`) |
+| `fetch`      | `typeof globalThis.fetch`                                | —       | **Deprecated.** Use `client` instead               |
+| `server`     | `string`                                                 | —       | Target a named server                              |
 
 ### Tool Naming
 

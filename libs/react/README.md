@@ -28,8 +28,7 @@ Optional peer dependencies:
 ## Quick Start
 
 ```tsx
-import { create } from '@frontmcp/react';
-import { FrontMcpProvider, useCallTool } from '@frontmcp/react';
+import { create, FrontMcpProvider, useCallTool } from '@frontmcp/react';
 
 const server = await create({
   info: { name: 'my-app', version: '1.0.0' },
@@ -84,8 +83,9 @@ The provider manages the MCP client lifecycle. It supports multi-server setups, 
 Type-safe factory that wraps a React component + zod schema into an MCP-registered component:
 
 ```tsx
-import { mcpComponent } from '@frontmcp/react';
 import { z } from 'zod';
+
+import { mcpComponent } from '@frontmcp/react';
 
 const WeatherCard = mcpComponent(
   ({ city, temp }) => (
@@ -190,7 +190,7 @@ useReduxResource({
 Register stores directly on `FrontMcpProvider` without hooks:
 
 ```tsx
-import { FrontMcpProvider, reduxStore, valtioStore, createStore } from '@frontmcp/react';
+import { createStore, FrontMcpProvider, reduxStore, valtioStore } from '@frontmcp/react';
 
 <FrontMcpProvider
   server={server}
@@ -221,7 +221,7 @@ import { FrontMcpProvider, reduxStore, valtioStore, createStore } from '@frontmc
 `@frontmcp/react/api` registers OpenAPI operations as MCP tools with a pluggable HTTP client.
 
 ```tsx
-import { useApiClient, parseOpenApiSpec, createFetchClient } from '@frontmcp/react/api';
+import { createFetchClient, parseOpenApiSpec, useApiClient } from '@frontmcp/react/api';
 
 useApiClient({
   baseUrl: 'https://api.example.com',
@@ -255,7 +255,7 @@ function App() {
 ## AI Integration
 
 ```tsx
-import { useAITools, useTools, createToolCallHandler } from '@frontmcp/react/ai';
+import { createToolCallHandler, useAITools, useTools } from '@frontmcp/react/ai';
 ```
 
 ## License

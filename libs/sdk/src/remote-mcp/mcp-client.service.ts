@@ -38,7 +38,6 @@ import {
   TransportNotConnectedError,
   UnsupportedTransportTypeError,
 } from '../errors/transport.errors';
-import { Mcp2026ClientAdapter, negotiateRemoteProtocol } from './mcp-2026-client.adapter';
 import type {
   McpCapabilityChangeCallback,
   McpCapabilityChangeEvent,
@@ -55,6 +54,7 @@ import type {
   McpStaticCredentials,
   McpUnsubscribeFn,
 } from './mcp-client.types';
+import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
 import {
   CircuitBreakerManager,
   CircuitOpenError,
@@ -814,7 +814,7 @@ export class McpClientService {
     const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, httpOptions?.headers);
     if (negotiated !== '2026-07-28') return undefined;
 
-    const adapter = new Mcp2026ClientAdapter({
+    const adapter = new McpStatelessClientAdapter({
       url: request.url,
       clientInfo: { name: this.options.clientName, version: this.options.clientVersion },
       headers: httpOptions?.headers,

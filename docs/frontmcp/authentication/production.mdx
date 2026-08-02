@@ -417,13 +417,14 @@ add_header Content-Security-Policy "default-src 'self'" always;
 
 FrontMCP includes a built-in **session rate limiter** with a sliding window algorithm:
 
-| Setting | Default | Description |
-| ------- | ------- | ----------- |
-| Window | 60 seconds (`windowMs: 60000`) | Sliding window duration |
-| Max requests | 100 (`maxRequests`) | Maximum requests per window per key |
-| Cleanup interval | 60000 ms (`cleanupIntervalMs`, set `0` to disable) | Auto-cleanup of expired entries |
+| Setting          | Default                                            | Description                         |
+| ---------------- | -------------------------------------------------- | ----------------------------------- |
+| Window           | 60 seconds (`windowMs: 60000`)                     | Sliding window duration             |
+| Max requests     | 100 (`maxRequests`)                                | Maximum requests per window per key |
+| Cleanup interval | 60000 ms (`cleanupIntervalMs`, set `0` to disable) | Auto-cleanup of expired entries     |
 
 The rate limiter tracks requests per key (typically client IP) and provides:
+
 - `wouldAllow(key)` — pre-check without consuming quota
 - `getStats()` — monitoring statistics
 

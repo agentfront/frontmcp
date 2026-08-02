@@ -130,13 +130,13 @@ A `callTool` failure (auth, schema, network, SSRF) **throws inside the script**.
 
 The exact prompt depends on your agent harness, but these phrasings work well in practice (cribbed from the tool descriptions the plugin ships):
 
-- For `search_skill`: *"Use this tool first to discover what skills exist for the user's request."*
-- For `load_skill`: *"Call this tool once per skill you intend to use. The instructions field is markdown — read it carefully before invoking any action."*
-- For `run_workflow`: *"This is the only way to invoke upstream operations. Write a short AgentScript program and call `await callTool(actionId, input)` for each loaded action — you can chain several calls in one round-trip. End with `return <value>`. Each `callTool` auto-validates input and applies authority checks; an unauthorized or failing call throws inside your script. The result comes back as `{ success, value, error, stats }`."*
+- For `search_skill`: _"Use this tool first to discover what skills exist for the user's request."_
+- For `load_skill`: _"Call this tool once per skill you intend to use. The instructions field is markdown — read it carefully before invoking any action."_
+- For `run_workflow`: _"This is the only way to invoke upstream operations. Write a short AgentScript program and call `await callTool(actionId, input)` for each loaded action — you can chain several calls in one round-trip. End with `return <value>`. Each `callTool` auto-validates input and applies authority checks; an unauthorized or failing call throws inside your script. The result comes back as `{ success, value, error, stats }`."_
 
 ## Skills-only mode
 
-If your FrontMCP server is configured with `skills_only` mode (set via `?mode=skills_only` on the MCP transport URL), the meta-tools stay visible — they're the only way to use skills, and the plugin treats them as exempt from the skills-only filter. See [Skills](/frontmcp/features/skills) for the skills-only contract.
+If your FrontMCP server is configured with `skills_only` mode (set via `?mode=skills_only` on the MCP transport URL), the meta-tools stay visible — they're the only way to use skills, and the plugin treats them as exempt from the skills-only filter. See [Skills](/frontmcp/features/skill-based-workflows) for the skills-only contract.
 
 ## What about hidden tools?
 

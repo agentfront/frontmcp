@@ -33,7 +33,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { SessionVerificationFailedError } from '../../errors';
-import { isProtocol2026Request } from '../../transport/mcp-2026';
+import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type Scope } from '../scope.instance';
 
 const plan = {
@@ -48,14 +48,16 @@ const plan = {
     'router',
   ],
   execute: [
-    // Web-fetch (V8-isolate / Cloudflare Worker) MCP handling. Runs FIRST and,
-    // in web mode only, responds with a Web `Response` (short-circuiting the
-    // Node handle stages below). On the Node/Express path it's a no-op and falls
-    // through to the runtime-coupled stages.
-    'handleWebFetch',
-    // Protocol 2026-07-28. Runs before the session-era handlers because it is
-    // claimed by an explicit per-request version declaration, never by fallback.
+    // Protocol 2026-07-28. Runs before EVERY session-era handler — including
+    // `handleWebFetch`, which answers any request carrying a Web `Request`
+    // regardless of intent and would otherwise swallow 2026 traffic on a
+    // Cloudflare Worker. Its output (`json` / `text` / `sse`) renders on both
+    // the Node writer and the Web response renderer.
     'handleMcp2026',
+    // Web-fetch (V8-isolate / Cloudflare Worker) MCP handling for every OTHER
+    // revision. In web mode it responds with a Web `Response`, short-circuiting
+    // the Node handle stages below; on the Node/Express path it's a no-op.
+    'handleWebFetch',
     'handleLegacySse',
     'handleSse',
     'handleStreamableHttp',
@@ -383,22 +385,35 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // Detection is explicit: only a request that declares 2026-07-28 (or uses
       // a method introduced by it) is claimed, which is what leaves every
       // earlier revision on its original path.
-      if (isProtocol2026Request({ headers: request.headers, body: request.body })) {
+      // A V8-isolate deployment (Cloudflare Worker) defaults to the stateless
+      // revision: it needs no session storage, so an unversioned call is served
+      // directly instead of minting a session in a Durable Object. Node keeps
+      // defaulting to the session pipeline. Either way an explicit declaration
+      // from the client always wins.
+      const defaultProtocolVersion = transportConfig.defaultProtocolVersion ?? (isWebMode ? '2026-07-28' : 'legacy');
+
+      if (
+        isProtocol20260728Request({
+          headers: request.headers,
+          body: request.body,
+          defaultVersion: defaultProtocolVersion,
+        })
+      ) {
         const verify = this.state.required.verifyResult;
         if (verify.kind === 'authorized') {
           request[ServerRequestTokens.auth] = verify.authorization;
         } else if (verify.kind === 'forbidden') {
-          this.logger.warn(`[${this.requestId}] mcp-2026: forbidden, insufficient scope`);
+          this.logger.warn(`[${this.requestId}] mcp-20260728: forbidden, insufficient scope`);
           this.respond(httpRespond.forbidden({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
           return;
         } else {
-          this.logger.warn(`[${this.requestId}] mcp-2026: unauthorized`);
+          this.logger.warn(`[${this.requestId}] mcp-20260728: unauthorized`);
           this.respond(httpRespond.unauthorized({ headers: { 'WWW-Authenticate': verify.prmMetadataHeader } }));
           return;
         }
 
-        this.logger.verbose(`[${this.requestId}] routing to mcp-2026 pipeline`);
-        this.state.set('intent', 'mcp-2026');
+        this.logger.verbose(`[${this.requestId}] routing to mcp-20260728 pipeline`);
+        this.state.set('intent', 'mcp-20260728');
         return;
       }
 
@@ -691,7 +706,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * MCP protocol 2026-07-28. Delegates to `handle:mcp-2026`, which owns header
+   * MCP protocol 2026-07-28. Delegates to `handle:mcp-20260728`, which owns header
    * validation, `server/discover`, `subscriptions/listen`, MRTR, and result
    * decoration for that revision.
    */
@@ -700,11 +715,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       state: {
         required: { intent },
       },
-    }) => intent === 'mcp-2026',
+    }) => intent === 'mcp-20260728',
   })
   async handleMcp2026() {
     try {
-      const response = await this.scope.runFlow('handle:mcp-2026', this.rawInput);
+      const response = await this.scope.runFlow('handle:mcp-202607280728', this.rawInput);
       if (response) {
         this.respond(response);
       }

@@ -287,13 +287,13 @@ template: (ctx: TemplateContext<MyInput, MyOutput>) => {
 
 ### Available Helpers
 
-| Helper                            | Description                                                          |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `escapeHtml(str)`                 | Escape HTML entities to prevent XSS (handles `null`/`undefined`)     |
-| `formatDate(date, format?)`       | Format a date (accepts `Date` or ISO string)                         |
-| `formatCurrency(amount, ccy?)`    | ISO-4217 currency formatting (defaults to `'USD'`)                   |
-| `uniqueId(prefix?)`               | Generate a unique ID for DOM elements                                |
-| `jsonEmbed(data)`                 | Safely embed JSON in an inline `<script>` (escapes `</script>`)      |
+| Helper                         | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `escapeHtml(str)`              | Escape HTML entities to prevent XSS (handles `null`/`undefined`) |
+| `formatDate(date, format?)`    | Format a date (accepts `Date` or ISO string)                     |
+| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting (defaults to `'USD'`)               |
+| `uniqueId(prefix?)`            | Generate a unique ID for DOM elements                            |
+| `jsonEmbed(data)`              | Safely embed JSON in an inline `<script>` (escapes `</script>`)  |
 
 <Warning>
 Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.

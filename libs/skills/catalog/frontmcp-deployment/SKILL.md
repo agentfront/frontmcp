@@ -67,7 +67,7 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 | Write a Dockerfile for Node.js deployment         | `deploy-to-node-dockerfile`        | Dockerfile configuration for Node.js deployment                                                                                                  |
 | Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`          | Vercel-specific configuration (vercel.json)                                                                                                      |
 | Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`           | Configure .mcp.json for stdio, HTTP, or Unix socket transport                                                                                    |
-| Serve or consume MCP protocol `2026-07-28`        | `protocol-versions`                | Stateless requests, `server/discover`, mirrored headers, MRTR, tasks extension, and the `Mcp2026Client`                                          |
+| Serve or consume MCP protocol `2026-07-28`        | `protocol-versions`                | Stateless requests, `server/discover`, mirrored headers, MRTR, tasks extension, and the `McpStatelessClient`                                     |
 
 ### CLI Commands for Deployment and Operations
 

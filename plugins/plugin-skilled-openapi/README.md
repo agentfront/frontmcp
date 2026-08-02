@@ -24,8 +24,9 @@ Register the plugin with `SkilledOpenApiPlugin.init(...)` and point it at a bund
 
 ```typescript
 import * as path from 'node:path';
-import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'Skilled-OpenAPI Demo', version: '0.1.0' },
@@ -74,10 +75,10 @@ OpenAPI spec  --(analyzer + optional signing)-->  bundle (spec + overlay)
 
 ## Meta-Tools
 
-| Tool | Purpose |
-| --- | --- |
-| `search_skill` | Semantic search over the loaded skills; returns matching `skillId`s with scores. The live skill catalog is injected into the tool description so the model can discover what's available. |
-| `load_skill` | Returns a skill's markdown instructions plus its `actions[]` and their JSON Schemas (the `actionId`s a workflow calls). |
+| Tool           | Purpose                                                                                                                                                                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_skill` | Semantic search over the loaded skills; returns matching `skillId`s with scores. The live skill catalog is injected into the tool description so the model can discover what's available.                                                    |
+| `load_skill`   | Returns a skill's markdown instructions plus its `actions[]` and their JSON Schemas (the `actionId`s a workflow calls).                                                                                                                      |
 | `run_workflow` | Runs an AgentScript `script` in the enclave sandbox. Each `await callTool(actionId, input)` invokes a loaded operation through the full authorize → validate → HTTPS → validate path; the script's `return` value is surfaced as the result. |
 
 ## Features
@@ -93,28 +94,28 @@ OpenAPI spec  --(analyzer + optional signing)-->  bundle (spec + overlay)
 
 All options are validated by a strict Zod schema (`skilledOpenApiPluginOptionsSchema`).
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `source` | `static \| npm \| saas \| inline` | — (required) | Where bundles come from. `{ type: 'static', path, watch? }`, `{ type: 'npm', package }`, `{ type: 'saas', endpoint, ... }`, or `{ type: 'inline', ... }`. |
-| `requireSignature` | `boolean` | `true` | Require a valid bundle signature (RS256/Ed25519 JWT-of-hashes). Opt out only with `dev: true`. |
-| `trustedKeys` | `SignatureKey[]` | `[]` | Public keys trusted to sign bundles. |
-| `dev` | `boolean` | `false` | Local-dev escape hatch: bypasses signing and widens `outbound` to allow `http://`. **Never enable in production.** |
-| `outbound` | `OutboundOptions` | see below | SSRF / egress controls. |
-| `unprotectedOps` | `'allow' \| 'deny'` | `'allow'` | Default-deny policy for operations that declare no required authorities. |
-| `sourceConflictPolicy` | `'static-wins' \| 'last-wins' \| 'reject'` | `'static-wins'` | How to resolve two sources registering the same skill id. |
-| `bundleCacheDir` | `string` | — | Last-good cache directory (only for `source.type === 'saas'`). |
-| `credentials` | `Record<vaultRef, secret>` | — | In-memory credential map for dev / single-tenant. In production resolve via `@frontmcp/auth`'s vault. |
-| `exposeOperationsAsInternalTools` | `boolean` | `true` | Keep operations reachable via `callTool` inside workflows. |
+| Option                            | Type                                       | Default         | Description                                                                                                                                               |
+| --------------------------------- | ------------------------------------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`                          | `static \| npm \| saas \| inline`          | — (required)    | Where bundles come from. `{ type: 'static', path, watch? }`, `{ type: 'npm', package }`, `{ type: 'saas', endpoint, ... }`, or `{ type: 'inline', ... }`. |
+| `requireSignature`                | `boolean`                                  | `true`          | Require a valid bundle signature (RS256/Ed25519 JWT-of-hashes). Opt out only with `dev: true`.                                                            |
+| `trustedKeys`                     | `SignatureKey[]`                           | `[]`            | Public keys trusted to sign bundles.                                                                                                                      |
+| `dev`                             | `boolean`                                  | `false`         | Local-dev escape hatch: bypasses signing and widens `outbound` to allow `http://`. **Never enable in production.**                                        |
+| `outbound`                        | `OutboundOptions`                          | see below       | SSRF / egress controls.                                                                                                                                   |
+| `unprotectedOps`                  | `'allow' \| 'deny'`                        | `'allow'`       | Default-deny policy for operations that declare no required authorities.                                                                                  |
+| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'` | `'static-wins'` | How to resolve two sources registering the same skill id.                                                                                                 |
+| `bundleCacheDir`                  | `string`                                   | —               | Last-good cache directory (only for `source.type === 'saas'`).                                                                                            |
+| `credentials`                     | `Record<vaultRef, secret>`                 | —               | In-memory credential map for dev / single-tenant. In production resolve via `@frontmcp/auth`'s vault.                                                     |
+| `exposeOperationsAsInternalTools` | `boolean`                                  | `true`          | Keep operations reachable via `callTool` inside workflows.                                                                                                |
 
 `outbound` (SSRF + egress):
 
-| Field | Default | Description |
-| --- | --- | --- |
-| `allowPrivateNetworks` | `false` | Allow connections to private/loopback/link-local IPs. |
-| `allowHttp` | `false` | Allow `http://` upstreams (auto-enabled by `dev: true`). |
-| `maxConcurrencyPerHost` | `10` | Per-host concurrency cap. |
-| `defaultTimeoutMs` | `30000` | Per-request timeout. |
-| `defaultMaxResponseBytes` | `262144` | Per-response size cap. |
+| Field                     | Default  | Description                                              |
+| ------------------------- | -------- | -------------------------------------------------------- |
+| `allowPrivateNetworks`    | `false`  | Allow connections to private/loopback/link-local IPs.    |
+| `allowHttp`               | `false`  | Allow `http://` upstreams (auto-enabled by `dev: true`). |
+| `maxConcurrencyPerHost`   | `10`     | Per-host concurrency cap.                                |
+| `defaultTimeoutMs`        | `30000`  | Per-request timeout.                                     |
+| `defaultMaxResponseBytes` | `262144` | Per-response size cap.                                   |
 
 Full reference: [Configuration](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/configuration).
 
@@ -136,7 +137,7 @@ Details: [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi
 
 ## Documentation
 
-Full docs: **https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi**
+Full docs: **https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/overview**
 
 - [Overview](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/overview) · [Quickstart](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/quickstart) · [Sources](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/sources) · [Bundle format](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/bundle-format)
 - [Configuration](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/configuration) · [Meta-tools](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/meta-tools) · [Security](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/security) · [API reference](https://docs.agentfront.dev/frontmcp/plugins/skilled-openapi/api-reference)

@@ -98,12 +98,12 @@ export default defineConfig({
 });
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `heartbeatIntervalMs` | number | 10000 | How often each pod writes its heartbeat |
-| `heartbeatTtlMs` | number | 30000 | TTL for heartbeat key (should be 2-3x interval) |
-| `takeoverGracePeriodMs` | number | 5000 | Wait time before claiming orphaned sessions |
-| `redisKeyPrefix` | string | `mcp:ha:` | Redis key prefix for all HA keys |
+| Field                   | Type   | Default   | Description                                     |
+| ----------------------- | ------ | --------- | ----------------------------------------------- |
+| `heartbeatIntervalMs`   | number | 10000     | How often each pod writes its heartbeat         |
+| `heartbeatTtlMs`        | number | 30000     | TTL for heartbeat key (should be 2-3x interval) |
+| `takeoverGracePeriodMs` | number | 5000      | Wait time before claiming orphaned sessions     |
+| `redisKeyPrefix`        | string | `mcp:ha:` | Redis key prefix for all HA keys                |
 
 <Tip>
   Set `heartbeatTtlMs` to at least 2x `heartbeatIntervalMs` to avoid false positives from network jitter.
@@ -237,10 +237,10 @@ spec:
 
 ## Errors
 
-| Error | When | Action |
-| --- | --- | --- |
-| `SessionClaimConflictError` | Another pod already claimed the session | Retry the request --- the load balancer will route to the new owner |
-| `HaConfigurationError` | Redis not configured but `FRONTMCP_DEPLOYMENT_MODE=distributed` | Add `redis` configuration to `@FrontMcp()` decorator |
+| Error                       | When                                                            | Action                                                              |
+| --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `SessionClaimConflictError` | Another pod already claimed the session                         | Retry the request --- the load balancer will route to the new owner |
+| `HaConfigurationError`      | Redis not configured but `FRONTMCP_DEPLOYMENT_MODE=distributed` | Add `redis` configuration to `@FrontMcp()` decorator                |
 
 ## Verifying HA
 

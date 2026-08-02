@@ -29,6 +29,34 @@ A request is served as `2026-07-28` when **any** of these is true:
 Everything else — including every request carrying `Mcp-Session-Id`, and every
 `initialize` — is served by the session pipeline unchanged.
 
+### Default for unversioned requests
+
+A client that names a revision always gets that revision. For a bare JSON-RPC
+call that names none — no `initialize`, no `Mcp-Session-Id`, no
+`MCP-Protocol-Version` — the fallback is configurable:
+
+```ts
+@FrontMcp({
+  transport: {
+    // '2026-07-28' | 'legacy'
+    defaultProtocolVersion: '2026-07-28',
+  },
+})
+```
+
+| Runtime                                | Default        | Why                                                                       |
+| -------------------------------------- | -------------- | ------------------------------------------------------------------------- |
+| Cloudflare Workers / other V8 isolates | `'2026-07-28'` | Stateless fits the runtime; no session means no Durable Object is needed. |
+| Node (and everything else)             | `'legacy'`     | Existing deployments keep their exact behaviour.                          |
+
+<Note>
+  When the SERVER defaults a request to this revision, the mirrored-header rules
+  are **not** enforced — the client never opted into SEP-2243, so requiring
+  `Mcp-Method` / `Mcp-Name` would turn a working call into a `400`. Headers that
+  ARE present are still validated. Once a client declares `2026-07-28` itself,
+  the full contract applies.
+</Note>
+
 ## What changed in 2026-07-28
 
 ### Statelessness
@@ -80,12 +108,12 @@ Streamable HTTP mirrors body fields into headers so intermediaries can route
 without parsing the body. FrontMCP **validates** that the two agree and rejects
 a mismatch with `400` + `-32020`:
 
-| Header                 | Source                        | Required for                              |
-| ---------------------- | ----------------------------- | ----------------------------------------- |
-| `MCP-Protocol-Version` | `_meta` protocol version      | all requests                              |
-| `Mcp-Method`           | `method`                      | all requests                              |
-| `Mcp-Name`             | `params.name` / `params.uri`  | `tools/call`, `prompts/get`, `resources/read` |
-| `Mcp-Param-{Name}`     | an `x-mcp-header` argument    | tool calls that supply the argument       |
+| Header                 | Source                       | Required for                                  |
+| ---------------------- | ---------------------------- | --------------------------------------------- |
+| `MCP-Protocol-Version` | `_meta` protocol version     | all requests                                  |
+| `Mcp-Method`           | `method`                     | all requests                                  |
+| `Mcp-Name`             | `params.name` / `params.uri` | `tools/call`, `prompts/get`, `resources/read` |
+| `Mcp-Param-{Name}`     | an `x-mcp-header` argument   | tool calls that supply the argument           |
 
 Values that are not header-safe travel Base64-wrapped as `=?base64?…?=`;
 FrontMCP decodes before comparing.
@@ -196,12 +224,12 @@ actually honors; every message carries
 
 ### Error codes
 
-| Code     | Meaning                                                   |
-| -------- | --------------------------------------------------------- |
-| `-32020` | `HeaderMismatch` — headers disagree with the body          |
-| `-32021` | `MissingRequiredClientCapability`                          |
+| Code     | Meaning                                                        |
+| -------- | -------------------------------------------------------------- |
+| `-32020` | `HeaderMismatch` — headers disagree with the body              |
+| `-32021` | `MissingRequiredClientCapability`                              |
 | `-32022` | `UnsupportedProtocolVersion` (carries `supported`/`requested`) |
-| `-32602` | Resource not found (was `-32002` before this revision)     |
+| `-32602` | Resource not found (was `-32002` before this revision)         |
 
 ## Tasks extension
 
@@ -237,9 +265,9 @@ The upstream `@modelcontextprotocol/sdk` client does not speak this revision, so
 FrontMCP ships its own:
 
 ```ts
-import { Mcp2026Client } from '@frontmcp/sdk';
+import { McpStatelessClient } from '@frontmcp/sdk';
 
-const client = new Mcp2026Client({
+const client = new McpStatelessClient({
   url: 'https://example.com/mcp',
   capabilities: { elicitation: { form: {} } },
   handlers: {
@@ -291,6 +319,17 @@ Still functional, but new servers should not adopt them:
 - **Sampling** — integrate with an LLM provider API directly.
 - **Logging** — log to `stderr` or use OpenTelemetry.
 - **HTTP+SSE transport** — migrate to Streamable HTTP.
+
+## Cloudflare Workers
+
+A Worker serves this revision natively and defaults to it: `server/discover`,
+stateless `tools/call`, `subscriptions/listen` and the mirrored-header rules all
+work through the same `fetch` handler, and no session is minted. Legacy clients
+that send `initialize` keep working on the same endpoint.
+
+Skills served over MCP (`skill://` resources, `skills/search` / `skills/load` /
+`skills/list`) go through the shared handler set, so they are available under
+2026-07-28 without extra configuration.
 
 ## Observability
 

@@ -42,6 +42,32 @@ A request is served as `2026-07-28` when ANY of these is true:
 Everything else — including every `initialize` and every request carrying
 `Mcp-Session-Id` — takes the session pipeline unchanged.
 
+## Default for unversioned requests
+
+A bare JSON-RPC call naming no revision (no `initialize`, no `Mcp-Session-Id`,
+no `MCP-Protocol-Version`) falls back to:
+
+| Runtime                                | Default        |
+| -------------------------------------- | -------------- |
+| Cloudflare Workers / other V8 isolates | `'2026-07-28'` |
+| Node and everything else               | `'legacy'`     |
+
+Override per server:
+
+```ts
+@FrontMcp({
+  transport: { defaultProtocolVersion: '2026-07-28' }, // or 'legacy'
+})
+```
+
+The Worker default is stateless on purpose: no session means no Durable Object
+binding is needed to serve MCP.
+
+When the SERVER defaults a request to 2026-07-28, the mirrored-header rules are
+NOT enforced — the client never opted into SEP-2243. Headers that ARE present
+are still validated. A client that declares the revision itself gets the full
+contract.
+
 ## What 2026-07-28 changed
 
 | Area          | Before                                     | 2026-07-28                                           |
@@ -135,9 +161,9 @@ anonymous task cannot be scoped to its creator, so a public server refuses.
 The upstream `@modelcontextprotocol/sdk` client cannot speak this revision:
 
 ```ts
-import { Mcp2026Client } from '@frontmcp/sdk';
+import { McpStatelessClient } from '@frontmcp/sdk';
 
-const client = new Mcp2026Client({
+const client = new McpStatelessClient({
   url: 'https://example.com/mcp',
   capabilities: { elicitation: { form: {} } },
   handlers: { onElicit: async () => ({ action: 'accept', content: { confirmed: true } }) },
@@ -168,6 +194,17 @@ Still functional; do not adopt in new servers:
 - **HTTP+SSE transport** → Streamable HTTP
 - **DCR** → Client ID Metadata Documents
 
+## Cloudflare Workers
+
+A Worker serves 2026-07-28 natively and defaults to it. `server/discover`,
+stateless `tools/call`, `subscriptions/listen`, and the mirrored-header rules
+all work through the same `fetch` handler; `initialize` clients keep working on
+the same endpoint.
+
+Skills over MCP (`skill://` resources plus `skills/search` / `skills/load` /
+`skills/list`) share the same handler set, so they are available under
+2026-07-28 with no extra configuration.
+
 ## Common Mistakes
 
 ❌ Reusing the JSON-RPC id on an MRTR retry — it MUST be a new id
@@ -175,7 +212,8 @@ Still functional; do not adopt in new servers:
 ❌ Performing side effects before the first `elicit()` — the tool is replayed
 ❌ Expecting `Mcp-Session-Id` to be echoed — sessions are gone
 ❌ Calling `tasks/list` or `tasks/result` — both removed (`404` + `-32601`)
-❌ Omitting `Mcp-Method`/`Mcp-Name` headers — rejected with `-32020`
+❌ Omitting `Mcp-Method`/`Mcp-Name` headers once you declare 2026 — `-32020`
+❌ Assuming a Worker still mints `Mcp-Session-Id` — it defaults to stateless
 
 ## Related
 

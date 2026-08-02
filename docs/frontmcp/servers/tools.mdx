@@ -220,12 +220,12 @@ output?: {
 }
 ```
 
-| `schemaMode`    | Effect                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------ |
-| `'definition'`  | **(Default)** Advertise the schema as the tool's `outputSchema` (JSON Schema).                   |
-| `'description'` | Fold a readable rendering of the schema into the tool `description`, and omit `outputSchema`.    |
-| `'both'`        | Advertise as `outputSchema` **and** fold it into the description.                                |
-| `'none'`        | Do not expose the output schema anywhere.                                                        |
+| `schemaMode`    | Effect                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| `'definition'`  | **(Default)** Advertise the schema as the tool's `outputSchema` (JSON Schema).                |
+| `'description'` | Fold a readable rendering of the schema into the tool `description`, and omit `outputSchema`. |
+| `'both'`        | Advertise as `outputSchema` **and** fold it into the description.                             |
+| `'none'`        | Do not expose the output schema anywhere.                                                     |
 
 When the schema is folded into the description (`'description'` / `'both'`), `schemaDescriptionFormat` picks the rendering: `'summary'` (a compact human-readable property list) or `'jsonSchema'` (a fenced JSON Schema code block).
 
@@ -353,20 +353,20 @@ execute() {
 
 **Field descriptions:**
 
-| Field               | Description                                                  |
-| ------------------- | ------------------------------------------------------------ |
-| `name`              | Programmatic identifier used internally and in MCP responses |
-| `description`       | Helps the model understand when and how to use this tool     |
-| `inputSchema`       | Zod schema defining expected input parameters                |
-| `outputSchema`      | Zod schema for validating and documenting output             |
-| `title`             | Human-friendly name for UI display                           |
-| `icons`             | Array of icons for visual representation in clients          |
-| `tags`              | Categorization for organization and filtering                |
-| `annotations`       | MCP-defined hints about tool behavior                        |
-| `examples`          | Usage examples for discovery and LLM understanding           |
-| `ui`                | Visual widget configuration (template, display mode, etc.)   |
-| `output`            | Output-validation + output-schema exposure policy — see [Output schema exposure](#output-schema-exposure) |
-| `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
+| Field               | Description                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | Programmatic identifier used internally and in MCP responses                                                                     |
+| `description`       | Helps the model understand when and how to use this tool                                                                         |
+| `inputSchema`       | Zod schema defining expected input parameters                                                                                    |
+| `outputSchema`      | Zod schema for validating and documenting output                                                                                 |
+| `title`             | Human-friendly name for UI display                                                                                               |
+| `icons`             | Array of icons for visual representation in clients                                                                              |
+| `tags`              | Categorization for organization and filtering                                                                                    |
+| `annotations`       | MCP-defined hints about tool behavior                                                                                            |
+| `examples`          | Usage examples for discovery and LLM understanding                                                                               |
+| `ui`                | Visual widget configuration (template, display mode, etc.)                                                                       |
+| `output`            | Output-validation + output-schema exposure policy — see [Output schema exposure](#output-schema-exposure)                        |
+| `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list`                                                                     |
 | `availableWhen`     | Restrict discovery and execution to specific environments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
 
 ---
@@ -892,11 +892,12 @@ FrontMCP auto-detects your template type:
 import { type TemplateContext } from '@frontmcp/sdk';
 
 ui: {
-  // Annotate `ctx` explicitly under strict / noImplicitAny.
-  template: (ctx: TemplateContext<MyInput, MyOutput>) =>
-    `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
+// Annotate `ctx` explicitly under strict / noImplicitAny.
+template: (ctx: TemplateContext<MyInput, MyOutput>) =>
+`<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
 }
-```
+
+````
 
 ```tsx React Component
 import WeatherCard from './components/WeatherCard';
@@ -904,7 +905,7 @@ import WeatherCard from './components/WeatherCard';
 ui: {
   template: WeatherCard, // React component
 }
-```
+````
 
 ```ts MDX Template
 ui: {
@@ -944,6 +945,7 @@ ui: {
 **`.tsx`/`.jsx` widgets require `@frontmcp/ui` installed.** When `ui.template` points at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Install `@frontmcp/ui` in the consuming project at the same version as `@frontmcp/sdk` — without it, server-side bundling fails.
 
 In the default `resourceMode: 'cdn'` mode, `react` / `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk. When the framework selects `resourceMode: 'inline'` — either explicitly or via host detection (Claude, #456) — `react` and `react-dom` must also be resolvable from the consuming project so esbuild can bundle them into the widget; install them as devDependencies if your project doesn't already pull them in. See [building-tool-ui](/frontmcp/guides/building-tool-ui#step-1-install-the-ui-package) for the install snippet and the per-host trade-offs.
+
 </Info>
 
 <Warning>
@@ -957,6 +959,7 @@ ui: { template: { file: widgetPath } }
 ```
 
 In a **CommonJS** project (`"type": "commonjs"`), `import.meta.url` is unavailable — anchor with `join(__dirname, 'weather.widget.tsx')` (from `node:path`) instead. Both forms are invariant to `process.cwd()`.
+
 </Warning>
 
 <Info>
@@ -972,6 +975,7 @@ ui: {
 ```
 
 Detection only applies to per-call rendering (inline / hybrid / lean serving modes). `servingMode: 'static'` widgets compile at server startup with no client context — set `resourceMode: 'inline'` explicitly when a static widget needs to render in Claude.
+
 </Info>
 
 <Info>

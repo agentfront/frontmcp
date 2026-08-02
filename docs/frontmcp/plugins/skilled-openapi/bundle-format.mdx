@@ -154,13 +154,13 @@ One bundle can wrap several microservices natively — declare each service in `
 
 ## What's not supported
 
-| Feature | Status |
-| --- | --- |
-| Multipart / form-data request bodies | Not supported |
-| Server-sent events / streaming responses | Not supported |
-| WebSocket operations | Not supported |
-| OpenAPI `callbacks` and `links` | Not supported |
+| Feature                                                      | Status                                    |
+| ------------------------------------------------------------ | ----------------------------------------- |
+| Multipart / form-data request bodies                         | Not supported                             |
+| Server-sent events / streaming responses                     | Not supported                             |
+| WebSocket operations                                         | Not supported                             |
+| OpenAPI `callbacks` and `links`                              | Not supported                             |
 | `oauth2` interactive flows (authorization_code, device_code) | Not supported (only `client_credentials`) |
-| HTTP/2 push | Not supported |
+| HTTP/2 push                                                  | Not supported                             |
 
 These are the same caveats the underlying `mcp-from-openapi` parser carries; bundles that include them will fail validation.

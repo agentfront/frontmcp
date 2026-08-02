@@ -12,11 +12,11 @@ FrontMCP can **dynamically load npm packages at runtime** and register their too
 
 FrontMCP supports three ways to compose apps:
 
-| Type | Declaration | Execution | Use Case |
-|------|------------|-----------|----------|
-| **Local** | `@App` class | In-process | First-party code you own |
-| **ESM Package** | `App.esm()` | In-process | Community or internal npm packages |
-| **Remote** | `App.remote()` | HTTP proxy | External MCP servers |
+| Type            | Declaration    | Execution  | Use Case                           |
+| --------------- | -------------- | ---------- | ---------------------------------- |
+| **Local**       | `@App` class   | In-process | First-party code you own           |
+| **ESM Package** | `App.esm()`    | In-process | Community or internal npm packages |
+| **Remote**      | `App.remote()` | HTTP proxy | External MCP servers               |
 
 ```ts
 import { FrontMcp, App } from '@frontmcp/sdk';

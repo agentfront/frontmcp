@@ -13,12 +13,12 @@ The Authorities system provides declarative, built-in authorization on tools, re
 
 Authorities supports four authorization paradigms:
 
-| Paradigm | Description | Use Case |
-| -------- | ----------- | -------- |
-| **RBAC** | Role-based and permission-based checks | "Only admins can delete users" |
-| **ABAC** | Attribute-based conditions with operators | "Only users in the `engineering` department" |
-| **ReBAC** | Relationship-based checks via an external resolver | "Only the owner of this document" |
-| **Custom** | Extend with your own evaluator functions | "Only requests from allowed IP ranges" |
+| Paradigm   | Description                                        | Use Case                                     |
+| ---------- | -------------------------------------------------- | -------------------------------------------- |
+| **RBAC**   | Role-based and permission-based checks             | "Only admins can delete users"               |
+| **ABAC**   | Attribute-based conditions with operators          | "Only users in the `engineering` department" |
+| **ReBAC**  | Relationship-based checks via an external resolver | "Only the owner of this document"            |
+| **Custom** | Extend with your own evaluator functions           | "Only requests from allowed IP ranges"       |
 
 These paradigms can be composed using `allOf`, `anyOf`, and `not` combinators to express complex policies.
 
@@ -309,12 +309,12 @@ When both `roles` and `permissions` are specified in the same policy, they are c
 
 Attribute-based access control evaluates conditions against a context envelope with four namespaces:
 
-| Prefix | Source |
-| -------- | ------ |
-| `user.*` | Resolved user object (`sub`, `roles`, `permissions`, `claims`) |
-| `claims.*` | Raw JWT claims |
-| `input.*` | Tool/prompt input arguments |
-| `env.*` | Runtime environment variables |
+| Prefix     | Source                                                         |
+| ---------- | -------------------------------------------------------------- |
+| `user.*`   | Resolved user object (`sub`, `roles`, `permissions`, `claims`) |
+| `claims.*` | Raw JWT claims                                                 |
+| `input.*`  | Tool/prompt input arguments                                    |
+| `env.*`    | Runtime environment variables                                  |
 
 ### Simple Match
 
@@ -355,21 +355,21 @@ The `conditions` field supports a rich set of operators for more complex checks.
 
 ### Operator Reference
 
-| Operator | Description | Value Type |
-| ------------ | ---------------------------------------- | ------------- |
-| `eq` | Strict equality (`===`) | any |
-| `neq` | Strict inequality (`!==`) | any |
-| `in` | Value is in the array | array |
-| `notIn` | Value is not in the array | array |
-| `gt` | Greater than | number |
-| `gte` | Greater than or equal | number |
-| `lt` | Less than | number |
-| `lte` | Less than or equal | number |
-| `contains` | String includes substring, or array contains value | string/array |
-| `startsWith` | String starts with prefix | string |
-| `endsWith` | String ends with suffix | string |
-| `exists` | Value is defined (`true`) or undefined (`false`) | boolean |
-| `matches` | Regular expression match | string (regex) |
+| Operator     | Description                                        | Value Type     |
+| ------------ | -------------------------------------------------- | -------------- |
+| `eq`         | Strict equality (`===`)                            | any            |
+| `neq`        | Strict inequality (`!==`)                          | any            |
+| `in`         | Value is in the array                              | array          |
+| `notIn`      | Value is not in the array                          | array          |
+| `gt`         | Greater than                                       | number         |
+| `gte`        | Greater than or equal                              | number         |
+| `lt`         | Less than                                          | number         |
+| `lte`        | Less than or equal                                 | number         |
+| `contains`   | String includes substring, or array contains value | string/array   |
+| `startsWith` | String starts with prefix                          | string         |
+| `endsWith`   | String ends with suffix                            | string         |
+| `exists`     | Value is defined (`true`) or undefined (`false`)   | boolean        |
+| `matches`    | Regular expression match                           | string (regex) |
 
 ### Dynamic Value References
 
@@ -399,9 +399,9 @@ Condition values can reference runtime data instead of using static literals.
 })
 ```
 
-| Ref | Description |
-| ---- | ----------- |
-| `{ fromInput: 'fieldName' }` | Resolves to the value of the named tool input argument |
+| Ref                          | Description                                                 |
+| ---------------------------- | ----------------------------------------------------------- |
+| `{ fromInput: 'fieldName' }` | Resolves to the value of the named tool input argument      |
 | `{ fromClaims: 'dot.path' }` | Resolves to a value from the user's JWT claims via dot-path |
 
 <Note>
@@ -480,11 +480,11 @@ Pass an array of relationship checks. All must pass.
 
 ### Resource ID Sources
 
-| Source | Example | Description |
-| ------ | ------- | ----------- |
-| Static string | `resourceId: 'site-123'` | Hardcoded resource ID |
-| From input | `resourceId: { fromInput: 'siteId' }` | Resolved from tool input arguments |
-| From claims | `resourceId: { fromClaims: 'user.orgId' }` | Resolved from JWT claims via dot-path |
+| Source        | Example                                    | Description                           |
+| ------------- | ------------------------------------------ | ------------------------------------- |
+| Static string | `resourceId: 'site-123'`                   | Hardcoded resource ID                 |
+| From input    | `resourceId: { fromInput: 'siteId' }`      | Resolved from tool input arguments    |
+| From claims   | `resourceId: { fromClaims: 'user.orgId' }` | Resolved from JWT claims via dot-path |
 
 ## Combinators
 
@@ -659,11 +659,11 @@ If a referenced custom evaluator is not registered, the policy is denied with th
 
 List and discovery flows automatically filter entries based on the caller's authorities via the built-in `filterByAuthorities` stage. When a client calls `tools/list`, `resources/list`, or `prompts/list`, entries the user is not authorized to access are silently removed from the results.
 
-| Flow | Stage | Runs After |
-| ---- | ----- | ---------- |
-| `tools:list-tools` | `filterByAuthorities` | `findTools` |
+| Flow                       | Stage                 | Runs After      |
+| -------------------------- | --------------------- | --------------- |
+| `tools:list-tools`         | `filterByAuthorities` | `findTools`     |
 | `resources:list-resources` | `filterByAuthorities` | `findResources` |
-| `prompts:list-prompts` | `filterByAuthorities` | `findPrompts` |
+| `prompts:list-prompts`     | `filterByAuthorities` | `findPrompts`   |
 
 ```typescript
 // A viewer calling tools/list will only see tools they are authorized to use.
@@ -684,11 +684,11 @@ This ensures AI agents only see tools they can actually call, preventing wasted 
 
 Skills are filtered on **every** discovery surface so a caller never sees a skill they are not authorized to load:
 
-| Surface | What is filtered |
-| ------- | ---------------- |
-| `skills/search`, `skills/list` (MCP) | Authority-gated skills the caller can't access are removed from results |
-| `skill://index.json` + skill-path completions (SEP-2640) | Gated skills are excluded from the discovery index and autocomplete |
-| `GET /skills`, `GET /skills?query=…` (HTTP) | Gated skills are hidden (see HTTP note below) |
+| Surface                                                  | What is filtered                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `skills/search`, `skills/list` (MCP)                     | Authority-gated skills the caller can't access are removed from results |
+| `skill://index.json` + skill-path completions (SEP-2640) | Gated skills are excluded from the discovery index and autocomplete     |
+| `GET /skills`, `GET /skills?query=…` (HTTP)              | Gated skills are hidden (see HTTP note below)                           |
 
 ```typescript
 @Skill({ name: 'review-pr' })                              // Visible to everyone
@@ -709,14 +709,14 @@ Authority enforcement runs as **native flow stages**, not plugin hooks. This mea
 
 ### Flow Stages Reference
 
-| Flow | Stage | Purpose |
-| ---- | ----- | ------- |
-| `tools:call-tool` | `checkEntryAuthorities` | Enforce before tool execution |
-| `tools:list-tools` | `filterByAuthorities` | Filter unauthorized tools from discovery |
-| `resources:read-resource` | `checkEntryAuthorities` | Enforce before resource read |
-| `resources:list-resources` | `filterByAuthorities` | Filter unauthorized resources from discovery |
-| `prompts:get-prompt` | `checkEntryAuthorities` | Enforce before prompt execution |
-| `prompts:list-prompts` | `filterByAuthorities` | Filter unauthorized prompts from discovery |
+| Flow                       | Stage                   | Purpose                                      |
+| -------------------------- | ----------------------- | -------------------------------------------- |
+| `tools:call-tool`          | `checkEntryAuthorities` | Enforce before tool execution                |
+| `tools:list-tools`         | `filterByAuthorities`   | Filter unauthorized tools from discovery     |
+| `resources:read-resource`  | `checkEntryAuthorities` | Enforce before resource read                 |
+| `resources:list-resources` | `filterByAuthorities`   | Filter unauthorized resources from discovery |
+| `prompts:get-prompt`       | `checkEntryAuthorities` | Enforce before prompt execution              |
+| `prompts:list-prompts`     | `filterByAuthorities`   | Filter unauthorized prompts from discovery   |
 
 Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
 
@@ -821,14 +821,14 @@ When an authorities check fails at execution time (as opposed to list filtering)
 
 ### AuthorityDeniedError
 
-| Property | Type | Value |
-| ------------- | -------- | ----- |
-| `mcpErrorCode` | `number` | `-32003` (FORBIDDEN) |
-| `statusCode` | `number` | `403` |
-| `code` | `string` | `AUTHORITY_DENIED` |
-| `entryType` | `string` | `'Tool'`, `'Resource'`, `'Prompt'`, `'Skill'` |
-| `entryName` | `string` | Name of the denied entry |
-| `deniedBy` | `string` | Human-readable reason (e.g., `"roles.all: missing 'admin'"`) |
+| Property       | Type     | Value                                                        |
+| -------------- | -------- | ------------------------------------------------------------ |
+| `mcpErrorCode` | `number` | `-32003` (FORBIDDEN)                                         |
+| `statusCode`   | `number` | `403`                                                        |
+| `code`         | `string` | `AUTHORITY_DENIED`                                           |
+| `entryType`    | `string` | `'Tool'`, `'Resource'`, `'Prompt'`, `'Skill'`                |
+| `entryName`    | `string` | Name of the denied entry                                     |
+| `deniedBy`     | `string` | Human-readable reason (e.g., `"roles.all: missing 'admin'"`) |
 
 ```typescript
 import { AuthorityDeniedError } from '@frontmcp/auth';
@@ -862,17 +862,17 @@ The error serializes to a standard JSON-RPC error for MCP transport:
 
 The `deniedBy` field provides actionable feedback:
 
-| Pattern | Example |
-| ------- | ------- |
-| `roles.all: missing '<role>'` | `roles.all: missing 'admin'` |
-| `roles.any: user has none of '<role>', ...` | `roles.any: user has none of 'admin', 'superadmin'` |
-| `permissions.all: missing '<perm>'` | `permissions.all: missing 'users:delete'` |
-| `permissions.any: user has none of '<perm>', ...` | `permissions.any: user has none of 'data:export'` |
-| `attributes.match: '<path>' expected ...` | `attributes.match: 'claims.dept' expected 'eng' but got 'sales'` |
-| `attributes.conditions: '<path>' failed '<op>' check` | `attributes.conditions: 'claims.credits' failed 'gt' check against '0'` |
-| `relationships: user '<sub>' is not '<type>' of <resource>:<id>` | `relationships: user 'u-123' is not 'owner' of document:doc-456` |
-| `profile '<name>' is not registered` | `profile 'admin' is not registered` |
-| `custom evaluator '<name>' is not registered` | `custom evaluator 'ipAllowList' is not registered` |
+| Pattern                                                          | Example                                                                 |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `roles.all: missing '<role>'`                                    | `roles.all: missing 'admin'`                                            |
+| `roles.any: user has none of '<role>', ...`                      | `roles.any: user has none of 'admin', 'superadmin'`                     |
+| `permissions.all: missing '<perm>'`                              | `permissions.all: missing 'users:delete'`                               |
+| `permissions.any: user has none of '<perm>', ...`                | `permissions.any: user has none of 'data:export'`                       |
+| `attributes.match: '<path>' expected ...`                        | `attributes.match: 'claims.dept' expected 'eng' but got 'sales'`        |
+| `attributes.conditions: '<path>' failed '<op>' check`            | `attributes.conditions: 'claims.credits' failed 'gt' check against '0'` |
+| `relationships: user '<sub>' is not '<type>' of <resource>:<id>` | `relationships: user 'u-123' is not 'owner' of document:doc-456`        |
+| `profile '<name>' is not registered`                             | `profile 'admin' is not registered`                                     |
+| `custom evaluator '<name>' is not registered`                    | `custom evaluator 'ipAllowList' is not registered`                      |
 
 ## Type-Safe Profiles
 

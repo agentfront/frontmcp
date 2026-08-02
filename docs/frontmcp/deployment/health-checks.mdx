@@ -78,12 +78,12 @@ Runs all registered probes in parallel, returns aggregate status with catalog in
 
 ## Runtime Availability
 
-| Runtime | `/healthz` | `/readyz` | Notes |
-| --- | --- | --- | --- |
-| Node.js / Bun / Deno | Yes | Yes | Full support |
-| Edge / Cloudflare / Vercel | Yes | No | No persistent connections to probe |
-| CLI (stdio) | Yes | No | No HTTP server |
-| Browser | Yes | Yes | Full support |
+| Runtime                    | `/healthz` | `/readyz` | Notes                              |
+| -------------------------- | ---------- | --------- | ---------------------------------- |
+| Node.js / Bun / Deno       | Yes        | Yes       | Full support                       |
+| Edge / Cloudflare / Vercel | Yes        | No        | No persistent connections to probe |
+| CLI (stdio)                | Yes        | No        | No HTTP server                     |
+| Browser                    | Yes        | Yes       | Full support                       |
 
 ## Auto-Discovered Probes
 

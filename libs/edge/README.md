@@ -13,6 +13,7 @@ Node `req`/`res` shim).
 ```ts
 // worker.ts
 import { createEdgeMcp } from '@frontmcp/edge';
+
 import { MyApp } from './apps';
 
 export default createEdgeMcp({
@@ -57,7 +58,7 @@ export default createEdgeMcp({
     jwksUrl: 'https://cloud.frontmcp.dev/.well-known/jwks.json',
     expectedIssuer: 'https://cloud.frontmcp.dev',
     pollIntervalMs: 300_000, // optional — auto-refresh every 5 min (default)
-    enableWebhook: true,     // optional — also accept synchronous pushes
+    enableWebhook: true, // optional — also accept synchronous pushes
   },
 });
 ```

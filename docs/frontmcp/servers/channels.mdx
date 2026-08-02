@@ -16,13 +16,13 @@ This feature implements the [Claude Code Channels extension](https://code.claude
 
 Channels fill a gap that tools, resources, and prompts cannot address — **server-initiated push notifications**:
 
-| Aspect           | Tool                    | Resource              | Channel                          |
-| ---------------- | ----------------------- | --------------------- | -------------------------------- |
-| **Purpose**      | Execute actions         | Provide data          | Push real-time events            |
-| **Direction**    | Client triggers         | Client pulls          | Server pushes                    |
-| **Side effects** | Yes                     | No                    | No (notification only)           |
-| **Two-way**      | Request/response        | Read-only             | Optional reply tool              |
-| **Use case**     | Actions, calculations   | Context loading       | Alerts, chat bridges, monitoring |
+| Aspect           | Tool                  | Resource        | Channel                          |
+| ---------------- | --------------------- | --------------- | -------------------------------- |
+| **Purpose**      | Execute actions       | Provide data    | Push real-time events            |
+| **Direction**    | Client triggers       | Client pulls    | Server pushes                    |
+| **Side effects** | Yes                   | No              | No (notification only)           |
+| **Two-way**      | Request/response      | Read-only       | Optional reply tool              |
+| **Use case**     | Actions, calculations | Context loading | Alerts, chat bridges, monitoring |
 
 Channels are ideal for:
 
@@ -86,14 +86,14 @@ const ErrorChannel = channel({
 
 Every channel has a source that determines how events flow into it:
 
-| Source | Trigger | Config |
-| --- | --- | --- |
-| `webhook` | HTTP POST to a path | `{ type: 'webhook', path: '/hooks/deploy' }` |
-| `app-event` | In-process event bus | `{ type: 'app-event', event: 'error' }` |
-| `agent-completion` | Agent finishes | `{ type: 'agent-completion', agentIds?: ['reviewer'] }` |
-| `job-completion` | Job completes | `{ type: 'job-completion', jobNames?: ['daily-report'] }` |
-| `service` | Persistent connection | `{ type: 'service', service: 'whatsapp-business' }` |
-| `manual` | Programmatic push | `{ type: 'manual' }` |
+| Source             | Trigger               | Config                                                    |
+| ------------------ | --------------------- | --------------------------------------------------------- |
+| `webhook`          | HTTP POST to a path   | `{ type: 'webhook', path: '/hooks/deploy' }`              |
+| `app-event`        | In-process event bus  | `{ type: 'app-event', event: 'error' }`                   |
+| `agent-completion` | Agent finishes        | `{ type: 'agent-completion', agentIds?: ['reviewer'] }`   |
+| `job-completion`   | Job completes         | `{ type: 'job-completion', jobNames?: ['daily-report'] }` |
+| `service`          | Persistent connection | `{ type: 'service', service: 'whatsapp-business' }`       |
+| `manual`           | Programmatic push     | `{ type: 'manual' }`                                      |
 
 ### Webhook Source
 
@@ -424,12 +424,12 @@ Channel notifications are **session-scoped** to prevent data leaking between con
 
 ### Delivery Matrix
 
-| Source | Target | Delivery |
-| --- | --- | --- |
-| Webhook, file-watcher, app-event | All subscribers | Every subscribed session |
-| Agent completion | Originating session | ONLY the session that triggered the agent |
-| Job completion | Originating session | ONLY the session that triggered the job |
-| Manual push | Configurable | `send()` = all subscribers, `sendToSession()` = one session |
+| Source                           | Target              | Delivery                                                    |
+| -------------------------------- | ------------------- | ----------------------------------------------------------- |
+| Webhook, file-watcher, app-event | All subscribers     | Every subscribed session                                    |
+| Agent completion                 | Originating session | ONLY the session that triggered the agent                   |
+| Job completion                   | Originating session | ONLY the session that triggered the job                     |
+| Manual push                      | Configurable        | `send()` = all subscribers, `sendToSession()` = one session |
 
 ### Selective Subscriptions
 

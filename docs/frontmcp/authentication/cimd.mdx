@@ -158,17 +158,17 @@ CIMD is configured through the `auth.cimd` option when creating a FrontMCP serve
 import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
-  info: { name: 'my-mcp-server', version: '1.0.0' },
-  auth: {
-    mode: 'local',
-    cimd: {
-      enabled: true,
-      security: {
-        blockPrivateIPs: true,
-        allowedDomains: ['*.verified-clients.mcp'],
-      },
-    },
-  },
+info: { name: 'my-mcp-server', version: '1.0.0' },
+auth: {
+mode: 'local',
+cimd: {
+enabled: true,
+security: {
+blockPrivateIPs: true,
+allowedDomains: ['*.verified-clients.mcp'],
+},
+},
+},
 })
 class MyServer {}
 
@@ -207,12 +207,12 @@ const client = await connect({
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  info: { name: 'my-mcp-server', version: '1.0.0' },
-  auth: {
-    mode: 'local',
-    cimd: {
-      // Enable/disable CIMD support
-      enabled: true,
+info: { name: 'my-mcp-server', version: '1.0.0' },
+auth: {
+mode: 'local',
+cimd: {
+// Enable/disable CIMD support
+enabled: true,
 
       // Cache settings
       cache: {
@@ -240,7 +240,8 @@ import { FrontMcp } from '@frontmcp/sdk';
         maxRedirects: 5,
       },
     },
-  },
+
+},
 })
 class MyServer {}
 
@@ -272,32 +273,32 @@ CIMD is **enabled by default** when using orchestrated auth mode. The framework 
 
 ### Security Settings
 
-| Option                     | Default     | Description                                           |
-| -------------------------- | ----------- | ----------------------------------------------------- |
-| `blockPrivateIPs`          | `true`      | Block private/internal IP addresses (SSRF protection) |
-| `allowedDomains`           | `undefined` | If set, only these domains can host CIMD documents    |
-| `blockedDomains`           | `undefined` | These domains cannot host CIMD documents              |
-| `warnOnLocalhostRedirects` | `true`      | Log warning for localhost-only redirect URIs          |
+| Option                     | Default     | Description                                                                      |
+| -------------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `blockPrivateIPs`          | `true`      | Block private/internal IP addresses (SSRF protection)                            |
+| `allowedDomains`           | `undefined` | If set, only these domains can host CIMD documents                               |
+| `blockedDomains`           | `undefined` | These domains cannot host CIMD documents                                         |
+| `warnOnLocalhostRedirects` | `true`      | Log warning for localhost-only redirect URIs                                     |
 | `allowInsecureForTesting`  | `false`     | **Test only.** Permit `http://` (non-TLS) CIMD URLs. Never enable in production. |
 
 ### Cache Settings
 
-| Option         | Default               | Description                                                            |
-| -------------- | --------------------- | --------------------------------------------------------------------- |
-| `type`         | `'memory'`            | Cache backend: `'memory'` (dev/single-instance) or `'redis'` (distributed) |
+| Option         | Default               | Description                                                                                    |
+| -------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
+| `type`         | `'memory'`            | Cache backend: `'memory'` (dev/single-instance) or `'redis'` (distributed)                     |
 | `redis`        | `undefined`           | Redis connection (e.g. `{ provider: 'redis', host, port }`). **Required** when `type: 'redis'` |
-| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present                             |
-| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer                            |
-| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter                           |
+| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present                                                      |
+| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer                                                     |
+| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter                                                    |
 
 ### Network Settings
 
-| Option                 | Default        | Description                                                                 |
-| ---------------------- | -------------- | --------------------------------------------------------------------------- |
-| `timeoutMs`            | `5000` (5s)    | Request timeout                                                             |
-| `maxResponseSizeBytes` | `65536` (64KB) | Maximum response body size                                                 |
+| Option                 | Default        | Description                                                                                                                                                             |
+| ---------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeoutMs`            | `5000` (5s)    | Request timeout                                                                                                                                                         |
+| `maxResponseSizeBytes` | `65536` (64KB) | Maximum response body size                                                                                                                                              |
 | `redirectPolicy`       | `'deny'`       | How to handle redirects when fetching the CIMD document: `'deny'` (reject any redirect), `'same-origin'` (only same-origin), or `'allow'` (follow up to `maxRedirects`) |
-| `maxRedirects`         | `5`            | Maximum redirects to follow (only relevant when `redirectPolicy` allows redirects) |
+| `maxRedirects`         | `5`            | Maximum redirects to follow (only relevant when `redirectPolicy` allows redirects)                                                                                      |
 
 ## Client Metadata Document Format
 

@@ -18,8 +18,8 @@ npm install @frontmcp/ui react react-dom @mui/material @emotion/react @emotion/s
 ### Theme + Components
 
 ```tsx
+import { Badge, Button, Card } from '@frontmcp/ui/components';
 import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
-import { Card, Button, Badge } from '@frontmcp/ui/components';
 
 function App() {
   return (
@@ -64,7 +64,7 @@ function WeatherWidget() {
 ### Content Rendering
 
 ```tsx
-import { renderContent, detectContentType } from '@frontmcp/ui/renderer';
+import { detectContentType, renderContent } from '@frontmcp/ui/renderer';
 
 // Auto-detects content type and renders with the appropriate renderer
 const type = detectContentType(data); // 'chart' | 'csv' | 'pdf' | 'mermaid' | ...

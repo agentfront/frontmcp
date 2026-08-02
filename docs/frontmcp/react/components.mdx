@@ -33,12 +33,12 @@ function ToolUI() {
 
 ### Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `tool` | `ToolInfo` | — | **Required.** Tool definition with `inputSchema` |
-| `onSubmit` | `(args: Record<string, unknown>) => void` | — | **Required.** Called with parsed form values |
-| `renderField` | `(props: FieldRenderProps) => ReactNode` | — | Custom field renderer |
-| `submitLabel` | `string` | `'Call Tool'` | Submit button text |
+| Prop          | Type                                      | Default       | Description                                      |
+| ------------- | ----------------------------------------- | ------------- | ------------------------------------------------ |
+| `tool`        | `ToolInfo`                                | —             | **Required.** Tool definition with `inputSchema` |
+| `onSubmit`    | `(args: Record<string, unknown>) => void` | —             | **Required.** Called with parsed form values     |
+| `renderField` | `(props: FieldRenderProps) => ReactNode`  | —             | Custom field renderer                            |
+| `submitLabel` | `string`                                  | `'Call Tool'` | Submit button text                               |
 
 ### Custom Field Rendering
 
@@ -58,15 +58,15 @@ function ToolUI() {
 
 ### FieldRenderProps
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Field name from schema |
-| `type` | `string` | `'string' \| 'number' \| 'integer' \| 'boolean' \| 'enum'` |
-| `required` | `boolean` | Whether the field is required |
-| `description` | `string?` | Schema description |
-| `enumValues` | `string[]?` | Enum options (renders `<select>`) |
-| `value` | `string` | Current value |
-| `onChange` | `(value: string) => void` | Change handler |
+| Field         | Type                      | Description                                                |
+| ------------- | ------------------------- | ---------------------------------------------------------- |
+| `name`        | `string`                  | Field name from schema                                     |
+| `type`        | `string`                  | `'string' \| 'number' \| 'integer' \| 'boolean' \| 'enum'` |
+| `required`    | `boolean`                 | Whether the field is required                              |
+| `description` | `string?`                 | Schema description                                         |
+| `enumValues`  | `string[]?`               | Enum options (renders `<select>`)                          |
+| `value`       | `string`                  | Current value                                              |
+| `onChange`    | `(value: string) => void` | Change handler                                             |
 
 ---
 
@@ -89,12 +89,12 @@ function PromptUI() {
 
 ### Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `prompt` | `PromptInfo` | — | **Required.** Prompt definition with `arguments` |
-| `onSubmit` | `(args: Record<string, string>) => void` | — | **Required.** Called with form values |
-| `renderField` | `(props: FieldRenderProps) => ReactNode` | — | Custom field renderer |
-| `submitLabel` | `string` | `'Get Prompt'` | Submit button text |
+| Prop          | Type                                     | Default        | Description                                      |
+| ------------- | ---------------------------------------- | -------------- | ------------------------------------------------ |
+| `prompt`      | `PromptInfo`                             | —              | **Required.** Prompt definition with `arguments` |
+| `onSubmit`    | `(args: Record<string, string>) => void` | —              | **Required.** Called with form values            |
+| `renderField` | `(props: FieldRenderProps) => ReactNode` | —              | Custom field renderer                            |
+| `submitLabel` | `string`                                 | `'Get Prompt'` | Submit button text                               |
 
 ---
 
@@ -114,11 +114,11 @@ function ConfigViewer() {
 
 ### Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `data` | `{ contents?: ResourceContent[] } \| null` | Resource result |
-| `loading` | `boolean` | Show loading indicator |
-| `error` | `Error \| null` | Show error message |
+| Prop      | Type                                       | Description            |
+| --------- | ------------------------------------------ | ---------------------- |
+| `data`    | `{ contents?: ResourceContent[] } \| null` | Resource result        |
+| `loading` | `boolean`                                  | Show loading indicator |
+| `error`   | `Error \| null`                            | Show error message     |
 
 JSON content (`application/json` mimeType) is automatically pretty-printed in a `<pre>` block.
 
@@ -145,11 +145,11 @@ function ToolOutput() {
 
 ### Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `data` | `unknown` | Output value — objects are JSON-stringified |
-| `loading` | `boolean` | Show loading indicator |
-| `error` | `Error \| null` | Show error message |
+| Prop      | Type            | Description                                 |
+| --------- | --------------- | ------------------------------------------- |
+| `data`    | `unknown`       | Output value — objects are JSON-stringified |
+| `loading` | `boolean`       | Show loading indicator                      |
+| `error`   | `Error \| null` | Show error message                          |
 
 ---
 

@@ -205,14 +205,14 @@ class ResourceNotFoundError extends PublicMcpError {
 
 ## Error Properties
 
-| Property       | Type      | Description                             |
-| -------------- | --------- | --------------------------------------- |
-| `errorId`      | `string`  | Unique ID for tracking (auto-generated) |
-| `isPublic`     | `boolean` | Whether to expose message to clients    |
-| `statusCode`   | `number`  | HTTP status code equivalent             |
+| Property          | Type      | Description                                                                   |
+| ----------------- | --------- | ----------------------------------------------------------------------------- |
+| `errorId`         | `string`  | Unique ID for tracking (auto-generated)                                       |
+| `isPublic`        | `boolean` | Whether to expose message to clients                                          |
+| `statusCode`      | `number`  | HTTP status code equivalent                                                   |
 | `wwwAuthenticate` | `string?` | Optional `WWW-Authenticate` header value (e.g. `'Bearer'`) for 401 challenges |
-| `code`         | `string`  | Error code for categorization           |
-| `mcpErrorCode` | `number`  | JSON-RPC error code (optional)          |
+| `code`            | `string`  | Error code for categorization                                                 |
+| `mcpErrorCode`    | `number`  | JSON-RPC error code (optional)                                                |
 
 ## Best Practices
 

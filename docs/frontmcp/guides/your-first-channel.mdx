@@ -48,13 +48,13 @@ export class DeployChannel extends ChannelContext {
 
 Key concepts:
 
-| Part | Purpose |
-| --- | --- |
-| `@Channel()` | Declares metadata — name, source, static meta |
-| `ChannelContext` | Base class providing logger, DI, and lifecycle hooks |
-| `onEvent()` | **Inbound handler** — receives external events, returns a notification for Claude |
-| `source: { type: 'webhook', path: '...' }` | Registers an HTTP POST endpoint |
-| `meta` | Static key-value pairs added to every notification |
+| Part                                       | Purpose                                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `@Channel()`                               | Declares metadata — name, source, static meta                                     |
+| `ChannelContext`                           | Base class providing logger, DI, and lifecycle hooks                              |
+| `onEvent()`                                | **Inbound handler** — receives external events, returns a notification for Claude |
+| `source: { type: 'webhook', path: '...' }` | Registers an HTTP POST endpoint                                                   |
+| `meta`                                     | Static key-value pairs added to every notification                                |
 
 ---
 

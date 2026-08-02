@@ -19,7 +19,7 @@ keywords:
   ]
 ---
 
-FrontMCP v1.3 introduces a **skills-only deployment model** where the MCP surface is just four meta-tools (plus an optional legacy fifth tool for direct invocation), and every capability is reached through a skill. The agent loop becomes "discover the skill, describe its operations, execute AgentScript." OpenAPI specs become a *capability inventory* rather than a flat tool catalog.
+FrontMCP v1.3 introduces a **skills-only deployment model** where the MCP surface is just four meta-tools (plus an optional legacy fifth tool for direct invocation), and every capability is reached through a skill. The agent loop becomes "discover the skill, describe its operations, execute AgentScript." OpenAPI specs become a _capability inventory_ rather than a flat tool catalog.
 
 This page is the conceptual overview. For the concrete pieces:
 
@@ -40,25 +40,25 @@ This page is the conceptual overview. For the concrete pieces:
 
 ## Why this model
 
-The flat "every operation becomes a tool" approach hits two walls fast: catalog explosion (a 200-operation OpenAPI dumps 200 tools and agents drown) and curation drift (the description of how to *use* the API lives outside the tool surface). Skills-only deployment collapses six surfaces (openapi, skills, tools, prompts, resources, data) into one — the **skill** — with one execution path (CodeCall/AgentScript). OpenAPI stays the source of truth for what operations exist, what they take, what they return — but it's reachable only through a skill that's been granted access.
+The flat "every operation becomes a tool" approach hits two walls fast: catalog explosion (a 200-operation OpenAPI dumps 200 tools and agents drown) and curation drift (the description of how to _use_ the API lives outside the tool surface). Skills-only deployment collapses six surfaces (openapi, skills, tools, prompts, resources, data) into one — the **skill** — with one execution path (CodeCall/AgentScript). OpenAPI stays the source of truth for what operations exist, what they take, what they return — but it's reachable only through a skill that's been granted access.
 
-| Concern | Flat tools | Skills-only |
-| --- | --- | --- |
-| Catalog size at the MCP surface | 200+ tools | 3–4 meta-tools |
-| Agent loop | `tools/list` → `tools/call` | `search` → `describe` → `execute` |
-| OpenAPI role | Source of every tool | Capability inventory; never exposed directly |
-| Curation point | Tool name + description per op | Skill markdown (prose + op mentions) |
-| Authority boundary | Per-tool | Per-skill (allowlist derived from markdown) |
-| Hot-reload unit | Per-tool registration | Skill bundle envelope |
+| Concern                         | Flat tools                     | Skills-only                                  |
+| ------------------------------- | ------------------------------ | -------------------------------------------- |
+| Catalog size at the MCP surface | 200+ tools                     | 3–4 meta-tools                               |
+| Agent loop                      | `tools/list` → `tools/call`    | `search` → `describe` → `execute`            |
+| OpenAPI role                    | Source of every tool           | Capability inventory; never exposed directly |
+| Curation point                  | Tool name + description per op | Skill markdown (prose + op mentions)         |
+| Authority boundary              | Per-tool                       | Per-skill (allowlist derived from markdown)  |
+| Hot-reload unit                 | Per-tool registration          | Skill bundle envelope                        |
 
 ## The MCP surface — four meta-tools
 
-| Tool | Purpose |
-| --- | --- |
-| `codecall:searchSkills` | Find **executable** skills (skills that mention OpenAPI operations or declare tools). Returns name, description, tags, and the operation IDs inline so the agent can author AgentScript from one search response. |
-| `codecall:searchKnowledge` | Find **knowledge-only** skills (pure references / examples / prose). Use to load domain context before deciding what to do. |
-| `codecall:describe` | Full skill content: instructions + references + every operation's request/response schema. Use when search wasn't enough. |
-| `codecall:execute` | Run agent-authored AgentScript in a capability-bound sandbox. The active skills' OpenAPI operations are pre-bound as namespaces. |
+| Tool                       | Purpose                                                                                                                                                                                                           |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codecall:searchSkills`    | Find **executable** skills (skills that mention OpenAPI operations or declare tools). Returns name, description, tags, and the operation IDs inline so the agent can author AgentScript from one search response. |
+| `codecall:searchKnowledge` | Find **knowledge-only** skills (pure references / examples / prose). Use to load domain context before deciding what to do.                                                                                       |
+| `codecall:describe`        | Full skill content: instructions + references + every operation's request/response schema. Use when search wasn't enough.                                                                                         |
+| `codecall:execute`         | Run agent-authored AgentScript in a capability-bound sandbox. The active skills' OpenAPI operations are pre-bound as namespaces.                                                                                  |
 
 A fifth tool — `codecall:invoke` — stays for the rare case where the agent wants to call a tool by name without the AgentScript path.
 
@@ -115,7 +115,7 @@ const order = await callTool('acme.getOrder', { id: orderId });
 
 ## OpenAPI as capability inventory
 
-OpenAPI specs ship to the project but are *never* directly exposed to MCP clients. They serve three purposes:
+OpenAPI specs ship to the project but are _never_ directly exposed to MCP clients. They serve three purposes:
 
 1. **The capability inventory.** What operations exist, what they take, what they return.
 2. **The classification source.** HTTP semantics decide whether each operation surfaces as an MCP resource, a tool, or both — and what `notifications/resources/*` event should fire on a successful call.
@@ -123,15 +123,15 @@ OpenAPI specs ship to the project but are *never* directly exposed to MCP client
 
 The classifier follows HTTP semantics with no per-spec assumptions:
 
-| OpenAPI shape | MCP surface | Notify on success |
-| --- | --- | --- |
-| `GET /users/{id}` | Resource template + tool | — |
-| `GET /users` | Resource (collection) | — |
-| `POST /users` (matching GET) | Tool | `resources/list_changed` on `/users` |
-| `POST /users/{id}` (matching GET) | Tool | `resources/updated` on `/users/{id}` |
-| `POST /users/{id}/reset-password` (no matching GET) | Tool | `resources/updated` on parent `/users/{id}` |
-| `PUT /users/{id}` / `PATCH /users/{id}` | Tool | `resources/updated` on `/users/{id}` |
-| `DELETE /users/{id}` | Tool | `resources/list_changed` on parent `/users` |
+| OpenAPI shape                                       | MCP surface              | Notify on success                           |
+| --------------------------------------------------- | ------------------------ | ------------------------------------------- |
+| `GET /users/{id}`                                   | Resource template + tool | —                                           |
+| `GET /users`                                        | Resource (collection)    | —                                           |
+| `POST /users` (matching GET)                        | Tool                     | `resources/list_changed` on `/users`        |
+| `POST /users/{id}` (matching GET)                   | Tool                     | `resources/updated` on `/users/{id}`        |
+| `POST /users/{id}/reset-password` (no matching GET) | Tool                     | `resources/updated` on parent `/users/{id}` |
+| `PUT /users/{id}` / `PATCH /users/{id}`             | Tool                     | `resources/updated` on `/users/{id}`        |
+| `DELETE /users/{id}`                                | Tool                     | `resources/list_changed` on parent `/users` |
 
 When the script in `codecall:execute` calls `acme.issueRefund({ orderId: '42' })` and that maps to `POST /orders/{orderId}/refund` (a "no matching GET" action endpoint), the runtime auto-emits `notifications/resources/updated` for `mcp+op://acme/orders/42` once on success — no extra code, no manual wiring.
 
@@ -237,7 +237,7 @@ Concrete deploy details live on the [Cloudflare Worker page](/frontmcp/deploymen
 
 - **Signature-verified bundles.** The Worker rejects any envelope whose JWS signature doesn't match a `kid` in `signing.trustRoots`. Local dev mode can bypass this with a loud warning.
 - **Replay protection.** Every bundle carries a timestamp + nonce. The Worker tracks nonces in KV (`bindings.kvNamespaces[]` configured for the purpose) and rejects re-submissions inside `signing.replay.windowSeconds`.
-- **AST-validated AgentScript.** Every `codecall:execute` script runs through `@enclave-vm/ast` *at execute time* (yes, every call) before it touches a binding. Disallowed identifiers (`eval`, `Function`, `process`, dynamic `import`, raw `fetch`, etc.) are rejected with a structured `IllegalBuiltinAccess` error.
+- **AST-validated AgentScript.** Every `codecall:execute` script runs through `@enclave-vm/ast` _at execute time_ (yes, every call) before it touches a binding. Disallowed identifiers (`eval`, `Function`, `process`, dynamic `import`, raw `fetch`, etc.) are rejected with a structured `IllegalBuiltinAccess` error.
 - **Capability-bound scope.** The script's globals are a frozen object containing only the active skills' generated namespaces plus `callTool` / `getTool` / `mcpLog` / `mcpNotify`. There is no way to reach an operation the skill didn't allow.
 - **Resource-change notifications.** Auto-derived from OpenAPI semantics; one emit per call regardless of which skill made it.
 

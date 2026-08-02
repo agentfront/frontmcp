@@ -50,14 +50,14 @@ function App() {
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | — | **Required.** MCP tool name agents will call |
-| `description` | `string` | `name` | Tool description for agents |
-| `schema` | `z.ZodObject` | — | **Required.** Zod schema for type-safe input |
-| `fallback` | `ReactNode` | `null` | Shown before first invocation |
-| `server` | `string` | — | Target a named server |
-| `columns` | `McpColumnDef[]` | — | Table mode column definitions |
+| Option        | Type             | Default | Description                                  |
+| ------------- | ---------------- | ------- | -------------------------------------------- |
+| `name`        | `string`         | —       | **Required.** MCP tool name agents will call |
+| `description` | `string`         | `name`  | Tool description for agents                  |
+| `schema`      | `z.ZodObject`    | —       | **Required.** Zod schema for type-safe input |
+| `fallback`    | `ReactNode`      | `null`  | Shown before first invocation                |
+| `server`      | `string`         | —       | Target a named server                        |
+| `columns`     | `McpColumnDef[]` | —       | Table mode column definitions                |
 
 ### Static Properties
 
@@ -169,11 +169,11 @@ const OrderTable = mcpComponent(null, {
 
 ### McpColumnDef
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `key` | `string` | Property key in the row object |
-| `header` | `string` | Column header text |
-| `render` | `(value) => ReactNode` | Optional custom cell renderer |
+| Field    | Type                   | Description                    |
+| -------- | ---------------------- | ------------------------------ |
+| `key`    | `string`               | Property key in the row object |
+| `header` | `string`               | Column header text             |
+| `render` | `(value) => ReactNode` | Optional custom cell renderer  |
 
 ### How Table Mode Works
 

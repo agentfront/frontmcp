@@ -35,8 +35,8 @@ Individual plugins are also available as standalone packages (`@frontmcp/plugin-
 ## Quick Start
 
 ```ts
-import { App } from '@frontmcp/sdk';
 import { CachePlugin, RememberPlugin } from '@frontmcp/plugins';
+import { App } from '@frontmcp/sdk';
 
 @App({
   id: 'my-app',
@@ -75,8 +75,8 @@ Apache-2.0 — see [LICENSE](../../LICENSE).
 <!-- links -->
 
 [docs-overview]: https://docs.agentfront.dev/frontmcp/plugins/overview
-[docs-cache]: https://docs.agentfront.dev/frontmcp/plugins/cache
-[docs-remember]: https://docs.agentfront.dev/frontmcp/plugins/remember
-[docs-codecall]: https://docs.agentfront.dev/frontmcp/plugins/codecall
-[docs-dashboard]: https://docs.agentfront.dev/frontmcp/plugins/dashboard
+[docs-cache]: https://docs.agentfront.dev/frontmcp/plugins/cache-plugin
+[docs-remember]: https://docs.agentfront.dev/frontmcp/plugins/remember-plugin
+[docs-codecall]: https://docs.agentfront.dev/frontmcp/plugins/codecall/overview
+[docs-dashboard]: https://docs.agentfront.dev/frontmcp/plugins/overview
 [docs-creating]: https://docs.agentfront.dev/frontmcp/plugins/creating-plugins

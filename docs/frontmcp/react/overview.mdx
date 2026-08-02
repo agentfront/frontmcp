@@ -12,13 +12,13 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'react', 'ui', 'frontend
 
 The package exposes five entry points:
 
-| Import | Purpose |
-|--------|---------|
-| `@frontmcp/react` | Provider, hooks, components, `ServerRegistry`, and SDK re-exports |
-| `@frontmcp/react/ai` | AI SDK integration (`useAITools`, `useTools`, `createToolCallHandler`) |
-| `@frontmcp/react/router` | React Router bridge (`useRouterBridge`, navigation tools, route resource) |
-| `@frontmcp/react/state` | State management integration (hooks + store adapters: `reduxStore`, `valtioStore`, `createStore`) |
-| `@frontmcp/react/api` | API client integration (`useApiClient`, `parseOpenApiSpec`, `HttpClient`) |
+| Import                   | Purpose                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `@frontmcp/react`        | Provider, hooks, components, `ServerRegistry`, and SDK re-exports                                 |
+| `@frontmcp/react/ai`     | AI SDK integration (`useAITools`, `useTools`, `createToolCallHandler`)                            |
+| `@frontmcp/react/router` | React Router bridge (`useRouterBridge`, navigation tools, route resource)                         |
+| `@frontmcp/react/state`  | State management integration (hooks + store adapters: `reduxStore`, `valtioStore`, `createStore`) |
+| `@frontmcp/react/api`    | API client integration (`useApiClient`, `parseOpenApiSpec`, `HttpClient`)                         |
 
 ## Architecture
 
@@ -61,12 +61,12 @@ yarn add @frontmcp/react react react-dom
 
 `@frontmcp/sdk` and `@frontmcp/utils` are bundled as dependencies and installed automatically.
 
-| Package | Version | Required |
-|---------|---------|----------|
-| `react` | `^18.0.0 \|\| ^19.0.0` | Yes |
-| `react-dom` | `^18.0.0 \|\| ^19.0.0` | Yes |
-| `react-router-dom` | `^7.0.0` | Optional (only for `/router`) |
-| `zod` | `^4.0.0` | Optional (for `mcpComponent` and zod-based `useDynamicTool`) |
+| Package            | Version                | Required                                                     |
+| ------------------ | ---------------------- | ------------------------------------------------------------ |
+| `react`            | `^18.0.0 \|\| ^19.0.0` | Yes                                                          |
+| `react-dom`        | `^18.0.0 \|\| ^19.0.0` | Yes                                                          |
+| `react-router-dom` | `^7.0.0`               | Optional (only for `/router`)                                |
+| `zod`              | `^4.0.0`               | Optional (for `mcpComponent` and zod-based `useDynamicTool`) |
 
 ## Quick Example
 

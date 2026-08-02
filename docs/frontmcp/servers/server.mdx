@@ -159,13 +159,13 @@ http: {
 }
 ```
 
-| Field         | Description                                                                  |
-| ------------- | ---------------------------------------------------------------------------- |
-| `port`        | HTTP listening port (default: `process.env.PORT` or `3000`)                  |
-| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                      |
-| `hostFactory` | Custom host implementation for advanced setups                               |
-| `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port |
-| `cors`        | CORS configuration (see [CORS](#cors) below)                                 |
+| Field         | Description                                                                          |
+| ------------- | ------------------------------------------------------------------------------------ |
+| `port`        | HTTP listening port (default: `process.env.PORT` or `3000`)                          |
+| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                              |
+| `hostFactory` | Custom host implementation for advanced setups                                       |
+| `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port         |
+| `cors`        | CORS configuration (see [CORS](#cors) below)                                         |
 | `routes`      | First-class custom HTTP routes (see [Custom HTTP routes](#custom-http-routes) below) |
 
 - **Port**: listening port for Streamable HTTP. Defaults to `process.env.PORT` or `3000` when omitted.
@@ -279,12 +279,12 @@ http: {
 }
 ```
 
-| Field     | Type                   | Default          | Description                                                              |
-| --------- | ---------------------- | ---------------- | ------------------------------------------------------------------------ |
-| `method`  | `HttpMethod`           | —                | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE' \| 'OPTIONS' \| 'HEAD'`  |
+| Field     | Type                   | Default          | Description                                                                                |
+| --------- | ---------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `method`  | `HttpMethod`           | —                | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE' \| 'OPTIONS' \| 'HEAD'`                   |
 | `path`    | `string`               | —                | Express-style path (`/files/:id`); rejected at startup if it collides with a reserved path |
-| `handler` | `ServerRequestHandler` | —                | `(req, res, next) => void \| Promise<void>`                              |
-| `auth`    | `boolean`              | `false` (public) | When `true`, gate the route behind the MCP `session:verify` flow         |
+| `handler` | `ServerRequestHandler` | —                | `(req, res, next) => void \| Promise<void>`                                                |
+| `auth`    | `boolean`              | `false` (public) | When `true`, gate the route behind the MCP `session:verify` flow                           |
 
 `req` / `res` are exported as `ServerRequest` / `ServerResponse` from `@frontmcp/sdk`; `ServerRequestHandler` types the handler. Respond with `res.status(...).json(...)` / `res.send(...)`, or call `next()` to fall through.
 

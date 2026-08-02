@@ -17,8 +17,8 @@ npm install @frontmcp/adapters
 Generate MCP tools from an OpenAPI spec. Each operation becomes a tool with Zod input validation and automatic request/response handling.
 
 ```ts
-import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App } from '@frontmcp/sdk';
 
 @App({
   id: 'my-app',

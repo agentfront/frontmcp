@@ -8,11 +8,11 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'plugin', 'plugins', 'ex
 
 The plugin loads bundles through a `SkillBundleSource` interface. Three implementations are available; you choose by setting `source.type` in the plugin options.
 
-| Source | Refresh | Production-ready | Use when |
-| --- | --- | --- | --- |
-| `static` | `fs.watch` (optional) | ✅ for self-hosted | Bundle lives on the FrontMCP server's filesystem; you control deployments |
-| `npm` | Server redeploy only | ✅ | Bundle ships as an npm package pinned in your `package.json` |
-| `saas` | Boot pull + interval polling | ✅ when paired with signing | Bundle is produced by an external service (FrontMCP Cloud or your own analyzer) |
+| Source   | Refresh                      | Production-ready            | Use when                                                                        |
+| -------- | ---------------------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `static` | `fs.watch` (optional)        | ✅ for self-hosted          | Bundle lives on the FrontMCP server's filesystem; you control deployments       |
+| `npm`    | Server redeploy only         | ✅                          | Bundle ships as an npm package pinned in your `package.json`                    |
+| `saas`   | Boot pull + interval polling | ✅ when paired with signing | Bundle is produced by an external service (FrontMCP Cloud or your own analyzer) |
 
 ## `static`
 
@@ -30,6 +30,7 @@ SkilledOpenApiPlugin.init({
 ```
 
 Bundle file extensions:
+
 - `.json` → JSON
 - `.yaml` / `.yml` → YAML
 - anything else → format sniffed from the first non-whitespace byte
@@ -96,6 +97,7 @@ SkilledOpenApiPlugin.init({
 ```
 
 Values:
+
 - `'static-wins'` (default): static beats npm beats saas
 - `'last-wins'`: most recent apply wins (use with caution; race-prone)
 - `'reject'`: fail to apply when a conflict is detected

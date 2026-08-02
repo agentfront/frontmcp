@@ -52,22 +52,22 @@ const ErrorChannel = channel({
 
 ### Required Properties
 
-| Property | Type | Description |
-| --- | --- | --- |
-| `name` | `string` | Unique channel identifier. Becomes the `source` attribute in notifications. |
-| `source` | `ChannelSourceConfig` | Event source configuration (see Source Types below). |
+| Property | Type                  | Description                                                                 |
+| -------- | --------------------- | --------------------------------------------------------------------------- |
+| `name`   | `string`              | Unique channel identifier. Becomes the `source` attribute in notifications. |
+| `source` | `ChannelSourceConfig` | Event source configuration (see Source Types below).                        |
 
 ### Optional Properties
 
-| Property | Type | Default | Description |
-| --- | --- | --- | --- |
-| `description` | `string` | — | Human-readable description. Included in server instructions for Claude. |
-| `twoWay` | `boolean` | `false` | Enable reply support. Auto-registers `channel-reply` tool when `true`. |
-| `meta` | `Record<string, string>` | — | Static metadata appended to every notification from this channel. |
-| `tools` | `ToolType[]` | — | Tools contributed by this channel. Auto-registered in the scope's tool registry. |
-| `replay` | `{ enabled: boolean; maxEvents?: number }` | — | Buffer events for replay when sessions connect later. |
-| `tags` | `string[]` | — | Tags for categorization and filtering. |
-| `availableWhen` | `EntryAvailability` | — | Environment constraints (platform, runtime, env). |
+| Property        | Type                                       | Default | Description                                                                      |
+| --------------- | ------------------------------------------ | ------- | -------------------------------------------------------------------------------- |
+| `description`   | `string`                                   | —       | Human-readable description. Included in server instructions for Claude.          |
+| `twoWay`        | `boolean`                                  | `false` | Enable reply support. Auto-registers `channel-reply` tool when `true`.           |
+| `meta`          | `Record<string, string>`                   | —       | Static metadata appended to every notification from this channel.                |
+| `tools`         | `ToolType[]`                               | —       | Tools contributed by this channel. Auto-registered in the scope's tool registry. |
+| `replay`        | `{ enabled: boolean; maxEvents?: number }` | —       | Buffer events for replay when sessions connect later.                            |
+| `tags`          | `string[]`                                 | —       | Tags for categorization and filtering.                                           |
+| `availableWhen` | `EntryAvailability`                        | —       | Environment constraints (platform, runtime, env).                                |
 
 ### Source Types
 
@@ -77,10 +77,10 @@ const ErrorChannel = channel({
 source: { type: 'webhook', path: '/hooks/github' }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'webhook'` | Source discriminator |
-| `path` | `string` | HTTP POST endpoint path |
+| Field  | Type        | Description             |
+| ------ | ----------- | ----------------------- |
+| `type` | `'webhook'` | Source discriminator    |
+| `path` | `string`    | HTTP POST endpoint path |
 
 #### App Event
 
@@ -88,10 +88,10 @@ source: { type: 'webhook', path: '/hooks/github' }
 source: { type: 'app-event', event: 'app:error' }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'app-event'` | Source discriminator |
-| `event` | `string` | Event name to subscribe to on `ChannelEventBus` |
+| Field   | Type          | Description                                     |
+| ------- | ------------- | ----------------------------------------------- |
+| `type`  | `'app-event'` | Source discriminator                            |
+| `event` | `string`      | Event name to subscribe to on `ChannelEventBus` |
 
 #### Agent Completion
 
@@ -99,10 +99,10 @@ source: { type: 'app-event', event: 'app:error' }
 source: { type: 'agent-completion', agentIds: ['code-reviewer'] }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'agent-completion'` | Source discriminator |
-| `agentIds` | `string[]` | Optional filter — only these agent IDs trigger the channel |
+| Field      | Type                 | Description                                                |
+| ---------- | -------------------- | ---------------------------------------------------------- |
+| `type`     | `'agent-completion'` | Source discriminator                                       |
+| `agentIds` | `string[]`           | Optional filter — only these agent IDs trigger the channel |
 
 #### Job Completion
 
@@ -110,10 +110,10 @@ source: { type: 'agent-completion', agentIds: ['code-reviewer'] }
 source: { type: 'job-completion', jobNames: ['daily-report'] }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'job-completion'` | Source discriminator |
-| `jobNames` | `string[]` | Optional filter — only these job names trigger the channel |
+| Field      | Type               | Description                                                |
+| ---------- | ------------------ | ---------------------------------------------------------- |
+| `type`     | `'job-completion'` | Source discriminator                                       |
+| `jobNames` | `string[]`         | Optional filter — only these job names trigger the channel |
 
 #### Service
 
@@ -121,10 +121,10 @@ source: { type: 'job-completion', jobNames: ['daily-report'] }
 source: { type: 'service', service: 'whatsapp-business' }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'service'` | Source discriminator |
-| `service` | `string` | Human-readable service identifier |
+| Field     | Type        | Description                       |
+| --------- | ----------- | --------------------------------- |
+| `type`    | `'service'` | Source discriminator              |
+| `service` | `string`    | Human-readable service identifier |
 
 Channels with `service` source use `onConnect()` / `onDisconnect()` lifecycle hooks and `pushIncoming()` for feeding incoming events.
 
@@ -134,10 +134,10 @@ Channels with `service` source use `onConnect()` / `onDisconnect()` lifecycle ho
 source: { type: 'file-watcher', paths: ['./logs/*.log'], events: ['change'] }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | `'file-watcher'` | Source discriminator |
-| `paths` | `string[]` | Glob patterns or file paths to watch |
+| Field    | Type                                                  | Description                          |
+| -------- | ----------------------------------------------------- | ------------------------------------ |
+| `type`   | `'file-watcher'`                                      | Source discriminator                 |
+| `paths`  | `string[]`                                            | Glob patterns or file paths to watch |
 | `events` | `Array<'change' \| 'create' \| 'delete' \| 'rename'>` | Optional file system events to watch |
 
 #### Manual
@@ -192,11 +192,11 @@ class ChatBridge extends ChannelContext {
 
 The `channel-reply` tool is auto-registered with this input schema:
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `channel_name` | `string` | Yes | Target channel name |
-| `text` | `string` | Yes | Reply text |
-| `meta` | `Record<string, string>` | No | Metadata passed to `onReply()` |
+| Field          | Type                     | Required | Description                    |
+| -------------- | ------------------------ | -------- | ------------------------------ |
+| `channel_name` | `string`                 | Yes      | Target channel name            |
+| `text`         | `string`                 | Yes      | Reply text                     |
+| `meta`         | `Record<string, string>` | No       | Metadata passed to `onReply()` |
 
 ## Server Configuration
 
@@ -211,10 +211,10 @@ Enable channels at the server level:
 })
 ```
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enabled` | `boolean` | `false` | Enable the channel system |
-| `defaultMeta` | `Record<string, string>` | — | Metadata appended to all channel notifications |
+| Option        | Type                     | Default | Description                                    |
+| ------------- | ------------------------ | ------- | ---------------------------------------------- |
+| `enabled`     | `boolean`                | `false` | Enable the channel system                      |
+| `defaultMeta` | `Record<string, string>` | —       | Metadata appended to all channel notifications |
 
 ## Related
 

@@ -28,16 +28,16 @@ import { FrontMcpProvider } from '@frontmcp/react';
 
 ### Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `server` | `DirectMcpServer` | — | **Required.** Primary MCP server instance |
-| `name` | `string` | `'default'` | Logical name for the primary server in the registry |
-| `servers` | `Record<string, DirectMcpServer>` | — | Additional named servers |
-| `components` | `Record<string, ComponentType>` | — | Components for `DynamicRenderer` and `ComponentRegistry` |
-| `autoConnect` | `boolean` | `true` | Connect on mount |
-| `children` | `ReactNode` | — | **Required.** Child elements |
-| `onConnected` | `(client: DirectClient) => void` | — | Called after successful connection |
-| `onError` | `(error: Error) => void` | — | Called if connection fails |
+| Prop          | Type                              | Default     | Description                                              |
+| ------------- | --------------------------------- | ----------- | -------------------------------------------------------- |
+| `server`      | `DirectMcpServer`                 | —           | **Required.** Primary MCP server instance                |
+| `name`        | `string`                          | `'default'` | Logical name for the primary server in the registry      |
+| `servers`     | `Record<string, DirectMcpServer>` | —           | Additional named servers                                 |
+| `components`  | `Record<string, ComponentType>`   | —           | Components for `DynamicRenderer` and `ComponentRegistry` |
+| `autoConnect` | `boolean`                         | `true`      | Connect on mount                                         |
+| `children`    | `ReactNode`                       | —           | **Required.** Child elements                             |
+| `onConnected` | `(client: DirectClient) => void`  | —           | Called after successful connection                       |
+| `onError`     | `(error: Error) => void`          | —           | Called if connection fails                               |
 
 ### Lifecycle
 
@@ -83,16 +83,16 @@ const unsub = serverRegistry.subscribe(() => {
 
 ### ServerEntry
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `server` | `DirectMcpServer` | The server instance |
-| `client` | `DirectClient \| null` | Connected client (null until connected) |
-| `status` | `FrontMcpStatus` | `'idle' \| 'connecting' \| 'connected' \| 'error'` |
-| `error` | `Error \| null` | Connection error |
-| `tools` | `ToolInfo[]` | Discovered tools |
-| `resources` | `ResourceInfo[]` | Discovered resources |
-| `resourceTemplates` | `ResourceTemplateInfo[]` | Discovered resource templates |
-| `prompts` | `PromptInfo[]` | Discovered prompts |
+| Field               | Type                     | Description                                        |
+| ------------------- | ------------------------ | -------------------------------------------------- |
+| `server`            | `DirectMcpServer`        | The server instance                                |
+| `client`            | `DirectClient \| null`   | Connected client (null until connected)            |
+| `status`            | `FrontMcpStatus`         | `'idle' \| 'connecting' \| 'connected' \| 'error'` |
+| `error`             | `Error \| null`          | Connection error                                   |
+| `tools`             | `ToolInfo[]`             | Discovered tools                                   |
+| `resources`         | `ResourceInfo[]`         | Discovered resources                               |
+| `resourceTemplates` | `ResourceTemplateInfo[]` | Discovered resource templates                      |
+| `prompts`           | `PromptInfo[]`           | Discovered prompts                                 |
 
 ## useFrontMcp
 

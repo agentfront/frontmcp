@@ -10,8 +10,8 @@
  * `nodejs_compat` flag, or a Node `req`/`res` shim), this fails.
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const FIXTURE_DIR = path.resolve(__dirname, '..', 'fixture');
@@ -48,21 +48,59 @@ type JsonRpcResponse = {
   id?: number | string | null;
   result?: {
     serverInfo?: { name?: string; version?: string };
-    capabilities?: { tools?: unknown };
+    capabilities?: { tools?: unknown; extensions?: Record<string, unknown> };
     tools?: Array<{ name: string }>;
     content?: Array<{ text?: string }>;
+    // Protocol 2026-07-28 envelope.
+    resultType?: string;
+    supportedVersions?: string[];
+    ttlMs?: number;
+    cacheScope?: string;
+    _meta?: Record<string, unknown>;
   };
   error?: { code: number; message: string };
 };
 
-async function mcp(body: unknown): Promise<{ status: number; json: JsonRpcResponse }> {
+async function mcp(
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<{ status: number; json: JsonRpcResponse; headers: Headers }> {
   const res = await fetch(`${BASE_URL}/mcp`, {
     method: 'POST',
-    headers: MCP_HEADERS,
+    headers: { ...MCP_HEADERS, ...extraHeaders },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
-  return { status: res.status, json: await readMcp(res) };
+  return { status: res.status, json: await readMcp(res), headers: res.headers };
+}
+
+const PROTOCOL_20260728 = '2026-07-28';
+const META_VERSION = 'io.modelcontextprotocol/protocolVersion';
+const META_CAPS = 'io.modelcontextprotocol/clientCapabilities';
+const META_SERVER_INFO = 'io.modelcontextprotocol/serverInfo';
+
+/** Issue a fully-conforming 2026-07-28 request, mirrored headers and all. */
+async function mcpStateless20260728(
+  method: string,
+  params: Record<string, unknown> = {},
+  id = 1,
+): Promise<{ status: number; json: JsonRpcResponse; headers: Headers }> {
+  const headers: Record<string, string> = {
+    'mcp-protocol-version': PROTOCOL_20260728,
+    'mcp-method': method,
+  };
+  const name = method === 'tools/call' ? params['name'] : undefined;
+  if (typeof name === 'string') headers['mcp-name'] = name;
+
+  return mcp(
+    {
+      jsonrpc: '2.0',
+      id,
+      method,
+      params: { ...params, _meta: { [META_VERSION]: PROTOCOL_20260728, [META_CAPS]: {} } },
+    },
+    headers,
+  );
 }
 
 /** Read an MCP response, handling both buffered JSON and the SSE stream the worker emits by default. */
@@ -163,5 +201,122 @@ describe('FrontMCP on Cloudflare Workers (workerd)', () => {
     });
     expect(status).toBe(200);
     expect(json.result?.content?.[0]?.text).toBe('Echo: hi');
+  });
+
+  /**
+   * Protocol 2026-07-28 on the Worker.
+   *
+   * A V8-isolate deployment defaults to the stateless revision: it needs no
+   * session storage, so an MCP call that names no revision is answered directly
+   * instead of minting a session in a Durable Object. Clients that DO name a
+   * revision still get exactly that one.
+   */
+  describe('FrontMCP on Cloudflare Workers — protocol 2026-07-28', () => {
+    it('serves server/discover natively', async () => {
+      const { status, json } = await mcpStateless20260728('server/discover', {}, 10);
+
+      expect(status).toBe(200);
+      expect(json.error).toBeUndefined();
+      expect(json.result?.supportedVersions).toContain('2026-07-28');
+      expect(json.result?.capabilities).toBeDefined();
+    });
+
+    it('answers a fully-conforming 2026 tools/call', async () => {
+      const { status, json } = await mcpStateless20260728(
+        'tools/call',
+        { name: 'echo', arguments: { message: 'cf' } },
+        11,
+      );
+
+      expect(status).toBe(200);
+      expect(json.error).toBeUndefined();
+      expect(json.result?.resultType).toBe('complete');
+      expect(json.result?.content?.[0]?.text).toBe('Echo: cf');
+    });
+
+    it('defaults an unversioned call to the stateless pipeline', async () => {
+      // No `initialize`, no session id, no version header — on the Worker this is
+      // served by the 2026 pipeline. `resultType` + `serverInfo` are the proof:
+      // the session-era transport never emits them.
+      const { status, json } = await mcp({ jsonrpc: '2.0', id: 12, method: 'tools/list', params: {} });
+
+      expect(status).toBe(200);
+      expect(json.result?.resultType).toBe('complete');
+      expect(json.result?._meta?.[META_SERVER_INFO]).toBeDefined();
+    });
+
+    it('mints no session for a stateless call', async () => {
+      const { headers } = await mcp({ jsonrpc: '2.0', id: 13, method: 'tools/list', params: {} });
+
+      // The whole point on a Worker: no session means no Durable Object.
+      expect(headers.get('mcp-session-id')).toBeNull();
+    });
+
+    it('marks list results cacheable', async () => {
+      const { json } = await mcp({ jsonrpc: '2.0', id: 14, method: 'tools/list', params: {} });
+
+      expect(typeof json.result?.ttlMs).toBe('number');
+      expect(['public', 'private']).toContain(json.result?.cacheScope);
+    });
+
+    it('does NOT require mirrored headers from a client that never opted in', async () => {
+      // A pre-2026 client sends no `Mcp-Method` / `Mcp-Name`. Defaulting it to the
+      // stateless revision must not turn its working call into a -32020.
+      const { status, json } = await mcp({
+        jsonrpc: '2.0',
+        id: 15,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { message: 'lenient' } },
+      });
+
+      expect(status).toBe(200);
+      expect(json.error).toBeUndefined();
+      expect(json.result?.content?.[0]?.text).toBe('Echo: lenient');
+    });
+
+    it('still enforces mirrored headers once the client declares 2026', async () => {
+      const { status, json } = await mcp(
+        {
+          jsonrpc: '2.0',
+          id: 16,
+          method: 'tools/list',
+          params: { _meta: { [META_VERSION]: PROTOCOL_20260728, [META_CAPS]: {} } },
+        },
+        { 'mcp-protocol-version': PROTOCOL_20260728, 'mcp-method': 'resources/list' },
+      );
+
+      expect(status).toBe(400);
+      expect(json.error?.code).toBe(-32020);
+    });
+
+    it('keeps serving the legacy initialize handshake', async () => {
+      // The stateless default must not strand a session-based client: an
+      // explicit `initialize` still routes to the session-era pipeline.
+      const { status, json } = await mcp({
+        jsonrpc: '2.0',
+        id: 17,
+        method: 'initialize',
+        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'legacy', version: '1.0.0' } },
+      });
+
+      expect(status).toBe(200);
+      expect(json.result?.serverInfo?.name).toBe('cf-worker-fixture');
+      // A legacy negotiation must not grow the 2026 envelope.
+      expect(json.result?.resultType).toBeUndefined();
+      // No `Mcp-Session-Id` assertion here: this fixture binds no Durable
+      // Object, so the Worker's legacy path already ran session-less before
+      // this change. Sessions on the Worker come from the DO session host.
+    });
+
+    it('rejects GET and DELETE on the MCP endpoint', async () => {
+      for (const method of ['GET', 'DELETE']) {
+        const res = await fetch(`${BASE_URL}/mcp`, {
+          method,
+          headers: { 'mcp-protocol-version': PROTOCOL_20260728 },
+          signal: AbortSignal.timeout(10000),
+        });
+        expect(res.status).toBe(405);
+      }
+    });
   });
 });

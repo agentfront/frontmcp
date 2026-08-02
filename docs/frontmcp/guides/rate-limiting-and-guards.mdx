@@ -15,6 +15,7 @@ This guide walks through adding production-grade traffic controls to your FrontM
 ## What You'll Build
 
 By the end of this guide, your server will have:
+
 - Per-user rate limiting on tools
 - Concurrency control to prevent resource exhaustion
 - Execution timeouts to catch hanging requests
@@ -51,6 +52,7 @@ By the end of this guide, your server will have:
     ```
 
     This limits each user to 30 search requests per minute.
+
   </Step>
 
   <Step title="Register the tool and enable guard">
@@ -70,6 +72,7 @@ By the end of this guide, your server will have:
     <Tip>
     Setting `throttle.enabled: true` is required. Without it, rate limit decorators on tools are ignored.
     </Tip>
+
   </Step>
 
   <Step title="Test the rate limit">
@@ -81,6 +84,7 @@ By the end of this guide, your server will have:
       "message": "Rate limit exceeded. Retry after 12 seconds."
     }
     ```
+
   </Step>
 </Steps>
 
@@ -110,6 +114,7 @@ Prevent expensive tools from running too many instances simultaneously.
     ```
 
     This allows at most 2 report generations at once. Additional requests wait up to 15 seconds for a slot.
+
   </Step>
 
   <Step title="Understand queue behavior">
@@ -123,6 +128,7 @@ Prevent expensive tools from running too many instances simultaneously.
     ```typescript
     concurrency: { maxConcurrent: 1 }
     ```
+
   </Step>
 </Steps>
 
@@ -149,6 +155,7 @@ Protect against hanging requests by setting a maximum execution time.
     ```
 
     If execution takes longer than 30 seconds, it throws `ExecutionTimeoutError` (408).
+
   </Step>
 
   <Step title="Set a default timeout for all tools">
@@ -167,6 +174,7 @@ Protect against hanging requests by setting a maximum execution time.
     ```
 
     Tools with their own `timeout` override the default. Tools without `timeout` use the app default.
+
   </Step>
 </Steps>
 
@@ -198,6 +206,7 @@ Add a server-wide rate limit that applies to all requests, regardless of which t
     ```
 
     Global limits are checked **before** per-tool limits. Both must pass for a request to proceed.
+
   </Step>
 
   <Step title="Combine with per-tool limits">
@@ -213,6 +222,7 @@ Add a server-wide rate limit that applies to all requests, regardless of which t
     ```
 
     Even if the global limit allows 500 requests/min per IP, this tool is limited to 5 requests/min per user.
+
   </Step>
 </Steps>
 
@@ -258,6 +268,7 @@ Block malicious IPs and restrict access to known networks.
     3. IP on neither list → `defaultAction` applies (`'allow'` or `'deny'`)
 
     With `defaultAction: 'deny'`, only IPs explicitly on the allow list can access your server.
+
   </Step>
 
   <Step title="Enable proxy trust">
@@ -270,6 +281,7 @@ Block malicious IPs and restrict access to known networks.
       // ...
     }
     ```
+
   </Step>
 </Steps>
 
@@ -305,6 +317,7 @@ In-memory storage works for development but does not persist across restarts or 
     ```
 
     All rate limit counters and semaphore tickets are stored in Redis, shared across all server instances.
+
   </Step>
 
   <Step title="Verify distributed behavior">
@@ -322,6 +335,7 @@ In-memory storage works for development but does not persist across restarts or 
       token: process.env.KV_REST_API_TOKEN,
     },
     ```
+
   </Step>
 </Steps>
 

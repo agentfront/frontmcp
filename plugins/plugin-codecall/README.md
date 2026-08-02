@@ -13,8 +13,8 @@ npm install @frontmcp/plugin-codecall @frontmcp/plugin-cache
 ## Usage
 
 ```typescript
-import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
 import { CachePlugin } from '@frontmcp/plugin-cache';
+import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
 import { FrontMcp } from '@frontmcp/sdk';
 
 const app = new FrontMcp({

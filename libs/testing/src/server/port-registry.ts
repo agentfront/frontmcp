@@ -74,7 +74,7 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-distributed': { start: 50440, size: 20 },
 
   // Protocol revision E2E tests (50460-50479)
-  'demo-e2e-protocol-2026': { start: 50460, size: 20 },
+  'demo-e2e-protocol-20260728': { start: 50460, size: 20 },
 
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },

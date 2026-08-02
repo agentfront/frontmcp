@@ -24,10 +24,10 @@ FrontMCP runs on Cloudflare Workers via the Web-standard `fetch` handler — cli
 
 There are **two deployment paths**, and they have different maturity:
 
-| Path | API | Status |
-| --- | --- | --- |
-| **Decorator build** | `@FrontMcp` app + `frontmcp build --target cloudflare` | ✅ **Works today** — boots on real workerd (covered by `apps/e2e/demo-e2e-cloudflare`) |
-| **Managed edge** | `@frontmcp/edge` `createEdgeMcp({ managed })` | 🧪 **Experimental** — API + KV cache + Cron wiring are built and unit/integration-tested, but the full managed bundle does **not** yet boot on workerd (see [Current status](#current-status--limitations)) |
+| Path                | API                                                    | Status                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Decorator build** | `@FrontMcp` app + `frontmcp build --target cloudflare` | ✅ **Works today** — boots on real workerd (covered by `apps/e2e/demo-e2e-cloudflare`)                                                                                                                      |
+| **Managed edge**    | `@frontmcp/edge` `createEdgeMcp({ managed })`          | 🧪 **Experimental** — API + KV cache + Cron wiring are built and unit/integration-tested, but the full managed bundle does **not** yet boot on workerd (see [Current status](#current-status--limitations)) |
 
 Start with the decorator path. It's the one that's verified end-to-end.
 
@@ -46,23 +46,23 @@ import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({ name: 'echo', description: 'Echo a message', inputSchema: { message: z.string() } })
 class EchoTool extends ToolContext {
-  async execute(input: { message: string }) {
-    return { content: [{ type: 'text' as const, text: `Echo: ${input.message}` }] };
-  }
+async execute(input: { message: string }) {
+return { content: [{ type: 'text' as const, text: `Echo: ${input.message}` }] };
+}
 }
 
 @App({ id: 'demo', name: 'demo', tools: [EchoTool] })
 class DemoApp {}
 
 @FrontMcp({
-  info: { name: 'my-worker', version: '1.0.0' },
-  apps: [DemoApp],
-  // Serve MCP at /mcp (the worker default is root `/`). See "Endpoint path,
-  // CORS & SSE" below — all three are driven by this same `http`/`transport` config.
-  http: { entryPath: '/mcp' },
-  // Background tasks need distributed storage (Redis/Upstash) — disable on edge
-  // unless you've configured one.
-  tasks: { enabled: false },
+info: { name: 'my-worker', version: '1.0.0' },
+apps: [DemoApp],
+// Serve MCP at /mcp (the worker default is root `/`). See "Endpoint path,
+// CORS & SSE" below — all three are driven by this same `http`/`transport` config.
+http: { entryPath: '/mcp' },
+// Background tasks need distributed storage (Redis/Upstash) — disable on edge
+// unless you've configured one.
+tasks: { enabled: false },
 })
 class MyServer {}
 
@@ -118,10 +118,11 @@ curl https://my-worker.<subdomain>.workers.dev/healthz
 # → { "status": "ok", "transport": "web-fetch", "server": { "name": "my-worker", ... } }
 
 curl -s https://my-worker.<subdomain>.workers.dev/mcp \
-  -H 'content-type: application/json' \
-  -H 'accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
-```
+ -H 'content-type: application/json' \
+ -H 'accept: application/json, text/event-stream' \
+ -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
+
+````
 Point any MCP client at `https://<your-worker-url>/mcp` (Streamable HTTP).
 </Step>
 </Steps>
@@ -155,7 +156,7 @@ export default createEdgeMcp({
   // transport: 'legacy' (default) / 'modern' → SSE streaming on POST;
   // transport: 'stateless-api' → buffered JSON responses instead.
 });
-```
+````
 
 - **CORS** comes from `http.cors` (`false` to disable, `{ origin, credentials, maxAge }` to configure). A function `origin` isn't supported on the worker — use a static origin (`true` / string / `string[]`).
 - **SSE** is derived from the transport protocol: streaming is on when Streamable HTTP is enabled and JSON-buffering is off (true under `legacy`/`modern`, false under `stateless-api`). Server→client `GET` streams are always honored.
@@ -252,7 +253,7 @@ KV is eventually-consistent and is **not** Redis. The adapter is honest about wh
 
 ## Stateful sessions & notifications (Durable Objects)
 
-A stateless worker can't support the Streamable HTTP **standalone `GET` notification stream**: each request is a fresh isolate/transport, so a `tools/call`'s notifications have no path back to the client's open `GET` stream (it closes immediately). The fix is a **Durable Object** — one instance per `Mcp-Session-Id` holds a *persistent* MCP server + session-bound transport, so the `GET` stream stays open and server→client notifications reach it. It runs the **same `http:request` flow** as the stateless path — only the transport persists.
+A stateless worker can't support the Streamable HTTP **standalone `GET` notification stream**: each request is a fresh isolate/transport, so a `tools/call`'s notifications have no path back to the client's open `GET` stream (it closes immediately). The fix is a **Durable Object** — one instance per `Mcp-Session-Id` holds a _persistent_ MCP server + session-bound transport, so the `GET` stream stays open and server→client notifications reach it. It runs the **same `http:request` flow** as the stateless path — only the transport persists.
 
 Enable it with `sessions` and export the DO class `createEdgeMcp` returns:
 
@@ -338,6 +339,7 @@ thin wrappers that build a scope and call this.
 FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missing:
 
 **Works today (verified on real Cloudflare):**
+
 - The decorator build path (`frontmcp build --target cloudflare`) boots on real workerd and serves MCP over `/mcp` with a `/healthz` liveness probe.
 - **`createEdgeMcp` also deploys + serves on real Cloudflare** — bundled with esbuild + a small set of stubs (see the next bullet). Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
 - **The worker runs the real `http:request` flow** — the same hookable pipeline every transport runs: `session:verify` (auth), router, audit, metrics + plugin/user hooks all execute on the worker. The MCP response is produced by the SDK's web-standard Streamable HTTP transport (`WebStandardStreamableHTTPServerTransport`) — which **is** the standard transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it). Configure transparent auth and the flow's `checkAuthorization` stage returns `401` + `WWW-Authenticate` on the worker, just like Node.
@@ -345,6 +347,7 @@ FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missi
 - `CloudflareKvStorageAdapter` (KV only, with the honest limits above).
 
 **Deploying `createEdgeMcp` today needs two things:**
+
 - It must run with `serve: false` (now the default inside `createEdgeMcp`) so the scope doesn't construct the Node Express host.
 - Three Node-only transports that are statically bundled but **never used on the edge** must be stubbed in your bundler: `express` (pulls `node:tty`), `raw-body` (pulls `safer-buffer`, which crashes at module-eval on workerd), and `cross-spawn` (pulls `node:child_process`, via the MCP stdio client). See `cloudflare-sandbox/build-edge.mjs` for a working esbuild config.
 
@@ -353,6 +356,7 @@ The miniflare-based local e2e is stricter than production — it rejects `node:h
 </Note>
 
 **Known gaps (roadmap):**
+
 - **Stateless mode has no server push.** Without `sessions`, the worker is stateless and the standalone `GET` notification stream can't deliver server→client notifications (each request is a fresh isolate) — enable `sessions` (the Durable Object) for that.
 - **DO session eviction.** A Durable Object is evicted when idle; an in-flight session then needs to re-`initialize`. WebSocket-hibernation-style persistence is a follow-up.
 - **KV only.** No R2 (blobs) or D1 (relational) stores, and no `@frontmcp/adapters/cloudflare` subpath yet.

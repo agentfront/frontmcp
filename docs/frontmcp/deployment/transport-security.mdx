@@ -33,13 +33,13 @@ Enable strict security mode for production:
 
 ## Security Options
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `security.strict` | boolean | `false` | Enable all security features at once |
-| `security.bindAddress` | `'loopback'` \| `'all'` \| string | `'0.0.0.0'` | Network bind address |
-| `security.dnsRebindingProtection.enabled` | boolean | `false` | Validate Host and Origin headers |
-| `security.dnsRebindingProtection.allowedHosts` | string[] | --- | Allowed Host header values |
-| `security.dnsRebindingProtection.allowedOrigins` | string[] | --- | Allowed Origin header values |
+| Field                                            | Type                              | Default     | Description                          |
+| ------------------------------------------------ | --------------------------------- | ----------- | ------------------------------------ |
+| `security.strict`                                | boolean                           | `false`     | Enable all security features at once |
+| `security.bindAddress`                           | `'loopback'` \| `'all'` \| string | `'0.0.0.0'` | Network bind address                 |
+| `security.dnsRebindingProtection.enabled`        | boolean                           | `false`     | Validate Host and Origin headers     |
+| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | ---         | Allowed Host header values           |
+| `security.dnsRebindingProtection.allowedOrigins` | string[]                          | ---         | Allowed Origin header values         |
 
 ## CORS Configuration
 
@@ -75,15 +75,16 @@ To disable CORS entirely (same-origin only):
 
 Controls which network interface the server listens on:
 
-| Value | Binds To | Use Case |
-| --- | --- | --- |
-| `'loopback'` | `127.0.0.1` | Local-only access (development, reverse proxy) |
-| `'all'` | `0.0.0.0` | All interfaces (distributed pods, direct access) |
-| IP string | Specific IP | Custom network binding |
+| Value        | Binds To    | Use Case                                         |
+| ------------ | ----------- | ------------------------------------------------ |
+| `'loopback'` | `127.0.0.1` | Local-only access (development, reverse proxy)   |
+| `'all'`      | `0.0.0.0`   | All interfaces (distributed pods, direct access) |
+| IP string    | Specific IP | Custom network binding                           |
 
 ### Strict Mode Behavior
 
 When `security.strict: true`:
+
 - **Standalone mode**: binds to `127.0.0.1` (loopback only)
 - **Distributed mode**: binds to `0.0.0.0` (pods need external access)
 
@@ -140,10 +141,10 @@ DOCXes, large HTML inputs) before they reached MCP tool handlers (issue
 class Server {}
 ```
 
-| Option            | Type               | Default              | Notes                                                                             |
-| ----------------- | ------------------ | -------------------- | --------------------------------------------------------------------------------- |
-| `bodyLimit`       | `number \| string` | `'4mb'`              | Accepts bytes (number) or body-parser strings (`'4mb'`, `'500kb'`, `'2gb'`, …).   |
-| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.       |
+| Option            | Type               | Default                   | Notes                                                                           |
+| ----------------- | ------------------ | ------------------------- | ------------------------------------------------------------------------------- |
+| `bodyLimit`       | `number \| string` | `'4mb'`                   | Accepts bytes (number) or body-parser strings (`'4mb'`, `'500kb'`, `'2gb'`, …). |
+| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.            |
 
 When a request exceeds the configured limit, the adapter returns HTTP 413
 with a structured JSON-RPC envelope:

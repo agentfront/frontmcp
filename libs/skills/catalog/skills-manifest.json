@@ -1119,7 +1119,7 @@
         "sdk",
         "guide",
         "protocol",
-        "mcp-2026"
+        "mcp-20260728"
       ],
       "bundle": ["recommended", "minimal", "full"],
       "references": [

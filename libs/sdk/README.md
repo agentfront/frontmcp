@@ -63,6 +63,12 @@ Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quicksta
 - **Secure** — Remote & Local OAuth, JWKS, Dynamic Client Registration, per-app auth,
   and stateful / stateless sessions.
   &nbsp;([Authentication][docs-auth])
+- **Speak every MCP revision** — `2024-11-05` through `2026-07-28` on one endpoint,
+  selected per request. The 2026 revision is stateless (no `initialize`, no session):
+  `server/discover`, mirrored request headers, Multi Round-Trip Requests, the tasks
+  extension, and `subscriptions/listen` are all built in, and older clients keep
+  working unchanged.
+  &nbsp;([Protocol Versions][docs-protocol])
 - **Operate** — Streamable HTTP + SSE transport, capability discovery, elicitation,
   lifecycle hooks, and HTTP-discoverable skill manifests.
   &nbsp;([Transport][docs-transport] · [Discovery][docs-discovery] · [Elicitation][docs-elicitation] · [Hooks][docs-hooks] · [Skills][docs-skills])
@@ -78,7 +84,7 @@ Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quicksta
 
 ## Related packages
 
-- [`@frontmcp/cli`](../cli) — scaffolding and dev tooling (`frontmcp create`, `dev`, `build`)
+- [`frontmcp`](../cli) — the CLI: scaffolding and dev tooling (`frontmcp create`, `dev`, `build`)
 - [`@frontmcp/auth`](../auth) — authentication, OAuth, JWKS, credential vault
 - [`@frontmcp/adapters`](../adapters) — OpenAPI adapter
 - [`@frontmcp/plugins`](../plugins) — Cache, Remember, CodeCall, Dashboard
@@ -94,20 +100,21 @@ Run `npm run dev` and point any MCP client at it. Full walkthrough → [Quicksta
 [docs-home]: https://docs.agentfront.dev/frontmcp 'FrontMCP Docs'
 [docs-install]: https://docs.agentfront.dev/frontmcp/getting-started/installation
 [docs-quickstart]: https://docs.agentfront.dev/frontmcp/getting-started/quickstart
-[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/overview
+[docs-sdk-ref]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview
 [docs-tools]: https://docs.agentfront.dev/frontmcp/servers/tools
 [docs-resources]: https://docs.agentfront.dev/frontmcp/servers/resources
 [docs-prompts]: https://docs.agentfront.dev/frontmcp/servers/prompts
 [docs-agents]: https://docs.agentfront.dev/frontmcp/servers/agents
 [docs-providers]: https://docs.agentfront.dev/frontmcp/extensibility/providers
 [docs-auth]: https://docs.agentfront.dev/frontmcp/authentication/overview
-[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport
+[docs-transport]: https://docs.agentfront.dev/frontmcp/deployment/transport-security
+[docs-protocol]: https://docs.agentfront.dev/frontmcp/fundamentals/protocol-versions 'Protocol Versions'
 [docs-discovery]: https://docs.agentfront.dev/frontmcp/servers/discovery
 [docs-elicitation]: https://docs.agentfront.dev/frontmcp/servers/elicitation
-[docs-hooks]: https://docs.agentfront.dev/frontmcp/extensibility/hooks
+[docs-hooks]: https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/hooks
 [docs-skills]: https://docs.agentfront.dev/frontmcp/servers/skills
 [docs-plugins]: https://docs.agentfront.dev/frontmcp/plugins/overview
 [docs-adapters]: https://docs.agentfront.dev/frontmcp/adapters/overview
-[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/servers/ext-apps
+[docs-ext-apps]: https://docs.agentfront.dev/frontmcp/guides/building-tool-ui
 [docs-direct]: https://docs.agentfront.dev/frontmcp/deployment/direct-client
 [docs-deploy]: https://docs.agentfront.dev/frontmcp/deployment/local-dev-server

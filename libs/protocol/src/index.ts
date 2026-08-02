@@ -11,7 +11,7 @@
 export * from './types';
 
 // MCP protocol revision 2026-07-28 (not yet shipped by @modelcontextprotocol/sdk)
-export * from './types-2026';
+export * from './types-20260728';
 
 // Auth types
 export * from './auth-types';

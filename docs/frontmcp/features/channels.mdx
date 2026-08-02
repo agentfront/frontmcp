@@ -52,15 +52,15 @@ class DeployChannel extends ChannelContext {
 
 ## Seven Source Types
 
-| Source | Use Case | Trigger |
-| --- | --- | --- |
-| `webhook` | GitHub, CI/CD, Stripe, any HTTP POST | External HTTP request |
-| `app-event` | Application errors, status changes | In-process event bus |
-| `agent-completion` | AI agent results | Agent registry emitter |
-| `job-completion` | Background job results | Job execution manager |
-| `service` | WhatsApp, Telegram, Slack connectors | Persistent connection with tools |
-| `file-watcher` | Log files, config changes, build outputs | File system events |
-| `manual` | Custom logic | `scope.channelNotifications.send()` |
+| Source             | Use Case                                 | Trigger                             |
+| ------------------ | ---------------------------------------- | ----------------------------------- |
+| `webhook`          | GitHub, CI/CD, Stripe, any HTTP POST     | External HTTP request               |
+| `app-event`        | Application errors, status changes       | In-process event bus                |
+| `agent-completion` | AI agent results                         | Agent registry emitter              |
+| `job-completion`   | Background job results                   | Job execution manager               |
+| `service`          | WhatsApp, Telegram, Slack connectors     | Persistent connection with tools    |
+| `file-watcher`     | Log files, config changes, build outputs | File system events                  |
+| `manual`           | Custom logic                             | `scope.channelNotifications.send()` |
 
 ## Capability-Based Delivery
 
