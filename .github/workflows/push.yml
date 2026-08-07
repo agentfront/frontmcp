@@ -54,6 +54,7 @@ jobs:
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
           install: "false"
+          cache: ""
 
       - name: Check internal @frontmcp/* version pins agree
         run: node scripts/normalize-internal-versions.mjs --check

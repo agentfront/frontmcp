@@ -49,7 +49,7 @@
     }
   },
   "dependencies": {
-    "@enclave-vm/core": "^2.15.1",
+    "@enclave-vm/core": "^2.15.2",
     "@frontmcp/protocol": "1.6.0",
     "@frontmcp/sdk": "1.6.0",
     "vectoriadb": "^2.3.2"

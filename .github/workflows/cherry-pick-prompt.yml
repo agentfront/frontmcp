@@ -133,6 +133,7 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           install: "false"
+          cache: ""
 
       - name: Re-pin internal versions to the target branch line
         if: steps.prepare.outputs.conflict == 'false'
