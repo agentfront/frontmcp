@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import { type ParsedArgs } from '../../../core/args';
-import { buildJestArgs, findUserJestConfig, generateJestConfig } from '../test';
+import { buildJestArgs, buildTransformIgnorePatterns, findUserJestConfig, generateJestConfig } from '../test';
 
 type JestConfig = {
   testEnvironment: string;
@@ -28,8 +28,13 @@ type JestConfig = {
   testTimeout: number;
   collectCoverage: boolean;
   collectCoverageFrom?: string[];
+  transformIgnorePatterns: string[];
   verbose: boolean;
 };
+
+/** True when Jest would SKIP transforming `filePath` under `patterns`. */
+const isIgnored = (patterns: string[], filePath: string): boolean =>
+  patterns.some((pattern) => new RegExp(pattern).test(filePath));
 
 const makeOpts = (overrides: Partial<ParsedArgs> = {}): ParsedArgs => ({
   _: ['test'],
@@ -142,6 +147,80 @@ describe('generateJestConfig (issue #402)', () => {
       const cfg = generateJestConfig('/proj', makeOpts()) as JestConfig;
       expect(cfg.testTimeout).toBe(60_000);
     });
+  });
+});
+
+describe('buildTransformIgnorePatterns (issue #519)', () => {
+  // pnpm installs into a symlinked store, so the real path Jest resolves is
+  // `node_modules/.pnpm/<name>@<version>/node_modules/<name>/...`. The old
+  // `node_modules/(?!(jose)/)` matched at the FIRST `node_modules/` — followed
+  // by `.pnpm/` — so jose was never transformed and the run died with
+  // `SyntaxError: Unexpected token 'export'`.
+  const NPM_JOSE = '/proj/node_modules/jose/dist/webapi/index.js';
+  const NPM_LODASH = '/proj/node_modules/lodash/index.js';
+  const PNPM_JOSE = '/proj/node_modules/.pnpm/jose@6.2.3/node_modules/jose/dist/webapi/index.js';
+  const PNPM_LODASH = '/proj/node_modules/.pnpm/lodash@4.17.21/node_modules/lodash/index.js';
+
+  it('transforms jose under the flat npm/yarn layout', () => {
+    expect(isIgnored(buildTransformIgnorePatterns(), NPM_JOSE)).toBe(false);
+  });
+
+  it("transforms jose under pnpm's .pnpm store layout", () => {
+    expect(isIgnored(buildTransformIgnorePatterns(), PNPM_JOSE)).toBe(false);
+  });
+
+  it('still ignores unrelated packages under both layouts', () => {
+    const patterns = buildTransformIgnorePatterns();
+    expect(isIgnored(patterns, NPM_LODASH)).toBe(true);
+    expect(isIgnored(patterns, PNPM_LODASH)).toBe(true);
+  });
+
+  it('never ignores the user own sources', () => {
+    expect(isIgnored(buildTransformIgnorePatterns(), '/proj/src/tools/add.tool.ts')).toBe(false);
+  });
+
+  it('matches Windows paths, where separators are backslashes', () => {
+    const patterns = buildTransformIgnorePatterns();
+    expect(isIgnored(patterns, 'C:\\proj\\node_modules\\jose\\dist\\index.js')).toBe(false);
+    expect(isIgnored(patterns, 'C:\\proj\\node_modules\\.pnpm\\jose@6.2.3\\node_modules\\jose\\dist\\index.js')).toBe(
+      false,
+    );
+    expect(isIgnored(patterns, 'C:\\proj\\node_modules\\lodash\\index.js')).toBe(true);
+  });
+
+  it('adds packages from test.esmPackages while keeping the built-in jose', () => {
+    const patterns = buildTransformIgnorePatterns(['nanoid']);
+    expect(isIgnored(patterns, '/proj/node_modules/nanoid/index.js')).toBe(false);
+    expect(isIgnored(patterns, '/proj/node_modules/.pnpm/nanoid@5.0.9/node_modules/nanoid/index.js')).toBe(false);
+    expect(isIgnored(patterns, PNPM_JOSE)).toBe(false);
+    expect(isIgnored(patterns, PNPM_LODASH)).toBe(true);
+  });
+
+  it('handles scoped package names under both layouts', () => {
+    const patterns = buildTransformIgnorePatterns(['@noble/hashes']);
+    expect(isIgnored(patterns, '/proj/node_modules/@noble/hashes/sha2.js')).toBe(false);
+    expect(isIgnored(patterns, '/proj/node_modules/.pnpm/@noble+hashes@1.7.1/node_modules/@noble/hashes/sha2.js')).toBe(
+      false,
+    );
+    expect(isIgnored(patterns, '/proj/node_modules/@noble/ciphers/aes.js')).toBe(true);
+  });
+
+  it('escapes regex metacharacters in package names', () => {
+    const patterns = buildTransformIgnorePatterns(['pkg.with+meta']);
+    expect(() => patterns.map((pattern) => new RegExp(pattern))).not.toThrow();
+    expect(isIgnored(patterns, '/proj/node_modules/pkg.with+meta/index.js')).toBe(false);
+    expect(isIgnored(patterns, '/proj/node_modules/pkgxwithxmeta/index.js')).toBe(true);
+  });
+
+  it('deduplicates jose when it is also listed in test.esmPackages', () => {
+    expect(buildTransformIgnorePatterns(['jose'])).toEqual(buildTransformIgnorePatterns());
+  });
+
+  it('is wired into the generated config, honoring test.esmPackages', () => {
+    const cfg = generateJestConfig('/proj', makeOpts(), { esmPackages: ['nanoid'] }) as JestConfig;
+    expect(isIgnored(cfg.transformIgnorePatterns, PNPM_JOSE)).toBe(false);
+    expect(isIgnored(cfg.transformIgnorePatterns, '/proj/node_modules/nanoid/index.js')).toBe(false);
+    expect(isIgnored(cfg.transformIgnorePatterns, PNPM_LODASH)).toBe(true);
   });
 });
 

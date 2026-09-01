@@ -46,17 +46,46 @@ By default the injected config discovers:
 
 - Colocated unit specs: `src/**/*.spec.ts` and `src/**/*.spec.tsx`
 - `__tests__/**/*.spec.ts(x)`
-- E2E specs: `e2e/**/*.e2e.ts(x)` and `e2e/**/*.e2e.spec.ts(x)`
+- E2E specs: `e2e/**/*.e2e.spec.ts` and `e2e/**/*.e2e.spec.tsx`
 
 Both `.ts` and `.tsx` files are transformed via SWC with the automatic JSX
 runtime, so React component tests work without extra setup.
+
+#### ESM-only dependencies
+
+Jest runs your tests through a CommonJS runtime, so any dependency published as
+pure ESM has to be transpiled rather than skipped. The injected config already
+does this for `jose` (pulled in transitively by `@frontmcp/sdk`), and its
+`transformIgnorePatterns` understand every package-manager layout — including
+pnpm, which installs into a symlinked store at
+`node_modules/.pnpm/<name>@<version>/node_modules/<name>`.
+
+If one of *your* dependencies ships ESM-only, add it to `test.esmPackages` in
+`frontmcp.config.ts` rather than hand-writing a whole Jest config:
+
+```ts title="frontmcp.config.ts"
+import { defineConfig } from 'frontmcp';
+
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+  test: {
+    esmPackages: ['nanoid', '@noble/hashes'],
+  },
+});
+```
+
+Scoped names work as written. Without this, such a package fails at import time
+with `SyntaxError: Unexpected token 'export'`.
 
 <Info>
 **Bring your own config.** If a `jest.config.{ts,js,mjs,cjs,json}` exists in
 your project root, `frontmcp test` delegates to it instead of injecting the
 default config. You can also drop a `jest.config.ts` to customise transforms,
 projects, setup files, or coverage paths while still running via `frontmcp
-test`.
+test`. Delegation is total, so remember to carry over `transformIgnorePatterns`
+for ESM-only dependencies — or start from
+`preset: '@frontmcp/testing/jest-preset'`, which already includes them.
 </Info>
 
 ### 2. Write Your First Test

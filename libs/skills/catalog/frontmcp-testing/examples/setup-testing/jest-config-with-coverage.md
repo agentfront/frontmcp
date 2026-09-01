@@ -22,8 +22,14 @@ export default {
   displayName: 'my-lib',
   preset: '../../jest.preset.js',
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
+    // Must cover `.js` too: `transformIgnorePatterns` only un-ignores a file,
+    // the transform still has to match it. An ESM dep's `.js` would otherwise
+    // reach Jest untransformed.
+    '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
+  // ESM-only deps (jose, reached via @frontmcp/sdk) must be transpiled, not
+  // ignored. The `.pnpm` skip keeps this correct under pnpm's symlinked store.
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
   coverageThreshold: {
     global: {
       statements: 95,
@@ -42,6 +48,7 @@ export default {
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
+    "allowJs": true,
     "types": ["jest", "node"]
   },
   "include": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.spec.tsx"]

@@ -18,6 +18,8 @@ module.exports = {
     }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
+  // Transpile ESM-only deps; the `.pnpm` skip keeps this correct under pnpm (issue #519).
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
   coverageDirectory: '../../coverage/unit/<%= projectName %>',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
 };
