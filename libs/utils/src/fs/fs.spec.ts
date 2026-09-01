@@ -22,6 +22,7 @@ import {
   rm,
   runCmd,
   stat,
+  symlink,
   unlink,
   watchFile,
   writeFile,
@@ -591,6 +592,33 @@ describe('FS Utils', () => {
       // the OR meaningful — the test only passes if SOME failure was
       // observed (sync throw OR async error event).
       expect(threwSync || errors.length > 0).toBe(true);
+    });
+  });
+
+  describe('symlink', () => {
+    it('creates a link that resolves to the target file', async () => {
+      const target = path.join(tempDir, 'target.txt');
+      const link = path.join(tempDir, 'link.txt');
+      await fs.promises.writeFile(target, 'linked content');
+
+      await symlink(target, link);
+
+      expect(await fs.promises.readFile(link, 'utf-8')).toBe('linked content');
+      expect((await fs.promises.lstat(link)).isSymbolicLink()).toBe(true);
+    });
+
+    it('forwards the link type, so Windows callers can request a junction', async () => {
+      const targetDir = path.join(tempDir, 'target-dir');
+      const link = path.join(tempDir, 'link-dir');
+      await fs.promises.mkdir(targetDir);
+      await fs.promises.writeFile(path.join(targetDir, 'inner.txt'), 'inside');
+
+      // `junction` is the type that needs no elevation on Windows; on POSIX
+      // Node ignores it and creates an ordinary directory symlink.
+      await symlink(targetDir, link, process.platform === 'win32' ? 'junction' : 'dir');
+
+      expect(await fs.promises.readFile(path.join(link, 'inner.txt'), 'utf-8')).toBe('inside');
+      expect(await fs.promises.realpath(link)).toBe(await fs.promises.realpath(targetDir));
     });
   });
 

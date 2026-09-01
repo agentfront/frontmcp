@@ -28,4 +28,4 @@ export {
   watchFile,
   getSpawnFn,
 } from './fs';
-export type { FileWatcherHandle } from './fs';
+export type { FileWatcherHandle, SymlinkType } from './fs';

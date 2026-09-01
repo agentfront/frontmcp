@@ -280,6 +280,9 @@ export async function stat(p: string): Promise<import('fs').Stats> {
   return fsp.stat(p);
 }
 
+/** Link type accepted by {@link symlink}; only meaningful on Windows. */
+export type SymlinkType = 'dir' | 'file' | 'junction';
+
 /**
  * Create a symbolic link at `linkPath` pointing to `target`.
  *
@@ -287,13 +290,17 @@ export async function stat(p: string): Promise<import('fs').Stats> {
  *
  * @param target - Path the symlink should point to
  * @param linkPath - Where to create the symlink
+ * @param type - Windows link type. `dir` and `file` need elevation or Developer
+ * Mode there, while `junction` does not (directories only, absolute target).
+ * Ignored on POSIX.
  *
  * @example
  * await symlink('/etc/hosts', '/tmp/hosts-link');
+ * await symlink(dir, link, process.platform === 'win32' ? 'junction' : 'dir');
  */
-export async function symlink(target: string, linkPath: string): Promise<void> {
+export async function symlink(target: string, linkPath: string, type?: SymlinkType): Promise<void> {
   const fsp = getFsp();
-  await fsp.symlink(target, linkPath);
+  await fsp.symlink(target, linkPath, type);
 }
 
 /**

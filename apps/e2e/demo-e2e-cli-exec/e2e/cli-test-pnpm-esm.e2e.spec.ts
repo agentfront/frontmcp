@@ -16,10 +16,14 @@
 // through the real jest + swc pipeline at the same time.
 
 import { spawn } from 'node:child_process';
-import { existsSync, symlinkSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+// `existsSync` only: the describe/describe.skip choice below is made
+// synchronously at module scope, which `@frontmcp/utils`' async `fileExists`
+// cannot express. Every other filesystem call goes through the utils boundary.
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+
+import { mkdir, mkdtemp, symlink, writeFile } from '@frontmcp/utils';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
@@ -65,16 +69,15 @@ async function makePnpmProject(): Promise<string> {
   await writeFile(
     path.join(storePkgDir, 'package.json'),
     JSON.stringify({ name: FIXTURE_NAME, version: FIXTURE_VERSION, type: 'module', main: 'index.js' }, null, 2),
-    'utf-8',
   );
   // Untranspiled ESM — Jest's CJS runtime throws `Unexpected token 'export'`
   // on this unless the transform actually reaches it.
-  await writeFile(path.join(storePkgDir, 'index.js'), `export const answer = 42;\n`, 'utf-8');
+  await writeFile(path.join(storePkgDir, 'index.js'), `export const answer = 42;\n`);
 
-  symlinkSync(storePkgDir, path.join(nodeModules, FIXTURE_NAME), SYMLINK_TYPE);
+  await symlink(storePkgDir, path.join(nodeModules, FIXTURE_NAME), SYMLINK_TYPE);
 
   for (const dep of LINKED_DEPS) {
-    symlinkSync(path.join(ROOT_NODE_MODULES, dep), path.join(nodeModules, dep), SYMLINK_TYPE);
+    await symlink(path.join(ROOT_NODE_MODULES, dep), path.join(nodeModules, dep), SYMLINK_TYPE);
   }
 
   const srcDir = path.join(dir, 'src');
@@ -88,7 +91,6 @@ describe('esm-only dependency under pnpm', () => {
   });
 });
 `,
-    'utf-8',
   );
 
   // Exercises the new \`test.esmPackages\` escape hatch (issue #519).
@@ -100,12 +102,10 @@ describe('esm-only dependency under pnpm', () => {
   test: { esmPackages: ['${FIXTURE_NAME}'] },
 };
 `,
-    'utf-8',
   );
   await writeFile(
     path.join(dir, 'package.json'),
     JSON.stringify({ name: 'fix-519-e2e', version: '0.0.0', private: true }, null, 2),
-    'utf-8',
   );
   await writeFile(
     path.join(dir, 'tsconfig.json'),
@@ -123,7 +123,6 @@ describe('esm-only dependency under pnpm', () => {
       null,
       2,
     ),
-    'utf-8',
   );
 
   return dir;
