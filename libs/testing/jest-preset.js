@@ -15,15 +15,21 @@ module.exports = {
   // Use Node.js environment for E2E tests
   testEnvironment: 'node',
 
-  // Transform TypeScript files
+  // Must cover `.js`/`.jsx` as well as `.ts`/`.tsx`: `transformIgnorePatterns`
+  // only un-ignores a file and `testMatch` only discovers one — the transform
+  // still has to match it. ESM-only deps ship `.js`, and testMatch accepts
+  // `.e2e.spec.js(x)`, so a `.tsx?`-only rule would silently skip both.
   transform: {
-    '^.+\\.tsx?$': [
+    '^.+\\.[tj]sx?$': [
       'ts-jest',
       {
         useESM: false,
         tsconfig: {
           // Allow importing .js extensions for ESM compatibility
           moduleResolution: 'node',
+          // Required to compile the `.js`/`.jsx` files the rule now matches.
+          allowJs: true,
+          jsx: 'react-jsx',
         },
       },
     ],

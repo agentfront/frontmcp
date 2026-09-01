@@ -64,6 +64,8 @@ If one of *your* dependencies ships ESM-only, add it to `test.esmPackages` in
 `frontmcp.config.ts` rather than hand-writing a whole Jest config:
 
 ```ts title="frontmcp.config.ts"
+import { defineConfig } from 'frontmcp';
+
 export default defineConfig({
   name: 'my-server',
   deployments: [{ target: 'node' }],

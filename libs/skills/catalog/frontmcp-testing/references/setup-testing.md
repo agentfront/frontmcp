@@ -464,6 +464,8 @@ In standalone projects driven by `frontmcp test`, prefer `test.esmPackages` in
 
 ```typescript
 // frontmcp.config.ts
+import { defineConfig } from 'frontmcp';
+
 export default defineConfig({
   name: 'my-server',
   deployments: [{ target: 'node' }],

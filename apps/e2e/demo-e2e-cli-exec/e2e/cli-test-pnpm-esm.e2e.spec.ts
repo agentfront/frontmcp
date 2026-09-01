@@ -23,7 +23,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { mkdir, mkdtemp, symlink, writeFile } from '@frontmcp/utils';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from '@frontmcp/utils';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
@@ -164,18 +164,25 @@ describeOrSkip(
       'transpiles an ESM-only package installed in pnpm’s .pnpm store',
       async () => {
         const projectDir = await makePnpmProject();
-        const { output, exitCode } = await runFrontmcpTest(projectDir);
+        try {
+          const { output, exitCode } = await runFrontmcpTest(projectDir);
 
-        // Strip ANSI escapes before matching — jest wraps its summary in them.
-        // eslint-disable-next-line no-control-regex
-        const merged = output.replace(/\x1b\[[0-9;]*m/g, '');
+          // Strip ANSI escapes before matching — jest wraps its summary in them.
+          // eslint-disable-next-line no-control-regex
+          const merged = output.replace(/\x1b\[[0-9;]*m/g, '');
 
-        // The regression signature: jest ignored the package, so its raw ESM
-        // reached the CJS runtime untransformed.
-        expect(merged).not.toMatch(/Unexpected token 'export'/);
-        expect(merged).toMatch(/fixture\.spec\.ts/);
-        expect(merged).toMatch(/Tests:\s+1 passed,\s+1 total/);
-        expect(exitCode).toBe(0);
+          // The regression signature: jest ignored the package, so its raw ESM
+          // reached the CJS runtime untransformed.
+          expect(merged).not.toMatch(/Unexpected token 'export'/);
+          expect(merged).toMatch(/fixture\.spec\.ts/);
+          expect(merged).toMatch(/Tests:\s+1 passed,\s+1 total/);
+          expect(exitCode).toBe(0);
+        } finally {
+          // Runs on assertion failure too. `rm` unlinks the node_modules
+          // symlinks rather than following them, so the monorepo's real
+          // node_modules is untouched.
+          await rm(projectDir, { recursive: true, force: true });
+        }
       },
       TEST_TIMEOUT,
     );
