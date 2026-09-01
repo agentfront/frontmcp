@@ -432,7 +432,10 @@ export default {
   displayName: 'my-lib',
   preset: '../../jest.preset.js',
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
+    // Must cover `.js` too: `transformIgnorePatterns` only un-ignores a file,
+    // the transform still has to match it. An ESM dep's `.js` would otherwise
+    // reach Jest untransformed.
+    '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   // ESM-only deps (jose, reached via @frontmcp/sdk) must be transpiled, not
   // ignored. Skipping the `.pnpm` segment re-anchors the regex on the inner

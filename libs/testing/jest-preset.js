@@ -39,8 +39,10 @@ module.exports = {
   // Path resolves to the compiled output when used from node_modules/@frontmcp/testing
   setupFilesAfterEnv: [require.resolve('@frontmcp/testing/setup')],
 
-  // Test file patterns for E2E tests
-  testMatch: ['**/*.e2e.ts', '**/*.e2e.js', '**/e2e/**/*.test.ts', '**/e2e/**/*.test.js'],
+  // E2E specs, per the `.e2e.spec.ts(x)` convention the CLI's injected config
+  // also enforces. The legacy `.e2e.ts` / `.test.ts` globs matched none of the
+  // documented names, so projects on this preset silently ran zero E2E tests.
+  testMatch: ['**/*.e2e.spec.ts', '**/*.e2e.spec.tsx', '**/*.e2e.spec.js', '**/*.e2e.spec.jsx'],
 
   // Module name mapping for path aliases
   // Note: These point to dist/ since the package exports declare dist/index.js

@@ -36,6 +36,11 @@ const LINKED_DEPS = ['.bin', 'jest', '@swc', '@frontmcp'];
 const FIXTURE_NAME = 'esm-only-fixture';
 const FIXTURE_VERSION = '1.0.0';
 
+// Windows refuses `dir` symlinks without elevation or Developer Mode, so use a
+// junction there. Junctions require absolute targets; realpath resolution — the
+// only thing this test depends on — is identical either way.
+const SYMLINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
+
 function distIsCurrent(): boolean {
   return existsSync(FRONTMCP_BIN);
 }
@@ -66,10 +71,10 @@ async function makePnpmProject(): Promise<string> {
   // on this unless the transform actually reaches it.
   await writeFile(path.join(storePkgDir, 'index.js'), `export const answer = 42;\n`, 'utf-8');
 
-  symlinkSync(path.relative(nodeModules, storePkgDir), path.join(nodeModules, FIXTURE_NAME), 'dir');
+  symlinkSync(storePkgDir, path.join(nodeModules, FIXTURE_NAME), SYMLINK_TYPE);
 
   for (const dep of LINKED_DEPS) {
-    symlinkSync(path.join(ROOT_NODE_MODULES, dep), path.join(nodeModules, dep), 'dir');
+    symlinkSync(path.join(ROOT_NODE_MODULES, dep), path.join(nodeModules, dep), SYMLINK_TYPE);
   }
 
   const srcDir = path.join(dir, 'src');
