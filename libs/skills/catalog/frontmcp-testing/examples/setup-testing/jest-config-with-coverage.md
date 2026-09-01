@@ -24,6 +24,9 @@ export default {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
+  // ESM-only deps (jose, reached via @frontmcp/sdk) must be transpiled, not
+  // ignored. The `.pnpm` skip keeps this correct under pnpm's symlinked store.
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
   coverageThreshold: {
     global: {
       statements: 95,

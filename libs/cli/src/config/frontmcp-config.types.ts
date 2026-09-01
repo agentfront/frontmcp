@@ -488,6 +488,11 @@ export interface TestConfig {
   runInBand?: boolean;
   testMatch?: string[];
   coverage?: boolean;
+  /**
+   * Extra ESM-only packages the injected Jest config must transpile, merged
+   * with the built-in `jose`. Only needed when a dependency ships pure ESM.
+   */
+  esmPackages?: string[];
 }
 
 // ============================================

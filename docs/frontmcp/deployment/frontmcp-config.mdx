@@ -82,7 +82,7 @@ Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.p
 | --------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                |
 | `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                         |
-| `test`                            | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `env.shared` ⊕ `env.test` |
+| `test`                            | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `test.esmPackages`, `env.shared` ⊕ `env.test` |
 | `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio.command/args`                       |
 | `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`   |
 | `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                      |

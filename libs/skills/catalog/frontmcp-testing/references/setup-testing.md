@@ -434,6 +434,11 @@ export default {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
+  // ESM-only deps (jose, reached via @frontmcp/sdk) must be transpiled, not
+  // ignored. Skipping the `.pnpm` segment re-anchors the regex on the inner
+  // `node_modules/`, so this holds under npm, yarn AND pnpm's symlinked store;
+  // the trailing character classes cover Windows separators.
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
   coverageThreshold: {
     global: {
       statements: 95,
@@ -443,6 +448,24 @@ export default {
     },
   },
 };
+```
+
+Add further ESM-only packages to the alternation (`(jose|nanoid)`). A plain
+`node_modules/(?!(jose)/)` silently breaks under pnpm: the real path is
+`node_modules/.pnpm/jose@6.2.3/node_modules/jose/...`, the unanchored regex
+matches at the first `node_modules/`, and the run fails with
+`SyntaxError: Unexpected token 'export'`.
+
+In standalone projects driven by `frontmcp test`, prefer `test.esmPackages` in
+`frontmcp.config.ts` — the injected config already carries the pattern above:
+
+```typescript
+// frontmcp.config.ts
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+  test: { esmPackages: ['nanoid'] },
+});
 ```
 
 ## Manual Testing with frontmcp dev

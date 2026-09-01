@@ -532,6 +532,8 @@ export const testConfigSchema = z
     runInBand: z.boolean().optional(),
     testMatch: z.array(z.string()).optional(),
     coverage: z.boolean().optional(),
+    // Issue #519 — extra ESM-only packages Jest must transpile.
+    esmPackages: z.array(z.string().min(1)).optional(),
   })
   .strict();
 

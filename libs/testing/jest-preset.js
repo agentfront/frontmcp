@@ -50,6 +50,9 @@ module.exports = {
     '^@frontmcp/testing/(.*)$': '<rootDir>/node_modules/@frontmcp/testing/dist/$1',
   },
 
+  // Transpile ESM-only deps; the `.pnpm` skip keeps this correct under pnpm (issue #519).
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
+
   // Ignore patterns
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 

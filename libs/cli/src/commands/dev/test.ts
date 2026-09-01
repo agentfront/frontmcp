@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { fileExists, unlink, writeFile } from '@frontmcp/utils';
 
-import { resolveConfig } from '../../config';
+import { resolveConfig, type TestConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 
@@ -47,6 +47,45 @@ export function buildJestArgs(configPath: string, opts: ParsedArgs, positionalPa
 }
 
 /**
+ * ESM-only packages the injected Jest config must transpile rather than ignore.
+ * `jose` ships as pure ESM and is reachable from the `@frontmcp/sdk` barrel, so
+ * every scaffolded project needs it transformed.
+ */
+const DEFAULT_ESM_PACKAGES = ['jose'];
+
+/** Matches either path separator so the patterns hold on Windows too. */
+const PATH_SEPARATOR = '[/\\\\]';
+
+function escapePackageName(name: string): string {
+  return name
+    .split('/')
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join(PATH_SEPARATOR);
+}
+
+/**
+ * Build `transformIgnorePatterns` that survive every package-manager layout.
+ *
+ * Issue #519: the previous pattern `node_modules/(?!(jose)/)` only worked when
+ * the package was hoisted to the top-level `node_modules`. pnpm installs into a
+ * symlinked store, so the real path Jest sees is
+ * `node_modules/.pnpm/jose@6.2.3/node_modules/jose/dist/...`. The unanchored
+ * regex matched at the FIRST `node_modules/` — followed by `.pnpm/`, not
+ * `jose/` — so the lookahead passed, the file was ignored, and the run died
+ * with `SyntaxError: Unexpected token 'export'`.
+ *
+ * Skipping the `.pnpm` store segment lets the regex re-anchor on the inner
+ * `node_modules/`, where the allow-list applies exactly as it does under
+ * npm/yarn. Returned as plain strings because the generated config is
+ * serialized to JSON before Jest reads it.
+ */
+export function buildTransformIgnorePatterns(esmPackages: string[] = []): string[] {
+  const packages = [...new Set([...DEFAULT_ESM_PACKAGES, ...esmPackages])];
+  const allowList = packages.map(escapePackageName).join('|');
+  return [`node_modules${PATH_SEPARATOR}(?!\\.pnpm${PATH_SEPARATOR})(?!(${allowList})${PATH_SEPARATOR})`];
+}
+
+/**
  * Generate Jest configuration programmatically.
  *
  * Issue #402: the original config (a) only ran `e2e/**` and `**\/*.e2e.ts`,
@@ -58,11 +97,7 @@ export function buildJestArgs(configPath: string, opts: ParsedArgs, positionalPa
  *     runtime so React components are usable in tests,
  *   - exposes the helper for unit testing.
  */
-export function generateJestConfig(
-  cwd: string,
-  opts: ParsedArgs,
-  testDefaults?: { timeoutMs?: number; testMatch?: string[]; coverage?: boolean },
-): object {
+export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?: TestConfig): object {
   // Issue #400 — config defaults apply when CLI flags are absent.
   const testTimeout = opts.timeout ?? testDefaults?.timeoutMs ?? 60000;
 
@@ -136,8 +171,8 @@ export function generateJestConfig(
     // Setup files that run after Jest is initialized
     setupFilesAfterEnv: ['@frontmcp/testing/setup'],
 
-    // Transform packages that use ESM
-    transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
+    // Transform ESM-only packages (issue #519: pnpm/Windows aware)
+    transformIgnorePatterns: buildTransformIgnorePatterns(testDefaults?.esmPackages),
 
     // Ignore patterns
     testPathIgnorePatterns: ['/node_modules/', '/dist/'],
