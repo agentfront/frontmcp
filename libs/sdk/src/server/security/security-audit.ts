@@ -198,6 +198,16 @@ export function resolveBindAddress(security?: SecurityAuditConfig['security'], d
     return deploymentMode === 'distributed' ? '0.0.0.0' : '127.0.0.1';
   }
 
-  // Default: 0.0.0.0 (backwards compatible — no breaking changes)
-  return '0.0.0.0';
+  // A distributed deployment must be reachable by its peers — that is what the mode means.
+  if (deploymentMode === 'distributed') return '0.0.0.0';
+
+  // Default: LOOPBACK.
+  //
+  // This was `0.0.0.0` "for backwards compatibility", which meant a server that said nothing about
+  // security published itself on every interface. Combined with auth being opt-in, that put
+  // unauthenticated MCP endpoints — tools, jobs, telemetry — on the network by default; a downstream
+  // consumer shipped exactly that. A default should be the safe choice, and the unsafe one should be
+  // a sentence someone wrote on purpose: `security.bindAddress: 'all'`, or `deploymentMode:
+  // 'distributed'` above.
+  return '127.0.0.1';
 }

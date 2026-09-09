@@ -32,13 +32,20 @@ describe('FrontMcpServerInstance', () => {
   });
 
   describe('CORS resolution in setupDefaults', () => {
-    it('should pass default permissive CORS when cors is not specified', () => {
+    // BREAKING in v1.x: the default was `{ origin: true, credentials: false }` — any Origin
+    // reflected, so any page the user visited could read a local server's responses. A server that
+    // wants cross-origin browser access now says so.
+    it('sends NO CORS headers when cors is not specified — same-origin only', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '' });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({
-        cors: { origin: true, credentials: false },
-      });
+      expect(capturedAdapterArgs[0]).toEqual({});
+    });
+
+    it('still honours an explicit permissive CORS config — the way back', () => {
+      new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: { origin: true } });
+
+      expect(capturedAdapterArgs[0]).toEqual({ cors: { origin: true } });
     });
 
     it('should pass empty options when cors is false', () => {
@@ -144,8 +151,8 @@ describe('FrontMcpServerInstance', () => {
 
       expect(instance.config.routes).toHaveLength(1);
       expect(instance.config.routes?.[0]).toMatchObject({ method: 'GET', path: '/ping' });
-      // Adapter still constructed with just the permissive CORS default.
-      expect(capturedAdapterArgs[0]).toEqual({ cors: { origin: true, credentials: false } });
+      // Adapter constructed with no CORS options at all (the same-origin default).
+      expect(capturedAdapterArgs[0]).toEqual({});
     });
   });
 

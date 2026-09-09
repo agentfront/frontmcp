@@ -158,8 +158,21 @@ describe('logSecurityFindings()', () => {
 });
 
 describe('resolveBindAddress()', () => {
-  it('returns 0.0.0.0 by default (backwards compatible)', () => {
-    expect(resolveBindAddress()).toBe('0.0.0.0');
+  // BREAKING in v1.x: the default was 0.0.0.0. A server that did not mention security bound every
+  // interface, which is how an unauthenticated MCP endpoint ended up reachable from the network in a
+  // downstream consumer. Loopback is the safe default; `bindAddress: 'all'` and
+  // `deploymentMode: 'distributed'` are the two documented ways back.
+  it('returns loopback by default — a server that says nothing is local-only', () => {
+    expect(resolveBindAddress()).toBe('127.0.0.1');
+  });
+
+  it('still binds all interfaces for a distributed deployment', () => {
+    expect(resolveBindAddress(undefined, 'distributed')).toBe('0.0.0.0');
+  });
+
+  it('an explicit bindAddress is unaffected by the new default', () => {
+    expect(resolveBindAddress({ bindAddress: 'all' })).toBe('0.0.0.0');
+    expect(resolveBindAddress({ bindAddress: '10.0.0.5' })).toBe('10.0.0.5');
   });
 
   it('returns loopback when strict in standalone mode', () => {
