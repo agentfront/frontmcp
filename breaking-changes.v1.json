@@ -336,8 +336,8 @@
     "category": "change",
     "severity": "high",
     "old": "// no security config \u2192 server bound 0.0.0.0 (all interfaces)",
-    "new": "http: { security: { bindAddress: 'all' } } // or deploymentMode: 'distributed'",
-    "migration": "The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said nothing about security previously published itself on every interface, and since auth is opt-in that put unauthenticated tools, jobs and telemetry on the network by default. If your server must be reachable from another host \u2014 a container, a VM, behind a reverse proxy \u2014 set `http.security.bindAddress: 'all'` (or a specific address), or run it with `deploymentMode: 'distributed'`, which still binds all interfaces. Local development and stdio transports are unaffected.",
+    "new": "http: { security: { bindAddress: 'all' } } // or FRONTMCP_BIND_ADDRESS=all",
+    "migration": "The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said nothing about security previously published itself on every interface, and since auth is opt-in that put unauthenticated tools, jobs and telemetry on the network by default. If your server must be reachable from another host \u2014 a container, a VM, behind a reverse proxy \u2014 set `http.security.bindAddress: 'all'` (or a specific address), or set the `FRONTMCP_BIND_ADDRESS=all` environment variable, which needs no rebuild and is the right fit for a Dockerfile or compose file. Distributed builds (`frontmcp build --target distributed`, which sets `FRONTMCP_DEPLOYMENT_MODE=distributed`) still bind all interfaces automatically. Local development and stdio transports are unaffected.",
     "codemod": "no"
   },
   {

@@ -1,9 +1,10 @@
 /**
  * Security Audit — Production Readiness Warnings
  *
- * Logs security-relevant configuration at server startup.
- * Warn-only approach: no defaults are changed, but insecure
- * configurations are flagged in production environments.
+ * Logs security-relevant configuration at server startup so an operator can see
+ * what the transport actually exposes. The audit only reports — it never changes
+ * behaviour; the safe choices are the defaults themselves (loopback binding, no
+ * CORS headers), and this flags where a config opts out of them.
  */
 
 import type { CorsOptions } from '../../common';
@@ -12,7 +13,7 @@ import type { CorsOptions } from '../../common';
  * Security configuration for the audit.
  */
 export interface SecurityAuditConfig {
-  /** CORS configuration (undefined = permissive default) */
+  /** CORS configuration (undefined = the default: no CORS headers, same-origin only) */
   cors?: CorsOptions | false;
   /** Security options from HttpOptionsInterface */
   security?: {
@@ -58,26 +59,26 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
 
   const strict = config.security?.strict === true;
 
-  // CORS audit — suppress raw-config warnings when strict mode handles it
-  if (config.cors === undefined && !strict) {
+  // CORS audit.
+  //
+  // `undefined` and `false` are the SAME runtime state — server.instance.ts collapses both to "no
+  // CORS middleware" — so they must report identically. Omitting `cors` is the safe default now,
+  // not a permissive one, and warning about it would send every well-configured production server
+  // chasing a problem it does not have. The only permissive state left is an explicit
+  // `{ origin: true }`, and that stays a warning whatever `strict` says: strict mode does not
+  // touch CORS, so it has nothing to suppress here.
+  if (config.cors === undefined || config.cors === false) {
     findings.push({
-      level: 'warn',
-      code: 'CORS_PERMISSIVE_DEFAULT',
-      message: 'CORS is using the permissive default (origin: true), which allows all origins.',
-      recommendation: 'Set explicit cors.origin to restrict allowed origins in production.',
+      level: 'info',
+      code: 'CORS_DISABLED',
+      message: 'No CORS headers are sent — browsers will block cross-origin reads of this server.',
     });
-  } else if (config.cors !== false && config.cors?.origin === true && !strict) {
+  } else if (config.cors.origin === true) {
     findings.push({
       level: 'warn',
       code: 'CORS_ORIGIN_TRUE',
       message: 'CORS origin=true allows all origins to make cross-origin requests.',
       recommendation: 'Set cors.origin to specific allowed origins.',
-    });
-  } else if (config.cors === false) {
-    findings.push({
-      level: 'info',
-      code: 'CORS_DISABLED',
-      message: 'CORS is disabled. Cross-origin requests will be blocked by browsers.',
     });
   } else {
     findings.push({
@@ -87,8 +88,9 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     });
   }
 
-  // Bind address audit
-  const bindAddress = config.resolvedBindAddress ?? '0.0.0.0';
+  // Bind address audit. The fallback must match resolveBindAddress()'s default, or a caller that
+  // omits `resolvedBindAddress` gets warned about an exposure that isn't there.
+  const bindAddress = config.resolvedBindAddress ?? '127.0.0.1';
   if (bindAddress === '0.0.0.0' || bindAddress === '::') {
     if (config.deploymentMode !== 'distributed') {
       findings.push({
@@ -136,7 +138,7 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     findings.push({
       level: 'info',
       code: 'STRICT_MODE_ENABLED',
-      message: 'Strict security mode is enabled: loopback binding, restrictive CORS, DNS rebinding protection.',
+      message: 'Strict security mode is enabled: loopback binding and DNS rebinding protection.',
     });
   } else {
     findings.push({
@@ -179,7 +181,19 @@ export function logSecurityFindings(
 }
 
 /**
+ * Map a bind-address token to the address the server actually listens on.
+ * `'loopback'` / `'all'` are the two aliases; anything else is taken literally.
+ */
+function toBindAddress(value: string): string {
+  if (value === 'loopback') return '127.0.0.1';
+  if (value === 'all') return '0.0.0.0';
+  return value;
+}
+
+/**
  * Resolve the effective bind address based on configuration and deployment mode.
+ *
+ * Precedence: explicit config > FRONTMCP_BIND_ADDRESS > strict mode > deployment mode > loopback.
  *
  * @param security - Security configuration
  * @param deploymentMode - Current deployment mode
@@ -188,9 +202,17 @@ export function logSecurityFindings(
 export function resolveBindAddress(security?: SecurityAuditConfig['security'], deploymentMode?: string): string {
   // Explicit bind address takes priority
   if (security?.bindAddress) {
-    if (security.bindAddress === 'loopback') return '127.0.0.1';
-    if (security.bindAddress === 'all') return '0.0.0.0';
-    return security.bindAddress;
+    return toBindAddress(security.bindAddress);
+  }
+
+  // FRONTMCP_BIND_ADDRESS — the ops-side opt-in. A container publishes a port and expects the
+  // process inside to listen on every interface, but a Dockerfile can't reach into the server's
+  // TypeScript config. This lets the deployment say `FRONTMCP_BIND_ADDRESS=all` without a rebuild,
+  // and keeps the safe default for everyone who says nothing. Accepts 'all', 'loopback', or a
+  // literal address.
+  const envBindAddress = process.env['FRONTMCP_BIND_ADDRESS']?.trim();
+  if (envBindAddress) {
+    return toBindAddress(envBindAddress);
   }
 
   // Strict mode: loopback for standalone, all for distributed
@@ -207,7 +229,8 @@ export function resolveBindAddress(security?: SecurityAuditConfig['security'], d
   // security published itself on every interface. Combined with auth being opt-in, that put
   // unauthenticated MCP endpoints — tools, jobs, telemetry — on the network by default; a downstream
   // consumer shipped exactly that. A default should be the safe choice, and the unsafe one should be
-  // a sentence someone wrote on purpose: `security.bindAddress: 'all'`, or `deploymentMode:
-  // 'distributed'` above.
+  // a sentence someone wrote on purpose: `security.bindAddress: 'all'`, the FRONTMCP_BIND_ADDRESS
+  // env var, or a distributed build (`frontmcp build --target distributed`, which sets
+  // FRONTMCP_DEPLOYMENT_MODE=distributed).
   return '127.0.0.1';
 }

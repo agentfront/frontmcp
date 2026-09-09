@@ -111,8 +111,9 @@ export const httpOptionsSchema = z.object({
    * Security configuration for transport hardening.
    *
    * The defaults are the SAFE choice: the server binds loopback and sends no CORS headers. Reaching
-   * it from another host or another origin is something you opt into — `bindAddress: 'all'` (or
-   * `deploymentMode: 'distributed'`) and an explicit `cors` config.
+   * it from another host or another origin is something you opt into — `bindAddress: 'all'`, the
+   * `FRONTMCP_BIND_ADDRESS=all` env var (no rebuild; the right fit for a Dockerfile), or a
+   * distributed build — and an explicit `cors` config.
    */
   security: z
     .object({

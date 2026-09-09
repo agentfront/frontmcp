@@ -72,7 +72,7 @@ Everything else is optional with sensible defaults.
     entryPath?: '',             // MUST match PRM resourcePath in .well-known
     hostFactory?: /* custom host */,
     socketPath?: '/tmp/mcp.sock',  // Unix socket path (overrides port)
-    cors?: CorsOptions | false, // default: permissive with built-in adapter (origin: true, credentials: false)
+    cors?: CorsOptions | false, // default: no CORS headers (same-origin only)
   },
 
   /** Transport & session lifecycle (NEW in v0.6) */
@@ -154,7 +154,7 @@ http: {
   entryPath?: string;           // default ''; MUST match the PRM resourcePath in .well-known
   hostFactory?: FrontMcpServer | ((cfg) => FrontMcpServer);
   socketPath?: string;          // Unix socket path (overrides port)
-  cors?: CorsOptions | false;   // default: permissive with built-in adapter (origin: true, credentials: false)
+  cors?: CorsOptions | false;   // default: no CORS headers (same-origin only)
   routes?: HttpRouteConfig[];   // custom HTTP routes (see Custom HTTP routes below)
 }
 ```
@@ -179,11 +179,15 @@ http: {
 
 CORS is configured via the `http.cors` option. It supports three modes:
 
-| Value         | Behavior                                                                     |
-| ------------- | ---------------------------------------------------------------------------- |
-| `undefined`   | **Default** — permissive CORS enabled (`origin: true`, `credentials: false`) |
-| `false`       | CORS disabled entirely (no CORS headers are sent)                            |
-| `CorsOptions` | Custom CORS configuration                                                    |
+| Value         | Behavior                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `undefined`   | **Default** — no CORS headers are sent; a browser will not let another origin read the response |
+| `false`       | Same as the default; kept so a config can say it explicitly                                     |
+| `CorsOptions` | Custom CORS configuration                                                                       |
+
+<Warning>
+**Changed in v1.7.0.** Omitting `cors` used to enable permissive CORS (`origin: true`). It now sends no headers. Pass `cors: { origin: true }` to restore the old behaviour, or better, list the origins that actually need access. Non-browser clients are unaffected — CORS is a browser rule, not a server-side access control. See `BREAKING_CHANGES.v1.md` entry BC-034.
+</Warning>
 
 ```typescript
 interface CorsOptions {
@@ -197,18 +201,18 @@ interface CorsOptions {
 }
 ```
 
-| Field         | Type                                        | Default | Description                                                                                                                                            |
-| ------------- | ------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `origin`      | `boolean \| string \| string[] \| function` | —       | Allowed origins; `true` reflects the request `Origin` header. Defaults to `true` only via the built-in `DEFAULT_CORS` when `cors` is omitted entirely. |
-| `credentials` | `boolean`                                   | `false` | Whether to allow credentials (cookies, authorization headers)                                                                                          |
-| `maxAge`      | `number`                                    | —       | How long (in seconds) browsers may cache preflight responses                                                                                           |
+| Field         | Type                                        | Default | Description                                                                                                                             |
+| ------------- | ------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `origin`      | `boolean \| string \| string[] \| function` | —       | Allowed origins; `true` reflects the request `Origin` header. There is no default — omitting `cors` installs no CORS middleware at all. |
+| `credentials` | `boolean`                                   | `false` | Whether to allow credentials (cookies, authorization headers)                                                                           |
+| `maxAge`      | `number`                                    | —       | How long (in seconds) browsers may cache preflight responses                                                                            |
 
 <Warning>
-The permissive default (`origin: true`, `credentials: false`) only applies when using the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself — FrontMCP does not install CORS middleware automatically.
+CORS middleware is only installed by the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself.
 </Warning>
 
 <Tip>
-An empty `cors: {}` object (without an `origin` key) will **not** enable CORS middleware — the adapter requires an explicit `origin` value. To enable permissive CORS, omit `cors` entirely or pass `cors: { origin: true }`.
+An empty `cors: {}` object (without an `origin` key) will **not** enable CORS middleware — the adapter requires an explicit `origin` value. To allow any origin, pass `cors: { origin: true }`; omitting `cors` sends no headers.
 </Tip>
 
 <Info>
@@ -216,10 +220,10 @@ FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to t
 </Info>
 
 <CodeGroup>
-```ts Default (permissive)
+```ts Default (same-origin)
 @FrontMcp({
   http: { port: 3001 },
-  // cors is undefined → permissive CORS (origin: true, credentials: false)
+  // cors is undefined → no CORS headers; browsers block cross-origin reads
 })
 ```
 

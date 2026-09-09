@@ -1,5 +1,10 @@
-import * as path from 'path';
+import { createRequire } from 'module';
 import { tmpdir } from 'os';
+import * as path from 'path';
+
+import { fileExists, mkdir, mkdtemp, readFileSync, rm, runCmd, writeFile } from '@frontmcp/utils';
+
+import { runCreate } from '../create';
 
 // Mock runCmd to prevent actual package manager execution (used only in Nx scaffold path)
 jest.mock('@frontmcp/utils', () => {
@@ -19,10 +24,6 @@ jest.mock('child_process', () => ({
   ...jest.requireActual('child_process'),
   execSync: mockExecSync,
 }));
-
-import { runCreate } from '../create';
-import { runCmd, mkdtemp, mkdir, rm, readFileSync, writeFile, fileExists } from '@frontmcp/utils';
-import { createRequire } from 'module';
 
 // Capture console output during tests
 let consoleLogs: string[] = [];
@@ -281,6 +282,16 @@ describe('runCreate', () => {
         // Entrypoint
         expect(content).toContain('EXPOSE 3000');
         expect(content).toContain('CMD ["node", "dist/main.js"]');
+      });
+
+      // The SDK binds 127.0.0.1 unless told otherwise, so a published container port would
+      // otherwise reach a server listening only inside the container's own loopback.
+      it('should bind every interface so the published port is reachable', async () => {
+        await runCreate('docker-bind-app', { yes: true, target: 'node' });
+
+        const content = readFileSync(path.join(tempDir, 'docker-bind-app', 'ci', 'Dockerfile'), 'utf8');
+
+        expect(content).toContain('ENV FRONTMCP_BIND_ADDRESS=all');
       });
     });
 

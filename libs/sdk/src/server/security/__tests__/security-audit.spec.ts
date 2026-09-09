@@ -23,15 +23,28 @@ describe('auditSecurityDefaults()', () => {
   });
 
   describe('CORS audit', () => {
-    it('warns when CORS is using permissive default (undefined)', () => {
+    it('reports an omitted cors option as the same-origin default, not a permissive one', () => {
       const findings = auditSecurityDefaults({ cors: undefined }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_PERMISSIVE_DEFAULT');
+      const corsFinding = findings.find((f) => f.code === 'CORS_DISABLED');
       expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('warn');
+      expect(corsFinding!.level).toBe('info');
+    });
+
+    it('emits no warn-level CORS finding when cors is omitted', () => {
+      const findings = auditSecurityDefaults({ cors: undefined }, true);
+      const corsWarnings = findings.filter((f) => f.level === 'warn' && f.code.startsWith('CORS_'));
+      expect(corsWarnings).toEqual([]);
     });
 
     it('warns when origin is explicitly true', () => {
       const findings = auditSecurityDefaults({ cors: { origin: true } }, true);
+      const corsFinding = findings.find((f) => f.code === 'CORS_ORIGIN_TRUE');
+      expect(corsFinding).toBeDefined();
+      expect(corsFinding!.level).toBe('warn');
+    });
+
+    it('still warns about an explicit origin=true under strict mode — strict does not touch CORS', () => {
+      const findings = auditSecurityDefaults({ cors: { origin: true }, security: { strict: true } }, true);
       const corsFinding = findings.find((f) => f.code === 'CORS_ORIGIN_TRUE');
       expect(corsFinding).toBeDefined();
       expect(corsFinding!.level).toBe('warn');
@@ -71,6 +84,12 @@ describe('auditSecurityDefaults()', () => {
       const findings = auditSecurityDefaults({ resolvedBindAddress: '127.0.0.1' }, true);
       const bindFinding = findings.find((f) => f.code === 'BIND_RESTRICTED');
       expect(bindFinding).toBeDefined();
+    });
+
+    it('falls back to the loopback default when no resolved address is passed', () => {
+      const findings = auditSecurityDefaults({}, true);
+      expect(findings.find((f) => f.code === 'BIND_RESTRICTED')).toBeDefined();
+      expect(findings.find((f) => f.code === 'BIND_ALL_INTERFACES')).toBeUndefined();
     });
   });
 
@@ -114,7 +133,7 @@ describe('auditSecurityDefaults()', () => {
       };
       const findings = auditSecurityDefaults(config, true);
 
-      const corsWarn = findings.find((f) => f.code === 'CORS_PERMISSIVE_DEFAULT');
+      const corsWarn = findings.find((f) => f.level === 'warn' && f.code.startsWith('CORS_'));
       const dnsWarn = findings.find((f) => f.code === 'DNS_REBINDING_UNPROTECTED');
       expect(corsWarn).toBeUndefined();
       expect(dnsWarn).toBeUndefined();
@@ -160,8 +179,19 @@ describe('logSecurityFindings()', () => {
 describe('resolveBindAddress()', () => {
   // BREAKING in v1.x: the default was 0.0.0.0. A server that did not mention security bound every
   // interface, which is how an unauthenticated MCP endpoint ended up reachable from the network in a
-  // downstream consumer. Loopback is the safe default; `bindAddress: 'all'` and
-  // `deploymentMode: 'distributed'` are the two documented ways back.
+  // downstream consumer. Loopback is the safe default; `bindAddress: 'all'`, FRONTMCP_BIND_ADDRESS,
+  // and a distributed build (FRONTMCP_DEPLOYMENT_MODE=distributed) are the documented ways back.
+  const originalEnv = process.env['FRONTMCP_BIND_ADDRESS'];
+
+  beforeEach(() => {
+    delete process.env['FRONTMCP_BIND_ADDRESS'];
+  });
+
+  afterAll(() => {
+    if (originalEnv === undefined) delete process.env['FRONTMCP_BIND_ADDRESS'];
+    else process.env['FRONTMCP_BIND_ADDRESS'] = originalEnv;
+  });
+
   it('returns loopback by default — a server that says nothing is local-only', () => {
     expect(resolveBindAddress()).toBe('127.0.0.1');
   });
@@ -197,5 +227,43 @@ describe('resolveBindAddress()', () => {
 
   it('explicit bindAddress takes priority over strict', () => {
     expect(resolveBindAddress({ strict: true, bindAddress: 'all' }, 'standalone')).toBe('0.0.0.0');
+  });
+
+  describe('FRONTMCP_BIND_ADDRESS', () => {
+    // The container opt-in: a Dockerfile cannot reach into the server's TypeScript config, so
+    // without this a published port reaches a process listening only on 127.0.0.1.
+    it('binds all interfaces when set to all', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = 'all';
+      expect(resolveBindAddress()).toBe('0.0.0.0');
+    });
+
+    it('resolves the loopback keyword and a literal address', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = 'loopback';
+      expect(resolveBindAddress()).toBe('127.0.0.1');
+      process.env['FRONTMCP_BIND_ADDRESS'] = '10.1.2.3';
+      expect(resolveBindAddress()).toBe('10.1.2.3');
+    });
+
+    it('tolerates surrounding whitespace', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = '  all  ';
+      expect(resolveBindAddress()).toBe('0.0.0.0');
+    });
+
+    it('is ignored when empty', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = '   ';
+      expect(resolveBindAddress()).toBe('127.0.0.1');
+    });
+
+    it('loses to an explicit bindAddress — config is the more specific statement', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = 'all';
+      expect(resolveBindAddress({ bindAddress: 'loopback' })).toBe('127.0.0.1');
+    });
+
+    it('beats strict mode and the deployment mode', () => {
+      process.env['FRONTMCP_BIND_ADDRESS'] = 'all';
+      expect(resolveBindAddress({ strict: true }, 'standalone')).toBe('0.0.0.0');
+      process.env['FRONTMCP_BIND_ADDRESS'] = 'loopback';
+      expect(resolveBindAddress(undefined, 'distributed')).toBe('127.0.0.1');
+    });
   });
 });

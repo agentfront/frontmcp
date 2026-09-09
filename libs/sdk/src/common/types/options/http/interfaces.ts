@@ -110,16 +110,22 @@ export interface HttpOptionsInterface {
 
   /**
    * CORS configuration.
-   * - `undefined` (default): permissive CORS enabled (all origins, no credentials)
-   * - `false`: CORS disabled entirely
+   * - `undefined` (default): NO CORS headers — same-origin only. A browser will not let another
+   *   origin read the response. Set `{ origin: true }` for the old permissive behaviour.
+   * - `false`: CORS disabled (same effect as the default; kept for explicitness)
    * - `CorsOptions`: custom CORS configuration
    */
   cors?: CorsOptions | false;
 
   /**
    * Security configuration for transport hardening.
-   * These options are opt-in — defaults remain backwards-compatible.
-   * Set `strict: true` to enable all security features at once.
+   *
+   * The defaults are the SAFE choice: the server binds loopback and sends no CORS headers. Reaching
+   * it from another host or another origin is something you opt into — `bindAddress: 'all'`, the
+   * `FRONTMCP_BIND_ADDRESS=all` env var (no rebuild; the right fit for a Dockerfile), or a
+   * distributed build — and an explicit `cors` config.
+   *
+   * Set `strict: true` to enable the remaining hardening (DNS rebinding protection) at once.
    */
   security?: SecurityOptions;
 

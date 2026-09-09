@@ -33,7 +33,9 @@ Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix
 - Only need rate limiting or IP filtering without changing HTTP binding -- use `configure-throttle`
 - Need to configure TLS/HTTPS termination -- handle at the reverse proxy or load balancer level, not in FrontMCP
 
-> **Decision:** Use this skill when you need to customize how the HTTP listener binds (port, socket, prefix) or how it handles CORS; skip if the default port 3000 with permissive CORS is sufficient.
+> **Decision:** Use this skill when you need to customize how the HTTP listener binds (port, socket, prefix, network interface) or how it handles CORS; skip if the defaults are sufficient — port 3000, bound to loopback, sending no CORS headers.
+
+> **Changed in v1.7.0.** The server now binds `127.0.0.1` (was `0.0.0.0`) and omitting `cors` now sends no CORS headers (was `{ origin: true }`). Reaching the server from another host or another origin is an explicit opt-in — see [Network Binding](#network-binding) and [CORS Configuration](#cors-configuration).
 
 ## HttpOptionsInput
 
@@ -46,7 +48,7 @@ Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix
     entryPath: '', // default: '' (root)
     socketPath: undefined, // unix socket path (overrides port)
     cors: {
-      // default: permissive (all origins)
+      // default: undefined — no CORS headers at all
       origin: ['https://myapp.com'],
       credentials: true,
       maxAge: 86400,
@@ -87,15 +89,57 @@ http: {
 }
 ```
 
-## CORS Configuration
+## Network Binding
 
-### Permissive (Default)
+The server binds `127.0.0.1` unless told otherwise — a server that says nothing about security is
+local-only. The effective address is resolved in this order, first match wins:
 
-When `cors` is not specified, the server allows all origins without credentials:
+1. `http.security.bindAddress` — `'loopback'`, `'all'`, or a literal address
+2. The `FRONTMCP_BIND_ADDRESS` environment variable — same three forms
+3. Strict mode (`http.security.strict`) — `0.0.0.0` when distributed, `127.0.0.1` otherwise
+4. A distributed build (`FRONTMCP_DEPLOYMENT_MODE=distributed`) — `0.0.0.0`
+5. The default — `127.0.0.1`
 
 ```typescript
-// All origins allowed (default behavior)
 http: {
+  security: {
+    bindAddress: 'all',  // 0.0.0.0 — reachable from other hosts
+  },
+}
+```
+
+In a container, prefer the environment variable: a Dockerfile cannot reach into the server's
+TypeScript config, and the env var needs no rebuild.
+
+```dockerfile
+ENV FRONTMCP_BIND_ADDRESS=all
+EXPOSE 3000
+```
+
+## CORS Configuration
+
+### Same-origin (Default)
+
+When `cors` is not specified, the server sends **no CORS headers** — a browser will not let another
+origin read the response. Non-browser clients are unaffected: CORS is a browser rule, not a
+server-side access control.
+
+```typescript
+// No CORS headers (default behavior)
+http: {
+}
+```
+
+### Allow Any Origin
+
+The pre-v1.7.0 default. Reflects whatever `Origin` the request carries, so any page a user visits
+can read this server's responses — never use it in production.
+
+```typescript
+http: {
+  cors: {
+    origin: true,
+  },
 }
 ```
 
@@ -345,13 +389,13 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 
 ## Common Patterns
 
-| Pattern               | Correct                                                      | Incorrect                                    | Why                                                                                                               |
-| --------------------- | ------------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Port from environment | `port: Number(process.env.PORT) \|\| 3000`                   | `port: process.env.PORT`                     | The `port` field expects a number; passing a string causes a silent bind failure                                  |
-| CORS with credentials | `cors: { origin: ['https://myapp.com'], credentials: true }` | `cors: { origin: true, credentials: true }`  | Browsers reject `Access-Control-Allow-Origin: *` when credentials are enabled; you must list explicit origins     |
-| Unix socket mode      | `socketPath: '/tmp/my-mcp.sock'` with no `port` field        | Setting both `socketPath` and `port`         | When `socketPath` is set, `port` is silently ignored which can cause confusion during debugging                   |
-| Entry path prefix     | `entryPath: '/api/mcp'` (no trailing slash)                  | `entryPath: '/api/mcp/'` with trailing slash | Trailing slashes cause double-slash issues in route matching (e.g., `/api/mcp//sse`)                              |
-| Disabling CORS        | `cors: false`                                                | Omitting the `cors` field entirely           | Omitting `cors` applies permissive defaults (all origins allowed); set `false` explicitly to send no CORS headers |
+| Pattern               | Correct                                                      | Incorrect                                    | Why                                                                                                                            |
+| --------------------- | ------------------------------------------------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Port from environment | `port: Number(process.env.PORT) \|\| 3000`                   | `port: process.env.PORT`                     | The `port` field expects a number; passing a string causes a silent bind failure                                               |
+| CORS with credentials | `cors: { origin: ['https://myapp.com'], credentials: true }` | `cors: { origin: true, credentials: true }`  | Browsers reject `Access-Control-Allow-Origin: *` when credentials are enabled; you must list explicit origins                  |
+| Unix socket mode      | `socketPath: '/tmp/my-mcp.sock'` with no `port` field        | Setting both `socketPath` and `port`         | When `socketPath` is set, `port` is silently ignored which can cause confusion during debugging                                |
+| Entry path prefix     | `entryPath: '/api/mcp'` (no trailing slash)                  | `entryPath: '/api/mcp/'` with trailing slash | Trailing slashes cause double-slash issues in route matching (e.g., `/api/mcp//sse`)                                           |
+| Allowing cross-origin | `cors: { origin: ['https://myapp.com'] }`                    | Omitting the `cors` field entirely           | Omitting `cors` (like `cors: false`) sends no CORS headers at all; a browser on another origin needs an explicit `origin` list |
 
 ## Verification Checklist
 
@@ -362,8 +406,14 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 - [ ] If `socketPath` is set, `port` is removed or commented out to avoid confusion
 - [ ] `entryPath` does not have a trailing slash
 
+### Network Binding
+
+- [ ] If the server must be reachable from another host, `security.bindAddress` or `FRONTMCP_BIND_ADDRESS` is set — the default is loopback-only
+- [ ] Containers set `FRONTMCP_BIND_ADDRESS=all` so the published port reaches the process
+
 ### CORS
 
+- [ ] `cors` is set only if a browser on another origin needs access — omitting it sends no headers
 - [ ] If `credentials: true`, `origin` lists explicit allowed origins (not `true` or `*`)
 - [ ] `maxAge` is set to a reasonable value for production (e.g., `86400` for 24 hours)
 - [ ] Dynamic origin function handles `undefined` origin (non-browser requests)
@@ -390,7 +440,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | CORS errors in the browser console                    | Origin not included in the `cors.origin` list or `credentials: true` with wildcard origin                            | Add the frontend origin to the `origin` array and ensure credentials and origin settings are compatible  |
 | Unix socket file not created                          | Missing write permissions on the target directory or stale socket file from a previous run                           | Check directory permissions and remove the stale `.sock` file before restarting                          |
 | Routes return 404 after setting `entryPath`           | Client is still requesting the root path without the prefix                                                          | Update client base URL to include the entry path (e.g., `http://localhost:3000/api/mcp`)                 |
-| Server binds but external clients cannot connect      | Server bound to `localhost` or `127.0.0.1` inside a container                                                        | Set `host: '0.0.0.0'` or use Docker port mapping to expose the container port                            |
+| Server binds but external clients cannot connect      | The default bind address is `127.0.0.1`, which a published container port cannot reach                               | Set `FRONTMCP_BIND_ADDRESS=all` in the container (or `http.security.bindAddress: 'all'` in the config)   |
 | `413 Payload Too Large` with JSON-RPC envelope        | Request body exceeded `bodyLimit` (default `'4mb'`)                                                                  | Raise `http.bodyLimit` to fit the payload, or move large blobs to a separate upload endpoint             |
 | Server throws at startup mentioning a "reserved" path | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics` | Rename the custom route to a non-reserved path                                                           |
 | Custom route returns JSON when HTML/bytes expected    | The Express adapter defaults responses to `application/json`                                                         | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |

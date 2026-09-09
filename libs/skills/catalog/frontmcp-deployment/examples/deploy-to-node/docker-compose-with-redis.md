@@ -70,6 +70,8 @@ RUN npx frontmcp build --target node
 FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+# The server binds 127.0.0.1 by default, which a published container port cannot reach.
+ENV FRONTMCP_BIND_ADDRESS=all
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/yarn.lock ./

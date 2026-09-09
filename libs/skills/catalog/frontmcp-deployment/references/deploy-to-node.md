@@ -130,7 +130,10 @@ Create a `.env` file or set variables in your deployment environment:
 # Server
 PORT=3000
 NODE_ENV=production
-HOST=0.0.0.0
+# The server binds 127.0.0.1 by default. Set this only when it must be reachable
+# from another host — a container, a VM, direct access. Behind a reverse proxy on
+# the same machine, leave it unset.
+FRONTMCP_BIND_ADDRESS=all
 
 # Redis (required for session storage in production)
 REDIS_URL=redis://localhost:6379
@@ -139,13 +142,13 @@ REDIS_URL=redis://localhost:6379
 LOG_LEVEL=info
 ```
 
-| Variable    | Description                         | Default       |
-| ----------- | ----------------------------------- | ------------- |
-| `PORT`      | HTTP port for the server            | `3000`        |
-| `NODE_ENV`  | Runtime environment                 | `development` |
-| `REDIS_URL` | Redis connection string for storage | (none)        |
-| `HOST`      | Network interface to bind           | `0.0.0.0`     |
-| `LOG_LEVEL` | Logging verbosity                   | `info`        |
+| Variable                | Description                                                        | Default                  |
+| ----------------------- | ------------------------------------------------------------------ | ------------------------ |
+| `PORT`                  | HTTP port for the server                                           | `3000`                   |
+| `NODE_ENV`              | Runtime environment                                                | `development`            |
+| `REDIS_URL`             | Redis connection string for storage                                | (none)                   |
+| `FRONTMCP_BIND_ADDRESS` | Network interface to bind: `all`, `loopback`, or a literal address | `loopback` (`127.0.0.1`) |
+| `LOG_LEVEL`             | Logging verbosity                                                  | `info`                   |
 
 ## Step 5: Health Checks
 
