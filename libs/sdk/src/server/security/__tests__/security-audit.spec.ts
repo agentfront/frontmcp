@@ -23,61 +23,52 @@ describe('auditSecurityDefaults()', () => {
   });
 
   describe('CORS audit', () => {
-    it('reports an omitted cors option as the same-origin default, not a permissive one', () => {
-      const findings = auditSecurityDefaults({ cors: undefined }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_DISABLED');
-      expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('info');
-    });
+    // The audit must match ExpressHostAdapter, which installs the CORS middleware only when
+    // `origin` is neither undefined nor false. Every config below that yields no middleware has to
+    // report CORS_DISABLED, or the audit tells operators they have CORS when they do not.
+    it.each([
+      ['omitted', undefined],
+      ['false', false as const],
+      ['an empty object', {}],
+      ['an explicit origin: false', { origin: false }],
+    ])('reports %s as no-CORS-headers, not a permissive or configured state', (_label, cors) => {
+      const findings = auditSecurityDefaults({ cors }, true);
 
-    it('emits no warn-level CORS finding when cors is omitted', () => {
-      const findings = auditSecurityDefaults({ cors: undefined }, true);
-      const corsWarnings = findings.filter((f) => f.level === 'warn' && f.code.startsWith('CORS_'));
-      expect(corsWarnings).toEqual([]);
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'CORS_DISABLED', level: 'info' }));
+      expect(findings).not.toContainEqual(expect.objectContaining({ code: 'CORS_CONFIGURED' }));
+      expect(findings.filter((f) => f.level === 'warn' && f.code.startsWith('CORS_'))).toEqual([]);
     });
 
     it('warns when origin is explicitly true', () => {
       const findings = auditSecurityDefaults({ cors: { origin: true } }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_ORIGIN_TRUE');
-      expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('warn');
+
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'CORS_ORIGIN_TRUE', level: 'warn' }));
     });
 
     it('still warns about an explicit origin=true under strict mode — strict does not touch CORS', () => {
       const findings = auditSecurityDefaults({ cors: { origin: true }, security: { strict: true } }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_ORIGIN_TRUE');
-      expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('warn');
-    });
 
-    it('info when CORS is disabled', () => {
-      const findings = auditSecurityDefaults({ cors: false }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_DISABLED');
-      expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('info');
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'CORS_ORIGIN_TRUE', level: 'warn' }));
     });
 
     it('info when CORS is explicitly configured', () => {
       const findings = auditSecurityDefaults({ cors: { origin: 'https://example.com' } }, true);
-      const corsFinding = findings.find((f) => f.code === 'CORS_CONFIGURED');
-      expect(corsFinding).toBeDefined();
-      expect(corsFinding!.level).toBe('info');
+
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'CORS_CONFIGURED', level: 'info' }));
     });
   });
 
   describe('bind address audit', () => {
     it('warns when bound to 0.0.0.0 in non-distributed mode', () => {
       const findings = auditSecurityDefaults({ resolvedBindAddress: '0.0.0.0' }, true);
-      const bindFinding = findings.find((f) => f.code === 'BIND_ALL_INTERFACES');
-      expect(bindFinding).toBeDefined();
-      expect(bindFinding!.level).toBe('warn');
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'BIND_ALL_INTERFACES', level: 'warn' }));
     });
 
     it('info when bound to 0.0.0.0 in distributed mode', () => {
       const findings = auditSecurityDefaults({ resolvedBindAddress: '0.0.0.0', deploymentMode: 'distributed' }, true);
-      const bindFinding = findings.find((f) => f.code === 'BIND_ALL_INTERFACES_DISTRIBUTED');
-      expect(bindFinding).toBeDefined();
-      expect(bindFinding!.level).toBe('info');
+      expect(findings).toContainEqual(
+        expect.objectContaining({ code: 'BIND_ALL_INTERFACES_DISTRIBUTED', level: 'info' }),
+      );
     });
 
     it('info when bound to loopback', () => {
@@ -96,9 +87,7 @@ describe('auditSecurityDefaults()', () => {
   describe('DNS rebinding audit', () => {
     it('warns when DNS rebinding protection is disabled', () => {
       const findings = auditSecurityDefaults({}, true);
-      const dnsFinding = findings.find((f) => f.code === 'DNS_REBINDING_UNPROTECTED');
-      expect(dnsFinding).toBeDefined();
-      expect(dnsFinding!.level).toBe('warn');
+      expect(findings).toContainEqual(expect.objectContaining({ code: 'DNS_REBINDING_UNPROTECTED', level: 'warn' }));
     });
 
     it('info when DNS rebinding protection is enabled', () => {
@@ -119,6 +108,25 @@ describe('auditSecurityDefaults()', () => {
       const findings = auditSecurityDefaults(config, true);
       const strictFinding = findings.find((f) => f.code === 'STRICT_MODE_ENABLED');
       expect(strictFinding).toBeDefined();
+    });
+
+    it('does not claim loopback binding in distributed mode, where strict still binds 0.0.0.0', () => {
+      const findings = auditSecurityDefaults(
+        { security: { strict: true }, deploymentMode: 'distributed', resolvedBindAddress: '0.0.0.0' },
+        true,
+      );
+      const strictFinding = findings.find((f) => f.code === 'STRICT_MODE_ENABLED');
+
+      expect(strictFinding).toBeDefined();
+      expect(strictFinding?.message).not.toContain('loopback');
+      expect(strictFinding?.message).toContain('DNS rebinding protection');
+    });
+
+    it('still names loopback binding for a standalone strict deployment', () => {
+      const findings = auditSecurityDefaults({ security: { strict: true } }, true);
+      const strictFinding = findings.find((f) => f.code === 'STRICT_MODE_ENABLED');
+
+      expect(strictFinding?.message).toContain('loopback binding');
     });
 
     it('shows strict mode hint when strict is not set', () => {

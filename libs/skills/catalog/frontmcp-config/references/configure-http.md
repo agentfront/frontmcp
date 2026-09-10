@@ -118,11 +118,15 @@ EXPOSE 3000
 
 ## CORS Configuration
 
-### Same-origin (Default)
+### No CORS Headers (Default)
 
-When `cors` is not specified, the server sends **no CORS headers** — a browser will not let another
-origin read the response. Non-browser clients are unaffected: CORS is a browser rule, not a
-server-side access control.
+When `cors` is not specified, the server sends **no CORS headers**. A cross-origin request still
+reaches the server and is served normally — the browser simply refuses to let the calling page read
+the response. Non-browser clients are unaffected: CORS is a browser rule, **not server-side access
+control**. If you need to keep callers out, use authentication.
+
+`cors: {}` and `cors: { origin: false }` behave identically to omitting the option — the middleware
+is installed only when `origin` is set to something other than `false`.
 
 ```typescript
 // No CORS headers (default behavior)
@@ -183,11 +187,11 @@ http: {
 
 ### CORS Fields
 
-| Field         | Type                                        | Default      | Description                        |
-| ------------- | ------------------------------------------- | ------------ | ---------------------------------- |
-| `origin`      | `boolean \| string \| string[] \| function` | `true` (all) | Allowed origins                    |
-| `credentials` | `boolean`                                   | `false`      | Allow cookies/auth headers         |
-| `maxAge`      | `number`                                    | —            | Preflight cache duration (seconds) |
+| Field         | Type                                        | Default | Description                                                                        |
+| ------------- | ------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `origin`      | `boolean \| string \| string[] \| function` | none    | Allowed origins. No default — omitting it (or `false`) installs no CORS middleware |
+| `credentials` | `boolean`                                   | `false` | Allow cookies/auth headers                                                         |
+| `maxAge`      | `number`                                    | —       | Preflight cache duration (seconds)                                                 |
 
 ## Request Body Limits
 

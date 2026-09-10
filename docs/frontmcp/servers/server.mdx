@@ -72,7 +72,7 @@ Everything else is optional with sensible defaults.
     entryPath?: '',             // MUST match PRM resourcePath in .well-known
     hostFactory?: /* custom host */,
     socketPath?: '/tmp/mcp.sock',  // Unix socket path (overrides port)
-    cors?: CorsOptions | false, // default: no CORS headers (same-origin only)
+    cors?: CorsOptions | false, // default: no CORS headers (browsers block cross-origin reads)
   },
 
   /** Transport & session lifecycle (NEW in v0.6) */
@@ -154,7 +154,7 @@ http: {
   entryPath?: string;           // default ''; MUST match the PRM resourcePath in .well-known
   hostFactory?: FrontMcpServer | ((cfg) => FrontMcpServer);
   socketPath?: string;          // Unix socket path (overrides port)
-  cors?: CorsOptions | false;   // default: no CORS headers (same-origin only)
+  cors?: CorsOptions | false;   // default: no CORS headers (browsers block cross-origin reads)
   routes?: HttpRouteConfig[];   // custom HTTP routes (see Custom HTTP routes below)
 }
 ```
@@ -179,11 +179,13 @@ http: {
 
 CORS is configured via the `http.cors` option. It supports three modes:
 
-| Value         | Behavior                                                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| `undefined`   | **Default** — no CORS headers are sent; a browser will not let another origin read the response |
-| `false`       | Same as the default; kept so a config can say it explicitly                                     |
-| `CorsOptions` | Custom CORS configuration                                                                       |
+| Value         | Behavior                                                                            |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `undefined`   | **Default** — no CORS headers are sent                                              |
+| `false`       | Same as the default; kept so a config can say it explicitly                         |
+| `CorsOptions` | Custom config — headers are only sent when `origin` is something other than `false` |
+
+A cross-origin request still **reaches the server** and is served normally; the browser simply refuses to let the calling page read the response. CORS is a browser rule, not server-side access control — use authentication for that.
 
 <Warning>
 **Changed in v1.7.0.** Omitting `cors` used to enable permissive CORS (`origin: true`). It now sends no headers. Pass `cors: { origin: true }` to restore the old behaviour, or better, list the origins that actually need access. Non-browser clients are unaffected — CORS is a browser rule, not a server-side access control. See `BREAKING_CHANGES.v1.md` entry BC-034.

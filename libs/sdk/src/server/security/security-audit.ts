@@ -61,19 +61,25 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
 
   // CORS audit.
   //
-  // `undefined` and `false` are the SAME runtime state — server.instance.ts collapses both to "no
-  // CORS middleware" — so they must report identically. Omitting `cors` is the safe default now,
-  // not a permissive one, and warning about it would send every well-configured production server
-  // chasing a problem it does not have. The only permissive state left is an explicit
-  // `{ origin: true }`, and that stays a warning whatever `strict` says: strict mode does not
-  // touch CORS, so it has nothing to suppress here.
-  if (config.cors === undefined || config.cors === false) {
+  // The audit must report what the adapter actually does. ExpressHostAdapter installs the CORS
+  // middleware only when `origin` is neither `undefined` nor `false`, so `cors: undefined`,
+  // `cors: false`, `cors: {}` and `cors: { origin: false }` are ALL the same runtime state — no
+  // headers — and must report identically. Reporting `cors: {}` as "explicitly configured" told
+  // operators they had CORS when the middleware was never installed.
+  //
+  // Omitting `cors` is the safe default now, not a permissive one, so it is not a warning. The
+  // only permissive state left is an explicit `{ origin: true }`, and that stays a warning
+  // whatever `strict` says: strict mode does not touch CORS, so it has nothing to suppress here.
+  const corsOrigin = config.cors === false ? undefined : config.cors?.origin;
+  if (corsOrigin === undefined || corsOrigin === false) {
     findings.push({
       level: 'info',
       code: 'CORS_DISABLED',
-      message: 'No CORS headers are sent — browsers will block cross-origin reads of this server.',
+      message:
+        'No CORS headers are sent. Cross-origin requests still reach the server — a browser just ' +
+        'will not let the calling page read the response. CORS is not server-side access control.',
     });
-  } else if (config.cors.origin === true) {
+  } else if (corsOrigin === true) {
     findings.push({
       level: 'warn',
       code: 'CORS_ORIGIN_TRUE',
@@ -138,7 +144,11 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     findings.push({
       level: 'info',
       code: 'STRICT_MODE_ENABLED',
-      message: 'Strict security mode is enabled: loopback binding and DNS rebinding protection.',
+      message:
+        config.deploymentMode === 'distributed'
+          ? 'Strict security mode is enabled: DNS rebinding protection. Binding is unchanged for a ' +
+            'distributed deployment — it still listens on all interfaces so peers can reach it.'
+          : 'Strict security mode is enabled: loopback binding and DNS rebinding protection.',
     });
   } else {
     findings.push({

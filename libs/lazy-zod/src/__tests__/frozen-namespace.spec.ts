@@ -49,6 +49,26 @@ describe('createLazyZ over a frozen namespace', () => {
     expect(z.NEVER).toBe(realZ.NEVER);
   });
 
+  it('forwards writes to the namespace instead of silently landing on the empty target', () => {
+    // A mutable stand-in: the write must reach the namespace, not be swallowed by the
+    // proxy's own (empty) target, which would make the value unreadable afterwards.
+    const ns = { string: () => realZ.string() } as unknown as typeof realZ;
+    const z = createLazyZ(ns);
+
+    (z as unknown as Record<string, unknown>)['marker'] = 42;
+
+    expect((ns as unknown as Record<string, unknown>)['marker']).toBe(42);
+    expect((z as unknown as Record<string, unknown>)['marker']).toBe(42);
+  });
+
+  it('surfaces a frozen namespace rejecting a write, rather than pretending it worked', () => {
+    const z = createLazyZ(makeFrozenNamespace());
+
+    expect(() => {
+      (z as unknown as Record<string, unknown>)['marker'] = 42;
+    }).toThrow(TypeError);
+  });
+
   it('reports the frozen namespace for has / ownKeys / descriptors', () => {
     const ns = makeFrozenNamespace();
     const z = createLazyZ(ns);

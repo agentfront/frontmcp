@@ -47,7 +47,7 @@ Enable strict security mode for production:
 
 ## CORS Configuration
 
-By default FrontMCP sends **no CORS headers at all** — a browser will not let another origin read the response. Non-browser clients (the MCP CLI, an agent runtime, curl) are unaffected: CORS is a browser rule, not a server-side access control.
+By default FrontMCP sends **no CORS headers at all**. A cross-origin request still reaches the server and is served normally — the browser simply refuses to let the calling page read the response. Non-browser clients (the MCP CLI, an agent runtime, curl) are unaffected: CORS is a browser rule, **not server-side access control**. If you need to keep callers out, use authentication.
 
 If a browser on another origin needs access, say so explicitly:
 
