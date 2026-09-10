@@ -54,7 +54,8 @@ server {
 # .env
 PORT=3000
 NODE_ENV=production
-HOST=0.0.0.0
+# No FRONTMCP_BIND_ADDRESS here on purpose: the server binds 127.0.0.1 by default,
+# which is exactly right when NGINX on the same host is the only thing talking to it.
 REDIS_URL=redis://localhost:6379
 LOG_LEVEL=info
 ```

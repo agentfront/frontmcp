@@ -4,6 +4,47 @@ import { HEAVY_FACTORIES } from './factories';
 import { LazyZodSchema, wrapLazy } from './lazy-schema';
 
 /**
+ * Build the lazy `z` Proxy over a zod namespace object.
+ *
+ * The Proxy target is a fresh empty object, NOT the namespace itself. zod >= 4.6
+ * `Object.freeze`s its namespace, so every export became a non-configurable,
+ * non-writable DATA property — and a `get` trap that returns anything other than
+ * the value the target holds violates a Proxy invariant:
+ *
+ *   TypeError: 'get' on proxy: property 'object' is a read-only and
+ *   non-configurable data property on the proxy target but the proxy did not
+ *   return its actual value
+ *
+ * which is exactly what swapping in a lazy factory does. An empty, extensible
+ * target owns nothing, so no invariant applies; every trap forwards to
+ * `namespace` instead. Exported for tests — the public entry point is `z`.
+ */
+export function createLazyZ(namespace: typeof realZ): typeof realZ {
+  return new Proxy({} as typeof realZ, {
+    get(_target, key, receiver) {
+      if (typeof key === 'string' && HEAVY_FACTORIES.has(key)) {
+        const realFactory = (namespace as unknown as Record<string, (...a: unknown[]) => unknown>)[key];
+        return (...args: unknown[]) =>
+          wrapLazy(
+            new LazyZodSchema(() => realFactory.call(namespace, ...args) as ReturnType<typeof realFactory> as never),
+          );
+      }
+      return Reflect.get(namespace, key, receiver);
+    },
+    set: (_target, key, value) => Reflect.set(namespace, key, value),
+    has: (_target, key) => Reflect.has(namespace, key),
+    ownKeys: () => Reflect.ownKeys(namespace),
+    getOwnPropertyDescriptor(_target, key) {
+      const desc = Reflect.getOwnPropertyDescriptor(namespace, key);
+      // `ownKeys` reports keys the empty target does not own, so each must be
+      // reported configurable or the invariant check rejects it.
+      return desc ? { ...desc, configurable: true } : undefined;
+    },
+    getPrototypeOf: () => Reflect.getPrototypeOf(namespace),
+  }) as typeof realZ;
+}
+
+/**
  * Lazy-by-default `z`. Proxy over real zod's `z`:
  *  - Heavy compound factories (`object`, `union`, `discriminatedUnion`,
  *    `intersection`, `record`, `tuple`) return a `LazyZodSchema` Proxy —
@@ -17,18 +58,7 @@ import { LazyZodSchema, wrapLazy } from './lazy-schema';
  * namespace so `z.infer<T>`, `z.ZodObject<Shape>`, `z.ZodRawShape`, etc.
  * resolve at the TYPE level (a const alone doesn't expose the namespace).
  */
-const lazyProxy: typeof realZ = new Proxy(realZ, {
-  get(target, key, receiver) {
-    if (typeof key === 'string' && HEAVY_FACTORIES.has(key)) {
-      const realFactory = (target as unknown as Record<string, (...a: unknown[]) => unknown>)[key];
-      return (...args: unknown[]) =>
-        wrapLazy(new LazyZodSchema(() => realFactory.call(target, ...args) as ReturnType<typeof realFactory> as never));
-    }
-    return Reflect.get(target, key, receiver);
-  },
-}) as typeof realZ;
-
-export const z: typeof realZ = lazyProxy;
+export const z: typeof realZ = createLazyZ(realZ);
 
 /* eslint-disable @typescript-eslint/no-namespace */
 // Type-only namespace merged with the `const z` above so consumers can write

@@ -50,6 +50,8 @@ USER frontmcp
 
 # Environment defaults
 ENV NODE_ENV=production
+# The server binds 127.0.0.1 by default, which a published container port cannot reach.
+ENV FRONTMCP_BIND_ADDRESS=all
 ENV PORT=3000
 
 EXPOSE 3000

@@ -55,7 +55,7 @@
     "reflect-metadata": "^0.2.2",
     "vectoriadb": "^2.3.2",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.1"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
@@ -143,7 +143,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "test-exclude": "^7.0.1",
-    "zod": "4.4.3"
+    "zod": "4.6.1"
   },
   "workspaces": [
     "apps/*",

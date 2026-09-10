@@ -663,3 +663,47 @@ Use inputSchema with ZodRawShape instead.
 ```
 
 **Codemod available:** yes
+
+---
+
+## BC-033: HTTP server binds loopback by default
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** high
+
+The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said nothing about security previously published itself on every interface, and since auth is opt-in that put unauthenticated tools, jobs and telemetry on the network by default. If your server must be reachable from another host — a container, a VM, behind a reverse proxy — set `http.security.bindAddress: 'all'` (or a specific address), or set the `FRONTMCP_BIND_ADDRESS=all` environment variable, which needs no rebuild and is the right fit for a Dockerfile or compose file. Distributed builds (`frontmcp build --target distributed`, which sets `FRONTMCP_DEPLOYMENT_MODE=distributed`) still bind all interfaces automatically. Local development and stdio transports are unaffected.
+
+**Before:**
+
+```typescript
+// no security config → server bound 0.0.0.0 (all interfaces)
+```
+
+**After:**
+
+```typescript
+http: { security: { bindAddress: 'all' } } // or FRONTMCP_BIND_ADDRESS=all
+```
+
+**Codemod available:** no
+
+---
+
+## BC-034: HTTP server sends no CORS headers by default
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+CORS now defaults to off — no headers, so a browser will not let another origin read the response. The previous default reflected any request Origin, which meant any page a developer visited could read a local server's responses. If a browser on another origin needs access, configure it explicitly: `http.cors: { origin: [...] }`, or `http.cors: { origin: true }` to restore the old permissive behaviour. Non-browser clients are unaffected — CORS is not a server-side access control.
+
+**Before:**
+
+```typescript
+// no cors config → { origin: true, credentials: false } (any origin reflected)
+```
+
+**After:**
+
+```typescript
+http: { cors: { origin: ['https://app.example.com'] } }
+```
+
+**Codemod available:** no

@@ -83,7 +83,7 @@ interface HttpOptions {
     | FrontMcpServer
     | ((config: HttpOptions) => FrontMcpServer);
   socketPath?: string;                             // Unix socket path (overrides port)
-  cors?: CorsOptions | false;                      // CORS config (default: permissive with built-in adapter)
+  cors?: CorsOptions | false;                      // CORS config (default: none; browsers block cross-origin reads)
   security?: SecurityOptions;                      // Transport hardening (strict, bindAddress, DNS rebinding protection)
 }
 ```

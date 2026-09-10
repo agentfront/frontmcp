@@ -101,14 +101,19 @@ export const httpOptionsSchema = z.object({
   socketPath: z.string().optional(),
   /**
    * CORS configuration.
-   * - undefined (default): permissive CORS (all origins, no credentials)
-   * - false: CORS disabled
+   * - undefined (default): NO CORS headers — same-origin only. A browser will not let another
+   *   origin read the response. Set `{ origin: true }` for the old permissive behaviour.
+   * - false: CORS disabled (same effect as the default; kept for explicitness)
    * - CorsOptions object: custom CORS config
    */
   cors: z.union([z.literal(false), corsOptionsSchema]).optional(),
   /**
    * Security configuration for transport hardening.
-   * Opt-in — defaults remain backwards-compatible.
+   *
+   * The defaults are the SAFE choice: the server binds loopback and sends no CORS headers. Reaching
+   * it from another host or another origin is something you opt into — `bindAddress: 'all'`, the
+   * `FRONTMCP_BIND_ADDRESS=all` env var (no rebuild; the right fit for a Dockerfile), or a
+   * distributed build — and an explicit `cors` config.
    */
   security: z
     .object({
