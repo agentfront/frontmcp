@@ -110,16 +110,25 @@ export interface HttpOptionsInterface {
 
   /**
    * CORS configuration.
-   * - `undefined` (default): permissive CORS enabled (all origins, no credentials)
-   * - `false`: CORS disabled entirely
-   * - `CorsOptions`: custom CORS configuration
+   * - `undefined` (default): NO CORS headers. A cross-origin request still REACHES the server and
+   *   is served normally — the browser simply refuses to let the calling page read the response.
+   *   CORS is a browser rule, not server-side access control; use auth for that. Set
+   *   `{ origin: true }` for the old permissive behaviour.
+   * - `false`: same runtime state as the default — no headers; kept so a config can say so
+   * - `CorsOptions`: custom CORS configuration. Headers are only sent when `origin` is set to
+   *   something other than `false` — `{}` and `{ origin: false }` install no middleware.
    */
   cors?: CorsOptions | false;
 
   /**
    * Security configuration for transport hardening.
-   * These options are opt-in — defaults remain backwards-compatible.
-   * Set `strict: true` to enable all security features at once.
+   *
+   * The defaults are the SAFE choice: the server binds loopback and sends no CORS headers. Reaching
+   * it from another host or another origin is something you opt into — `bindAddress: 'all'`, the
+   * `FRONTMCP_BIND_ADDRESS=all` env var (no rebuild; the right fit for a Dockerfile), or a
+   * distributed build — and an explicit `cors` config.
+   *
+   * Set `strict: true` to enable the remaining hardening (DNS rebinding protection) at once.
    */
   security?: SecurityOptions;
 
@@ -178,8 +187,12 @@ export interface HttpOptionsInterface {
  */
 export interface SecurityOptions {
   /**
-   * Enable strict security defaults.
-   * When true: loopback binding (standalone), restrictive CORS, DNS rebinding protection.
+   * Enable strict security defaults: DNS rebinding protection, and loopback binding for a
+   * standalone deployment. A distributed deployment still binds all interfaces — peers have to
+   * reach it — so strict mode does not change binding there.
+   *
+   * Strict mode does NOT change CORS. Omitting `cors` already sends no headers; an explicit
+   * `{ origin: true }` stays permissive whatever `strict` says.
    * @default false
    */
   strict?: boolean;
@@ -190,9 +203,12 @@ export interface SecurityOptions {
    * - `'all'`: bind to 0.0.0.0 (all interfaces)
    * - string: specific IP address
    *
-   * Default (no strict): '0.0.0.0' (backwards compatible)
-   * Default (strict, standalone): '127.0.0.1'
-   * Default (strict, distributed): '0.0.0.0'
+   * Resolved in this order, first match wins:
+   * 1. this option
+   * 2. the `FRONTMCP_BIND_ADDRESS` env var (`'all'` / `'loopback'` / an address)
+   * 3. strict mode — '0.0.0.0' when distributed, '127.0.0.1' otherwise
+   * 4. a distributed deployment — '0.0.0.0'
+   * 5. the default — '127.0.0.1'
    */
   bindAddress?: 'loopback' | 'all' | string;
 

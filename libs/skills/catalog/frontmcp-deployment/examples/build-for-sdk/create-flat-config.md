@@ -42,6 +42,10 @@ async function main() {
           case 'multiply':
             return { result: input.a * input.b };
           case 'divide':
+            // `z.number()` accepts 0, so guard the divisor: 1/0 is Infinity, which JSON
+            // serialises as null, and 0/0 is NaN, which the output schema rejects with an
+            // opaque error. Fail with a message the caller can act on instead.
+            if (input.b === 0) throw new Error('Cannot divide by zero');
             return { result: input.a / input.b };
         }
       }),

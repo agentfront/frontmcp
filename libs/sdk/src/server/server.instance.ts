@@ -14,7 +14,14 @@ import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
 import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
-const DEFAULT_CORS: CorsOptions = { origin: true, credentials: false };
+/**
+ * No CORS headers unless the server asks for them — same-origin only.
+ *
+ * This was `{ origin: true }`, which reflects any request Origin and lets any web page the user
+ * visits read a local server's responses. A server that wants browser access from another origin
+ * now says so: `cors: { origin: [...] }`, or `cors: { origin: true }` for the old behaviour.
+ */
+const DEFAULT_CORS: CorsOptions | undefined = undefined;
 
 export class FrontMcpServerInstance extends FrontMcpServer {
   config: HttpOptions;

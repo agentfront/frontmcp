@@ -2836,7 +2836,7 @@ __metadata:
     webpack-cli: "npm:^5.1.4"
     wrangler: "npm:^4.100.0"
     yaml: "npm:^2.9.0"
-    zod: "npm:^4.4.3"
+    zod: "npm:^4.6.1"
   languageName: unknown
   linkType: soft
 
@@ -23674,10 +23674,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:4.4.3":
-  version: 4.4.3
-  resolution: "zod@npm:4.4.3"
-  checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
+"zod@npm:4.6.1":
+  version: 4.6.1
+  resolution: "zod@npm:4.6.1"
+  checksum: 10c0/ef427982cc9b89e25a2559f5d28c9ee29504332de35c50523c2c61bbbb1f55a688713f7d39ddcb2e4fb4ef905432699b9cac7510e7b7d4da3f41099e35601dd2
   languageName: node
   linkType: hard
 

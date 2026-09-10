@@ -514,6 +514,9 @@ FROM node:24-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
+# The server binds 127.0.0.1 by default, which a published port cannot reach.
+# A container is the case where listening on every interface is the intent.
+ENV FRONTMCP_BIND_ADDRESS=all
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
@@ -550,6 +553,7 @@ services:
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
       - PORT=\${PORT:-3000}
+      - FRONTMCP_BIND_ADDRESS=all
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
@@ -577,6 +581,7 @@ services:
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
       - PORT=\${PORT:-3000}
+      - FRONTMCP_BIND_ADDRESS=all
 
 # Selective rebuild:
 #   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
@@ -590,6 +595,8 @@ const TEMPLATE_ENV_DOCKER_CI = `
 # Application
 PORT=3000
 NODE_ENV=development
+# The server binds 127.0.0.1 by default; a published container port needs every interface
+FRONTMCP_BIND_ADDRESS=all
 
 # Redis - use 'redis' (service name) as host inside Docker network
 REDIS_HOST=redis
