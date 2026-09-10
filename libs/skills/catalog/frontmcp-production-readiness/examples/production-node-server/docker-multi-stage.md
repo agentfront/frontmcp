@@ -33,6 +33,8 @@ RUN npx frontmcp build
 FROM node:24-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# The server binds 127.0.0.1 by default, which a published container port cannot reach.
+ENV FRONTMCP_BIND_ADDRESS=all
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 COPY --from=builder /app/dist ./dist

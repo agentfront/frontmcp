@@ -328,5 +328,27 @@
     "new": "Use inputSchema with ZodRawShape instead.",
     "migration": "Remove rawInputSchema and rawOutputSchema from @Tool() decorator options. Use inputSchema with ZodRawShape format.",
     "codemod": "yes"
+  },
+  {
+    "id": "BC-033",
+    "title": "HTTP server binds loopback by default",
+    "package": "@frontmcp/sdk",
+    "category": "change",
+    "severity": "high",
+    "old": "// no security config \u2192 server bound 0.0.0.0 (all interfaces)",
+    "new": "http: { security: { bindAddress: 'all' } } // or FRONTMCP_BIND_ADDRESS=all",
+    "migration": "The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said nothing about security previously published itself on every interface, and since auth is opt-in that put unauthenticated tools, jobs and telemetry on the network by default. If your server must be reachable from another host \u2014 a container, a VM, behind a reverse proxy \u2014 set `http.security.bindAddress: 'all'` (or a specific address), or set the `FRONTMCP_BIND_ADDRESS=all` environment variable, which needs no rebuild and is the right fit for a Dockerfile or compose file. Distributed builds (`frontmcp build --target distributed`, which sets `FRONTMCP_DEPLOYMENT_MODE=distributed`) still bind all interfaces automatically. Local development and stdio transports are unaffected.",
+    "codemod": "no"
+  },
+  {
+    "id": "BC-034",
+    "title": "HTTP server sends no CORS headers by default",
+    "package": "@frontmcp/sdk",
+    "category": "change",
+    "severity": "medium",
+    "old": "// no cors config \u2192 { origin: true, credentials: false } (any origin reflected)",
+    "new": "http: { cors: { origin: ['https://app.example.com'] } }",
+    "migration": "CORS now defaults to off \u2014 no headers, so a browser will not let another origin read the response. The previous default reflected any request Origin, which meant any page a developer visited could read a local server's responses. If a browser on another origin needs access, configure it explicitly: `http.cors: { origin: [...] }`, or `http.cors: { origin: true }` to restore the old permissive behaviour. Non-browser clients are unaffected \u2014 CORS is not a server-side access control.",
+    "codemod": "no"
   }
 ]

@@ -69,15 +69,34 @@ const server = await create({
     tool({
       name: 'calculate',
       description: 'Perform calculation',
-      inputSchema: { expression: z.string() },
+      inputSchema: {
+        a: z.number(),
+        b: z.number(),
+        operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+      },
       outputSchema: { result: z.number() },
-    })((input) => ({ result: eval(input.expression) })),
+    })((input) => {
+      switch (input.operation) {
+        case 'add':
+          return { result: input.a + input.b };
+        case 'subtract':
+          return { result: input.a - input.b };
+        case 'multiply':
+          return { result: input.a * input.b };
+        case 'divide':
+          // `z.number()` accepts 0, so guard the divisor: 1/0 is Infinity, which JSON
+          // serialises as null, and 0/0 is NaN, which the output schema rejects with an
+          // opaque error. Fail with a message the caller can act on instead.
+          if (input.b === 0) throw new Error('Cannot divide by zero');
+          return { result: input.a / input.b };
+      }
+    }),
   ],
   cacheKey: 'my-service', // Reuse same instance on repeated calls
 });
 
 // Call tools directly
-const result = await server.callTool('calculate', { expression: '2 + 2' });
+const result = await server.callTool('calculate', { a: 2, b: 2, operation: 'add' });
 
 // List available tools
 const { tools } = await server.listTools();
@@ -85,6 +104,13 @@ const { tools } = await server.listTools();
 // Clean up
 await server.dispose();
 ```
+
+> **Never `eval()` tool input.** A tool's arguments come from the MCP caller, or from an LLM acting
+> on caller-controlled prompts — they are untrusted by definition. `eval` on that value runs with the
+> embedding process's full authority: environment credentials, the filesystem, the network, and
+> `process.getBuiltinModule('child_process')`. Output-schema validation cannot help, because the side
+> effects happen before the result is validated. Model the operation in the schema, as above, so the
+> set of things the tool can do is fixed at design time.
 
 ### CreateConfig Fields
 

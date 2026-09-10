@@ -5,7 +5,11 @@ icon: 'lock'
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'deployment', 'production', 'hosting', 'cors', 'transport security', 'dns rebinding', 'typescript']
 ---
 
-FrontMCP provides transport-level security controls for CORS, network binding, DNS rebinding protection, and host header validation. In development, defaults are permissive for ease of use. In production, FrontMCP logs security warnings and offers a **strict mode** that enables all protections at once.
+FrontMCP provides transport-level security controls for CORS, network binding, DNS rebinding protection, and host header validation. The defaults are the safe choice — the server binds loopback and sends no CORS headers — so reaching it from another host or another origin is something you opt into. In production, FrontMCP logs a security audit at startup and offers a **strict mode** that enables the remaining protections at once.
+
+<Warning>
+  **Changed in v1.7.0.** `security.bindAddress` now defaults to `'loopback'` (was `'0.0.0.0'`), and omitting `cors` now sends no CORS headers (was `{ origin: true }`). A container or VM that must be reachable from outside now needs an explicit opt-in — see [Bind Address](#bind-address). See `BREAKING_CHANGES.v1.md` entries BC-033 and BC-034.
+</Warning>
 
 ## Quick Start
 
@@ -33,17 +37,19 @@ Enable strict security mode for production:
 
 ## Security Options
 
-| Field                                            | Type                              | Default     | Description                          |
-| ------------------------------------------------ | --------------------------------- | ----------- | ------------------------------------ |
-| `security.strict`                                | boolean                           | `false`     | Enable all security features at once |
-| `security.bindAddress`                           | `'loopback'` \| `'all'` \| string | `'0.0.0.0'` | Network bind address                 |
-| `security.dnsRebindingProtection.enabled`        | boolean                           | `false`     | Validate Host and Origin headers     |
-| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | ---         | Allowed Host header values           |
-| `security.dnsRebindingProtection.allowedOrigins` | string[]                          | ---         | Allowed Origin header values         |
+| Field                                            | Type                              | Default      | Description                          |
+| ------------------------------------------------ | --------------------------------- | ------------ | ------------------------------------ |
+| `security.strict`                                | boolean                           | `false`      | Enable all security features at once |
+| `security.bindAddress`                           | `'loopback'` \| `'all'` \| string | `'loopback'` | Network bind address                 |
+| `security.dnsRebindingProtection.enabled`        | boolean                           | `false`      | Validate Host and Origin headers     |
+| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | ---          | Allowed Host header values           |
+| `security.dnsRebindingProtection.allowedOrigins` | string[]                          | ---          | Allowed Origin header values         |
 
 ## CORS Configuration
 
-By default, FrontMCP uses permissive CORS (`origin: true`) for development convenience. In production, you should restrict origins explicitly:
+By default FrontMCP sends **no CORS headers at all**. A cross-origin request still reaches the server and is served normally — the browser simply refuses to let the calling page read the response. Non-browser clients (the MCP CLI, an agent runtime, curl) are unaffected: CORS is a browser rule, **not server-side access control**. If you need to keep callers out, use authentication.
+
+If a browser on another origin needs access, say so explicitly:
 
 ```typescript
 @FrontMcp({
@@ -57,7 +63,7 @@ By default, FrontMCP uses permissive CORS (`origin: true`) for development conve
 })
 ```
 
-To disable CORS entirely (same-origin only):
+`cors: false` is the same runtime state as omitting the option — no headers — and exists only to say so explicitly:
 
 ```typescript
 @FrontMcp({
@@ -67,19 +73,60 @@ To disable CORS entirely (same-origin only):
 })
 ```
 
+To restore the pre-v1.7.0 permissive behaviour, ask for it by name:
+
+```typescript
+@FrontMcp({
+  http: {
+    cors: { origin: true },
+  },
+})
+```
+
 <Warning>
-  `origin: true` reflects the request origin header, effectively allowing **any** website to make cross-origin requests. This is safe for local development but should never be used in production.
+  `origin: true` reflects the request origin header, effectively allowing **any** website to make cross-origin requests — including any page a developer happens to have open while a local server is running. It should never be used in production.
 </Warning>
 
 ## Bind Address
 
-Controls which network interface the server listens on:
+Controls which network interface the server listens on. **The default is `127.0.0.1`** — a server that says nothing about security is local-only.
 
 | Value        | Binds To    | Use Case                                         |
 | ------------ | ----------- | ------------------------------------------------ |
 | `'loopback'` | `127.0.0.1` | Local-only access (development, reverse proxy)   |
 | `'all'`      | `0.0.0.0`   | All interfaces (distributed pods, direct access) |
 | IP string    | Specific IP | Custom network binding                           |
+
+The effective address is resolved in this order, first match wins:
+
+1. `http.security.bindAddress` in the server config
+2. The `FRONTMCP_BIND_ADDRESS` environment variable (`all`, `loopback`, or a literal address)
+3. Strict mode — `0.0.0.0` for a distributed deployment, `127.0.0.1` otherwise
+4. Distributed deployment mode — `0.0.0.0`
+5. The default — `127.0.0.1`
+
+### Containers and VMs
+
+A container publishes a port and expects the process inside to listen on every interface, but a Dockerfile cannot reach into the server's TypeScript config. Set the environment variable instead — no rebuild required:
+
+```dockerfile
+ENV FRONTMCP_BIND_ADDRESS=all
+EXPOSE 3000
+CMD ["node", "dist/main.js"]
+```
+
+```yaml
+services:
+  app:
+    environment:
+      - FRONTMCP_BIND_ADDRESS=all
+```
+
+Projects scaffolded by `frontmcp create` with the Docker target already set this.
+
+<Note>
+  Distributed builds (`frontmcp build --target distributed`, which sets `FRONTMCP_DEPLOYMENT_MODE=distributed`) bind all interfaces automatically — a distributed deployment must be reachable by its peers. Serverless targets (Vercel, Lambda, Cloudflare) never bind a port at all, so this setting does not apply to them.
+</Note>
 
 ### Strict Mode Behavior
 
@@ -181,19 +228,19 @@ deployments must configure their own body limits.
 In production (`NODE_ENV=production`) or distributed mode, FrontMCP logs security warnings at startup:
 
 ```
-[Security] CORS_PERMISSIVE_DEFAULT: CORS is using the permissive default (origin: true).
+[Security] CORS_ORIGIN_TRUE: CORS origin=true allows all origins to make cross-origin requests.
 [Security] BIND_ALL_INTERFACES: Server bound to 0.0.0.0 — accessible from all network interfaces.
 [Security] DNS_REBINDING_UNPROTECTED: DNS rebinding protection is disabled.
 [Security] STRICT_MODE_HINT: To enable strict security defaults, set security.strict = true.
 ```
 
-These are warnings only — no defaults are changed. Use them to audit your configuration before going to production.
+A server on the defaults logs only info-level findings — `CORS_DISABLED` and `BIND_RESTRICTED` — because the defaults are already the safe choice. The audit reports; it never changes behaviour. Use it to check what your configuration actually exposes before going to production.
 
 ## Production Checklist
 
-- [ ] Set explicit `cors.origin` (not `true`)
+- [ ] Set explicit `cors.origin` (not `true`) — only if a browser on another origin needs access
 - [ ] Enable `security.dnsRebindingProtection` with `allowedHosts`
-- [ ] Set `security.bindAddress` to `'loopback'` if behind a reverse proxy
+- [ ] Confirm the bind address: loopback behind a reverse proxy, `FRONTMCP_BIND_ADDRESS=all` in a container
 - [ ] Configure TLS termination at the reverse proxy layer
 - [ ] Set `NODE_ENV=production` for security audit warnings
 - [ ] Review startup logs for `[Security]` warnings

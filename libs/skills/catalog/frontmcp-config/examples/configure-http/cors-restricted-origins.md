@@ -5,7 +5,7 @@ level: basic
 description: 'Configure CORS to allow only specific frontend origins with credentials.'
 tags: [config, browser, http, cors, restricted, origins]
 features:
-  - 'Restricting CORS to explicit origins instead of the permissive default'
+  - 'Naming the origins a browser may read from — omitting `cors` sends no headers at all'
   - 'Enabling `credentials: true` with specific origins (required -- browsers reject `*` with credentials)'
   - 'Setting `maxAge` to reduce preflight request overhead'
   - 'Reading port from an environment variable with a fallback'
@@ -41,7 +41,7 @@ class Server {}
 
 ## What This Demonstrates
 
-- Restricting CORS to explicit origins instead of the permissive default
+- Naming the origins a browser may read from — omitting `cors` sends no headers at all
 - Enabling `credentials: true` with specific origins (required -- browsers reject `*` with credentials)
 - Setting `maxAge` to reduce preflight request overhead
 - Reading port from an environment variable with a fallback

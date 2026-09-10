@@ -31,8 +31,8 @@ export const DEFAULT_EXPRESS_BODY_LIMIT = '4mb';
 export interface ExpressHostAdapterOptions {
   /**
    * CORS configuration.
-   * At the adapter level, CORS is disabled by default (no middleware installed).
-   * Note: FrontMcpServerInstance provides a permissive default when `cors` is omitted.
+   * The middleware is installed only when `origin` is set to something other than `false`, so
+   * omitting `cors` — or passing `{}` / `{ origin: false }` — sends no CORS headers at all.
    */
   cors?: CorsOptions;
 
