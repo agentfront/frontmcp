@@ -14,7 +14,7 @@ import { Job, JobContext } from '@frontmcp/sdk';
   permissions: [{ action: 'execute', scopes: ['reports:run'] }],
 })
 export default class ScopedReportJob extends JobContext {
-  async execute() {
-    return { done: true };
+  async execute(input: { range: string }) {
+    return { done: input.range.length > 0 };
   }
 }
