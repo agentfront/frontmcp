@@ -35,17 +35,17 @@ Create a class extending `JobContext<In, Out>` and implement the `execute(input:
 
 ### JobMetadata Fields
 
-| Field          | Type                     | Required | Default          | Description                                |
-| -------------- | ------------------------ | -------- | ---------------- | ------------------------------------------ |
-| `name`         | `string`                 | Yes      | --               | Unique job name                            |
-| `inputSchema`  | `ZodRawShape`            | Yes      | --               | Zod raw shape for input validation         |
-| `outputSchema` | `ZodRawShape \| ZodType` | Yes      | --               | Zod schema for output validation           |
-| `description`  | `string`                 | No       | --               | Human-readable description                 |
-| `timeout`      | `number`                 | No       | `300000` (5 min) | Maximum execution time in milliseconds     |
-| `retry`        | `RetryPolicy`            | No       | --               | Retry configuration (see below)            |
-| `tags`         | `string[]`               | No       | --               | Categorization tags                        |
-| `labels`       | `Record<string, string>` | No       | --               | Key-value labels for filtering             |
-| `permissions`  | `JobPermission[]`        | No       | --               | Array of permission rules (one per action) |
+| Field          | Type                     | Required | Default          | Description                                                                                        |
+| -------------- | ------------------------ | -------- | ---------------- | -------------------------------------------------------------------------------------------------- |
+| `name`         | `string`                 | Yes      | --               | Unique job name                                                                                    |
+| `inputSchema`  | `ZodRawShape`            | Yes      | --               | Zod raw shape for input validation                                                                 |
+| `outputSchema` | `ZodRawShape \| ZodType` | Yes      | --               | Zod schema for output validation                                                                   |
+| `description`  | `string`                 | No       | --               | Human-readable description                                                                         |
+| `timeout`      | `number`                 | No       | `300000` (5 min) | Maximum execution time in milliseconds                                                             |
+| `retry`        | `RetryPolicy`            | No       | --               | Retry configuration (see below)                                                                    |
+| `tags`         | `string[]`               | No       | --               | Categorization tags                                                                                |
+| `labels`       | `Record<string, string>` | No       | --               | Key-value labels for filtering                                                                     |
+| `permissions`  | `JobPermission[]`        | No       | --               | Array of permission rules. Multiple rules may target the same action; all matching rules must pass |
 
 ### Basic Example
 
