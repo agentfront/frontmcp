@@ -4,8 +4,9 @@
  * Detects LLM platform from clientInfo and formats tools/results accordingly.
  */
 
-import type { Tool as McpTool, CallToolResult, TextContent, ImageContent } from '@frontmcp/protocol';
-import type { LLMPlatform, ClientInfo } from './client.types';
+import type { CallToolResult, ImageContent, Tool as McpTool, TextContent } from '@frontmcp/protocol';
+
+import type { ClientInfo, LLMPlatform } from './client.types';
 
 /**
  * Client info presets for each LLM platform.
@@ -223,7 +224,9 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
       );
 
     case 'vercel-ai': {
-      const result: VercelAITools = {};
+      // Null prototype: the keys are tool names, so a tool called `__proto__`
+      // would otherwise re-parent this object mid-build.
+      const result: VercelAITools = Object.create(null) as VercelAITools;
       for (const tool of tools) {
         result[tool.name] = {
           description: tool.description ?? `Execute ${tool.name}`,
@@ -357,7 +360,7 @@ function extractStructuredResult(result: CallToolResult): FormattedToolResult {
  */
 export function formatResultForPlatform(result: CallToolResult, platform: LLMPlatform): FormattedToolResult {
   // Handle toolResult-based response (newer MCP SDK versions)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const flexResult = result as any;
   if ('toolResult' in flexResult && flexResult.toolResult !== undefined) {
     // For toolResult responses, return as-is for most platforms

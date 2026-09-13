@@ -304,10 +304,15 @@ describe('buildToolNamespaces — prototype keys (GHSA-cmrw-xhcg-6gf9)', () => {
     expect(skipped).toEqual([{ name: '__proto__.pwned', reason: 'prototype-key' }]);
   });
 
-  it('rejects a prototype key in the METHOD position too', () => {
-    const { skipped } = buildToolNamespaces([{ name: 'acme.__proto__' }] as never, callTool as never);
+  it('still allows a prototype key in the METHOD position', () => {
+    // Harmless there: the bucket has a null prototype, so `acme.__proto__`
+    // lands as a plain own property and reaches no intrinsic. A tool
+    // legitimately named this keeps working.
+    const { namespaces, skipped } = buildToolNamespaces([{ name: 'acme.__proto__' }] as never, callTool as never);
 
-    expect(skipped).toEqual([{ name: 'acme.__proto__', reason: 'prototype-key' }]);
+    expect(skipped).toEqual([]);
+    expect(typeof namespaces['acme']['__proto__']).toBe('function');
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 
   it('keeps building the safe namespaces around a hostile one', () => {

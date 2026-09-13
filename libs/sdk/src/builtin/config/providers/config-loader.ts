@@ -115,14 +115,23 @@ async function loadYamlConfig(basePath: string, configPath: string): Promise<Rec
   return {};
 }
 
+/** Keys that reach a prototype rather than the object in hand. */
+const UNSAFE_MERGE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+
 /**
  * Deep merge two objects, with source values taking precedence.
  * Arrays are replaced, not merged.
+ *
+ * Prototype keys are skipped, matching the guard in `env-loader.ts`. The sources
+ * here are a trusted on-disk config file and already-sanitized env vars, so this
+ * is not a live vector — but a merge that walks arbitrary keys should not be the
+ * one place in the repo that omits the check.
  */
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const result = { ...target };
 
   for (const key in source) {
+    if (UNSAFE_MERGE_KEYS.has(key)) continue;
     const sourceVal = source[key];
     const targetVal = result[key];
 
