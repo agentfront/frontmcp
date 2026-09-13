@@ -11,6 +11,10 @@ FrontMCP provides transport-level security controls for CORS, network binding, D
   **Changed in v1.7.0.** `security.bindAddress` now defaults to `'loopback'` (was `'0.0.0.0'`), and omitting `cors` now sends no CORS headers (was `{ origin: true }`). A container or VM that must be reachable from outside now needs an explicit opt-in — see [Bind Address](#bind-address). See `BREAKING_CHANGES.v1.md` entries BC-033 and BC-034.
 </Warning>
 
+<Warning>
+  **Changed in v1.7.2 (BC-035).** `security.dnsRebindingProtection` now defaults to **on**, with `allowedHosts` derived from what the server listens on. A proxied deployment should name its public hostname — see [DNS Rebinding Protection](#dns-rebinding-protection). Fixes GHSA-mc9g-v2cp-vfff.
+</Warning>
+
 ## Quick Start
 
 Enable strict security mode for production:
@@ -41,8 +45,8 @@ Enable strict security mode for production:
 | ------------------------------------------------ | --------------------------------- | ------------ | ------------------------------------ |
 | `security.strict`                                | boolean                           | `false`      | Enable all security features at once |
 | `security.bindAddress`                           | `'loopback'` \| `'all'` \| string | `'loopback'` | Network bind address                 |
-| `security.dnsRebindingProtection.enabled`        | boolean                           | `false`      | Validate Host and Origin headers     |
-| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | ---          | Allowed Host header values           |
+| `security.dnsRebindingProtection.enabled`        | boolean                           | `true`       | Validate Host and Origin headers     |
+| `security.dnsRebindingProtection.allowedHosts`   | string[]                          | *derived*    | Allowed Host header values           |
 | `security.dnsRebindingProtection.allowedOrigins` | string[]                          | ---          | Allowed Origin header values         |
 
 ## CORS Configuration
@@ -149,24 +153,52 @@ security: {
 
 ## DNS Rebinding Protection
 
-Validates the HTTP `Host` and `Origin` headers against an allowlist. When a request arrives with an unrecognized host, the server responds with `403 Forbidden`.
+Validates the HTTP `Host`, `X-Forwarded-Host` and `Origin` headers against an allowlist. A request naming a host this server does not answer to gets `403 Forbidden` — before routing and before the body is read, so the MCP endpoint, the OAuth routes, the SSE transport and any custom route are all covered.
+
+**On by default since v1.7.2.** You only configure it when the derived default cannot know your hostname.
+
+### What the default allows
+
+With no `allowedHosts` configured, the list is derived from what the process actually listens on:
+
+- `localhost`, `127.0.0.1`, `[::1]` — each with and without the bound port
+- the specific NIC address, when the server binds one
+
+Matching is case-insensitive, and `example.com` / `example.com:80` / `example.com:443` compare equal.
+
+### Deployments behind a proxy
+
+A server bound to a routable address (`0.0.0.0`, `::`, a specific NIC) is reached under a hostname the process cannot know. FrontMCP does **not** enforce a derived list there — it logs a warning and leaves host checking off, so upgrading a patch version does not take a proxied deployment offline. Name your public host to turn it on:
 
 ```typescript
 security: {
   dnsRebindingProtection: {
-    enabled: true,
-    allowedHosts: ['localhost:3000', 'api.example.com'],
+    allowedHosts: ['api.example.com', 'api.example.com:8443'],
     allowedOrigins: ['https://app.example.com'],
   },
 }
 ```
 
-- **`allowedHosts`**: Matches the `Host` header exactly (include port if non-standard)
-- **`allowedOrigins`**: Matches the `Origin` header exactly (include scheme)
-- If `allowedOrigins` is set, requests **without** an `Origin` header are allowed through (non-browser clients)
+Or via the environment, which pairs with `FRONTMCP_BIND_ADDRESS` in a container:
+
+```bash
+FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
+```
+
+To turn it off entirely:
+
+```typescript
+security: { dnsRebindingProtection: { enabled: false } }
+```
+
+### Semantics
+
+- **`allowedHosts`**: matched against `Host`, and against every hop of `X-Forwarded-Host` when present. A poisoned forwarded host is rejected even when `Host` itself is valid, because issuer and OAuth-discovery URLs can be derived from it.
+- **`allowedOrigins`**: matched against `Origin`, scheme included.
+- A request with **no** `Origin` is allowed through: non-browser clients never send one, and a rebound page always does.
 
 <Note>
-  DNS rebinding attacks use a malicious domain that resolves to `127.0.0.1`, tricking a browser into making requests to your local server. Host validation blocks these requests.
+  A DNS rebinding attack points an attacker-controlled domain at `127.0.0.1`, so the victim's browser treats a request to a local server as same-origin. Binding to loopback does not help — loopback is the destination — and neither does CORS, because the browser genuinely considers the request same-origin. Validating `Host` is the server-side defence. See GHSA-mc9g-v2cp-vfff.
 </Note>
 
 ## Request Body Limits
@@ -239,7 +271,7 @@ A server on the defaults logs only info-level findings — `CORS_DISABLED` and `
 ## Production Checklist
 
 - [ ] Set explicit `cors.origin` (not `true`) — only if a browser on another origin needs access
-- [ ] Enable `security.dnsRebindingProtection` with `allowedHosts`
+- [ ] Set `security.dnsRebindingProtection.allowedHosts` (or `FRONTMCP_ALLOWED_HOSTS`) to your public hostname — on a routable bind the derived default is not enforced
 - [ ] Confirm the bind address: loopback behind a reverse proxy, `FRONTMCP_BIND_ADDRESS=all` in a container
 - [ ] Configure TLS termination at the reverse proxy layer
 - [ ] Set `NODE_ENV=production` for security audit warnings
