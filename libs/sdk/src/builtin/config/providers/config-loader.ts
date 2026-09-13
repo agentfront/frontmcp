@@ -119,6 +119,27 @@ async function loadYamlConfig(basePath: string, configPath: string): Promise<Rec
 const UNSAFE_MERGE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
+ * Copy a value with every unsafe key removed, at any depth.
+ *
+ * Skipping unsafe keys during the merge is not enough on its own: a subtree the
+ * target does not already have is assigned WHOLESALE, so it would arrive
+ * straight from the YAML with its keys intact. `js-yaml` keeps `__proto__` as an
+ * ordinary own property, and an object carrying one pollutes whatever it is
+ * later spread or merged into.
+ */
+function stripUnsafeKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripUnsafeKeys);
+  if (!value || typeof value !== 'object') return value;
+
+  const clean: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (UNSAFE_MERGE_KEYS.has(key)) continue;
+    clean[key] = stripUnsafeKeys(nested);
+  }
+  return clean;
+}
+
+/**
  * Deep merge two objects, with source values taking precedence.
  * Arrays are replaced, not merged.
  *
@@ -146,8 +167,9 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
         // Both are objects - deep merge
         result[key] = deepMerge(targetVal as Record<string, unknown>, sourceVal as Record<string, unknown>);
       } else {
-        // Replace value
-        result[key] = sourceVal;
+        // Replace value — sanitized, because an unmerged subtree arrives exactly
+        // as the source had it.
+        result[key] = stripUnsafeKeys(sourceVal);
       }
     }
   }

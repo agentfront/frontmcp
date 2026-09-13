@@ -6,11 +6,11 @@
  * rather than a live vector — but a merge over arbitrary keys should not be the
  * one place in the repo that omits the guard `env-loader.ts` already applies.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { z } from '@frontmcp/lazy-zod';
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { deepMerge, loadConfig } from '../config-loader';
 
@@ -31,6 +31,15 @@ function assertNotReparented(merged: Record<string, unknown>): void {
   expect(merged['polluted']).toBeUndefined();
   // `constructor` must still resolve to the real one, not a config value.
   expect(merged.constructor).toBe(Object);
+
+  // No unsafe key may survive as an OWN property either. `prototype` in
+  // particular re-parents nothing and shadows nothing, so the checks above
+  // would not notice it — but a config object carrying it is still a merge that
+  // copied a key it was told to skip.
+  for (const key of UNSAFE_KEYS) {
+    expect(Object.prototype.hasOwnProperty.call(merged, key)).toBe(false);
+  }
+
   // And nothing reached the global intrinsics either.
   expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   expect((Object as unknown as Record<string, unknown>)['polluted']).toBeUndefined();
@@ -101,18 +110,28 @@ describe('loadConfig — YAML with prototype keys', () => {
       'utf8',
     );
 
-    const schema = z.object({
+    // Capture the merged object BEFORE the schema sees it. `z.object` strips
+    // unknown keys, so asserting on the parsed result alone would pass even if
+    // the raw merge had been re-parented or had copied an unsafe key.
+    const raw: Record<string, unknown>[] = [];
+    const inner = z.object({
       name: z.string().default('default'),
       nested: z.object({ value: z.string().default('') }).default({ value: '' }),
     });
+    const schema = z.preprocess((value) => {
+      raw.push(value as Record<string, unknown>);
+      return value;
+    }, inner) as unknown as typeof inner;
 
     const config = await loadConfig(schema, { basePath: dir, loadYaml: true, loadEnv: false });
 
     // The legitimate keys still load…
     expect(config.name).toBe('from-yaml');
     expect(config.nested.value).toBe('kept');
-    // …and nothing was re-parented or reached an intrinsic.
-    assertNotReparented(config as unknown as Record<string, unknown>);
-    assertNotReparented(config.nested as unknown as Record<string, unknown>);
+
+    // …and the object the schema was handed is clean, not merely its output.
+    expect(raw).toHaveLength(1);
+    assertNotReparented(raw[0]);
+    assertNotReparented(raw[0]['nested'] as Record<string, unknown>);
   });
 });
