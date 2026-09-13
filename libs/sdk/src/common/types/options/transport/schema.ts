@@ -233,7 +233,10 @@ export const persistenceConfigSchema = z
  */
 export const eventStoreConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  provider: z.enum(['memory', 'redis']).optional().default('memory'),
+  // 'sqlite' is supported by createEventStore and the TS interface but was
+  // missing from this enum, so a valid `provider: 'sqlite'` config failed
+  // validation.
+  provider: z.enum(['memory', 'redis', 'sqlite']).optional().default('memory'),
   maxEvents: z.number().int().positive().optional().default(10000),
   ttlMs: z.number().int().positive().optional().default(300000),
   redis: redisOptionsSchema.optional(),
