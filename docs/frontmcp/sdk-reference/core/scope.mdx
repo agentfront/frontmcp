@@ -218,6 +218,11 @@ Get the event store (if configured).
 get eventStore(): EventStore | undefined
 ```
 
+This is the **scope-wide** store, shared by every session. Transports must not
+hand it to a session directly — wrap it with `createSessionScopedEventStore(store, sessionId)`
+so a client cannot replay another session's stream with a borrowed
+`Last-Event-ID` (GHSA-84j6-jc92-77jm, fixed in 1.7.2).
+
 ### tasks
 
 Get the task registry for MCP 2025-11-25 background tasks (if enabled).
