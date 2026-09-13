@@ -266,13 +266,17 @@ class ImportCsvJob extends JobContext {
 
 Control who can interact with jobs using the `permissions` field. **`permissions` is an array** of rules; each rule grants access to a single `action` and lists the roles, scopes, and/or custom predicate required for that action.
 
+**Requires 1.7.2 or later.** Before 1.7.2 (GHSA-58v2-gpcc-jmqv) the `permissions` array was validated and stored but never evaluated — every job was reachable by every caller who could reach `execute_job`. On older versions do not rely on this field for access control.
+
+Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. Enforcement happens in `JobExecutionManager`, so background runs and workflow steps are covered, and `list_jobs` hides entries the caller could not run. A denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
+
 ### Permission Rule Shape
 
 ```typescript
 interface JobPermission {
   action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular!
-  roles?: string[]; // user must have one of these roles
-  scopes?: string[]; // token must include all of these scopes
+  roles?: string[]; // caller must have one of these roles
+  scopes?: string[]; // token must include one of these scopes
   custom?: (authInfo: Partial<Record<string, unknown>>) => boolean | Promise<boolean>;
 }
 ```
@@ -418,7 +422,7 @@ class DataApp {}
 
 ### Enabling the Jobs System
 
-**Auto-enable (issue #408):** declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) is enough — the jobs subsystem comes up with in-memory stores by default and the management tools (`execute_job`, `list_jobs`, `get_job_status`, `register_job`, `remove_job`) are registered automatically so agents can invoke them. No `@FrontMcp({ jobs: { enabled: true } })` is required for the happy path.
+**Auto-enable (issue #408):** declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) is enough — the jobs subsystem comes up with in-memory stores by default and the management tools (`execute_job`, `list_jobs`, `get_job_status`, `remove_job`) are registered automatically so agents can invoke them. `register_job` is added only when `jobs.allowDynamicRegistration` is `true`. No `@FrontMcp({ jobs: { enabled: true } })` is required for the happy path.
 
 **When to configure `@FrontMcp({ jobs })` explicitly:** override the in-memory default with persistent storage (Redis recommended for multi-replica HA) so job state, progress, logs, and outputs survive retries and server restarts.
 
@@ -450,17 +454,27 @@ Setting `jobs: { enabled: false }` is an explicit opt-out — declared jobs will
 
 Once jobs are registered, the SDK exposes five MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
 
-| Tool             | Purpose                                                                  |
-| ---------------- | ------------------------------------------------------------------------ |
-| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters   |
-| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)       |
-| `get_job_status` | Get the run state for a `runId` returned by `execute_job`                |
-| `register_job`   | Register a dynamic job at runtime (sandboxed; `hideFromDiscovery: true`) |
-| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)                 |
+| Tool             | Purpose                                                                |
+| ---------------- | ---------------------------------------------------------------------- |
+| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters |
+| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)     |
+| `get_job_status` | Get the run state for a `runId` returned by `execute_job`              |
+| `register_job`   | Register a dynamic job at runtime — **opt-in**, see below              |
+| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)               |
 
 Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `remove_workflow`.
 
-For finer-grained control (e.g. omit `register_job` / `remove_job` in production), opt out of auto-registration by importing the tool classes manually:
+`register_job` / `register_workflow` take a **raw script string** and register it as an executable job. Since 1.7.2 they are not registered unless you opt in:
+
+```typescript
+@FrontMcp({ jobs: { enabled: true, allowDynamicRegistration: true } })
+```
+
+Leave it off unless an agent is genuinely meant to author jobs — with it on, any caller who reaches the tool list can author and run code on the server.
+
+`get_job_status` / `get_workflow_status` return only runs started by the calling subject; a run record carries the job's inputs and results, so a foreign `runId` reads as "not found".
+
+For finer-grained control, opt out of auto-registration by importing the tool classes manually:
 
 ```typescript
 import { App, ExecuteJobTool, GetJobStatusTool, ListJobsTool } from '@frontmcp/sdk';

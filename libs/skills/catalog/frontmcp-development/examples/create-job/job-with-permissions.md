@@ -112,6 +112,8 @@ class DataServer {}
 ## What This Demonstrates
 
 - Declarative `permissions` as an array of `{ action, roles, scopes, custom }` rules
+  (**enforced from 1.7.2 onward** — see GHSA-58v2-gpcc-jmqv; earlier versions
+  stored the rules without evaluating them)
 - Using `tags` and `labels` for categorization and filtering
 - The `job()` function builder for simple jobs that need no class
 - Full server registration with `jobs.enabled: true` and a Redis store
