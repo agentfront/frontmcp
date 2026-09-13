@@ -48,13 +48,21 @@ export function publishDashboardOptions(options: DashboardPluginOptions): void {
   publishedOptions = options;
 }
 
-/** Whether two configurations would behave identically. */
+/**
+ * Whether two configurations would behave identically.
+ *
+ * Compares every field that changes what a dashboard serves — `cdn` included,
+ * since `generateDashboardHtml` builds the script URLs and the external
+ * entrypoint from it, so a silent swap would serve one server's HTML with
+ * another's CDN.
+ */
 function sameConfiguration(a: DashboardPluginOptions, b: DashboardPluginOptions): boolean {
   return (
     a.basePath === b.basePath &&
     a.enabled === b.enabled &&
     a.auth?.enabled === b.auth?.enabled &&
-    a.auth?.token === b.auth?.token
+    a.auth?.token === b.auth?.token &&
+    JSON.stringify(a.cdn ?? {}) === JSON.stringify(b.cdn ?? {})
   );
 }
 

@@ -149,6 +149,21 @@ describe('DashboardHttpPlugin', () => {
       }
     });
 
+    it('warns when only the CDN settings differ', () => {
+      // `generateDashboardHtml` builds its script URLs and external entrypoint
+      // from `cdn`, so a silent swap serves one server's page with another's CDN.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ cdn: { react: 'https://a.example/react' } }));
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ cdn: { react: 'https://b.example/react' } }));
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('process-wide'));
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
     it('does not warn when the same configuration is published twice', () => {
       // `init()` publishes from both the constructor and dynamicProviders.
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
