@@ -41,6 +41,9 @@ export class FrontMcpServerInstance extends FrontMcpServer {
 
   private setupDefaults() {
     if (typeof this.config.hostFactory === 'function') {
+      // Forward `security` to a custom host too — it used to be dropped here, so
+      // a hostFactory server silently ran with no host validation at all
+      // (GHSA-mc9g-v2cp-vfff).
       const { hostFactory, ...config } = this.config;
       this.host = this.config.hostFactory(config);
     } else if (this.config.hostFactory !== undefined) {
@@ -59,6 +62,12 @@ export class FrontMcpServerInstance extends FrontMcpServer {
         ...(this.config.security ? { security: this.config.security } : {}),
         ...(this.config.bodyLimit !== undefined ? { bodyLimit: this.config.bodyLimit } : {}),
         ...(this.config.urlencodedLimit !== undefined ? { urlencodedLimit: this.config.urlencodedLimit } : {}),
+        // What this process will actually listen on — the DNS-rebinding
+        // allow-list is derived from it when none is configured.
+        listen: {
+          bindAddress: resolveBindAddress(this.config.security, getRuntimeContext().deployment),
+          ...(this.config.socketPath ? { socketPath: this.config.socketPath } : { port: this.config.port }),
+        },
       });
     }
   }
