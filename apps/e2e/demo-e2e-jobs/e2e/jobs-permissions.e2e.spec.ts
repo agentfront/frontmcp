@@ -204,6 +204,16 @@ describe('Jobs/workflows permission enforcement (GHSA-58v2-gpcc-jmqv)', () => {
   });
 
   describe('run isolation', () => {
+    it('refuses a run id that belongs to nobody', async () => {
+      // A record with neither an owner nor a session cannot be attributed, and
+      // its inputs and results are exactly what this check protects.
+      await withClient(asAdmin, async (mcp) => {
+        const result = await mcp.tools.call('get_job_status', { runId: '00000000-0000-0000-0000-000000000000' });
+
+        expect(result.isError).toBe(true);
+      });
+    });
+
     it('does not expose another session run to a different caller', async () => {
       const runId = await withClient(asAdmin, async (mcp) => {
         const started = await mcp.tools.call('execute_job', {
