@@ -54,12 +54,29 @@ export function createSessionScopedEventStore(store: EventStore, sessionId: stri
   };
 
   /**
-   * Whether an event id was minted for this session.
+   * The scoped stream an event belongs to, or undefined when it is not ours.
    *
-   * Stores build ids as `<streamId>:<sequence>`, so a scoped id carries the
-   * session prefix. Anything else belongs to another session, or is forged.
+   * Ownership is resolved by ASKING the backing store, not by parsing the event
+   * id: the `EventStore` contract says nothing about id format, and a store
+   * returning opaque ids would otherwise make a session look like a stranger to
+   * its own events and lose its replay on reconnect. Every store FrontMCP ships
+   * implements the lookup.
+   *
+   * The prefix check below is the fallback for a store that does not, and it is
+   * sound for the `<streamId>:<sequence>` shape those stores use.
    */
-  const ownsEvent = (eventId: EventId): boolean => String(eventId).startsWith(prefix);
+  const resolveOwnedStream = async (eventId: EventId): Promise<StreamId | undefined> => {
+    const lookup = (store as EventStoreWithLookup).getStreamIdForEventId;
+    if (lookup) {
+      const resolved = await lookup.call(store, eventId);
+      return resolved !== undefined && String(resolved).startsWith(prefix) ? resolved : undefined;
+    }
+
+    if (!String(eventId).startsWith(prefix)) return undefined;
+    const value = String(eventId);
+    const lastColon = value.lastIndexOf(':');
+    return lastColon === -1 ? undefined : (value.slice(0, lastColon) as StreamId);
+  };
 
   return {
     async storeEvent(streamId: StreamId, message: JSONRPCMessage): Promise<EventId> {
@@ -67,31 +84,23 @@ export function createSessionScopedEventStore(store: EventStore, sessionId: stri
     },
 
     async getStreamIdForEventId(eventId: EventId): Promise<StreamId | undefined> {
-      if (!ownsEvent(eventId)) return undefined;
-
-      const inner = (store as EventStoreWithLookup).getStreamIdForEventId;
-      if (!inner) {
-        // Derive it from the id's own shape when the backing store offers no
-        // lookup: everything before the final `:` is the stream id.
-        const value = String(eventId);
-        const lastColon = value.lastIndexOf(':');
-        return lastColon === -1 ? undefined : unscope(value.slice(0, lastColon) as StreamId);
-      }
-
-      const resolved = await inner.call(store, eventId);
-      return resolved === undefined ? undefined : unscope(resolved);
+      const owned = await resolveOwnedStream(eventId);
+      return owned === undefined ? undefined : unscope(owned);
     },
 
     async replayEventsAfter(
       lastEventId: EventId,
       options: { send: (eventId: EventId, message: JSONRPCMessage) => Promise<void> },
     ): Promise<StreamId> {
-      if (!ownsEvent(lastEventId)) {
-        // Another session's event id, or a forged one. Replay nothing — and hand
-        // back a stream id in THIS session's namespace, because the transport
-        // binds the caller's live SSE stream to whatever comes back. Returning
-        // the requested stream would attach the attacker to the victim's.
-        return scope('default-stream' as StreamId);
+      const owned = await resolveOwnedStream(lastEventId);
+      if (owned === undefined) {
+        // Another session's event id, or a forged one. Replay nothing, and hand
+        // back an UNSCOPED stream id: the transport binds the caller's live SSE
+        // stream to whatever comes back and may pass it to a later `storeEvent`,
+        // which scopes it again — returning a scoped id here would prefix it
+        // twice. Returning the requested stream would be worse still: it would
+        // attach the attacker to the victim's.
+        return 'default-stream' as StreamId;
       }
 
       return unscope(await store.replayEventsAfter(lastEventId, options));

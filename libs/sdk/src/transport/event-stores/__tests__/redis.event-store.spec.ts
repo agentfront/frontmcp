@@ -45,16 +45,15 @@ describe('RedisEventStore.parseEventId', () => {
     expect(parse(store, ':1700000000000-0')).toBeUndefined();
   });
 
-  it('rejects Redis glob metacharacters in the stream id', () => {
-    // The stream half is concatenated into a key; `*`/`?`/`[` are glob
-    // metacharacters and must not reach it.
-    expect(parse(store, '*:1700000000000-0')).toBeUndefined();
-    expect(parse(store, 'str?eam:1700000000000-0')).toBeUndefined();
-    expect(parse(store, 'str[eam:1700000000000-0')).toBeUndefined();
-  });
-
-  it('rejects newlines in the stream id', () => {
-    expect(parse(store, 'stream\r\nEXTRA:1700000000000-0')).toBeUndefined();
+  it('round-trips any stream id storeEvent would accept', () => {
+    // `storeEvent` takes any `StreamId` and uses it as an exact Redis key —
+    // Redis applies no glob matching to a key argument, and ioredis
+    // length-prefixes it. Rejecting characters here would let `storeEvent` mint
+    // ids that `parseEventId` then refuses, silently breaking replay for that
+    // stream. Ownership is enforced by the session-scoped facade instead.
+    for (const streamId of ['tenant?1', 'a*b', 'str[eam', 'plain', 'session-a _GET_stream']) {
+      expect(parse(store, `${streamId}:1700000000000-0`)).toEqual([streamId, '1700000000000-0']);
+    }
   });
 });
 

@@ -190,12 +190,19 @@ export class RedisEventStore implements EventStore {
    * Event IDs have format: `{streamId}:{redisStreamEntryId}`
    * Redis stream entry IDs have format: `{timestamp}-{sequence}`
    *
-   * The event id is client-supplied and its stream half is concatenated into a
-   * Redis key, so both halves are validated here: the entry id must have the
-   * `{millis}-{seq}` shape, and the stream id must not carry glob or key
-   * metacharacters (GHSA-84j6-jc92-77jm).
+   * The entry-id half is validated because it is interpolated into the `xrange`
+   * range argument (`(${redisId}`), where a malformed value is a protocol error
+   * rather than data.
    *
-   * @returns the pair, or `undefined` when the id is malformed or unsafe.
+   * The stream-id half is NOT character-filtered. `xadd`/`xrange` take the key
+   * as an exact argument — Redis applies no glob matching there — and ioredis
+   * length-prefixes it, so no character is special. Filtering here would also
+   * make `storeEvent`, which accepts any `StreamId`, able to mint ids this
+   * function then refuses, silently breaking replay for that stream. Ownership
+   * is enforced by the session-scoped facade (GHSA-84j6-jc92-77jm), not by
+   * guessing at the id's characters.
+   *
+   * @returns the pair, or `undefined` when the id is malformed.
    *
    * @example
    * 'my-stream:1234567890123-0' -> ['my-stream', '1234567890123-0']
@@ -213,8 +220,6 @@ export class RedisEventStore implements EventStore {
 
     // `{millis}-{seq}`, or a bare `{millis}` (what XADD accepts as a range start).
     if (!/^\d+(-\d+)?$/.test(redisId)) return undefined;
-    // `*`, `?` and `[` are Redis glob metacharacters; newlines break RESP framing.
-    if (/[*?[\]\r\n]/.test(streamId)) return undefined;
 
     return [streamId as StreamId, redisId];
   }

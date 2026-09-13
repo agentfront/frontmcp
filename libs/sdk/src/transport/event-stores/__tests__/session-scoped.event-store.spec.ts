@@ -94,16 +94,30 @@ describe('createSessionScopedEventStore', () => {
     expect(await replay(attacker, '_GET_stream:1' as EventId)).toEqual([]);
   });
 
-  it('returns a stream id the caller owns, even for an unknown event id', async () => {
-    // The upstream transport registers the caller's live SSE controller under
-    // whatever StreamId comes back, so it must never be another session's.
+  it('returns an UNSCOPED fallback stream for an unknown event id', async () => {
+    // The transport registers the caller's live SSE controller under whatever
+    // StreamId comes back and may hand it to a later `storeEvent`, which scopes
+    // it. Returning an already-scoped id would prefix it twice; returning the
+    // requested one would attach this caller to the victim's stream.
     const attacker = createSessionScopedEventStore(shared, 'attacker-session');
 
     const streamId = await attacker.replayEventsAfter('_GET_stream:1' as EventId, {
       send: async () => undefined,
     });
 
-    expect(String(streamId)).toContain('attacker-session');
+    expect(String(streamId)).toBe('default-stream');
+    expect(String(streamId)).not.toContain('victim');
+  });
+
+  it('scopes the fallback stream exactly once when it is written back', async () => {
+    const attacker = createSessionScopedEventStore(shared, 'attacker-session');
+    const fallback = await attacker.replayEventsAfter('_GET_stream:1' as EventId, { send: async () => undefined });
+
+    // Round-trip it the way the transport would.
+    const eventId = await attacker.storeEvent(fallback, message(1, 'A'));
+
+    expect(String(eventId).startsWith('attacker-session attacker-session')).toBe(false);
+    expect(String(eventId).startsWith('attacker-session ')).toBe(true);
   });
 
   it('resolves getStreamIdForEventId only for its own events', async () => {
@@ -115,6 +129,39 @@ describe('createSessionScopedEventStore', () => {
 
     expect(await victim.getStreamIdForEventId?.(victimEvent)).toBeDefined();
     expect(await attacker.getStreamIdForEventId?.(victimEvent)).toBeUndefined();
+  });
+
+  it('resolves ownership by ASKING the store, not by parsing the event id', async () => {
+    // The EventStore contract says nothing about id format. A store handing back
+    // opaque ids must still let a session replay its own events, or a legitimate
+    // reconnect silently loses its backlog.
+    const opaque = new Map<string, StreamId>();
+    let counter = 0;
+    const opaqueStore = {
+      async storeEvent(streamId: StreamId): Promise<EventId> {
+        const id = `opaque-${++counter}` as EventId;
+        opaque.set(id, streamId);
+        return id;
+      },
+      async getStreamIdForEventId(eventId: EventId): Promise<StreamId | undefined> {
+        return opaque.get(String(eventId));
+      },
+      async replayEventsAfter(eventId: EventId, { send }: { send: (id: EventId, m: JSONRPCMessage) => Promise<void> }) {
+        await send('opaque-replayed' as EventId, message(99, 'REPLAYED'));
+        return opaque.get(String(eventId)) as StreamId;
+      },
+    };
+
+    const owner = createSessionScopedEventStore(opaqueStore as never, 'owner-session');
+    const stranger = createSessionScopedEventStore(opaqueStore as never, 'other-session');
+    const ownEvent = await owner.storeEvent(GET_STREAM, message(1, 'A'));
+
+    // The id carries no session prefix at all, yet the owner still replays.
+    expect(String(ownEvent)).not.toContain('owner-session');
+    expect(await replay(owner, ownEvent)).toEqual([message(99, 'REPLAYED')]);
+
+    // And a different session still gets nothing from it.
+    expect(await replay(stranger, ownEvent)).toEqual([]);
   });
 
   it('passes through to the shared store, so one store still backs every session', async () => {
