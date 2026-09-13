@@ -173,7 +173,15 @@ describe('Dashboard MCP scope inherits server auth (GHSA-rgxj-434m-vxh3)', () =>
       }),
     });
 
-    expect(await res.text()).not.toContain('read-secret');
+    // MCP-over-HTTP answers a sessionless call with 200 + a JSON-RPC error, so
+    // the HTTP status proves nothing here. Assert the envelope IS an error (not
+    // merely that the body lacks the tool name, which an unrelated 5xx would
+    // also satisfy) AND that no inventory leaked.
+    const body = (await res.json()) as { error?: { code: number }; result?: unknown };
+
+    expect(body.error).toBeDefined();
+    expect(body.result).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('read-secret');
   });
 
   it('serves the dashboard scope to an authenticated caller', async () => {

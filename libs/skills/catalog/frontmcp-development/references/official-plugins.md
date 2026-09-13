@@ -672,7 +672,12 @@ interface DashboardPluginOptionsInput {
 The dashboard's MCP scope **inherits the server's authentication**. Its introspection tools (`dashboard:graph`, `dashboard:list-tools`, `dashboard:list-resources`) reach the root scope and enumerate every app, tool, resource and prompt on the server — including names, descriptions and (on request) schemas. Two consequences:
 
 - On an authenticated server (`local`, `remote`, `transparent`, `orchestrated`), the dashboard requires the same credential as everything else.
-- On a **public** server the dashboard is public too, because the server is. `auth.token` gates the dashboard _page_, not the MCP scope. If the inventory is sensitive, authenticate the server — do not rely on the dashboard token alone.
+- On a **public** server the dashboard is public too, because the server is. `auth.token` gates the dashboard _page_, not the MCP scope or the SSE stream. If the inventory is sensitive, authenticate the server — do not rely on the dashboard token alone.
+
+Two further limitations worth knowing:
+
+- The token is accepted as `Authorization: Bearer <token>` or `?token=`. Prefer the header: a URL token lands in browser history, `Referer` headers and access logs. There is no cookie/session option yet.
+- Dashboard options are **process-wide**. Two `@FrontMcp` servers built in one process that configure the dashboard differently share the last configuration registered, including its token; the plugin logs a warning when that happens. Run one dashboard per process.
 
 ---
 
