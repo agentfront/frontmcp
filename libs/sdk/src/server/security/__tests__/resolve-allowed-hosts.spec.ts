@@ -17,7 +17,21 @@ import {
 } from '../resolve-allowed-hosts';
 
 describe('isLoopbackAddress', () => {
-  it.each(['127.0.0.1', '127.0.0.53', '::1', '[::1]', 'localhost', 'LOCALHOST'])('treats %s as loopback', (addr) => {
+  it.each([
+    '127.0.0.1',
+    '127.0.0.53',
+    '::1',
+    '[::1]',
+    'localhost',
+    'LOCALHOST',
+    // Equivalent IPv6 spellings. Missing one would classify a loopback-only
+    // listener as routable and silently disable the derived allow-list — on
+    // exactly the server DNS rebinding targets.
+    '0:0:0:0:0:0:0:1',
+    '0000:0000:0000:0000:0000:0000:0000:0001',
+    '[0:0:0:0:0:0:0:1]',
+    '::ffff:127.0.0.1',
+  ])('treats %s as loopback', (addr) => {
     expect(isLoopbackAddress(addr)).toBe(true);
   });
 
@@ -87,6 +101,21 @@ describe('shouldEnforceDerivedHosts', () => {
 
   it('enforces for a routable bind once the issuer names the public host', () => {
     expect(shouldEnforceDerivedHosts({ bindAddress: '0.0.0.0', issuer: 'https://api.example.com' })).toBe(true);
+  });
+
+  it('does NOT enforce on an unusable issuer', () => {
+    // An unparseable issuer would flip enforcement on while deriveAllowedHosts
+    // drops it — leaving a loopback-only list that 403s every real request.
+    expect(shouldEnforceDerivedHosts({ bindAddress: '0.0.0.0', issuer: 'not a url' })).toBe(false);
+    expect(shouldEnforceDerivedHosts({ bindAddress: '0.0.0.0', issuer: '' })).toBe(false);
+  });
+
+  it('does NOT enforce on blank extra hosts', () => {
+    expect(shouldEnforceDerivedHosts({ bindAddress: '0.0.0.0', extraHosts: ['   '] })).toBe(false);
+  });
+
+  it('classifies an expanded IPv6 loopback bind as loopback', () => {
+    expect(shouldEnforceDerivedHosts({ bindAddress: '0:0:0:0:0:0:0:1', port: 3000 })).toBe(true);
   });
 
   it('enforces for a routable bind once hosts are supplied explicitly', () => {
