@@ -54,12 +54,25 @@ export function normalizeHost(value: string): string {
   return DEFAULT_PORTS.has(port) ? name : `${name}:${port}`;
 }
 
-/** Normalize an `Origin` header (scheme + host, default port elided). */
+/**
+ * Normalize an `Origin` header (scheme + host, default port elided).
+ *
+ * The default port is scheme-specific: only `:80` is redundant for `http` and
+ * only `:443` for `https`. Eliding both regardless of scheme would make
+ * `https://app.example.com:80` compare equal to `https://app.example.com`, and a
+ * service on an untrusted port of an allowed hostname would pass the allowlist.
+ *
+ * `URL` applies exactly that rule and canonicalizes IPv6 literals on the way, so
+ * it does the work. Anything it cannot parse falls back to a lowercase compare,
+ * which is stricter, not looser.
+ */
 export function normalizeOrigin(value: string): string {
   const origin = value.trim().toLowerCase();
-  const schemeEnd = origin.indexOf('://');
-  if (schemeEnd === -1) return origin;
-  return `${origin.slice(0, schemeEnd)}://${normalizeHost(origin.slice(schemeEnd + 3))}`;
+  try {
+    return new URL(origin).origin.toLowerCase();
+  } catch {
+    return origin;
+  }
 }
 
 /** Precompiled rules — build once per server, not per request. */

@@ -23,15 +23,43 @@ export interface DeriveAllowedHostsInput {
   extraHosts?: string[];
 }
 
-/** True when the address only accepts connections from this machine. */
-export function isLoopbackAddress(address: string | undefined): boolean {
-  if (!address) return false;
-  const normalized = address
+/**
+ * Canonicalize an IP literal or hostname.
+ *
+ * IPv6 has many spellings of one address — `::1`, `0:0:0:0:0:0:0:1` and
+ * `0000:...:0001` are the same loopback — so a textual compare misses most of
+ * them. `URL` canonicalizes them; a hostname passes through lowercased.
+ */
+function canonicalizeAddress(address: string): string {
+  const bare = address
     .trim()
     .toLowerCase()
     .replace(/^\[|\]$/g, '');
+  if (!bare.includes(':')) return bare;
+  try {
+    return new URL(`http://[${bare}]`).hostname.replace(/^\[|\]$/g, '');
+  } catch {
+    return bare;
+  }
+}
+
+/**
+ * True when the address only accepts connections from this machine.
+ *
+ * Classifying a loopback listener as routable would disable the derived
+ * DNS-rebinding allow-list on exactly the server the attack targets, so every
+ * spelling of loopback has to resolve here.
+ */
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const normalized = canonicalizeAddress(address);
   return (
-    normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost' || normalized.startsWith('127.')
+    normalized === '::1' ||
+    normalized === 'localhost' ||
+    normalized.startsWith('127.') ||
+    // IPv4-mapped IPv6 loopback, which `URL` renders as `::ffff:7f00:1`.
+    normalized === '::ffff:7f00:1' ||
+    normalized.startsWith('::ffff:127.')
   );
 }
 
@@ -123,7 +151,10 @@ export function deriveAllowedHosts(input: DeriveAllowedHostsInput): string[] {
 export function shouldEnforceDerivedHosts(input: DeriveAllowedHostsInput): boolean {
   if (input.socketPath) return false;
 
-  const hasExplicitName = Boolean(input.issuer) || (input.extraHosts?.length ?? 0) > 0;
+  // Only a USABLE public name counts. An unparseable issuer would otherwise
+  // flip enforcement on while `deriveAllowedHosts` drops it, leaving a list of
+  // loopback hosts that 403s every request arriving on the real hostname.
+  const hasExplicitName = hostFromUrl(input.issuer) !== undefined || (input.extraHosts ?? []).some((h) => h.trim());
   if (hasExplicitName) return true;
 
   // Without a known port the derived list cannot match a real `Host` header
