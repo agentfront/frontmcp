@@ -16,7 +16,7 @@ import {
 import { createDashboardAuthValidator } from '../auth/dashboard-auth';
 import { resolveDashboardOptions } from '../dashboard.config-store';
 // Types and symbols
-import { DashboardConfigToken, GraphDataProviderToken, ParentScopeToken } from '../dashboard.symbol';
+import { DashboardConfigToken, ParentScopeToken } from '../dashboard.symbol';
 import {
   dashboardPluginOptionsSchema,
   defaultDashboardPluginOptions,

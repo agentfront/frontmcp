@@ -8,7 +8,6 @@ import {
   dashboardPluginOptionsSchema,
   defaultDashboardPluginOptions,
   isDashboardEnabled,
-  type DashboardPluginOptions,
 } from '../dashboard.types';
 
 describe('Dashboard Types', () => {
