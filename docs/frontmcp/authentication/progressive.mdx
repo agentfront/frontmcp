@@ -34,7 +34,7 @@ sequenceDiagram
 
     Agent-->>User: "I need Slack access"
 
-    User->>FrontMCP: Follow auth_url (ticket proves the session; prior grant carried in it)
+    User->>FrontMCP: Follow auth_url (ticket proves the signed subject; prior grant carried in it)
     FrontMCP->>Slack: OAuth flow
     Slack-->>FrontMCP: Token (stored server-side)
     FrontMCP-->>Agent: New access token (authorized_apps: [crm, slack])

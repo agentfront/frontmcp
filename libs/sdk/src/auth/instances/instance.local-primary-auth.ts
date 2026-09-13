@@ -36,6 +36,7 @@ import {
   randomBytes,
   randomUUID,
   sha256Hex,
+  StorageNotSupportedError,
   type StorageAdapter,
 } from '@frontmcp/utils';
 
@@ -252,6 +253,15 @@ export function validateAuthorizationIssuer(
   return { ok: true };
 }
 
+/**
+ * Whether a storage error means "this backend cannot do that", as opposed to a
+ * transient failure. Only the former justifies falling back to another guard;
+ * a transient error must fail closed.
+ */
+function isUnsupportedOperation(error: unknown): boolean {
+  return error instanceof StorageNotSupportedError;
+}
+
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly host: string;
   readonly port: number;
@@ -303,8 +313,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * Shares the persistent adapter when one is configured so the guard holds
    * across a distributed deployment; falls back to a dedicated in-memory
    * adapter, matching how the credential vault selects its backing store.
+   *
+   * Holds the in-flight PROMISE, not the resolved adapter: two concurrent
+   * claims for the same ticket must not each build their own store, or each
+   * would write and read back its own nonce and both would win.
    */
-  private ticketReplayStorage?: StorageAdapter;
+  private ticketReplayStorage?: Promise<StorageAdapter>;
 
   /**
    * Per-session encrypted credential vault (Checkpoint 3b). Backs
@@ -583,31 +597,71 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * @returns true when this caller claimed the ticket, false when it was already used.
    */
   async claimIncrementalTicket(jti: string, ttlMs: number): Promise<boolean> {
-    const storage = await this.getTicketReplayStorage();
     const key = `incremental-ticket:${jti}`;
     const nonce = randomUUID();
     const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
+
+    let storage = await this.getTicketReplayStorage();
     try {
       await storage.set(key, nonce, { ifNotExists: true, ttlSeconds });
+    } catch (error) {
+      // A backend without compare-and-set (Cloudflare KV raises
+      // StorageNotSupportedError) cannot host this guard at all. Rejecting
+      // every ticket would disable incremental authorization silently, so fall
+      // back to the in-memory guard once and keep single use within this
+      // instance. Any other error is transient and fails CLOSED.
+      if (!isUnsupportedOperation(error)) {
+        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+        return false;
+      }
+      this.logger.warn(
+        'Incremental ticket replay guard: the configured storage has no conditional write; ' +
+          'falling back to an in-memory guard (single use holds within this instance only).',
+      );
+      storage = await this.useInMemoryTicketReplayStorage();
+      try {
+        await storage.set(key, nonce, { ifNotExists: true, ttlSeconds });
+      } catch (fallbackError) {
+        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(fallbackError)}`);
+        return false;
+      }
+    }
+
+    try {
       return (await storage.get(key)) === nonce;
     } catch (error) {
-      // Fail CLOSED: an unusable replay guard must not silently downgrade the
-      // ticket to multi-use.
       this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
       return false;
     }
   }
 
-  private async getTicketReplayStorage(): Promise<StorageAdapter> {
-    if (this.ticketReplayStorage) return this.ticketReplayStorage;
-    if (this.storageAdapter) {
-      this.ticketReplayStorage = this.storageAdapter;
-      return this.ticketReplayStorage;
+  private getTicketReplayStorage(): Promise<StorageAdapter> {
+    if (!this.ticketReplayStorage) {
+      if (this.storageAdapter) {
+        this.ticketReplayStorage = Promise.resolve(this.storageAdapter);
+      } else {
+        // No persistent token storage configured. The guard is then per-process
+        // — but so are the pending authorizations and codes this flow depends
+        // on, so such a deployment is single-instance by construction.
+        this.logger.debug(
+          'Incremental ticket replay guard is in-memory (no persistent tokenStorage configured); ' +
+            'single use holds within this instance only.',
+        );
+        this.ticketReplayStorage = this.useInMemoryTicketReplayStorage();
+      }
     }
-    const memory = new MemoryStorageAdapter();
-    await memory.connect();
-    this.ticketReplayStorage = memory;
-    return memory;
+    return this.ticketReplayStorage;
+  }
+
+  /** Replace the replay guard with a fresh in-memory adapter, memoized. */
+  private useInMemoryTicketReplayStorage(): Promise<StorageAdapter> {
+    const pending = (async () => {
+      const memory = new MemoryStorageAdapter();
+      await memory.connect();
+      return memory;
+    })();
+    this.ticketReplayStorage = pending;
+    return pending;
   }
 
   private async initializeCredentialVault(): Promise<void> {
