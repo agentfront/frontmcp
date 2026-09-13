@@ -769,7 +769,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     authInfo: Partial<AuthInfo> | undefined,
     priorAppIds: Set<string> | undefined,
   ): string | undefined {
-    const sub = authInfo?.user?.sub;
+    // The verified user sits at `extra.user` on the web/worker transport and at
+    // the top level on the Node one. Read both, or the ticket is silently
+    // omitted on the worker and every incremental link falls back to a full
+    // login.
+    const extraUser = (authInfo?.extra as { user?: { sub?: string } } | undefined)?.user;
+    const sub = extraUser?.sub ?? authInfo?.user?.sub;
     if (!sub) return undefined;
 
     const secret = (this.scope.auth as { signingSecret?: string } | undefined)?.signingSecret;
