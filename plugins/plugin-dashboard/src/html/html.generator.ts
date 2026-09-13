@@ -22,6 +22,15 @@ function escapeForJs(str: string): string {
  * - Call dashboard:graph tool to get graph data
  * - Receive real-time notifications
  */
+/**
+ * Build the dashboard page.
+ *
+ * The configured `auth.token` is deliberately NOT embedded here, and not put in
+ * the SSE query string: a URL token lands in access logs, `Referer` headers and
+ * browser history, and the page's own MCP POSTs never carried it anyway
+ * (GHSA-rgxj-434m-vxh3). The token gates the page; the dashboard's MCP scope
+ * uses the server's normal authentication.
+ */
 export function generateDashboardHtml(options: DashboardPluginOptions): string {
   const cdn = options.cdn;
   const basePath = options.basePath;
@@ -39,9 +48,8 @@ export function generateDashboardHtml(options: DashboardPluginOptions): string {
  * Generate HTML that loads dashboard from an external CDN entrypoint.
  */
 function generateExternalEntrypointHtml(options: DashboardPluginOptions): string {
-  const { cdn, auth } = options;
+  const { cdn } = options;
   const safeBasePath = escapeForJs(options.basePath);
-  const token = escapeForJs(auth?.token || '');
 
   // Escape CDN URLs for safe interpolation
   const safeReact = escapeForJs(cdn.react);
@@ -84,8 +92,7 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
     // Dashboard configuration
     window.__FRONTMCP_DASHBOARD__ = {
       basePath: '${safeBasePath}',
-      sseUrl: '${safeBasePath}/sse${token ? `?token=${token}` : ''}',
-      token: '${token}',
+      sseUrl: '${safeBasePath}/sse',
     };
 
     // Load external dashboard UI
@@ -107,10 +114,9 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
  * Uses MCP protocol via SSE to fetch data from dashboard:graph tool.
  */
 function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
-  const { cdn, auth } = options;
+  const { cdn } = options;
   const safeBasePath = escapeForJs(options.basePath);
-  const token = escapeForJs(auth?.token || '');
-  const sseUrl = `${safeBasePath}/sse${token ? `?token=${token}` : ''}`;
+  const sseUrl = `${safeBasePath}/sse`;
 
   // Escape CDN URLs for safe interpolation
   const safeReact = escapeForJs(cdn.react);
@@ -312,7 +318,6 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
     const config = {
       basePath: '${safeBasePath}',
       sseUrl: '${sseUrl}',
-      token: '${token}',
     };
 
     // Node styling config
