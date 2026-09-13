@@ -26,6 +26,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
+ * Convert the first source that is actually PRESENT, rather than the first that
+ * happens to be non-empty.
+ *
+ * The difference matters for authorization: an explicitly empty array is a
+ * statement ("no scopes"), not a gap to fill from somewhere weaker.
+ */
+function firstPresent(sources: unknown[], convert: (value: unknown) => string[]): string[] {
+  for (const source of sources) {
+    if (source !== undefined && source !== null) return convert(source);
+  }
+  return [];
+}
+
+/**
  * Resolve the caller's roles, permissions, scopes and claims from AuthInfo.
  *
  * When the scope has an authorities engine configured, its `claimsMapping` /
@@ -48,13 +62,17 @@ export function resolvePrincipal(
   const authorizationClaims = asRecord(extraAuthorization?.['claims']) ?? {};
   const claims: Record<string, unknown> = { ...authorizationClaims, ...authInfoClaims, ...user };
 
-  const scopes = (() => {
-    const direct = toStringArray(info['scopes']);
-    if (direct.length > 0) return direct;
-    const fromAuthorization = toStringArray(extraAuthorization?.['scopes']);
-    if (fromAuthorization.length > 0) return fromAuthorization;
-    return toStringArray(claims['scope'] ?? claims['scopes']);
-  })();
+  // `AuthInfo.scopes` is REQUIRED by the protocol type, so it is always present
+  // and an empty array there carries no intent — a session-reconstructed
+  // authorization legitimately has none while the verified token still states
+  // its scope. Fall through on empty for that first source only; the remaining
+  // sources are optional, so presence is meaningful for them.
+  //
+  // Falling through does not weaken the check: every source below is derived
+  // from the same verified token.
+  const scopes = toStringArray(info['scopes']).length
+    ? toStringArray(info['scopes'])
+    : firstPresent([extraAuthorization?.['scopes'], claims['scope'], claims['scopes']], toStringArray);
 
   if (contextBuilder) {
     const ctx = contextBuilder.build(info as never);
@@ -68,19 +86,12 @@ export function resolvePrincipal(
   }
 
   // Fallback chain mirrors AuthoritiesContextBuilder.build():
-  // user.roles → claims.roles → the authorization's scopes.
-  const roles = (() => {
-    const fromUser = toStringArray(user['roles']);
-    if (fromUser.length > 0) return fromUser;
-    const fromClaims = toStringArray(claims['roles']);
-    if (fromClaims.length > 0) return fromClaims;
-    return toStringArray(extraAuthorization?.['scopes']);
-  })();
+  // user.roles → claims.roles → the authorization's scopes. Presence-based for
+  // the same reason as scopes above, and so both paths agree on what an
+  // explicitly empty array means.
+  const roles = firstPresent([user['roles'], claims['roles'], extraAuthorization?.['scopes']], toStringArray);
 
-  const permissions = (() => {
-    const fromUser = toStringArray(user['permissions']);
-    return fromUser.length > 0 ? fromUser : toStringArray(claims['permissions']);
-  })();
+  const permissions = firstPresent([user['permissions'], claims['permissions']], toStringArray);
 
   return {
     sub: typeof user['sub'] === 'string' ? (user['sub'] as string) : '',

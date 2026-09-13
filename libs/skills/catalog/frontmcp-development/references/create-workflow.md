@@ -35,16 +35,16 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 
 ### WorkflowMetadata Fields
 
-| Field            | Type                               | Required    | Default           | Description                                                                                                                            |
-| ---------------- | ---------------------------------- | ----------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | `string`                           | Yes         | --                | Unique workflow name                                                                                                                   |
-| `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                | Array of step definitions                                                                                                              |
-| `description`    | `string`                           | No          | --                | Human-readable description                                                                                                             |
-| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`        | How the workflow is initiated                                                                                                          |
-| `webhook`        | `WebhookConfig`                    | No          | --                | Webhook configuration (when trigger is `'webhook'`)                                                                                    |
-| `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds                                                                                  |
-| `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel                                                                                            |
-| `permissions`    | `JobPermission[]`                  | No          | --                | Array of permission rules (one per action). Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
+| Field            | Type                               | Required    | Default           | Description                                                                                                                                                                                    |
+| ---------------- | ---------------------------------- | ----------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | `string`                           | Yes         | --                | Unique workflow name                                                                                                                                                                           |
+| `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                | Array of step definitions                                                                                                                                                                      |
+| `description`    | `string`                           | No          | --                | Human-readable description                                                                                                                                                                     |
+| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`        | How the workflow is initiated                                                                                                                                                                  |
+| `webhook`        | `WebhookConfig`                    | No          | --                | Webhook configuration (when trigger is `'webhook'`)                                                                                                                                            |
+| `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds                                                                                                                                          |
+| `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel                                                                                                                                                    |
+| `permissions`    | `JobPermission[]`                  | No          | --                | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
 
 ### WorkflowStep Fields
 
