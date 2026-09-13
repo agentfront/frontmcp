@@ -331,7 +331,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   }
 
   protected ensureAuthInfo(req: AuthenticatedServerRequest, transport: LocalTransportAdapter<T>) {
-    const { token, user, session } = req[ServerRequestTokens.auth];
+    const { token, user, session, scopes, claims } = req[ServerRequestTokens.auth];
 
     // Session must always exist at this point — created in session.verify (public mode)
     // or synced from flow state in onInitialize (reconnect). A missing session here
@@ -379,7 +379,12 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       user,
       sessionId,
       sessionIdPayload: sessionPayload,
-      scopes: [],
+      // Carry the scopes and claims the verified Authorization actually holds.
+      // These used to be dropped (`scopes: []`, no claims), which left every
+      // scope- or claim-based check downstream inert. Copied, not aliased, so
+      // tool code cannot mutate the request's authorization.
+      scopes: Array.isArray(scopes) ? [...scopes] : [],
+      ...(claims ? { claims } : {}),
       clientId: user.sub ?? '',
       transport,
     };
