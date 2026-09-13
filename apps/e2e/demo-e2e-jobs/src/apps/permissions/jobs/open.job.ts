@@ -17,7 +17,7 @@ import { Job, JobContext } from '@frontmcp/sdk';
   },
 })
 export default class OpenJob extends JobContext {
-  async execute() {
-    return { done: true };
+  async execute(input: { value: string }) {
+    return { done: input.value.length > 0 };
   }
 }

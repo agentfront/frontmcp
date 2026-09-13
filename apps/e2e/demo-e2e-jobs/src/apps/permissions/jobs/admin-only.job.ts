@@ -15,7 +15,7 @@ import { Job, JobContext } from '@frontmcp/sdk';
   permissions: [{ action: 'execute', roles: ['admin'] }],
 })
 export default class AdminOnlyJob extends JobContext {
-  async execute() {
-    return { done: true, marker: 'ADMIN-JOB-RAN' };
+  async execute(input: { confirm: string }) {
+    return { done: input.confirm === 'yes', marker: 'ADMIN-JOB-RAN' };
   }
 }
