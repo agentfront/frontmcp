@@ -126,4 +126,19 @@ describe('LocalTransportAdapter.ensureAuthInfo — verified scopes and claims re
     authInfo.scopes.push('admin');
     expect(scopes).toEqual(['read']);
   });
+
+  it('does not alias the claims object, at any depth', () => {
+    // Tool code receives this AuthInfo. A nested mutation on a shared reference
+    // would rewrite the request's own verified authorization — which the
+    // job/workflow permission guard reads to decide what the caller may run.
+    const adapter = makeAdapter();
+    const claims = { roles: ['viewer'], tenant: { id: 'acme' } };
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession, { claims }), {});
+
+    (authInfo.claims as { roles: string[] }).roles.push('admin');
+    (authInfo.claims as { tenant: { id: string } }).tenant.id = 'evil';
+
+    expect(claims.roles).toEqual(['viewer']);
+    expect(claims.tenant.id).toBe('acme');
+  });
 });
