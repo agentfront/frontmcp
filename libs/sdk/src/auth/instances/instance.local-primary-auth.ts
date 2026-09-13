@@ -299,6 +299,14 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   private storageAdapter?: StorageAdapter;
 
   /**
+   * Replay guard for incremental-authorization tickets (GHSA-2c4g-9c8x-6m8g).
+   * Shares the persistent adapter when one is configured so the guard holds
+   * across a distributed deployment; falls back to a dedicated in-memory
+   * adapter, matching how the credential vault selects its backing store.
+   */
+  private ticketReplayStorage?: StorageAdapter;
+
+  /**
    * Per-session encrypted credential vault (Checkpoint 3b). Backs
    * `this.credentials` in tools and persists `authenticate()` credentials.
    * Constructed in {@link initialize} once the storage backend is known.
@@ -551,6 +559,57 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * (`this.secret`), so resume URLs are framework-signed with the same trust
    * root as the access tokens.
    */
+  /**
+   * The server HMAC signing key, as the string form the `signData`/`verifyData`
+   * helpers take. These are the exact bytes the access tokens are signed with,
+   * so framework-signed URLs share the access tokens' trust root.
+   */
+  get signingSecret(): string {
+    return new TextDecoder().decode(this.secret);
+  }
+
+  /**
+   * Claim an incremental-authorization ticket, exactly once.
+   *
+   * A signature check proves a ticket was minted by this server for a verified
+   * subject; it cannot prove the ticket has not already been used. The `auth_url`
+   * carrying the ticket travels through agent transcripts and server logs, so a
+   * leaked ticket must not stay usable for the rest of its TTL.
+   *
+   * The claim is race-free without a transaction: each attempt writes its OWN
+   * nonce under `ifNotExists` and reads the key back. Only the attempt whose
+   * nonce survives won, so concurrent replays all lose.
+   *
+   * @returns true when this caller claimed the ticket, false when it was already used.
+   */
+  async claimIncrementalTicket(jti: string, ttlMs: number): Promise<boolean> {
+    const storage = await this.getTicketReplayStorage();
+    const key = `incremental-ticket:${jti}`;
+    const nonce = randomUUID();
+    const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
+    try {
+      await storage.set(key, nonce, { ifNotExists: true, ttlSeconds });
+      return (await storage.get(key)) === nonce;
+    } catch (error) {
+      // Fail CLOSED: an unusable replay guard must not silently downgrade the
+      // ticket to multi-use.
+      this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+      return false;
+    }
+  }
+
+  private async getTicketReplayStorage(): Promise<StorageAdapter> {
+    if (this.ticketReplayStorage) return this.ticketReplayStorage;
+    if (this.storageAdapter) {
+      this.ticketReplayStorage = this.storageAdapter;
+      return this.ticketReplayStorage;
+    }
+    const memory = new MemoryStorageAdapter();
+    await memory.connect();
+    this.ticketReplayStorage = memory;
+    return memory;
+  }
+
   private async initializeCredentialVault(): Promise<void> {
     // Public mode has no authenticate() verifier and no stable sub — no vault.
     if (isPublicMode(this.options)) {
@@ -582,7 +641,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // The resume-link HMAC key is the server JWT secret (constant-time verified
     // by the connect flow). Reuse the exact bytes the access tokens are signed
     // with so the trust root is identical.
-    const signingSecret = new TextDecoder().decode(this.secret);
+    const signingSecret = this.signingSecret;
     const basePath = this.issuer;
 
     await this.providers.addDynamicProviders(

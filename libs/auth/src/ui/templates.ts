@@ -220,8 +220,6 @@ export function buildIncrementalAuthPage(params: {
 
       <form method="GET" action="${escapeHtml(callbackPath)}" class="flex gap-3 pt-4 border-t border-gray-100">
         <input type="hidden" name="pending_auth_id" value="${escapeHtml(sessionHint)}">
-        <input type="hidden" name="app_id" value="${escapeHtml(app.appId)}">
-        <input type="hidden" name="incremental" value="true">
         <button type="button" onclick="window.close()"
           class="flex-1 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 font-medium rounded-lg transition-colors">
           Cancel

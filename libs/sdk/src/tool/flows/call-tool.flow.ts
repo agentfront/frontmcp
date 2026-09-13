@@ -1,4 +1,5 @@
 // tools/flows/call-tool.flow.ts
+import { signIncrementalAuthTicket } from '@frontmcp/auth';
 import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
@@ -708,7 +709,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
 
       // Require explicit authorization - build auth URL
-      const authUrl = this.buildProgressiveAuthUrl(appId, tool?.fullName || '');
+      const authUrl = this.buildProgressiveAuthUrl(appId, tool?.fullName || '', authInfo, claimAuthorizedApps);
 
       this.logger.info(`checkToolAuthorization: authorization required for app "${appId}"`);
       throw new AuthorizationRequiredError({
@@ -723,11 +724,66 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Build the URL for progressive/incremental authorization
+   * Build the URL for progressive/incremental authorization.
+   *
+   * This is the ONE point in the request lifecycle where the caller's identity
+   * is both known and verified, so it is where the incremental-authorization
+   * ticket is minted (GHSA-2c4g-9c8x-6m8g). The ticket is what later authorizes
+   * `/oauth/authorize` to skip the login step; `app`/`tool` are carried purely
+   * for display and are re-read from the signed payload server-side.
+   *
+   * When no verified subject or signing secret is available the URL is emitted
+   * WITHOUT a ticket — the user then completes an ordinary login, which is the
+   * correct fail-closed outcome rather than a credential-free shortcut.
    */
-  private buildProgressiveAuthUrl(appId: string, toolId: string): string {
+  private buildProgressiveAuthUrl(
+    appId: string,
+    toolId: string,
+    authInfo: Partial<AuthInfo> | undefined,
+    priorAppIds: Set<string> | undefined,
+  ): string {
     const baseUrl = this.scope.fullPath || '';
-    return `${baseUrl}/oauth/authorize?app=${encodeURIComponent(appId)}&tool=${encodeURIComponent(toolId)}`;
+    const url = new URL(`${baseUrl}/oauth/authorize`, 'http://placeholder.invalid');
+    url.searchParams.set('app', appId);
+    url.searchParams.set('tool', toolId);
+
+    const ticket = this.mintIncrementalTicket(appId, toolId, authInfo, priorAppIds);
+    if (ticket) {
+      url.searchParams.set('ticket', ticket);
+    } else {
+      this.logger.verbose('buildProgressiveAuthUrl: no incremental ticket minted — link requires a full login');
+    }
+
+    // `baseUrl` may be absolute or path-only; preserve whichever it was.
+    return baseUrl.startsWith('http') ? url.toString() : `${url.pathname}${url.search}`;
+  }
+
+  /**
+   * Mint a single-use, short-lived incremental-authorization ticket for the
+   * verified caller. Returns undefined when the scope has no local signing
+   * secret or the request has no verified subject.
+   */
+  private mintIncrementalTicket(
+    appId: string,
+    toolId: string,
+    authInfo: Partial<AuthInfo> | undefined,
+    priorAppIds: Set<string> | undefined,
+  ): string | undefined {
+    const sub = authInfo?.user?.sub;
+    if (!sub) return undefined;
+
+    const secret = (this.scope.auth as { signingSecret?: string } | undefined)?.signingSecret;
+    if (!secret) return undefined;
+
+    return signIncrementalAuthTicket(
+      {
+        sub,
+        appId,
+        toolId,
+        ...(priorAppIds && priorAppIds.size > 0 ? { priorAppIds: [...priorAppIds] } : {}),
+      },
+      secret,
+    );
   }
 
   /**

@@ -55,6 +55,10 @@ async function seedIncrementalPending(
     pkce,
     state: 'xyz',
     isIncremental: true,
+    // The subject the authorize flow proved via the signed ticket. The callback
+    // only treats a record as incremental when this is present, because it is
+    // the identity the credential-free code will be minted for.
+    incrementalSub: 'user-1',
     targetAppId: opts.targetAppId,
     priorAuthorizedAppIds: opts.priorAuthorizedAppIds,
   });

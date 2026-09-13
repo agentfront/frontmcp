@@ -101,6 +101,14 @@ export {
 } from './credential-resume-link';
 export type { CredentialResumePayload } from './credential-resume-link';
 
+// Incremental-authorization ticket signing (GHSA-2c4g-9c8x-6m8g)
+export {
+  signIncrementalAuthTicket,
+  verifyIncrementalAuthTicket,
+  DEFAULT_INCREMENTAL_TICKET_TTL_MS,
+} from './incremental-auth-ticket';
+export type { IncrementalAuthTicketPayload } from './incremental-auth-ticket';
+
 // Credentials accessor (`this.credentials` ToolContext API)
 export { CREDENTIALS_ACCESSOR } from './credentials-accessor';
 export type {
