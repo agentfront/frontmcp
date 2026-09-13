@@ -22,9 +22,40 @@ import {
  */
 let publishedOptions: DashboardPluginOptions | undefined;
 
-/** Record the operator's parsed options. Called by `DashboardPlugin.init`. */
+/**
+ * Record the operator's parsed options. Called by `DashboardPlugin.init`.
+ *
+ * KNOWN LIMITATION — this store is process-wide. Two `@FrontMcp` servers built
+ * in one process that each configure the dashboard differently would share the
+ * last configuration published, including its `auth.token`. `init(...)` runs
+ * while decorator metadata is evaluated, before any server or scope exists, so
+ * there is no server identity to key on at that point; giving each server its
+ * own configuration needs the app-declared plugin to receive options through the
+ * provider graph, which the `@App` decorator shape does not currently allow.
+ *
+ * A conflicting publish is therefore reported loudly rather than silently
+ * winning. Single-server processes — every documented deployment — are
+ * unaffected.
+ */
 export function publishDashboardOptions(options: DashboardPluginOptions): void {
+  if (publishedOptions && !sameConfiguration(publishedOptions, options)) {
+    console.warn(
+      '[frontmcp:dashboard] A second, different dashboard configuration was registered in this process. ' +
+        'Dashboard options are process-wide, so the last one wins for every server here — including its auth token. ' +
+        'Run one dashboard per process until per-instance configuration is supported.',
+    );
+  }
   publishedOptions = options;
+}
+
+/** Whether two configurations would behave identically. */
+function sameConfiguration(a: DashboardPluginOptions, b: DashboardPluginOptions): boolean {
+  return (
+    a.basePath === b.basePath &&
+    a.enabled === b.enabled &&
+    a.auth?.enabled === b.auth?.enabled &&
+    a.auth?.token === b.auth?.token
+  );
 }
 
 /**

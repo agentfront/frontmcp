@@ -134,6 +134,36 @@ describe('DashboardHttpPlugin', () => {
       expect(resolved.cdn.reactDom).toBe('https://esm.sh/react-dom@19');
     });
 
+    it('warns when a second, different configuration is published in one process', () => {
+      // The store is process-wide, so a conflicting publish would silently give
+      // every server in this process the last token registered. Report it.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'first' } }));
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'second' } }));
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('process-wide'));
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
+    it('does not warn when the same configuration is published twice', () => {
+      // `init()` publishes from both the constructor and dynamicProviders.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        const parsed = dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'same' } });
+        publishDashboardOptions(parsed);
+        publishDashboardOptions(parsed);
+
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
     it('prefers the options the operator gave DashboardPlugin over the app-declared {}', () => {
       // The real-world shape: `DashboardApp` declares `init({})`, and the
       // operator configures `DashboardPlugin` separately.
