@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { resolvePrincipal } from '../../common/utils/principal.utils';
 import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
 import type { WorkflowRunRecord } from '../../job/store/job-state.interface';
 
@@ -37,7 +38,9 @@ export default class GetWorkflowStatusTool extends ToolContext {
     }
 
     const record = await executionManager.getStatus(input.runId);
-    if (!record) {
+    // Scoped to the caller who started the run — step results carry the
+    // workflow's inputs and outputs (GHSA-58v2-gpcc-jmqv).
+    if (!record || !this.ownsRun(record)) {
       return this.fail(new Error(`Run "${input.runId}" not found`));
     }
 
@@ -50,5 +53,17 @@ export default class GetWorkflowStatusTool extends ToolContext {
       startedAt: record.startedAt,
       completedAt: record.completedAt,
     };
+  }
+
+  /**
+   * Match on the owning subject, falling back to the session for runs started
+   * before an owner was recorded (and for anonymous/public servers, where every
+   * caller has an empty subject and the session is the only identity there is).
+   */
+  private ownsRun(record: { ownerSub?: string; sessionId?: string }): boolean {
+    const callerSub = resolvePrincipal(this.authInfo, this.scope.authoritiesContextBuilder).sub;
+    if (record.ownerSub) return record.ownerSub === callerSub;
+    if (record.sessionId) return record.sessionId === this.authInfo.sessionId;
+    return true;
   }
 }

@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { JobNotAuthorizedError } from '../../errors';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
 import type { JobRegistryInterface } from '../job.registry';
 
@@ -31,13 +32,18 @@ export default class ExecuteJobTool extends ToolContext {
 
     const job = jobRegistry.findByName(input.name);
     if (!job) {
-      return this.fail(new Error(`Job "${input.name}" not found`));
+      // Same error as "not permitted" below, so a caller cannot tell restricted
+      // jobs from non-existent ones (GHSA-58v2-gpcc-jmqv).
+      return this.fail(new JobNotAuthorizedError(input.name));
     }
 
+    // Permissions are enforced inside executeJob — the single choke point every
+    // caller path funnels through — which throws JobNotAuthorizedError.
     const result = await executionManager.executeJob(job, input.input ?? {}, {
       background: input.background,
       sessionId: this.authInfo.sessionId,
       authInfo: this.authInfo,
+      authoritiesContextBuilder: this.scope.authoritiesContextBuilder,
     });
 
     return result;
