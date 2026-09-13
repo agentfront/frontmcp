@@ -13,7 +13,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
   outputSchema: { value: z.string() },
 })
 export default class ReadSecretTool extends ToolContext {
-  async execute() {
-    return { value: 'SENSITIVE-CANARY' };
+  async execute(input: { name: string }) {
+    return { value: `SENSITIVE-CANARY for ${input.name}` };
   }
 }
