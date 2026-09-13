@@ -381,10 +381,14 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       sessionIdPayload: sessionPayload,
       // Carry the scopes and claims the verified Authorization actually holds.
       // These used to be dropped (`scopes: []`, no claims), which left every
-      // scope- or claim-based check downstream inert. Copied, not aliased, so
-      // tool code cannot mutate the request's authorization.
+      // scope- or claim-based check downstream inert.
+      //
+      // Both are COPIED, not aliased. Tool code receives this object, and a
+      // nested mutation (`authInfo.claims.roles.push('admin')`) on a shared
+      // reference would rewrite the request's own verified authorization — which
+      // the job/workflow permission guard then reads.
       scopes: Array.isArray(scopes) ? [...scopes] : [],
-      ...(claims ? { claims } : {}),
+      ...(claims ? { claims: structuredClone(claims) } : {}),
       clientId: user.sub ?? '',
       transport,
     };
