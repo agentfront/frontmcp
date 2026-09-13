@@ -683,8 +683,8 @@ The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said
 ```typescript
 http: {
   security: {
-    bindAddress: 'all';
-  }
+    bindAddress: 'all',
+  },
 } // or FRONTMCP_BIND_ADDRESS=all
 ```
 

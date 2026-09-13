@@ -38,6 +38,25 @@ describe('normalizeHost', () => {
 describe('normalizeOrigin', () => {
   it('normalizes scheme and host together', () => {
     expect(normalizeOrigin('HTTPS://App.Example.com:443')).toBe('https://app.example.com');
+    expect(normalizeOrigin('HTTP://App.Example.com:80')).toBe('http://app.example.com');
+  });
+
+  // The default port is scheme-specific. Eliding both regardless of scheme
+  // would let a service on an untrusted port of an allowed hostname match.
+  it('keeps a port that is NOT the default for its scheme', () => {
+    expect(normalizeOrigin('https://app.example.com:80')).toBe('https://app.example.com:80');
+    expect(normalizeOrigin('http://app.example.com:443')).toBe('http://app.example.com:443');
+  });
+
+  it('does not let an off-scheme default port match the bare origin', () => {
+    const compiled = compileHostValidation({ allowedOrigins: ['https://app.example.com'] });
+
+    expect(validateHostHeaders({ origin: 'https://app.example.com:80' }, compiled)?.status).toBe(403);
+    expect(validateHostHeaders({ origin: 'https://app.example.com' }, compiled)).toBeUndefined();
+  });
+
+  it('canonicalizes an IPv6 origin', () => {
+    expect(normalizeOrigin('http://[0:0:0:0:0:0:0:1]:3000')).toBe('http://[::1]:3000');
   });
 
   it('passes through a value with no scheme', () => {
