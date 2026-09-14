@@ -218,11 +218,15 @@ describe('buildIncrementalAuthPage', () => {
     expect(html).toContain('value="session-123"');
   });
 
-  it('should include incremental flag', () => {
+  // GHSA-2c4g-9c8x-6m8g: the page must NOT submit its own incremental flag.
+  // Whether a callback is incremental is decided from the server's pending
+  // record; a hidden form field is client input and was forgeable.
+  it('submits only the pending id, never a client-supplied incremental flag', () => {
     const html = buildIncrementalAuthPage(defaultParams);
 
-    expect(html).toContain('name="incremental"');
-    expect(html).toContain('value="true"');
+    expect(html).toContain('name="pending_auth_id"');
+    expect(html).not.toContain('name="incremental"');
+    expect(html).not.toContain('name="app_id"');
   });
 
   it('should have cancel and authorize buttons', () => {

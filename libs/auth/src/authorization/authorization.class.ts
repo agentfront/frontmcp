@@ -175,11 +175,22 @@ export abstract class AuthorizationBase implements Authorization {
   /**
    * Build URL for progressive/incremental authorization.
    * Used when a tool requires authorization for an app that was skipped during initial auth.
+   *
+   * The URL only SKIPS the login step when it carries a valid incremental
+   * ticket (GHSA-2c4g-9c8x-6m8g) — mint one with
+   * {@link signIncrementalAuthTicket} using the server signing secret and pass
+   * it here. Without a ticket the link still works, but the user completes an
+   * ordinary login; `mode=incremental` alone is no longer an authorization
+   * signal and is not emitted.
+   *
    * @param appId - App ID that requires authorization
    * @param baseUrl - Base URL of the server
+   * @param ticket - Signed incremental-authorization ticket for this subject
    */
-  getProgressiveAuthUrl(appId: string, baseUrl: string): string {
-    return `${baseUrl}/oauth/authorize?app=${encodeURIComponent(appId)}&mode=incremental`;
+  getProgressiveAuthUrl(appId: string, baseUrl: string, ticket?: string): string {
+    const params = new URLSearchParams({ app: appId });
+    if (ticket) params.set('ticket', ticket);
+    return `${baseUrl}/oauth/authorize?${params.toString()}`;
   }
 
   /**

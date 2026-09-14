@@ -114,8 +114,13 @@ export function createMockAuthorizationStore(): AuthorizationStore {
 /**
  * Creates a mock FrontMcpAuth for testing
  */
+/** Signing secret the mock auth uses for framework-signed URLs. */
+export const MOCK_SIGNING_SECRET = 'mock-signing-secret';
+
 export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
   const store = createMockAuthorizationStore();
+  // Per-mock replay guard: a ticket jti can be claimed exactly once.
+  const claimedTickets = new Set<string>();
   const resolved = options || { mode: 'public' };
 
   const base: Record<string, unknown> = {
@@ -129,6 +134,15 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
     // SessionVerifyFlow paths (which call it on the primary auth) resolve a
     // valid payload instead of TypeError-ing on an undefined method.
     verifyGatewayToken: jest.fn(async () => ({ ok: true, payload: { sub: 'user-1', scope: 'openid' } })),
+    // Stand in for LocalPrimaryAuth's HMAC signing key + incremental-ticket
+    // replay guard (GHSA-2c4g-9c8x-6m8g), so flow tests can mint and claim a
+    // real signed ticket instead of asserting on a forgeable query parameter.
+    signingSecret: MOCK_SIGNING_SECRET,
+    claimIncrementalTicket: jest.fn(async (jti: string) => {
+      if (claimedTickets.has(jti)) return false;
+      claimedTickets.add(jti);
+      return true;
+    }),
   };
 
   // Remote mode: stand in for LocalPrimaryAuth's single mandatory upstream
