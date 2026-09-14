@@ -493,6 +493,23 @@ describe('ExpressHostAdapter — derived host allow-list scope', () => {
     expect(checkHost(adapter, 'anything.example')).toBe('allowed');
   });
 
+  it('stays silent for a unix-socket listener instead of calling it routable', () => {
+    // A socket binds no address, so the routable-bind warning is both wrong and
+    // bad advice: acting on it (setting allowedHosts) would enforce a TCP host
+    // list against the placeholder Host a socket client sends.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const adapter = new ExpressHostAdapter();
+      (adapter as unknown as { enableDerivedHostValidation(p: string): void }).enableDerivedHostValidation(
+        '/tmp/frontmcp.sock',
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('warns and does not enforce when start() binds a routable address', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {

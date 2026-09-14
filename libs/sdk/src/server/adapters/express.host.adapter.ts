@@ -196,17 +196,22 @@ export class ExpressHostAdapter extends HostServerAdapter {
       // (`getHandler()`) never calls it, and its public hostname is unknowable
       // here — deriving one there would 403 every real request.
       this.deriveHostValidation = (portOrSocketPath, bindAddress) => {
+        // A Unix socket has no TCP host at all — the socket's filesystem
+        // permissions are the boundary and clients send an arbitrary
+        // placeholder Host. There is nothing to check and nothing to warn
+        // about: acting on the routable-bind warning below would enforce a TCP
+        // allow-list against that placeholder and reject every request.
+        if (typeof portOrSocketPath === 'string') return undefined;
+
         // Describe the listener `start()` actually opened. Reading a predicted
         // address out of the options instead would leave a direct caller —
         // `new ExpressHostAdapter().start(3000, '127.0.0.1')` — with no port to
         // derive from, and therefore no protection on exactly the loopback
         // listener DNS rebinding targets.
-        const isSocket = typeof portOrSocketPath === 'string';
         const derivation = {
           // `start()` binds `bindAddress ?? '0.0.0.0'`; mirror that exactly.
-          bindAddress: isSocket ? undefined : (bindAddress ?? '0.0.0.0'),
-          port: isSocket ? undefined : portOrSocketPath,
-          socketPath: isSocket ? portOrSocketPath : undefined,
+          bindAddress: bindAddress ?? '0.0.0.0',
+          port: portOrSocketPath,
           issuer: options?.listen?.issuer,
         };
         if (!shouldEnforceDerivedHosts(derivation)) {
@@ -217,16 +222,15 @@ export class ExpressHostAdapter extends HostServerAdapter {
           // addresses the attacker otherwise cannot).
           console.warn(
             '[frontmcp] DNS-rebinding protection is not enforcing a Host allow-list: the server binds a routable ' +
-              `address (${derivation.bindAddress ?? 'unknown'}) and no allowed hosts are configured. ` +
+              `address (${derivation.bindAddress}) and no allowed hosts are configured. ` +
               'Set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
           );
           return undefined;
         }
 
         const allowedHosts = deriveAllowedHosts(derivation);
-        // A Unix-socket server derives no hosts (the socket's permissions are
-        // the boundary). With nothing to check against, validating would reject
-        // everything, so skip it rather than fail closed on a valid config.
+        // Nothing to check against means validating would reject everything, so
+        // skip it rather than fail closed on a valid config.
         if (!allowedHosts.length) return undefined;
 
         return createHostValidationMiddleware({ enabled: true, allowedHosts });

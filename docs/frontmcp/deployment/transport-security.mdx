@@ -185,6 +185,10 @@ Or via the environment, which pairs with `FRONTMCP_BIND_ADDRESS` in a container:
 FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
 ```
 
+### Unix-socket servers
+
+A server bound to `socketPath` has no TCP host: the socket's filesystem permissions are the boundary, and clients send an arbitrary placeholder `Host`. Host checking is skipped there and needs no configuration — a rebound browser cannot reach a unix socket at all.
+
 To turn it off entirely:
 
 ```typescript

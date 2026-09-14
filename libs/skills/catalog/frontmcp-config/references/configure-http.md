@@ -155,6 +155,10 @@ ENV FRONTMCP_BIND_ADDRESS=all
 ENV FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
 ```
 
+A server bound to `socketPath` has no TCP host — the socket's filesystem permissions are the
+boundary and clients send an arbitrary placeholder `Host` — so host checking is skipped there and
+needs no configuration. A rebound browser cannot reach a unix socket at all.
+
 To turn it off entirely: `dnsRebindingProtection: { enabled: false }`.
 
 A request with **no** `Origin` header is allowed through — non-browser clients never send one, and a
