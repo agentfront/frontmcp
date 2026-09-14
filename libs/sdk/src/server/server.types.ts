@@ -1,9 +1,9 @@
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
-import type { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
-import type { StreamableHTTPServerTransport } from '@frontmcp/protocol';
-import type { SSEServerTransport } from '../transport/adapters/base-sse-transport';
-import type { Scope } from '../scope';
+import { type AuthInfo, type StreamableHTTPServerTransport } from '@frontmcp/protocol';
+
+import { type Authorization, type ServerRequest, type SessionIdPayload, type UserClaim } from '../common';
+import { type Scope } from '../scope';
+import { type SSEServerTransport } from '../transport/adapters/base-sse-transport';
+import { type LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
 
 export interface ScopedServerRequest extends ServerRequest {
   authScope: Scope;
@@ -26,5 +26,11 @@ declare module '@frontmcp/protocol' {
     user: UserClaim;
     sessionId: string;
     sessionIdPayload: SessionIdPayload;
+    /**
+     * Verified token claims, as resolved by the auth flow. Surfaced so
+     * permission checks can read roles/tenancy without reaching into
+     * `extra.authorization`.
+     */
+    claims?: Record<string, unknown>;
   }
 }

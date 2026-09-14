@@ -1,10 +1,17 @@
 /**
- * transport.local.adapter — ensureAuthInfo 401 (#471)
+ * transport.local.adapter — ensureAuthInfo
  *
- * When a token verifies but its session cannot be reconstructed (evicted /
- * expired), ensureAuthInfo must throw a PublicMcpError-derived 401 carrying a
- * `WWW-Authenticate: Bearer` challenge — NOT a plain Error that surfaces as a
- * 500/-32000. A valid session must still produce SdkAuthInfo as before.
+ * Two contracts:
+ *
+ * 1. #471 — when a token verifies but its session cannot be reconstructed
+ *    (evicted / expired), ensureAuthInfo must throw a PublicMcpError-derived
+ *    401 carrying a `WWW-Authenticate: Bearer` challenge — NOT a plain Error
+ *    that surfaces as a 500/-32000.
+ *
+ * 2. The AuthInfo handed to tool code must carry the scopes and claims the
+ *    request's verified `Authorization` actually holds. They used to be dropped
+ *    (`scopes: []` hardcoded), which silently disabled every scope-based check
+ *    downstream — including the job/workflow permission guard.
  */
 import 'reflect-metadata';
 
@@ -23,15 +30,21 @@ function makeAdapter(): any {
   return adapter;
 }
 
-function makeReq(session?: { id: string; payload?: Record<string, unknown> }): any {
+function makeReq(
+  session?: { id: string; payload?: Record<string, unknown> },
+  authorization: Record<string, unknown> = {},
+): any {
   return {
     [ServerRequestTokens.auth]: {
       token: 'verified-token',
       user: { sub: 'user-123' },
       session,
+      ...authorization,
     },
   };
 }
+
+const liveSession = { id: 'live-session-id', payload: { protocol: 'streamable-http' as const } };
 
 describe('LocalTransportAdapter.ensureAuthInfo — missing session → 401 (#471)', () => {
   it('UnauthorizedError is a 401 PublicMcpError (constructor contract)', () => {
@@ -74,12 +87,58 @@ describe('LocalTransportAdapter.ensureAuthInfo — missing session → 401 (#471
   it('returns SdkAuthInfo for a valid session (no regression)', () => {
     const adapter = makeAdapter();
     const transport = { marker: 'transport' };
-    const authInfo = adapter.ensureAuthInfo(
-      makeReq({ id: 'live-session-id', payload: { protocol: 'streamable-http' } }),
-      transport,
-    );
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession), transport);
     expect(authInfo.sessionId).toBe('live-session-id');
     expect(authInfo.token).toBe('verified-token');
     expect(authInfo.transport).toBe(transport);
+  });
+});
+
+describe('LocalTransportAdapter.ensureAuthInfo — verified scopes and claims reach tool code', () => {
+  it('carries the verified scopes through to AuthInfo', () => {
+    const adapter = makeAdapter();
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession, { scopes: ['read', 'admin'] }), {});
+
+    expect(authInfo.scopes).toEqual(['read', 'admin']);
+  });
+
+  it('carries the verified claims through to AuthInfo', () => {
+    const adapter = makeAdapter();
+    const claims = { roles: ['admin'], tenant: 'acme' };
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession, { claims }), {});
+
+    expect(authInfo.claims).toEqual(claims);
+  });
+
+  it('defaults to an empty scope set when the authorization carries none', () => {
+    const adapter = makeAdapter();
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession), {});
+
+    expect(authInfo.scopes).toEqual([]);
+    expect(authInfo.claims).toBeUndefined();
+  });
+
+  it('does not alias the authorization scope array (tool code cannot mutate it)', () => {
+    const adapter = makeAdapter();
+    const scopes = ['read'];
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession, { scopes }), {});
+
+    authInfo.scopes.push('admin');
+    expect(scopes).toEqual(['read']);
+  });
+
+  it('does not alias the claims object, at any depth', () => {
+    // Tool code receives this AuthInfo. A nested mutation on a shared reference
+    // would rewrite the request's own verified authorization — which the
+    // job/workflow permission guard reads to decide what the caller may run.
+    const adapter = makeAdapter();
+    const claims = { roles: ['viewer'], tenant: { id: 'acme' } };
+    const authInfo = adapter.ensureAuthInfo(makeReq(liveSession, { claims }), {});
+
+    (authInfo.claims as { roles: string[] }).roles.push('admin');
+    (authInfo.claims as { tenant: { id: string } }).tenant.id = 'evil';
+
+    expect(claims.roles).toEqual(['viewer']);
+    expect(claims.tenant.id).toBe('acme');
   });
 });
