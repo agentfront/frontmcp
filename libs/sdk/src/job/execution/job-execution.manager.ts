@@ -73,11 +73,12 @@ export class JobExecutionManager {
     input: unknown,
     opts: ExecuteJobOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
-    // Authorization choke point (GHSA-58v2-gpcc-jmqv). Every caller path —
-    // the execute_job tool, a workflow step, a trigger — funnels through here,
-    // so the check lives here rather than in each entry point. It also runs
-    // BEFORE any run record is created, so an unauthorized attempt leaves no
-    // state behind and background execution has no async escape hatch.
+    // Authorization choke point for a directly executed job
+    // (GHSA-58v2-gpcc-jmqv) — the execute_job tool, a trigger, any in-process
+    // caller. It runs BEFORE any run record is created, so an unauthorized
+    // attempt leaves no state behind and background execution has no async
+    // escape hatch. Workflow STEPS do not pass through here; the engine runs
+    // them directly and `WorkflowStepExecutor` applies the same check per step.
     await this.assertMayExecute(job.metadata.permissions, job.name, opts);
 
     const runId = randomUUID();
@@ -306,6 +307,7 @@ export class JobExecutionManager {
       const engine = new WorkflowEngine(workflow.metadata, jobRegistry, this.logger, {
         authInfo: opts.authInfo ?? {},
         contextProviders: opts.contextProviders,
+        authoritiesContextBuilder: opts.authoritiesContextBuilder,
       });
 
       const result = await engine.execute(opts.workflowInput);

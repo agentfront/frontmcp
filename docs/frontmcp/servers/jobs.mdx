@@ -276,10 +276,12 @@ When no permissions are defined, the job is accessible to all authenticated user
 Once a rule targets an action, **every** rule for that action must pass; within a
 single rule, `roles` and `scopes` are any-of.
 
-Rules are enforced in `JobExecutionManager`, the choke point every caller path
-goes through, so background runs and workflow steps are covered too. `list_jobs`
-hides a job the caller could not run, and a denial is indistinguishable from
-"not found" so the response cannot be used to enumerate restricted job names.
+A directly executed job is checked in `JobExecutionManager` — the choke point the
+`execute_job` tool, triggers and background runs all go through. A job reached as a
+**workflow step** is checked against its own rules too, in `WorkflowStepExecutor`, so
+authorizing the workflow does not launder the jobs it references. `list_jobs` hides a
+job the caller could not run, and a denial is indistinguishable from "not found" so
+the response cannot be used to enumerate restricted job names.
 
 Roles and scopes are read from the caller's verified token. When the server
 declares `authorities.claimsMapping`, that mapping is authoritative; otherwise

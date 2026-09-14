@@ -616,6 +616,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // replayed or unclaimable ticket downgrades to an ordinary login rather
     // than failing the request outright.
     let effectiveIncremental = isIncrementalAuth;
+    // Everything the ticket supplied, so a downgrade drops all of it together.
+    let effectivePriorAppIds = priorAuthorizedAppIds;
     if (incrementalTicket) {
       const claimed = await localAuth.claimIncrementalTicket(
         incrementalTicket.jti,
@@ -624,7 +626,17 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       if (!claimed) {
         this.logger.warn('Incremental auth ticket already used — falling back to an ordinary login');
         effectiveIncremental = false;
-        this.state.set({ isIncrementalAuth: false, targetAppId: undefined, targetToolId: undefined });
+        // The prior grant list came from the ticket too. Keeping it would
+        // narrow an ordinary login to exactly the apps the caller already had,
+        // while the target app is gone — so the tool call that triggered this
+        // is still unauthorized and starts the same flow over again.
+        effectivePriorAppIds = undefined;
+        this.state.set({
+          isIncrementalAuth: false,
+          targetAppId: undefined,
+          targetToolId: undefined,
+          priorAuthorizedAppIds: undefined,
+        });
       }
     }
 
@@ -703,7 +715,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetAppId: effectiveIncremental ? targetAppId : undefined,
       targetToolId: effectiveIncremental ? targetToolId : undefined,
       existingSessionId,
-      priorAuthorizedAppIds,
+      priorAuthorizedAppIds: effectivePriorAppIds,
       // Federated Login State
       federatedLogin,
       // Consent State

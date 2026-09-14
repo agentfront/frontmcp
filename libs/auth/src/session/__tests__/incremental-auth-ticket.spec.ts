@@ -42,8 +42,9 @@ describe('signIncrementalAuthTicket / verifyIncrementalAuthTicket', () => {
     const before = Date.now();
     const payload = verifyIncrementalAuthTicket(signIncrementalAuthTicket({ sub: 'u', appId: 'B' }, SECRET), SECRET);
 
-    expect(payload!.exp).toBeGreaterThanOrEqual(before + DEFAULT_INCREMENTAL_TICKET_TTL_MS - 1000);
-    expect(payload!.exp).toBeLessThanOrEqual(Date.now() + DEFAULT_INCREMENTAL_TICKET_TTL_MS);
+    if (!payload) throw new Error('expected a verifiable ticket');
+    expect(payload.exp).toBeGreaterThanOrEqual(before + DEFAULT_INCREMENTAL_TICKET_TTL_MS - 1000);
+    expect(payload.exp).toBeLessThanOrEqual(Date.now() + DEFAULT_INCREMENTAL_TICKET_TTL_MS);
   });
 
   it('rejects a ticket signed with a different secret', () => {

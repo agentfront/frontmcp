@@ -13,6 +13,10 @@ export {
   isDashboardEnabled,
 } from './dashboard.types';
 
+// Process-wide option store — `resetDashboardOptions` clears it between
+// serially constructed servers (see BC-036).
+export { resetDashboardOptions } from './dashboard.config-store';
+
 // Symbols for advanced DI usage
 export { DashboardConfigToken, GraphDataProviderToken, ParentScopeToken } from './dashboard.symbol';
 

@@ -31,6 +31,15 @@ describe('createDashboardAuthValidator', () => {
       expect(authorize({ headers: { Authorization: `Bearer ${TOKEN}` } }).authorized).toBe(true);
     });
 
+    it('accepts the bearer scheme in any casing (RFC 7235 makes it case-insensitive)', () => {
+      expect(authorize({ headers: { authorization: `bearer ${TOKEN}` } }).authorized).toBe(true);
+      expect(authorize({ headers: { authorization: `BEARER ${TOKEN}` } }).authorized).toBe(true);
+    });
+
+    it('tolerates extra whitespace between the scheme and the token', () => {
+      expect(authorize({ headers: { authorization: `Bearer   ${TOKEN}` } }).authorized).toBe(true);
+    });
+
     it('accepts a query parameter, which is what the documented link uses', () => {
       expect(authorize({ query: { token: TOKEN } }).authorized).toBe(true);
     });

@@ -369,7 +369,12 @@ it for a token with `authorized_apps: ["crm", "slack"]`.
   skip that verifier and obtain a token as the operator.
 
   Tickets are valid for 5 minutes and can be claimed **once**; a replayed ticket falls back
-  to an ordinary login rather than failing the request.
+  to an ordinary login rather than failing the request. Single use is enforced with a
+  conditional write against the configured session storage, so **a multi-instance
+  deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for
+  the guarantee to hold across instances. A backend without conditional writes — Cloudflare
+  KV, for example — degrades to an in-memory guard that holds within one instance only, and
+  logs a warning at first use.
 </Warning>
 
 <Note>

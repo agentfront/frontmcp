@@ -674,10 +674,11 @@ The dashboard's MCP scope **inherits the server's authentication**. Its introspe
 - On an authenticated server (`local`, `remote`, `transparent`, `orchestrated`), the dashboard requires the same credential as everything else.
 - On a **public** server the dashboard is public too, because the server is. `auth.token` gates the dashboard _page_, not the MCP scope or the SSE stream. If the inventory is sensitive, authenticate the server — do not rely on the dashboard token alone.
 
-Two further limitations worth knowing:
+Three further limitations worth knowing:
 
-- The token is accepted as `Authorization: Bearer <token>` or `?token=`. Prefer the header: a URL token lands in browser history, `Referer` headers and access logs. There is no cookie/session option yet.
-- Dashboard options are **process-wide**. Two `@FrontMcp` servers built in one process that configure the dashboard differently share the last configuration registered, including its token; the plugin logs a warning when that happens. Run one dashboard per process.
+- **The bundled page cannot authenticate itself against a non-public server.** The browser client opens `EventSource(sseUrl)` and POSTs with no `Authorization` header, and the SDK reads the credential from that header only. So on a server with `local`/`remote`/`transparent`/`orchestrated` auth the page loads (its own token gates that) but the in-page graph, tool list and SSE stream get `401`. Run the dashboard on a public/development server, or put it behind a proxy that injects a server credential. Failing closed here is deliberate — the alternative is the `mode: 'public'` scope that GHSA-rgxj-434m-vxh3 was about.
+- The token is accepted as `Authorization: Bearer <token>` (scheme matched case-insensitively) or `?token=`. Prefer the header: a URL token lands in browser history, `Referer` headers and access logs. There is no cookie/session option yet.
+- Dashboard options are **process-wide**. Two `@FrontMcp` servers built in one process that configure the dashboard with CONFLICTING auth now throw at registration rather than silently sharing the last token; a differing `basePath` or `cdn` logs a warning. Run one dashboard per process, or call `resetDashboardOptions()` between serial constructions.
 
 ---
 

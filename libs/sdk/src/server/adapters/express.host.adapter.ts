@@ -294,8 +294,6 @@ export class ExpressHostAdapter extends HostServerAdapter {
   }
 
   async start(portOrSocketPath: number | string, bindAddress?: string) {
-    // This process owns the listener, and these arguments describe it.
-    this.enableDerivedHostValidation(portOrSocketPath, bindAddress);
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
@@ -305,6 +303,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
     if (typeof portOrSocketPath === 'string') {
       // Unix socket mode - clean up stale socket file before listening
       await this.cleanupStaleSocket(portOrSocketPath);
+      this.enableDerivedHostValidation(portOrSocketPath);
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
         server.listen(portOrSocketPath, () => {
@@ -325,7 +324,16 @@ export class ExpressHostAdapter extends HostServerAdapter {
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
         server.listen(portOrSocketPath, host, () => {
-          console.log(`MCP HTTP (Express) on ${host}:${portOrSocketPath}`);
+          // Derive AFTER binding: `port: 0` means "let the OS choose", and the
+          // allow-list has to name the port clients actually dial. Deriving
+          // from the literal 0 yields port-less loopback names and 403s every
+          // request. The assignment is synchronous inside the `listening`
+          // callback, so it lands before any request is dispatched.
+          const bound = server.address();
+          const boundPort = typeof bound === 'object' && bound ? bound.port : portOrSocketPath;
+          const boundAddress = typeof bound === 'object' && bound ? bound.address : host;
+          this.enableDerivedHostValidation(boundPort, boundAddress);
+          console.log(`MCP HTTP (Express) on ${host}:${boundPort}`);
           resolve();
         });
       });

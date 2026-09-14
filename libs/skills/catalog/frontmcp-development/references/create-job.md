@@ -268,7 +268,7 @@ Control who can interact with jobs using the `permissions` field. **`permissions
 
 **Requires 1.7.2 or later.** Before 1.7.2 (GHSA-58v2-gpcc-jmqv) the `permissions` array was validated and stored but never evaluated — every job was reachable by every caller who could reach `execute_job`. On older versions do not rely on this field for access control.
 
-Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. Enforcement happens in `JobExecutionManager`, so background runs and workflow steps are covered, and `list_jobs` hides entries the caller could not run. A denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
+Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` (the `execute_job` tool, triggers, background runs); a job reached as a workflow step is checked against its own rules in `WorkflowStepExecutor`, so authorizing the workflow does not launder the jobs it references. `list_jobs` hides entries the caller could not run, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
 
 ### Permission Rule Shape
 
@@ -333,7 +333,7 @@ class DataExportJob extends JobContext {
 
 ### Combining Permission Strategies
 
-Within a single rule, `roles`, `scopes`, and `custom` are additive -- all specified conditions must be met. Add additional entries to grant other actions (or alternative role/scope sets):
+Within a single rule, `roles`, `scopes`, and `custom` are additive -- all specified conditions must be met, while the list inside `roles` (or `scopes`) is any-of. Add one entry per action. Adding a SECOND entry for the same action makes the check stricter, not looser -- both rules must pass -- so express alternatives as a longer `roles`/`scopes` list within one rule, never as an extra entry:
 
 ```typescript
 permissions: [

@@ -162,9 +162,10 @@ Validates the HTTP `Host`, `X-Forwarded-Host` and `Origin` headers against an al
 With no `allowedHosts` configured, the list is derived from what the process actually listens on:
 
 - `localhost`, `127.0.0.1`, `[::1]` — each with and without the bound port
-- the specific NIC address, when the server binds one
 
 Matching is case-insensitive, and `example.com` / `example.com:80` / `example.com:443` compare equal.
+
+A **loopback** listener is reachable only under those names, so the derived list is exact and is enforced as-is — which is precisely the DNS-rebinding case. A **routable** bind is reachable under names this process cannot enumerate, so nothing derived is enforced there until you name the public host (see below); once you do, the bound NIC address joins the list alongside it.
 
 ### Deployments behind a proxy
 
@@ -187,7 +188,9 @@ FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
 
 ### Unix-socket servers
 
-A server bound to `socketPath` has no TCP host: the socket's filesystem permissions are the boundary, and clients send an arbitrary placeholder `Host`. Host checking is skipped there and needs no configuration — a rebound browser cannot reach a unix socket at all.
+A server bound to `socketPath` has no TCP host: the socket's filesystem permissions are the boundary, and clients send an arbitrary placeholder `Host`. The *derived* allow-list is skipped there and needs no configuration — a rebound browser cannot reach a unix socket at all.
+
+An **explicit** `allowedHosts` / `allowedOrigins` (or `FRONTMCP_ALLOWED_HOSTS`) still applies to a socket server, because it is configuration rather than a guess. Since a socket client's `Host` is a placeholder, setting one there will reject every request — leave it unset.
 
 To turn it off entirely:
 

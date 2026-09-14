@@ -12,7 +12,7 @@ import {
   WorkflowTimeoutError,
 } from '../../errors/workflow.errors';
 import { type JobRegistryInterface } from '../../job/job.registry';
-import { WorkflowStepExecutor } from './workflow-step.executor';
+import { WorkflowStepExecutor, type WorkflowStepExecutorExtra } from './workflow-step.executor';
 
 /**
  * DAG-based workflow execution engine.
@@ -38,7 +38,7 @@ export class WorkflowEngine {
     metadata: WorkflowMetadata,
     jobRegistry: JobRegistryInterface,
     logger: FrontMcpLogger,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
+    extra: WorkflowStepExecutorExtra,
   ) {
     this.metadata = metadata;
     this.logger = logger;

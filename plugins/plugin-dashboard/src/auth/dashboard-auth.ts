@@ -60,6 +60,24 @@ function tokenMatches(presented: string, expected: string): boolean {
  * token lands in access logs, `Referer` headers and browser history) or as
  * `?token=<token>`, which is what the documented dashboard link uses.
  */
+/**
+ * Extract the token from an `Authorization: Bearer <token>` header.
+ *
+ * RFC 7235 makes the scheme name case-insensitive and allows more than one
+ * space before the token, so matching the literal `'Bearer '` rejects headers
+ * that are perfectly valid. Only the scheme is normalized; the token bytes are
+ * compared as sent (a `token68` cannot contain whitespace, so trimming it is
+ * safe).
+ */
+function readBearerToken(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const separator = header.indexOf(' ');
+  if (separator === -1) return undefined;
+  if (header.slice(0, separator).toLowerCase() !== 'bearer') return undefined;
+  const token = header.slice(separator + 1).trim();
+  return token.length > 0 ? token : undefined;
+}
+
 export function createDashboardAuthValidator(
   auth: DashboardAuth | undefined,
 ): ((req: DashboardAuthRequest) => DashboardAuthResult) | undefined {
@@ -75,8 +93,7 @@ export function createDashboardAuthValidator(
       return { authorized: false, status: 401, message: 'Dashboard authentication is misconfigured' };
     }
 
-    const header = readHeader(req.headers, 'authorization');
-    const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+    const bearer = readBearerToken(readHeader(req.headers, 'authorization'));
     if (bearer && tokenMatches(bearer, expected)) return AUTHORIZED;
 
     const queryToken = readQuery(req.query, 'token');

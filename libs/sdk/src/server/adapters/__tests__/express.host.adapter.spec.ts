@@ -510,6 +510,36 @@ describe('ExpressHostAdapter — derived host allow-list scope', () => {
     }
   });
 
+  it('derives from the port the OS assigned, not the requested 0', async () => {
+    // `port: 0` asks the OS to pick. Deriving before `listen()` sees only the
+    // literal 0, which `deriveAllowedHosts` reads as "no port" — the allow-list
+    // is then port-less loopback names while every real `Host` carries the
+    // assigned port, so enforcement 403s the whole server.
+    const opened: http.Server[] = [];
+    const realCreateServer = http.createServer.bind(http);
+    const spy = jest.spyOn(http, 'createServer').mockImplementation(((...args: never[]) => {
+      const server = (realCreateServer as (...a: never[]) => http.Server)(...args);
+      opened.push(server);
+      return server;
+    }) as never);
+
+    try {
+      const adapter = new ExpressHostAdapter();
+      await adapter.start(0, '127.0.0.1');
+
+      const address = opened[0]?.address();
+      const assignedPort = typeof address === 'object' && address ? address.port : 0;
+      expect(assignedPort).toBeGreaterThan(0);
+
+      expect(checkHost(adapter, `127.0.0.1:${assignedPort}`)).toBe('allowed');
+      expect(checkHost(adapter, `localhost:${assignedPort}`)).toBe('allowed');
+      expect(checkHost(adapter, 'evil.attacker.example')).toBe(403);
+    } finally {
+      spy.mockRestore();
+      await Promise.all(opened.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+    }
+  });
+
   it('warns and does not enforce when start() binds a routable address', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {

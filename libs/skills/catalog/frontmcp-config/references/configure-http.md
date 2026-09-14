@@ -129,8 +129,10 @@ after the rebind the browser genuinely considers the request same-origin. Valida
 server-side defence.
 
 With no `allowedHosts` configured, the list is derived from what the process listens on: `localhost`,
-`127.0.0.1` and `[::1]`, each with and without the bound port, plus a specific bound NIC address.
-Matching is case-insensitive and treats `host` and `host:80`/`host:443` as equal.
+`127.0.0.1` and `[::1]`, each with and without the bound port. Matching is case-insensitive and
+treats `host` and `host:80`/`host:443` as equal. A loopback listener is reachable only under those
+names, so the derived list is exact and is enforced as-is; a routable bind enforces nothing derived
+until you name the public host, and the bound NIC address then joins the list alongside it.
 
 **Deployments behind a proxy need one line of config.** A routable bind (`0.0.0.0`, `::`, a specific
 NIC) is reached under a hostname the process cannot know, so a derived list is not enforced there —
@@ -156,8 +158,10 @@ ENV FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
 ```
 
 A server bound to `socketPath` has no TCP host — the socket's filesystem permissions are the
-boundary and clients send an arbitrary placeholder `Host` — so host checking is skipped there and
-needs no configuration. A rebound browser cannot reach a unix socket at all.
+boundary and clients send an arbitrary placeholder `Host` — so the _derived_ allow-list is skipped
+there and needs no configuration. A rebound browser cannot reach a unix socket at all. An
+**explicit** `allowedHosts` / `allowedOrigins` still applies to a socket server, and because the
+client's `Host` is a placeholder it will reject every request — leave it unset.
 
 To turn it off entirely: `dnsRebindingProtection: { enabled: false }`.
 

@@ -94,7 +94,14 @@ export function resolveDashboardOptions(fallback: DashboardPluginOptionsInput = 
   return dashboardPluginOptionsSchema.parse({ ...defaultDashboardPluginOptions, ...fallback });
 }
 
-/** Test seam — clears the published options between cases. */
+/**
+ * Clear the published options.
+ *
+ * Dashboard options are process-wide, and a second CONFLICTING auth
+ * configuration now throws rather than silently replacing the first (BC-036).
+ * A host that builds several servers serially — a test suite, a CLI that
+ * reconfigures between runs — calls this between constructions.
+ */
 export function resetDashboardOptions(): void {
   publishedOptions = undefined;
 }

@@ -572,6 +572,10 @@ export const frontMcpBaseSchema = z.object({
   jobs: z
     .object({
       enabled: z.boolean(),
+      // Opt-in for `register_job` / `register_workflow` (GHSA-58v2-gpcc-jmqv).
+      // Omitting it here would let Zod strip the flag before the scope reads
+      // it, leaving the documented escape hatch permanently off.
+      allowDynamicRegistration: z.boolean().optional(),
       store: z
         .object({
           redis: redisOptionsSchema.optional(),
