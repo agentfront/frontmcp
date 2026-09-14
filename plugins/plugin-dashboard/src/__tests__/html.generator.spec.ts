@@ -1,8 +1,9 @@
 // file: plugins/plugin-dashboard/src/__tests__/html.generator.spec.ts
 
 import 'reflect-metadata';
-import { generateDashboardHtml } from '../html/html.generator';
+
 import { dashboardPluginOptionsSchema } from '../dashboard.types';
+import { generateDashboardHtml } from '../html/html.generator';
 
 describe('generateDashboardHtml', () => {
   describe('inline dashboard (no entrypoint)', () => {
@@ -26,13 +27,17 @@ describe('generateDashboardHtml', () => {
       expect(html).toContain("basePath: '/admin'");
     });
 
-    it('should include token in SSE URL when auth is enabled', () => {
+    // GHSA-rgxj-434m-vxh3: the token gates the page; it is NOT embedded in it.
+    // A URL token lands in access logs, Referer headers and browser history, and
+    // the page's own MCP POSTs never carried it anyway.
+    it('never puts the token in the page or the SSE URL', () => {
       const options = dashboardPluginOptionsSchema.parse({
         auth: { enabled: true, token: 'my-secret-token' },
       });
       const html = generateDashboardHtml(options);
 
-      expect(html).toContain('token=my-secret-token');
+      expect(html).not.toContain('my-secret-token');
+      expect(html).not.toContain('token=');
     });
 
     it('should not include token in SSE URL when auth is disabled', () => {
@@ -118,15 +123,14 @@ describe('generateDashboardHtml', () => {
       expect(html).toContain('\\x3e');
     });
 
-    it('should escape special characters in token', () => {
+    it('cannot be XSS-ed through the token, because the token never reaches the page', () => {
       const options = dashboardPluginOptionsSchema.parse({
         auth: { enabled: true, token: "token's<script>" },
       });
       const html = generateDashboardHtml(options);
 
-      // Should escape quotes and angle brackets
-      expect(html).toContain("token\\'s");
-      expect(html).toContain('\\x3cscript\\x3e');
+      expect(html).not.toContain("token's");
+      expect(html).not.toContain('<script>alert');
     });
   });
 
@@ -156,7 +160,7 @@ describe('generateDashboardHtml', () => {
 
       expect(html).toContain('window.__FRONTMCP_DASHBOARD__');
       expect(html).toContain("basePath: '/custom-dash'");
-      expect(html).toContain('ext-token');
+      expect(html).not.toContain('ext-token');
     });
 
     it('should include error handling for external entrypoint', () => {
@@ -207,14 +211,15 @@ describe('generateDashboardHtml', () => {
       expect(html).toContain("sseUrl: '/dashboard/sse'");
     });
 
-    it('should build correct SSE URL with token', () => {
+    it('builds the SSE URL without a token query parameter', () => {
       const options = dashboardPluginOptionsSchema.parse({
         basePath: '/dashboard',
         auth: { enabled: true, token: 'test-token' },
       });
       const html = generateDashboardHtml(options);
 
-      expect(html).toContain("sseUrl: '/dashboard/sse?token=test-token'");
+      expect(html).toContain("sseUrl: '/dashboard/sse'");
+      expect(html).not.toContain('test-token');
     });
   });
 });

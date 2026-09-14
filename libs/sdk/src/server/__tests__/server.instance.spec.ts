@@ -39,20 +39,20 @@ describe('FrontMcpServerInstance', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '' });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({});
+      expect(capturedAdapterArgs[0]).not.toHaveProperty('cors');
     });
 
     it('still honours an explicit permissive CORS config — the way back', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: { origin: true } });
 
-      expect(capturedAdapterArgs[0]).toEqual({ cors: { origin: true } });
+      expect(capturedAdapterArgs[0]).toMatchObject({ cors: { origin: true } });
     });
 
     it('should pass empty options when cors is false', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: false });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({});
+      expect(capturedAdapterArgs[0]).not.toHaveProperty('cors');
     });
 
     it('should pass custom cors config through to adapter', () => {
@@ -60,14 +60,14 @@ describe('FrontMcpServerInstance', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: customCors });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({ cors: customCors });
+      expect(capturedAdapterArgs[0]).toMatchObject({ cors: customCors });
     });
 
     it('should pass empty cors object through to adapter', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: {} });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({ cors: {} });
+      expect(capturedAdapterArgs[0]).toMatchObject({ cors: {} });
     });
 
     it('should pass cors with array of origins', () => {
@@ -75,7 +75,30 @@ describe('FrontMcpServerInstance', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: customCors });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toEqual({ cors: customCors });
+      expect(capturedAdapterArgs[0]).toMatchObject({ cors: customCors });
+    });
+  });
+
+  describe('listen info for DNS-rebinding protection (GHSA-mc9g-v2cp-vfff)', () => {
+    // The adapter derives its default Host allow-list from what the server will
+    // actually listen on, so that information has to reach it.
+    it('forwards the resolved bind address and port', () => {
+      new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+
+      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { bindAddress: '127.0.0.1', port: 3001 } });
+    });
+
+    it('forwards the socket path instead of a port for a unix-socket server', () => {
+      new FrontMcpServerInstance({ port: 3001, entryPath: '', socketPath: '/tmp/frontmcp.sock' });
+
+      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { socketPath: '/tmp/frontmcp.sock' } });
+      expect((capturedAdapterArgs[0] as { listen: Record<string, unknown> }).listen).not.toHaveProperty('port');
+    });
+
+    it('forwards an explicit bind address override', () => {
+      new FrontMcpServerInstance({ port: 3001, entryPath: '', security: { bindAddress: 'all' } });
+
+      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { bindAddress: '0.0.0.0' } });
     });
   });
 
@@ -152,7 +175,7 @@ describe('FrontMcpServerInstance', () => {
       expect(instance.config.routes).toHaveLength(1);
       expect(instance.config.routes?.[0]).toMatchObject({ method: 'GET', path: '/ping' });
       // Adapter constructed with no CORS options at all (the same-origin default).
-      expect(capturedAdapterArgs[0]).toEqual({});
+      expect(capturedAdapterArgs[0]).not.toHaveProperty('cors');
     });
   });
 

@@ -43,7 +43,13 @@ export function normalizeAppScope(
       ...metadata,
       id: scopeId,
       apps: [appItem],
-      auth: appMetadata.auth,
+      // An app that declares no `auth` INHERITS the server's policy. Writing
+      // `appMetadata.auth` unconditionally set the key to `undefined`, which
+      // overrode the spread above and dropped the server's auth entirely — so a
+      // standalone app silently became public (GHSA-rgxj-434m-vxh3, where the
+      // dashboard's own scope was the case in point). Declaring
+      // `auth: { mode: 'public' }` explicitly is still honoured.
+      auth: appMetadata.auth ?? metadata.auth,
       // For a splitByApp scope, auth (and any auth.ui paths) come from `@App`, so
       // anchor on the App's captured source dir. Fall back to the server's.
       // `__sourceDir` lives on LocalAppMetadata only; read it defensively.

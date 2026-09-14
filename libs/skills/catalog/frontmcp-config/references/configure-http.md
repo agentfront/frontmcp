@@ -116,6 +116,50 @@ ENV FRONTMCP_BIND_ADDRESS=all
 EXPOSE 3000
 ```
 
+## DNS Rebinding Protection
+
+**On by default since v1.7.2** (BC-035, GHSA-mc9g-v2cp-vfff). The server validates `Host`,
+`X-Forwarded-Host` and `Origin` before routing and before reading the body; a request naming a host
+this server does not answer to gets `403`. This covers the MCP endpoint, the OAuth routes, the SSE
+transport and any custom route.
+
+Binding loopback does **not** protect against this: a DNS rebinding attack points an
+attacker-controlled domain at `127.0.0.1`, so loopback is the destination. CORS does not either —
+after the rebind the browser genuinely considers the request same-origin. Validating `Host` is the
+server-side defence.
+
+With no `allowedHosts` configured, the list is derived from what the process listens on: `localhost`,
+`127.0.0.1` and `[::1]`, each with and without the bound port, plus a specific bound NIC address.
+Matching is case-insensitive and treats `host` and `host:80`/`host:443` as equal.
+
+**Deployments behind a proxy need one line of config.** A routable bind (`0.0.0.0`, `::`, a specific
+NIC) is reached under a hostname the process cannot know, so a derived list is not enforced there —
+FrontMCP logs a warning and leaves host checking off rather than 403-ing a proxied deployment on a
+patch upgrade. Name the public host to turn it on:
+
+```typescript
+http: {
+  security: {
+    dnsRebindingProtection: {
+      allowedHosts: ['api.example.com', 'api.example.com:8443'],
+      allowedOrigins: ['https://app.example.com'],
+    },
+  },
+}
+```
+
+Or via the environment, which pairs with `FRONTMCP_BIND_ADDRESS` in a container:
+
+```dockerfile
+ENV FRONTMCP_BIND_ADDRESS=all
+ENV FRONTMCP_ALLOWED_HOSTS=api.example.com,api.example.com:8443
+```
+
+To turn it off entirely: `dnsRebindingProtection: { enabled: false }`.
+
+A request with **no** `Origin` header is allowed through — non-browser clients never send one, and a
+rebound page always does. Rejecting the absent case breaks every CLI client and adds nothing.
+
 ## CORS Configuration
 
 ### No CORS Headers (Default)

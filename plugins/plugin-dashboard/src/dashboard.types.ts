@@ -30,12 +30,22 @@ export type CdnConfig = z.output<typeof cdnConfigSchema>;
 /**
  * Authentication configuration for dashboard access.
  */
-export const dashboardAuthSchema = z.object({
-  /** Enable authentication (default: false) */
-  enabled: z.boolean().default(false),
-  /** Secret token for query param authentication (?token=xxx) */
-  token: z.string().optional(),
-});
+export const dashboardAuthSchema = z
+  .object({
+    /** Enable authentication (default: false) */
+    enabled: z.boolean().default(false),
+    /**
+     * Secret token. Presented as `Authorization: Bearer <token>` (preferred) or
+     * `?token=<token>`. Required when `enabled` is true.
+     */
+    token: z.string().min(1).optional(),
+  })
+  .refine((value) => !value.enabled || Boolean(value.token), {
+    // Fail at startup rather than serve an "authenticated" dashboard with
+    // nothing to authenticate against (GHSA-rgxj-434m-vxh3).
+    message: 'dashboard auth.enabled requires auth.token to be set',
+    path: ['token'],
+  });
 
 /** Dashboard auth type */
 export type DashboardAuth = z.output<typeof dashboardAuthSchema>;

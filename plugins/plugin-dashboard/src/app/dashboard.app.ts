@@ -1,37 +1,37 @@
 import {
   App,
-  Plugin,
   DynamicPlugin,
-  ScopeEntry,
   FrontMcpConfig,
   FrontMcpServer,
-  ServerRequest,
-  ServerResponse,
-  ProviderType,
-  NextFn,
+  Plugin,
+  ScopeEntry,
   type FrontMcpConfigType,
+  type NextFn,
+  type ProviderType,
+  type ServerRequest,
+  type ServerResponse,
 } from '@frontmcp/sdk';
 
+// Auth
+import { createDashboardAuthValidator } from '../auth/dashboard-auth';
+import { resolveDashboardOptions } from '../dashboard.config-store';
 // Types and symbols
-import { DashboardConfigToken, GraphDataProviderToken, ParentScopeToken } from '../dashboard.symbol';
+import { DashboardConfigToken, ParentScopeToken } from '../dashboard.symbol';
 import {
-  DashboardPluginOptions,
-  DashboardPluginOptionsInput,
   dashboardPluginOptionsSchema,
   defaultDashboardPluginOptions,
   isDashboardEnabled,
+  type DashboardPluginOptions,
+  type DashboardPluginOptionsInput,
 } from '../dashboard.types';
-
-// Providers
-import { GraphDataProvider } from '../providers';
-
-// Tools
-import GraphTool from '../tools/graph.tool';
-import ListToolsTool from '../tools/list-tools.tool';
-import ListResourcesTool from '../tools/list-resources.tool';
-
 // HTML Generator
 import { generateDashboardHtml } from '../html/html.generator';
+// Providers
+import { GraphDataProvider } from '../providers';
+// Tools
+import GraphTool from '../tools/graph.tool';
+import ListResourcesTool from '../tools/list-resources.tool';
+import ListToolsTool from '../tools/list-tools.tool';
 
 /**
  * Token for tracking middleware registration.
@@ -44,11 +44,25 @@ const DashboardMiddlewareToken = Symbol('dashboard:middleware');
  */
 function createDashboardMiddleware(options: DashboardPluginOptions) {
   const html = generateDashboardHtml(options);
+  const authorize = createDashboardAuthValidator(options.auth);
 
   return async (req: ServerRequest, res: ServerResponse, next: NextFn) => {
     // Skip if dashboard is disabled
     if (!isDashboardEnabled(options)) {
       return next();
+    }
+
+    // Token gate (GHSA-rgxj-434m-vxh3). Runs before anything is served — the
+    // page itself is the disclosure, since it names the dashboard's endpoints.
+    if (authorize) {
+      const result = authorize({
+        headers: req.headers as Record<string, string | string[] | undefined> | undefined,
+        query: req.query as Record<string, string | string[] | undefined> | undefined,
+      });
+      if (!result.authorized) {
+        res.status(result.status ?? 401).json({ error: 'Unauthorized', message: result.message ?? 'Unauthorized' });
+        return;
+      }
     }
 
     const urlPath = (req.path || req.url || '/') as string;
@@ -96,15 +110,20 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
    * Provide the dashboard config and middleware registration via DI.
    */
   static override dynamicProviders(options: DashboardPluginOptionsInput): ProviderType[] {
-    const parsedOptions = dashboardPluginOptionsSchema.parse({
-      ...defaultDashboardPluginOptions,
-      ...options,
-    });
+    // NOTE: the operator's options are resolved INSIDE the factories, not here.
+    // `DashboardApp` declares this plugin inside an `@App` decorator, which runs
+    // at module-import time — strictly before `DashboardPlugin.init(...)` is
+    // evaluated in the `@FrontMcp` metadata. Reading the published options at
+    // this point would always see the defaults, which is how the operator's
+    // `auth` and `basePath` came to be silently discarded
+    // (GHSA-rgxj-434m-vxh3). The factories run at scope-construction time, by
+    // which point `init(...)` has published.
     return [
       {
         name: 'dashboard:config',
         provide: DashboardConfigToken,
-        useValue: parsedOptions,
+        inject: () => [] as const,
+        useFactory: () => resolveDashboardOptions(options),
       },
       // Register middleware for HTML serving (must be in dynamic providers to access config)
       {
@@ -112,9 +131,10 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
         provide: DashboardMiddlewareToken,
         inject: () => [FrontMcpServer] as const,
         useFactory: (server: FrontMcpServer) => {
-          const middleware = createDashboardMiddleware(parsedOptions);
-          // Register at /dashboard basePath
-          server.registerMiddleware(parsedOptions.basePath, middleware);
+          const effectiveOptions = resolveDashboardOptions(options);
+          const middleware = createDashboardMiddleware(effectiveOptions);
+          // Register at the configured basePath
+          server.registerMiddleware(effectiveOptions.basePath, middleware);
           return { registered: true };
         },
       },
@@ -174,10 +194,13 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
   ],
   plugins: [DashboardHttpPlugin.init({})],
   tools: [GraphTool, ListToolsTool, ListResourcesTool],
-  auth: {
-    mode: 'public',
-  },
-  standalone: true, // Dashboard is part of root scope so GraphDataProvider can access all tools/resources
+  // No `auth` block: the dashboard scope INHERITS the server's authentication
+  // policy. It used to hard-code `mode: 'public'`, which made
+  // `dashboard:graph` / `list-tools` / `list-resources` — and through them the
+  // whole server's inventory — anonymously reachable regardless of how the
+  // server itself was authenticated (GHSA-rgxj-434m-vxh3). A server that wants
+  // an open dashboard declares `auth: { mode: 'public' }` for itself.
+  standalone: true, // Isolated scope; GraphDataProvider walks up to the root ScopeRegistry for the full inventory
 })
 export class DashboardApp {}
 
