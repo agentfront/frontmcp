@@ -62,12 +62,6 @@ export class FrontMcpServerInstance extends FrontMcpServer {
         ...(this.config.security ? { security: this.config.security } : {}),
         ...(this.config.bodyLimit !== undefined ? { bodyLimit: this.config.bodyLimit } : {}),
         ...(this.config.urlencodedLimit !== undefined ? { urlencodedLimit: this.config.urlencodedLimit } : {}),
-        // What this process will actually listen on — the DNS-rebinding
-        // allow-list is derived from it when none is configured.
-        listen: {
-          bindAddress: resolveBindAddress(this.config.security, getRuntimeContext().deployment),
-          ...(this.config.socketPath ? { socketPath: this.config.socketPath } : { port: this.config.port }),
-        },
       });
     }
   }

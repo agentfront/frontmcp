@@ -5,6 +5,7 @@ import { FrontMcpServerInstance } from '../server.instance';
 
 // Capture constructor args passed to ExpressHostAdapter
 let capturedAdapterArgs: unknown[] = [];
+let capturedStartArgs: unknown[] = [];
 
 jest.mock('../adapters/express.host.adapter', () => {
   return {
@@ -21,7 +22,9 @@ jest.mock('../adapters/express.host.adapter', () => {
       getHandler() {
         return {};
       }
-      async start() {}
+      async start(...args: unknown[]) {
+        capturedStartArgs = args;
+      }
     },
   };
 });
@@ -29,6 +32,7 @@ jest.mock('../adapters/express.host.adapter', () => {
 describe('FrontMcpServerInstance', () => {
   beforeEach(() => {
     capturedAdapterArgs = [];
+    capturedStartArgs = [];
   });
 
   describe('CORS resolution in setupDefaults', () => {
@@ -79,26 +83,34 @@ describe('FrontMcpServerInstance', () => {
     });
   });
 
-  describe('listen info for DNS-rebinding protection (GHSA-mc9g-v2cp-vfff)', () => {
-    // The adapter derives its default Host allow-list from what the server will
-    // actually listen on, so that information has to reach it.
-    it('forwards the resolved bind address and port', () => {
+  describe('listener passed to start() (GHSA-mc9g-v2cp-vfff)', () => {
+    // The adapter derives its default Host allow-list from the arguments
+    // `start()` is called with — the listener it actually opens — so those have
+    // to be the resolved ones. Predicting them at construction instead left a
+    // direct caller's loopback listener unprotected.
+    it('starts on the resolved bind address and port', async () => {
+      await new FrontMcpServerInstance({ port: 3001, entryPath: '' }).start();
+
+      expect(capturedStartArgs).toEqual([3001, '127.0.0.1']);
+    });
+
+    it('starts on the socket path instead of a port for a unix-socket server', async () => {
+      await new FrontMcpServerInstance({ port: 3001, entryPath: '', socketPath: '/tmp/frontmcp.sock' }).start();
+
+      expect(capturedStartArgs[0]).toBe('/tmp/frontmcp.sock');
+    });
+
+    it('honours an explicit bind address override', async () => {
+      await new FrontMcpServerInstance({ port: 3001, entryPath: '', security: { bindAddress: 'all' } }).start();
+
+      expect(capturedStartArgs).toEqual([3001, '0.0.0.0']);
+    });
+
+    it('does not hand the adapter a predicted listener', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '' });
 
-      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { bindAddress: '127.0.0.1', port: 3001 } });
-    });
-
-    it('forwards the socket path instead of a port for a unix-socket server', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', socketPath: '/tmp/frontmcp.sock' });
-
-      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { socketPath: '/tmp/frontmcp.sock' } });
-      expect((capturedAdapterArgs[0] as { listen: Record<string, unknown> }).listen).not.toHaveProperty('port');
-    });
-
-    it('forwards an explicit bind address override', () => {
-      new FrontMcpServerInstance({ port: 3001, entryPath: '', security: { bindAddress: 'all' } });
-
-      expect(capturedAdapterArgs[0]).toMatchObject({ listen: { bindAddress: '0.0.0.0' } });
+      expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.bindAddress');
+      expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.port');
     });
   });
 

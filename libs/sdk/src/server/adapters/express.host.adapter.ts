@@ -56,14 +56,14 @@ export interface ExpressHostAdapterOptions {
   urlencodedLimit?: number | string;
 
   /**
-   * Resolved listening address and port, plus the configured issuer. Used to
-   * derive the default DNS-rebinding allow-list — the names a client can
-   * legitimately use to reach this process.
+   * Supplemental listener metadata for the default DNS-rebinding allow-list.
+   *
+   * The address and port are NOT read from here — they come from the arguments
+   * `start()` is actually called with, so the allow-list always describes the
+   * listener this process opened. `issuer` names the public host a proxy
+   * presents, which `start()` cannot know.
    */
   listen?: {
-    bindAddress?: string;
-    port?: number;
-    socketPath?: string;
     issuer?: string;
   };
 }
@@ -75,7 +75,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
   /** Active host-validation middleware, or undefined while nothing is enforced. */
   private hostValidation?: ReturnType<typeof createHostValidationMiddleware>;
   /** Builds the derived allow-list, once this process commits to listening. */
-  private deriveHostValidation?: () => ReturnType<typeof createHostValidationMiddleware> | undefined;
+  private deriveHostValidation?: (
+    portOrSocketPath: number | string,
+    bindAddress?: string,
+  ) => ReturnType<typeof createHostValidationMiddleware> | undefined;
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
@@ -192,11 +195,18 @@ export class ExpressHostAdapter extends HostServerAdapter {
       // port clients reach it on. `start()` says so; a serverless handler
       // (`getHandler()`) never calls it, and its public hostname is unknowable
       // here — deriving one there would 403 every real request.
-      this.deriveHostValidation = () => {
+      this.deriveHostValidation = (portOrSocketPath, bindAddress) => {
+        // Describe the listener `start()` actually opened. Reading a predicted
+        // address out of the options instead would leave a direct caller —
+        // `new ExpressHostAdapter().start(3000, '127.0.0.1')` — with no port to
+        // derive from, and therefore no protection on exactly the loopback
+        // listener DNS rebinding targets.
+        const isSocket = typeof portOrSocketPath === 'string';
         const derivation = {
-          bindAddress: options?.listen?.bindAddress,
-          port: options?.listen?.port,
-          socketPath: options?.listen?.socketPath,
+          // `start()` binds `bindAddress ?? '0.0.0.0'`; mirror that exactly.
+          bindAddress: isSocket ? undefined : (bindAddress ?? '0.0.0.0'),
+          port: isSocket ? undefined : portOrSocketPath,
+          socketPath: isSocket ? portOrSocketPath : undefined,
           issuer: options?.listen?.issuer,
         };
         if (!shouldEnforceDerivedHosts(derivation)) {
@@ -236,9 +246,9 @@ export class ExpressHostAdapter extends HostServerAdapter {
    * Enable the DERIVED host allow-list. Called from `start()` only — see
    * `installHostValidation`.
    */
-  private enableDerivedHostValidation(): void {
+  private enableDerivedHostValidation(portOrSocketPath: number | string, bindAddress?: string): void {
     if (this.hostValidation || !this.deriveHostValidation) return;
-    this.hostValidation = this.deriveHostValidation();
+    this.hostValidation = this.deriveHostValidation(portOrSocketPath, bindAddress);
     this.deriveHostValidation = undefined;
   }
 
@@ -280,8 +290,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
   }
 
   async start(portOrSocketPath: number | string, bindAddress?: string) {
-    // This process owns the listener, so the derived allow-list is meaningful.
-    this.enableDerivedHostValidation();
+    // This process owns the listener, and these arguments describe it.
+    this.enableDerivedHostValidation(portOrSocketPath, bindAddress);
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
