@@ -20,6 +20,12 @@ export interface EventStoreInterface {
     lastEventId: string,
     callbacks: { send: (eventId: string, message: unknown) => Promise<void> },
   ): Promise<string>;
+  /**
+   * Resolve the stream an event belongs to. Optional upstream, but the
+   * transport's 409-conflict guard is dead code without it
+   * (GHSA-84j6-jc92-77jm).
+   */
+  getStreamIdForEventId?(eventId: string): Promise<string | undefined>;
 }
 
 export interface SqliteEventStoreOptions extends SqliteStorageOptions {
@@ -164,6 +170,11 @@ export class SqliteEventStore implements EventStoreInterface {
     }
 
     return id;
+  }
+
+  async getStreamIdForEventId(eventId: string): Promise<string | undefined> {
+    const row = this.prepared().getStreamId.get(eventId) as { stream_id: string } | undefined;
+    return row?.stream_id;
   }
 
   async replayEventsAfter(

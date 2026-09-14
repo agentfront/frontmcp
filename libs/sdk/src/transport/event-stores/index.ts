@@ -50,3 +50,7 @@ export type { MemoryEventStoreOptions } from './memory.event-store';
 // Redis implementation
 export { RedisEventStore } from './redis.event-store';
 export type { RedisEventStoreOptions } from './redis.event-store';
+
+// Per-session view over the shared store (GHSA-84j6-jc92-77jm)
+export { createSessionScopedEventStore } from './session-scoped.event-store';
+export type { EventStoreWithLookup } from './session-scoped.event-store';
