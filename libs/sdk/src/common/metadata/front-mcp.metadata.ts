@@ -293,6 +293,13 @@ export interface FrontMcpBaseMetadata {
    */
   jobs?: {
     enabled: boolean;
+    /**
+     * Allow `register_job` / `register_workflow` to register a job from a raw
+     * script string at runtime. Off by default — see JobsConfig.
+     *
+     * @default false
+     */
+    allowDynamicRegistration?: boolean;
     store?: {
       redis?: RedisOptionsInput;
       keyPrefix?: string;

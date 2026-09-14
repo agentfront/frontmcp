@@ -1,10 +1,20 @@
 // file: plugins/plugin-dashboard/src/__tests__/dashboard.plugin.spec.ts
 
 import 'reflect-metadata';
+
+import { resetDashboardOptions } from '../dashboard.config-store';
 import DashboardPlugin from '../dashboard.plugin';
 import { DashboardConfigToken } from '../dashboard.symbol';
 
 describe('DashboardPlugin', () => {
+  // Dashboard options are process-wide, and a conflicting AUTH configuration is
+  // refused rather than silently replaced (GHSA-rgxj-434m-vxh3). Cases here
+  // build plugins with different tokens, so each starts from a clean store —
+  // which is what any caller constructing more than one must also do.
+  beforeEach(() => {
+    resetDashboardOptions();
+  });
+
   describe('constructor', () => {
     it('should create plugin with default options', () => {
       const plugin = new DashboardPlugin();

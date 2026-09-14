@@ -41,6 +41,9 @@ export class FrontMcpServerInstance extends FrontMcpServer {
 
   private setupDefaults() {
     if (typeof this.config.hostFactory === 'function') {
+      // Forward `security` to a custom host too — it used to be dropped here, so
+      // a hostFactory server silently ran with no host validation at all
+      // (GHSA-mc9g-v2cp-vfff).
       const { hostFactory, ...config } = this.config;
       this.host = this.config.hostFactory(config);
     } else if (this.config.hostFactory !== undefined) {

@@ -18,6 +18,7 @@ import {
   TransportNotConnectedError,
   UnsupportedContentTypeError,
 } from '../../errors/transport.errors';
+import { compileHostValidation, validateHostHeaders } from '../../server/security/host-validation';
 
 const MAXIMUM_MESSAGE_SIZE = '4mb';
 
@@ -75,6 +76,13 @@ export class SSEServerTransport implements Transport {
 
   /**
    * Validates request headers for DNS rebinding protection.
+   *
+   * Since v1.7.2 the primary defence is the adapter-level Host validation, which
+   * runs before routing and therefore already covers `/sse` and `/message`
+   * (GHSA-mc9g-v2cp-vfff). These per-transport options remain for a host that
+   * constructs the transport directly; they delegate to the same rules so the
+   * two can never disagree about what a valid Host looks like.
+   *
    * @returns Error message if validation fails, undefined if validation passes.
    */
   private validateRequestHeaders(req: IncomingMessage): string | undefined {
@@ -83,23 +91,19 @@ export class SSEServerTransport implements Transport {
       return undefined;
     }
 
-    // Validate Host header if allowedHosts is configured
-    if (this._options.allowedHosts && this._options.allowedHosts.length > 0) {
-      const hostHeader = req.headers.host;
-      if (!hostHeader || !this._options.allowedHosts.includes(hostHeader)) {
-        return `Invalid Host header: ${hostHeader}`;
-      }
-    }
+    const rejection = validateHostHeaders(
+      {
+        host: req.headers.host,
+        forwardedHost: req.headers['x-forwarded-host'] as string | undefined,
+        origin: req.headers.origin,
+      },
+      compileHostValidation({
+        allowedHosts: this._options.allowedHosts?.length ? this._options.allowedHosts : undefined,
+        allowedOrigins: this._options.allowedOrigins?.length ? this._options.allowedOrigins : undefined,
+      }),
+    );
 
-    // Validate Origin header if allowedOrigins is configured
-    if (this._options.allowedOrigins && this._options.allowedOrigins.length > 0) {
-      const originHeader = req.headers.origin;
-      if (!originHeader || !this._options.allowedOrigins.includes(originHeader)) {
-        return `Invalid Origin header: ${originHeader}`;
-      }
-    }
-
-    return undefined;
+    return rejection?.message;
   }
 
   /**

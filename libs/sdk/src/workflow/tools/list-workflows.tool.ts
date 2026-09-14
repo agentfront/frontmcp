@@ -2,6 +2,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
+import { JobPermissionGuard } from '../../job/job-permission.guard';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
@@ -39,7 +40,14 @@ export default class ListWorkflowsTool extends ToolContext {
       labels: input.labels,
     });
 
-    const mapped = workflows.map((w: WorkflowEntry) => ({
+    // Same disclosure rule as list_jobs: don't advertise a workflow the caller
+    // could never run (GHSA-58v2-gpcc-jmqv).
+    const visible: WorkflowEntry[] = [];
+    for (const workflow of workflows as WorkflowEntry[]) {
+      if (await this.maySee(workflow)) visible.push(workflow);
+    }
+
+    const mapped = visible.map((w: WorkflowEntry) => ({
       name: w.name,
       description: w.metadata.description,
       trigger: w.getTrigger(),
@@ -51,5 +59,12 @@ export default class ListWorkflowsTool extends ToolContext {
       workflows: mapped,
       count: mapped.length,
     };
+  }
+
+  private async maySee(workflow: WorkflowEntry): Promise<boolean> {
+    const permissions = workflow.metadata.permissions;
+    const builder = this.scope.authoritiesContextBuilder;
+    if (!(await JobPermissionGuard.check(permissions, 'list', this.authInfo, builder))) return false;
+    return JobPermissionGuard.check(permissions, 'execute', this.authInfo, builder);
   }
 }

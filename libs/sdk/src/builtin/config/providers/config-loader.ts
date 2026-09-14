@@ -115,14 +115,54 @@ async function loadYamlConfig(basePath: string, configPath: string): Promise<Rec
   return {};
 }
 
+/** Keys that reach a prototype rather than the object in hand. */
+const UNSAFE_MERGE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Copy a value with every unsafe key removed, at any depth.
+ *
+ * Skipping unsafe keys during the merge is not enough on its own: a subtree the
+ * target does not already have is assigned WHOLESALE, so it would arrive
+ * straight from the YAML with its keys intact. `js-yaml` keeps `__proto__` as an
+ * ordinary own property, and an object carrying one pollutes whatever it is
+ * later spread or merged into.
+ */
+function stripUnsafeKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripUnsafeKeys);
+  // Only PLAIN objects are rebuilt. YAML also yields `Date` (and a custom schema
+  // can yield anything else); rebuilding those would replace the value with an
+  // empty object and lose it before the schema ever sees it.
+  if (!isPlainObject(value)) return value;
+
+  const clean: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (UNSAFE_MERGE_KEYS.has(key)) continue;
+    clean[key] = stripUnsafeKeys(nested);
+  }
+  return clean;
+}
+
+/** A `{}`-style object — not a Date, RegExp, Map, class instance, or null. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 /**
  * Deep merge two objects, with source values taking precedence.
  * Arrays are replaced, not merged.
+ *
+ * Prototype keys are skipped, matching the guard in `env-loader.ts`. The sources
+ * here are a trusted on-disk config file and already-sanitized env vars, so this
+ * is not a live vector — but a merge that walks arbitrary keys should not be the
+ * one place in the repo that omits the check.
  */
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const result = { ...target };
 
   for (const key in source) {
+    if (UNSAFE_MERGE_KEYS.has(key)) continue;
     const sourceVal = source[key];
     const targetVal = result[key];
 
@@ -137,8 +177,9 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
         // Both are objects - deep merge
         result[key] = deepMerge(targetVal as Record<string, unknown>, sourceVal as Record<string, unknown>);
       } else {
-        // Replace value
-        result[key] = sourceVal;
+        // Replace value — sanitized, because an unmerged subtree arrives exactly
+        // as the source had it.
+        result[key] = stripUnsafeKeys(sourceVal);
       }
     }
   }

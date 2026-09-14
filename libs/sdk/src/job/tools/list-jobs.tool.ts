@@ -2,6 +2,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { type JobEntry } from '../../common/entries/job.entry';
+import { JobPermissionGuard } from '../job-permission.guard';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
@@ -38,7 +39,15 @@ export default class ListJobsTool extends ToolContext {
       labels: input.labels,
     });
 
-    const mapped = jobs.map((j: JobEntry) => ({
+    // Listing a job the caller may neither read nor execute leaks its name,
+    // description and input schema. Filter to what this caller could actually
+    // use (GHSA-58v2-gpcc-jmqv).
+    const visible: JobEntry[] = [];
+    for (const job of jobs as JobEntry[]) {
+      if (await this.maySee(job)) visible.push(job);
+    }
+
+    const mapped = visible.map((j: JobEntry) => ({
       name: j.name,
       description: j.metadata.description,
       tags: j.getTags(),
@@ -50,5 +59,17 @@ export default class ListJobsTool extends ToolContext {
       jobs: mapped,
       count: mapped.length,
     };
+  }
+
+  /**
+   * A job is listable when the caller passes its `list` rules and is not
+   * blocked from executing it. Checking `execute` too keeps the listing honest:
+   * showing a job the caller can never run is the disclosure this closes.
+   */
+  private async maySee(job: JobEntry): Promise<boolean> {
+    const permissions = job.metadata.permissions;
+    const builder = this.scope.authoritiesContextBuilder;
+    if (!(await JobPermissionGuard.check(permissions, 'list', this.authInfo, builder))) return false;
+    return JobPermissionGuard.check(permissions, 'execute', this.authInfo, builder);
   }
 }

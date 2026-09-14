@@ -269,7 +269,7 @@ Steps with no mutual dependencies execute in parallel, bounded by `maxConcurrenc
 | `tags`              | `string[]`                         | —          | Categorization tags                                 |
 | `labels`            | `Record<string, string>`           | —          | Fine-grained key-value labels                       |
 | `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list_workflows`                          |
-| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                               |
+| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules (same shape and semantics as [job permissions](/frontmcp/servers/jobs#permissions)) |
 | `inputSchema`       | `ZodShape`                         | —          | Workflow-level input schema                         |
 | `outputSchema`      | `ZodShape`                         | —          | Workflow-level output schema                        |
 

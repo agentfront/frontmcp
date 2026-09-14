@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { resolvePrincipal } from '../../common/utils/principal.utils';
 import { GenericServerError, InvalidInputError } from '../../errors';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
 
@@ -37,7 +38,10 @@ export default class GetJobStatusTool extends ToolContext {
     }
 
     const record = await executionManager.getStatus(input.runId);
-    if (!record) {
+    // A run record carries the job's inputs and results, so reads are scoped to
+    // whoever started it. A foreign runId reads exactly like an unknown one, so
+    // the error cannot be used to probe for live runs (GHSA-58v2-gpcc-jmqv).
+    if (!record || !this.ownsRun(record)) {
       return this.fail(new InvalidInputError(`Run "${input.runId}" not found`));
     }
 
@@ -52,5 +56,23 @@ export default class GetJobStatusTool extends ToolContext {
       attempt: record.attempt,
       logs: record.logs,
     };
+  }
+
+  /**
+   * Match on the owning subject, falling back to the session for runs started
+   * before an owner was recorded (and for anonymous/public servers, where every
+   * caller has an empty subject and the session is the only identity there is).
+   *
+   * A record carrying NEITHER identity is refused. Such a run cannot be
+   * attributed to anyone, and its inputs and results are exactly what this check
+   * exists to protect — anyone holding the id would otherwise be able to read
+   * it. Internal callers that must read unattributed runs should go through the
+   * execution manager directly rather than this tool.
+   */
+  private ownsRun(record: { ownerSub?: string; sessionId?: string }): boolean {
+    const callerSub = resolvePrincipal(this.authInfo, this.scope.authoritiesContextBuilder).sub;
+    if (record.ownerSub) return record.ownerSub === callerSub;
+    if (record.sessionId) return record.sessionId === this.authInfo.sessionId;
+    return false;
   }
 }
