@@ -252,3 +252,86 @@ describe('buildToolNamespaces', () => {
     });
   });
 });
+
+/**
+ * GHSA-cmrw-xhcg-6gf9 — a tool name whose NAMESPACE is a prototype key writes
+ * onto a JavaScript intrinsic.
+ *
+ * The mechanism is the read, not the write: for `__proto__.pwned`,
+ * `namespaces['__proto__']` hits the INHERITED getter and returns
+ * `Object.prototype`, which is truthy — so `??` short-circuits, the
+ * `= {}` never runs, and the method assignment lands on `Object.prototype`
+ * directly. `constructor.x` is the same shape against the `Object` constructor.
+ *
+ * The value written is not inert: it is a live closure over this session's
+ * `callTool`, which carries this session's `authInfo`. Every ordinary object in
+ * the process then inherits an auth-bearing capability, and it is invisible to
+ * `Object.keys(namespaces)` so nothing downstream can see it either.
+ */
+describe('buildToolNamespaces — prototype keys (GHSA-cmrw-xhcg-6gf9)', () => {
+  const callTool = jest.fn(async () => ({ ok: true }));
+
+  afterEach(() => {
+    // Fail loudly rather than leak pollution into the rest of the suite.
+    for (const key of ['pwned', 'polluted']) {
+      delete (Object.prototype as Record<string, unknown>)[key];
+      delete (Object as unknown as Record<string, unknown>)[key];
+    }
+  });
+
+  it('does not write onto Object.prototype for a __proto__ namespace', () => {
+    buildToolNamespaces([{ name: '__proto__.pwned' }] as never, callTool as never);
+
+    expect(({} as Record<string, unknown>)['pwned']).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, 'pwned')).toBe(false);
+  });
+
+  it('does not write onto the Object constructor for a constructor namespace', () => {
+    buildToolNamespaces([{ name: 'constructor.pwned' }] as never, callTool as never);
+
+    expect((Object as unknown as Record<string, unknown>)['pwned']).toBeUndefined();
+  });
+
+  it('does not accept a prototype namespace', () => {
+    buildToolNamespaces([{ name: 'prototype.polluted' }] as never, callTool as never);
+
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  });
+
+  it('reports the rejection rather than silently dropping it', () => {
+    const { skipped } = buildToolNamespaces([{ name: '__proto__.pwned' }] as never, callTool as never);
+
+    expect(skipped).toEqual([{ name: '__proto__.pwned', reason: 'prototype-key' }]);
+  });
+
+  it('still allows a prototype key in the METHOD position', () => {
+    // Harmless there: the bucket has a null prototype, so `acme.__proto__`
+    // lands as a plain own property and reaches no intrinsic. A tool
+    // legitimately named this keeps working.
+    const { namespaces, skipped } = buildToolNamespaces([{ name: 'acme.__proto__' }] as never, callTool as never);
+
+    expect(skipped).toEqual([]);
+    expect(typeof namespaces['acme']['__proto__']).toBe('function');
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
+  it('keeps building the safe namespaces around a hostile one', () => {
+    const { namespaces, skipped } = buildToolNamespaces(
+      [{ name: '__proto__.pwned' }, { name: 'safe.ok' }] as never,
+      callTool as never,
+    );
+
+    expect(Object.keys(namespaces)).toEqual(['safe']);
+    expect(typeof namespaces['safe']['ok']).toBe('function');
+    expect(skipped).toHaveLength(1);
+  });
+
+  it('builds namespace objects with a null prototype', () => {
+    // Belt and braces: even a key that slips past the reject-list cannot reach
+    // an intrinsic, because there is no prototype chain to reach along.
+    const { namespaces } = buildToolNamespaces([{ name: 'safe.ok' }] as never, callTool as never);
+
+    expect(Object.getPrototypeOf(namespaces)).toBeNull();
+    expect(Object.getPrototypeOf(namespaces['safe'])).toBeNull();
+  });
+});

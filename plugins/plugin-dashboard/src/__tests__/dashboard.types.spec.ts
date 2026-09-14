@@ -1,13 +1,13 @@
 // file: plugins/plugin-dashboard/src/__tests__/dashboard.types.spec.ts
 
 import 'reflect-metadata';
+
 import {
   cdnConfigSchema,
   dashboardAuthSchema,
   dashboardPluginOptionsSchema,
   defaultDashboardPluginOptions,
   isDashboardEnabled,
-  type DashboardPluginOptions,
 } from '../dashboard.types';
 
 describe('Dashboard Types', () => {
@@ -48,9 +48,16 @@ describe('Dashboard Types', () => {
       expect(result.token).toBeUndefined();
     });
 
-    it('should accept enabled=true', () => {
-      const result = dashboardAuthSchema.parse({ enabled: true });
+    it('should accept enabled=true with a token', () => {
+      const result = dashboardAuthSchema.parse({ enabled: true, token: 'my-secret' });
       expect(result.enabled).toBe(true);
+    });
+
+    // GHSA-rgxj-434m-vxh3: fail at startup rather than serve an
+    // "authenticated" dashboard with nothing to authenticate against.
+    it('should REJECT enabled=true without a token', () => {
+      expect(() => dashboardAuthSchema.parse({ enabled: true })).toThrow();
+      expect(() => dashboardAuthSchema.parse({ enabled: true, token: '' })).toThrow();
     });
 
     it('should accept token', () => {

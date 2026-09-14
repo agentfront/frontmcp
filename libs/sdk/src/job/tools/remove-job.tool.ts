@@ -1,6 +1,8 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { JobNotAuthorizedError } from '../../errors';
+import { JobPermissionGuard } from '../job-permission.guard';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
@@ -26,7 +28,19 @@ export default class RemoveJobTool extends ToolContext {
 
     const job = jobRegistry.findByName(input.name);
     if (!job) {
-      return this.fail(new Error(`Job "${input.name}" not found`));
+      return this.fail(new JobNotAuthorizedError(input.name));
+    }
+
+    const allowed = await JobPermissionGuard.check(
+      job.metadata.permissions,
+      'delete',
+      this.authInfo,
+      this.scope.authoritiesContextBuilder,
+    );
+    if (!allowed) {
+      // Indistinguishable from "not found", so removal cannot be used to probe
+      // which restricted jobs exist (GHSA-58v2-gpcc-jmqv).
+      return this.fail(new JobNotAuthorizedError(input.name));
     }
 
     if (!job.isDynamic()) {

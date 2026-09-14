@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { JobNotAuthorizedError } from '../../errors';
 import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
 import type { JobRegistryInterface } from '../../job/job.registry';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
@@ -36,13 +37,14 @@ export default class ExecuteWorkflowTool extends ToolContext {
 
     const workflow = workflowRegistry.findByName(input.name);
     if (!workflow) {
-      return this.fail(new Error(`Workflow "${input.name}" not found`));
+      return this.fail(new JobNotAuthorizedError(input.name));
     }
 
     const result = await executionManager.executeWorkflow(workflow, jobRegistry, {
       background: input.background,
       sessionId: this.authInfo.sessionId,
       authInfo: this.authInfo,
+      authoritiesContextBuilder: this.scope.authoritiesContextBuilder,
       workflowInput: input.input,
     });
 

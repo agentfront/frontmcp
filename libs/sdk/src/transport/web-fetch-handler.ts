@@ -9,7 +9,7 @@
  * flow's web-mode MCP execute stage (`handleWebFetch`) produces the MCP response
  * via the SDK's `WebStandardStreamableHTTPServerTransport`. The adapter itself
  * only handles transport-level concerns — CORS, liveness probes, and entry-path
- * routing — which are not flow stages.
+ * routing, Host validation — which are not flow stages.
  */
 import { FlowControl } from '../common';
 import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
@@ -19,6 +19,7 @@ import { type CorsOptions } from '../common/types/options/http/interfaces';
 import { normalizeEntryPrefix } from '../common/utils/path.utils';
 import { PublicMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
+import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
 import { renderHttpOutputToWebResponse } from './web-response.renderer';
 import { type WebStandardMcpPair } from './web-standard-mcp';
 
@@ -156,6 +157,22 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   const cors = options.cors ?? mapHttpCors(httpConfig?.cors, scope);
   const corsEnabled = cors?.origin !== undefined && cors.origin !== false;
 
+  // Host / Origin validation (GHSA-mc9g-v2cp-vfff) — the same rules the Express
+  // host applies, from the same module, so the two adapters cannot diverge.
+  //
+  // A worker is always reached under a hostname this process cannot enumerate,
+  // so there is no safe derived default here: validation runs only when the
+  // operator configured `allowedHosts` / `allowedOrigins`. That is the same
+  // outcome the Express host reaches for a routable bind.
+  const rebinding = httpConfig?.security?.dnsRebindingProtection;
+  const hostValidation =
+    rebinding?.enabled === false || (!rebinding?.allowedHosts?.length && !rebinding?.allowedOrigins?.length)
+      ? undefined
+      : compileHostValidation({
+          allowedHosts: rebinding.allowedHosts,
+          allowedOrigins: rebinding.allowedOrigins,
+        });
+
   /** CORS response headers for this request (empty when CORS is off / origin not allowed). */
   const corsHeadersFor = (request: Request): Record<string, string> => {
     if (!corsEnabled) return {};
@@ -193,6 +210,23 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 
   return async function handle(request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> {
     const url = new URL(request.url);
+
+    // Host validation runs FIRST, before CORS preflight, health probes and any
+    // routing — a request naming a host this server does not answer to is not
+    // answered at all.
+    if (hostValidation) {
+      const rejection = validateHostHeaders(
+        {
+          host: request.headers.get('host') ?? url.host,
+          forwardedHost: request.headers.get('x-forwarded-host') ?? undefined,
+          origin: request.headers.get('origin') ?? undefined,
+        },
+        hostValidation,
+      );
+      if (rejection) {
+        return Response.json({ error: rejection.error, message: rejection.message }, { status: rejection.status });
+      }
+    }
 
     // CORS preflight — answer OPTIONS directly (transport-adapter concern).
     if (corsEnabled && request.method === 'OPTIONS') {
@@ -386,9 +420,7 @@ function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
       status: error.statusCode,
       contentType: 'application/json; charset=utf-8',
       body: { error: error.getPublicMessage() },
-      ...(typeof challenge === 'string' && challenge.length > 0
-        ? { headers: { 'WWW-Authenticate': challenge } }
-        : {}),
+      ...(typeof challenge === 'string' && challenge.length > 0 ? { headers: { 'WWW-Authenticate': challenge } } : {}),
     };
   }
   return { kind: 'text', status: 500, body: 'Internal Server Error', contentType: 'text/plain; charset=utf-8' };

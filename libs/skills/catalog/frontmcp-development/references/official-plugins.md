@@ -662,8 +662,22 @@ interface DashboardPluginOptionsInput {
 
 - `enabled` -- When omitted, the dashboard is automatically enabled in development (`NODE_ENV !== 'production'`) and disabled in production.
 - `basePath` -- URL path where the dashboard is served. Default: `'/dashboard'`.
-- `auth.token` -- When set, the dashboard requires `?token=<value>` as a query parameter.
+- `auth.enabled` / `auth.token` -- Gate the dashboard page on a shared secret. Present it as `Authorization: Bearer <token>` (preferred) or `?token=<value>`. `enabled: true` without a `token` is a **startup error** — the server refuses to boot rather than serve an "authenticated" dashboard with nothing to check. The token is compared in constant time and is never embedded in the served page.
 - `cdn` -- Override default CDN URLs for the dashboard UI bundle and its dependencies. Useful for air-gapped environments.
+
+### Security
+
+**Requires 1.7.2 or later.** Before 1.7.2 (GHSA-rgxj-434m-vxh3) `auth.token` was documented and validated but never checked, the operator's options never reached the middleware at all, and the dashboard's MCP scope declared `auth: { mode: 'public' }` unconditionally — so a dashboard configured with a secret still served its page, and `dashboard:graph` still returned the entire server's inventory, to anyone. On 1.7.1 or earlier, treat any server running `DashboardApp` as publicly introspectable.
+
+The dashboard's MCP scope **inherits the server's authentication**. Its introspection tools (`dashboard:graph`, `dashboard:list-tools`, `dashboard:list-resources`) reach the root scope and enumerate every app, tool, resource and prompt on the server — including names, descriptions and (on request) schemas. Two consequences:
+
+- On an authenticated server (`local`, `remote`, `transparent`, `orchestrated`), the dashboard requires the same credential as everything else.
+- On a **public** server the dashboard is public too, because the server is. `auth.token` gates the dashboard _page_, not the MCP scope or the SSE stream. If the inventory is sensitive, authenticate the server — do not rely on the dashboard token alone.
+
+Two further limitations worth knowing:
+
+- The token is accepted as `Authorization: Bearer <token>` or `?token=`. Prefer the header: a URL token lands in browser history, `Referer` headers and access logs. There is no cookie/session option yet.
+- Dashboard options are **process-wide**. Two `@FrontMcp` servers built in one process that configure the dashboard differently share the last configuration registered, including its token; the plugin logs a warning when that happens. Run one dashboard per process.
 
 ---
 
