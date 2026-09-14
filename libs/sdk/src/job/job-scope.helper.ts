@@ -24,6 +24,18 @@ import RemoveJobTool from './tools/remove-job.tool';
 
 export interface JobsConfig {
   enabled: boolean;
+  /**
+   * Allow `register_job` / `register_workflow` — which take a raw script string
+   * and register it as an executable job — to be called at runtime.
+   *
+   * Off by default (GHSA-58v2-gpcc-jmqv): combined with an unguarded
+   * `execute_job` this was register-and-run-arbitrary-JS for any caller who
+   * could reach the tool list. Turn it on only when an agent is genuinely meant
+   * to author jobs, and pair it with `permissions` on the surrounding surface.
+   *
+   * @default false
+   */
+  allowDynamicRegistration?: boolean;
   store?: {
     redis?: {
       provider: string;
@@ -103,19 +115,27 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   // 4. Create execution manager
   const executionManager = new JobExecutionManager(stateStore, logger, notifyFn);
 
-  // 5. Collect management tools
+  // 5. Collect management tools. The dynamic-registration pair is omitted
+  // unless the operator opted in — an unregistered tool cannot be called at
+  // all, which is a stronger guarantee than a check inside it (the tools carry
+  // that check too, as defense in depth).
   const managementTools: any[] = [
     ListJobsTool,
     ExecuteJobTool,
     GetJobStatusTool,
-    RegisterJobTool,
     RemoveJobTool,
     ListWorkflowsTool,
     ExecuteWorkflowTool,
     GetWorkflowStatusTool,
-    RegisterWorkflowTool,
     RemoveWorkflowTool,
   ];
+
+  if (jobsConfig.allowDynamicRegistration === true) {
+    managementTools.push(RegisterJobTool, RegisterWorkflowTool);
+    logger.warn(
+      'Dynamic job registration is ENABLED: register_job/register_workflow accept a raw script and register it as an executable job.',
+    );
+  }
 
   logger.info(
     `Jobs initialized: ${jobRegistry.getJobs().length} jobs, ${workflowRegistry.getWorkflows().length} workflows`,

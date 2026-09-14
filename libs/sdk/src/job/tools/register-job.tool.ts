@@ -3,6 +3,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '../../common';
 import type { ToolInputType, ToolOutputType } from '../../common/metadata/tool.metadata';
 import { JobKind } from '../../common/records/job.record';
+import { DynamicJobRegistrationDisabledError } from '../../errors';
 import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
@@ -38,6 +39,14 @@ export default class RegisterJobTool extends ToolContext {
       return this.fail(new Error('Jobs system is not enabled'));
     }
 
+    // Defense in depth: the tool is normally not registered at all unless
+    // `jobs.allowDynamicRegistration` is true, but a host that wires it up by
+    // hand must not get an ungated arbitrary-script entry point
+    // (GHSA-58v2-gpcc-jmqv).
+    if (!this.dynamicRegistrationEnabled()) {
+      return this.fail(new DynamicJobRegistrationDisabledError('job'));
+    }
+
     // Check if job already exists
     const existing = jobRegistry.findByName(input.name);
     if (existing) {
@@ -63,5 +72,10 @@ export default class RegisterJobTool extends ToolContext {
     });
 
     return { success: true, jobId };
+  }
+
+  private dynamicRegistrationEnabled(): boolean {
+    const jobs = (this.scope.metadata as { jobs?: { allowDynamicRegistration?: boolean } } | undefined)?.jobs;
+    return jobs?.allowDynamicRegistration === true;
   }
 }

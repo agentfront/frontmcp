@@ -343,7 +343,7 @@ Replace buildToolUIMulti with individual buildToolUI calls. Remove BuildTargetPl
 **Before:**
 
 ```typescript
-import { buildToolUIMulti, BuildTargetPlatform } from '@frontmcp/uipack';
+import { BuildTargetPlatform, buildToolUIMulti } from '@frontmcp/uipack';
 ```
 
 **After:**
@@ -681,7 +681,11 @@ The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said
 **After:**
 
 ```typescript
-http: { security: { bindAddress: 'all' } } // or FRONTMCP_BIND_ADDRESS=all
+http: {
+  security: {
+    bindAddress: 'all',
+  },
+} // or FRONTMCP_BIND_ADDRESS=all
 ```
 
 **Codemod available:** no
@@ -703,7 +707,67 @@ CORS now defaults to off — no headers, so a browser will not let another origi
 **After:**
 
 ```typescript
-http: { cors: { origin: ['https://app.example.com'] } }
+http: {
+  cors: {
+    origin: ['https://app.example.com'];
+  }
+}
+```
+
+**Codemod available:** no
+
+## BC-035: DNS-rebinding protection (Host validation) is on by default
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+DNS-rebinding protection (`security.dnsRebindingProtection`) now defaults to ON. A request whose `Host` (or `X-Forwarded-Host`) is not one this server answers to gets a 403, before routing and before the body is read. This closes GHSA-mc9g-v2cp-vfff: a malicious page can rebind its own domain to the victim's loopback address and reach a local MCP server as a same-origin service, and neither loopback binding nor CORS prevents it.
+
+When `allowedHosts` is not configured it is derived from what the process actually listens on — the loopback aliases (`localhost`, `127.0.0.1`, `[::1]`, with and without the bound port) plus a specific bound NIC address. Matching is case-insensitive and treats `host` and `host:80`/`host:443` as equal.
+
+A server bound to a routable address (`0.0.0.0`, `::`, a specific NIC) is reached under a hostname the process cannot know, so a DERIVED list is NOT enforced there: FrontMCP logs a warning and leaves Host checking off until you name the public host. Set `security.dnsRebindingProtection.allowedHosts` (or the `FRONTMCP_ALLOWED_HOSTS` env var) on a proxied deployment to turn it on. To opt out entirely, set `security.dnsRebindingProtection.enabled: false`.
+
+Also fixed: `strict: true` previously derived a port-less allow-list (`['localhost', '127.0.0.1']`) and compared it against a raw `Host`, so it rejected every request on a non-default port.
+
+**Before:**
+
+```typescript
+// no security config → Host/Origin never validated (any Host accepted)
+```
+
+**After:**
+
+```typescript
+http: {
+  security: {
+    dnsRebindingProtection: {
+      allowedHosts: ['api.example.com'];
+    }
+  }
+}
+```
+
+**Codemod available:** no
+
+## BC-036: Dashboard auth.enabled now requires auth.token
+
+**Package:** `@frontmcp/plugin-dashboard` | **Category:** change | **Severity:** low
+
+`dashboardAuthSchema` now rejects `auth.enabled: true` without a non-empty `auth.token`, so a half-configured dashboard fails at startup instead of serving. Previously the combination parsed cleanly and the token was never checked at all (GHSA-rgxj-434m-vxh3), so a dashboard an operator believed was protected was public.
+
+Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one. Note the token gates the dashboard PAGE; the dashboard's MCP scope inherits the server's own authentication.
+
+Related: dashboard options are process-wide, and a second, CONFLICTING auth configuration in the same process now throws rather than silently replacing the first — accepting it would make one server's token valid on another's dashboard. Call `resetDashboardOptions()` between constructions if you build several servers serially.
+
+**Before:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true } }); // parsed, and served the dashboard unauthenticated
+```
+
+**After:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true, token: process.env.DASHBOARD_TOKEN } });
 ```
 
 **Codemod available:** no

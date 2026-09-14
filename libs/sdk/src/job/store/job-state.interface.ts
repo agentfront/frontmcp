@@ -5,6 +5,12 @@ export interface JobRunRecord {
   jobId: string;
   jobName: string;
   sessionId?: string;
+  /**
+   * Subject that started the run. Run status carries the job's inputs and
+   * results, so reads are scoped to the owner rather than to whoever guesses a
+   * runId (GHSA-58v2-gpcc-jmqv).
+   */
+  ownerSub?: string;
   state: JobExecutionState;
   input: unknown;
   result?: unknown;
