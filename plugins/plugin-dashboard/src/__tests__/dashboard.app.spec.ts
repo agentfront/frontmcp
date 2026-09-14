@@ -1,9 +1,17 @@
 // file: plugins/plugin-dashboard/src/__tests__/dashboard.app.spec.ts
 
 import 'reflect-metadata';
+
 import { DashboardApp, DashboardHttpPlugin } from '../app/dashboard.app';
+import { publishDashboardOptions, resetDashboardOptions } from '../dashboard.config-store';
 import { DashboardConfigToken } from '../dashboard.symbol';
-import { dashboardPluginOptionsSchema } from '../dashboard.types';
+import { dashboardPluginOptionsSchema, type DashboardPluginOptions } from '../dashboard.types';
+
+/** Run the config provider's factory — the config is resolved lazily. */
+function resolveConfig(providers: Array<{ provide?: unknown; useFactory?: unknown }>): DashboardPluginOptions {
+  const provider = providers.find((p) => p.provide === DashboardConfigToken);
+  return (provider as { useFactory: () => DashboardPluginOptions }).useFactory();
+}
 
 describe('DashboardApp', () => {
   describe('class export', () => {
@@ -79,15 +87,26 @@ describe('DashboardHttpPlugin', () => {
       expect(configProvider?.name).toBe('dashboard:config');
     });
 
-    it('should include parsed options in config provider', () => {
+    // GHSA-rgxj-434m-vxh3: the config is resolved in a FACTORY, not baked into a
+    // `useValue`. `DashboardApp` declares this plugin inside an `@App` decorator
+    // that runs at module-import time — before `DashboardPlugin.init(...)` is
+    // evaluated — so an eagerly-parsed value would always be the defaults, which
+    // is how the operator's `auth` and `basePath` came to be discarded.
+    it('resolves the config lazily, in a factory', () => {
       const providers = DashboardHttpPlugin.dynamicProviders({
         basePath: '/admin',
         auth: { enabled: true, token: 'test' },
       });
 
       const configProvider = providers.find((p) => p.provide === DashboardConfigToken);
-      expect(configProvider?.useValue.basePath).toBe('/admin');
-      expect(configProvider?.useValue.auth.enabled).toBe(true);
+      expect(configProvider).toBeDefined();
+      expect(typeof (configProvider as { useFactory?: unknown }).useFactory).toBe('function');
+
+      const resolved = (
+        configProvider as { useFactory: () => { basePath: string; auth: { enabled: boolean } } }
+      ).useFactory();
+      expect(resolved.basePath).toBe('/admin');
+      expect(resolved.auth.enabled).toBe(true);
     });
 
     it('should include middleware provider', () => {
@@ -100,9 +119,9 @@ describe('DashboardHttpPlugin', () => {
     it('should apply defaults when options are empty', () => {
       const providers = DashboardHttpPlugin.dynamicProviders({});
 
-      const configProvider = providers.find((p) => p.provide === DashboardConfigToken);
-      expect(configProvider?.useValue.basePath).toBe('/dashboard');
-      expect(configProvider?.useValue.auth.enabled).toBe(false);
+      const resolved = resolveConfig(providers);
+      expect(resolved.basePath).toBe('/dashboard');
+      expect(resolved.auth.enabled).toBe(false);
     });
 
     it('should parse cdn options with defaults', () => {
@@ -110,9 +129,69 @@ describe('DashboardHttpPlugin', () => {
         cdn: { react: 'https://custom.cdn/react' },
       });
 
-      const configProvider = providers.find((p) => p.provide === DashboardConfigToken);
-      expect(configProvider?.useValue.cdn.react).toBe('https://custom.cdn/react');
-      expect(configProvider?.useValue.cdn.reactDom).toBe('https://esm.sh/react-dom@19');
+      const resolved = resolveConfig(providers);
+      expect(resolved.cdn.react).toBe('https://custom.cdn/react');
+      expect(resolved.cdn.reactDom).toBe('https://esm.sh/react-dom@19');
+    });
+
+    it('warns when a second, different configuration is published in one process', () => {
+      // The store is process-wide, so a conflicting publish would silently give
+      // every server in this process the last token registered. Report it.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'first' } }));
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'second' } }));
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('process-wide'));
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
+    it('warns when only the CDN settings differ', () => {
+      // `generateDashboardHtml` builds its script URLs and external entrypoint
+      // from `cdn`, so a silent swap serves one server's page with another's CDN.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ cdn: { react: 'https://a.example/react' } }));
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ cdn: { react: 'https://b.example/react' } }));
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('process-wide'));
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
+    it('does not warn when the same configuration is published twice', () => {
+      // `init()` publishes from both the constructor and dynamicProviders.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        const parsed = dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'same' } });
+        publishDashboardOptions(parsed);
+        publishDashboardOptions(parsed);
+
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
+    it('prefers the options the operator gave DashboardPlugin over the app-declared {}', () => {
+      // The real-world shape: `DashboardApp` declares `init({})`, and the
+      // operator configures `DashboardPlugin` separately.
+      publishDashboardOptions(
+        dashboardPluginOptionsSchema.parse({ basePath: '/ops', auth: { enabled: true, token: 'operator-token' } }),
+      );
+      try {
+        const resolved = resolveConfig(DashboardHttpPlugin.dynamicProviders({}));
+        expect(resolved.basePath).toBe('/ops');
+        expect(resolved.auth.token).toBe('operator-token');
+      } finally {
+        resetDashboardOptions();
+      }
     });
   });
 });

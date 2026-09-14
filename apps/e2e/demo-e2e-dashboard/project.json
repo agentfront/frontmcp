@@ -1,0 +1,45 @@
+{
+  "name": "demo-e2e-dashboard",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-dashboard/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:dashboard"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-dashboard",
+        "main": "apps/e2e/demo-e2e-dashboard/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-dashboard/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-dashboard/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-dashboard/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-dashboard"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-dashboard/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

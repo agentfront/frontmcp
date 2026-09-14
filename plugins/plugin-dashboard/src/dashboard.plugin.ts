@@ -1,12 +1,13 @@
-import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, type ProviderType } from '@frontmcp/sdk';
 
+import { publishDashboardOptions } from './dashboard.config-store';
+import { DashboardConfigToken } from './dashboard.symbol';
 import {
-  DashboardPluginOptions,
-  DashboardPluginOptionsInput,
   dashboardPluginOptionsSchema,
   defaultDashboardPluginOptions,
+  type DashboardPluginOptions,
+  type DashboardPluginOptionsInput,
 } from './dashboard.types';
-import { DashboardConfigToken } from './dashboard.symbol';
 
 /**
  * FrontMCP Dashboard Plugin.
@@ -75,6 +76,7 @@ export default class DashboardPlugin extends DynamicPlugin<DashboardPluginOption
       ...defaultDashboardPluginOptions,
       ...options,
     });
+    publishDashboardOptions(this.options);
   }
 
   /**
@@ -88,6 +90,9 @@ export default class DashboardPlugin extends DynamicPlugin<DashboardPluginOption
       ...defaultDashboardPluginOptions,
       ...options,
     });
+    // Also reachable by `DashboardApp`'s HTTP plugin, which is declared inside
+    // a decorator and so cannot be handed these options directly.
+    publishDashboardOptions(parsedOptions);
 
     return [
       {
