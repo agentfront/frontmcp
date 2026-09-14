@@ -141,6 +141,13 @@ export interface PendingAuthorizationRecord {
   // Progressive/Incremental Authorization Fields
   /** Whether this is an incremental authorization request */
   isIncremental?: boolean;
+  /**
+   * The subject proven by the incremental-authorization ticket that created
+   * this record (GHSA-2c4g-9c8x-6m8g). Present only alongside
+   * `isIncremental: true`. An incremental callback skips the credential gate,
+   * so this is the ONLY identity it may mint a code for.
+   */
+  incrementalSub?: string;
   /** Target app ID for incremental authorization */
   targetAppId?: string;
   /** Target tool ID that triggered the incremental auth */
@@ -292,6 +299,8 @@ export interface CreatePendingRecordParams {
   resource?: string;
   // Progressive/Incremental Authorization Fields
   isIncremental?: boolean;
+  /** Subject proven by the incremental-authorization ticket (see the record type). */
+  incrementalSub?: string;
   targetAppId?: string;
   targetToolId?: string;
   existingSessionId?: string;
@@ -396,6 +405,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     createdAt: now,
     expiresAt: now + PENDING_AUTH_TTL_MS,
     isIncremental: params.isIncremental,
+    incrementalSub: params.incrementalSub,
     targetAppId: params.targetAppId,
     targetToolId: params.targetToolId,
     existingSessionId: params.existingSessionId,

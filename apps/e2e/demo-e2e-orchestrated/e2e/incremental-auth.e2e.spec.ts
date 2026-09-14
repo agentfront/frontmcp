@@ -15,6 +15,12 @@
  * is what turns on app-level gating and the expansion path. A server WITHOUT
  * `incrementalAuth` mints no `authorized_apps` claim and is unaffected (covered
  * by the existing orchestrated-auth e2e and the unit tests).
+ *
+ * Step 4 deliberately follows the SERVER-ISSUED `auth_url` from step 3 rather
+ * than hand-assembling `mode=incremental&app=`. That URL carries the signed
+ * single-use incremental ticket (GHSA-2c4g-9c8x-6m8g) which is what authorizes
+ * skipping the login step — an incremental authorize a client assembles for
+ * itself is not, and must fall back to an ordinary login.
  */
 import { expect, TestServer } from '@frontmcp/testing';
 import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
@@ -41,15 +47,15 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
 }
 
 /**
- * GET /oauth/authorize → extract pending_auth_id from the login page.
- * `apps` (comma-separated) declares the apps to grant; `mode=incremental&app=`
- * drives an incremental authorize.
+ * GET /oauth/authorize → extract pending_auth_id from the rendered page.
+ * `apps` (comma-separated) narrows the apps to grant on an ordinary login;
+ * `ticket` is the server-issued incremental-authorization ticket.
  */
 async function startAuthorization(
   baseUrl: string,
   challenge: string,
-  opts: { apps?: string[]; mode?: 'incremental'; app?: string } = {},
-): Promise<string> {
+  opts: { apps?: string[]; ticket?: string } = {},
+): Promise<{ html: string; pendingAuthId: string }> {
   const url = new URL(`${baseUrl}/oauth/authorize`);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', CLIENT_ID);
@@ -58,26 +64,34 @@ async function startAuthorization(
   url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('scope', 'read write');
   if (opts.apps) url.searchParams.set('apps', opts.apps.join(','));
-  if (opts.mode) url.searchParams.set('mode', opts.mode);
-  if (opts.app) url.searchParams.set('app', opts.app);
+  if (opts.ticket) url.searchParams.set('ticket', opts.ticket);
 
   const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
   expect(match).toBeTruthy();
-  return match![1];
+  return { html, pendingAuthId: match![1] };
 }
 
-/** GET /oauth/callback → mint a code (returns the redirect `code`). */
-async function completeLogin(baseUrl: string, pendingAuthId: string, incremental?: { app: string }): Promise<string> {
+/** Pull the signed incremental ticket out of a server-issued `auth_url`. */
+function ticketFromAuthUrl(authUrl: string): string {
+  const ticket = new URL(authUrl, 'http://placeholder.invalid').searchParams.get('ticket');
+  expect(ticket).toBeTruthy();
+  return ticket!;
+}
+
+/**
+ * GET /oauth/callback → mint a code (returns the redirect `code`).
+ *
+ * The callback takes nothing but the pending id: whether this is an incremental
+ * authorization is read from the server's own pending record, never from the
+ * request (GHSA-2c4g-9c8x-6m8g). This mirrors exactly what the built-in
+ * incremental page submits.
+ */
+async function completeLogin(baseUrl: string, pendingAuthId: string): Promise<string> {
   const url = new URL(`${baseUrl}/oauth/callback`);
   url.searchParams.set('pending_auth_id', pendingAuthId);
-  if (incremental) {
-    // Mirror exactly what the incremental auth page submits back to the callback.
-    url.searchParams.set('incremental', 'true');
-    url.searchParams.set('app_id', incremental.app);
-  }
   const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual' });
   expect([302, 303]).toContain(res.status);
   const location = res.headers.get('location');
@@ -110,16 +124,20 @@ async function exchangeToken(baseUrl: string, code: string, verifier: string): P
 /** Full authorize → callback → token, returning the access token. */
 async function authorizeForApps(baseUrl: string, apps: string[]): Promise<string> {
   const { verifier, challenge } = makePkce();
-  const pendingAuthId = await startAuthorization(baseUrl, challenge, { apps });
+  const { pendingAuthId } = await startAuthorization(baseUrl, challenge, { apps });
   const code = await completeLogin(baseUrl, pendingAuthId);
   return exchangeToken(baseUrl, code, verifier);
 }
 
-/** Incremental authorize for `app`, carrying `priorApps` forward. */
-async function incrementalAuthorize(baseUrl: string, app: string, priorApps: string[]): Promise<string> {
+/**
+ * Incremental authorize by following the server-issued `auth_url` from a denied
+ * tool call. The ticket in that URL names the target app and the prior grant, so
+ * the client supplies neither.
+ */
+async function incrementalAuthorize(baseUrl: string, authUrl: string): Promise<string> {
   const { verifier, challenge } = makePkce();
-  const pendingAuthId = await startAuthorization(baseUrl, challenge, { mode: 'incremental', app, apps: priorApps });
-  const code = await completeLogin(baseUrl, pendingAuthId, { app });
+  const { pendingAuthId } = await startAuthorization(baseUrl, challenge, { ticket: ticketFromAuthUrl(authUrl) });
+  const code = await completeLogin(baseUrl, pendingAuthId);
   return exchangeToken(baseUrl, code, verifier);
 }
 
@@ -234,8 +252,9 @@ describe('Progressive/Incremental Authorization E2E (orchestrated/local)', () =>
     expect(typeof meta['auth_url']).toBe('string');
     expect(meta['supports_incremental']).toBe(true);
 
-    // 4. INCREMENTAL authorize app B (Tasks), carrying the prior grant (Notes).
-    const tokenB = await incrementalAuthorize(baseUrl, APP_TASKS, [APP_NOTES]);
+    // 4. INCREMENTAL authorize app B (Tasks) by following the server-issued
+    //    auth_url — its signed ticket carries the target app and the prior grant.
+    const tokenB = await incrementalAuthorize(baseUrl, meta['auth_url'] as string);
     expect(new Set(decodeJwtPayload(tokenB)['authorized_apps'] as string[])).toEqual(new Set([APP_NOTES, APP_TASKS]));
 
     const sessionB = await initSession(baseUrl, tokenB);
@@ -254,7 +273,22 @@ describe('Progressive/Incremental Authorization E2E (orchestrated/local)', () =>
     expect(notesStillOk.error).toBeUndefined();
   }, 60000);
 
-  it('renders the incremental authorization page for an incremental authorize request', async () => {
+  it('renders the incremental authorization page for a ticketed authorize request', async () => {
+    // Obtain a real ticket the way a client does: get gated, then read auth_url.
+    const tokenA = await authorizeForApps(baseUrl, [APP_NOTES]);
+    const sessionA = await initSession(baseUrl, tokenA);
+    const denied = await callTool(baseUrl, tokenA, sessionA, 'create-task', { title: 'gated' });
+    const authUrl = denied.result?._meta?.['auth_url'] as string;
+
+    const { challenge } = makePkce();
+    const { html } = await startAuthorization(baseUrl, challenge, { ticket: ticketFromAuthUrl(authUrl) });
+
+    // The incremental auth page is single-app and references the target app.
+    expect(html).toContain('Authorization Required');
+    expect(html).toContain(APP_TASKS);
+  });
+
+  it('falls back to an ordinary login when the authorize request carries no ticket', async () => {
     const { challenge } = makePkce();
     const url = new URL(`${baseUrl}/oauth/authorize`);
     url.searchParams.set('response_type', 'code');
@@ -262,16 +296,13 @@ describe('Progressive/Incremental Authorization E2E (orchestrated/local)', () =>
     url.searchParams.set('redirect_uri', REDIRECT_URI);
     url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');
+    // The pre-fix incremental triggers — now inert on their own.
     url.searchParams.set('mode', 'incremental');
     url.searchParams.set('app', APP_TASKS);
-    url.searchParams.set('apps', APP_NOTES);
 
     const res = await fetch(url.toString(), { redirect: 'manual' });
     expect(res.status).toBe(200);
     const html = await res.text();
-    // The incremental auth page is single-app and references the target app.
-    expect(html).toContain('Authorization Required');
-    expect(html).toContain('incremental');
-    expect(html).toContain(APP_TASKS);
+    expect(html).not.toContain('Authorization Required');
   });
 });

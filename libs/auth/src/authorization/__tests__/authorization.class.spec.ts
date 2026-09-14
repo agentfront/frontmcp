@@ -385,13 +385,23 @@ describe('AuthorizationBase', () => {
     it('should construct the correct URL', () => {
       const auth = createAuth();
       const url = auth.getProgressiveAuthUrl('slack', 'https://example.com');
-      expect(url).toBe('https://example.com/oauth/authorize?app=slack&mode=incremental');
+      expect(url).toBe('https://example.com/oauth/authorize?app=slack');
     });
 
     it('should encode special characters in appId', () => {
       const auth = createAuth();
       const url = auth.getProgressiveAuthUrl('app with spaces', 'https://example.com');
-      expect(url).toBe('https://example.com/oauth/authorize?app=app%20with%20spaces&mode=incremental');
+      expect(url).toBe('https://example.com/oauth/authorize?app=app+with+spaces');
+    });
+
+    // GHSA-2c4g-9c8x-6m8g: `mode=incremental` is no longer an authorization
+    // signal, so it is not emitted. Skipping the login step is authorized by the
+    // signed ticket alone.
+    it('omits mode=incremental and carries the signed ticket instead', () => {
+      const auth = createAuth();
+      const url = auth.getProgressiveAuthUrl('slack', 'https://example.com', 'signed-ticket-value');
+      expect(url).not.toContain('mode=incremental');
+      expect(url).toContain('ticket=signed-ticket-value');
     });
 
     it('should handle trailing slash in baseUrl gracefully', () => {

@@ -23,11 +23,13 @@ import {
   escapeHtml,
   renderLocalLoginPage,
   startNextProvider,
+  verifyIncrementalAuthTicket,
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
   type DetectedAuthProvider,
   type FederatedLoginStateRecord,
+  type IncrementalAuthTicketPayload,
   type LoginConfig,
   type ProviderCard,
   type ProviderPkce,
@@ -172,6 +174,13 @@ const stateSchema = z.object({
   targetToolId: z.string().optional().describe('Target tool ID that triggered the incremental auth'),
   existingSessionId: z.string().optional().describe('Existing session ID for incremental auth'),
   /**
+   * The VERIFIED incremental-authorization ticket (GHSA-2c4g-9c8x-6m8g). Set
+   * only when `?ticket=` carried a valid, unexpired server signature. Its `sub`
+   * is the proven identity the expanded grant is minted for; `isIncrementalAuth`
+   * is derived from its presence, never from a raw query parameter.
+   */
+  incrementalTicket: z.custom<IncrementalAuthTicketPayload>().optional(),
+  /**
    * Apps the client already holds a grant for (the prior `authorized_apps`
    * claim), carried forward on an incremental authorize so the newly-minted
    * token is the UNION of prior apps + the target app. Only consulted when
@@ -272,26 +281,46 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const rawRedirectUri = request.query['redirect_uri'] as string | undefined;
     const rawState = request.query['state'] as string | undefined;
 
-    // Progressive/Incremental Authorization Parameters
-    const targetAppId = request.query['app'] as string | undefined;
-    const targetToolId = request.query['tool'] as string | undefined;
-    const existingSessionId = request.query['session_id'] as string | undefined;
-    const mode = request.query['mode'] as string | undefined;
-    const isIncrementalAuth = mode === 'incremental' || !!targetAppId;
-
-    // Apps the client already holds a grant for. The client carries its current
-    // `authorized_apps` claim forward via `apps=` (comma-separated or repeated)
-    // so an incremental authorize expands rather than replaces the grant.
-    const appsParam = request.query['apps'];
+    // Progressive/Incremental Authorization (GHSA-2c4g-9c8x-6m8g).
+    //
+    // An incremental authorize SKIPS the login step, so it is only legitimate
+    // for a caller the server has already authenticated. The proof is the
+    // framework-signed `?ticket=`, minted in the call-tool flow at the moment
+    // an AuthorizationRequiredError is raised — the one point where the
+    // caller's identity is verified. `mode`, `app`, `tool` and `apps` are raw
+    // client input and NEVER decide this on their own: without a valid ticket
+    // the request is an ordinary login and runs the full credential gate.
+    const incrementalTicket = this.verifyIncrementalTicket(request.query['ticket']);
+    const isIncrementalAuth = incrementalTicket !== undefined;
+    const targetAppId = incrementalTicket?.appId;
+    const targetToolId = incrementalTicket?.toolId;
+    // Apps the grant should cover.
+    //
+    // On an INCREMENTAL authorize these are read from the signed ticket: the
+    // new grant is `prior ∪ targetApp`, so letting the client name `prior`
+    // would let it widen its own grant.
+    //
+    // On an ORDINARY login `?apps=` is still honoured — there it can only
+    // NARROW (omitting it grants every app in the scope), so a client asking
+    // for less is self-restriction, not escalation.
     let priorAuthorizedAppIds: string[] | undefined;
-    if (appsParam) {
-      const raw = Array.isArray(appsParam) ? appsParam : [appsParam];
-      const ids = raw
-        .flatMap((v) => String(v).split(','))
-        .map((s) => s.trim())
-        .filter(Boolean);
-      priorAuthorizedAppIds = ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+    if (incrementalTicket) {
+      priorAuthorizedAppIds =
+        incrementalTicket.priorAppIds && incrementalTicket.priorAppIds.length > 0
+          ? Array.from(new Set(incrementalTicket.priorAppIds))
+          : undefined;
+    } else {
+      const appsParam = request.query['apps'];
+      if (appsParam) {
+        const ids = (Array.isArray(appsParam) ? appsParam : [appsParam])
+          .flatMap((v) => String(v).split(','))
+          .map((v) => v.trim())
+          .filter(Boolean);
+        priorAuthorizedAppIds = ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+      }
     }
+    // Retained for the record only; never used as an authentication signal.
+    const existingSessionId = request.query['session_id'] as string | undefined;
 
     const isDefaultAuthProvider = !metadata.auth;
 
@@ -327,6 +356,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       targetToolId,
       existingSessionId,
       priorAuthorizedAppIds,
+      incrementalTicket,
       // Federated Login
       requiresFederatedLogin,
       // Consent Flow
@@ -518,11 +548,38 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     }
   }
 
+  /**
+   * Verify a client-supplied incremental-authorization ticket.
+   *
+   * Returns the verified payload, or `undefined` when the parameter is absent,
+   * malformed, expired, or not signed by this server. Verification is
+   * side-effect free — the ticket is CLAIMED (single use) later, in
+   * {@link prepareAuthorizationRequest}, so a request that fails OAuth
+   * validation does not burn the user's ticket.
+   */
+  private verifyIncrementalTicket(raw: unknown): IncrementalAuthTicketPayload | undefined {
+    const token = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : undefined;
+    if (typeof token !== 'string' || token.length === 0) return undefined;
+
+    const localAuth = this.scope.auth as LocalPrimaryAuth | undefined;
+    const secret = localAuth?.signingSecret;
+    if (!secret) return undefined;
+
+    const payload = verifyIncrementalAuthTicket(token, secret);
+    if (!payload) {
+      this.logger.warn('Incremental auth ticket failed verification — treating as an ordinary login');
+      return undefined;
+    }
+    return payload;
+  }
+
   @Stage('checkIfAuthorized')
   async checkIfAuthorized() {
-    // TODO: Check if user is already authorized (has valid session cookie)
-    // If yes, skip login and directly generate authorization code
-    // For now, always proceed to login
+    // Intentionally empty. FrontMCP does not keep a browser login session, so
+    // there is no server-side "already authorized" signal to short-circuit on
+    // here. The one case that legitimately skips login — expanding an existing
+    // grant — is proven by the signed incremental ticket verified in
+    // `parseInput`, not by anything readable from this request.
   }
 
   @Stage('prepareAuthorizationRequest')
@@ -536,6 +593,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       priorAuthorizedAppIds,
       requiresFederatedLogin,
       requiresConsent,
+      incrementalTicket,
     } = this.state;
     const { metadata } = this.scope;
 
@@ -552,6 +610,23 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     }
     const localAuth = auth as LocalPrimaryAuth;
     const store = localAuth.authorizationStore;
+
+    // Claim the incremental ticket — exactly once, and only now that the OAuth
+    // request itself has validated, so a rejected request does not burn it. A
+    // replayed or unclaimable ticket downgrades to an ordinary login rather
+    // than failing the request outright.
+    let effectiveIncremental = isIncrementalAuth;
+    if (incrementalTicket) {
+      const claimed = await localAuth.claimIncrementalTicket(
+        incrementalTicket.jti,
+        Math.max(0, incrementalTicket.exp - Date.now()),
+      );
+      if (!claimed) {
+        this.logger.warn('Incremental auth ticket already used — falling back to an ordinary login');
+        effectiveIncremental = false;
+        this.state.set({ isIncrementalAuth: false, targetAppId: undefined, targetToolId: undefined });
+      }
+    }
 
     // Build federated login state if multiple providers
     let federatedLogin: FederatedLoginStateRecord | undefined;
@@ -619,10 +694,14 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       },
       state: validatedRequest.state,
       resource: validatedRequest.resource,
-      // Progressive/Incremental Authorization Fields
-      isIncremental: isIncrementalAuth,
-      targetAppId,
-      targetToolId,
+      // Progressive/Incremental Authorization Fields. `isIncremental` reflects a
+      // CLAIMED, server-signed ticket; `incrementalSub` is the identity that
+      // ticket proved, and is the only subject the callback may mint for when
+      // it skips the credential gate.
+      isIncremental: effectiveIncremental,
+      incrementalSub: effectiveIncremental ? incrementalTicket?.sub : undefined,
+      targetAppId: effectiveIncremental ? targetAppId : undefined,
+      targetToolId: effectiveIncremental ? targetToolId : undefined,
       existingSessionId,
       priorAuthorizedAppIds,
       // Federated Login State
@@ -634,7 +713,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     await localAuth.authorizationStore.storePendingAuthorization(pendingRecord);
     this.logger.info(
       `Pending authorization created: ${pendingRecord.id}${
-        isIncrementalAuth ? ` (incremental for app: ${targetAppId})` : ''
+        effectiveIncremental ? ` (incremental for app: ${targetAppId})` : ''
       }${requiresFederatedLogin ? ' (federated)' : ''}${requiresConsent ? ' (consent enabled)' : ''}`,
     );
 

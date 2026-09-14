@@ -6,8 +6,9 @@
  * request parameter builders, and common OAuth scenarios.
  */
 
-import { generatePkceChallenge, type PkceChallenge } from '@frontmcp/auth';
-import { createMockHttpRequest } from './flow.fixtures';
+import { generatePkceChallenge, signIncrementalAuthTicket, type PkceChallenge } from '@frontmcp/auth';
+
+import { createMockHttpRequest, MOCK_SIGNING_SECRET } from './flow.fixtures';
 
 // ============================================
 // Types
@@ -30,6 +31,8 @@ export interface OAuthAuthorizeParams {
   app?: string;
   tool?: string;
   session_id?: string;
+  /** Framework-signed incremental-authorization ticket (GHSA-2c4g-9c8x-6m8g). */
+  ticket?: string;
 }
 
 /**
@@ -165,12 +168,33 @@ export function createIncrementalAuthRequest(
 ): OAuthAuthorizeParams & { _pkce: PkcePair } {
   const baseRequest = createValidOAuthRequest(overrides);
 
+  // GHSA-2c4g-9c8x-6m8g — an authorize is incremental only when it carries a
+  // ticket this server signed. `mode`/`app`/`tool` are display context; the
+  // server re-reads the authoritative values from the signed payload.
   return {
     ...baseRequest,
     mode: 'incremental',
     app: appId,
     tool: toolId,
     session_id: sessionId,
+    ticket: signIncrementalAuthTicket({ sub: 'user-1', appId, toolId }, MOCK_SIGNING_SECRET),
+  };
+}
+
+/**
+ * An incremental-looking request WITHOUT a ticket — what an attacker can
+ * assemble unaided. Must be treated as an ordinary login.
+ */
+export function createUnticketedIncrementalAuthRequest(
+  appId: string,
+  toolId?: string,
+  overrides: Partial<OAuthAuthorizeParams> = {},
+): OAuthAuthorizeParams & { _pkce: PkcePair } {
+  return {
+    ...createValidOAuthRequest(overrides),
+    mode: 'incremental',
+    app: appId,
+    tool: toolId,
   };
 }
 
