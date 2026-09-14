@@ -129,14 +129,24 @@ const UNSAFE_MERGE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructo
  */
 function stripUnsafeKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripUnsafeKeys);
-  if (!value || typeof value !== 'object') return value;
+  // Only PLAIN objects are rebuilt. YAML also yields `Date` (and a custom schema
+  // can yield anything else); rebuilding those would replace the value with an
+  // empty object and lose it before the schema ever sees it.
+  if (!isPlainObject(value)) return value;
 
   const clean: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, nested] of Object.entries(value)) {
     if (UNSAFE_MERGE_KEYS.has(key)) continue;
     clean[key] = stripUnsafeKeys(nested);
   }
   return clean;
+}
+
+/** A `{}`-style object — not a Date, RegExp, Map, class instance, or null. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 /**

@@ -134,17 +134,26 @@ describe('DashboardHttpPlugin', () => {
       expect(resolved.cdn.reactDom).toBe('https://esm.sh/react-dom@19');
     });
 
-    it('warns when a second, different configuration is published in one process', () => {
-      // The store is process-wide, so a conflicting publish would silently give
-      // every server in this process the last token registered. Report it.
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    it('REFUSES a second, different auth configuration in one process', () => {
+      // The store is process-wide. Accepting it would make one server's token
+      // valid on another's dashboard, invisibly — worse than failing to boot.
       try {
         publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'first' } }));
-        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'second' } }));
 
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('process-wide'));
+        expect(() =>
+          publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'second' } })),
+        ).toThrow(/AUTH configuration/);
       } finally {
-        warn.mockRestore();
+        resetDashboardOptions();
+      }
+    });
+
+    it('refuses a second configuration that only turns auth off', () => {
+      try {
+        publishDashboardOptions(dashboardPluginOptionsSchema.parse({ auth: { enabled: true, token: 'first' } }));
+
+        expect(() => publishDashboardOptions(dashboardPluginOptionsSchema.parse({}))).toThrow(/AUTH configuration/);
+      } finally {
         resetDashboardOptions();
       }
     });

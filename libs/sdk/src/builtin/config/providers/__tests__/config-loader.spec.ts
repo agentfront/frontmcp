@@ -78,6 +78,34 @@ describe('deepMerge — prototype keys', () => {
   it('replaces arrays rather than merging them', () => {
     expect(deepMerge({ list: [1, 2, 3] }, { list: [9] })['list']).toEqual([9]);
   });
+
+  it('preserves non-plain values instead of rebuilding them', () => {
+    // YAML yields `Date` for a timestamp. Rebuilding it as a plain object would
+    // replace the value with `{}` and lose it before the schema sees it.
+    const when = new Date('2026-01-01T00:00:00Z');
+    const pattern = /^x$/;
+
+    const merged = deepMerge({}, { when, pattern, nested: { when } });
+
+    expect(merged['when']).toBeInstanceOf(Date);
+    expect((merged['when'] as Date).toISOString()).toBe(when.toISOString());
+    expect(merged['pattern']).toBeInstanceOf(RegExp);
+    expect((merged['nested'] as { when: Date }).when).toBeInstanceOf(Date);
+  });
+
+  it('still strips unsafe keys from a plain object alongside a Date', () => {
+    // Built via JSON.parse, not an object literal: in a literal `__proto__:`
+    // sets the prototype, whereas js-yaml (and JSON.parse) create it as an
+    // ordinary OWN key — which is the case the guard has to handle.
+    const nested = JSON.parse('{"__proto__":{"polluted":true},"keep":1}') as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(nested, '__proto__')).toBe(true);
+
+    const merged = deepMerge({}, { when: new Date('2026-01-01T00:00:00Z'), nested } as Record<string, unknown>);
+
+    expect(merged['when']).toBeInstanceOf(Date);
+    assertNotReparented(merged['nested'] as Record<string, unknown>);
+    expect((merged['nested'] as Record<string, unknown>)['keep']).toBe(1);
+  });
 });
 
 describe('loadConfig — YAML with prototype keys', () => {

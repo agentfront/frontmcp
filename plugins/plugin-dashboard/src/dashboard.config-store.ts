@@ -39,13 +39,32 @@ let publishedOptions: DashboardPluginOptions | undefined;
  */
 export function publishDashboardOptions(options: DashboardPluginOptions): void {
   if (publishedOptions && !sameConfiguration(publishedOptions, options)) {
+    // A conflicting AUTH setting is refused outright. Replacing it would make
+    // one server's dashboard credential valid on another's, invisibly — a worse
+    // outcome than refusing to boot.
+    if (!sameAuth(publishedOptions, options)) {
+      throw new Error(
+        '[frontmcp:dashboard] A second, different dashboard AUTH configuration was registered in this process. ' +
+          "Dashboard options are process-wide, so accepting it would apply one server's token to another. " +
+          'Run one dashboard per process, or give both servers the same auth configuration.',
+      );
+    }
+
+    // Everything else (basePath, cdn) is a rendering concern: the last one
+    // silently wins, which is worth a warning but not worth taking the process
+    // down for.
     console.warn(
       '[frontmcp:dashboard] A second, different dashboard configuration was registered in this process. ' +
-        'Dashboard options are process-wide, so the last one wins for every server here — including its auth token. ' +
+        'Dashboard options are process-wide, so the last one wins for every server here. ' +
         'Run one dashboard per process until per-instance configuration is supported.',
     );
   }
   publishedOptions = options;
+}
+
+/** Whether two configurations authenticate identically. */
+function sameAuth(a: DashboardPluginOptions, b: DashboardPluginOptions): boolean {
+  return a.auth?.enabled === b.auth?.enabled && a.auth?.token === b.auth?.token;
 }
 
 /**

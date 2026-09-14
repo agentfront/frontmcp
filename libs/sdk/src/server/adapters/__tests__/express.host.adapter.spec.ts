@@ -400,3 +400,54 @@ describe('ExpressHostAdapter', () => {
     });
   });
 });
+
+/**
+ * DNS-rebinding protection and deployment shape (GHSA-mc9g-v2cp-vfff).
+ *
+ * A DERIVED allow-list is only sound when this process owns the listener and so
+ * knows the address and port clients reach it on. A serverless handler
+ * (`getHandler()`) never calls `start()` and its public hostname is unknowable
+ * here, so deriving one there would 403 every real request.
+ */
+describe('ExpressHostAdapter — derived host allow-list scope', () => {
+  const listen = { bindAddress: '127.0.0.1', port: 3000 };
+
+  async function get(app: unknown, host: string): Promise<number> {
+    const http = await import('node:http');
+    const server = http.createServer(app as never);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        const req = http.request({ hostname: '127.0.0.1', port, path: '/', headers: { Host: host } }, (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        });
+        req.on('error', reject);
+        req.end();
+      });
+    } finally {
+      server.close();
+    }
+  }
+
+  it('does NOT derive an allow-list for a serverless handler', async () => {
+    // getHandler() without start() — the Vercel/Lambda shape.
+    const adapter = new ExpressHostAdapter({ listen });
+    adapter.registerRoute('GET', '/', (_req, res) => res.status(200).json({ ok: true }));
+
+    expect(await get(adapter.getHandler(), 'myapp.vercel.app')).toBe(200);
+  });
+
+  it('still honours an EXPLICIT allow-list for a serverless handler', async () => {
+    const adapter = new ExpressHostAdapter({
+      listen,
+      security: { dnsRebindingProtection: { allowedHosts: ['myapp.vercel.app'] } },
+    });
+    adapter.registerRoute('GET', '/', (_req, res) => res.status(200).json({ ok: true }));
+    const app = adapter.getHandler();
+
+    expect(await get(app, 'myapp.vercel.app')).toBe(200);
+    expect(await get(app, 'evil.example')).toBe(403);
+  });
+});

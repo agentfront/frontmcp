@@ -72,6 +72,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
   private router = express.Router();
   private prepared = false;
+  /** Active host-validation middleware, or undefined while nothing is enforced. */
+  private hostValidation?: ReturnType<typeof createHostValidationMiddleware>;
+  /** Builds the derived allow-list, once this process commits to listening. */
+  private deriveHostValidation?: () => ReturnType<typeof createHostValidationMiddleware> | undefined;
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
@@ -168,52 +172,74 @@ export class ExpressHostAdapter extends HostServerAdapter {
    * `FRONTMCP_ALLOWED_HOSTS` env var, or `enabled: false` to turn it off.
    */
   private installHostValidation(options?: ExpressHostAdapterOptions): void {
-    const securityOpts = options?.security;
-    const protection = securityOpts?.dnsRebindingProtection;
-
+    const protection = options?.security?.dnsRebindingProtection;
     if (protection?.enabled === false) return;
 
     const allowedOrigins = protection?.allowedOrigins;
-    const configuredHosts = protection?.allowedHosts;
-    const envHosts = allowedHostsFromEnv();
+    const explicitHosts = protection?.allowedHosts ?? allowedHostsFromEnv();
 
-    let allowedHosts: string[] | undefined = configuredHosts ?? envHosts;
-    if (!allowedHosts) {
-      const derivation = {
-        bindAddress: options?.listen?.bindAddress,
-        port: options?.listen?.port,
-        socketPath: options?.listen?.socketPath,
-        issuer: options?.listen?.issuer,
+    // An EXPLICIT allow-list applies to every deployment shape — this process
+    // did not have to guess it.
+    if (explicitHosts?.length || allowedOrigins?.length) {
+      this.hostValidation = createHostValidationMiddleware({
+        enabled: true,
+        allowedHosts: explicitHosts?.length ? explicitHosts : undefined,
+        allowedOrigins,
+      });
+    } else {
+      // Otherwise the allow-list can only be DERIVED, and that is sound only
+      // when this process owns the listener and therefore knows the address and
+      // port clients reach it on. `start()` says so; a serverless handler
+      // (`getHandler()`) never calls it, and its public hostname is unknowable
+      // here — deriving one there would 403 every real request.
+      this.deriveHostValidation = () => {
+        const derivation = {
+          bindAddress: options?.listen?.bindAddress,
+          port: options?.listen?.port,
+          socketPath: options?.listen?.socketPath,
+          issuer: options?.listen?.issuer,
+        };
+        if (!shouldEnforceDerivedHosts(derivation)) {
+          // A routable bind with no public name to add: enforcing the derived
+          // list would 403 every request arriving under the deployment's real
+          // hostname. Warn instead — a server reachable from the network is not
+          // the DNS-rebinding target anyway (that attack exists to reach
+          // addresses the attacker otherwise cannot).
+          console.warn(
+            '[frontmcp] DNS-rebinding protection is not enforcing a Host allow-list: the server binds a routable ' +
+              `address (${derivation.bindAddress ?? 'unknown'}) and no allowed hosts are configured. ` +
+              'Set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
+          );
+          return undefined;
+        }
+
+        const allowedHosts = deriveAllowedHosts(derivation);
+        // A Unix-socket server derives no hosts (the socket's permissions are
+        // the boundary). With nothing to check against, validating would reject
+        // everything, so skip it rather than fail closed on a valid config.
+        if (!allowedHosts.length) return undefined;
+
+        return createHostValidationMiddleware({ enabled: true, allowedHosts });
       };
-      if (shouldEnforceDerivedHosts(derivation)) {
-        allowedHosts = deriveAllowedHosts(derivation);
-      } else {
-        // A routable bind with no public name to add: enforcing the derived
-        // list would 403 every request arriving under the deployment's real
-        // hostname. Warn instead, and leave it to the operator — a server
-        // reachable from the network is not the DNS-rebinding target anyway
-        // (that attack exists to reach addresses the attacker otherwise can't).
-
-        console.warn(
-          '[frontmcp] DNS-rebinding protection is not enforcing a Host allow-list: the server binds a routable ' +
-            `address (${options?.listen?.bindAddress ?? 'unknown'}) and no allowed hosts are configured. ` +
-            'Set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
-        );
-      }
     }
 
-    // A Unix-socket server derives no hosts (the socket's permissions are the
-    // boundary) and an operator may legitimately pass an empty list. With
-    // nothing to check against, installing the middleware would reject
-    // everything, so skip it rather than fail closed on a valid config.
-    if (!allowedHosts?.length && !allowedOrigins?.length) return;
+    // Installed unconditionally so it keeps its place ahead of the body parsers;
+    // it is inert until a rule set exists.
+    this.app.use(((req, res, next) => {
+      const validate = this.hostValidation;
+      if (!validate) return next();
+      return validate(req as never, res as never, next);
+    }) as express.RequestHandler);
+  }
 
-    const hostValidation = createHostValidationMiddleware({
-      enabled: true,
-      allowedHosts: allowedHosts?.length ? allowedHosts : undefined,
-      allowedOrigins,
-    });
-    this.app.use(hostValidation as express.RequestHandler);
+  /**
+   * Enable the DERIVED host allow-list. Called from `start()` only — see
+   * `installHostValidation`.
+   */
+  private enableDerivedHostValidation(): void {
+    if (this.hostValidation || !this.deriveHostValidation) return;
+    this.hostValidation = this.deriveHostValidation();
+    this.deriveHostValidation = undefined;
   }
 
   registerRoute(method: HttpMethod, path: string, handler: ServerRequestHandler) {
@@ -254,6 +280,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
   }
 
   async start(portOrSocketPath: number | string, bindAddress?: string) {
+    // This process owns the listener, so the derived allow-list is meaningful.
+    this.enableDerivedHostValidation();
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;

@@ -52,9 +52,18 @@ function createDashboardMiddleware(options: DashboardPluginOptions) {
       return next();
     }
 
-    // Token gate (GHSA-rgxj-434m-vxh3). Runs before anything is served — the
-    // page itself is the disclosure, since it names the dashboard's endpoints.
-    if (authorize) {
+    const urlPath = (req.path || req.url || '/') as string;
+    const method = ((req.method as string) || 'GET').toUpperCase();
+    const isPageRequest = method === 'GET' && (urlPath === '/' || urlPath === '');
+
+    // Token gate (GHSA-rgxj-434m-vxh3), scoped to the PAGE request only.
+    //
+    // The page is what this token protects — it is the disclosure, since it
+    // names the dashboard's endpoints. Everything else under `basePath` (the
+    // SSE stream, the MCP POSTs) belongs to the dashboard's MCP scope, which
+    // authenticates with the server's own policy; demanding the dashboard token
+    // there would reject clients holding a perfectly good server credential.
+    if (isPageRequest && authorize) {
       const result = authorize({
         headers: req.headers as Record<string, string | string[] | undefined> | undefined,
         query: req.query as Record<string, string | string[] | undefined> | undefined,
@@ -65,11 +74,7 @@ function createDashboardMiddleware(options: DashboardPluginOptions) {
       }
     }
 
-    const urlPath = (req.path || req.url || '/') as string;
-    const method = ((req.method as string) || 'GET').toUpperCase();
-
-    // Only serve HTML for GET requests to the root path
-    if (method === 'GET' && (urlPath === '/' || urlPath === '')) {
+    if (isPageRequest) {
       // ServerResponse extends HttpServerResponse which has setHeader
       // Use optional chaining for environments that may not support it
       (res as unknown as { setHeader?: (name: string, value: string) => void }).setHeader?.(

@@ -747,3 +747,27 @@ http: {
 ```
 
 **Codemod available:** no
+
+## BC-036: Dashboard auth.enabled now requires auth.token
+
+**Package:** `@frontmcp/plugin-dashboard` | **Category:** change | **Severity:** low
+
+`dashboardAuthSchema` now rejects `auth.enabled: true` without a non-empty `auth.token`, so a half-configured dashboard fails at startup instead of serving. Previously the combination parsed cleanly and the token was never checked at all (GHSA-rgxj-434m-vxh3), so a dashboard an operator believed was protected was public.
+
+Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one. Note the token gates the dashboard PAGE; the dashboard's MCP scope inherits the server's own authentication.
+
+Related: dashboard options are process-wide, and a second, CONFLICTING auth configuration in the same process now throws rather than silently replacing the first — accepting it would make one server's token valid on another's dashboard. Call `resetDashboardOptions()` between constructions if you build several servers serially.
+
+**Before:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true } }); // parsed, and served the dashboard unauthenticated
+```
+
+**After:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true, token: process.env.DASHBOARD_TOKEN } });
+```
+
+**Codemod available:** no

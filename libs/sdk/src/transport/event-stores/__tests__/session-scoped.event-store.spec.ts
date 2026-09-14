@@ -16,10 +16,10 @@
  * when it builds the store, so stream ids are namespaced by it and a replay
  * whose event id belongs to another session replays nothing.
  */
-import type { EventId, JSONRPCMessage, StreamId } from '@frontmcp/protocol';
+import type { EventId, EventStore, JSONRPCMessage, StreamId } from '@frontmcp/protocol';
 
 import { MemoryEventStore } from '../memory.event-store';
-import { createSessionScopedEventStore } from '../session-scoped.event-store';
+import { createSessionScopedEventStore, type EventStoreWithLookup } from '../session-scoped.event-store';
 
 const GET_STREAM = '_GET_stream' as StreamId;
 
@@ -27,16 +27,19 @@ function message(id: number, secret: string): JSONRPCMessage {
   return { jsonrpc: '2.0', id, result: { secret } } as JSONRPCMessage;
 }
 
-/** Collect everything a replay sends. */
-async function replay(
-  store: { replayEventsAfter: (id: EventId, o: never) => Promise<StreamId> },
-  lastEventId: EventId,
-) {
+/**
+ * Collect everything a replay sends.
+ *
+ * Typed against `EventStore` rather than a structural stand-in, so a change to
+ * `replayEventsAfter`'s signature is a compile error here instead of slipping
+ * through a cast.
+ */
+async function replay(store: EventStore, lastEventId: EventId): Promise<JSONRPCMessage[]> {
   const received: JSONRPCMessage[] = [];
   const send = async (_id: EventId, msg: JSONRPCMessage): Promise<void> => {
     received.push(msg);
   };
-  await store.replayEventsAfter(lastEventId, { send } as never);
+  await store.replayEventsAfter(lastEventId, { send });
   return received;
 }
 
@@ -137,7 +140,7 @@ describe('createSessionScopedEventStore', () => {
     // reconnect silently loses its backlog.
     const opaque = new Map<string, StreamId>();
     let counter = 0;
-    const opaqueStore = {
+    const opaqueStore: EventStoreWithLookup = {
       async storeEvent(streamId: StreamId): Promise<EventId> {
         const id = `opaque-${++counter}` as EventId;
         opaque.set(id, streamId);
@@ -152,8 +155,8 @@ describe('createSessionScopedEventStore', () => {
       },
     };
 
-    const owner = createSessionScopedEventStore(opaqueStore as never, 'owner-session');
-    const stranger = createSessionScopedEventStore(opaqueStore as never, 'other-session');
+    const owner = createSessionScopedEventStore(opaqueStore, 'owner-session');
+    const stranger = createSessionScopedEventStore(opaqueStore, 'other-session');
     const ownEvent = await owner.storeEvent(GET_STREAM, message(1, 'A'));
 
     // The id carries no session prefix at all, yet the owner still replays.
