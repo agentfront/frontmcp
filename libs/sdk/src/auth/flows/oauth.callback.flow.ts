@@ -170,9 +170,14 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // control params are excluded so they can't masquerade as login fields.
     const loginFields = this.collectLoginFields(request);
 
-    // Progressive/Incremental Authorization Parameters
-    const isIncremental = request.query['incremental'] === 'true';
-    const targetAppId = request.query['app_id'] as string | undefined;
+    // Progressive/Incremental Authorization (GHSA-2c4g-9c8x-6m8g).
+    //
+    // NOTHING about incremental authorization is read from the query here. An
+    // incremental callback skips the credential gate, so the decision must come
+    // from the pending record the server itself created — see
+    // `validatePendingAuth`, which reads it after loading that record. A client
+    // claiming `incremental=true` on an ordinary pending record used to walk
+    // straight past `authenticate()`.
 
     // Federated Login Parameters
     const isFederated = request.query['federated'] === 'true';
@@ -209,8 +214,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       pendingAuthId,
       email,
       name,
-      isIncremental,
-      targetAppId,
       isFederated,
       selectedProviders,
       selectedTools,
@@ -218,10 +221,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       loginFields,
       csrf,
     });
-
-    if (isIncremental) {
-      this.logger.info(`Incremental auth callback for app: ${targetAppId}`);
-    }
 
     if (isFederated) {
       this.logger.info(`Federated login callback with ${selectedProviders?.length || 0} selected providers`);
@@ -234,17 +233,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const {
-      pendingAuthId,
-      email,
-      name,
-      isIncremental,
-      isFederated,
-      selectedProviders,
-      selectedTools,
-      consentSubmitted,
-      loginFields,
-    } = this.state;
+    const { pendingAuthId, email, name, isFederated, selectedProviders, selectedTools, consentSubmitted, loginFields } =
+      this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -254,6 +244,36 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     // Retrieve the pending authorization
     const localAuth = this.scope.auth as LocalPrimaryAuth;
+
+    // GHSA-2c4g-9c8x-6m8g — the pending record is loaded BEFORE any gate runs,
+    // because the gates below branch on whether this is an incremental
+    // authorization and that answer must come from server-side state. The
+    // record is written by the authorize flow only after it claimed a valid,
+    // single-use, server-signed incremental ticket, so `isIncremental` here
+    // means "an already-authenticated caller is expanding a grant" — the one
+    // case where skipping the credential gate is correct.
+    const pendingAuth = await localAuth.authorizationStore.getPendingAuthorization(pendingAuthId);
+
+    if (!pendingAuth) {
+      this.logger.warn(`Pending authorization not found or expired: ${pendingAuthId}`);
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
+          400,
+        ),
+      );
+      return;
+    }
+
+    // An incremental callback must ALSO carry the subject the ticket proved;
+    // without it there is no verified identity to mint for, so treat the
+    // request as an ordinary login rather than trusting a half-formed record.
+    const isIncremental = pendingAuth.isIncremental === true && typeof pendingAuth.incrementalSub === 'string';
+    const targetAppId = isIncremental ? pendingAuth.targetAppId : undefined;
+    this.state.set({ isIncremental, targetAppId });
+    if (isIncremental) {
+      this.logger.info(`Incremental auth callback for app: ${targetAppId}`);
+    }
 
     // Checkpoint 3a — a configured custom `authenticate` verifier takes over the
     // login-completion decision. When it is set, the built-in email requirement
@@ -281,19 +301,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (!authenticateFn && !isIncremental && !email && requireEmail) {
       this.logger.warn('Missing email in callback');
       this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Email is required'), 400));
-      return;
-    }
-
-    const pendingAuth = await localAuth.authorizationStore.getPendingAuthorization(pendingAuthId);
-
-    if (!pendingAuth) {
-      this.logger.warn(`Pending authorization not found or expired: ${pendingAuthId}`);
-      this.respond(
-        httpRespond.html(
-          this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
-          400,
-        ),
-      );
       return;
     }
 
@@ -342,9 +349,15 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // login derived), so we derive it here too when no email is supplied. This
     // keeps the expanded token's `sub` identical to the original session's.
     let userSub: string | undefined;
-    if (email) {
+    if (isIncremental) {
+      // The ticket proved exactly who this is; the grant expands for THAT
+      // subject and no other. Never fall back to the anonymous subject here —
+      // deriving it from a request parameter is what made the operator's
+      // identity forgeable (GHSA-2c4g-9c8x-6m8g).
+      userSub = pendingAuth.incrementalSub;
+    } else if (email) {
       userSub = this.generateUserSub(email);
-    } else if (!requireEmail || isIncremental) {
+    } else if (!requireEmail) {
       const anonymousSubject = localOptions.anonymousSubject ?? 'local-operator';
       userSub = this.generateUserSub(anonymousSubject);
     } else {
@@ -601,10 +614,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       originalState: pendingAuth.state,
       resource: pendingAuth.resource,
       userSub,
-      // Progressive/Incremental Authorization from pending record
-      isIncremental: pendingAuth.isIncremental || isIncremental,
-      targetAppId: pendingAuth.targetAppId || this.state.targetAppId,
-      targetToolId: pendingAuth.targetToolId,
+      // Progressive/Incremental Authorization — from the pending record ONLY.
+      // `isIncremental` was derived above from the record plus its proven
+      // subject; OR-ing a client-supplied flag in here is what let a caller
+      // override the server's `false` (GHSA-2c4g-9c8x-6m8g).
+      isIncremental,
+      targetAppId,
+      targetToolId: isIncremental ? pendingAuth.targetToolId : undefined,
       existingSessionId: pendingAuth.existingSessionId,
       existingAuthorizationId: pendingAuth.existingAuthorizationId,
       priorAuthorizedAppIds: pendingAuth.priorAuthorizedAppIds,
@@ -1009,6 +1025,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     'pending_auth_id',
     'incremental',
     'app_id',
+    'ticket',
     'federated',
     'providers',
     'tools',
