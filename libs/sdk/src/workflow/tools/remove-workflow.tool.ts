@@ -1,6 +1,8 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { JobNotAuthorizedError } from '../../errors';
+import { JobPermissionGuard } from '../../job/job-permission.guard';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
@@ -26,7 +28,17 @@ export default class RemoveWorkflowTool extends ToolContext {
 
     const workflow = workflowRegistry.findByName(input.name);
     if (!workflow) {
-      return this.fail(new Error(`Workflow "${input.name}" not found`));
+      return this.fail(new JobNotAuthorizedError(input.name));
+    }
+
+    const allowed = await JobPermissionGuard.check(
+      workflow.metadata.permissions,
+      'delete',
+      this.authInfo,
+      this.scope.authoritiesContextBuilder,
+    );
+    if (!allowed) {
+      return this.fail(new JobNotAuthorizedError(input.name));
     }
 
     if (!workflow.isDynamic()) {

@@ -3,7 +3,11 @@ import { randomUUID } from '@frontmcp/utils';
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobPermission } from '../../common/metadata/job.metadata';
+import { resolvePrincipal } from '../../common/utils/principal.utils';
+import { JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
+import { JobPermissionGuard } from '../job-permission.guard';
 import { type JobRegistryInterface } from '../job.registry';
 import {
   type JobExecutionState,
@@ -17,6 +21,13 @@ export interface ExecuteJobOptions {
   sessionId?: string;
   authInfo?: Partial<Record<string, unknown>>;
   contextProviders?: unknown;
+  /**
+   * The scope's authorities context builder, when one is configured. Passed
+   * through so the permission guard resolves roles/claims using the server's
+   * own `claimsMapping` rather than a second, divergent notion of where roles
+   * live.
+   */
+  authoritiesContextBuilder?: import('@frontmcp/auth').AuthoritiesContextBuilder;
 }
 
 export interface ExecuteWorkflowOptions extends ExecuteJobOptions {
@@ -62,6 +73,14 @@ export class JobExecutionManager {
     input: unknown,
     opts: ExecuteJobOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
+    // Authorization choke point for a directly executed job
+    // (GHSA-58v2-gpcc-jmqv) — the execute_job tool, a trigger, any in-process
+    // caller. It runs BEFORE any run record is created, so an unauthorized
+    // attempt leaves no state behind and background execution has no async
+    // escape hatch. Workflow STEPS do not pass through here; the engine runs
+    // them directly and `WorkflowStepExecutor` applies the same check per step.
+    await this.assertMayExecute(job.metadata.permissions, job.name, opts);
+
     const runId = randomUUID();
     const retryConfig = job.metadata.retry ?? {};
     const maxAttempts = retryConfig.maxAttempts ?? 1;
@@ -71,6 +90,7 @@ export class JobExecutionManager {
       jobId: job.metadata.id ?? job.name,
       jobName: job.name,
       sessionId: opts.sessionId,
+      ownerSub: resolvePrincipal(opts.authInfo, opts.authoritiesContextBuilder).sub || undefined,
       state: 'pending',
       input,
       startedAt: Date.now(),
@@ -111,6 +131,8 @@ export class JobExecutionManager {
     jobRegistry: JobRegistryInterface,
     opts: ExecuteWorkflowOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
+    await this.assertMayExecute(workflow.metadata.permissions, workflow.name, opts);
+
     const runId = randomUUID();
 
     const runRecord: WorkflowRunRecord = {
@@ -119,6 +141,7 @@ export class JobExecutionManager {
       jobName: workflow.name,
       workflowName: workflow.name,
       sessionId: opts.sessionId,
+      ownerSub: resolvePrincipal(opts.authInfo, opts.authoritiesContextBuilder).sub || undefined,
       state: 'pending',
       input: opts.workflowInput,
       startedAt: Date.now(),
@@ -148,6 +171,30 @@ export class JobExecutionManager {
     }
 
     return this.executeWorkflowInline(workflow, jobRegistry, runId, opts);
+  }
+
+  /**
+   * Throw unless the caller may execute the entry.
+   *
+   * Uses the same error for "not authorized" as the tools use for "not found",
+   * so a caller cannot enumerate which restricted jobs exist by comparing
+   * responses.
+   */
+  private async assertMayExecute(
+    permissions: JobPermission[] | undefined,
+    name: string,
+    opts: ExecuteJobOptions,
+  ): Promise<void> {
+    const allowed = await JobPermissionGuard.check(
+      permissions,
+      'execute',
+      opts.authInfo,
+      opts.authoritiesContextBuilder,
+    );
+    if (!allowed) {
+      this.logger.warn(`Execution of "${name}" denied: caller does not satisfy its execute permissions`);
+      throw new JobNotAuthorizedError(name);
+    }
   }
 
   /**
@@ -260,6 +307,7 @@ export class JobExecutionManager {
       const engine = new WorkflowEngine(workflow.metadata, jobRegistry, this.logger, {
         authInfo: opts.authInfo ?? {},
         contextProviders: opts.contextProviders,
+        authoritiesContextBuilder: opts.authoritiesContextBuilder,
       });
 
       const result = await engine.execute(opts.workflowInput);

@@ -343,7 +343,7 @@ Replace buildToolUIMulti with individual buildToolUI calls. Remove BuildTargetPl
 **Before:**
 
 ```typescript
-import { buildToolUIMulti, BuildTargetPlatform } from '@frontmcp/uipack';
+import { BuildTargetPlatform, buildToolUIMulti } from '@frontmcp/uipack';
 ```
 
 **After:**
@@ -681,7 +681,11 @@ The HTTP transport now binds 127.0.0.1 unless told otherwise. A server that said
 **After:**
 
 ```typescript
-http: { security: { bindAddress: 'all' } } // or FRONTMCP_BIND_ADDRESS=all
+http: {
+  security: {
+    bindAddress: 'all',
+  },
+} // or FRONTMCP_BIND_ADDRESS=all
 ```
 
 **Codemod available:** no
@@ -703,7 +707,93 @@ CORS now defaults to off — no headers, so a browser will not let another origi
 **After:**
 
 ```typescript
-http: { cors: { origin: ['https://app.example.com'] } }
+http: {
+  cors: {
+    origin: ['https://app.example.com'];
+  }
+}
+```
+
+**Codemod available:** no
+
+## BC-035: DNS-rebinding protection (Host validation) is on by default
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+DNS-rebinding protection (`http.security.dnsRebindingProtection`) now defaults to ON. A request whose `Host` (or `X-Forwarded-Host`) is not one this server answers to gets a 403, before routing and before the body is read. This closes GHSA-mc9g-v2cp-vfff: a malicious page can rebind its own domain to the victim's loopback address and reach a local MCP server as a same-origin service, and neither loopback binding nor CORS prevents it.
+
+When `allowedHosts` is not configured it is derived from what the process actually listens on: the loopback aliases (`localhost`, `127.0.0.1`, `[::1]`, with and without the bound port). Matching is case-insensitive and treats `host` and `host:80`/`host:443` as equal. A Unix-socket listener derives nothing — the socket's filesystem permissions are the boundary and a rebound browser cannot reach it — so Host checking is skipped there.
+
+A server bound to a routable address (`0.0.0.0`, `::`, a specific NIC) is reached under a hostname the process cannot know, so a DERIVED list is NOT enforced there: FrontMCP logs a warning and leaves Host checking off until you name the public host. Set `http.security.dnsRebindingProtection.allowedHosts` (or the `FRONTMCP_ALLOWED_HOSTS` env var) on a proxied deployment to turn it on — the bound NIC address is then added to the list alongside your public name. To opt out entirely, set `http.security.dnsRebindingProtection.enabled: false`.
+
+Also fixed: `strict: true` previously derived a port-less allow-list (`['localhost', '127.0.0.1']`) and compared it against a raw `Host`, so it rejected every request on a non-default port.
+
+**Before:**
+
+```typescript
+// no security config → Host/Origin never validated (any Host accepted)
+```
+
+**After:**
+
+```typescript
+http: {
+  security: {
+    dnsRebindingProtection: {
+      allowedHosts: ['api.example.com'];
+    }
+  }
+}
+```
+
+**Codemod available:** no
+
+## BC-036: Dashboard auth.enabled now requires auth.token
+
+**Package:** `@frontmcp/plugin-dashboard` | **Category:** change | **Severity:** low
+
+`dashboardAuthSchema` now rejects `auth.enabled: true` without a non-empty `auth.token`, so a half-configured dashboard fails at startup instead of serving. Previously the combination parsed cleanly and the token was never checked at all (GHSA-rgxj-434m-vxh3), so a dashboard an operator believed was protected was public.
+
+Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one. Note the token gates the dashboard PAGE; the dashboard's MCP scope inherits the server's own authentication (previously it declared `auth: { mode: 'public' }` unconditionally, which is what GHSA-rgxj-434m-vxh3 exposed).
+
+Consequence to plan for: the bundled browser client sends no `Authorization` header, so on a server with non-public auth the page loads but its in-page graph and SSE stream get `401`. Run the dashboard on a public/development server, or front it with a proxy that injects a credential — scoped to the dashboard's own routes (`<basePath>/sse` and `<basePath>/message`) and holding no grant beyond the dashboard scope. Injecting a server credential across the MCP endpoint instead would let any page on that origin issue arbitrary authenticated JSON-RPC.
+
+Related: dashboard options are process-wide, and a second, CONFLICTING auth configuration in the same process now throws rather than silently replacing the first — accepting it would make one server's token valid on another's dashboard. Call `resetDashboardOptions()` between constructions if you build several servers serially.
+
+**Before:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true } }); // parsed, and served the dashboard unauthenticated
+```
+
+**After:**
+
+```typescript
+DashboardPlugin.init({ auth: { enabled: true, token: process.env.DASHBOARD_TOKEN } });
+```
+
+**Codemod available:** no
+
+## BC-037: register_job / register_workflow are no longer registered by default
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+`register_job` and `register_workflow` take a raw `script` string and register it as a dynamic job, so an MCP client that can reach them can run arbitrary code in the server process. They were added to the tool surface automatically whenever any app declared jobs (GHSA-58v2-gpcc-jmqv). They are now omitted unless the server opts in, and a call that reaches them without the opt-in fails with `DynamicJobRegistrationDisabledError`.
+
+The opt-in is `jobs.allowDynamicRegistration`. It is in addition to — not instead of — the `create` permission check on the entry, so a server that turns it on still authorizes each registration.
+
+The other management tools (`list_jobs`, `execute_job`, `get_job_status`, `remove_job`, and their `*_workflow` counterparts) are unaffected.
+
+**Before:**
+
+```typescript
+@FrontMcp({ jobs: { enabled: true } }) // register_job and register_workflow were exposed
+```
+
+**After:**
+
+```typescript
+@FrontMcp({ jobs: { enabled: true, allowDynamicRegistration: true } })
 ```
 
 **Codemod available:** no

@@ -1,10 +1,25 @@
+import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
+
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
 import { InvalidEntityError } from '../../errors';
+import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
+import { JobPermissionGuard } from '../../job/job-permission.guard';
 import { type JobRegistryInterface } from '../../job/job.registry';
+
+export interface WorkflowStepExecutorExtra {
+  authInfo: Partial<Record<string, unknown>>;
+  contextProviders?: unknown;
+  /**
+   * The scope's authorities context builder, so a step's permission check
+   * resolves roles through the server's own `claimsMapping` rather than a
+   * second, divergent notion of where roles live.
+   */
+  authoritiesContextBuilder?: AuthoritiesContextBuilder;
+}
 
 /**
  * Executes a single workflow step by resolving the job and running it.
@@ -12,13 +27,9 @@ import { type JobRegistryInterface } from '../../job/job.registry';
 export class WorkflowStepExecutor {
   private readonly jobRegistry: JobRegistryInterface;
   private readonly logger: FrontMcpLogger;
-  private readonly extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown };
+  private readonly extra: WorkflowStepExecutorExtra;
 
-  constructor(
-    jobRegistry: JobRegistryInterface,
-    logger: FrontMcpLogger,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
-  ) {
+  constructor(jobRegistry: JobRegistryInterface, logger: FrontMcpLogger, extra: WorkflowStepExecutorExtra) {
     this.jobRegistry = jobRegistry;
     this.logger = logger;
     this.extra = extra;
@@ -29,6 +40,22 @@ export class WorkflowStepExecutor {
     const job = this.jobRegistry.findByName(step.jobName);
     if (!job) {
       throw new InvalidEntityError('job', step.jobName, `a registered job (referenced by step "${step.id}")`);
+    }
+
+    // The step job's OWN permissions, not just the workflow's
+    // (GHSA-58v2-gpcc-jmqv). `JobExecutionManager` authorizes the workflow
+    // once and the engine then runs steps directly, so a workflow that
+    // declares nothing would otherwise launder every job it references.
+    // Checked outside the retry loop: a denial is not transient.
+    const allowed = await JobPermissionGuard.check(
+      job.metadata.permissions,
+      'execute',
+      this.extra.authInfo,
+      this.extra.authoritiesContextBuilder,
+    );
+    if (!allowed) {
+      this.logger.warn(`Step "${step.id}" denied: caller does not satisfy the execute permissions of "${job.name}"`);
+      throw new JobNotAuthorizedError(job.name);
     }
 
     // Determine retry config (step override or job default)

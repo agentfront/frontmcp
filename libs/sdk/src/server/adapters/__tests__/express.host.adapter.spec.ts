@@ -400,3 +400,159 @@ describe('ExpressHostAdapter', () => {
     });
   });
 });
+
+/**
+ * DNS-rebinding protection and deployment shape (GHSA-mc9g-v2cp-vfff).
+ *
+ * A DERIVED allow-list is only sound when this process owns the listener and so
+ * knows the address and port clients reach it on. A serverless handler
+ * (`getHandler()`) never calls `start()` and its public hostname is unknowable
+ * here, so deriving one there would 403 every real request.
+ */
+describe('ExpressHostAdapter — derived host allow-list scope', () => {
+  async function get(app: unknown, host: string): Promise<number> {
+    const http = await import('node:http');
+    const server = http.createServer(app as never);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        const req = http.request({ hostname: '127.0.0.1', port, path: '/', headers: { Host: host } }, (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        });
+        req.on('error', reject);
+        req.end();
+      });
+    } finally {
+      server.close();
+    }
+  }
+
+  it('does NOT derive an allow-list for a serverless handler', async () => {
+    // getHandler() without start() — the Vercel/Lambda shape.
+    const adapter = new ExpressHostAdapter();
+    adapter.registerRoute('GET', '/', (_req, res) => res.status(200).json({ ok: true }));
+
+    expect(await get(adapter.getHandler(), 'myapp.vercel.app')).toBe(200);
+  });
+
+  it('still honours an EXPLICIT allow-list for a serverless handler', async () => {
+    const adapter = new ExpressHostAdapter({
+      security: { dnsRebindingProtection: { allowedHosts: ['myapp.vercel.app'] } },
+    });
+    adapter.registerRoute('GET', '/', (_req, res) => res.status(200).json({ ok: true }));
+    const app = adapter.getHandler();
+
+    expect(await get(app, 'myapp.vercel.app')).toBe(200);
+    expect(await get(app, 'evil.example')).toBe(403);
+  });
+
+  /**
+   * Drive whatever host validation the adapter has installed.
+   *
+   * `start()` opens a listener the adapter does not expose, so asserting over
+   * real HTTP here would leak one. The full HTTP path is covered by
+   * `apps/e2e/demo-e2e-standalone/e2e/dns-rebinding-default.e2e.spec.ts`; what
+   * matters at this level is WHICH allow-list the adapter derived.
+   */
+  function checkHost(adapter: ExpressHostAdapter, host: string): number | 'allowed' {
+    const validate = (adapter as unknown as { hostValidation?: (req: never, res: never, next: () => void) => void })
+      .hostValidation;
+    if (!validate) return 'allowed';
+
+    let status: number | 'allowed' = 'allowed';
+    const res = { status: (code: number) => ({ json: () => (status = code) }) };
+    validate({ headers: { host } } as never, res as never, () => undefined);
+    return status;
+  }
+
+  it('derives from the arguments start() is called with, not from options', async () => {
+    // A direct caller passes the listener to `start()` and nothing to the
+    // constructor. Predicting the address from options instead left this
+    // loopback listener — exactly the DNS-rebinding target — unprotected.
+    const adapter = new ExpressHostAdapter();
+    (adapter as unknown as { enableDerivedHostValidation(p: number, b?: string): void }).enableDerivedHostValidation(
+      3000,
+      '127.0.0.1',
+    );
+
+    expect(checkHost(adapter, '127.0.0.1:3000')).toBe('allowed');
+    expect(checkHost(adapter, 'localhost:3000')).toBe('allowed');
+    expect(checkHost(adapter, 'evil.attacker.example')).toBe(403);
+  });
+
+  it('does not derive an allow-list for a unix-socket listener', () => {
+    // The socket's filesystem permissions are the boundary; clients send an
+    // arbitrary placeholder Host.
+    const adapter = new ExpressHostAdapter();
+    (adapter as unknown as { enableDerivedHostValidation(p: string): void }).enableDerivedHostValidation(
+      '/tmp/frontmcp.sock',
+    );
+
+    expect(checkHost(adapter, 'anything.example')).toBe('allowed');
+  });
+
+  it('stays silent for a unix-socket listener instead of calling it routable', () => {
+    // A socket binds no address, so the routable-bind warning is both wrong and
+    // bad advice: acting on it (setting allowedHosts) would enforce a TCP host
+    // list against the placeholder Host a socket client sends.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const adapter = new ExpressHostAdapter();
+      (adapter as unknown as { enableDerivedHostValidation(p: string): void }).enableDerivedHostValidation(
+        '/tmp/frontmcp.sock',
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('derives from the port the OS assigned, not the requested 0', async () => {
+    // `port: 0` asks the OS to pick. Deriving before `listen()` sees only the
+    // literal 0, which `deriveAllowedHosts` reads as "no port" — the allow-list
+    // is then port-less loopback names while every real `Host` carries the
+    // assigned port, so enforcement 403s the whole server.
+    const opened: http.Server[] = [];
+    const realCreateServer = http.createServer.bind(http);
+    const spy = jest.spyOn(http, 'createServer').mockImplementation(((...args: never[]) => {
+      const server = (realCreateServer as (...a: never[]) => http.Server)(...args);
+      opened.push(server);
+      return server;
+    }) as never);
+
+    try {
+      const adapter = new ExpressHostAdapter();
+      await adapter.start(0, '127.0.0.1');
+
+      const address = opened[0]?.address();
+      const assignedPort = typeof address === 'object' && address ? address.port : 0;
+      expect(assignedPort).toBeGreaterThan(0);
+
+      expect(checkHost(adapter, `127.0.0.1:${assignedPort}`)).toBe('allowed');
+      expect(checkHost(adapter, `localhost:${assignedPort}`)).toBe('allowed');
+      expect(checkHost(adapter, 'evil.attacker.example')).toBe(403);
+    } finally {
+      spy.mockRestore();
+      await Promise.all(opened.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+    }
+  });
+
+  it('warns and does not enforce when start() binds a routable address', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const adapter = new ExpressHostAdapter();
+      (adapter as unknown as { enableDerivedHostValidation(p: number, b?: string): void }).enableDerivedHostValidation(
+        3000,
+        '0.0.0.0',
+      );
+
+      expect(checkHost(adapter, 'anything.example')).toBe('allowed');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('routable'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

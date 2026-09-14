@@ -1,5 +1,4 @@
-import type { EventId, EventStore, StreamId } from '@frontmcp/protocol';
-import type { JSONRPCMessage } from '@frontmcp/protocol';
+import { type EventId, type EventStore, type JSONRPCMessage, type StreamId } from '@frontmcp/protocol';
 
 interface StoredEvent {
   id: EventId;
@@ -53,6 +52,17 @@ export class MemoryEventStore implements EventStore {
     }
 
     return id;
+  }
+
+  /**
+   * Resolve the stream an event belongs to.
+   *
+   * Optional in the upstream `EventStore` contract, and the transport's
+   * 409-conflict guard (refusing a second live stream for the same id) is dead
+   * code while no store provides it (GHSA-84j6-jc92-77jm).
+   */
+  async getStreamIdForEventId(eventId: EventId): Promise<StreamId | undefined> {
+    return this.index.get(eventId)?.streamId;
   }
 
   async replayEventsAfter(

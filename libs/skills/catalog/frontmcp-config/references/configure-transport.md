@@ -45,7 +45,7 @@ Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, 
     distributedMode: 'auto', // boolean | 'auto'
     eventStore: {
       enabled: true,
-      provider: 'redis', // 'memory' | 'redis'
+      provider: 'redis', // 'memory' | 'redis' | 'sqlite'
       maxEvents: 10000,
       ttlMs: 300000,
     },
@@ -115,13 +115,19 @@ Enable event store so clients can resume SSE connections after disconnects:
 transport: {
   eventStore: {
     enabled: true,
-    provider: 'redis',       // 'memory' for single instance, 'redis' for distributed
+    provider: 'redis',       // 'memory' | 'redis' | 'sqlite'
     maxEvents: 10000,        // max events to store
     ttlMs: 300000,           // 5 minute TTL
     redis: { provider: 'redis', host: 'localhost' },
   },
 }
 ```
+
+**Auto-enabled in distributed mode.** A distributed deployment with Redis configured turns the event store on without an explicit `eventStore` block, so the notes below apply there too.
+
+**Requires 1.7.2 or later.** Before 1.7.2 (GHSA-84j6-jc92-77jm) one store instance was shared by every session with no ownership check on replay, and the upstream transport writes every session's standalone SSE stream under the constant id `_GET_stream` with sequential event numbers — so a client sending `Last-Event-ID: _GET_stream:1` was replayed other sessions' server-to-client messages (tool results, resource contents, notifications). On 1.7.1 or earlier, do not enable the event store on a multi-tenant deployment.
+
+From 1.7.2 each session gets a view over the shared store scoped to its own session id: an event id belonging to another session replays nothing.
 
 ## Target-Specific Recommendations
 

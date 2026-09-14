@@ -30,11 +30,11 @@ sequenceDiagram
     Agent->>FrontMCP: Call tool: slack:send_message
     FrontMCP->>FrontMCP: Token claim: Slack NOT in authorized_apps
 
-    FrontMCP-->>Agent: AUTHORIZATION_REQUIRED (isError + _meta.auth_url)
+    FrontMCP-->>Agent: AUTHORIZATION_REQUIRED (isError + _meta.auth_url with signed ticket)
 
     Agent-->>User: "I need Slack access"
 
-    User->>FrontMCP: Incremental authorize (auth_url, apps=crm carried forward)
+    User->>FrontMCP: Follow auth_url (ticket proves the signed subject; prior grant carried in it)
     FrontMCP->>Slack: OAuth flow
     Slack-->>FrontMCP: Token (stored server-side)
     FrontMCP-->>Agent: New access token (authorized_apps: [crm, slack])
@@ -178,7 +178,7 @@ surface the authorize link). The error class is
     "authorization_required": true,
     "app": "slack",
     "tool": "slack:send_message",
-    "auth_url": "https://my-server/oauth/authorize?app=slack",
+    "auth_url": "https://my-server/oauth/authorize?app=slack&tool=slack%3Asend_message&ticket=…",
     "required_scopes": ["chat:write"],
     "session_mode": "stateful",
     "supports_incremental": true
@@ -343,23 +343,43 @@ returns `AUTHORIZATION_REQUIRED` with an `auth_url`.
 
 ### Incremental authorization (expand the grant)
 
-To add a skipped app, start an **incremental** authorize. The client carries its current
-grant forward via `apps=` so the new token is the **union** of the prior apps plus the
-target app:
+An incremental authorize **skips the login step**, so it is only legitimate for a caller
+the server has already authenticated. The proof is a framework-signed, single-use
+`ticket` the server mints when it raises `AUTHORIZATION_REQUIRED` — at the one point in
+the request where the caller's identity is verified. It is already embedded in the
+`auth_url`:
 
 ```
 GET /oauth/authorize?response_type=code&client_id=…&redirect_uri=…
     &code_challenge=…&code_challenge_method=S256
-    &mode=incremental&app=slack&apps=crm
+    &ticket=<from auth_url>
 ```
 
-This renders a single-app authorization page; on submit, `/oauth/callback` mints a fresh
-code → the client exchanges it for a token with `authorized_apps: ["crm", "slack"]`. The
-`auth_url` returned in the 403 `_meta` points the agent straight at this flow.
+**Follow the `auth_url` — do not assemble this URL yourself.** The ticket names the
+target app and the prior grant, so the client sends neither. This renders a single-app
+authorization page; on submit, `/oauth/callback` mints a fresh code → the client exchanges
+it for a token with `authorized_apps: ["crm", "slack"]`.
+
+<Warning>
+  **Security (GHSA-2c4g-9c8x-6m8g, fixed in 1.7.2)** — `mode=incremental` and `app=` are no
+  longer authorization signals on their own, and `/oauth/callback` ignores an
+  `incremental=true` parameter entirely. An authorize request without a valid ticket is an
+  ordinary login and runs the full credential gate, including a configured
+  `authenticate()` verifier. Before 1.7.2 these parameters let an unauthenticated caller
+  skip that verifier and obtain a token as the operator.
+
+  Tickets are valid for 5 minutes and can be claimed **once**; a replayed ticket falls back
+  to an ordinary login rather than failing the request. Single use is enforced with a
+  conditional write against the configured session storage, so **a multi-instance
+  deployment needs shared storage** (Redis, or any adapter supporting `ifNotExists`) for
+  the guarantee to hold across instances. A backend without conditional writes — Cloudflare
+  KV, for example — degrades to an in-memory guard that holds within one instance only, and
+  logs a warning at first use.
+</Warning>
 
 <Note>
-  Unknown app ids passed via `apps=`/`app=` are dropped — a client can never forge a grant
-  to a non-existent app. Gating is per real app, so a bogus id is harmless.
+  Unknown app ids are dropped — a client can never forge a grant to a non-existent app.
+  Gating is per real app, so a bogus id is harmless.
 </Note>
 
 ---
@@ -484,7 +504,7 @@ For multi-provider consent where users select which IdPs to authenticate with:
 <Check>**Provide clear descriptions** - Users should understand why each app is needed</Check>
 <Check>**Handle the 403 structurally** - Read `result._meta.auth_url` and surface it to the user</Check>
 <Check>**Use stateful sessions** - Required for the incremental `auth_url` (stateless omits it)</Check>
-<Check>**Carry `apps=` forward** - On an incremental authorize, include the prior grant so it isn't lost</Check>
+<Check>**Follow the server's `auth_url`** - It carries the signed ticket; a hand-assembled incremental URL falls back to a full login</Check>
 
 ---
 
@@ -495,12 +515,15 @@ For multi-provider consent where users select which IdPs to authenticate with:
     - Confirm the client sent `apps=` on the initial authorize (or omit it to grant all apps).
     - The `authorized_apps` claim only appears when `incrementalAuth` is enabled — verify the
       `auth` block has an `incrementalAuth` object (an empty `{}` enables it with defaults).
-    - App ids in `apps=`/`app=` must match the app's id (`metadata.id`, else the slug of
+    - App ids in `apps=` must match the app's id (`metadata.id`, else the slug of
       `name`); unknown ids are dropped.
   </Accordion>
   <Accordion title="Incremental authorize didn't expand the grant">
-    - The client must carry its current grant forward via `apps=` on the incremental
-      authorize; otherwise only the target app (plus nothing) is granted.
+    - The authorize must carry the `ticket` from the failed call's `auth_url`. Without it
+      the request is an ordinary login: the user is asked for credentials and the prior
+      grant is not carried forward.
+    - Tickets are single-use and expire after 5 minutes. Re-trigger the tool call to get a
+      fresh `auth_url` rather than reusing an old one.
     - The new token from the code exchange replaces the old one — make sure the client swaps
       it in before retrying the call.
     - Confirm `incrementalAuth.enabled` is not `false`.

@@ -5,6 +5,7 @@ import { type ServerResponse } from '../../common';
 import { type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { ElicitationTimeoutError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
+import { createSessionScopedEventStore } from '../event-stores/session-scoped.event-store';
 import { rpcRequest } from '../transport.error';
 import { type TransportType } from '../transport.types';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
@@ -32,7 +33,13 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     // Get EventStore from scope configuration (undefined if not enabled)
     // By default, EventStore is disabled because Claude.ai's client doesn't handle priming events correctly.
     // Enable via transport.eventStore config if your clients support SSE resumability.
-    const eventStore = this.scope.eventStore;
+    //
+    // The scope's store is SHARED by every session, and the upstream replay
+    // contract passes no caller identity — so a client could present another
+    // session's `Last-Event-ID` and be handed that session's backlog
+    // (GHSA-84j6-jc92-77jm). Scope it to this session, which is known right here.
+    const sharedEventStore = this.scope.eventStore;
+    const eventStore = sharedEventStore ? createSessionScopedEventStore(sharedEventStore, sessionId) : undefined;
 
     const isStateless = this.key.type === 'stateless-http';
 

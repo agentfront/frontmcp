@@ -1,6 +1,6 @@
-import type { EventId, EventStore, StreamId } from '@frontmcp/protocol';
-import type { JSONRPCMessage } from '@frontmcp/protocol';
-import type { RedisOptionsInput } from '../../common';
+import { type EventId, type EventStore, type JSONRPCMessage, type StreamId } from '@frontmcp/protocol';
+
+import { type RedisOptionsInput } from '../../common';
 import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
 
 export interface RedisEventStoreOptions {
@@ -140,12 +140,32 @@ export class RedisEventStore implements EventStore {
     return `${streamId}:${redisId}` as EventId;
   }
 
+  /**
+   * Resolve the stream an event belongs to.
+   *
+   * Optional in the upstream `EventStore` contract, and the transport's
+   * 409-conflict guard (refusing a second live stream for the same id) is dead
+   * code while no store provides it (GHSA-84j6-jc92-77jm).
+   */
+  async getStreamIdForEventId(eventId: EventId): Promise<StreamId | undefined> {
+    const parsed = this.parseEventId(eventId);
+    return parsed ? parsed[0] : undefined;
+  }
+
   async replayEventsAfter(
     lastEventId: EventId,
     { send }: { send: (eventId: EventId, message: JSONRPCMessage) => Promise<void> },
   ): Promise<StreamId> {
+    // Parse BEFORE connecting: the stream id half is concatenated into a Redis
+    // key, so a malformed or unsafe id must not reach one — and a garbage
+    // `Last-Event-ID` should not cost a connection either.
+    const parsed = this.parseEventId(lastEventId);
+    if (!parsed) {
+      return 'default-stream' as StreamId;
+    }
+
     const client = await this.getClient();
-    const [streamId, redisId] = this.parseEventId(lastEventId);
+    const [streamId, redisId] = parsed;
     const streamKey = `${this.keyPrefix}${streamId}`;
 
     // Read events after the last ID using exclusive range
@@ -170,19 +190,38 @@ export class RedisEventStore implements EventStore {
    * Event IDs have format: `{streamId}:{redisStreamEntryId}`
    * Redis stream entry IDs have format: `{timestamp}-{sequence}`
    *
+   * The entry-id half is validated because it is interpolated into the `xrange`
+   * range argument (`(${redisId}`), where a malformed value is a protocol error
+   * rather than data.
+   *
+   * The stream-id half is NOT character-filtered. `xadd`/`xrange` take the key
+   * as an exact argument — Redis applies no glob matching there — and ioredis
+   * length-prefixes it, so no character is special. Filtering here would also
+   * make `storeEvent`, which accepts any `StreamId`, able to mint ids this
+   * function then refuses, silently breaking replay for that stream. Ownership
+   * is enforced by the session-scoped facade (GHSA-84j6-jc92-77jm), not by
+   * guessing at the id's characters.
+   *
+   * @returns the pair, or `undefined` when the id is malformed.
+   *
    * @example
    * 'my-stream:1234567890123-0' -> ['my-stream', '1234567890123-0']
    */
-  private parseEventId(eventId: EventId): [StreamId, string] {
-    // Redis stream IDs contain a '-', so we need to find the last colon
-    // that separates the stream ID from the Redis entry ID
-    const lastColonBeforeDash = eventId.lastIndexOf(':', eventId.lastIndexOf('-'));
-    if (lastColonBeforeDash === -1) {
-      // Fallback: split on last colon
-      const lastColon = eventId.lastIndexOf(':');
-      return [eventId.slice(0, lastColon) as StreamId, eventId.slice(lastColon + 1)];
-    }
-    return [eventId.slice(0, lastColonBeforeDash) as StreamId, eventId.slice(lastColonBeforeDash + 1)];
+  private parseEventId(eventId: EventId): [StreamId, string] | undefined {
+    const value = String(eventId);
+    // Redis stream IDs contain a '-', so find the last colon that separates the
+    // stream ID from the Redis entry ID.
+    const lastDash = value.lastIndexOf('-');
+    const separator = lastDash === -1 ? value.lastIndexOf(':') : value.lastIndexOf(':', lastDash);
+    if (separator <= 0 || separator === value.length - 1) return undefined;
+
+    const streamId = value.slice(0, separator);
+    const redisId = value.slice(separator + 1);
+
+    // `{millis}-{seq}`, or a bare `{millis}` (what XADD accepts as a range start).
+    if (!/^\d+(-\d+)?$/.test(redisId)) return undefined;
+
+    return [streamId as StreamId, redisId];
   }
 
   /**

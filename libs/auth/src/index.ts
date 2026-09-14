@@ -214,6 +214,10 @@ export {
   verifyCredentialResumeToken,
   buildCredentialResumeUrl,
   DEFAULT_RESUME_TTL_MS,
+  // Incremental-authorization ticket signing (GHSA-2c4g-9c8x-6m8g)
+  signIncrementalAuthTicket,
+  verifyIncrementalAuthTicket,
+  DEFAULT_INCREMENTAL_TICKET_TTL_MS,
   // Credentials accessor (`this.credentials`)
   CREDENTIALS_ACCESSOR,
   CredentialsAccessorImpl,
@@ -343,6 +347,8 @@ export type {
   CreateSessionCredentialVaultOptions,
   // Credential resume-link types
   CredentialResumePayload,
+  // Incremental-authorization ticket types
+  IncrementalAuthTicketPayload,
   // Credentials accessor types
   CredentialsAccessor,
   CredentialValue,

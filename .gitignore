@@ -110,3 +110,5 @@ planning/
 # Local throwaway sandbox for deploying a FrontMCP worker to a real Cloudflare
 # account (not committed; see cloudflare-sandbox/README.md to use it).
 /cloudflare-sandbox
+# Draft GHSA replies — describe unpatched behaviour until release. Never commit.
+advisories/replies/

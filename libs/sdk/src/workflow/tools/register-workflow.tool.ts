@@ -2,6 +2,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { WorkflowKind } from '../../common/records/workflow.record';
+import { DynamicJobRegistrationDisabledError } from '../../errors';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({
@@ -53,6 +54,14 @@ export default class RegisterWorkflowTool extends ToolContext {
       return this.fail(new Error('Workflows system is not enabled'));
     }
 
+    // Defense in depth: the tool is normally not registered at all unless
+    // `jobs.allowDynamicRegistration` is true, but a host that wires it up by
+    // hand must not get an ungated arbitrary-script entry point
+    // (GHSA-58v2-gpcc-jmqv).
+    if (!this.dynamicRegistrationEnabled()) {
+      return this.fail(new DynamicJobRegistrationDisabledError('workflow'));
+    }
+
     const existing = workflowRegistry.findByName(input.name);
     if (existing) {
       return this.fail(new Error(`Workflow "${input.name}" already exists`));
@@ -76,5 +85,10 @@ export default class RegisterWorkflowTool extends ToolContext {
     });
 
     return { success: true, workflowId };
+  }
+
+  private dynamicRegistrationEnabled(): boolean {
+    const jobs = (this.scope.metadata as { jobs?: { allowDynamicRegistration?: boolean } } | undefined)?.jobs;
+    return jobs?.allowDynamicRegistration === true;
   }
 }
