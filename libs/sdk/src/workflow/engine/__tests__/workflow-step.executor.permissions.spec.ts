@@ -20,7 +20,7 @@ const logger = {
   error: jest.fn(),
   info: jest.fn(),
   debug: jest.fn(),
-} as unknown as Parameters<typeof WorkflowStepExecutor.prototype.constructor>[1];
+} as unknown as ConstructorParameters<typeof WorkflowStepExecutor>[1];
 
 function jobEntry(name: string, permissions?: JobPermission[], execute = jest.fn()): JobEntry {
   return {
@@ -41,7 +41,7 @@ describe('WorkflowStepExecutor — step job permissions', () => {
   it('refuses a step whose job the caller may not execute', async () => {
     const execute = jest.fn();
     const job = jobEntry('admin-only', [{ action: 'execute', roles: ['admin'] }], execute);
-    const executor = new WorkflowStepExecutor(registryWith(job), logger as never, { authInfo: {} });
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
 
     await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(JobNotAuthorizedError);
     expect(execute).not.toHaveBeenCalled();
@@ -53,7 +53,7 @@ describe('WorkflowStepExecutor — step job permissions', () => {
     const execute = jest.fn();
     const job = jobEntry('admin-only', [{ action: 'execute', roles: ['admin'] }], execute);
     const retried: WorkflowStep = { id: 'step-1', jobName: 'admin-only', retry: { maxAttempts: 3 } } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger as never, { authInfo: {} });
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
 
     const started = Date.now();
     await expect(executor.executeStep(retried, {})).rejects.toBeInstanceOf(JobNotAuthorizedError);
@@ -64,7 +64,7 @@ describe('WorkflowStepExecutor — step job permissions', () => {
   it('runs the step when the caller holds the role the job requires', async () => {
     const execute = jest.fn().mockResolvedValue({ ok: true });
     const job = jobEntry('admin-only', [{ action: 'execute', roles: ['admin'] }], execute);
-    const executor = new WorkflowStepExecutor(registryWith(job), logger as never, {
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, {
       authInfo: { user: { sub: 'u1', roles: ['admin'] } },
     });
 
@@ -76,7 +76,7 @@ describe('WorkflowStepExecutor — step job permissions', () => {
     const execute = jest.fn().mockResolvedValue({ ok: true });
     const job = jobEntry('open', undefined, execute);
     const openStep: WorkflowStep = { id: 'step-1', jobName: 'open' } as WorkflowStep;
-    const executor = new WorkflowStepExecutor(registryWith(job), logger as never, { authInfo: {} });
+    const executor = new WorkflowStepExecutor(registryWith(job), logger, { authInfo: {} });
 
     await expect(executor.executeStep(openStep, {})).resolves.toEqual({ outputs: { ok: true }, state: 'completed' });
   });

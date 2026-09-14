@@ -756,7 +756,7 @@ http: {
 
 Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one. Note the token gates the dashboard PAGE; the dashboard's MCP scope inherits the server's own authentication (previously it declared `auth: { mode: 'public' }` unconditionally, which is what GHSA-rgxj-434m-vxh3 exposed).
 
-Consequence to plan for: the bundled browser client sends no `Authorization` header, so on a server with non-public auth the page loads but its in-page graph and SSE stream get `401`. Run the dashboard on a public/development server, or front it with a proxy that injects a server credential.
+Consequence to plan for: the bundled browser client sends no `Authorization` header, so on a server with non-public auth the page loads but its in-page graph and SSE stream get `401`. Run the dashboard on a public/development server, or front it with a proxy that injects a credential — scoped to the dashboard's own routes (`<basePath>/sse` and `<basePath>/message`) and holding no grant beyond the dashboard scope. Injecting a server credential across the MCP endpoint instead would let any page on that origin issue arbitrary authenticated JSON-RPC.
 
 Related: dashboard options are process-wide, and a second, CONFLICTING auth configuration in the same process now throws rather than silently replacing the first — accepting it would make one server's token valid on another's dashboard. Call `resetDashboardOptions()` between constructions if you build several servers serially.
 
