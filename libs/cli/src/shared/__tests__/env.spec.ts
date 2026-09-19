@@ -14,7 +14,7 @@ jest.mock('../../core/colors', () => ({
 }));
 
 import * as fs from 'fs';
-import { parseEnvContent, loadEnvFilesSync, populateProcessEnv, loadDevEnv } from '../env';
+import { parseEnvContent, loadEnvFilesSync, populateProcessEnv, loadCommandEnv, loadDevEnv } from '../env';
 
 describe('env utilities', () => {
   beforeEach(() => {
@@ -328,5 +328,53 @@ describe('env utilities', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to load .env files: string error'));
     });
+  });
+});
+
+describe('loadCommandEnv (issue #540)', () => {
+  const original = { ...process.env };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (fs.existsSync as unknown as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as unknown as jest.Mock).mockReturnValue('FROM_DOTENV=file\nALREADY_SET=file');
+  });
+
+  afterEach(() => {
+    process.env = { ...original };
+  });
+
+  it('returns the variables it read so a caller can forward them to a child', () => {
+    const env = loadCommandEnv('/project', 'test');
+
+    expect(env['FROM_DOTENV']).toBe('file');
+  });
+
+  it('populates process.env without overriding what the real environment set', () => {
+    process.env['ALREADY_SET'] = 'from-ci';
+    delete process.env['FROM_DOTENV'];
+
+    loadCommandEnv('/project', 'test');
+
+    expect(process.env['FROM_DOTENV']).toBe('file');
+    expect(process.env['ALREADY_SET']).toBe('from-ci');
+  });
+
+  it('labels its log line with the calling command', () => {
+    const logs: string[] = [];
+    jest.spyOn(console, 'log').mockImplementation((...args) => logs.push(args.join(' ')));
+
+    loadCommandEnv('/project', 'test');
+
+    expect(logs.join('\n')).toContain('[test]');
+  });
+
+  it('degrades to an empty result when the files cannot be read', () => {
+    (fs.readFileSync as unknown as jest.Mock).mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(loadCommandEnv('/project', 'test')).toEqual({});
   });
 });

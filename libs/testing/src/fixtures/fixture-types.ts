@@ -3,9 +3,10 @@
  * @description Type definitions for test fixtures
  */
 
+import type { JWK } from 'jose';
+
 import type { McpTestClient } from '../client/mcp-test-client';
 import type { McpTestClientBuilder } from '../client/mcp-test-client.builder';
-import type { JWK } from 'jose';
 
 // ═══════════════════════════════════════════════════════════════════
 // TEST CONFIGURATION
@@ -47,8 +48,25 @@ export interface TestConfig {
   env?: Record<string, string>;
   /** Startup timeout in ms (default: 30000) */
   startupTimeout?: number;
-  /** Base URL for connecting to an external/already running server */
+  /**
+   * Base URL for connecting to an external/already running server.
+   *
+   * May also be supplied alongside `server`, in which case the booted server's
+   * own URL is overridden — useful when the server is reachable through a proxy
+   * or a different host than it binds (issue #543).
+   */
   baseUrl?: string;
+  /**
+   * The server's `http.entryPath` — where MCP is mounted (`'/mcp'`, …).
+   * Defaults to the server root.
+   *
+   * Issue #543: setting `http.entryPath` on the server used to take the whole
+   * suite down, because the fixture always pointed its client at the root and
+   * every spec failed with an opaque `HTTP 404` from inside the test client.
+   * The client also recovers on its own when the server reports its paths in a
+   * 404 body, so this is only needed when that report is unavailable.
+   */
+  entryPath?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -148,6 +166,8 @@ export interface ServerFixture {
     transport?: 'sse' | 'streamable-http';
     token?: string;
     clientInfo?: { name: string; version: string };
+    /** Override the MCP entry path for this client (default: `test.use()`'s). */
+    entryPath?: string;
   }): Promise<McpTestClient>;
 
   /**
@@ -214,8 +234,20 @@ export interface TestWithFixtures {
   /** Run after all tests in the file */
   afterAll: typeof afterAll;
 
-  /** Skip a test */
+  /** Skip a named test. */
   skip(name: string, fn: TestFn): void;
+  /**
+   * Playwright-style conditional skip: when `condition` is true, every test
+   * registered after this call in the enclosing `describe` (or file) is
+   * skipped. Put it at the top of the block you want to gate.
+   *
+   * @example
+   * test.describe('against the live API', () => {
+   *   test.skip(!hasCredentials, 'credentials not set');
+   *   test('lookup', async ({ mcp }) => { ... });
+   * });
+   */
+  skip(condition: boolean, reason?: string): void;
 
   /** Run only this test */
   only(name: string, fn: TestFn): void;

@@ -134,8 +134,15 @@ export interface McpTransport {
  * Configuration for transport implementations
  */
 export interface TransportConfig {
-  /** Base URL of the MCP server */
+  /** Base URL of the MCP server (its root, not the MCP endpoint). */
   baseUrl: string;
+  /**
+   * The server's `http.entryPath` — the path MCP itself is mounted at
+   * (`''` / `/` for the root, `/mcp`, …). Applied to the MCP endpoint only;
+   * OAuth and discovery endpoints stay at the server root, which is where the
+   * server mounts them (issue #543).
+   */
+  entryPath?: string;
   /** Request timeout in milliseconds */
   timeout?: number;
   /** Authentication configuration */

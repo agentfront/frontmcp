@@ -11,6 +11,7 @@ import {
   isOrchestratedLocal,
   isOrchestratedMode,
   isPublicMode,
+  isStaticMode,
   isTransparentMode,
   parseAuthOptions,
   type AppType,
@@ -207,6 +208,15 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
    */
   private createPrimaryAuth(scope: ScopeEntry, providers: ProviderRegistry, options: AuthOptions): FrontMcpAuth {
     if (isPublicMode(options)) {
+      return new LocalPrimaryAuth(scope, providers, options);
+    }
+
+    // #544 — static mode reuses the local instance (it needs the same session /
+    // discovery surface public mode does) while `session:verify`'s
+    // `handleStaticToken` stage is the whole of its authentication. Without this
+    // branch a static config fell through to the public-mode fallback below,
+    // which would silently serve a token-protected server unauthenticated.
+    if (isStaticMode(options)) {
       return new LocalPrimaryAuth(scope, providers, options);
     }
 

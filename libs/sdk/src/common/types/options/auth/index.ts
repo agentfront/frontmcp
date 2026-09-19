@@ -26,6 +26,7 @@ export type {
   LocalDcrConfig,
   LocalDcrClient,
   PublicAuthOptionsInterface,
+  StaticAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
   RemoteAuthOptionsInterface,
@@ -124,6 +125,10 @@ export type {
 export { publicAuthOptionsSchema } from '@frontmcp/auth';
 export type { PublicAuthOptions, PublicAuthOptionsInput } from '@frontmcp/auth';
 
+// Static mode — access token / API key (#544)
+export { staticAuthOptionsSchema } from '@frontmcp/auth';
+export type { StaticAuthOptions, StaticAuthOptionsInput } from '@frontmcp/auth';
+
 // ============================================
 // TRANSPARENT MODE SCHEMA
 // ============================================
@@ -174,6 +179,7 @@ export type { AppAuthOptions, AppAuthOptionsInput } from '@frontmcp/auth';
 export {
   parseAuthOptions,
   isPublicMode,
+  isStaticMode,
   isTransparentMode,
   isLocalMode,
   isRemoteMode,

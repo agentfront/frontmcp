@@ -7,16 +7,17 @@ description: Deep dive into public, transparent, local, and remote authenticatio
 keywords: ['frontmcp', 'mcp', 'model context protocol', 'authentication', 'auth', 'oauth', 'security', 'auth modes', 'typescript']
 ---
 
-FrontMCP's four authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
+FrontMCP's five authentication modes address different deployment scenarios. Understanding when to use each mode is critical for both security and developer experience.
 
 ## Mode Overview
 
-The `auth.mode` literal accepts one of four values: `'public'`, `'transparent'`, `'local'`, `'remote'`.
+The `auth.mode` literal accepts one of five values: `'public'`, `'static'`, `'transparent'`, `'local'`, `'remote'`.
 
 ```mermaid
 graph TB
     subgraph "Authentication Modes"
         Public["mode: 'public'<br/>Anonymous Access"]
+        Static["mode: 'static'<br/>Shared Access Token / API Key"]
         Transparent["mode: 'transparent'<br/>Pass-through Tokens"]
         Local["mode: 'local'<br/>Built-in OAuth Server"]
         Remote["mode: 'remote'<br/>OAuth Server proxying to upstream IdP"]
@@ -25,15 +26,15 @@ graph TB
 
 ## Mode Comparison
 
-| Feature                | Public            | Transparent       | Local                           | Remote                          |
-| ---------------------- | ----------------- | ----------------- | ------------------------------- | ------------------------------- |
-| Token Required         | No                | Yes (external)    | Yes (FrontMCP-issued)           | Yes (FrontMCP-issued)           |
-| User Identity          | Anonymous         | From upstream IdP | From login form                 | From upstream IdP               |
-| Token Signing          | HS256 (symmetric) | Upstream IdP      | HS256 (symmetric, `JWT_SECRET`) | HS256 (symmetric, `JWT_SECRET`) |
-| Session Management     | Minimal           | Pass-through      | Full control                    | Full control                    |
-| Multi-provider         | No                | Single provider   | Multiple via apps               | Multiple via apps               |
-| Progressive Auth       | No                | No                | Yes                             | Yes                             |
-| Tool-authz enforcement | No                | No                | Optional                        | Optional                        |
+| Feature                | Public            | Static                 | Transparent       | Local                           | Remote                          |
+| ---------------------- | ----------------- | ---------------------- | ----------------- | ------------------------------- | ------------------------------- |
+| Token Required         | No                | Yes (shared secret)    | Yes (external)    | Yes (FrontMCP-issued)           | Yes (FrontMCP-issued)           |
+| User Identity          | Anonymous         | Per configured token   | From upstream IdP | From login form                 | From upstream IdP               |
+| Token Signing          | HS256 (symmetric) | None — opaque secret   | Upstream IdP      | HS256 (symmetric, `JWT_SECRET`) | HS256 (symmetric, `JWT_SECRET`) |
+| Session Management     | Minimal           | Minimal                | Pass-through      | Full control                    | Full control                    |
+| Multi-provider         | No                | No                     | Single provider   | Multiple via apps               | Multiple via apps               |
+| Progressive Auth       | No                | No                     | No                | Yes                             | Yes                             |
+| Tool-authz enforcement | No                | No                     | No                | Optional                        | Optional                        |
 
 ---
 
@@ -89,6 +90,64 @@ sequenceDiagram
   - Access control per user
   - Compliance requirements
 </Warning>
+
+<Note>
+  **Bearer tokens in public mode.** A JWT is still verified against this instance's own HS256 secret, so a valid gateway token upgrades the request to that identity. A bearer token that is *not* a JWT is ignored and the request is served anonymously — public mode has no issuer, JWKS or audience to verify it against, and a request carrying a credential must never fare worse than the same request without one.
+
+  That also means a `@Will('checkAuthorization')` hook can implement its own shared-secret check without having to strip the header before the built-in verifier sees it. For a first-class shared secret, prefer [static mode](#static-mode).
+</Note>
+
+---
+
+## Static Mode
+
+A fixed shared secret presented on every request — the shape every non-OAuth MCP host expects. ChatGPT's custom-app connector calls it **Access token / API key**: it attaches a constant `Authorization: Bearer <token>` and never performs an OAuth exchange.
+
+```typescript
+const auth: AuthOptionsInput = {
+  mode: 'static',
+  tokens: [process.env.MCP_AUTH_TOKEN!],
+};
+```
+
+Use it when you want a server protected by one secret without standing up an OAuth 2.1 provider. Before this mode existed the only options were "no auth at all" or a full OAuth server — and for a server wrapping a billed third-party API, "no auth" means anyone who learns the URL can spend your money.
+
+### How It Works
+
+1. The credential is read from the configured header (`authorization` by default), and the scheme prefix (`Bearer` by default, matched case-insensitively) is stripped.
+2. It is compared against each configured token **in constant time**, over SHA-256 digests, so neither the secret's value nor its length is observable through timing.
+3. A match produces an authenticated session whose `sub` is `static:<12 hex chars>` — a non-reversible digest prefix of the token that matched, so audit logs and per-subject partitions (rate limits, sessions) can tell configured tokens apart without the secret appearing anywhere.
+4. Anything else answers `401` with a `WWW-Authenticate: Bearer realm="…"` challenge. Unlike public mode, a **missing** credential is also a 401.
+
+### Configuration Options
+
+| Option          | Type       | Default        | Description                                                                 |
+| --------------- | ---------- | -------------- | --------------------------------------------------------------------------- |
+| `tokens`        | `string[]` | Required       | Accepted credentials. At least one. Read them from the environment.          |
+| `header`        | `string`   | `'authorization'` | Request header carrying the credential.                                   |
+| `scheme`        | `string`   | `'Bearer'`     | Scheme prefix stripped before comparing. `''` for a bare token header.       |
+| `scopes`        | `string[]` | `['static']`   | Scopes granted to an accepted request.                                       |
+| `realm`         | `string`   | `'mcp'`        | Realm reported in the `WWW-Authenticate` challenge.                          |
+| `publicAccess`  | object     | -              | Same tool/prompt access configuration the other modes accept.                |
+
+An API-key header with no scheme prefix:
+
+```typescript
+const auth: AuthOptionsInput = {
+  mode: 'static',
+  tokens: [process.env.MCP_API_KEY!],
+  header: 'x-api-key',
+  scheme: '',
+};
+```
+
+<Warning>
+  A shared secret identifies a **caller**, not a user. There is no per-user identity, no revocation short of rotating the token and redeploying, and no progressive auth. Use `local` or `remote` when you need any of those. Rotate by deploying with both the old and new token in `tokens`, then removing the old one.
+</Warning>
+
+<Note>
+  Static mode is checked entirely in the `session:verify` flow's `handleStaticToken` stage, before any other authentication stage runs. The server still exposes the OAuth discovery endpoints that public mode does; nothing uses them in this mode.
+</Note>
 
 ---
 

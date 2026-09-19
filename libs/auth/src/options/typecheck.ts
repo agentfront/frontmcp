@@ -9,6 +9,7 @@ import type {
   PublicAccessConfig,
   PublicAuthOptionsInterface,
   RemoteAuthOptionsInterface,
+  StaticAuthOptionsInterface,
   TransparentAuthOptionsInterface,
 } from './interfaces';
 import type { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
@@ -53,6 +54,7 @@ type _RemoteInterfaceCheck = AssertTrue<IsAssignable<RemoteAuthOptionsInterface,
 // ============================================
 
 type _PublicModeCheck = AssertTrue<IsEqual<PublicAuthOptionsInterface['mode'], 'public'>>;
+type _StaticModeCheck = AssertTrue<IsEqual<StaticAuthOptionsInterface['mode'], 'static'>>;
 type _TransparentModeCheck = AssertTrue<IsEqual<TransparentAuthOptionsInterface['mode'], 'transparent'>>;
 type _LocalModeCheck = AssertTrue<IsEqual<LocalAuthOptionsInterface['mode'], 'local'>>;
 type _RemoteModeCheck = AssertTrue<IsEqual<RemoteAuthOptionsInterface['mode'], 'remote'>>;

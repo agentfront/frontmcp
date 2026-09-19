@@ -57,6 +57,7 @@ import {
   type LocalAuthOptions,
   type PublicAuthOptions,
   type RemoteAuthOptions,
+  type StaticAuthOptions,
 } from '../../common/types/options/auth';
 import { installContextExtensions } from '../../context/context-extension';
 import type ProviderRegistry from '../../provider/provider.registry';
@@ -81,7 +82,7 @@ import { secureStoreContextExtension } from '../secure-store/secure-store.contex
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
  */
-export type LocalPrimaryAuthOptions = PublicAuthOptions | LocalAuthOptions | RemoteAuthOptions;
+export type LocalPrimaryAuthOptions = PublicAuthOptions | StaticAuthOptions | LocalAuthOptions | RemoteAuthOptions;
 
 // Lazily generated and memoized so importing this module has NO side effects —
 // V8-isolate runtimes (Cloudflare Workers) forbid generating random values in

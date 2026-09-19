@@ -46,6 +46,8 @@ export function toParsedArgs(
   if (options['verbose'] !== undefined) out.verbose = options['verbose'] as boolean;
   if (options['timeout'] !== undefined) out.timeout = options['timeout'] as number;
   if (options['coverage'] !== undefined) out.coverage = options['coverage'] as boolean;
+  // #540 — commander turns `--no-env` into `env: false`; default stays true.
+  if (options['env'] === false) out.env = false;
 
   // PM - start / socket
   if (options['port'] !== undefined) out.port = options['port'] as number;

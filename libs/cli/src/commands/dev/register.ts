@@ -37,6 +37,7 @@ export function registerDevCommands(program: Command): void {
     .option('-v, --verbose', 'Show verbose test output')
     .option('-t, --timeout <ms>', 'Set test timeout (default: 60000ms)', parseInt)
     .option('-c, --coverage', 'Collect test coverage')
+    .option('--no-env', 'Skip loading .env / .env.local for a hermetic run')
     .action(async (patterns: string[], options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runTest } = await import('./test.js');
       const topOpts = cmd.parent?.opts?.() ?? {};

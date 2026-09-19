@@ -7,6 +7,7 @@ import {
   httpRequestInputSchema,
   isPublicMode,
   isPublicUrlPinned,
+  isStaticMode,
   isTransparentMode,
   normalizeEntryPrefix,
   normalizeScopeBase,
@@ -15,6 +16,7 @@ import {
   userClaimSchema,
   type FlowPlan,
   type FlowRunOptions,
+  type StaticAuthOptions,
   type TransparentAuthOptions,
 } from '../../common';
 
@@ -35,7 +37,7 @@ import {
   type VerifyResult,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { getMachineId, randomUUID } from '@frontmcp/utils';
+import { getMachineId, randomUUID, sha256, sha256Hex, timingSafeEqual } from '@frontmcp/utils';
 
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
 import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
@@ -81,7 +83,14 @@ const ForbiddenSchema = z
 export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema, ForbiddenSchema]);
 
 const plan = {
-  pre: ['parseInput', 'handlePublicMode', 'handleAnonymousFallback', 'requireAuthorizationHeader', 'verifyIfJwt'],
+  pre: [
+    'parseInput',
+    'handleStaticToken',
+    'handlePublicMode',
+    'handleAnonymousFallback',
+    'requireAuthorizationHeader',
+    'verifyIfJwt',
+  ],
   execute: ['deriveUser', 'parseSessionHeader', 'buildAuthorizedOutput'],
 } as const satisfies FlowPlan<string>;
 
@@ -107,8 +116,40 @@ const Stage = StageHookOf(name);
  */
 let warnedUnpinnedAudience = false;
 
+/**
+ * Compare two secrets without leaking their contents or lengths by timing.
+ *
+ * `timingSafeEqual` requires equal-length inputs (and throws otherwise, which
+ * would itself be a length oracle), so both sides are hashed to a fixed 32
+ * bytes first. An attacker cannot steer a digest without inverting SHA-256.
+ */
+function constantTimeEquals(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  return timingSafeEqual(sha256(encoder.encode(a)), sha256(encoder.encode(b)));
+}
+
+/**
+ * Strip anything that cannot appear inside a quoted header parameter: the quote
+ * itself, CR/LF, and every other control character. The realm comes from the
+ * server's own config rather than a request, but a response header is not the
+ * place to trust that.
+ */
+function quoteHeaderParam(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[^\x20-\x21\x23-\x7e]/g, '');
+}
+
+/** RFC 7235 challenge for static mode; no PRM URL, since there is no OAuth AS. */
+function buildStaticChallenge(realm: string, description?: string): string {
+  const parts = [`Bearer realm="${quoteHeaderParam(realm)}"`];
+  if (description) {
+    parts.push('error="invalid_token"', `error_description="${quoteHeaderParam(description)}"`);
+  }
+  return parts.join(', ');
+}
+
 /** Auth mode for session payload - distinguishes between anonymous session types */
-type AuthMode = 'public' | 'transparent-anon';
+type AuthMode = 'public' | 'transparent-anon' | 'static';
 
 /** Options for creating an anonymous session */
 interface AnonymousSessionOptions {
@@ -118,6 +159,12 @@ interface AnonymousSessionOptions {
   issuer: string;
   /** Optional scopes for the anonymous user */
   scopes?: string[];
+  /**
+   * Explicit `sub` for the session. Static mode uses it to identify which
+   * configured token was presented; the anonymous modes leave it unset and get
+   * a fresh `anon:<uuid>`.
+   */
+  subject?: string;
   /** Existing session ID header from client (if present) */
   sessionIdHeader?: string;
 }
@@ -143,7 +190,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
-    const { authMode, issuer, scopes = ['anonymous'], sessionIdHeader } = options;
+    const { authMode, issuer, scopes = ['anonymous'], subject, sessionIdHeader } = options;
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
     const machineId = getMachineId();
 
@@ -157,12 +204,22 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // issued below, so the client cannot choose its own anonymous identity.
     if (sessionIdHeader) {
       const existingPayload = decryptPublicSession(sessionIdHeader);
-      if (existingPayload && existingPayload.nodeId === machineId) {
+      // `authSig` records the mode the session was minted under. Requiring a
+      // match keeps a session issued for one mode from being resumed under
+      // another (e.g. a `public` id presented to a `static`-mode server), which
+      // would otherwise carry that session's `isPublic` flag into a different
+      // authorization context.
+      if (existingPayload && existingPayload.nodeId === machineId && existingPayload.authSig === authMode) {
         // Derive the anonymous `sub` from the session's unique `uuid` (not its
         // one-second `iat`, which collided for sessions minted in the same
         // second and shared a `sub`-keyed partition, e.g. the rate limiter).
         const anonId = existingPayload.uuid ?? `${existingPayload.iat * 1000}`;
-        const user = { sub: `anon:${anonId}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
+        const user = {
+          sub: subject ?? `anon:${anonId}`,
+          iss: issuer,
+          name: subject ? 'Static token' : 'Anonymous',
+          scope: scopes.join(' '),
+        };
         this.respond({
           kind: 'authorized',
           authorization: {
@@ -181,9 +238,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // Create new anonymous session
     const now = Date.now();
     const user = {
-      sub: `anon:${randomUUID()}`,
+      sub: subject ?? `anon:${randomUUID()}`,
       iss: issuer,
-      name: 'Anonymous',
+      name: subject ? 'Static token' : 'Anonymous',
       scope: scopes.join(' '),
     };
     const uuid = randomUUID();
@@ -273,6 +330,90 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   }
 
   /**
+   * Static mode — accept a fixed shared secret and nothing else (#544).
+   *
+   * ChatGPT's "Access token / API key" connector option, and every other
+   * non-OAuth MCP host, attaches a constant `Authorization: Bearer <token>`.
+   * There is no issuer, no JWKS and no `aud` to verify against, so this stage
+   * compares the presented credential against the configured ones and is the
+   * whole of authentication for the mode — nothing downstream re-checks it.
+   *
+   * The comparison runs over SHA-256 digests so that neither the secret's value
+   * nor its length is observable through timing.
+   */
+  @Stage('handleStaticToken', {
+    filter: ({ scope }) => {
+      const authOptions = scope.auth?.options;
+      return !!authOptions && isStaticMode(authOptions);
+    },
+  })
+  async handleStaticToken() {
+    const authOptions = this.scope.auth?.options;
+    // Defense in depth: the stage filter already restricts this to static mode,
+    // but an auth stage should not depend on the scheduler to stay in its lane.
+    if (!authOptions || !isStaticMode(authOptions)) return;
+
+    const options = authOptions;
+    const presented = this.readStaticCredential(options);
+
+    if (!presented) {
+      this.logger.warn('handleStaticToken: no credential presented, returning 401');
+      this.respond({
+        kind: 'unauthorized',
+        prmMetadataHeader: buildStaticChallenge(options.realm),
+      });
+      return;
+    }
+
+    // Reduce rather than `find`: every configured token is compared on every
+    // request, so the work done does not depend on which one matched.
+    const matched = options.tokens.reduce<string | undefined>(
+      (found, candidate) => (constantTimeEquals(candidate, presented) ? candidate : found),
+      undefined,
+    );
+    if (!matched) {
+      this.logger.warn('handleStaticToken: credential did not match, returning 401');
+      this.respond({
+        kind: 'unauthorized',
+        prmMetadataHeader: buildStaticChallenge(options.realm, 'The access token is invalid'),
+      });
+      return;
+    }
+
+    // Identify the caller by a non-reversible digest prefix of the token that
+    // matched, so audit logs and per-subject partitions (rate limits, sessions)
+    // can tell configured tokens apart without the secret appearing anywhere.
+    this.logger.verbose('handleStaticToken: credential accepted');
+    this.createAnonymousSession({
+      authMode: 'static',
+      issuer: 'static',
+      scopes: options.scopes,
+      subject: `static:${sha256Hex(matched).slice(0, 12)}`,
+      sessionIdHeader: this.state.sessionIdHeader,
+    });
+  }
+
+  /**
+   * Pull the credential out of the configured header, stripping the scheme
+   * prefix when one is configured (case-insensitively, per RFC 7235).
+   */
+  private readStaticCredential(options: StaticAuthOptions): string | undefined {
+    const headers = this.rawInput.request.headers ?? {};
+    const raw = headers[options.header.toLowerCase()];
+    const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+    if (!value) return undefined;
+
+    const { scheme } = options;
+    if (!scheme) return value;
+
+    // Compare the prefix case-insensitively but slice by the CONFIGURED length,
+    // so a scheme whose lowercase form differs in length cannot desync the cut.
+    if (value.slice(0, scheme.length).toLowerCase() !== scheme.toLowerCase()) return undefined;
+    if (value[scheme.length] !== ' ') return undefined;
+    return value.slice(scheme.length + 1).trim() || undefined;
+  }
+
+  /**
    * Handle public mode - allow anonymous access without requiring authorization
    * In public mode, we create an anonymous authorization with a stateful session
    * but NO token. This allows public docs/CI to work without Authorization header.
@@ -289,9 +430,24 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // If token is present, let the normal verification flow handle it
-    if (this.state.token) {
+    // A JWT in public mode is still verified — it may be a gateway token this
+    // instance minted, and honoring it upgrades the request to that identity.
+    if (this.state.token && isJwt(this.state.token)) {
       return;
+    }
+
+    // Issue #544: a NON-JWT bearer used to fall through to `verifyIfJwt`, which
+    // 401s anything that doesn't parse as a JWT. In public mode there is no
+    // issuer, no JWKS and no audience, so there is nothing such a token could be
+    // verified against — and the result was that a request WITH a credential
+    // fared worse than the same request with none. Ignore it and serve the
+    // request anonymously, which also lets a `@Will('checkAuthorization')` hook
+    // implement its own shared-secret check without having to strip the header
+    // before the built-in verifier sees it.
+    if (this.state.token) {
+      this.logger.verbose(
+        'handlePublicMode: ignoring non-JWT bearer token (public mode has nothing to verify it against)',
+      );
     }
 
     this.logger.info('handlePublicMode: allowing anonymous access (public mode)');

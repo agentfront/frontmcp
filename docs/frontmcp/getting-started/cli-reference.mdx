@@ -203,6 +203,17 @@ If `git` is not installed, this step is silently skipped.
 | `-v, --verbose`      | Show verbose test output                     |
 | `-t, --timeout <ms>` | Set test timeout (default: `60000ms`)        |
 | `-c, --coverage`     | Collect test coverage                        |
+| `--no-env`           | Skip `.env` / `.env.local` loading           |
+
+#### `.env` is loaded, exactly as `frontmcp dev` loads it
+
+`frontmcp test` reads `.env` and `.env.local` into the environment before
+spawning Jest, so a spec reading `process.env.MY_API_KEY` sees the same value
+the dev server does. Precedence matches `dev`: the real environment wins over
+the files, so CI secrets still override a local `.env`, and config overlays
+(`env.shared` + `env.test` in `frontmcp.config.*`) sit underneath both.
+
+Pass `--no-env` for a hermetic run that must not see local credentials.
 
 ---
 

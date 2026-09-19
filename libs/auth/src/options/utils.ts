@@ -1,10 +1,11 @@
 // options/utils.ts
 // Helper functions for auth options
 
-import { authOptionsSchema, AuthOptions, AuthOptionsInput } from './schema';
+import { LocalAuthOptions, LocalOrRemoteAuthOptions, RemoteAuthOptions } from './orchestrated.schema';
 import { PublicAuthOptions } from './public.schema';
+import { AuthOptions, AuthOptionsInput, authOptionsSchema } from './schema';
+import { StaticAuthOptions } from './static.schema';
 import { TransparentAuthOptions } from './transparent.schema';
-import { LocalAuthOptions, RemoteAuthOptions, LocalOrRemoteAuthOptions } from './orchestrated.schema';
 
 // ============================================
 // PARSING
@@ -26,6 +27,13 @@ export function parseAuthOptions(input: AuthOptionsInput): AuthOptions {
  */
 export function isPublicMode(options: AuthOptions | AuthOptionsInput): options is PublicAuthOptions {
   return options.mode === 'public';
+}
+
+/**
+ * Check if options are static mode — a fixed shared secret, no OAuth (#544)
+ */
+export function isStaticMode(options: AuthOptions | AuthOptionsInput): options is StaticAuthOptions {
+  return options.mode === 'static';
 }
 
 /**

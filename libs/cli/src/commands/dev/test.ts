@@ -7,6 +7,7 @@ import { fileExists, unlink, writeFile } from '@frontmcp/utils';
 import { resolveConfig, type TestConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
+import { loadCommandEnv } from '../../shared/env';
 
 /**
  * Filenames in cwd that, when present, cause `frontmcp test` to delegate to
@@ -200,6 +201,28 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?:
 }
 
 /**
+ * Build the environment handed to the spawned Jest child.
+ *
+ * Issue #540: `frontmcp dev` loaded `.env` / `.env.local` but `frontmcp test`
+ * did not, so a spec reading `process.env.MY_API_KEY` saw nothing even though
+ * the very same file worked in dev. Nothing errored — credential-gated suites
+ * just skipped, or asserted against an unconfigured code path, and looked green.
+ *
+ * Precedence matches `dev`: config overlays (`env.shared` + `env.test`) first,
+ * then the real environment — which already contains `.env` values, loaded
+ * without overriding anything the OS or CI set. So CI secrets still win over a
+ * local `.env`.
+ *
+ * @internal
+ */
+export function buildTestChildEnv(params: {
+  effectiveEnv: Record<string, string>;
+  baseEnv: NodeJS.ProcessEnv;
+}): NodeJS.ProcessEnv {
+  return { ...params.effectiveEnv, ...params.baseEnv };
+}
+
+/**
  * Run E2E tests using Jest with auto-injected configuration.
  *
  * Usage:
@@ -208,9 +231,17 @@ export function generateJestConfig(cwd: string, opts: ParsedArgs, testDefaults?:
  *   frontmcp test --watch            # Run tests in watch mode
  *   frontmcp test --verbose          # Show verbose output
  *   frontmcp test --timeout 60000    # Set test timeout (default: 60000ms)
+ *   frontmcp test --no-env           # Skip .env loading for a hermetic run
  */
 export async function runTest(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
+
+  // Issue #540 — load `.env` / `.env.local` the same way `dev` does, before
+  // resolving config so an overlay can reference them. `--no-env` opts out for
+  // runs that must not see local credentials.
+  if (opts.env !== false) {
+    loadCommandEnv(cwd, 'test');
+  }
 
   // Issue #400 — resolve frontmcp.config so `test.timeoutMs` /
   // `test.runInBand` / `test.coverage` / `test.testMatch` apply when the
@@ -317,6 +348,9 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     stdio: 'inherit',
     shell: false,
     cwd,
+    // #540 — without an explicit env the child inherits process.env, which is
+    // fine, but the config overlays (`env.shared` / `env.test`) would be lost.
+    env: buildTestChildEnv({ effectiveEnv: resolved.effectiveEnv, baseEnv: process.env }),
   });
 
   // Handle cleanup
