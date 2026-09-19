@@ -135,7 +135,6 @@ function constantTimeEquals(a: string, b: string): boolean {
  * place to trust that.
  */
 function quoteHeaderParam(value: string): string {
-  // eslint-disable-next-line no-control-regex
   return value.replace(/[^\x20-\x21\x23-\x7e]/g, '');
 }
 
