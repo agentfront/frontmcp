@@ -1,6 +1,28 @@
 import type { DeploymentTarget } from '../../config/frontmcp-config.types';
 
 /**
+ * Build-time facts an adapter may need that aren't part of the deployment
+ * entry itself. Passed to `getSetupTemplate` so a target can reconcile CLI-side
+ * configuration with what the server will actually read at runtime (#539).
+ */
+export type AdapterBuildContext = {
+  /**
+   * `transport.http.path` from `frontmcp.config.*`, when declared. Configures
+   * the CLI (dev, inspector, generated client URLs); adapters use it to supply
+   * the server's `http.entryPath` default so one declaration drives both.
+   */
+  transportHttpPath?: string;
+};
+
+/** Outcome of reconciling an existing platform config file with the build. */
+export type AdapterConfigMerge = {
+  /** Full contents to write back. */
+  content: string;
+  /** Notes the build should print (e.g. a value the build declined to change). */
+  warnings: string[];
+};
+
+/**
  * Configuration for a deployment adapter.
  * Each adapter defines how to compile and package the FrontMCP server
  * for a specific deployment target.
@@ -21,7 +43,7 @@ export type AdapterTemplate = {
    * This file is imported first to set environment variables before decorators run.
    * @returns The content for serverless-setup.js, or undefined if not needed
    */
-  getSetupTemplate?: () => string;
+  getSetupTemplate?: (context?: AdapterBuildContext) => string;
 
   /**
    * Whether to bundle the output with rspack.
@@ -82,6 +104,18 @@ export type AdapterTemplate = {
     decoratorConfig: Record<string, unknown> | undefined,
     info?: { keysSeenInSource: string[] },
   ) => void;
+
+  /**
+   * Reconcile an existing platform config file with this build instead of
+   * replacing it. Called in place of `getConfig()` when the file already
+   * exists and `alwaysWriteConfig` is set, so an adapter can rewrite only the
+   * keys it owns and leave user-authored sections alone (#535).
+   *
+   * @param existing - Current file contents.
+   * @param cwd - Current working directory.
+   * @param deployment - Resolved `frontmcp.config.deployments[]` entry, if any.
+   */
+  mergeConfig?: (existing: string, cwd: string, deployment?: DeploymentTarget) => AdapterConfigMerge;
 
   /**
    * Whether `getConfig()` output should overwrite an existing config file

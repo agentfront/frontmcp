@@ -13,6 +13,25 @@ export function normalizeEntryPrefix(entryPath?: string): string {
   return t ? `/${t}` : '';
 }
 
+/**
+ * Resolve the configured MCP entry path, falling back to
+ * `FRONTMCP_HTTP_ENTRY_PATH`.
+ *
+ * `httpOptionsSchema.entryPath` already defaults from that env var (#446, how
+ * `frontmcp dev` propagates `transport.http.path`), but the schema only runs
+ * when the decorator actually declares an `http` block — `http` is
+ * `.optional()` on the metadata, so `@FrontMcp({ info, apps })` leaves
+ * `metadata.http` undefined and the default never fires. Reading the env here
+ * closes that gap for both hosts, which is what makes a Cloudflare worker
+ * serve `transport.http.path` (#539).
+ *
+ * @param entryPath - `metadata.http?.entryPath`, when the block exists.
+ */
+export function resolveEntryPath(entryPath?: string): string {
+  if (entryPath !== undefined) return entryPath;
+  return process.env['FRONTMCP_HTTP_ENTRY_PATH'] ?? '';
+}
+
 /** Normalize a scope base (per-app or per-auth) to "" or "/app1" */
 export function normalizeScopeBase(scopeBase?: string): string {
   const t = trimSlashes(scopeBase ?? '');

@@ -16,7 +16,7 @@ import { type HttpMethod, type ServerRequest } from '../common/interfaces/server
 import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
-import { normalizeEntryPrefix } from '../common/utils/path.utils';
+import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
 import { PublicMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
@@ -151,7 +151,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   // `http.entryPath` (the Express gateway prefix) → worker root `/`. The worker
   // serves exactly where it's configured (not a guessed `/` + `/mcp` set); an
   // explicit array still opts into a multi-path allow-list.
-  const rawEntry = options.entryPath ?? (normalizeEntryPrefix(httpConfig?.entryPath) || '/');
+  const rawEntry = options.entryPath ?? (normalizeEntryPrefix(resolveEntryPath(httpConfig?.entryPath)) || '/');
   const entryPaths = new Set((Array.isArray(rawEntry) ? rawEntry : [rawEntry]).map(normalizePath));
   // CORS: explicit option wins, else mirror the scope's `http.cors`.
   const cors = options.cors ?? mapHttpCors(httpConfig?.cors, scope);
@@ -397,11 +397,60 @@ async function toServerRequest(
 }
 
 /**
+ * Error codes that mean "the deployment is misconfigured", not "something went
+ * wrong handling this request". They name a missing setting and nothing about
+ * the request, the user, or any secret's value, so echoing the code is safe and
+ * saves the operator a `wrangler tail` against live traffic (#546).
+ */
+const MISCONFIGURATION_REMEDIES: Record<string, string> = {
+  SESSION_SECRET_REQUIRED:
+    'Set MCP_SESSION_SECRET in the deployment environment (e.g. `wrangler secret put MCP_SESSION_SECRET`). ' +
+    'Session IDs are encrypted with it, and production refuses the development machine-id fallback.',
+  JWT_SECRET_REQUIRED:
+    'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
+    'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
+    'not survive a restart or verify across instances.',
+};
+
+/**
+ * Recognize an error that carries one of the codes above, however deeply it is
+ * wrapped. The message is never echoed — only the fixed code and remedy are.
+ */
+function findMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && MISCONFIGURATION_REMEDIES[code]) {
+      return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+/**
  * Map an error thrown out of `runFlow('http:request', …)` to a normalized
  * `HttpOutput`, mirroring the Express middleware's FlowControl handling. Returns
  * `undefined` for `next`/`handled` (no response → the caller 404s).
  */
 function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
+  // #546 — a deployment that is merely missing a secret used to answer a bare
+  // `Internal Server Error`, so the only way to learn the cause was to tail the
+  // live worker. Report the configuration fault instead.
+  const misconfiguration = findMisconfiguration(error);
+  if (misconfiguration) {
+    return {
+      kind: 'json',
+      status: 500,
+      contentType: 'application/json; charset=utf-8',
+      body: {
+        error: 'server_misconfigured',
+        code: misconfiguration.code,
+        message: misconfiguration.remedy,
+      },
+    };
+  }
+
   if (error instanceof FlowControl) {
     switch (error.type) {
       case 'respond':

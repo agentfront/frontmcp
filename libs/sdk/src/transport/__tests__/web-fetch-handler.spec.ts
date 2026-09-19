@@ -18,6 +18,7 @@ import { Tool, ToolContext } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
+import { JwtSecretRequiredError, SessionSecretRequiredError } from '../../errors';
 import { createWebFetchHandler, type WebFetchHandler } from '../web-fetch-handler';
 
 const echoInput = { message: z.string() };
@@ -248,5 +249,77 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
     const buffered = createWebFetchHandler(await scopeFor({ transport: { protocol: 'stateless-api' } }));
     const jsonRes = await buffered(mcpRequestAt('/', INITIALIZE));
     expect(jsonRes.headers.get('content-type')).toContain('application/json');
+  });
+});
+
+/**
+ * Issue #546 — a worker that merely lacks `MCP_SESSION_SECRET` answered a bare
+ * `Internal Server Error`, so the only way to find out why was `wrangler tail`
+ * against live traffic. A configuration fault names a missing setting and
+ * nothing about the request, the user, or any secret's value, so it is safe to
+ * report — and it saves an operator that round trip.
+ */
+describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
+  let instance: FrontMcpInstance;
+  let scope: Scope;
+
+  beforeAll(async () => {
+    instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'misconfig-test', version: '1.0.0' },
+      apps: [WebFetchApp],
+    });
+    scope = instance.getScopes()[0] as Scope;
+  });
+
+  afterAll(async () => {
+    await instance?.dispose?.();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  async function respondToFlowError(error: unknown): Promise<Response> {
+    jest.spyOn(scope, 'runFlow').mockRejectedValue(error);
+    return createWebFetchHandler(scope)(mcpRequestAt('/', INITIALIZE));
+  }
+
+  it('reports a missing session secret as server_misconfigured with the remedy', async () => {
+    const res = await respondToFlowError(new SessionSecretRequiredError('session ID encryption'));
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['error']).toBe('server_misconfigured');
+    expect(body['code']).toBe('SESSION_SECRET_REQUIRED');
+    expect(body['message']).toContain('MCP_SESSION_SECRET');
+  });
+
+  it('reports a missing JWT secret the same way', async () => {
+    const res = await respondToFlowError(new JwtSecretRequiredError('local'));
+
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['code']).toBe('JWT_SECRET_REQUIRED');
+    expect(body['message']).toContain('JWT_SECRET');
+  });
+
+  it('unwraps a configuration fault that arrives wrapped in another error', async () => {
+    const wrapped = new Error('scope initialization failed', {
+      cause: new SessionSecretRequiredError('session ID encryption'),
+    });
+    const res = await respondToFlowError(wrapped);
+
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['code']).toBe('SESSION_SECRET_REQUIRED');
+    // The wrapper's own message is never echoed.
+    expect(JSON.stringify(body)).not.toContain('scope initialization failed');
+  });
+
+  it('still answers a bare Internal Server Error for an ordinary failure', async () => {
+    const res = await respondToFlowError(new Error('boom: postgres://user:hunter2@db/app'));
+
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(text).toBe('Internal Server Error');
+    expect(text).not.toContain('hunter2');
   });
 });

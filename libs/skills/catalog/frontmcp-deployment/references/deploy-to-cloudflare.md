@@ -59,22 +59,22 @@ This produces:
 dist/cloudflare/
   index.js       # Cloudflare Workers entry (CommonJS) — wraps your @FrontMcp server
   main.js        # Your compiled server module (CommonJS)
-wrangler.toml    # Wrangler configuration (overwritten on every build)
+wrangler.toml    # Wrangler configuration (managed keys reconciled on every build)
 ```
 
 Cloudflare Workers use CommonJS (not ESM). The build command sets `--module commonjs` automatically.
 
-> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true` and overwrites the entire `wrangler.toml` on every build with the template below. Hand-edited bindings (`[[kv_namespaces]]`, `[vars]`, `[[d1_databases]]`, etc.) WILL be erased the next time you run `frontmcp build --target cloudflare`. Configure `name`, `compatibility_date`, and extra `compatibility_flags` via your `frontmcp.config` file's `deployments[].wrangler` section, and keep bindings in a separate config file referenced from your toolchain (or re-add them after each build).
+> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true`, but it rewrites only the keys it manages. `main` is always overwritten (it has to track the build output); `name` and `compatibility_date` are written only when the file does not already declare them; `compatibility_flags` is merged. Hand-edited `[vars]`, `[[kv_namespaces]]`, `[[d1_databases]]`, `[triggers]` and comments survive every build. If `wrangler.toml` and `frontmcp.config` disagree on the worker name, the build keeps the file's value and warns instead of renaming your worker.
 
 ## Step 3: Configure wrangler.toml
 
-The build always writes this. `compatibility_flags = ["nodejs_compat"]` is **always** emitted — the worker entry is an ES Module that imports `@frontmcp/sdk`'s web-fetch handler, which still transitively pulls in Node builtins (no Express on the Worker), so without the flag the deployed Worker fails to load. The default `compatibility_date` is `2024-09-23` (the date that enables full `nodejs_compat`). `main` is `dist/cloudflare/index.js`.
+The build writes this when the file does not exist yet. `nodejs_compat` is **always** emitted — the worker entry is an ES Module that imports `@frontmcp/sdk`'s web-fetch handler, which still transitively pulls in Node builtins (no Express on the Worker), so without the flag the deployed Worker fails to load. `nodejs_compat_populate_process_env` is emitted too, so `[vars]` and secrets are readable as `process.env.*`; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to opt out. The default `compatibility_date` is `2024-09-23` (the date that enables full `nodejs_compat`). `main` is `dist/cloudflare/index.js`.
 
 ```toml
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 ```
 
 `name`, `compatibility_date`, and any extra `compatibilityFlags` come from `frontmcp.config.{ts,js}`'s `deployments` array (`nodejs_compat` is merged in automatically). Example:
@@ -96,7 +96,7 @@ export default {
 };
 ```
 
-To add KV storage or other bindings, append them AFTER each build (or use a wrapper script that runs the build then concatenates a `wrangler.bindings.toml` you maintain separately):
+To add KV storage or other bindings, add them to `wrangler.toml` directly — they are preserved across builds:
 
 ```toml
 name = "my-worker"
@@ -144,6 +144,32 @@ export default MyServer;
 
 For session storage, use Upstash Redis (HTTP) via `redis: { provider: 'vercel-kv' }` or wire Cloudflare KV directly inside your tools — the SDK does not include a built-in Cloudflare KV provider, and ioredis-style `redis: { ... }` configs are rejected by the Cloudflare adapter at build time (no Node TCP on Workers).
 
+### Secrets, vars and `process.env`
+
+Worker bindings arrive as an argument to `fetch`, not as environment variables. The generated entry copies every **string** binding into `process.env` on the first request (existing values are never overwritten), so ordinary `process.env.MY_API_KEY` reads behave the same on Workers as under `frontmcp dev`. Non-string bindings (KV, D1, R2, Durable Objects) stay on `env`, which the entry forwards to the handler along with `ctx`.
+
+A value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`, because the copy happens on the first request. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (emitted by default), which populates `process.env` before your module evaluates.
+
+### Required secrets
+
+`NODE_ENV = "production"` in `[vars]` makes this a production deployment, where FrontMCP refuses its development fallbacks:
+
+| Secret | Required when | Failure without it |
+| ------ | ------------- | ------------------ |
+| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}` |
+| `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
+
+```bash
+wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+wrangler secret put JWT_SECRET           # openssl rand -hex 32
+```
+
+Because `[vars]` reach `process.env`, `wrangler dev` sees the same `NODE_ENV=production` the deployment does, so a missing secret fails locally rather than only after a successful deploy.
+
+### Background tasks
+
+Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
+
 ## Step 5: Deploy
 
 ```bash
@@ -175,6 +201,8 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 ```
 
 ## Endpoint path, CORS & SSE — config-driven
+
+Two settings name this concept. `transport.http.path` in `frontmcp.config.*` configures the **CLI** (`frontmcp dev`, the inspector, the generated `clients[].url`); `@FrontMcp({ http: { entryPath } })` configures the **server**, and that is what the deployed worker reads. The cloudflare build reconciles them — `transport.http.path` becomes the server's default, an explicit decorator `entryPath` still wins, and the build warns on a mismatch and prints the resolved path (`Server will serve MCP at /mcp`).
 
 The worker's transport is driven by the standard `http` + `transport` config (the same fields the Express host reads), so behaviour is identical on both adapters. The worker serves MCP at **exactly one path** — `http.entryPath` (the worker root `/` when unset) — not a guessed `/` + `/mcp` set. Cloudflare never strips the path before it reaches the worker:
 

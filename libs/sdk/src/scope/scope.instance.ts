@@ -33,6 +33,7 @@ import {
   type Type,
 } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
+import { resolveEntryPath } from '../common/utils/path.utils';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
@@ -174,7 +175,7 @@ export class Scope extends ScopeEntry {
     this.logger = globalProviders.get(FrontMcpLogger).child('FrontMcp.MultiAppScope');
     this.globalProviders = globalProviders;
     this.server = this.globalProviders.get(FrontMcpServer);
-    this.entryPath = rec.metadata.http?.entryPath ?? '';
+    this.entryPath = resolveEntryPath(rec.metadata.http?.entryPath);
 
     if (rec.kind === 'SPLIT_BY_APP') {
       this.routeBase = `/${rec.metadata.id}`;
@@ -345,15 +346,44 @@ export class Scope extends ScopeEntry {
     //    invocation. Runner = CliTaskRunner (spawns detached workers).
     //  - Task worker (re-invoked by CliTaskRunner): allocate store, use
     //    InProcessTaskRunner because we ARE the worker now.
-    //  - Edge runtime: warn (or throw when tasks.strict: true).
+    //  - Edge runtime: skip unless explicitly asked for (see below).
     const tasksConfig = this.metadata.tasks;
     const tasksExplicitlyDisabled = tasksConfig?.enabled === false;
+    const tasksExplicitlyEnabled = tasksConfig?.enabled === true;
     const isTaskWorker = !!(this.metadata as unknown as Record<string, unknown>)['__taskWorkerMode'];
     const hasPersistentBackend = Boolean(
       tasksConfig?.sqlite || tasksConfig?.redis || this.metadata.redis || this.metadata.sqlite,
     );
     const tasksEnabledForCli = this.cliMode && hasPersistentBackend;
-    const shouldInitTasks = !tasksExplicitlyDisabled && (!this.cliMode || tasksEnabledForCli || isTaskWorker);
+
+    // Issue #538 — task init was opt-OUT, so a server that never declared a
+    // task still ran `createTaskStore()`, which refuses any non-distributed
+    // store on an edge runtime. The throw landed inside per-request scope
+    // initialization, so a default `frontmcp create --target cloudflare`
+    // worker answered 500 to EVERY request, /healthz included, and the error
+    // text sent users to provision a Redis they did not need.
+    //
+    // On edge, tasks are now skipped unless the config asks for them: the
+    // in-process runner cannot outlive the response there anyway, so an
+    // unusable feature is turned off rather than taking the server down.
+    // An explicit `tasks: { enabled: true }` still initializes — and still
+    // throws without a distributed store — because that was a real request.
+    const hasDistributedTaskBackend = Boolean(tasksConfig?.redis ?? this.metadata.redis);
+    const onEdgeRuntime = isEdgeRuntime();
+    const tasksUnavailableOnEdge = onEdgeRuntime && !hasDistributedTaskBackend && !tasksExplicitlyEnabled;
+    if (tasksUnavailableOnEdge) {
+      this.logger.info(
+        '[tasks] Background tasks are unavailable on this edge/serverless runtime: the in-process ' +
+          'runner cannot continue past the HTTP response, and an in-memory store is not shared between ' +
+          'isolates. Serving without tasks. Configure `tasks.redis` (Upstash Redis over HTTP works on ' +
+          'Workers) to enable them.',
+      );
+    }
+
+    const shouldInitTasks =
+      !tasksExplicitlyDisabled &&
+      !tasksUnavailableOnEdge &&
+      (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
     const tasksPromise = shouldInitTasks
       ? (async () => {
@@ -363,7 +393,7 @@ export class Scope extends ScopeEntry {
           // applies when there's no redis source — never pass both backends to
           // createTaskStore (issue #401 review).
           const tasksSqlite = tasksConfig?.sqlite ?? (tasksRedis ? undefined : resolvedTopLevelSqlite);
-          const onEdge = isEdgeRuntime();
+          const onEdge = onEdgeRuntime;
           if (onEdge) {
             const msg =
               '[tasks] Background tasks are enabled on an edge/serverless runtime. ' +

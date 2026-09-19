@@ -76,6 +76,20 @@ export class SessionSecretRequiredError extends AuthInternalError {
 }
 
 /**
+ * Thrown when tokens will be minted in production but no signing secret is set.
+ */
+export class JwtSecretRequiredError extends AuthInternalError {
+  constructor(mode: string) {
+    super(
+      `JWT_SECRET is required in production for auth.mode "${mode}". Without it the server signs tokens ` +
+        'with a random per-process secret, so every restart invalidates outstanding tokens and any second ' +
+        'instance or isolate rejects tokens the first one minted.',
+      'JWT_SECRET_REQUIRED',
+    );
+  }
+}
+
+/**
  * Thrown when a credential provider is already registered.
  */
 export class CredentialProviderAlreadyRegisteredError extends AuthInternalError {

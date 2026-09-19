@@ -59,10 +59,9 @@ info: { name: 'my-worker', version: '1.0.0' },
 apps: [DemoApp],
 // Serve MCP at /mcp (the worker default is root `/`). See "Endpoint path,
 // CORS & SSE" below — all three are driven by this same `http`/`transport` config.
+// You can also declare it once as `transport.http.path` in frontmcp.config;
+// the cloudflare build feeds that in as this field's default.
 http: { entryPath: '/mcp' },
-// Background tasks need distributed storage (Redis/Upstash) — disable on edge
-// unless you've configured one.
-tasks: { enabled: false },
 })
 class MyServer {}
 
@@ -96,11 +95,16 @@ This emits `dist/cloudflare/index.js` (an ES Module Worker) and **(re)writes the
 name = "my-worker"
 main = "dist/cloudflare/index.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 ```
 
 <Note>
 `nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load. The build always emits both.
+`nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env`; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` if you deliberately want `process.env` left empty.
+</Note>
+
+<Note>
+Only `main` is rewritten outright — it has to track the build output. `name` and `compatibility_date` are written only when the file does not already declare them, and `compatibility_flags` is merged rather than replaced, so a name you set by hand is never silently changed. If `wrangler.toml` and `frontmcp.config` disagree on the name, the build keeps the file's and warns.
 </Note>
 </Step>
 
@@ -128,14 +132,54 @@ Point any MCP client at `https://<your-worker-url>/mcp` (Streamable HTTP).
 </Steps>
 
 <Note>
-`frontmcp build --target cloudflare` regenerates `wrangler.toml`'s four top-level keys on **every** build (`alwaysWriteConfig`). It does **not** emit `[[kv_namespaces]]`, `[[durable_objects]]`, `[[r2_buckets]]`, `[[d1_databases]]`, or `[triggers]`, and the generated entry passes only the `Request` (not `env`) to the handler — so the decorator-build path can't wire CF bindings. For bindings + the auto-update Cron, use the managed-edge path below with a hand-maintained `wrangler.toml`.
+`frontmcp build --target cloudflare` reconciles `wrangler.toml`'s managed top-level keys on **every** build (`alwaysWriteConfig`), but leaves everything else — `[vars]`, `[[kv_namespaces]]`, `[[durable_objects]]`, `[[r2_buckets]]`, `[[d1_databases]]`, `[triggers]` and your comments — untouched. It does not *emit* those sections for you; add them by hand and they will survive subsequent builds.
+
+The generated entry forwards `env` and `ctx` to the handler, so bindings and `ctx.waitUntil` are reachable from the decorator-build path. For the managed auto-update Cron (`scheduled`), use the managed-edge path below.
 </Note>
+
+### Secrets, vars and `process.env`
+
+Worker bindings arrive as an argument to `fetch`, not as environment variables. The generated entry copies every **string** binding into `process.env` on the first request (without overwriting anything already there), so ordinary `process.env.MY_API_KEY` reads work the same on Workers as they do under `frontmcp dev`:
+
+```ts
+const sid = process.env.TWILIO_ACCOUNT_SID; // set via `wrangler secret put`
+```
+
+Non-string bindings (KV, D1, R2, Durable Objects) are objects and stay on `env`, which the entry forwards to the handler.
+
+<Warning>
+The copy happens on the **first request**, so a value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (the build emits it by default), which populates `process.env` before your module evaluates.
+</Warning>
+
+### Required secrets
+
+A worker with `NODE_ENV = "production"` in `[vars]` is a production deployment, and FrontMCP refuses its development fallbacks there:
+
+| Secret | Required when | Failure without it |
+| --- | --- | --- |
+| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}` |
+| `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
+
+```bash
+wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+wrangler secret put JWT_SECRET           # openssl rand -hex 32
+```
+
+Because `[vars]` now reach `process.env`, `wrangler dev` sees the same `NODE_ENV=production` your deployment does — so a missing secret fails locally instead of only after a successful deploy.
+
+### Background tasks
+
+Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
 ---
 
 ## Endpoint path, CORS & SSE — all config-driven
 
 The worker's transport is driven by the **standard `http` + `transport` config** — the same fields the Express host reads — so one config behaves identically on either adapter. There are no edge-specific knobs.
+
+<Note>
+**Two settings, one concept.** `transport.http.path` in `frontmcp.config.*` configures the **CLI** — `frontmcp dev`, the inspector, and the `clients[].url` entries it generates. `@FrontMcp({ http: { entryPath } })` configures the **server**, and it is what the deployed worker reads. The cloudflare build reconciles them: `transport.http.path` becomes the server's default, so declaring it once drives dev, the generated client URL, and the worker. An explicit `entryPath` on the decorator still wins, and the build warns when the two disagree. The build prints the resolved path (`Server will serve MCP at /mcp`) so it is visible without curling for a 404.
+</Note>
 
 The worker serves MCP at **exactly one path**: `http.entryPath` (the worker root `/` when unset). It does **not** guess a `/` + `/mcp` set — pick the path that matches how you expose the worker. Cloudflare routes never strip the path before it reaches the worker:
 

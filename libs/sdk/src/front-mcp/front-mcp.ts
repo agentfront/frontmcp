@@ -24,7 +24,7 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
-import { createWebFetchHandler, type WebFetchHandler } from '../transport/web-fetch-handler';
+import { createWebFetchHandler, type FetchHandlerCtx, type WebFetchHandler } from '../transport/web-fetch-handler';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 
 /**
@@ -289,7 +289,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
       return createWebFetchHandler(scope);
     };
 
-    return async (request: Request): Promise<Response> => {
+    // #536 — `ctx` and `env` must reach the inner handler: `ctx.waitUntil` keeps
+    // the isolate alive for a streaming body, and `env` carries the Worker's
+    // bindings (KV, D1, R2, Durable Objects). The memoizing wrapper used to drop
+    // both, which made them unreachable through the decorator-build path.
+    return async (request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> => {
       if (!inner) {
         // Reset the memo if build() rejects, so one transient init error doesn't
         // poison the isolate — without this, every later request would reuse the
@@ -302,7 +306,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
         inner = await building;
       }
-      return inner(request);
+      return inner(request, ctx, env);
     };
   }
 

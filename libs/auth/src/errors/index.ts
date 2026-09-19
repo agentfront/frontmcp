@@ -7,6 +7,7 @@ export {
   TokenStoreRequiredError,
   NoProviderIdError,
   TokenLeakDetectedError,
+  JwtSecretRequiredError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,

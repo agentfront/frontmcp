@@ -111,12 +111,31 @@ describe('Build Adapters', () => {
 
     it('invokes the handler Web-natively and ships no Node req/res shim', () => {
       const entry = cloudflareAdapter.getEntryTemplate('./main.js');
-      // The handler is called with the Web Request — no Node req/res.
-      expect(entry).toContain('handler(request)');
+      // The handler is called with the Web Request — no Node req/res. ctx and
+      // env ride along so waitUntil and bindings stay reachable (#536).
+      expect(entry).toContain('handler(request, ctx, env)');
       // Guard against the old hand-rolled shim creeping back.
       expect(entry).not.toContain('statusCode');
       expect(entry).not.toContain('setHeader');
       expect(entry).not.toContain('app(req, res)');
+    });
+
+    it('bridges string bindings into process.env without clobbering existing values (#536)', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain('bridgeEnvToProcess(env)');
+      // Only strings — KV/D1/R2 bindings are objects and stay on `env`.
+      expect(entry).toContain("if (typeof value !== 'string') continue;");
+      expect(entry).toContain('process.env[key] === undefined');
+    });
+
+    it('propagates transport.http.path as the server entryPath default (#539)', () => {
+      const setup = cloudflareAdapter.getSetupTemplate?.({ transportHttpPath: '/mcp' });
+      expect(setup).toContain('process.env.FRONTMCP_HTTP_ENTRY_PATH = "/mcp"');
+    });
+
+    it('omits the entryPath default when no transport path is configured', () => {
+      const setup = cloudflareAdapter.getSetupTemplate?.({});
+      expect(setup).not.toContain('FRONTMCP_HTTP_ENTRY_PATH');
     });
 
     it('should have getConfig method', () => {
@@ -135,7 +154,21 @@ describe('Build Adapters', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
       // Without this the deployed Worker cannot boot — node:* builtins are
       // only available behind nodejs_compat.
-      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
+      expect(config).toContain('"nodejs_compat"');
+    });
+
+    it('emits nodejs_compat_populate_process_env so vars and secrets reach process.env (#536)', () => {
+      const config = cloudflareAdapter.getConfig?.('/test');
+      expect(config).toContain('"nodejs_compat_populate_process_env"');
+    });
+
+    it('respects an explicit opt-out rather than emitting two conflicting flags', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: { compatibilityFlags: ['nodejs_compat_do_not_populate_process_env'] },
+      });
+      expect(config).toContain('"nodejs_compat_do_not_populate_process_env"');
+      expect(config).not.toContain('"nodejs_compat_populate_process_env"');
     });
 
     it('defaults compatibility_date to one that enables full nodejs_compat (>= 2024-09-23)', () => {
@@ -146,9 +179,11 @@ describe('Build Adapters', () => {
     it('merges user compatibilityFlags while always keeping nodejs_compat first', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp', {
         target: 'cloudflare' as const,
-        wrangler: { compatibilityFlags: ['nodejs_compat_populate_process_env'] },
+        wrangler: { compatibilityFlags: ['my_custom_flag'] },
       });
-      expect(config).toContain('compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]');
+      expect(config).toContain(
+        'compatibility_flags = ["nodejs_compat", "my_custom_flag", "nodejs_compat_populate_process_env"]',
+      );
     });
 
     it('dedupes nodejs_compat when the user also lists it explicitly', () => {
@@ -156,7 +191,7 @@ describe('Build Adapters', () => {
         target: 'cloudflare' as const,
         wrangler: { compatibilityFlags: ['nodejs_compat'] },
       });
-      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
+      expect(config).toContain('compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]');
     });
 
     it('should have configFileName as wrangler.toml', () => {
