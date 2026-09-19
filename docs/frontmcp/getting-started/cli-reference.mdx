@@ -136,6 +136,29 @@ treated as authoritative.
 | `--icon <path>`      | Override the icon path included in the archive (use with `--target mcpb`)                              |
 | `--no-deterministic` | Disable deterministic archive output (use with `--target mcpb`)                                        |
 | `--stage-only`       | Leave the MCPB staging directory intact and skip zipping (use with `--target mcpb`)                    |
+| `--no-clean`         | Keep whatever is already in the output directory instead of clearing it first                          |
+
+#### Output directory is cleared on every build
+
+`frontmcp build` removes the target's output directory before compiling, so
+`dist/<target>/` only ever contains what the current source set emits. Deleting
+a source file therefore also removes its compiled output, and a local build
+matches what CI produces from a clean checkout.
+
+Pass `--no-clean` to keep the previous contents (useful for incremental
+workflows). Cleaning is skipped automatically — with a warning — when the
+resolved output directory is the project root, a parent of it, or outside the
+project entirely, so a stray `outDir` can never delete your sources.
+
+#### TypeScript is run from the project, not through `npx`
+
+The compiler is resolved from the project's own `typescript` install and
+spawned with the current Node binary, so the project's module resolver stays
+active. This matters for Yarn Plug'n'Play, where a bare `npx tsc` starts a
+process without `.pnp.cjs` and every entry in `compilerOptions.types` fails to
+resolve (`TS2688`). When the project has no local `typescript`, the build falls
+back to the package manager's own runner (`yarn tsc`, `pnpm exec tsc`,
+`bun x tsc`, `npx -y tsc`) selected from the lockfile.
 
 ### Start Options
 

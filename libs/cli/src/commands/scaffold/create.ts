@@ -1634,6 +1634,11 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.env.example'), envExample);
 }
 
+// Issue #534 — see the call site in `scaffoldProject`.
+const TEMPLATE_YARNRC_YML = `
+nodeLinker: node-modules
+`;
+
 // Basic .env.example without Redis
 const TEMPLATE_ENV_EXAMPLE_BASIC = `
 # Application
@@ -1745,6 +1750,14 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Node version
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.nvmrc'), '24\n');
+
+  // Issue #534 — Yarn 4 defaults to Plug'n'Play, and the SDK declares runtime
+  // peer dependencies (content-type, cors, express, raw-body) that a scaffolded
+  // project does not list. PnP enforces that strictly, so `require('@frontmcp/sdk')`
+  // throws before the server ever starts. Pin the node-modules linker instead.
+  if (packageManager === 'yarn') {
+    await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.yarnrc.yml'), TEMPLATE_YARNRC_YML);
+  }
 
   // Deployment-specific files
   await scaffoldDeploymentFiles(targetDir, options);

@@ -563,6 +563,21 @@ describe('runCreate', () => {
       });
     });
 
+    describe('.yarnrc.yml (issue #534)', () => {
+      it('pins the node-modules linker for yarn projects so strict PnP cannot break the SDK', async () => {
+        await runCreate('yarn-linker', { yes: true, target: 'node', pm: 'yarn' });
+
+        const content = readFileSync(path.join(tempDir, 'yarn-linker', '.yarnrc.yml'), 'utf8');
+        expect(content).toContain('nodeLinker: node-modules');
+      });
+
+      it.each(['npm', 'pnpm'] as const)('does not emit .yarnrc.yml for %s', async (pm) => {
+        await runCreate(`${pm}-linker`, { yes: true, target: 'node', pm });
+
+        await expect(fileExists(path.join(tempDir, `${pm}-linker`, '.yarnrc.yml'))).resolves.toBe(false);
+      });
+    });
+
     describe('GitHub Actions per package manager', () => {
       it('should generate CI workflow with yarn cache', async () => {
         await runCreate('yarn-ci', { yes: true, target: 'node', pm: 'yarn', cicd: true });

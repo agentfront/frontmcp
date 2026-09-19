@@ -1,8 +1,10 @@
 import * as path from 'path';
 import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, runCmd, writeJSON } from '@frontmcp/utils';
+import { ensureDir, fileExists, writeJSON } from '@frontmcp/utils';
 import { fsp, resolveEntry } from '../../shared/fs';
+import { runTsc } from '../../shared/tsc';
+import { cleanOutDir } from '../../shared/clean-out-dir';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterName } from './types';
@@ -182,6 +184,14 @@ async function buildSingleTarget(
   const entry = opts.entry || config?.entry;
   const targetOpts = { ...opts, outDir: targetOutDir, entry };
 
+  // #545 — clear the output directory first so `dist/` reflects only what the
+  // current source set emits. Without it, deleting a source file left its
+  // compiled output behind forever, where a stale import could still pull it
+  // into the bundle. `--no-clean` keeps the previous incremental behaviour.
+  if (opts.clean !== false) {
+    await cleanOutDir(targetOutDir, process.cwd());
+  }
+
   // #370: forward `build.storage` and per-deployment `cli.outputDefault` from
   // the FrontMcp config into the exec build so the manifest reflects them.
   // The exec build has its own loader (`loadExecConfig`) that doesn't see
@@ -302,7 +312,7 @@ async function runAdapterBuild(
 
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
-  const args: string[] = ['-y', 'tsc'];
+  const args: string[] = [];
 
   if (hasTsconfig) {
     console.log(c('gray', `[build] tsconfig.json detected — compiling with project settings`));
@@ -330,7 +340,7 @@ async function runAdapterBuild(
   args.push('--outDir', outDir);
   args.push('--skipLibCheck');
 
-  await runCmd('npx', args);
+  await runTsc(args, { cwd });
 
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));

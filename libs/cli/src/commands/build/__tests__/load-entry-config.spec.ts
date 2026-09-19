@@ -10,6 +10,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import Module = require('node:module');
 import { loadEntryDecoratorInfo } from '../load-entry-config';
 
 async function makeEntry(source: string): Promise<{ dir: string; entry: string }> {
@@ -111,6 +112,51 @@ export default class App {}
       expect(info.keysSeenInSource).toEqual(expect.arrayContaining(['http', 'cors']));
       expect(info.keysSeenInSource).not.toContain('sqlite');
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('loadEntryDecoratorInfo — TypeScript entries never reach require() (#537)', () => {
+  it('reads the decorator config without emitting a Node ESM load warning', async () => {
+    const { dir, entry } = await makeEntry(`
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({ http: { entryPath: '/mcp' } })
+export default class App {}
+`);
+    const warnings: string[] = [];
+    const captureWarning = (warning: Error): void => {
+      warnings.push(warning.message);
+    };
+    process.on('warning', captureWarning);
+    try {
+      const info = await loadEntryDecoratorInfo(entry);
+      // Give Node a turn to flush any process warning it queued.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(info.keysSeenInSource).toContain('http');
+      expect(warnings.filter((m) => /Failed to load the ES module/i.test(m))).toEqual([]);
+    } finally {
+      process.off('warning', captureWarning);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not require() a .ts entry, so an unresolvable import is not a load path', async () => {
+    const { dir, entry } = await makeEntry(`
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({ redis: { host: 'localhost' } })
+export default class App {}
+`);
+    const requireSpy = jest.spyOn(Module.prototype, 'require');
+    try {
+      const info = await loadEntryDecoratorInfo(entry);
+      expect(info.keysSeenInSource).toContain('redis');
+      const requiredEntryDirectly = requireSpy.mock.calls.some(([id]) => id === entry);
+      expect(requiredEntryDirectly).toBe(false);
+    } finally {
+      requireSpy.mockRestore();
       await rm(dir, { recursive: true, force: true });
     }
   });

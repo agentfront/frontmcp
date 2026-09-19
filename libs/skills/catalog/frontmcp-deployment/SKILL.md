@@ -77,6 +77,7 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | ---------------------------- | ----------------------------------------------------------------------------------- |
 | `frontmcp build -t <target>` | Build for target: `node`, `vercel`, `lambda`, `cloudflare`, `cli`, `browser`, `sdk` |
 | `frontmcp build -t cli --js` | Build CLI as JS bundle (instead of native binary via SEA)                           |
+| `frontmcp build --no-clean`  | Keep existing output instead of clearing the target's output directory first        |
 | `frontmcp start <name>`      | Start a named MCP server with supervisor (process management)                       |
 | `frontmcp stop <name>`       | Stop managed server (`-f` for force kill)                                           |
 | `frontmcp restart <name>`    | Restart managed server                                                              |
@@ -151,6 +152,9 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 | Session lost between requests      | Using memory storage on stateless serverless | Switch to platform-native storage (Vercel KV, DynamoDB, etc.)                   |
 | CORS errors on browser/web clients | HTTP CORS not configured                     | Add CORS config via `configure-http` skill                                      |
 | Build fails with missing module    | Node-only module in browser/edge build       | Use conditional imports or `@frontmcp/utils` cross-platform utilities           |
+| `TS2688: Cannot find type definition file for 'node'` under Yarn | An older CLI shelled out to `npx tsc`, which starts a process that never loads `.pnp.cjs` | Upgrade the CLI — the build now runs the project's own `typescript` with the current Node binary, or delegates to `yarn`/`pnpm`/`bun` when there is no local install |
+| `@frontmcp/sdk tried to access <pkg> (a peer dependency)` | Yarn Plug'n'Play enforces peer dependencies that a hoisted `node_modules` tree tolerates | Add `nodeLinker: node-modules` to `.yarnrc.yml` and reinstall (`frontmcp create` now scaffolds this for Yarn projects) |
+| Deleted source file still present in `dist/` | An older CLI never cleared the output directory, or `--no-clean` was passed | Rebuild without `--no-clean`; the build now clears the target's output directory first |
 
 ## Examples
 
