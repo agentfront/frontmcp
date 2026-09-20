@@ -59,6 +59,9 @@ jest.mock('@frontmcp/sdk', () => ({
 
 type ToolStub = { name: string; fullName?: string; metadata?: unknown };
 
+/** The shape `tools:call-tool` receives, so the assertions type-check against it. */
+type CallToolFlowCall = [flow: string, payload: { request?: { params?: { name?: string } } }];
+
 function createInvokeHarness(
   options: { mode?: string; tools?: ToolStub[]; includeTools?: unknown; directCalls?: unknown } = {},
 ) {
@@ -85,7 +88,7 @@ function createInvokeHarness(
     runFlow: tool.scope.runFlow as jest.Mock,
     reachedFlow(name: string) {
       return (tool.scope.runFlow as jest.Mock).mock.calls.some(
-        ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === name,
+        ([flow, payload]: CallToolFlowCall) => flow === 'tools:call-tool' && payload?.request?.params?.name === name,
       );
     },
   };

@@ -18,6 +18,16 @@ import type { RememberStoreInterface } from './remember-store.interface';
 const STATELESS_SESSION_ID = '__stateless__';
 
 /**
+ * Make a namespace component unambiguous before it is joined with `:`.
+ *
+ * `encodeURIComponent` escapes the separator, so no combination of identity and key can
+ * produce another pair's storage key.
+ */
+function encodeKeyPart(value: string): string {
+  return encodeURIComponent(value);
+}
+
+/**
  * Context-scoped accessor for remember storage.
  * Provides a human-friendly API for storing and retrieving values.
  *
@@ -289,11 +299,16 @@ export class RememberAccessor {
 
   /**
    * Build the scope-specific prefix.
+   *
+   * Every variable component is encoded, because the separator is also a legal character in
+   * a user id, a tool name and a memory key. Left raw, identity `a` with key `b:c` produces
+   * the same storage key as identity `a:b` with key `c` — one client reading or overwriting
+   * another's value through nothing more exotic than a colon in a name.
    */
   private buildScopePrefix(scope: RememberScope): string {
     switch (scope) {
       case 'session':
-        return `${this.keyPrefix}session:${this.resolveSessionIdentity()}:`;
+        return `${this.keyPrefix}session:${encodeKeyPart(this.resolveSessionIdentity())}:`;
       case 'user': {
         const userId = this.userId;
         if (!userId) {
@@ -304,12 +319,12 @@ export class RememberAccessor {
               "callers would share one namespace. Authenticate the request or use the 'global' scope.",
           );
         }
-        return `${this.keyPrefix}user:${userId}:`;
+        return `${this.keyPrefix}user:${encodeKeyPart(userId)}:`;
       }
       case 'tool': {
         // Tool scope uses flow name if available
         const toolName = this.ctx.flow?.name ?? 'unknown';
-        return `${this.keyPrefix}tool:${toolName}:${this.resolveSessionIdentity()}:`;
+        return `${this.keyPrefix}tool:${encodeKeyPart(toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`;
       }
       case 'global':
         return `${this.keyPrefix}global:`;

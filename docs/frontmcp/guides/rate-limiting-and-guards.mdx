@@ -286,8 +286,6 @@ configuration is reachable. Use the environment variables.
             '2001:db8::/32',        // IPv6 office range
           ],
           defaultAction: 'deny',    // Block everything not on allowList
-          trustProxy: true,         // Read IP from X-Forwarded-For
-          trustedProxyDepth: 1,
         },
       },
       tools: [MyTool],
@@ -308,15 +306,24 @@ configuration is reachable. Use the environment variables.
   </Step>
 
   <Step title="Enable proxy trust">
-    If your server is behind a load balancer or reverse proxy, the client IP will be the proxy's IP unless you enable `trustProxy`:
+    Behind a load balancer or reverse proxy the client IP is the proxy's, unless you declare
+    the proxy as trusted. This is set through the environment, not through `ipFilter`:
 
-    ```typescript
-    ipFilter: {
-      trustProxy: true,
-      trustedProxyDepth: 2,  // If behind 2 proxies (e.g., CloudFront + ALB)
-      // ...
-    }
+    ```bash
+    FRONTMCP_TRUST_PROXY=true
+    FRONTMCP_TRUSTED_PROXY_DEPTH=2   # behind 2 proxies (e.g. CloudFront + ALB)
     ```
+
+    The client is read that many hops back from the end of the `X-Forwarded-For` chain,
+    because callers can prepend entries but only your own proxies append to it. A chain
+    shorter than the configured depth was not built by those proxies, so the socket peer is
+    used instead.
+
+    <Note>
+      `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not
+      read — client-IP extraction happens in the SDK context layer, before guard
+      configuration is reachable. Use the environment variables above.
+    </Note>
 
   </Step>
 </Steps>
@@ -491,7 +498,6 @@ class ReportTool extends ToolContext {
     defaultTimeout: { executeMs: 30_000 },
     ipFilter: {
       denyList: ['192.0.2.0/24'],
-      trustProxy: true,
     },
   },
   tools: [SearchTool, ReportTool],

@@ -65,6 +65,9 @@ jest.mock('../utils', () => ({
 
 type ToolStub = { name: string; fullName?: string; metadata?: unknown };
 
+/** The shape `tools:call-tool` receives, so the assertions type-check against it. */
+type CallToolFlowCall = [flow: string, payload: { request?: { params?: { name?: string } } }];
+
 /**
  * Build an ExecuteTool whose enclave hands the `callTool` environment straight back, so a
  * test can drive the exact function an AgentScript would call.
@@ -102,8 +105,10 @@ function createToolHarness(options: { mode?: string; tools?: ToolStub[]; include
   return {
     tool,
     runFlow: tool.scope.runFlow as jest.Mock,
-    async callTool(name: string, input: unknown = {}) {
-      await tool.execute({ script: 'noop' });
+    async callTool(name: string, input: unknown = {}, allowedTools?: string[]) {
+      // The environment is rebuilt on each execute, so the allowlist under test has to be
+      // passed to the SAME execute whose environment we then drive.
+      await tool.execute(allowedTools ? { script: 'noop', allowedTools } : { script: 'noop' });
       if (!capturedEnv) throw new Error('enclave never received a callTool environment');
       return capturedEnv.callTool(name, input, { throwOnError: false });
     },
@@ -132,7 +137,8 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
 
     // The only assertion that matters: the excluded tool must never reach the flow.
     const reached = h.runFlow.mock.calls.some(
-      ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
+      ([flow, payload]: CallToolFlowCall) =>
+        flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
     );
     expect(reached).toBe(false);
   });
@@ -145,7 +151,7 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
       await h.callTool(name, {});
 
       const reached = h.runFlow.mock.calls.some(
-        ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === name,
+        ([flow, payload]: CallToolFlowCall) => flow === 'tools:call-tool' && payload?.request?.params?.name === name,
       );
       expect(reached).toBe(false);
     },
@@ -160,7 +166,8 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
     await h.callTool('admin:deleteUser', { userId: '42' });
 
     const reached = h.runFlow.mock.calls.some(
-      ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
+      ([flow, payload]: CallToolFlowCall) =>
+        flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
     );
     expect(reached).toBe(false);
   });
@@ -171,9 +178,35 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
     await h.callTool('users:list', {});
 
     const reached = h.runFlow.mock.calls.some(
-      ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === 'users:list',
+      ([flow, payload]: CallToolFlowCall) =>
+        flow === 'tools:call-tool' && payload?.request?.params?.name === 'users:list',
     );
     expect(reached).toBe(true);
+  });
+
+  it('still narrows: a permitted tool absent from allowedTools is refused', async () => {
+    const h = createToolHarness({ tools: [allowedTool, excludedTool] });
+
+    await h.callTool('users:list', {}, ['something:else']);
+
+    const reached = h.runFlow.mock.calls.some(
+      ([flow, payload]: CallToolFlowCall) =>
+        flow === 'tools:call-tool' && payload?.request?.params?.name === 'users:list',
+    );
+    expect(reached).toBe(false);
+  });
+
+  it('refuses a blocked namespace reached through a bare alias', async () => {
+    // The entry answers to both spellings and the flow dispatches fullName, so judging only
+    // the bare `name` would let `system:*` through.
+    const h = createToolHarness({
+      tools: [{ name: 'wipeConfig', fullName: 'system:wipeConfig', metadata: {} }],
+    });
+
+    await h.callTool('wipeConfig', {});
+
+    const reached = h.runFlow.mock.calls.some(([flow]: CallToolFlowCall) => flow === 'tools:call-tool');
+    expect(reached).toBe(false);
   });
 
   it('treats a caller-supplied allowedTools as narrowing only, never widening', async () => {
@@ -181,11 +214,11 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
 
     // The caller names the excluded tool in its own allowlist. A self-declared
     // allowlist must not be able to grant access the server policy withholds.
-    await h.tool.execute({ script: 'noop', allowedTools: ['admin:deleteUser'] });
-    await h.callTool('admin:deleteUser', { userId: '42' });
+    await h.callTool('admin:deleteUser', { userId: '42' }, ['admin:deleteUser']);
 
     const reached = h.runFlow.mock.calls.some(
-      ([flow, payload]: [string, any]) => flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
+      ([flow, payload]: CallToolFlowCall) =>
+        flow === 'tools:call-tool' && payload?.request?.params?.name === 'admin:deleteUser',
     );
     expect(reached).toBe(false);
   });

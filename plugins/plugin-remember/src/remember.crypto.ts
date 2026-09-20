@@ -201,6 +201,11 @@ export async function decryptValue<T = unknown>(
 
     return JSON.parse(textDecoder.decode(decrypted)) as T;
   } catch {
+    // Authentication failure is indistinguishable from "no such entry" to the caller. After
+    // the GHSA-h6f4-jg8x-38gj key-derivation change, entries written by an earlier version
+    // land here: the memory reads as absent rather than raising. Operators upgrading across
+    // that change should purge the `session:` and `tool:` prefixes rather than rely on these
+    // entries silently disappearing — see the plugin's upgrade note.
     return null;
   }
 }

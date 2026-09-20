@@ -28,6 +28,10 @@ const BLOCKED = [
   ['::1', 'loopback'],
   ['fe80::1', 'link-local'],
   ['fd00::1', 'unique local'],
+  ['::0.0.0.2', 'IPv4-compatible in the blocked 0.0.0.0/8 range'],
+  ['::2', 'the same address in hex'],
+  ['::ffff:0.0.0.2', 'IPv4-mapped 0.0.0.2'],
+  ['64:ff9b::7f00:1', 'NAT64-embedded loopback'],
 ] as const;
 
 /** Addresses that must keep working — the guard must not start refusing public hosts. */

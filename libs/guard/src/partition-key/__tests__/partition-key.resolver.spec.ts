@@ -26,15 +26,14 @@ describe('resolvePartitionKey', () => {
       expect(resolvePartitionKey('ip', fullContext)).toBe('10.0.0.1');
     });
 
-    it('should fall back to the session when clientIp is missing', () => {
-      // Not a shared literal key: two IP-less clients must not spend one budget
-      // (GHSA-p3qf-fcwm-35x4).
-      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('session:sess-1');
-      expect(resolvePartitionKey('ip', { sessionId: 'sess-2' })).toBe('session:sess-2');
+    it('should fall back to the authenticated user when clientIp is missing', () => {
+      // Never the session id — the caller sets that (GHSA-p3qf-fcwm-35x4).
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-1', userId: 'user-1' })).toBe('user:user-1');
     });
 
-    it('should fall back to the anonymous session when context is undefined', () => {
-      expect(resolvePartitionKey('ip', undefined)).toBe('session:anonymous');
+    it('should use a bounded fallback bucket when there is no identity at all', () => {
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('ip:unresolved');
+      expect(resolvePartitionKey('ip', undefined)).toBe('ip:unresolved');
     });
   });
 

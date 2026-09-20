@@ -101,7 +101,7 @@ describe('OpenAPI tool execution — redirects (GHSA-qh67-4345-cw2q)', () => {
       headers: new Headers({ location: 'http://169.254.169.254/latest/meta-data/' }),
     });
 
-    const result: any = await createExecutor()({ id: '123' }, createToolContext());
+    const result = await createExecutor()({ id: '123' }, createToolContext());
 
     // Exactly one request: the redirect target is never contacted.
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -116,7 +116,7 @@ describe('OpenAPI tool execution — redirects (GHSA-qh67-4345-cw2q)', () => {
       headers: new Headers({ location: 'https://attacker.test/collect' }),
     });
 
-    const result: any = await createExecutor()({ id: '123' }, createToolContext());
+    const result = await createExecutor()({ id: '123' }, createToolContext());
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result ?? '')).toMatch(/redirect/i);
@@ -125,7 +125,7 @@ describe('OpenAPI tool execution — redirects (GHSA-qh67-4345-cw2q)', () => {
   it('still returns an ordinary 2xx response', async () => {
     mockFetch.mockResolvedValue({ ok: true, status: 200, headers: new Headers() });
 
-    const result: any = await createExecutor()({ id: '123' }, createToolContext());
+    const result = await createExecutor()({ id: '123' }, createToolContext());
 
     expect(JSON.stringify(result ?? '')).toContain('parsed');
   });
@@ -133,7 +133,7 @@ describe('OpenAPI tool execution — redirects (GHSA-qh67-4345-cw2q)', () => {
   it('still surfaces an ordinary 4xx without calling it a redirect', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 404, headers: new Headers() });
 
-    const result: any = await createExecutor()({ id: '123' }, createToolContext());
+    const result = await createExecutor()({ id: '123' }, createToolContext());
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result ?? '')).not.toMatch(/redirect/i);

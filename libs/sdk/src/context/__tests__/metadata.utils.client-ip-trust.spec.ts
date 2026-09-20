@@ -94,6 +94,56 @@ describe('extractClientIp — proxy trust (GHSA-p3qf-fcwm-35x4)', () => {
     expect(extractClientIp({}, { peerAddress: 'garbage' })).toBeUndefined();
   });
 
+  describe('malformed addresses are not accepted as identities', () => {
+    // Each of these would otherwise become a rate-limit / IP-filter key of the caller's
+    // choosing.
+    it.each([':', '1:2:3', '1::2::3', '::ffff:999.999.999.999', '1.2.3.256', '0177.0.0.1', '::ffff:1.2.3'])(
+      'rejects %s',
+      (value) => {
+        expect(extractClientIp({ 'x-forwarded-for': value }, { trustProxy: true })).toBeUndefined();
+        expect(extractClientIp({}, { peerAddress: value })).toBeUndefined();
+      },
+    );
+
+    it.each(['::1', '::ffff:1.2.3.4', '2001:db8::1', '1:2:3:4:5:6:7:8', '10.0.0.1'])(
+      'still accepts the well-formed %s',
+      (value) => {
+        expect(extractClientIp({}, { peerAddress: value })).toBe(value);
+      },
+    );
+  });
+
+  describe('a chain shorter than the configured depth', () => {
+    it('falls back to the peer rather than the caller-controlled leftmost entry', () => {
+      // Two proxies are declared but only one entry is present, so that entry was not
+      // appended by them — it is whatever the caller sent.
+      const ip = extractClientIp(
+        { 'x-forwarded-for': '1.2.3.4' },
+        { trustProxy: true, trustedProxyDepth: 2, peerAddress: '203.0.113.9' },
+      );
+
+      expect(ip).toBe('203.0.113.9');
+    });
+
+    it('uses the chain once it is long enough', () => {
+      const ip = extractClientIp(
+        { 'x-forwarded-for': '198.51.100.7, 10.0.0.2' },
+        { trustProxy: true, trustedProxyDepth: 2, peerAddress: '203.0.113.9' },
+      );
+
+      expect(ip).toBe('198.51.100.7');
+    });
+
+    it('ignores a non-positive configured depth rather than trusting the wrong entry', () => {
+      const ip = extractClientIp(
+        { 'x-forwarded-for': 'fake, 198.51.100.7' },
+        { trustProxy: true, trustedProxyDepth: 0, peerAddress: '203.0.113.9' },
+      );
+
+      expect(ip).toBe('198.51.100.7');
+    });
+  });
+
   it('threads the peer address through extractMetadata', () => {
     delete process.env['FRONTMCP_TRUST_PROXY'];
 

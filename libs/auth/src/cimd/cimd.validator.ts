@@ -470,9 +470,10 @@ function extractEmbeddedIpv4(groups: number[]): string | null {
   // ::ffff:a.b.c.d — IPv4-mapped
   if (firstFive && groups[5] === 0xffff) return toDotted();
 
-  // ::a.b.c.d — IPv4-compatible. `::` and `::1` are handled above, so anything left here
-  // with a non-zero high group is a real embedded address.
-  if (firstFive && groups[5] === 0 && groups[6] !== 0) return toDotted();
+  // ::a.b.c.d — IPv4-compatible. `::` and `::1` are handled above, so everything left here
+  // is a real embedded address and belongs to the IPv4 rules. That includes the low ones
+  // (`::0.0.0.2`), which map into the blocked 0.0.0.0/8 range.
+  if (firstFive && groups[5] === 0) return toDotted();
 
   // 64:ff9b::a.b.c.d — NAT64 well-known prefix
   if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((group) => group === 0)) {

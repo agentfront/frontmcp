@@ -36,10 +36,17 @@ function createStore() {
   return { store, values };
 }
 
-function createAccessor(sessionId: string, authInfo?: Record<string, unknown>) {
-  const { store, values } = createStore();
+function createAccessor(
+  sessionId: string,
+  authInfo?: Record<string, unknown>,
+  shared?: ReturnType<typeof createStore>,
+) {
+  const backing = shared ?? createStore();
   const ctx = { sessionId, authInfo, flow: { name: 'billing:refund' } } as never;
-  return { accessor: new RememberAccessor(store, ctx, { encryption: { enabled: false } }), values };
+  return {
+    accessor: new RememberAccessor(backing.store, ctx, { encryption: { enabled: false } }),
+    values: backing.values,
+  };
 }
 
 describe('Remember — stateless isolation (GHSA-225p-f8jh-f3rh, GHSA-h6f4-jg8x-38gj)', () => {
@@ -51,17 +58,29 @@ describe('Remember — stateless isolation (GHSA-225p-f8jh-f3rh, GHSA-h6f4-jg8x-
     });
 
     it('does not let one stateless client read another stateless client value', async () => {
-      const writer = createAccessor('__stateless__', { extra: { sub: 'user-a' } });
-      const reader = createAccessor('__stateless__', { extra: { sub: 'user-b' } });
+      // ONE backing store, so this exercises real cross-client access rather than comparing
+      // key strings from two isolated maps.
+      const shared = createStore();
+      const writer = createAccessor('__stateless__', { extra: { sub: 'user-a' } }, shared);
+      const reader = createAccessor('__stateless__', { extra: { sub: 'user-b' } }, shared);
 
       await writer.accessor.set('card', '4242', { scope: 'session' });
 
-      // Same backing store contents, different identity: the key must not collide.
-      const writerKeys = [...writer.values.keys()];
-      const readerPrefixMatches = writerKeys.filter((key) => key.includes('user-b'));
-      expect(readerPrefixMatches).toHaveLength(0);
-      expect(writerKeys.some((key) => key.includes('user-a'))).toBe(true);
-      void reader;
+      await expect(reader.accessor.get('card', { scope: 'session' })).resolves.toBeUndefined();
+      await expect(writer.accessor.get('card', { scope: 'session' })).resolves.toBe('4242');
+    });
+
+    it('keeps a colon in an identity from colliding with a colon in a key', async () => {
+      // Identity `a` + key `b:c` must not land where identity `a:b` + key `c` lands.
+      const shared = createStore();
+      const first = createAccessor('__stateless__', { extra: { sub: 'a' } }, shared);
+      const second = createAccessor('__stateless__', { extra: { sub: 'a:b' } }, shared);
+
+      await first.accessor.set('b:c', 'first-value', { scope: 'session' });
+      await second.accessor.set('c', 'second-value', { scope: 'session' });
+
+      await expect(first.accessor.get('b:c', { scope: 'session' })).resolves.toBe('first-value');
+      await expect(second.accessor.get('c', { scope: 'session' })).resolves.toBe('second-value');
     });
 
     it('refuses user scope when there is no authenticated user', async () => {

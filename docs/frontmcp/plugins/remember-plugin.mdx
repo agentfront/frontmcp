@@ -323,6 +323,24 @@ from it alone could be recomputed by anyone who had seen it.
   decrypt entries written by the others.
 </Warning>
 
+### Upgrading past the key-derivation change
+
+`session` and `tool` entries written before this change cannot be decrypted after it. There is
+no automatic migration, and the failure is **silent**: decryption returns `null`, so the value
+reads as absent rather than raising.
+
+Purge the affected keys as part of the upgrade so the state is explicit rather than
+mysteriously empty:
+
+```bash
+# Redis example -- adjust for your keyPrefix
+redis-cli --scan --pattern 'remember:session:*' | xargs -r redis-cli del
+redis-cli --scan --pattern 'remember:tool:*'    | xargs -r redis-cli del
+```
+
+`user` and `global` entries are unaffected: those scopes already derived their key from the
+master secret.
+
 ### Secret Persistence
 
 In **development**, the plugin automatically generates and persists an encryption secret to `.frontmcp/remember-secret.json`:

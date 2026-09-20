@@ -17,7 +17,16 @@ const BLOCKED_NAMESPACE_PATTERNS: readonly RegExp[] = Object.freeze([/^system:/,
 
 /** The subset of a ToolEntry this decision needs, so callers need not pass the whole entry. */
 export interface CodeCallPolicyTool {
+  /** Canonical, most-qualified name — `fullName` where the entry has one. */
   name: string;
+  /**
+   * Every other name this tool answers to, including the name the caller asked for.
+   *
+   * The namespace rules run over all of them. A tool can carry a bare `name` and a qualified
+   * `fullName` (`wipeConfig` / `system:wipeConfig`), and the flow dispatches the qualified
+   * one — so judging a single spelling lets the other one through.
+   */
+  aliases?: string[];
   appId?: string;
   description?: string;
   tags?: string[];
@@ -57,12 +66,18 @@ export function checkCodeCallToolPolicy(
 ): CodeCallPolicyDecision {
   const { name } = tool;
 
-  if (name.startsWith('codecall:')) {
+  // Every spelling of the tool, so a blocked namespace cannot be dodged by resolving through
+  // a different one.
+  const names = [name, ...(tool.aliases ?? [])].filter((candidate): candidate is string => !!candidate);
+
+  if (names.some((candidate) => candidate.startsWith('codecall:'))) {
     return deny('CodeCall meta-tools are not callable from CodeCall');
   }
 
-  if (BLOCKED_NAMESPACE_PATTERNS.some((pattern) => pattern.test(name))) {
-    return deny(`Tool "${name}" is in a namespace CodeCall never calls`);
+  for (const candidate of names) {
+    if (BLOCKED_NAMESPACE_PATTERNS.some((pattern) => pattern.test(candidate))) {
+      return deny(`Tool "${candidate}" is in a namespace CodeCall never calls`);
+    }
   }
 
   if (tool.hideFromDiscovery === true) {
@@ -124,9 +139,7 @@ interface ResolvableEntry {
 interface ToolResolutionScope {
   tools: { getTools(includeHidden: boolean): ResolvableEntry[] };
   providers: {
-    getRegistries(
-      kind: string,
-    ): Array<{
+    getRegistries(kind: string): Array<{
       getApps(): Array<{ isRemote?: boolean; tools: { getTools(includeHidden: boolean): ResolvableEntry[] } }>;
     }>;
   };
@@ -224,6 +237,7 @@ export function checkCodeCallToolAccess(
   name: string,
   options: { directCall?: boolean } = {},
 ): CodeCallPolicyDecision {
+  // `name` is what the caller asked for; the entry may answer to other spellings too.
   const entry = resolveCodeCallTool<{ name: string; fullName: string; metadata?: unknown }>(scope, name);
 
   if (!entry) return denyUnknownTool(name);
@@ -234,7 +248,10 @@ export function checkCodeCallToolAccess(
   const owner = (entry as { owner?: { kind?: string; id?: string } }).owner;
 
   const policyTool: CodeCallPolicyTool = {
-    name: entry.name || entry.fullName,
+    // The qualified name is the subject: `call-tool.flow.ts` dispatches `fullName`, so the
+    // policy has to judge the same string the flow will run.
+    name: entry.fullName || entry.name,
+    aliases: [entry.name, name],
     appId: owner?.kind === 'app' ? owner.id : undefined,
     description: metadata?.description,
     tags: metadata?.tags,

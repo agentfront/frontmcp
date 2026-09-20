@@ -60,8 +60,7 @@ class ApiApp {}
     ipFilter: {
       allowList: ['10.0.0.0/8'],
       defaultAction: 'deny',
-      trustProxy: true,
-      trustedProxyDepth: 1,
+      // trustProxy is NOT read: use the FRONTMCP_TRUST_PROXY environment variable.
     },
   },
 })

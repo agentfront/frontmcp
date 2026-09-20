@@ -257,8 +257,6 @@ IP filtering allows or blocks requests based on client IP address, supporting IP
       allowList: ['10.0.0.0/8', '172.16.0.0/12'],
       denyList: ['192.0.2.1', '198.51.100.0/24'],
       defaultAction: 'deny',
-      trustProxy: true,
-      trustedProxyDepth: 1,
     },
   },
   tools: [MyTool],
@@ -286,15 +284,24 @@ class MyApp {}
 
 ### Proxy Configuration
 
-When your server is behind a reverse proxy (Nginx, CloudFront, etc.), enable `trustProxy` to read the client IP from the `X-Forwarded-For` header:
+When your server is behind a reverse proxy (Nginx, CloudFront, etc.), declare the proxy as
+trusted so the client IP is read from `X-Forwarded-For` instead of the socket peer. This is
+set through the environment:
 
-```typescript
-ipFilter: {
-  trustProxy: true,
-  trustedProxyDepth: 2,  // Trust up to 2 proxy hops
-  // ...
-}
+```bash
+FRONTMCP_TRUST_PROXY=true
+FRONTMCP_TRUSTED_PROXY_DEPTH=2   # trust up to 2 proxy hops
 ```
+
+The client is read that many hops back from the end of the chain, because callers can prepend
+entries but only your own proxies append to it. A chain shorter than the configured depth is
+ignored in favour of the socket peer.
+
+<Note>
+  `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not read:
+  client-IP extraction happens in the SDK context layer, before guard configuration is
+  reachable. Use the environment variables above.
+</Note>
 
 ---
 
@@ -326,7 +333,6 @@ The `throttle` field in `@FrontMcp` configures all guard features at the app lev
       allowList: ['203.0.113.0/24'],
       denyList: ['192.0.2.1'],
       defaultAction: 'allow',
-      trustProxy: true,
     },
   },
   tools: [SearchTool, ReportTool],

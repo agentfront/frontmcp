@@ -273,6 +273,12 @@ session id is not a secret -- the client knows it and it travels in the `mcp-ses
 header -- so it cannot be the key material on its own. Instances with different secrets cannot
 read each other's entries.
 
+**Upgrading past that change orphans existing `session` and `tool` entries.** There is no
+automatic migration and the failure is silent: decryption returns `null`, so the value reads
+as absent. Purge the `remember:session:*` and `remember:tool:*` keys during the upgrade so the
+state is explicit. `user` and `global` entries are unaffected -- they already keyed off the
+master secret.
+
 ### Tools Exposed (when `tools.enabled: true`)
 
 - `remember_this` -- Store a key-value pair in memory

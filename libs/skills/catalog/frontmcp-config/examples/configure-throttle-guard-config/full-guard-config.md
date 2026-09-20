@@ -21,7 +21,7 @@ Complete GuardConfig using every available field for maximum protection.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'secure-app' })
 class SecureApp {}
@@ -76,8 +76,7 @@ class SecureApp {}
       allowList: ['10.0.0.0/8', '172.16.0.0/12'],
       denyList: ['192.168.1.100'],
       defaultAction: 'deny',
-      trustProxy: true,
-      trustedProxyDepth: 2,
+      // trustProxy is NOT read: use the FRONTMCP_TRUST_PROXY environment variable.
     },
   },
 })

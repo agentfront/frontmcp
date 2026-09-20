@@ -19,6 +19,65 @@ export interface ClientIpOptions {
 
 const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 
+function isIpv4(value: string): boolean {
+  const match = IPV4_PATTERN.exec(value);
+  if (!match) return false;
+  return match.slice(1).every((octet) => {
+    // Reject leading zeros: `0177.0.0.1` is octal in some resolvers and decimal here.
+    if (octet.length > 1 && octet.startsWith('0')) return false;
+    return Number(octet) <= 255;
+  });
+}
+
+/**
+ * Whether `value` is a well-formed IPv6 address.
+ *
+ * Parses rather than pattern-matches. A character-class-and-count heuristic accepts `:`,
+ * `1:2:3`, `1::2::3` and `::ffff:999.999.999.999`, and this value becomes a rate-limit and
+ * IP-filter identity — so a malformed one is a key an attacker chose.
+ */
+function isIpv6(value: string): boolean {
+  const text = value.includes('%') ? value.slice(0, value.indexOf('%')) : value;
+  if (text.length === 0) return false;
+
+  let head = text;
+  let embedded = 0;
+
+  // A trailing dotted-quad stands for the last two groups and must be a valid IPv4.
+  const lastColon = head.lastIndexOf(':');
+  const tail = lastColon === -1 ? '' : head.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    if (!isIpv4(tail)) return false;
+    head = head.slice(0, lastColon + 1);
+    embedded = 2;
+  }
+
+  const halves = head.split('::');
+  if (halves.length > 2) return false;
+
+  const countGroups = (part: string): number | null => {
+    if (part === '') return 0;
+    const groups = part.split(':').filter((group, index, all) => !(group === '' && index === all.length - 1));
+    for (const group of groups) {
+      if (!/^[0-9A-Fa-f]{1,4}$/.test(group)) return null;
+    }
+    return groups.length;
+  };
+
+  const headCount = countGroups(halves[0]);
+  if (headCount === null) return false;
+
+  if (halves.length === 1) {
+    return headCount + embedded === 8;
+  }
+
+  const tailCount = countGroups(halves[1]);
+  if (tailCount === null) return false;
+
+  // `::` stands for at least one group of zeros.
+  return headCount + tailCount + embedded <= 7;
+}
+
 /**
  * Whether `value` is an IP address we are willing to key on.
  *
@@ -28,18 +87,7 @@ const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
  */
 function isIpAddress(value: string): boolean {
   const candidate = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
-
-  const ipv4 = IPV4_PATTERN.exec(candidate);
-  if (ipv4) {
-    return ipv4.slice(1).every((octet) => octet.length <= 3 && Number(octet) <= 255);
-  }
-
-  // IPv6, including the IPv4-mapped `::ffff:1.2.3.4` form.
-  if (!candidate.includes(':')) return false;
-  if (!/^[0-9A-Fa-f:.]+$/.test(candidate)) return false;
-  const embeddedIpv4 = candidate.slice(candidate.lastIndexOf(':') + 1);
-  if (embeddedIpv4.includes('.') && !IPV4_PATTERN.test(embeddedIpv4)) return false;
-  return candidate.split(':').length <= 9;
+  return candidate.includes(':') ? isIpv6(candidate) : isIpv4(candidate);
 }
 
 function normalizeIp(value: string | undefined): string | undefined {
@@ -59,6 +107,12 @@ function readTrustedProxyDepth(): number {
     // No process env — fall through to the default.
   }
   return 1;
+}
+
+/** A depth is only usable if it is a positive integer, however it was supplied. */
+function normalizeDepth(depth: number | undefined): number {
+  if (depth === undefined) return readTrustedProxyDepth();
+  return Number.isInteger(depth) && depth > 0 ? depth : readTrustedProxyDepth();
 }
 
 function headerValues(header: unknown): string[] {
@@ -124,16 +178,17 @@ export function extractClientIp(headers: Record<string, unknown>, options?: Clie
     return peerIp;
   }
 
-  const depth = options?.trustedProxyDepth ?? readTrustedProxyDepth();
+  const depth = normalizeDepth(options?.trustedProxyDepth);
   const forwarded = headerValues(headers['x-forwarded-for'])
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  if (forwarded.length > 0) {
-    // Count back past the hops we appended ourselves; clamp so a short chain still yields
-    // its leftmost entry rather than nothing.
-    const index = Math.max(0, forwarded.length - depth);
-    const candidate = normalizeIp(forwarded[index]);
+  // Count back past the hops our own proxies appended. A chain SHORTER than the configured
+  // depth was not built by those proxies, so none of its entries is vouched for — clamping
+  // to the leftmost entry would hand the caller the very value it controls. Fall back to the
+  // peer instead.
+  if (forwarded.length >= depth) {
+    const candidate = normalizeIp(forwarded[forwarded.length - depth]);
     if (candidate) return candidate;
   }
 

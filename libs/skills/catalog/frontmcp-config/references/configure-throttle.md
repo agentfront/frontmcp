@@ -68,8 +68,8 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       allowList: ['10.0.0.0/8', '172.16.0.0/12'], // CIDR ranges
       denyList: ['192.168.1.100'],
       defaultAction: 'allow', // 'allow' | 'deny'
-      trustProxy: true, // trust X-Forwarded-For
-      trustedProxyDepth: 1, // proxy depth to trust
+      // NOTE: trustProxy / trustedProxyDepth are NOT read here -- use the
+      // FRONTMCP_TRUST_PROXY and FRONTMCP_TRUSTED_PROXY_DEPTH environment variables.
     },
   },
 })
@@ -170,13 +170,13 @@ budget for every other client that also has no IP.
 
 ### IpFilterConfig
 
-| Field               | Type                | Default   | Description                         |
-| ------------------- | ------------------- | --------- | ----------------------------------- |
-| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges          |
-| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges          |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy`        | `boolean`           | `false`   | Trust X-Forwarded-For header        |
-| `trustedProxyDepth` | `number`            | `1`       | How many proxy hops to trust        |
+| Field               | Type                | Default   | Description                                      |
+| ------------------- | ------------------- | --------- | ------------------------------------------------ |
+| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                       |
+| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                       |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list              |
+| `trustProxy`        | `boolean`           | `false`   | **Not read.** Use `FRONTMCP_TRUST_PROXY`         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read.** Use `FRONTMCP_TRUSTED_PROXY_DEPTH` |
 
 ## Partition Strategies
 
