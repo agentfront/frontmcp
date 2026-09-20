@@ -1,9 +1,10 @@
 import 'reflect-metadata';
-import ApprovalCheckPlugin from '../approval-check.hook';
-import { ApprovalStoreToken } from '../../approval.symbols';
+
 import { ApprovalRequiredError } from '../../approval';
-import { ApprovalScope, ApprovalState } from '../../types';
+import { ApprovalStoreToken } from '../../approval.symbols';
 import type { ApprovalStore } from '../../stores';
+import { ApprovalScope, ApprovalState } from '../../types';
+import ApprovalCheckPlugin from '../approval-check.hook';
 
 // Mock the SDK decorators
 jest.mock('@frontmcp/sdk', () => ({
@@ -255,15 +256,18 @@ describe('ApprovalCheckPlugin', () => {
       await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
     });
 
-    it('should skip for pre-approved context', async () => {
+    it('should skip for a pre-approved context established by the session', async () => {
       const approvalContext = { type: 'project', identifier: 'trusted-project' };
       mockFlowCtx.state.tool!.metadata['approval'] = {
         required: true,
         preApprovedContexts: [approvalContext],
       };
-      mockFlowCtx.state.toolContext!.input = {
-        context: approvalContext,
-      };
+      // Since GHSA-r848-p7wf-96rc the context comes from the session, never from the
+      // arguments of the call being gated.
+      mockFlowCtx.state.toolContext!.tryGetContext = () => ({
+        sessionId: 'session-123',
+        authInfo: { clientId: 'client-456', extra: { approvalContext } },
+      });
 
       await plugin.checkApproval(mockFlowCtx as never);
       expect(mockStore.getApproval).not.toHaveBeenCalled();
@@ -338,9 +342,13 @@ describe('ApprovalCheckPlugin', () => {
         required: true,
         preApprovedContexts: [{ type: 'project', identifier: 'trusted-project' }],
       };
-      mockFlowCtx.state.toolContext!.input = {
-        context: { type: 'different', identifier: 'trusted-project' },
-      };
+      mockFlowCtx.state.toolContext!.tryGetContext = () => ({
+        sessionId: 'session-123',
+        authInfo: {
+          clientId: 'client-456',
+          extra: { approvalContext: { type: 'different', identifier: 'trusted-project' } },
+        },
+      });
       mockStore.getApproval.mockResolvedValue(undefined);
 
       await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
@@ -351,9 +359,13 @@ describe('ApprovalCheckPlugin', () => {
         required: true,
         preApprovedContexts: [{ type: 'project', identifier: 'trusted-project' }],
       };
-      mockFlowCtx.state.toolContext!.input = {
-        context: { type: 'project', identifier: 'different-project' },
-      };
+      mockFlowCtx.state.toolContext!.tryGetContext = () => ({
+        sessionId: 'session-123',
+        authInfo: {
+          clientId: 'client-456',
+          extra: { approvalContext: { type: 'project', identifier: 'different-project' } },
+        },
+      });
       mockStore.getApproval.mockResolvedValue(undefined);
 
       await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
@@ -463,7 +475,7 @@ describe('ApprovalCheckPlugin', () => {
       expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
     });
 
-    it('should prefer input context over session context', async () => {
+    it('should ignore input context in favour of session context', async () => {
       const inputContext = { type: 'project', identifier: 'input-project' };
       const sessionContext = { type: 'project', identifier: 'session-project' };
       mockFlowCtx.state.tool!.metadata['approval'] = {
@@ -478,10 +490,11 @@ describe('ApprovalCheckPlugin', () => {
           extra: { approvalContext: sessionContext },
         },
       });
+      mockStore.getApproval.mockResolvedValue(undefined);
 
-      // Should match the input context, not session
-      await plugin.checkApproval(mockFlowCtx as never);
-      expect(mockStore.getApproval).not.toHaveBeenCalled();
+      // The caller named the pre-approved context in its own arguments; the session says
+      // otherwise, and the session wins (GHSA-r848-p7wf-96rc).
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
     });
 
     it('should handle empty preApprovedContexts array', async () => {

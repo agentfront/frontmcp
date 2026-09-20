@@ -318,6 +318,21 @@ class WebhookServer {}
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
 - `webhook` -- Sends a PKCE-secured webhook to an external approval service. The external service calls back to confirm or deny. Suitable for compliance workflows requiring out-of-band approval.
 
+### Pre-approved contexts come from the session
+
+`approval.preApprovedContexts` lists contexts that skip the approval check entirely. The
+context a call runs in is taken **only** from `authInfo.extra.approvalContext`, which your
+authentication layer sets while establishing the session.
+
+A `context` field in the gated tool's own arguments is ignored. Do not build a flow that
+expects the caller to declare its context -- the caller of a gated tool must not be able to
+name the context that lets it skip the gate. Set the context when you authenticate:
+
+```typescript
+// In your auth layer, not in tool input
+authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectId };
+```
+
 ### Using `this.approval` in Tools
 
 ```typescript

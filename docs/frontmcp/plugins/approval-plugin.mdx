@@ -239,7 +239,13 @@ ApprovalPlugin.init({
 </ParamField>
 
 <ParamField path="approval.preApprovedContexts" type="ApprovalContext[]">
-  Contexts that are pre-approved (bypass approval check)
+  Contexts that are pre-approved (bypass approval check).
+
+The context a call runs in is read **only** from the session, at
+`authInfo.extra.approvalContext`, which your authentication layer sets. A `context`
+field in the tool's own arguments is ignored: the caller of a gated tool must not be
+able to name the context that lets it skip the gate.
+
 </ParamField>
 
 ---
