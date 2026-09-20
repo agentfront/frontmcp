@@ -85,15 +85,27 @@ describe('packageManagerTscCommand', () => {
   });
 
   it('uses bun x', () => {
-    expect(packageManagerTscCommand('bun', [])).toEqual({ command: 'bun', args: ['x', 'tsc'] });
+    expect(packageManagerTscCommand('bun', [])).toEqual({
+      command: 'bun',
+      args: ['x', '--package', 'typescript', 'tsc'],
+    });
   });
 
   it('falls back to npx for npm', () => {
     expect(packageManagerTscCommand('npm', ['-p', 'tsconfig.json'])).toEqual({
       command: 'npx',
-      args: ['-y', 'tsc', '-p', 'tsconfig.json'],
+      args: ['-y', '--package', 'typescript', 'tsc', '-p', 'tsconfig.json'],
     });
   });
+
+  it.each(['npm', 'bun'] as const)(
+    'names the typescript package explicitly for %s, so a registry fetch cannot pull the deprecated `tsc` package',
+    (manager) => {
+      const { args } = packageManagerTscCommand(manager, []);
+      expect(args).toContain('--package');
+      expect(args[args.indexOf('--package') + 1]).toBe('typescript');
+    },
+  );
 });
 
 describe('resolveProjectTsc', () => {
@@ -149,6 +161,8 @@ describe('runTsc (issue #534)', () => {
 
     await runTsc(['--outDir', 'dist'], { cwd: PROJECT });
 
-    expect(runCmdMock).toHaveBeenCalledWith('npx', ['-y', 'tsc', '--outDir', 'dist'], { cwd: PROJECT });
+    expect(runCmdMock).toHaveBeenCalledWith('npx', ['-y', '--package', 'typescript', 'tsc', '--outDir', 'dist'], {
+      cwd: PROJECT,
+    });
   });
 });

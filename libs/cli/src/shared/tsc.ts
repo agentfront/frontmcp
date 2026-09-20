@@ -56,6 +56,13 @@ export function resolveProjectTsc(cwd: string): string | undefined {
 /**
  * Command + args that invoke `tsc` through a package manager, so the child
  * process inherits whatever resolver that manager installs (Yarn PnP included).
+ *
+ * The npm and bun forms name the package explicitly. Both fetch a missing
+ * binary from the registry, and `tsc` there is a long-deprecated package that is
+ * NOT the TypeScript compiler — a bare `npx -y tsc` would download and run it.
+ * `--package typescript` pins the fetch to the real compiler. Yarn and pnpm need
+ * no such guard: they resolve `tsc` from the project's own dependencies and fail
+ * rather than fetching.
  */
 export function packageManagerTscCommand(
   manager: DetectedPackageManager,
@@ -67,9 +74,9 @@ export function packageManagerTscCommand(
     case 'pnpm':
       return { command: 'pnpm', args: ['exec', 'tsc', ...args] };
     case 'bun':
-      return { command: 'bun', args: ['x', 'tsc', ...args] };
+      return { command: 'bun', args: ['x', '--package', 'typescript', 'tsc', ...args] };
     default:
-      return { command: 'npx', args: ['-y', 'tsc', ...args] };
+      return { command: 'npx', args: ['-y', '--package', 'typescript', 'tsc', ...args] };
   }
 }
 
