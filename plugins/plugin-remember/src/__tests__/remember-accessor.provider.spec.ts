@@ -1,6 +1,7 @@
-import { RememberAccessor, createRememberAccessor } from '../providers/remember-accessor.provider';
-import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import type { FrontMcpContext } from '@frontmcp/sdk';
+
+import { createRememberAccessor, RememberAccessor } from '../providers/remember-accessor.provider';
+import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import type { RememberPluginOptions } from '../remember.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -457,14 +458,15 @@ describe('RememberAccessor', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('edge cases', () => {
-    it('handles anonymous user scope', async () => {
+    it('refuses user scope for an anonymous caller', async () => {
       const anonCtx = createMockContext({ authInfo: undefined });
       const anonAccessor = new RememberAccessor(store, anonCtx, config);
 
-      await anonAccessor.set('key', 'value', { scope: 'user' });
-
-      const keys = await store.keys('remember:user:anonymous:*');
-      expect(keys.length).toBe(1);
+      // A shared 'anonymous' namespace made every unauthenticated caller's memory readable by
+      // every other one (GHSA-225p-f8jh-f3rh).
+      await expect(anonAccessor.set('key', 'value', { scope: 'user' })).rejects.toThrow(
+        /without an authenticated user/,
+      );
     });
 
     it('handles unknown tool scope', async () => {

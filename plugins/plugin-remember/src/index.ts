@@ -73,6 +73,7 @@ export { brand } from './remember.types';
 // Providers
 export type { RememberStoreInterface } from './providers/remember-store.interface';
 export { RememberAccessor } from './providers/remember-accessor.provider';
+export { RememberIdentityError } from './remember.errors';
 export { default as RememberMemoryProvider } from './providers/remember-memory.provider';
 export { default as RememberRedisProvider } from './providers/remember-redis.provider';
 export { default as RememberVercelKvProvider } from './providers/remember-vercel-kv.provider';

@@ -146,6 +146,20 @@ Memory is organized into four scopes with different visibility and lifetime:
 | `tool`    | Tied to specific tool + session  | Tool-specific cache                   |
 | `global`  | Shared across all sessions/users | Application-wide configuration        |
 
+<Warning>
+  **`session`, `tool`, and `user` scopes require a per-client identity.**
+
+A stateless HTTP transport injects the same session id (`__stateless__`) into every request,
+so it carries no session identity of its own. `session` and `tool` scope therefore fall back
+to the authenticated principal, and an **unauthenticated stateless request is refused** with
+a `RememberIdentityError` rather than being given a namespace it would share with every
+other client. `user` scope is likewise refused when there is no authenticated user.
+
+If the data really is shared across clients, say so with `scope: 'global'`. Otherwise
+authenticate the request or use a stateful transport.
+
+</Warning>
+
 ### Using Scopes
 
 ```ts
@@ -295,9 +309,19 @@ All stored values are encrypted by default using AES-256-GCM.
 
 ### How Keys Are Derived
 
-1. A master secret is derived from `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
-2. Per-entry keys are derived using HKDF-SHA256 with session/user context as salt
+1. A master secret is derived from the `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
+2. Per-entry keys are derived using HKDF-SHA256 over that secret plus the scope's identity
 3. Each entry gets a unique key based on its scope and identity
+
+Every scope mixes in the master secret, `session` and `tool` included. A session id is not a
+secret -- the client knows it and it travels in the `mcp-session-id` header -- so a key derived
+from it alone could be recomputed by anyone who had seen it.
+
+<Warning>
+  Because the key now depends on the master secret, **every instance sharing a store must use
+  the same `REMEMBER_SECRET`**. Without it each instance auto-generates its own and cannot
+  decrypt entries written by the others.
+</Warning>
 
 ### Secret Persistence
 

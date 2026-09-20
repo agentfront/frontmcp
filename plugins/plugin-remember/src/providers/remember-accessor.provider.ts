@@ -1,18 +1,23 @@
-import { FrontMcpContext, Provider, ProviderScope, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
-import type { RememberStoreInterface } from './remember-store.interface';
+import { FRONTMCP_CONTEXT, FrontMcpContext, Provider, ProviderScope } from '@frontmcp/sdk';
+
+import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
+import { RememberIdentityError } from '../remember.errors';
+import { RememberConfigToken, RememberStoreToken } from '../remember.symbols';
 import type {
-  RememberScope,
+  PayloadBrandType,
   RememberEntry,
-  RememberPluginOptions,
-  RememberSetOptions,
-  RememberGetOptions,
   RememberForgetOptions,
+  RememberGetOptions,
   RememberKnowsOptions,
   RememberListOptions,
-  PayloadBrandType,
+  RememberPluginOptions,
+  RememberScope,
+  RememberSetOptions,
 } from '../remember.types';
-import { encryptAndSerialize, deserializeAndDecrypt, getKeySourceForScope } from '../remember.crypto';
-import { RememberStoreToken, RememberConfigToken } from '../remember.symbols';
+import type { RememberStoreInterface } from './remember-store.interface';
+
+/** Session id the stateless HTTP transport injects into every request. */
+const STATELESS_SESSION_ID = '__stateless__';
 
 /**
  * Context-scoped accessor for remember storage.
@@ -255,18 +260,58 @@ export class RememberAccessor {
   }
 
   /**
+   * The identity that namespaces session- and tool-scoped storage
+   * (GHSA-225p-f8jh-f3rh).
+   *
+   * In stateless mode the transport injects the literal session id `__stateless__` into every
+   * request, so using it as a namespace put every client's memory under the same keys. A
+   * stateless request carries no session identity: the authenticated principal is the only
+   * per-client identity available, and where there is none the request has no business
+   * reading or writing per-client memory at all.
+   */
+  private resolveSessionIdentity(): string {
+    const sessionId = this.ctx.sessionId;
+
+    if (sessionId !== STATELESS_SESSION_ID) {
+      return sessionId;
+    }
+
+    const userId = this.userId;
+    if (userId) {
+      return `stateless-user:${userId}`;
+    }
+
+    throw new RememberIdentityError(
+      'Remember cannot use session or tool scope for an unauthenticated stateless request: ' +
+        'every such request shares the session id "__stateless__", so the data would be shared ' +
+        'across all clients. Authenticate the request, use a stateful transport, or choose ' +
+        "the 'global' scope if the data really is shared.",
+    );
+  }
+
+  /**
    * Build the scope-specific prefix.
    */
   private buildScopePrefix(scope: RememberScope): string {
     switch (scope) {
       case 'session':
-        return `${this.keyPrefix}session:${this.ctx.sessionId}:`;
-      case 'user':
-        return `${this.keyPrefix}user:${this.userId ?? 'anonymous'}:`;
+        return `${this.keyPrefix}session:${this.resolveSessionIdentity()}:`;
+      case 'user': {
+        const userId = this.userId;
+        if (!userId) {
+          // 'anonymous' pooled every unauthenticated caller into one namespace, which is the
+          // same cross-client disclosure as the stateless case above.
+          throw new RememberIdentityError(
+            'Remember cannot use user scope without an authenticated user: all unauthenticated ' +
+              "callers would share one namespace. Authenticate the request or use the 'global' scope.",
+          );
+        }
+        return `${this.keyPrefix}user:${userId}:`;
+      }
       case 'tool': {
         // Tool scope uses flow name if available
         const toolName = this.ctx.flow?.name ?? 'unknown';
-        return `${this.keyPrefix}tool:${toolName}:${this.ctx.sessionId}:`;
+        return `${this.keyPrefix}tool:${toolName}:${this.resolveSessionIdentity()}:`;
       }
       case 'global':
         return `${this.keyPrefix}global:`;
@@ -277,8 +322,12 @@ export class RememberAccessor {
    * Get the encryption key source for a scope.
    */
   private getKeySource(scope: RememberScope) {
+    // Must match the namespace: a key derived from the raw '__stateless__' id would be the
+    // same constant for every client, exactly as the storage key was.
+    const needsSessionIdentity = scope === 'session' || scope === 'tool';
+
     return getKeySourceForScope(scope, {
-      sessionId: this.ctx.sessionId,
+      sessionId: needsSessionIdentity ? this.resolveSessionIdentity() : this.ctx.sessionId,
       userId: this.userId,
       toolName: this.ctx.flow?.name,
     });

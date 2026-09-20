@@ -1,14 +1,15 @@
 import {
-  hkdfSha256,
-  encryptAesGcm,
-  decryptAesGcm,
-  randomBytes,
-  base64urlEncode,
   base64urlDecode,
+  base64urlEncode,
+  decryptAesGcm,
+  encryptAesGcm,
+  hkdfSha256,
+  randomBytes,
+  type EncBlob,
 } from '@frontmcp/utils';
-import type { EncBlob } from '@frontmcp/utils';
-import type { RememberScope } from './remember.types';
+
 import { getOrCreatePersistedSecret } from './remember.secret-persistence';
+import type { RememberScope } from './remember.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -60,12 +61,23 @@ const textEncoder = new TextEncoder();
  * Derive a 256-bit encryption key based on the source.
  * Uses HKDF-SHA256 from @frontmcp/utils.
  *
- * Key derivation strategy (distributed-safe):
- * - session: IKM = sessionId (unique per session, no external dependency)
- * - tool: IKM = sessionId (same as session, tool name in context)
- * - user: IKM = baseSecret + userId (requires persisted/env secret)
- * - global: IKM = baseSecret (requires persisted/env secret)
+ * Key derivation strategy:
+ * - session: IKM = baseSecret + sessionId
+ * - tool: IKM = baseSecret + sessionId (tool name in context)
+ * - user: IKM = baseSecret + userId
+ * - global: IKM = baseSecret
  * - custom: IKM = custom key
+ *
+ * SECURITY (GHSA-h6f4-jg8x-38gj): session and tool scopes used the session id ALONE as input
+ * keying material. A session id is not a secret — the client knows it, it travels in the
+ * `mcp-session-id` header, and in stateless mode it is the fixed public constant
+ * `__stateless__`. Anyone who knew it could recompute the key and decrypt the stored blobs,
+ * so encryption at rest protected nothing. Mixing in the server secret makes the key depend
+ * on something the client does not hold.
+ *
+ * The server secret must be the SAME on every instance that shares a store; set
+ * `REMEMBER_SECRET` (or `MCP_MEMORY_SECRET` / `MCP_SESSION_SECRET`) in any distributed
+ * deployment, otherwise each instance generates its own and cannot read the others' entries.
  */
 export async function deriveEncryptionKey(source: EncryptionKeySource): Promise<Uint8Array> {
   const salt = textEncoder.encode('remember-plugin-v1');
@@ -75,14 +87,12 @@ export async function deriveEncryptionKey(source: EncryptionKeySource): Promise<
 
   switch (source.type) {
     case 'session':
-      // Session-scoped: use sessionId as IKM (no external dependency)
-      ikm = source.sessionId;
+      ikm = (await getBaseSecret()) + source.sessionId;
       context = `remember:session:${source.sessionId}`;
       break;
 
     case 'tool':
-      // Tool-scoped: same as session (tool name only affects context)
-      ikm = source.sessionId;
+      ikm = (await getBaseSecret()) + source.sessionId;
       context = `remember:tool:${source.toolName}:${source.sessionId}`;
       break;
 
