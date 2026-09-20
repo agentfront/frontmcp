@@ -76,7 +76,7 @@ NODE_ENV = "production"
 ```bash
 # Build and deploy to a custom domain
 frontmcp build --target cloudflare
-wrangler deploy --domain mcp.example.com
+npx wrangler deploy --domain mcp.example.com
 
 # Verify health endpoint (FrontMCP serves /healthz by default)
 curl https://mcp.example.com/healthz
