@@ -3,25 +3,27 @@ import {
   FlowCtxOf,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
-  ListToolsHook,
   ListResourcesHook,
+  ListToolsHook,
   Plugin,
   ProviderScope,
   ProviderType,
   ToolHook,
 } from '@frontmcp/sdk';
 
-import type { FeatureFlagPluginOptions, FeatureFlagPluginOptionsInput, FeatureFlagRef } from './feature-flag.types';
-import { FeatureFlagAdapterToken, FeatureFlagConfigToken, FeatureFlagAccessorToken } from './feature-flag.symbols';
-import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
-import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
+import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
+import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
+import type { FeatureFlagPluginOptions, FeatureFlagPluginOptionsInput, FeatureFlagRef } from './feature-flag.types';
+import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
 // Local hook references for prompts and skills flows.
 // These flows register their ExtendFlows types in their own modules, which are not
 // re-exported from the SDK barrel. We cast to bypass the type constraint at compile time.
 const ListPromptsHook = (FlowHooksOf as any)('prompts:list-prompts');
 const SearchSkillsHook = (FlowHooksOf as any)('skills:search');
+const ReadResourceHook = (FlowHooksOf as any)('resources:read-resource');
+const GetPromptHook = (FlowHooksOf as any)('prompts:get-prompt');
 
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
@@ -261,10 +263,43 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    */
   @ToolHook.Will('execute', { priority: 50 })
   async gateToolExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const { tool } = flowCtx.state;
-    if (!tool) return;
+    await this.gateEntryExecution('Tool', flowCtx.state.tool);
+  }
 
-    const ref = (tool.metadata as any)?.featureFlag as FeatureFlagRef | undefined;
+  /**
+   * Execution gate: block resources/read when the resource's feature flag is off.
+   *
+   * GHSA-gf7p-j3hr-h5h4: only tools had this gate, so a flagged resource was merely absent
+   * from resources/list and still readable by URI. Hiding a capability from a listing is not
+   * the same as withholding it — clients cache listings and hold URIs from earlier sessions.
+   */
+  @ReadResourceHook.Will('execute', { priority: 50 })
+  async gateResourceRead(flowCtx: any) {
+    await this.gateEntryExecution('Resource', flowCtx.state.resource);
+  }
+
+  /**
+   * Execution gate: block prompts/get when the prompt's feature flag is off.
+   *
+   * The same gap as resources (GHSA-gf7p-j3hr-h5h4): filtering prompts/list left the prompt
+   * retrievable by name.
+   */
+  @GetPromptHook.Will('execute', { priority: 50 })
+  async gatePromptGet(flowCtx: any) {
+    await this.gateEntryExecution('Prompt', flowCtx.state.prompt);
+  }
+
+  /**
+   * Shared execution gate for tools, resources and prompts.
+   *
+   * One implementation on purpose: the advisory existed because the tool path had a gate and
+   * the other two did not, and three copies would drift apart the same way.
+   */
+  private async gateEntryExecution(kind: string, entry: { metadata?: unknown } | undefined): Promise<void> {
+    if (!entry) return;
+
+    const metadata = entry.metadata as { name?: string; featureFlag?: FeatureFlagRef } | undefined;
+    const ref = metadata?.featureFlag;
     if (!ref) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -279,7 +314,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     }
 
     if (!enabled) {
-      throw new Error(`Tool "${tool.metadata.name}" is disabled by feature flag "${key}"`);
+      throw new Error(`${kind} "${metadata?.name}" is disabled by feature flag "${key}"`);
     }
   }
 

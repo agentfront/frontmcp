@@ -527,6 +527,17 @@ The cache key is computed from the tool name and the serialized input arguments.
 
 Gate tools, resources, prompts, and skills behind feature flags. Integrates with popular feature flag services or static configuration.
 
+### A flag withholds the capability, it does not just hide it
+
+A disabled flag filters the entry out of `tools/list`, `resources/list`, `prompts/list` and
+`skills/search`, **and** refuses it on direct access: `tools/call`, `resources/read` and
+`prompts/get` each evaluate the flag before executing.
+
+That matters because a listing is not an access control. Clients cache listings and hold
+resource URIs and prompt names from earlier sessions, so anything gated only at list time
+stays reachable by name. If the adapter is unavailable the gate uses the ref's
+`defaultValue`, and a bare string ref (no default) fails closed.
+
 ### Installation
 
 ```typescript

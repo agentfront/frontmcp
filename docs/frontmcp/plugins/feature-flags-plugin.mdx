@@ -22,7 +22,7 @@ The Feature Flags Plugin gates tools, resources, prompts, and skills based on fe
   </Card>
 
   <Card title="Execution Gate" icon="shield">
-    Blocks direct `tool/call` invocations that bypass the list filter — no sneaking past disabled flags
+    Blocks direct `tools/call`, `resources/read` and `prompts/get` that bypass the list filter — no sneaking past disabled flags
   </Card>
 </CardGroup>
 
@@ -47,7 +47,7 @@ npm install @frontmcp/plugin-feature-flags
   </Step>
 
   <Step title="Capability Filtering">
-    Capabilities with disabled flags are filtered out before reaching the client. An execution gate also blocks direct `tool/call` for disabled flags.
+    Capabilities with disabled flags are filtered out before reaching the client. Execution gates also block direct `tools/call`, `resources/read` and `prompts/get` for disabled flags, so a flag withholds the capability rather than merely hiding it from the menu.
   </Step>
 </Steps>
 
@@ -265,7 +265,7 @@ interface FeatureFlagAdapter {
 
 ## Annotating Capabilities
 
-Add `featureFlag` to any tool, resource, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses and blocked from direct invocation.
+Add `featureFlag` to any tool, resource, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses **and** refused on direct access -- `tools/call`, `resources/read` and `prompts/get` all check the flag before executing. A client that cached an earlier listing, or holds a URI from a previous session, gets an error rather than the capability.
 
 ### String Shorthand
 
