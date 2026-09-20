@@ -200,6 +200,7 @@ export {
   NoProviderIdError,
   TokenLeakDetectedError,
   JwtSecretRequiredError,
+  JwtSecretWeakError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,

@@ -13,6 +13,16 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
 interface ScopeWithTasks {
   tasks?: unknown;
+  dispose(): Promise<void>;
+}
+
+/** Scopes started by a test, disposed in afterEach so no cleanup timer leaks. */
+const startedScopes: ScopeWithTasks[] = [];
+
+function trackScopes(instance: { getScopes(): unknown[] }): ScopeWithTasks[] {
+  const scopes = instance.getScopes() as unknown as ScopeWithTasks[];
+  startedScopes.push(...scopes);
+  return scopes;
 }
 
 /**
@@ -31,6 +41,11 @@ function withEdgeRuntime<T>(run: () => Promise<T>): Promise<T> {
 }
 
 describe('Scope task initialization on an edge runtime (#538)', () => {
+  afterEach(async () => {
+    // A built scope's ProviderRegistry holds a session-cleanup interval.
+    await Promise.all(startedScopes.splice(0).map((scope) => scope.dispose()));
+  });
+
   it('serves without tasks when none were configured, instead of failing the whole scope', async () => {
     @App({ id: 'edge-tasks-default', name: 'edge-tasks-default' })
     class EdgeTasksDefaultApp {}
@@ -42,7 +57,7 @@ describe('Scope task initialization on an edge runtime (#538)', () => {
       }),
     );
 
-    const [scope] = instance.getScopes() as unknown as ScopeWithTasks[];
+    const [scope] = trackScopes(instance);
     expect(scope).toBeDefined();
     expect(scope.tasks).toBeUndefined();
   });
@@ -71,7 +86,7 @@ describe('Scope task initialization on an edge runtime (#538)', () => {
       apps: [NodeTasksDefaultApp],
     });
 
-    const [scope] = instance.getScopes() as unknown as ScopeWithTasks[];
+    const [scope] = trackScopes(instance);
     expect(scope.tasks).toBeDefined();
   });
 });

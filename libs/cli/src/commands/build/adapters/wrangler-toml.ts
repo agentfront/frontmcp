@@ -33,9 +33,12 @@ interface KeySpan {
 }
 
 /**
- * A real TOML table header (`[vars]`, `[[kv_namespaces]]`), not a line that
- * merely begins with `[` — a continuation line of a multi-line array does too,
- * and mistaking one for a section would cut the preamble short.
+ * A TOML table header (`[vars]`, `[[kv_namespaces]]`).
+ *
+ * A regex alone cannot decide this: an element of a multi-line array, such as a
+ * line reading `["a"]`, is shaped exactly like a header. Callers therefore only
+ * consult this while at bracket depth 0 — i.e. not inside an open value — which
+ * is what {@link countUnclosedBrackets} tracks.
  */
 const SECTION_HEADER = /^\[\[?[A-Za-z0-9_.\-"' ]+\]\]?\s*(#.*)?$/;
 
@@ -45,6 +48,32 @@ function isSectionHeader(line: string): boolean {
 
 function isComment(line: string): boolean {
   return line.trim().startsWith('#');
+}
+
+/**
+ * Net bracket delta for a line, ignoring brackets inside quoted strings and
+ * trailing comments. Used to tell "inside a multi-line value" from "at the top
+ * level", so an array element is never mistaken for a table header.
+ */
+function countUnclosedBrackets(line: string): number {
+  let depth = 0;
+  let quote: string | undefined;
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index];
+    if (quote) {
+      if (char === '\\' && quote === '"') index++;
+      else if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '#') break;
+    if (char === '[') depth++;
+    else if (char === ']') depth--;
+  }
+  return depth;
 }
 
 /** Extract every double- or single-quoted string in a TOML fragment, in order. */
@@ -70,8 +99,18 @@ function findManagedKeySpans(lines: string[]): { spans: Map<ManagedKey, KeySpan>
   const spans = new Map<ManagedKey, KeySpan>();
   let preambleEnd = lines.length;
 
+  // Tracks whether we are inside an unterminated multi-line value; a header can
+  // only appear at depth 0.
+  let openBrackets = 0;
+
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
+
+    if (openBrackets > 0) {
+      openBrackets += countUnclosedBrackets(line);
+      continue;
+    }
+
     if (isSectionHeader(line)) {
       preambleEnd = index;
       break;
@@ -79,10 +118,17 @@ function findManagedKeySpans(lines: string[]): { spans: Map<ManagedKey, KeySpan>
     if (isComment(line)) continue;
 
     const assignment = line.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/);
-    if (!assignment) continue;
+    if (!assignment) {
+      openBrackets += countUnclosedBrackets(line);
+      continue;
+    }
 
     const key = assignment[1] as ManagedKey;
-    if (!MANAGED_KEYS.includes(key)) continue;
+    if (!MANAGED_KEYS.includes(key)) {
+      // An unmanaged key may still open a multi-line value we must skip over.
+      openBrackets += countUnclosedBrackets(line);
+      continue;
+    }
 
     let rawValue = assignment[2];
     let end = index + 1;
@@ -144,7 +190,11 @@ export function renderWranglerToml(fields: ManagedWranglerFields): string {
  *   preserving the file's order, so a worker can never lose `nodejs_compat`.
  * - Everything else — sections, bindings, triggers, comments — is untouched.
  */
-export function mergeWranglerToml(existing: string, fields: ManagedWranglerFields): WranglerMergeResult {
+export function mergeWranglerToml(
+  existing: string,
+  fields: ManagedWranglerFields,
+  reconcileFlags: (declared: readonly string[]) => string[] = (declared) => [...declared],
+): WranglerMergeResult {
   const warnings: string[] = [];
   // Keep whatever line ending the file already uses so the build doesn't
   // rewrite every line of a CRLF checkout.
@@ -163,7 +213,10 @@ export function mergeWranglerToml(existing: string, fields: ManagedWranglerField
   const declaredFlags = spans.has('compatibility_flags')
     ? parseTomlStringArray(spans.get('compatibility_flags')!.rawValue)
     : [];
-  const mergedFlags = Array.from(new Set([...declaredFlags, ...fields.compatibilityFlags]));
+  // Run the union back through the adapter's reconciliation so a mutually
+  // exclusive pair declared in the FILE (not just in frontmcp.config) is still
+  // resolved — `wrangler deploy` rejects a config that carries both.
+  const mergedFlags = reconcileFlags(Array.from(new Set([...declaredFlags, ...fields.compatibilityFlags])));
 
   const replacements = new Map<ManagedKey, string>([['main', `main = "${fields.main}"`]]);
   if (!spans.has('name')) replacements.set('name', `name = "${fields.name}"`);

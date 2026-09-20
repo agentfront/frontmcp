@@ -80,8 +80,7 @@ export function createEdgeSessionDurableObject(
 
     async fetch(request: Request): Promise<Response> {
       bridgeEnv(this.#doEnv);
-      const sessionId =
-        request.headers.get(SESSION_ID_HEADER) ?? request.headers.get('mcp-session-id') ?? randomUUID();
+      const sessionId = request.headers.get(SESSION_ID_HEADER) ?? request.headers.get('mcp-session-id') ?? randomUUID();
 
       // Reset the memoized promise on failure so a transient init error doesn't
       // permanently brick this Durable Object instance — the next request retries.
@@ -98,7 +97,9 @@ export function createEdgeSessionDurableObject(
         this.#pair = await buildPersistentWebStandardMcp(scope, { sessionId });
       }
 
-      const response = await runHttpRequestFlowWeb(scope, request, { persistent: this.#pair });
+      // #536 — the DO's own bindings reach tools through the same request token
+      // the stateless path uses.
+      const response = await runHttpRequestFlowWeb(scope, request, { env: this.#doEnv, persistent: this.#pair });
       return (
         response ??
         new Response(JSON.stringify({ error: 'Not Found' }), {

@@ -16,9 +16,9 @@ import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
+import { JwtSecretRequiredError, SessionSecretRequiredError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
-import { JwtSecretRequiredError, SessionSecretRequiredError } from '../../errors';
 import { createWebFetchHandler, type WebFetchHandler } from '../web-fetch-handler';
 
 const echoInput = { message: z.string() };
@@ -129,9 +129,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
   });
 
   it('serves tools/list statelessly (fresh transport per request, no session)', async () => {
-    const res = await handler(
-      mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
-    );
+    const res = await handler(mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
 
     expect(res.status).toBe(200);
     const json = await readMcpResult<{ result?: { tools?: Array<{ name: string }> } }>(res);
@@ -321,5 +319,44 @@ describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
     const text = await res.text();
     expect(text).toBe('Internal Server Error');
     expect(text).not.toContain('hunter2');
+  });
+});
+
+/**
+ * Issue #546, second path. `SessionSecretRequiredError` is thrown inside the
+ * `http:request` flow, so `flowErrorToHttpOutput` maps it. `JwtSecretRequiredError`
+ * is thrown while the auth instance is CONSTRUCTED — i.e. out of the lazy scope
+ * build that `createFetchHandler` memoizes, before any flow exists. That path
+ * used to reject the handler promise, so the platform answered its own opaque
+ * 500 and the structured body never appeared.
+ */
+describe('createFetchHandler misconfiguration boundary (#546)', () => {
+  const ORIGINAL_NODE_ENV = process.env['NODE_ENV'];
+  const ORIGINAL_JWT_SECRET = process.env['JWT_SECRET'];
+
+  afterEach(() => {
+    if (ORIGINAL_NODE_ENV === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = ORIGINAL_NODE_ENV;
+    if (ORIGINAL_JWT_SECRET === undefined) delete process.env['JWT_SECRET'];
+    else process.env['JWT_SECRET'] = ORIGINAL_JWT_SECRET;
+  });
+
+  it('answers server_misconfigured when the scope build itself fails on a missing secret', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['JWT_SECRET'];
+
+    const handler = await FrontMcpInstance.createFetchHandler({
+      info: { name: 'lazy-misconfig', version: '1.0.0' },
+      apps: [WebFetchApp],
+      auth: { mode: 'local' },
+    } as never);
+
+    const res = await handler(mcpRequestAt('/', INITIALIZE));
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['error']).toBe('server_misconfigured');
+    expect(body['code']).toBe('JWT_SECRET_REQUIRED');
+    expect(body['message']).toContain('JWT_SECRET');
   });
 });

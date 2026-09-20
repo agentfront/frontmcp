@@ -36,7 +36,7 @@ Cloudflare Workers support is **experimental**. The Express-to-Workers adapter h
 ## Prerequisites
 
 - A Cloudflare account (https://dash.cloudflare.com)
-- Wrangler CLI installed: `npm install -g wrangler`
+- Wrangler — `frontmcp create --target cloudflare` adds it as a devDependency, so `npm run deploy` / `npm run dev:worker` use the project-local version. Invoke it directly as `npx wrangler` rather than installing it globally, so the pinned version is the one that runs.
 - A built FrontMCP project
 
 ## Step 1: Create a Cloudflare-targeted Project
@@ -45,7 +45,7 @@ Cloudflare Workers support is **experimental**. The Express-to-Workers adapter h
 npx frontmcp create my-app --target cloudflare
 ```
 
-This generates the project with a `wrangler.toml` and a deploy script (`npm run deploy` runs `wrangler deploy`).
+This generates the project with a `wrangler.toml`, `wrangler` as a devDependency, and `deploy` / `dev:worker` scripts that build first and then run the project-local `wrangler`.
 
 ## Step 2: Build for Cloudflare
 
@@ -57,12 +57,15 @@ This produces:
 
 ```text
 dist/cloudflare/
-  index.js       # Cloudflare Workers entry (CommonJS) — wraps your @FrontMcp server
-  main.js        # Your compiled server module (CommonJS)
+  index.js       # Cloudflare Workers entry (ES Module / Module Worker) — wraps your @FrontMcp server
+  main.js        # Your compiled server module (ES Module)
 wrangler.toml    # Wrangler configuration (managed keys reconciled on every build)
 ```
 
-Cloudflare Workers use CommonJS (not ESM). The build command sets `--module commonjs` automatically.
+The adapter emits a **Module Worker** (`export default { fetch }`), so the build
+compiles with `--module esnext`. The legacy CommonJS `module.exports` shape is
+read by Cloudflare as a Service Worker, where `nodejs_compat` cannot externalize
+Node builtins and the deploy fails — do not force CommonJS for this target.
 
 > **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true`, but it rewrites only the keys it manages. `main` is always overwritten (it has to track the build output); `name` and `compatibility_date` are written only when the file does not already declare them; `compatibility_flags` is merged. Hand-edited `[vars]`, `[[kv_namespaces]]`, `[[d1_databases]]`, `[triggers]` and comments survive every build. If `wrangler.toml` and `frontmcp.config` disagree on the worker name, the build keeps the file's value and warns instead of renaming your worker.
 
@@ -115,7 +118,7 @@ NODE_ENV = "production"
 Create the KV namespace via the dashboard or CLI:
 
 ```bash
-wrangler kv:namespace create FRONTMCP_KV
+npx wrangler kv:namespace create FRONTMCP_KV
 ```
 
 Copy the returned `id` into your `wrangler.toml`.
@@ -160,11 +163,11 @@ A value read at module-eval time — inside the `@FrontMcp({...})` argument itse
 | `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
 
 ```bash
-wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
-wrangler secret put JWT_SECRET           # openssl rand -hex 32
+npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
 
-Because `[vars]` reach `process.env`, `wrangler dev` sees the same `NODE_ENV=production` the deployment does, so a missing secret fails locally rather than only after a successful deploy.
+Because `[vars]` reach `process.env`, `npx wrangler dev` sees the same `NODE_ENV=production` the deployment does, so a missing secret fails locally rather than only after a successful deploy.
 
 ### Background tasks
 
@@ -174,10 +177,10 @@ Background tasks need a store that outlives a single request and is shared betwe
 
 ```bash
 # Preview deployment
-wrangler dev
+npx wrangler dev
 
 # Production deployment
-wrangler deploy
+npx wrangler deploy
 ```
 
 ### Custom Domain
@@ -248,8 +251,9 @@ class_name = "FrontMcpSession"
 [[migrations]]
 tag = "v1"
 new_classes = ["FrontMcpSession"]
-[vars]
-MCP_SESSION_SECRET = "..."   # required on production isolates; bridged into process.env
+# MCP_SESSION_SECRET is required on production isolates. Set it as a SECRET, not
+# a var — `[vars]` is committed plaintext:
+#   npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 ```
 
 One DO per session holds a persistent transport so the `GET` notification stream stays open and `tools/call` notifications reach it. It runs the **same `http:request` flow** (auth/session:verify/router/audit/metrics + hooks) as the stateless path — so transparent auth returns `401` + `WWW-Authenticate` on the worker too.
@@ -298,8 +302,8 @@ One DO per session holds a persistent transport so the `GET` notification stream
 
 **Deployment**
 
-- [ ] `wrangler dev` serves the MCP endpoint locally
-- [ ] `wrangler deploy` succeeds without errors
+- [ ] `npx wrangler dev` serves the MCP endpoint locally
+- [ ] `npx wrangler deploy` succeeds without errors
 - [ ] Health endpoint responds with 200
 
 **Runtime**

@@ -271,7 +271,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       if (routed) return withCors(routed, request);
     }
 
-    const rendered = await runHttpRequestFlowWeb(scope, request, { ctx });
+    const rendered = await runHttpRequestFlowWeb(scope, request, { ctx, env });
     // `next`/`handled`/no-output means no MCP handler claimed the request.
     return withCors(rendered ?? Response.json({ error: 'Not Found' }, { status: 404 }), request);
   };
@@ -288,10 +288,10 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 export async function runHttpRequestFlowWeb(
   scope: Scope,
   request: Request,
-  opts: { ctx?: FetchHandlerCtx; persistent?: WebStandardMcpPair } = {},
+  opts: { ctx?: FetchHandlerCtx; env?: unknown; persistent?: WebStandardMcpPair } = {},
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
-  const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent);
+  const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent, opts.env);
   let output: HttpOutput | undefined;
   try {
     output = (await scope.runFlow('http:request', {
@@ -341,6 +341,7 @@ async function toServerRequest(
   url: URL,
   ctx?: FetchHandlerCtx,
   persistent?: WebStandardMcpPair,
+  env?: unknown,
 ): Promise<ServerRequest> {
   const headers: Record<string, string> = {};
   request.headers.forEach((v, k) => {
@@ -392,6 +393,7 @@ async function toServerRequest(
   const tokenized = serverRequest as unknown as Record<PropertyKey, unknown>;
   tokenized[ServerRequestTokens.webRequest] = webRequest;
   tokenized[ServerRequestTokens.webCtx] = ctx;
+  tokenized[ServerRequestTokens.webEnv] = env;
   if (persistent) tokenized[ServerRequestTokens.webTransport] = persistent;
   return serverRequest;
 }
@@ -406,11 +408,34 @@ const MISCONFIGURATION_REMEDIES: Record<string, string> = {
   SESSION_SECRET_REQUIRED:
     'Set MCP_SESSION_SECRET in the deployment environment (e.g. `wrangler secret put MCP_SESSION_SECRET`). ' +
     'Session IDs are encrypted with it, and production refuses the development machine-id fallback.',
+  JWT_SECRET_INVALID:
+    'JWT_SECRET is present but too weak: HS256 requires at least 32 bytes (RFC 7518). ' +
+    'Replace it with `openssl rand -hex 32`.',
   JWT_SECRET_REQUIRED:
     'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
     'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
     'not survive a restart or verify across instances.',
 };
+
+/**
+ * Render a recognized configuration fault as a Web `Response`, or `undefined`
+ * when the error is not one.
+ *
+ * Exported because a missing secret can surface on two different paths: from
+ * inside the `http:request` flow (a `SessionSecretRequiredError` thrown during
+ * `session:verify`) or out of the lazy scope build that `createFetchHandler`
+ * memoizes, which happens BEFORE any flow exists (a `JwtSecretRequiredError`
+ * thrown while the auth instance is constructed). Both must answer the same
+ * structured body, so both go through here.
+ */
+export function misconfigurationResponse(error: unknown): Response | undefined {
+  const misconfiguration = findMisconfiguration(error);
+  if (!misconfiguration) return undefined;
+  return Response.json(
+    { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
+    { status: 500 },
+  );
+}
 
 /**
  * Recognize an error that carries one of the codes above, however deeply it is
@@ -443,11 +468,7 @@ function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
       kind: 'json',
       status: 500,
       contentType: 'application/json; charset=utf-8',
-      body: {
-        error: 'server_misconfigured',
-        code: misconfiguration.code,
-        message: misconfiguration.remedy,
-      },
+      body: { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
     };
   }
 

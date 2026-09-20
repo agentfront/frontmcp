@@ -99,8 +99,8 @@ compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 ```
 
 <Note>
-`nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load. The build always emits both.
-`nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env`; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` if you deliberately want `process.env` left empty.
+`nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load, so the build always emits it.
+`nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env` and is emitted **by default**; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to leave `process.env` empty. The opt-out always wins, so the two are never emitted together (`wrangler deploy` rejects a config carrying both).
 </Note>
 
 <Note>

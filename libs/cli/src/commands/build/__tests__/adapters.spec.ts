@@ -162,6 +162,19 @@ describe('Build Adapters', () => {
       expect(config).toContain('"nodejs_compat_populate_process_env"');
     });
 
+    it('drops the populate flag when the user lists BOTH conflicting flags', () => {
+      // wrangler deploy rejects a config carrying both, so the opt-out wins even
+      // when the user asks for both themselves.
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: {
+          compatibilityFlags: ['nodejs_compat_populate_process_env', 'nodejs_compat_do_not_populate_process_env'],
+        },
+      });
+      expect(config).toContain('"nodejs_compat_do_not_populate_process_env"');
+      expect(config).not.toContain('"nodejs_compat_populate_process_env"');
+    });
+
     it('respects an explicit opt-out rather than emitting two conflicting flags', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp', {
         target: 'cloudflare' as const,

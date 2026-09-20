@@ -90,6 +90,20 @@ export class JwtSecretRequiredError extends AuthInternalError {
 }
 
 /**
+ * Thrown when a JWT signing secret is present but too weak to use.
+ */
+export class JwtSecretWeakError extends AuthInternalError {
+  constructor(byteLength: number) {
+    super(
+      `JWT_SECRET is ${byteLength} bytes; HS256 requires at least 32 (RFC 7518 §3.2). ` +
+        'A shorter secret is guessable, and whoever guesses it can forge tokens for this server. ' +
+        'Generate one with `openssl rand -hex 32`.',
+      'JWT_SECRET_INVALID',
+    );
+  }
+}
+
+/**
  * Thrown when a credential provider is already registered.
  */
 export class CredentialProviderAlreadyRegisteredError extends AuthInternalError {

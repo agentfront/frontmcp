@@ -24,7 +24,12 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
-import { createWebFetchHandler, type FetchHandlerCtx, type WebFetchHandler } from '../transport/web-fetch-handler';
+import {
+  createWebFetchHandler,
+  misconfigurationResponse,
+  type FetchHandlerCtx,
+  type WebFetchHandler,
+} from '../transport/web-fetch-handler';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 
 /**
@@ -304,7 +309,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
             throw err;
           });
         }
-        inner = await building;
+        try {
+          inner = await building;
+        } catch (err) {
+          // #546 — a missing JWT_SECRET is thrown while the auth instance is
+          // constructed, i.e. before any flow exists to map it. Without this the
+          // handler promise rejects and the platform answers its own opaque 500,
+          // which is the very thing the structured body was added to replace.
+          const misconfigured = misconfigurationResponse(err);
+          if (misconfigured) return misconfigured;
+          throw err;
+        }
       }
       return inner(request, ctx, env);
     };

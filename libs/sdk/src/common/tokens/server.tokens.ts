@@ -24,6 +24,14 @@ interface ServerRequestTokenValue {
    */
   webCtx: { waitUntil?(promise: Promise<unknown>): void } | undefined;
   /**
+   * The Worker's bindings object — the second argument to `fetch`, carrying KV
+   * namespaces, D1 databases, R2 buckets, Durable Object namespaces and the
+   * `[vars]`/secrets. String values are also mirrored into `process.env` by the
+   * generated entry, but non-string bindings are only reachable here (#536).
+   * Web mode only; `undefined` on the Node/Express path.
+   */
+  webEnv: unknown;
+  /**
    * A persistent, session-bound MCP server + transport carried by a Durable
    * Object (stateful sessions). When present, the `handleWebFetch` stage handles
    * the request on THIS transport instead of creating a fresh per-request one —
@@ -47,5 +55,6 @@ export const ServerRequestTokens = {
   reinitialize: tokenFactory.meta('reinitialize'),
   webRequest: tokenFactory.meta('webRequest'),
   webCtx: tokenFactory.meta('webCtx'),
+  webEnv: tokenFactory.meta('webEnv'),
   webTransport: tokenFactory.meta('webTransport'),
 } satisfies RawMetadataShape<ServerRequestTokenValue>;

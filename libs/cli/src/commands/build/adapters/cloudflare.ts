@@ -30,19 +30,29 @@ const DEFAULT_WORKER_NAME = 'frontmcp-worker';
 
 const WORKER_MAIN = 'dist/cloudflare/index.js';
 
+/**
+ * Resolve the final flag list.
+ *
+ * `wrangler deploy` rejects a config carrying both the populate and the opt-out
+ * flag, so the opt-out always wins — including when the user lists both
+ * themselves, which the earlier "don't auto-add" guard did not cover.
+ */
+export function resolveCompatibilityFlags(declared: readonly string[]): string[] {
+  const optedOut = declared.includes(OPT_OUT_PROCESS_ENV_FLAG);
+  const flags = [REQUIRED_COMPATIBILITY_FLAG, ...declared];
+  if (!optedOut) flags.push(POPULATE_PROCESS_ENV_FLAG);
+  const deduped = Array.from(new Set(flags));
+  return optedOut ? deduped.filter((flag) => flag !== POPULATE_PROCESS_ENV_FLAG) : deduped;
+}
+
 function resolveManagedFields(deployment?: CloudflareDeployment): ManagedWranglerFields {
   const wrangler = deployment?.wrangler ?? {};
-  const declared = wrangler.compatibilityFlags ?? [];
-  const flags = [REQUIRED_COMPATIBILITY_FLAG, ...declared];
-  // Only add the process.env bridge when the user hasn't opted out; emitting
-  // both flags makes `wrangler deploy` reject the config outright.
-  if (!declared.includes(OPT_OUT_PROCESS_ENV_FLAG)) flags.push(POPULATE_PROCESS_ENV_FLAG);
 
   return {
     name: wrangler.name ?? DEFAULT_WORKER_NAME,
     main: WORKER_MAIN,
     compatibilityDate: wrangler.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-    compatibilityFlags: Array.from(new Set(flags)),
+    compatibilityFlags: resolveCompatibilityFlags(wrangler.compatibilityFlags ?? []),
   };
 }
 
@@ -230,7 +240,7 @@ export default {
   getConfig: (_cwd, deployment) => renderWranglerToml(resolveManagedFields(deployment as CloudflareDeployment)),
 
   mergeConfig: (existing, _cwd, deployment) =>
-    mergeWranglerToml(existing, resolveManagedFields(deployment as CloudflareDeployment)),
+    mergeWranglerToml(existing, resolveManagedFields(deployment as CloudflareDeployment), resolveCompatibilityFlags),
 
   configFileName: 'wrangler.toml',
 };

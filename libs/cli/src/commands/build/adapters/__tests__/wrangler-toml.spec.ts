@@ -179,6 +179,42 @@ crontabs = ["*/5 * * * *"]
     expect(content).toContain('  ["a"],');
   });
 
+  it('does not mistake a bare array element for a section header', () => {
+    // `["a"]` on its own line is shaped exactly like a table header; only the
+    // surrounding bracket depth distinguishes the two.
+    const nested = ['main = "x.js"', 'routes = [', '  ["a"]', ']', '', '[vars]', 'A = "1"', ''].join('\n');
+    const { content } = mergeWranglerToml(nested, MANAGED);
+
+    const lines = content.split('\n');
+    expect(lines.indexOf('name = "frontmcp-worker"')).toBeGreaterThan(lines.indexOf(']'));
+    expect(lines.indexOf('name = "frontmcp-worker"')).toBeLessThan(lines.indexOf('[vars]'));
+    expect(content).toContain('  ["a"]');
+    expect(content).toContain('A = "1"');
+  });
+
+  it('ignores brackets inside quoted values and comments when tracking depth', () => {
+    const tricky = ['main = "x.js"', 'note = "a [bracket] in a string"', '# a [comment] too', '', '[vars]', 'A = "1"', ''].join('\n');
+    const { content } = mergeWranglerToml(tricky, MANAGED);
+
+    const lines = content.split('\n');
+    expect(lines.indexOf('name = "frontmcp-worker"')).toBeLessThan(lines.indexOf('[vars]'));
+    expect(content).toContain('note = "a [bracket] in a string"');
+    expect(content).toContain('A = "1"');
+  });
+
+  it('applies the caller\u2019s flag reconciliation to flags declared in the file', () => {
+    const optedOut = 'main = "x.js"\ncompatibility_flags = ["nodejs_compat_do_not_populate_process_env"]\n';
+    const dropPopulate = (declared: readonly string[]): string[] =>
+      declared.includes('nodejs_compat_do_not_populate_process_env')
+        ? declared.filter((flag) => flag !== 'nodejs_compat_populate_process_env')
+        : [...declared];
+
+    const { content } = mergeWranglerToml(optedOut, MANAGED, dropPopulate);
+
+    expect(content).toContain('"nodejs_compat_do_not_populate_process_env"');
+    expect(content).not.toContain('"nodejs_compat_populate_process_env"');
+  });
+
   it('is idempotent — merging its own output changes nothing', () => {
     const first = mergeWranglerToml(SCAFFOLDED, MANAGED).content;
     const second = mergeWranglerToml(first, MANAGED).content;
