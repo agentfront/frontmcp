@@ -314,6 +314,21 @@ FrontMCP's secure defaults:
   IPv6 ULA/link-local), and hostnames are **DNS-resolved** and re-checked.
 - **`file://` is blocked** (prevents local file reads).
 
+### Tool-execution redirects (a separate phase)
+
+The rules above cover _loading the spec_. **Calling** a generated tool is a different fetch,
+and it never follows redirects either (**GHSA-qh67-4345-cw2q**): the adapter sets
+`redirect: 'manual'` and refuses any 3xx with `OPENAPI_REDIRECT_NOT_FOLLOWED`.
+
+Following one would send the request to a destination the _upstream_ chose. Only `baseUrl` is
+validated, and only for its scheme, so a 3xx is an unvalidated hop -- including to an internal
+or cloud-metadata address. `fetch` also strips only `Authorization` and `Cookie` across
+origins and **forwards custom headers**, which is exactly how this adapter injects API keys
+(`security.headers`, `additionalHeaders`), so following would disclose the backend credential
+to the redirect target.
+
+If an operation legitimately redirects, point `baseUrl` at the final host instead.
+
 Configure via `loadOptions.refResolution` (applies to the spec URL **and** `$ref`s):
 
 ```typescript

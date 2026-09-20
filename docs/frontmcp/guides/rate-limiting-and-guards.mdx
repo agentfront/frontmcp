@@ -252,6 +252,22 @@ everyone else.
 
 Block malicious IPs and restrict access to known networks.
 
+The filter runs at the start of the request pipeline, before the rate-limit check and before
+authentication. A rejected client gets HTTP 403 with JSON-RPC error `-32001`. An `ipFilter`
+block is enforced on its own -- it does not need a `global` rate limit configured alongside it.
+
+<Warning>
+  The client IP comes from the socket peer unless a trusted proxy is declared. Behind a load
+  balancer, set `FRONTMCP_TRUST_PROXY=true` (and `FRONTMCP_TRUSTED_PROXY_DEPTH` for more than
+  one hop) or every request will appear to come from the balancer and your lists will match
+  the wrong address.
+
+Note that `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` are accepted by the schema
+but are **not** read: client-IP extraction happens in the SDK context layer, before guard
+configuration is reachable. Use the environment variables.
+
+</Warning>
+
 <Steps>
   <Step title="Configure IP filtering">
     ```typescript

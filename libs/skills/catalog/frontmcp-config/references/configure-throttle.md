@@ -112,6 +112,15 @@ class ExpensiveQueryTool extends ToolContext {
 }
 ```
 
+## `ipFilter` is enforced on every request
+
+`allowList`, `denyList` and `defaultAction` are checked at the start of the request pipeline,
+before the rate-limit check and before authentication. A rejected client gets HTTP 403 with
+JSON-RPC error `-32001`.
+
+An `ipFilter` block works on its own -- you do not need to configure a `global` rate limit
+alongside it for the filter to run.
+
 ## `partitionBy: 'ip'` needs a declared trusted proxy
 
 The client IP comes from the socket peer address. `X-Forwarded-For` and `X-Real-IP` are set
@@ -243,13 +252,13 @@ done
 
 ## Troubleshooting
 
-| Problem                                         | Cause                                                                    | Solution                                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                     | Configure `storage: { type: 'redis' }` in the throttle block to share counters  |
-| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'` |
-| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time  | Increase the global default or set a per-tool `timeout.executeMs` override      |
-| `X-Forwarded-For` header ignored                | `ipFilter.trustProxy` not enabled or `trustedProxyDepth` too low         | Set `trustProxy: true` and adjust `trustedProxyDepth` to match your proxy chain |
-| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window   | The window is fixed; all counters reset at the end of each `windowMs` interval  |
+| Problem                                         | Cause                                                                                                                                                                                                     | Solution                                                                                             |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                       |
+| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries                                                                                                                                  | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'`                      |
+| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                           |
+| `X-Forwarded-For` header ignored                | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead |
+| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                       |
 
 ## Examples
 

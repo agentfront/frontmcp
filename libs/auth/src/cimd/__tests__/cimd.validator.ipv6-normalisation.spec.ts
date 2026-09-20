@@ -12,7 +12,7 @@
  * loopback `0:0:0:0:0:0:0:1` slipped through the same way, because the loopback branch
  * compared against the literal string `::1`.
  */
-import { checkSsrfProtection } from '../cimd.validator';
+import { checkSsrfProtection, resolveAndCheckHostname } from '../cimd.validator';
 
 /** Addresses that must all be refused; each is an alternate spelling of a blocked one. */
 const BLOCKED = [
@@ -47,6 +47,26 @@ describe('checkSsrfProtection — IPv6 normalisation (GHSA-xx4w-33pp-cmw4)', () 
   });
 
   it('refuses a bracketed hex-form loopback', () => {
+    // `new URL('https://[::ffff:127.0.0.1]/x').hostname` canonicalises to the bracketed hex
+    // form, so this is the shape the validator actually receives.
     expect(checkSsrfProtection('[::ffff:7f00:1]').allowed).toBe(false);
+  });
+
+  describe('the per-fetch hostname check', () => {
+    // resolveAndCheckHostname returns early for any literal IP. That early return is only
+    // safe because checkSsrfProtection runs first — so the second layer has to be shown to
+    // refuse these too, not just the first.
+    it.each(['::ffff:7f00:1', '[::ffff:7f00:1]', '::ffff:a9fe:a9fe', '0:0:0:0:0:0:0:1'])(
+      'refuses the literal %s without reaching DNS',
+      async (ip) => {
+        await expect(resolveAndCheckHostname(ip)).resolves.toEqual(expect.objectContaining({ allowed: false }));
+      },
+    );
+
+    it('still allows a public literal', async () => {
+      await expect(resolveAndCheckHostname('::ffff:808:808')).resolves.toEqual(
+        expect.objectContaining({ allowed: true }),
+      );
+    });
   });
 });
