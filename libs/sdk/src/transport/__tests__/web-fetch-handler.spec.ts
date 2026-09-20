@@ -16,10 +16,11 @@ import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
+import { ServerRequestTokens } from '../../common/tokens/server.tokens';
 import { JwtSecretRequiredError, SessionSecretRequiredError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
-import { createWebFetchHandler, type WebFetchHandler } from '../web-fetch-handler';
+import { createWebFetchHandler, runMatchingHttpFlowWeb, type WebFetchHandler } from '../web-fetch-handler';
 
 const echoInput = { message: z.string() };
 
@@ -358,5 +359,51 @@ describe('createFetchHandler misconfiguration boundary (#546)', () => {
     expect(body['error']).toBe('server_misconfigured');
     expect(body['code']).toBe('JWT_SECRET_REQUIRED');
     expect(body['message']).toContain('JWT_SECRET');
+  });
+});
+
+describe('runMatchingHttpFlowWeb worker context (#536)', () => {
+  /**
+   * Non-entry-path requests (auth, well-known, OAuth) are dispatched through
+   * `runMatchingHttpFlowWeb`, not `http:request`. It used to build the
+   * `ServerRequest` without `ctx`/`env`, so exactly the flows most likely to
+   * need a KV-backed store saw `undefined` bindings while `http:request` had
+   * them.
+   */
+  function scopeCapturingServerRequest(): {
+    scope: Scope;
+    captured: () => Record<symbol, unknown> | undefined;
+  } {
+    let seen: Record<symbol, unknown> | undefined;
+    const scope = {
+      findHttpFlowName: async (serverRequest: Record<symbol, unknown>) => {
+        seen = serverRequest;
+        return 'well-known.oauth-protected-resource';
+      },
+      runFlow: async () => undefined,
+    } as unknown as Scope;
+    return { scope, captured: () => seen };
+  }
+
+  it('carries the worker ctx and env into the dispatched flow request', async () => {
+    const { scope, captured } = scopeCapturingServerRequest();
+    const ctx = { waitUntil: () => undefined };
+    const env = { MY_KV: { get: async () => null } };
+
+    await runMatchingHttpFlowWeb(scope, new Request('https://worker.example.com/.well-known/x'), { ctx, env });
+
+    const serverRequest = captured();
+    expect(serverRequest?.[ServerRequestTokens.webCtx]).toBe(ctx);
+    expect(serverRequest?.[ServerRequestTokens.webEnv]).toBe(env);
+  });
+
+  it('leaves both undefined when the caller has neither', async () => {
+    const { scope, captured } = scopeCapturingServerRequest();
+
+    await runMatchingHttpFlowWeb(scope, new Request('https://worker.example.com/.well-known/x'));
+
+    const serverRequest = captured();
+    expect(serverRequest?.[ServerRequestTokens.webCtx]).toBeUndefined();
+    expect(serverRequest?.[ServerRequestTokens.webEnv]).toBeUndefined();
   });
 });

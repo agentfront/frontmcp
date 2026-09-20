@@ -193,7 +193,7 @@ npx wrangler deploy
 Configure a custom domain in the Cloudflare dashboard under **Workers & Pages > your worker > Settings > Domains & Routes**, or via wrangler:
 
 ```bash
-wrangler domains add mcp.example.com
+npx wrangler domains add mcp.example.com
 ```
 
 ## Step 6: Verify
@@ -277,7 +277,7 @@ One DO per session holds a persistent transport so the `GET` notification stream
 | ----------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
 | Worker exceeds size limit     | Too many bundled dependencies                  | Review dependencies and remove unused packages to reduce bundle size      |
 | Module format errors          | Worker bundled as a Service Worker             | FrontMCP Cloudflare builds emit an **ES Module Worker** (`export default { fetch }`); `nodejs_compat` requires it. Don't force `type`/CommonJS |
-| KV binding errors             | Namespace not created or binding name mismatch | Run `wrangler kv:namespace create` and copy the `id` into `wrangler.toml` |
+| KV binding errors             | Namespace not created or binding name mismatch | Run `npx wrangler kv:namespace create` and copy the `id` into `wrangler.toml` |
 | Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects              |
 | CORS failures on MCP endpoint | Missing CORS headers in Worker response        | `@frontmcp/edge`: pass `cors: { origin: true }` to `createEdgeMcp({...})` (transport-level CORS) |
 

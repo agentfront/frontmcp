@@ -163,8 +163,11 @@ A worker with `NODE_ENV = "production"` in `[vars]` is a production deployment, 
 | `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
 
 ```bash
-wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
-wrangler secret put JWT_SECRET           # openssl rand -hex 32
+npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+
+# Only when auth.mode is `local` or `remote`; a `public` or `static` worker
+# never mints tokens and does not read this.
+npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
 
 Because `[vars]` now reach `process.env`, `wrangler dev` sees the same `NODE_ENV=production` your deployment does — so a missing secret fails locally instead of only after a successful deploy.

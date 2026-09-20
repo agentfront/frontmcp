@@ -252,7 +252,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     // matching flow here through the SAME flow pipeline (hookable) instead of
     // hand-rolling discovery. Trailing slashes are normalized.
     if (!entryPaths.has(normalizePath(url.pathname))) {
-      const authResponse = await runMatchingHttpFlowWeb(scope, request);
+      const authResponse = await runMatchingHttpFlowWeb(scope, request, { ctx, env });
       if (authResponse) return withCors(authResponse, request);
       return withCors(Response.json({ error: 'Not Found', entryPaths: [...entryPaths] }, { status: 404 }), request);
     }
@@ -310,10 +310,19 @@ export async function runHttpRequestFlowWeb(
  * Mirrors the Express host's route dispatch for runtimes with no middleware
  * server (Cloudflare Worker / web-fetch). Returns the rendered Web `Response`,
  * or `undefined` when no flow matches (caller 404s).
+ *
+ * Carries the worker `ctx` and `env` for the same reason `http:request` does:
+ * an auth or OAuth flow on a Worker reaches its bindings only through
+ * `ServerRequestTokens.webEnv`, and dropping them here would leave exactly the
+ * flows that need a KV-backed store without one.
  */
-export async function runMatchingHttpFlowWeb(scope: Scope, request: Request): Promise<Response | undefined> {
+export async function runMatchingHttpFlowWeb(
+  scope: Scope,
+  request: Request,
+  opts: { ctx?: FetchHandlerCtx; env?: unknown } = {},
+): Promise<Response | undefined> {
   const url = new URL(request.url);
-  const serverRequest = await toServerRequest(request, url);
+  const serverRequest = await toServerRequest(request, url, opts.ctx, undefined, opts.env);
   const flowName = await scope.findHttpFlowName(serverRequest);
   if (!flowName) return undefined;
   let output: HttpOutput | undefined;
