@@ -48,8 +48,9 @@ npm install @frontmcp/plugin-cache
 </Steps>
 
 <Info>
-  Cache entries are keyed using a **deterministic hash** of the tool's validated input. The same input always produces
-  the same cache key.
+  Cache entries are keyed using a **deterministic hash** of the tool name, the tool's validated input, and — by default
+  — the **caller's identity**. Two calls share an entry only when all three match, so one user's response is never
+  served to another. See `keyByIdentity` below to opt out for data that is identical for every caller.
 </Info>
 
 ---

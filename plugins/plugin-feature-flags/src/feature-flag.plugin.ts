@@ -359,7 +359,12 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const key = typeof ref === 'string' ? ref : ref.key;
     const adapterResult = flagResults.get(key);
     const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
-    if (adapterResult === true) return true;
+
+    // An explicit answer from the adapter wins, `false` included. `defaultValue` is for an
+    // answer we do not have — an unknown key or an unavailable adapter. Letting it override
+    // an explicit `false` made listing disagree with `gateEntryExecution`, which honours the
+    // adapter: the entry appeared in the list and was then refused on direct access.
+    if (adapterResult !== undefined) return adapterResult;
     return defaultValue;
   }
 }

@@ -79,6 +79,30 @@ describe('FeatureFlagPlugin — direct access gates (GHSA-gf7p-j3hr-h5h4)', () =
     });
   });
 
+  describe('listing agrees with the execution gate', () => {
+    it('hides an entry the adapter disables, even when the ref has defaultValue: true', async () => {
+      // defaultValue is for an answer we do not have. Letting it override an explicit `false`
+      // listed the entry and then refused it on access.
+      (mockAdapter.evaluateFlags as jest.Mock).mockResolvedValue(new Map([['flag-a', false]]));
+      const tools = [{ tool: { metadata: { name: 'a', featureFlag: { key: 'flag-a', defaultValue: true } } } }];
+      const flowCtx = { state: { tools, set: jest.fn() } } as never;
+
+      await plugin.filterListTools(flowCtx);
+
+      expect((flowCtx as unknown as { state: { set: jest.Mock } }).state.set).toHaveBeenCalledWith('tools', []);
+    });
+
+    it('still applies defaultValue when the adapter returned no answer for the key', async () => {
+      (mockAdapter.evaluateFlags as jest.Mock).mockResolvedValue(new Map());
+      const tools = [{ tool: { metadata: { name: 'a', featureFlag: { key: 'flag-a', defaultValue: true } } } }];
+      const flowCtx = { state: { tools, set: jest.fn() } } as never;
+
+      await plugin.filterListTools(flowCtx);
+
+      expect((flowCtx as unknown as { state: { set: jest.Mock } }).state.set).toHaveBeenCalledWith('tools', tools);
+    });
+  });
+
   describe('gatePromptGet', () => {
     it('refuses a prompt whose flag is off', async () => {
       (mockAdapter.isEnabled as jest.Mock).mockResolvedValue(false);

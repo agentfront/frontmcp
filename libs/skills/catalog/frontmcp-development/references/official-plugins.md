@@ -525,7 +525,11 @@ The header name is configurable via `bypassHeader` in the plugin options. Defaul
 
 ### Cache Key
 
-The cache key is computed from the tool name and the serialized input arguments. Two calls with identical tool name and arguments return the same cached result.
+The cache key is a SHA-256 digest of the tool name, the serialized input arguments, and -- by default -- the caller's
+identity. Two calls share an entry only when all three match.
+
+Set `keyByIdentity: false` to drop identity from the key, and only for output that is identical for every caller. See
+"Cache keys include the caller's identity" above.
 
 ---
 
