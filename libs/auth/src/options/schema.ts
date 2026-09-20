@@ -6,6 +6,7 @@ import { z } from '@frontmcp/lazy-zod';
 import type { AuthOptionsInterface } from './interfaces';
 import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
 import { publicAuthOptionsSchema } from './public.schema';
+import { staticAuthOptionsSchema } from './static.schema';
 import { transparentAuthOptionsSchema } from './transparent.schema';
 
 // ============================================
@@ -14,6 +15,7 @@ import { transparentAuthOptionsSchema } from './transparent.schema';
 
 export const authOptionsSchema = z.union([
   publicAuthOptionsSchema,
+  staticAuthOptionsSchema,
   transparentAuthOptionsSchema,
   localAuthSchema,
   remoteAuthSchema,
@@ -30,4 +32,4 @@ export type AuthOptions = z.infer<typeof authOptionsSchema>;
  * Uses explicit interface for better IDE autocomplete.
  */
 export type AuthOptionsInput = AuthOptionsInterface;
-export type AuthMode = 'public' | 'transparent' | 'local' | 'remote';
+export type AuthMode = 'public' | 'static' | 'transparent' | 'local' | 'remote';

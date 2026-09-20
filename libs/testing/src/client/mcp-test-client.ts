@@ -3,47 +3,48 @@
  * @description Main MCP Test Client implementation for E2E testing
  */
 
+import {
+  DefaultInterceptorChain,
+  mockResponse,
+  type InterceptorChain,
+  type MockDefinition,
+  type MockHandle,
+  type RequestInterceptor,
+  type ResponseInterceptor,
+} from '../interceptor';
+import { StreamableHttpTransport } from '../transport/streamable-http.transport';
+import type { McpTransport } from '../transport/transport.interface';
+import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type {
-  McpTestClientConfig,
-  McpResponse,
-  TestTransportType,
-  TestClientCapabilities,
-  ToolResultWrapper,
-  ResourceContentWrapper,
-  PromptResultWrapper,
+  AuthState,
+  CallToolResult,
+  ElicitationHandler,
+  GetPromptResult,
+  InitializeResult,
+  JSONRPCResponse,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  ListToolsResult,
   LogEntry,
-  RequestTrace,
+  McpErrorInfo,
+  McpResponse,
+  McpTestClientConfig,
   NotificationEntry,
   ProgressUpdate,
-  SessionInfo,
-  AuthState,
-  McpErrorInfo,
-  InitializeResult,
-  ListToolsResult,
-  CallToolResult,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListResourceTemplatesResult,
-  ListPromptsResult,
-  GetPromptResult,
-  Tool,
-  Resource,
-  ResourceTemplate,
   Prompt,
-  JSONRPCResponse,
-  ElicitationHandler,
+  PromptResultWrapper,
+  ReadResourceResult,
+  RequestTrace,
+  Resource,
+  ResourceContentWrapper,
+  ResourceTemplate,
+  SessionInfo,
+  TestClientCapabilities,
+  TestTransportType,
+  Tool,
+  ToolResultWrapper,
 } from './mcp-test-client.types';
-import { McpTestClientBuilder } from './mcp-test-client.builder';
-import type { McpTransport } from '../transport/transport.interface';
-import { StreamableHttpTransport } from '../transport/streamable-http.transport';
-import type {
-  InterceptorChain,
-  MockDefinition,
-  MockHandle,
-  RequestInterceptor,
-  ResponseInterceptor,
-} from '../interceptor';
-import { DefaultInterceptorChain, mockResponse } from '../interceptor';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -60,15 +61,43 @@ const DEFAULT_CLIENT_INFO = {
 // MAIN CLIENT CLASS
 // ═══════════════════════════════════════════════════════════════════
 
+/**
+ * Pull `entryPaths` out of a 404 body the server produced.
+ *
+ * The web-fetch host answers an unmatched path with
+ * `{"error":"Not Found","entryPaths":["/mcp"]}`, and the transport passes that
+ * body through as the JSON-RPC error's `data`. It arrives as a string, so parse
+ * defensively — any other body simply yields `undefined` (issue #543).
+ */
+function extractEntryPaths(data: unknown): string[] | undefined {
+  let payload: unknown = data;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!payload || typeof payload !== 'object') return undefined;
+  const paths = (payload as { entryPaths?: unknown }).entryPaths;
+  if (!Array.isArray(paths)) return undefined;
+  const strings = paths.filter((p): p is string => typeof p === 'string');
+  return strings.length > 0 ? strings : undefined;
+}
+
 export class McpTestClient {
   // Platform, capabilities, and queryParams are optional - only set when needed
-  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>> &
-    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>;
+  private readonly config: Required<
+    Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>
+  > &
+    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>;
   private transport: McpTransport | null = null;
   private initResult: InitializeResult | null = null;
   private requestIdCounter = 0;
   private _lastRequestId: string | number = 0;
   private _sessionId: string | undefined;
+  /** #543 — discovery is attempted at most once per connect. */
+  private triedDiscoveredEntryPath = false;
   private _sessionInfo: SessionInfo | null = null;
   private _authState: AuthState = { isAnonymous: true, scopes: [] };
 
@@ -91,6 +120,7 @@ export class McpTestClient {
   constructor(config: McpTestClientConfig) {
     this.config = {
       baseUrl: config.baseUrl,
+      entryPath: config.entryPath,
       transport: config.transport ?? 'streamable-http',
       auth: config.auth ?? {},
       publicMode: config.publicMode ?? false,
@@ -136,6 +166,10 @@ export class McpTestClient {
   async connect(): Promise<InitializeResult> {
     this.log('debug', `Connecting to ${this.config.baseUrl}...`);
 
+    // Discovery is once per CONNECT, not once per client: a reconnect may face a
+    // server that now serves a different path.
+    this.triedDiscoveredEntryPath = false;
+
     // Create transport based on config
     this.transport = this.createTransport();
 
@@ -146,6 +180,7 @@ export class McpTestClient {
     const maxRetries = 3;
     const retryDelayMs = 500;
     let lastError: string | undefined;
+    let reportedEntryPaths: string[] | undefined;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const initResponse = await this.initialize();
@@ -156,6 +191,22 @@ export class McpTestClient {
       }
 
       lastError = initResponse.error?.message ?? 'Unknown error';
+      reportedEntryPaths = extractEntryPaths(initResponse.error?.data) ?? reportedEntryPaths;
+
+      // Issue #543 — a server with a non-default `http.entryPath` answers the
+      // root with `{"error":"Not Found","entryPaths":["/mcp"]}`. Retrying at the
+      // path it names turns a whole-suite failure into a connection, and is
+      // strictly better than surfacing a bare HTTP 404 from client internals.
+      if (reportedEntryPaths?.length === 1 && !this.triedDiscoveredEntryPath) {
+        this.triedDiscoveredEntryPath = true;
+        const discovered = reportedEntryPaths[0];
+        this.log('info', `Server serves MCP at ${discovered}; reconnecting there (configured: ${this.mcpPathLabel()})`);
+        this.config.entryPath = discovered;
+        await this.transport.close();
+        this.transport = this.createTransport();
+        await this.transport.connect();
+        continue;
+      }
 
       if (attempt < maxRetries) {
         this.log('debug', `MCP init attempt ${attempt} failed (${lastError}), retrying in ${retryDelayMs}ms...`);
@@ -164,7 +215,14 @@ export class McpTestClient {
     }
 
     if (!this.initResult) {
-      throw new Error(`Failed to initialize MCP connection after ${maxRetries} attempts: ${lastError}`);
+      const served = reportedEntryPaths?.length
+        ? ` The server reports it serves MCP at ${reportedEntryPaths.join(', ')}; ` +
+          `set \`entryPath\` in test.use() (or \`http.entryPath\` on the server) to match.`
+        : '';
+      throw new Error(
+        `Failed to initialize MCP connection to ${this.config.baseUrl}${this.mcpPathLabel()} ` +
+          `after ${maxRetries} attempts: ${lastError}.${served}`,
+      );
     }
     this._sessionId = this.transport.getSessionId();
     this._sessionInfo = {
@@ -886,6 +944,12 @@ export class McpTestClient {
   // PRIVATE: TRANSPORT & REQUEST HELPERS
   // ═══════════════════════════════════════════════════════════════════
 
+  /** The MCP path this client is currently pointed at, for log and error text. */
+  private mcpPathLabel(): string {
+    const entry = (this.config.entryPath ?? '').replace(/^\/+|\/+$/g, '');
+    return entry ? `/${entry}` : '/';
+  }
+
   private createTransport(): McpTransport {
     // Build URL with query params if provided using URL API for proper handling
     let baseUrl = this.config.baseUrl;
@@ -901,6 +965,7 @@ export class McpTestClient {
       case 'streamable-http':
         return new StreamableHttpTransport({
           baseUrl,
+          entryPath: this.config.entryPath,
           timeout: this.config.timeout,
           auth: this.config.auth,
           publicMode: this.config.publicMode,

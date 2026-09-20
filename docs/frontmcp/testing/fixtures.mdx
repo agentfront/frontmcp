@@ -42,6 +42,7 @@ test.use({
   logLevel: 'debug',            // Log level
   env: { API_KEY: 'test' },    // Environment variables
   startupTimeout: 30000,        // Startup timeout (ms)
+  entryPath: '/mcp',            // Where the server mounts MCP (default: '/')
 });
 
 test('my test', async ({ mcp }) => {
@@ -60,7 +61,41 @@ test('my test', async ({ mcp }) => {
 | `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                                   |
 | `env`            | `Record<string, string>`                 | —                   | Environment variables                              |
 | `startupTimeout` | `number`                                 | `30000`             | Server startup timeout in ms                       |
-| `baseUrl`        | `string`                                 | —                   | Connect to existing server instead of starting one |
+| `baseUrl`        | `string`                                 | —                   | Connect to an existing server. May also be combined with `server` to override the booted server's URL. |
+| `entryPath`      | `string`                                 | `'/'`               | Where the server mounts MCP (`http.entryPath`)     |
+
+### Servers that serve MCP somewhere other than `/`
+
+A server configured with `http: { entryPath: '/mcp' }` serves MCP at `/mcp`, and the test client follows it:
+
+```ts
+test.use({
+  server: './src/main.ts',
+  entryPath: '/mcp',
+});
+```
+
+You usually do not need to set this. When the client's first request 404s and the server reports where it does serve MCP — the web-fetch host answers `{"error":"Not Found","entryPaths":["/mcp"]}` — the client reconnects there on its own. If it still cannot connect, the error names the paths the server reported instead of a bare `HTTP 404`.
+
+`entryPath` applies to the MCP endpoint only. OAuth and discovery endpoints stay at the server root, which is where the server mounts them.
+
+### Conditional skipping
+
+`test.skip(condition, reason)` skips every test registered after it in the enclosing block — the Playwright idiom, and the natural way to gate a suite on credentials:
+
+```ts
+const hasCredentials = Boolean(process.env.TWILIO_ACCOUNT_SID);
+
+test.describe('against the live Twilio API', () => {
+  test.skip(!hasCredentials, 'credentials not set');
+
+  test('looks up a carrier', async ({ mcp }) => {
+    // ...
+  });
+});
+```
+
+Put the call at the top of the block you want to gate. A nested `test.describe` inherits an outer skip. The `(name, fn)` form still skips a single named test.
 
 ---
 

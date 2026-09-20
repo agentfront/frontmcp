@@ -68,6 +68,8 @@ export interface ParsedArgs {
   verbose?: boolean;
   timeout?: number;
   coverage?: boolean;
+  // Test --no-env flag (skip .env / .env.local loading)
+  env?: boolean;
   // Build --target flag (unified build target)
   buildTarget?: BuildTarget;
   // Build --js flag (cli target: produce JS bundle instead of SEA binary)
@@ -138,6 +140,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const parsed = parseInt(argv[++i], 10);
       out.timeout = Number.isNaN(parsed) ? undefined : parsed;
     } else if (a === '--coverage' || a === '-c') out.coverage = true;
+    else if (a === '--no-env') out.env = false;
     // Create command flags
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--target') {

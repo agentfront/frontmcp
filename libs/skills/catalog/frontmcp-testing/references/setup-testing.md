@@ -380,6 +380,39 @@ test('unauthenticated call is rejected', async ({ mcp }) => {
 });
 ```
 
+### Servers that serve MCP somewhere other than `/`
+
+A server configured with `http: { entryPath: '/mcp' }` serves MCP at `/mcp`, and the test client follows it:
+
+```typescript
+test.use({
+  server: './src/main.ts',
+  entryPath: '/mcp',
+});
+```
+
+You usually do not need to set this: when the client's first request 404s and the server reports where it does serve MCP (`{"error":"Not Found","entryPaths":["/mcp"]}`), the client reconnects there on its own, and a failure names the reported paths instead of a bare `HTTP 404`. `entryPath` applies to the MCP endpoint only — OAuth and discovery endpoints stay at the server root.
+
+`baseUrl` may also be supplied alongside `server` to override the booted server's own URL (for a proxy, or a different host than it binds).
+
+### Gating a block on credentials
+
+`test.skip(condition, reason)` is the Playwright signature and skips every test registered after it in the enclosing block:
+
+```typescript
+const hasCredentials = Boolean(process.env.TWILIO_ACCOUNT_SID);
+
+test.describe('against the live API', () => {
+  test.skip(!hasCredentials, 'credentials not set');
+
+  test('looks up a carrier', async ({ mcp }) => {
+    // ...
+  });
+});
+```
+
+A nested `test.describe` inherits an outer skip. The `(name, fn)` form still skips a single named test. `frontmcp test` loads `.env` / `.env.local`, so a credential in `.env` reaches the condition above.
+
 ## Custom MCP Matchers
 
 `@frontmcp/testing` provides Jest matchers tailored for MCP responses. Import `expect` from `@frontmcp/testing` instead of from Jest:

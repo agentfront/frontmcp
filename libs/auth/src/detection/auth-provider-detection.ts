@@ -16,7 +16,7 @@ import { isOrchestratedMode, isOrchestratedRemote, isPublicMode, isTransparentMo
 export const detectedAuthProviderSchema = z.object({
   id: z.string(),
   providerUrl: z.string().optional(),
-  mode: z.enum(['public', 'transparent', 'local', 'remote']),
+  mode: z.enum(['public', 'static', 'transparent', 'local', 'remote']),
   appIds: z.array(z.string()),
   scopes: z.array(z.string()),
   isParentProvider: z.boolean(),

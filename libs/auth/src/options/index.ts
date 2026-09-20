@@ -26,6 +26,7 @@ export type {
   LocalDcrConfig,
   LocalDcrClient,
   PublicAuthOptionsInterface,
+  StaticAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   LocalAuthOptionsInterface,
   RemoteAuthOptionsInterface,
@@ -125,6 +126,12 @@ export { publicAuthOptionsSchema } from './public.schema';
 export type { PublicAuthOptions, PublicAuthOptionsInput } from './public.schema';
 
 // ============================================
+// STATIC MODE SCHEMA (#544)
+// ============================================
+export { staticAuthOptionsSchema } from './static.schema';
+export type { StaticAuthOptions, StaticAuthOptionsInput } from './static.schema';
+
+// ============================================
 // TRANSPARENT MODE SCHEMA
 // ============================================
 export { transparentAuthOptionsSchema } from './transparent.schema';
@@ -177,6 +184,7 @@ export type { AppAuthOptions, AppAuthOptionsInput } from './app-auth.schema';
 export {
   parseAuthOptions,
   isPublicMode,
+  isStaticMode,
   isTransparentMode,
   isLocalMode,
   isRemoteMode,

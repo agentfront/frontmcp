@@ -142,8 +142,15 @@ export interface TestClientCapabilities {
 // ═══════════════════════════════════════════════════════════════════
 
 export interface McpTestClientConfig {
-  /** Base URL of the MCP server */
+  /** Base URL of the MCP server (its root, not the MCP endpoint). */
   baseUrl: string;
+  /**
+   * The server's `http.entryPath` — where MCP itself is mounted (`/mcp`, …).
+   * Defaults to the server root. Applied to the MCP endpoint only; OAuth and
+   * discovery endpoints stay at the root, which is where the server mounts
+   * them (issue #543).
+   */
+  entryPath?: string;
   /** Transport type to use (default: 'streamable-http') */
   transport?: TestTransportType;
   /** Authentication configuration */

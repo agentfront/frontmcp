@@ -17,7 +17,13 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import { type ParsedArgs } from '../../../core/args';
-import { buildJestArgs, buildTransformIgnorePatterns, findUserJestConfig, generateJestConfig } from '../test';
+import {
+  buildJestArgs,
+  buildTestChildEnv,
+  buildTransformIgnorePatterns,
+  findUserJestConfig,
+  generateJestConfig,
+} from '../test';
 
 type JestConfig = {
   testEnvironment: string;
@@ -317,5 +323,34 @@ describe('buildJestArgs (issue #402)', () => {
       ['my-spec'],
     );
     expect(args).toEqual([...base, '--runInBand', '--watch', '--verbose', '--coverage', 'my-spec']);
+  });
+});
+
+describe('buildTestChildEnv (issue #540)', () => {
+  it('forwards the config env overlay to the Jest child', () => {
+    const env = buildTestChildEnv({
+      effectiveEnv: { FROM_CONFIG: 'overlay' },
+      baseEnv: { PATH: '/usr/bin' },
+    });
+
+    expect(env['FROM_CONFIG']).toBe('overlay');
+    expect(env['PATH']).toBe('/usr/bin');
+  });
+
+  it('lets the real environment win over a config overlay, matching dev', () => {
+    // `.env` values are loaded into process.env without overriding the OS/CI
+    // environment, so this ordering is what keeps CI secrets authoritative.
+    const env = buildTestChildEnv({
+      effectiveEnv: { API_KEY: 'from-config' },
+      baseEnv: { API_KEY: 'from-ci' },
+    });
+
+    expect(env['API_KEY']).toBe('from-ci');
+  });
+
+  it('passes through a variable that only the real environment has', () => {
+    const env = buildTestChildEnv({ effectiveEnv: {}, baseEnv: { LOADED_FROM_DOTENV: 'yes' } });
+
+    expect(env['LOADED_FROM_DOTENV']).toBe('yes');
   });
 });

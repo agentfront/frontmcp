@@ -819,6 +819,25 @@ export interface PublicAuthOptionsInterface {
   signKey?: JWK | Uint8Array;
 }
 
+/**
+ * Static mode — a fixed shared secret on every request (issue #544).
+ * See `static.schema.ts` for the field-by-field contract.
+ */
+export interface StaticAuthOptionsInterface {
+  mode: 'static';
+  /** Accepted credentials. Compared in constant time over SHA-256 digests. */
+  tokens: string[];
+  /** Header carrying the credential. @default 'authorization' */
+  header?: string;
+  /** Scheme prefix stripped before comparing; `''` for a bare token. @default 'Bearer' */
+  scheme?: string;
+  /** Scopes granted to an accepted request. @default ['static'] */
+  scopes?: string[];
+  /** Realm reported in the WWW-Authenticate challenge. @default 'mcp' */
+  realm?: string;
+  publicAccess?: PublicAccessConfig;
+}
+
 export interface TransparentAuthOptionsInterface {
   mode: 'transparent';
   provider: string;
@@ -1019,13 +1038,14 @@ export interface RemoteAuthOptionsInterface {
 
 export type AuthOptionsInterface =
   | PublicAuthOptionsInterface
+  | StaticAuthOptionsInterface
   | TransparentAuthOptionsInterface
   | LocalAuthOptionsInterface
   | RemoteAuthOptionsInterface;
 
 export type LocalOrRemoteAuthOptionsInterface = LocalAuthOptionsInterface | RemoteAuthOptionsInterface;
 
-export type AuthMode = 'public' | 'transparent' | 'local' | 'remote';
+export type AuthMode = 'public' | 'static' | 'transparent' | 'local' | 'remote';
 
 // ============================================
 // BACKWARDS COMPAT ALIASES (deprecated)

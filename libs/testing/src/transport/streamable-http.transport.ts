@@ -3,15 +3,15 @@
  * @description StreamableHTTP transport implementation for MCP Test Client
  */
 
+import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
+import type { InterceptorChain } from '../interceptor';
 import type {
+  JsonRpcRequest,
+  JsonRpcResponse,
   McpTransport,
   TransportConfig,
   TransportState,
-  JsonRpcRequest,
-  JsonRpcResponse,
 } from './transport.interface';
-import type { InterceptorChain } from '../interceptor';
-import type { ClientInfo, ElicitationHandler, ElicitationCreateRequest } from '../client/mcp-test-client.types';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -22,9 +22,12 @@ const DEFAULT_TIMEOUT = 30000;
  * following the MCP StreamableHTTP specification.
  */
 export class StreamableHttpTransport implements McpTransport {
-  private readonly config: Required<Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler'>> & {
+  private readonly config: Required<
+    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'entryPath'>
+  > & {
     interceptors?: InterceptorChain;
     clientInfo?: ClientInfo;
+    entryPath?: string;
   };
   private state: TransportState = 'disconnected';
   private sessionId: string | undefined;
@@ -39,6 +42,7 @@ export class StreamableHttpTransport implements McpTransport {
   constructor(config: TransportConfig) {
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''), // Remove trailing slash
+      entryPath: config.entryPath,
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       auth: config.auth ?? {},
       publicMode: config.publicMode ?? false,
@@ -158,7 +162,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/`;
+    const url = this.mcpUrl();
     this.log(`POST ${url}`, message);
 
     const controller = new AbortController();
@@ -253,7 +257,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/`;
+    const url = this.mcpUrl();
     this.log(`POST ${url} (notification)`, message);
 
     const controller = new AbortController();
@@ -294,7 +298,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/`;
+    const url = this.mcpUrl();
     this.log(`POST ${url} (raw)`, data);
 
     const controller = new AbortController();
@@ -658,7 +662,7 @@ export class StreamableHttpTransport implements McpTransport {
     response: { action: 'accept' | 'cancel' | 'decline'; content?: Record<string, unknown> },
   ): Promise<void> {
     const headers = this.buildHeaders();
-    const url = `${this.config.baseUrl}/`;
+    const url = this.mcpUrl();
 
     const rpcResponse: JsonRpcResponse = {
       jsonrpc: '2.0',
@@ -681,6 +685,22 @@ export class StreamableHttpTransport implements McpTransport {
     } catch (error) {
       this.log('Failed to send elicitation response:', error);
     }
+  }
+
+  /**
+   * The MCP endpoint URL. `entryPath` is where the server mounts MCP; the
+   * trailing slash is kept because both hosts normalize it and the original
+   * behaviour (`${baseUrl}/`) relied on it (issue #543).
+   */
+  private mcpUrl(): string {
+    // Built from URL components, not string concatenation: `baseUrl` carries the
+    // client's `queryParams`, so appending to it would produce
+    // `http://host/?mode=x/mcp` — a request to `/` with a mangled query.
+    const url = new URL(this.config.baseUrl);
+    const entry = (this.config.entryPath ?? '').replace(/^\/+|\/+$/g, '');
+    const basePath = url.pathname.replace(/\/+$/, '');
+    url.pathname = entry ? `${basePath}/${entry}` : `${basePath}/`;
+    return url.toString();
   }
 
   private buildHeaders(): Record<string, string> {

@@ -3,6 +3,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { c } from '../core/colors';
 
 /**
@@ -110,12 +111,20 @@ export function populateProcessEnv(env: Record<string, string>, override = false
 }
 
 /**
- * Load environment variables for development.
- * Logs the number of loaded variables.
+ * Load `.env` / `.env.local` into `process.env` for a CLI command, without
+ * overriding anything the real environment already set (so CI secrets win).
  *
- * @param cwd - Current working directory
+ * Issue #540: only `dev` used to do this, so `frontmcp test` ran specs that
+ * could not see the very same `.env` the dev server reads — silently, since an
+ * unconfigured value does not error, it just makes credential-gated suites
+ * skip or assert against the wrong code path.
+ *
+ * @param cwd - Current working directory.
+ * @param label - Command name used in the log line (`dev`, `test`, …).
+ * @returns The variables read from the files, for callers that also need to
+ *   forward them into a child process.
  */
-export function loadDevEnv(cwd: string): void {
+export function loadCommandEnv(cwd: string, label = 'dev'): Record<string, string> {
   try {
     const env = loadEnvFilesSync(cwd, '.env', '.env.local');
     const count = Object.keys(env).length;
@@ -123,11 +132,23 @@ export function loadDevEnv(cwd: string): void {
     if (count > 0) {
       populateProcessEnv(env, false);
       console.log(
-        `${c('cyan', '[dev]')} loaded ${count} environment variable${count === 1 ? '' : 's'} from .env files`,
+        `${c('cyan', `[${label}]`)} loaded ${count} environment variable${count === 1 ? '' : 's'} from .env files`,
       );
     }
+    return env;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`${c('yellow', '[dev]')} warning: failed to load .env files: ${message}`);
+    console.warn(`${c('yellow', `[${label}]`)} warning: failed to load .env files: ${message}`);
+    return {};
   }
+}
+
+/**
+ * Load environment variables for development.
+ * Logs the number of loaded variables.
+ *
+ * @param cwd - Current working directory
+ */
+export function loadDevEnv(cwd: string): void {
+  loadCommandEnv(cwd, 'dev');
 }

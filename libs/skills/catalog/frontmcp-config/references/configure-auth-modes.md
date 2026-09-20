@@ -1,6 +1,6 @@
 ---
 name: configure-auth-modes
-description: Detailed comparison of public, transparent, local, and remote auth modes
+description: Detailed comparison of public, static, transparent, local, and remote auth modes
 ---
 
 # Auth Modes Detailed Comparison
@@ -19,6 +19,29 @@ auth: {
 ```
 
 **Use when:** Development, internal tools, public APIs.
+
+A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
+
+## Static Mode
+
+A fixed shared secret on every request — the shape non-OAuth MCP hosts expect (ChatGPT's custom-app connector calls it "Access token / API key"). No OAuth, no JWT, no JWKS.
+
+```typescript
+auth: {
+  mode: 'static',
+  tokens: [process.env.MCP_AUTH_TOKEN!],
+  // header: 'authorization',   // default
+  // scheme: 'Bearer',          // default; '' for a bare-token header like x-api-key
+  // scopes: ['static'],        // default
+  // realm: 'mcp',              // default, used in the WWW-Authenticate challenge
+}
+```
+
+Tokens are compared in constant time over SHA-256 digests, so neither the value nor its length leaks by timing. A match yields a session whose `sub` is `static:<12 hex chars>` — a non-reversible digest prefix of the matching token, so audit logs can tell configured tokens apart without the secret appearing anywhere. Anything else, including a missing credential, is a `401` with a `WWW-Authenticate: Bearer realm="…"` challenge.
+
+**Use when:** one shared secret is the right granularity and standing up OAuth 2.1 is not. Rotate by deploying with both the old and new token in `tokens`, then dropping the old one.
+
+**Do not use when:** you need per-user identity, revocation, or progressive auth — use `local` or `remote`.
 
 ## Transparent Mode
 
@@ -130,17 +153,17 @@ upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Transparent     | Local                           | Remote                            |
-| ------------------------ | ------------- | --------------- | ------------------------------- | --------------------------------- |
-| Token issuance           | Anonymous JWT | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)               |
-| Signing                  | HS256 secret  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
-| Session-token refresh    | No            | No              | Yes                             | Yes                               |
-| Upstream-token refresh   | n/a           | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
-| Identity source          | Anonymous     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
-| PKCE support             | No            | No              | Yes                             | Yes                               |
-| Token persistence        | n/a           | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
-| Consent (tool selection) | No            | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
-| Upstream OAuth providers | No            | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
+| Feature                  | Public        | Static             | Transparent     | Local                           | Remote                            |
+| ------------------------ | ------------- | ------------------ | --------------- | ------------------------------- | --------------------------------- |
+| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)           | Self-signed (HS256)               |
+| Signing                  | HS256 secret  | n/a                | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
+| Session-token refresh    | No            | No                 | No              | Yes                             | Yes                               |
+| Upstream-token refresh   | n/a           | n/a                | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
+| Identity source          | Anonymous     | Configured token   | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
+| PKCE support             | No            | No                 | No              | Yes                             | Yes                               |
+| Token persistence        | n/a           | n/a                | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
+| Consent (tool selection) | No            | No                 | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
+| Upstream OAuth providers | No            | No                 | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 
