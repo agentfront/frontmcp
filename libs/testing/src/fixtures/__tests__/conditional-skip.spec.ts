@@ -52,6 +52,31 @@ test.describe('a sibling block is unaffected by another block’s skip', () => {
   });
 });
 
+test.describe('a focused test still honours an enclosing skip', () => {
+  test.skip(true, 'credentials not set');
+
+  // Were `only` to ignore the scope, this would run — and, being `.only`, would
+  // also suppress every other test in the file.
+  test.only('does not run', async () => {
+    ran['focusedInsideSkip'] = true;
+  });
+});
+
+test.describe.skip('a skipped block does not leak its scope to later blocks', () => {
+  // Jest still evaluates a skipped block's callback during collection.
+  test.skip(true, 'inner gate');
+
+  test('does not run', async () => {
+    ran['insideSkippedBlock'] = true;
+  });
+});
+
+test.describe('a block after a skipped one is unaffected', () => {
+  test.skip('named skip, still just one test', async () => {
+    ran['afterSkippedBlock'] = true;
+  });
+});
+
 describe('conditional skip bookkeeping (#541)', () => {
   it('accepts a boolean first argument instead of throwing at collection time', () => {
     // Reaching this assertion at all means the calls above did not throw while
@@ -63,6 +88,17 @@ describe('conditional skip bookkeeping (#541)', () => {
     expect(ran['trueCondition']).toBeUndefined();
     expect(ran['trueConditionSecond']).toBeUndefined();
     expect(ran['nestedInherited']).toBeUndefined();
+  });
+
+  it('did not run a focused test that sits inside a skipped block', () => {
+    expect(ran['focusedInsideSkip']).toBeUndefined();
+  });
+
+  it('did not let a skipped block leak its scope to a later sibling', () => {
+    // Reaching this assertion at all proves the leak did not happen: a leaked
+    // scope would have skipped this whole `describe`.
+    expect(ran['insideSkippedBlock']).toBeUndefined();
+    expect(ran['afterSkippedBlock']).toBeUndefined();
   });
 
   it('rejects a first argument that is neither a name nor a condition', () => {

@@ -204,6 +204,55 @@ describe('static mode (#544)', () => {
     expect(output?.kind).toBe('authorized');
   });
 
+  it('refuses to resume a session minted for a DIFFERENT configured token', async () => {
+    // Two callers, two tokens. Token A's session id must not resolve token B's
+    // request onto A's session (and therefore A's live transport).
+    const twoTokens = { mode: 'static', tokens: [TOKEN, OTHER_TOKEN] };
+    const first = await run(twoTokens, { authorization: `Bearer ${TOKEN}` });
+    if (first.output?.kind !== 'authorized') throw new Error('expected authorized');
+    const tokenASession = first.output.authorization.session?.id as string;
+    expect(tokenASession).toBeTruthy();
+
+    const stolen = await run(twoTokens, {
+      authorization: `Bearer ${OTHER_TOKEN}`,
+      'mcp-session-id': tokenASession,
+    });
+
+    // Token B is valid, so the request is authorized — but on a FRESH session.
+    expect(stolen.output?.kind).toBe('authorized');
+    if (stolen.output?.kind !== 'authorized') return;
+    expect(stolen.output.authorization.session?.id).not.toBe(tokenASession);
+    expect(stolen.output.authorization.user?.sub).not.toBe(first.output.authorization.user?.sub);
+  });
+
+  it('resumes a session minted for the SAME token', async () => {
+    const first = await run(staticAuth, { authorization: `Bearer ${TOKEN}` });
+    if (first.output?.kind !== 'authorized') throw new Error('expected authorized');
+    const sessionId = first.output.authorization.session?.id as string;
+
+    const second = await run(staticAuth, { authorization: `Bearer ${TOKEN}`, 'mcp-session-id': sessionId });
+
+    if (second.output?.kind !== 'authorized') throw new Error('expected authorized');
+    expect(second.output.authorization.session?.id).toBe(sessionId);
+  });
+
+  it('advertises the configured scheme in the challenge, not a hardcoded Bearer', async () => {
+    const apiKeyScheme = { mode: 'static', tokens: [TOKEN], scheme: 'ApiKey' };
+    const { output } = await run(apiKeyScheme, {});
+
+    if (output?.kind !== 'unauthorized') throw new Error('expected unauthorized');
+    expect(output.prmMetadataHeader).toContain('ApiKey realm="mcp"');
+    expect(output.prmMetadataHeader).not.toContain('Bearer');
+  });
+
+  it('sends no challenge for a bare-token header, which has no auth scheme', async () => {
+    const apiKeyAuth = { mode: 'static', tokens: [TOKEN], header: 'x-api-key', scheme: '' };
+    const { output } = await run(apiKeyAuth, {});
+
+    if (output?.kind !== 'unauthorized') throw new Error('expected unauthorized');
+    expect(output.prmMetadataHeader).toBe('');
+  });
+
   it('does not fall through to anonymous access when the token is absent', async () => {
     // The whole point of the mode: unlike `public`, a missing credential is a 401.
     const { output } = await run(staticAuth, {});

@@ -460,9 +460,18 @@ function skip(nameOrCondition: string | boolean, fnOrReason?: TestFn | string): 
 }
 
 /**
- * Run only this test
+ * Run only this test.
+ *
+ * A focused test still honours an enclosing conditional skip — otherwise
+ * `test.only` inside a credential-gated block would run without the credentials
+ * the block was gated on.
  */
 function only(name: string, fn: TestFn): void {
+  const scope = currentSkipScope();
+  if (scope.skipped) {
+    it.skip(scope.reason ? `${name} (skipped: ${scope.reason})` : name, runWithFixtures(fn));
+    return;
+  }
   it.only(name, runWithFixtures(fn));
 }
 
@@ -496,11 +505,25 @@ function withSkipScope(register: (name: string, body: () => void) => void) {
   };
 }
 
+/**
+ * `describe.each(table)(name, fn)` — the returned registrar needs the same
+ * scoping, or a conditional skip inside a parameterized block leaks to the file.
+ */
+function eachWithSkipScope(each: jest.Describe['each']): jest.Describe['each'] {
+  return ((...eachArgs: Parameters<jest.Describe['each']>) => {
+    const register = (each as (...args: unknown[]) => (name: string, fn: () => void) => void)(...eachArgs);
+    return withSkipScope(register);
+  }) as jest.Describe['each'];
+}
+
+// Every variant that runs a block body gets its own scope. `describe.skip` is
+// included because Jest still evaluates a skipped block's callback during
+// collection, so a `test.skip(condition)` inside one would otherwise set the
+// FILE scope and skip later, unrelated blocks.
 const describeWithSkipScope = Object.assign(withSkipScope(describe), describe, {
-  // `.only` gets its own scope too — without it a conditional skip inside a
-  // focused block would set the FILE scope and bleed into later blocks.
-  only: withSkipScope(describe.only),
-  skip: describe.skip,
+  only: Object.assign(withSkipScope(describe.only), { each: eachWithSkipScope(describe.only.each) }),
+  skip: Object.assign(withSkipScope(describe.skip), { each: eachWithSkipScope(describe.skip.each) }),
+  each: eachWithSkipScope(describe.each),
 }) as unknown as jest.Describe;
 
 // ═══════════════════════════════════════════════════════════════════

@@ -102,6 +102,38 @@ describe('McpTestClient entryPath (#543)', () => {
     await expect(client.connect()).rejects.toThrow(/serves MCP at \/a, \/b/);
   });
 
+  it('keeps a query string on the MCP endpoint instead of mangling it', async () => {
+    const calls = stubFetch(() => ({ status: 200, body: initializeResult() }));
+    const client = McpTestClient.create({
+      baseUrl: BASE_URL,
+      entryPath: '/mcp',
+      queryParams: { mode: 'skills_only' },
+      publicMode: true,
+    }).build();
+
+    await client.connect();
+
+    expect(calls[0].url).toBe(`${BASE_URL}/mcp?mode=skills_only`);
+  });
+
+  it('re-attempts discovery on a reconnect, in case the server moved', async () => {
+    let servedPath = '/mcp';
+    const calls = stubFetch((url) =>
+      url === `${BASE_URL}${servedPath}`
+        ? { status: 200, body: initializeResult() }
+        : { status: 404, body: JSON.stringify({ error: 'Not Found', entryPaths: [servedPath] }) },
+    );
+    const client = McpTestClient.create({ baseUrl: BASE_URL, publicMode: true }).build();
+
+    await client.connect();
+    await client.disconnect();
+
+    servedPath = '/rpc';
+    calls.length = 0;
+    await expect(client.connect()).resolves.toBeDefined();
+    expect(calls.some((call) => call.url === `${BASE_URL}/rpc`)).toBe(true);
+  });
+
   it('names the URL it tried in the failure message', async () => {
     stubFetch(() => ({ status: 500, body: JSON.stringify({ error: 'boom' }) }));
     const client = McpTestClient.create({ baseUrl: BASE_URL, entryPath: '/mcp', publicMode: true }).build();

@@ -693,8 +693,14 @@ export class StreamableHttpTransport implements McpTransport {
    * behaviour (`${baseUrl}/`) relied on it (issue #543).
    */
   private mcpUrl(): string {
+    // Built from URL components, not string concatenation: `baseUrl` carries the
+    // client's `queryParams`, so appending to it would produce
+    // `http://host/?mode=x/mcp` — a request to `/` with a mangled query.
+    const url = new URL(this.config.baseUrl);
     const entry = (this.config.entryPath ?? '').replace(/^\/+|\/+$/g, '');
-    return entry ? `${this.config.baseUrl}/${entry}` : `${this.config.baseUrl}/`;
+    const basePath = url.pathname.replace(/\/+$/, '');
+    url.pathname = entry ? `${basePath}/${entry}` : `${basePath}/`;
+    return url.toString();
   }
 
   private buildHeaders(): Record<string, string> {

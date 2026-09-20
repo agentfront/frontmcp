@@ -166,6 +166,10 @@ export class McpTestClient {
   async connect(): Promise<InitializeResult> {
     this.log('debug', `Connecting to ${this.config.baseUrl}...`);
 
+    // Discovery is once per CONNECT, not once per client: a reconnect may face a
+    // server that now serves a different path.
+    this.triedDiscoveredEntryPath = false;
+
     // Create transport based on config
     this.transport = this.createTransport();
 

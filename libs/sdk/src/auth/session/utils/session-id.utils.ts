@@ -44,15 +44,17 @@ function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPaylo
   return hasValidSessionStructure(dec) && dec.authSig === sig;
 }
 
-function isValidPublicSessionPayload(dec: unknown): dec is SessionIdPayload {
+function isValidPublicSessionPayload(dec: unknown, expectedAuthSig = 'public'): dec is SessionIdPayload {
   if (typeof dec !== 'object' || dec === null) return false;
   const d = dec as Record<string, unknown>;
   return (
     typeof d['nodeId'] === 'string' &&
-    d['authSig'] === 'public' &&
+    d['authSig'] === expectedAuthSig &&
     typeof d['uuid'] === 'string' &&
     typeof d['iat'] === 'number' &&
-    d['isPublic'] === true
+    // `isPublic` is set only for public mode, so it must track the signature —
+    // a static-mode session must never decrypt as a public one.
+    d['isPublic'] === (expectedAuthSig === 'public')
   );
 }
 
@@ -62,20 +64,27 @@ function decryptSessionId(sessionId: string, sig: string): SessionIdPayload | nu
 }
 
 /**
- * Decrypt a public session ID without signature verification.
- * Public sessions use authSig: 'public' and isPublic: true.
- * First checks the cache for potentially updated payload (e.g., platformType).
+ * Decrypt a token-less session ID without signature verification.
+ *
+ * Public sessions use `authSig: 'public'` and `isPublic: true`. Static mode
+ * (#544) also mints token-less sessions, but signs them `static:<token
+ * fingerprint>` so a session issued for one configured token cannot be resumed
+ * by a caller presenting another — hence `expectedAuthSig`, which the caller
+ * must supply for any mode other than public. A payload that does not carry
+ * exactly that signature is rejected.
+ *
+ * First checks the cache for a potentially updated payload (e.g. platformType).
  */
-export function decryptPublicSession(sessionId: string): SessionIdPayload | null {
+export function decryptPublicSession(sessionId: string, expectedAuthSig = 'public'): SessionIdPayload | null {
   // Check cache first - may have updated fields like platformType
   const cached = cache.get(sessionId);
-  if (cached && isValidPublicSessionPayload(cached)) {
+  if (cached && isValidPublicSessionPayload(cached, expectedAuthSig)) {
     return cached;
   }
 
   // Fall back to decrypting from the encrypted session ID
   const dec = safeDecrypt(sessionId);
-  if (isValidPublicSessionPayload(dec)) {
+  if (isValidPublicSessionPayload(dec, expectedAuthSig)) {
     // Cache the decrypted payload for future requests
     cache.set(sessionId, dec as SessionIdPayload);
     return dec as SessionIdPayload;

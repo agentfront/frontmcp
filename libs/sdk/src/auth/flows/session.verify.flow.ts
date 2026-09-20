@@ -138,9 +138,20 @@ function quoteHeaderParam(value: string): string {
   return value.replace(/[^\x20-\x21\x23-\x7e]/g, '');
 }
 
-/** RFC 7235 challenge for static mode; no PRM URL, since there is no OAuth AS. */
-function buildStaticChallenge(realm: string, description?: string): string {
-  const parts = [`Bearer realm="${quoteHeaderParam(realm)}"`];
+/**
+ * RFC 7235 challenge for static mode; no PRM URL, since there is no OAuth AS.
+ *
+ * The challenge advertises the scheme the server actually accepts — hardcoding
+ * `Bearer` would point a client at a mechanism a server configured with
+ * `scheme: 'ApiKey'` rejects. A bare-token configuration (`scheme: ''`, e.g. an
+ * `x-api-key` header) has no HTTP auth scheme at all, and RFC 7235 has no way to
+ * express one, so no challenge is sent; the 401 stands on its own.
+ */
+function buildStaticChallenge(options: StaticAuthOptions, description?: string): string {
+  const scheme = options.scheme.trim();
+  if (!scheme) return '';
+
+  const parts = [`${quoteHeaderParam(scheme)} realm="${quoteHeaderParam(options.realm)}"`];
   if (description) {
     parts.push('error="invalid_token"', `error_description="${quoteHeaderParam(description)}"`);
   }
@@ -193,6 +204,16 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
     const machineId = getMachineId();
 
+    // `authSig` is documented as "the signature of the token used to create the
+    // session", so bind it to the caller, not just the mode. With several static
+    // tokens configured, a mode-only check let a caller holding token B present a
+    // session id minted for token A: the token check passes on its own merits, but
+    // the resumed session id resolves A's live transport, so B would receive A's
+    // notifications and elicitations. `subject` is already a non-reversible digest
+    // prefix of the matching token, so composing it in costs nothing and keeps the
+    // secret out of the payload.
+    const authSignature = subject ? `${authMode}:${subject}` : authMode;
+
     // If the client sent a session id, ONLY honor it when it decrypts to a
     // payload THIS server minted for THIS node (valid AES-256-GCM tag). All
     // anonymous sessions share `token: ''`, so the transport registry separates
@@ -202,13 +223,11 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // An unrecognized / forged id is IGNORED and a fresh server-minted id is
     // issued below, so the client cannot choose its own anonymous identity.
     if (sessionIdHeader) {
-      const existingPayload = decryptPublicSession(sessionIdHeader);
-      // `authSig` records the mode the session was minted under. Requiring a
-      // match keeps a session issued for one mode from being resumed under
-      // another (e.g. a `public` id presented to a `static`-mode server), which
-      // would otherwise carry that session's `isPublic` flag into a different
-      // authorization context.
-      if (existingPayload && existingPayload.nodeId === machineId && existingPayload.authSig === authMode) {
+      const existingPayload = decryptPublicSession(sessionIdHeader, authSignature);
+      // `decryptPublicSession` already rejects any payload not signed with this
+      // exact signature, so a session issued for one mode — or, in static mode,
+      // for a DIFFERENT token — never reaches here.
+      if (existingPayload && existingPayload.nodeId === machineId) {
         // Derive the anonymous `sub` from the session's unique `uuid` (not its
         // one-second `iat`, which collided for sessions minted in the same
         // second and shared a `sub`-keyed partition, e.g. the rate limiter).
@@ -254,7 +273,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const payload = {
       uuid,
       nodeId: machineId,
-      authSig: authMode,
+      authSig: authSignature,
       iat: Math.floor(now / 1000),
       isPublic: authMode === 'public',
       authMode,
@@ -359,7 +378,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.logger.warn('handleStaticToken: no credential presented, returning 401');
       this.respond({
         kind: 'unauthorized',
-        prmMetadataHeader: buildStaticChallenge(options.realm),
+        prmMetadataHeader: buildStaticChallenge(options),
       });
       return;
     }
@@ -374,7 +393,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.logger.warn('handleStaticToken: credential did not match, returning 401');
       this.respond({
         kind: 'unauthorized',
-        prmMetadataHeader: buildStaticChallenge(options.realm, 'The access token is invalid'),
+        prmMetadataHeader: buildStaticChallenge(options, 'The access token is invalid'),
       });
       return;
     }
