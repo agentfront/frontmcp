@@ -1,10 +1,8 @@
-import { FRONTMCP_CONTEXT, FrontMcpContext, Provider, ProviderScope } from '@frontmcp/sdk';
+import { FrontMcpContext, Provider, ProviderScope } from '@frontmcp/sdk';
 
 import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
 import { RememberIdentityError } from '../remember.errors';
-import { RememberConfigToken, RememberStoreToken } from '../remember.symbols';
 import type {
-  PayloadBrandType,
   RememberEntry,
   RememberForgetOptions,
   RememberGetOptions,

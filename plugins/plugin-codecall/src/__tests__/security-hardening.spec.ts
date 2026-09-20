@@ -8,7 +8,7 @@ import {
   ToolNotFoundError,
 } from '../errors/tool-call.errors';
 import { assertNotSelfReference, getBlockedPatterns, isBlockedSelfReference } from '../security/self-reference-guard';
-import { ToolAccessControlService, ToolAccessPolicy } from '../security/tool-access-control.service';
+import { ToolAccessControlService } from '../security/tool-access-control.service';
 
 describe('CodeCall Security Hardening', () => {
   describe('Self-Reference Guard', () => {
