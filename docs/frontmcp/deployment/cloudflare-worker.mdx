@@ -100,7 +100,9 @@ compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 
 <Note>
 `nodejs_compat` with `compatibility_date >= 2024-09-23` is **required** — the SDK runtime still uses some Node builtins behind that flag; without it the Worker won't load, so the build always emits it.
-`nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env` and is emitted **by default**; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to leave `process.env` empty. The opt-out always wins, so the two are never emitted together (`wrangler deploy` rejects a config carrying both).
+`nodejs_compat_populate_process_env` mirrors `[vars]` and secrets into `process.env` and is emitted **by default**; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to keep `process.env` empty. The opt-out always wins, so the two are never emitted together (`wrangler deploy` rejects a config carrying both).
+
+Cloudflare's flag only governs population at **module evaluation**, and the generated entry separately copies string bindings into `process.env` on the first request so `process.env.MY_API_KEY` behaves the same under `frontmcp dev` and in production. Declaring the opt-out therefore also drops that bridge from the generated entry — otherwise the build would put back exactly the values you excluded. Read bindings from the `env` argument instead; non-string bindings (KV, D1, R2, Durable Objects) are only ever reachable that way.
 </Note>
 
 <Note>

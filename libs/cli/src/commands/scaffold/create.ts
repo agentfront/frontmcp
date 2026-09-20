@@ -1852,8 +1852,11 @@ function printNextSteps(
 // =============================================================================
 
 /**
- * Pinned so `compatibility_date` behaviour is reproducible between developers
- * and CI for the same commit (issue #542).
+ * Major version, not an exact pin. Wrangler 4 is the line whose `wrangler.toml`
+ * schema the build writes, so the caret is the compatibility contract; runtime
+ * behaviour is pinned separately by the `compatibility_date` the build emits,
+ * not by the CLI version (issue #542). An exact pin here would only hand every
+ * scaffolded project an immediately-stale toolchain to bump by hand.
  */
 const WRANGLER_VERSION_RANGE = '^4.0.0';
 

@@ -153,6 +153,8 @@ Worker bindings arrive as an argument to `fetch`, not as environment variables. 
 
 A value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`, because the copy happens on the first request. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (emitted by default), which populates `process.env` before your module evaluates.
 
+To keep bindings out of `process.env` entirely, add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags`. Cloudflare's flag only suppresses population at module evaluation, so the build also drops the first-request bridge from the generated entry — otherwise it would put back exactly the values you excluded. Every binding is then read from the `env` argument only.
+
 ### Required secrets
 
 `NODE_ENV = "production"` in `[vars]` makes this a production deployment, where FrontMCP refuses its development fallbacks:
@@ -164,6 +166,9 @@ A value read at module-eval time — inside the `@FrontMcp({...})` argument itse
 
 ```bash
 npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+
+# Only when auth.mode is `local` or `remote`; a `public` or `static` worker
+# never mints tokens and does not read this.
 npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
 

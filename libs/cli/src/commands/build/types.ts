@@ -34,9 +34,14 @@ export type AdapterTemplate = {
   /**
    * Generate the entry point file content.
    * @param mainModulePath - Relative path to the compiled main module (e.g., './main.js')
+   * @param deployment - Resolved `frontmcp.config.deployments[]` entry for this
+   *   target, when one was found. Adapters that opt in use it to shape the
+   *   generated entry to the platform config the user declared — e.g. the
+   *   cloudflare entry drops its `process.env` bridge when the worker opted out
+   *   of process-env population.
    * @returns The content for index.js, or empty string if no wrapper needed
    */
-  getEntryTemplate: (mainModulePath: string) => string;
+  getEntryTemplate: (mainModulePath: string, deployment?: DeploymentTarget) => string;
 
   /**
    * Generate the serverless setup file content.

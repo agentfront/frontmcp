@@ -128,6 +128,27 @@ describe('Build Adapters', () => {
       expect(entry).toContain('process.env[key] === undefined');
     });
 
+    it('drops the process.env bridge when the worker opted out of process-env population', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js', {
+        target: 'cloudflare',
+        wrangler: { compatibilityFlags: ['nodejs_compat_do_not_populate_process_env'] },
+      });
+      // Bridging anyway would put the very bindings the operator excluded back
+      // into process.env on the first request.
+      expect(entry).not.toContain('bridgeEnvToProcess');
+      expect(entry).not.toContain('process.env[key]');
+      // The env argument is still forwarded, so bindings stay reachable.
+      expect(entry).toContain('handler(request, ctx, env)');
+    });
+
+    it('keeps the bridge when the worker declares only unrelated compatibility flags', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js', {
+        target: 'cloudflare',
+        wrangler: { compatibilityFlags: ['streams_enable_constructors'] },
+      });
+      expect(entry).toContain('bridgeEnvToProcess(env)');
+    });
+
     it('propagates transport.http.path as the server entryPath default (#539)', () => {
       const setup = cloudflareAdapter.getSetupTemplate?.({ transportHttpPath: '/mcp' });
       expect(setup).toContain('process.env.FRONTMCP_HTTP_ENTRY_PATH = "/mcp"');

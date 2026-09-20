@@ -40,6 +40,16 @@ function createServer(mode: 'public' | 'local'): Promise<FrontMcpInstance> {
   });
 }
 
+/** Boot the server, assert it came up, and release its scopes' cleanup timers. */
+async function expectBoots(mode: 'public' | 'local'): Promise<void> {
+  const instance = await createServer(mode);
+  try {
+    expect(instance.getScopes().length).toBeGreaterThan(0);
+  } finally {
+    await Promise.all(instance.getScopes().map((scope) => scope.dispose()));
+  }
+}
+
 describe('LocalPrimaryAuth JWT secret handling (#546)', () => {
   it('refuses to start a token-minting mode in production without JWT_SECRET', async () => {
     await withEnv({ NODE_ENV: 'production', JWT_SECRET: undefined }, async () => {
@@ -49,9 +59,7 @@ describe('LocalPrimaryAuth JWT secret handling (#546)', () => {
 
   it('starts a token-minting mode in production once JWT_SECRET is set', async () => {
     await withEnv({ NODE_ENV: 'production', JWT_SECRET: 'a'.repeat(64) }, async () => {
-      const instance = await createServer('local');
-      expect(instance.getScopes().length).toBeGreaterThan(0);
-      await Promise.all(instance.getScopes().map((scope) => scope.dispose()));
+      await expectBoots('local');
     });
   });
 
@@ -69,31 +77,25 @@ describe('LocalPrimaryAuth JWT secret handling (#546)', () => {
 
   it('accepts a 32-byte secret', async () => {
     await withEnv({ NODE_ENV: 'production', JWT_SECRET: 'a'.repeat(32) }, async () => {
-      const instance = await createServer('local');
-      expect(instance.getScopes().length).toBeGreaterThan(0);
+      await expectBoots('local');
     });
   });
 
   it('warns but still boots on a short secret outside production', async () => {
     await withEnv({ NODE_ENV: 'development', JWT_SECRET: 'short' }, async () => {
-      const instance = await createServer('local');
-      expect(instance.getScopes().length).toBeGreaterThan(0);
+      await expectBoots('local');
     });
   });
 
   it('leaves development alone so the dev server still boots without a secret', async () => {
     await withEnv({ NODE_ENV: 'development', JWT_SECRET: undefined }, async () => {
-      const instance = await createServer('local');
-      expect(instance.getScopes().length).toBeGreaterThan(0);
-      await Promise.all(instance.getScopes().map((scope) => scope.dispose()));
+      await expectBoots('local');
     });
   });
 
   it('does not require a secret in public mode, which never mints through this path', async () => {
     await withEnv({ NODE_ENV: 'production', JWT_SECRET: undefined }, async () => {
-      const instance = await createServer('public');
-      expect(instance.getScopes().length).toBeGreaterThan(0);
-      await Promise.all(instance.getScopes().map((scope) => scope.dispose()));
+      await expectBoots('public');
     });
   });
 });

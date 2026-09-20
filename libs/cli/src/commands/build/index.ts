@@ -54,7 +54,7 @@ async function generateAdapterFiles(
 
   // Generate index.js entry point
   const mainModuleName = entryBasename.replace(/\.tsx?$/, '.js');
-  const entryContent = template.getEntryTemplate(`./${mainModuleName}`);
+  const entryContent = template.getEntryTemplate(`./${mainModuleName}`, deployment);
 
   // Skip if no entry template (e.g., node adapter)
   if (entryContent) {

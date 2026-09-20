@@ -325,9 +325,12 @@ crontabs = ["*/5 * * * *"]
       expect(toml).toContain('# a comment the build must preserve');
       expect(toml).toContain('crontabs = ["*/5 * * * *"]');
 
-      // The required flags are merged in, not dropped, even though the
-      // pre-seeded file declared none.
+      // Both managed flags are merged in, not dropped, even though the
+      // pre-seeded file declared none. Asserting only `nodejs_compat` would let
+      // a regression that drops the process-env flag through, and the worker
+      // would boot with `[vars]` and secrets missing from `process.env` (#536).
       expect(toml).toContain('"nodejs_compat"');
+      expect(toml).toContain('"nodejs_compat_populate_process_env"');
     });
   });
 });
