@@ -401,6 +401,25 @@ When `approval.required` is `true`, the plugin automatically intercepts tool exe
 
 Automatic tool result caching. Cache responses by tool name patterns or per-tool metadata. Supports sliding window TTL and cache bypass headers.
 
+### Cache keys include the caller's identity
+
+`keyByIdentity` defaults to `true`. Most cached tools return something that depends on who is
+asking -- a profile, a balance, a tenant's records, anything filtered by the caller's own
+permissions -- and a key built only from the tool and its arguments serves the first caller's
+response to everyone else.
+
+The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
+session. A call with no identity at all gets a key of its own rather than one shared with
+every other identity-less caller.
+
+Set `keyByIdentity: false` **only** when every caller would get byte-identical output: public
+reference data, a currency table, a static document.
+
+```typescript
+// Public data, identical for everyone -- safe to share one entry
+CachePlugin.init({ type: 'memory', toolPatterns: ['reference:*'], keyByIdentity: false });
+```
+
 ### Installation
 
 ```typescript

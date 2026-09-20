@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@frontmcp/sdk": "1.5.7",
+    "@frontmcp/utils": "1.5.7",
     "ioredis": "^5.8.0"
   },
   "peerDependencies": {

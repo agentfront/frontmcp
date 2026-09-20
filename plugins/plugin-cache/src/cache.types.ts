@@ -58,6 +58,21 @@ export interface BaseCachePluginOptions {
    * ```
    */
   bypassHeader?: string;
+
+  /**
+   * Include the caller's identity in the cache key.
+   *
+   * On by default (GHSA-r6v6-p4r8-p936). Most cached tools return something that depends on
+   * who is asking, and a key built only from the tool and its arguments serves the first
+   * caller's response to everyone else.
+   *
+   * Set this to `false` ONLY for a cache whose entries are identical for every caller --
+   * public reference data, a currency table, a static document. Anything derived from the
+   * caller's own permissions, tenant or account must leave it on.
+   *
+   * @default true
+   */
+  keyByIdentity?: boolean;
 }
 
 export interface RedisClientCachePluginOptions extends BaseCachePluginOptions {

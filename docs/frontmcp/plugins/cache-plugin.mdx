@@ -185,6 +185,25 @@ Configure default behavior when registering the plugin:
   Default time-to-live in seconds (applies to all cached tools unless overridden)
 </ParamField>
 
+<ParamField path="keyByIdentity" type="boolean" default="true">
+  Include the caller's identity in the cache key.
+
+On by default. Most cached tools return something that depends on who is asking -- a
+profile, a balance, a tenant's records, anything filtered by the caller's own permissions --
+and a key built only from the tool and its arguments serves the first caller's response to
+everyone else.
+
+The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
+session. A call with no identity at all gets a key of its own rather than one shared with
+every other identity-less caller.
+
+  <Warning>
+    Set this to `false` **only** when every caller would get byte-identical output: public
+    reference data, a currency table, a static document. Anything derived from the caller's
+    permissions, tenant or account must leave it on.
+  </Warning>
+</ParamField>
+
 <ParamField path="config" type="object">
   Redis connection configuration (required when `type: 'redis'`)
 
