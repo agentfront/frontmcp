@@ -190,10 +190,16 @@ npx wrangler deploy
 
 ### Custom Domain
 
-Configure a custom domain in the Cloudflare dashboard under **Workers & Pages > your worker > Settings > Domains & Routes**, or via wrangler:
+Configure a custom domain in the Cloudflare dashboard under **Workers & Pages > your worker > Settings > Domains & Routes**, declare it in `wrangler.toml`, or pass it to the deploy:
 
 ```bash
-npx wrangler domains add mcp.example.com
+npx wrangler deploy --domain mcp.example.com
+```
+
+The `wrangler.toml` form is equivalent and survives across deploys:
+
+```toml
+routes = [{ pattern = "mcp.example.com", custom_domain = true }]
 ```
 
 ## Step 6: Verify

@@ -1276,7 +1276,7 @@
               "tags": ["deployment", "json-rpc", "cloudflare", "worker", "custom", "domain"],
               "features": [
                 "Using `frontmcp create --target cloudflare` to scaffold a project with `wrangler.toml` and deploy scripts",
-                "Adding a custom domain with `wrangler domains add` for production-ready URLs",
+                "Adding a custom domain with `wrangler deploy --domain` for production-ready URLs",
                 "End-to-end verification of both the health check and MCP JSON-RPC endpoint"
               ]
             },
