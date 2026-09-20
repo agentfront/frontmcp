@@ -1,13 +1,13 @@
 // file: libs/plugins/src/codecall/__tests__/security-hardening.spec.ts
 
-import { isBlockedSelfReference, assertNotSelfReference, getBlockedPatterns } from '../security/self-reference-guard';
 import {
   createToolCallError,
-  TOOL_CALL_ERROR_CODES,
   SelfReferenceError,
+  TOOL_CALL_ERROR_CODES,
   ToolAccessDeniedError,
   ToolNotFoundError,
 } from '../errors/tool-call.errors';
+import { assertNotSelfReference, getBlockedPatterns, isBlockedSelfReference } from '../security/self-reference-guard';
 import { ToolAccessControlService, ToolAccessPolicy } from '../security/tool-access-control.service';
 
 describe('CodeCall Security Hardening', () => {
@@ -185,7 +185,13 @@ describe('CodeCall Security Hardening', () => {
     });
   });
 
-  describe('Tool Access Control Service', () => {
+  /**
+   * These construct the service directly. It is NOT wired into CodeCall — see the note on
+   * the class. Passing here says the class behaves as written, not that CodeCall enforces
+   * anything; the enforcement path is covered by `execute.tool.access-control.spec.ts` and
+   * `invoke.tool.access-control.spec.ts`.
+   */
+  describe('Tool Access Control Service (unwired — behaviour of the class only)', () => {
     describe('blacklist mode (default)', () => {
       it('should allow tools not in blacklist', async () => {
         const service = new ToolAccessControlService({ mode: 'blacklist' });

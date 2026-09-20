@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/security/tool-access-control.service.ts
 
-import { Provider, ProviderScope } from '@frontmcp/sdk';
 import type { AuthInfo } from '@frontmcp/protocol';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 /**
  * Tool access control modes:
@@ -83,8 +83,18 @@ const DEFAULT_BLACKLIST: ReadonlySet<string> = Object.freeze(
 /**
  * Tool Access Control Service
  *
- * Provides centralized access control for tool calls within CodeCall.
- * Implements a layered security model:
+ * NOT ON THE ENFORCEMENT PATH. Nothing constructs this service: the plugin declares
+ * `providers: []`, no `ToolAccessPolicy` can be supplied through the plugin options, and
+ * neither `codecall:execute` nor `codecall:invoke` consults it. Its unit tests pass by
+ * constructing it directly, which is exactly how GHSA-6w3j-82v5-6qrr stayed invisible — a
+ * green suite for a control that never ran.
+ *
+ * The policy CodeCall actually enforces lives in `codecall-tool-policy.ts`
+ * (`checkCodeCallToolAccess`), called by both meta-tools. This class is kept only so the
+ * exported types do not disappear from the package's public surface in a security patch;
+ * wiring it in, or removing it, is a follow-up with its own BC note.
+ *
+ * The richer model it offers, unused today:
  *
  * 1. Self-reference blocking (handled separately in self-reference-guard.ts)
  * 2. Default blacklist (always enforced)

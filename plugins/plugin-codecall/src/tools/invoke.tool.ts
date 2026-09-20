@@ -1,14 +1,16 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import type { CallToolResult } from '@frontmcp/protocol';
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import CodeCallConfig from '../providers/code-call.config';
+import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import {
+  invokeToolDescription,
   InvokeToolInput,
   invokeToolInputSchema,
   InvokeToolOutput,
   invokeToolOutputSchema,
-  invokeToolDescription,
 } from './invoke.schema';
-import { isBlockedSelfReference } from '../security';
 
 /**
  * Build an MCP error response in CallToolResult format.
@@ -26,6 +28,8 @@ function buildErrorResult(message: string): CallToolResult {
  *
  * Security Considerations:
  * - Self-reference blocking: Cannot invoke codecall:* tools
+ * - Shares the CodeCall access policy with `codecall:execute`, so a tool withheld from
+ *   scripts is not reachable by naming it here instead (GHSA-6w3j-82v5-6qrr)
  * - All middleware (auth, PII, rate limiting) applies via normal tool execution
  */
 @Tool({
@@ -51,6 +55,16 @@ export default class InvokeTool extends ToolContext {
       return buildErrorResult(
         `Tool "${toolName}" cannot be invoked directly. CodeCall tools are internal and not accessible via codecall:invoke.`,
       );
+    }
+
+    // The same policy `codecall:execute` applies, plus the `directCalls` options. Without
+    // it this tool is a plain proxy over the whole registry, and every CodeCall restriction
+    // an operator configured is bypassed by invoking the tool directly.
+    // One message for "denied" and for "no such tool": distinguishing them would turn this
+    // tool into an existence oracle for the tools the policy hides from codecall:search.
+    const decision = checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), toolName, { directCall: true });
+    if (!decision.allowed) {
+      return buildErrorResult(`Tool "${toolName}" is not available. Use codecall:search to discover available tools.`);
     }
 
     // Execute through the flow system - returns standard CallToolResult

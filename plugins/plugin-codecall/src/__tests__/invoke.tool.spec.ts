@@ -1,8 +1,10 @@
 // file: libs/plugins/src/codecall/__tests__/invoke.tool.spec.ts
 
-import InvokeTool from '../tools/invoke.tool';
-import { isBlockedSelfReference } from '../security/self-reference-guard';
 import type { CallToolResult } from '@frontmcp/protocol';
+
+import CodeCallConfig from '../providers/code-call.config';
+import { isBlockedSelfReference } from '../security/self-reference-guard';
+import InvokeTool from '../tools/invoke.tool';
 
 // Helper to create a mock MCP CallToolResult
 function createMockMcpResult(data: unknown, isError = false): CallToolResult {
@@ -43,7 +45,17 @@ jest.mock('@frontmcp/sdk', () => ({
     <T>(target: T) =>
       target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
+  BaseConfig: class MockBaseConfig {
+    protected options: Record<string, unknown>;
+    constructor(options: Record<string, unknown> = {}) {
+      this.options = options;
+    }
+    get(key: string): unknown {
+      return this.options[key];
+    }
+  },
   ToolContext: class MockToolContext {
+    private dependencies = new Map<unknown, unknown>();
     scope = {
       tools: {
         getTools: jest.fn(() => []),
@@ -56,20 +68,51 @@ jest.mock('@frontmcp/sdk', () => ({
     constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
+    get<T>(token: unknown): T {
+      return this.dependencies.get(token) as T;
+    }
+    tryGet<T>(token: unknown): T | undefined {
+      return this.dependencies.get(token) as T | undefined;
+    }
+    _setDependency(token: unknown, instance: unknown): void {
+      this.dependencies.set(token, instance);
+    }
   },
 }));
+
+/**
+ * Since GHSA-6w3j-82v5-6qrr, `codecall:invoke` consults the CodeCall access policy before
+ * running anything, so a tool has to be registered and the plugin config reachable for a
+ * call to get as far as the flow. These helpers give each fixture the surroundings a real
+ * scope would have.
+ */
+function createInvokeTool(registeredTools: string[] = []): any {
+  const tool = new (InvokeTool as any)();
+  tool._setDependency(CodeCallConfig, { get: () => undefined, getAll: () => ({}) });
+  tool.scope.tools.getTools = jest.fn(() => registeredTools.map((name) => ({ name, fullName: name, metadata: {} })));
+  return tool;
+}
+
+function setScope(tool: any, runFlow: jest.Mock, registeredTools: string[] = []): void {
+  tool.scope = {
+    runFlow,
+    tools: {
+      getTools: jest.fn(() => registeredTools.map((name) => ({ name, fullName: name, metadata: {} }))),
+    },
+  };
+}
 
 describe('InvokeTool', () => {
   describe('Constructor Validation', () => {
     it('should instantiate InvokeTool correctly', () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
       expect(tool).toBeDefined();
     });
   });
 
   describe('Security: Self-Reference Blocking', () => {
     it('should block invocation of codecall:execute', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'codecall:execute',
@@ -81,7 +124,7 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:search', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'codecall:search',
@@ -93,7 +136,7 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:describe', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'codecall:describe',
@@ -105,7 +148,7 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:invoke (self)', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'codecall:invoke',
@@ -117,7 +160,7 @@ describe('InvokeTool', () => {
     });
 
     it('should block any codecall: prefixed tool', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'codecall:custom-tool',
@@ -129,7 +172,7 @@ describe('InvokeTool', () => {
     });
 
     it('should block CODECALL: prefix case-insensitively', async () => {
-      const tool = new (InvokeTool as any)();
+      const tool = createInvokeTool();
 
       const result = await tool.execute({
         tool: 'CODECALL:Execute',
@@ -142,11 +185,12 @@ describe('InvokeTool', () => {
   });
 
   describe('Tool Not Found', () => {
-    it('should return error when flow returns null (tool not found)', async () => {
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(null)),
-      };
+    it('should return an error when the named tool resolves to nothing', async () => {
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(null)),
+      );
 
       const result = await tool.execute({
         tool: 'nonexistent:tool',
@@ -154,15 +198,18 @@ describe('InvokeTool', () => {
       });
 
       assertErrorResult(result);
-      expect(getResultText(result)).toContain('not found');
+      // Deliberately the same wording a withheld tool gets: telling the two apart would
+      // turn codecall:invoke into an existence oracle for tools the policy hides.
+      expect(getResultText(result)).toContain('not available');
       expect(getResultText(result)).toContain('nonexistent:tool');
     });
 
-    it('should suggest using codecall:search when tool not found', async () => {
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(null)),
-      };
+    it('should suggest using codecall:search when a tool is unavailable', async () => {
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(null)),
+      );
 
       const result = await tool.execute({
         tool: 'unknown:tool',
@@ -178,10 +225,12 @@ describe('InvokeTool', () => {
     it('should return CallToolResult directly from flow', async () => {
       const mockFlowResult = createMockMcpResult({ id: '123', name: 'Test User' });
 
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(mockFlowResult)),
-      };
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(mockFlowResult)),
+        ['users:create'],
+      );
 
       const result = await tool.execute({
         tool: 'users:create',
@@ -197,10 +246,12 @@ describe('InvokeTool', () => {
     it('should pass through flow error results unchanged', async () => {
       const mockErrorResult = createMockMcpResult('Database connection failed', true);
 
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(mockErrorResult)),
-      };
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(mockErrorResult)),
+        ['users:delete'],
+      );
 
       const result = await tool.execute({
         tool: 'users:delete',
@@ -216,10 +267,8 @@ describe('InvokeTool', () => {
       const mockFlowResult = createMockMcpResult({ success: true });
       const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: mockRunFlow,
-      };
+      const tool = createInvokeTool();
+      setScope(tool, mockRunFlow, ['billing:getInvoice']);
       tool.authInfo = { userId: 'test-user' };
 
       await tool.execute({
@@ -252,10 +301,12 @@ describe('InvokeTool', () => {
         isError: false,
       };
 
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(multiContentResult)),
-      };
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(multiContentResult)),
+        ['report:generate'],
+      );
 
       const result = await tool.execute({
         tool: 'report:generate',
@@ -272,10 +323,12 @@ describe('InvokeTool', () => {
         isError: false,
       };
 
-      const tool = new (InvokeTool as any)();
-      tool.scope = {
-        runFlow: jest.fn(() => Promise.resolve(imageResult)),
-      };
+      const tool = createInvokeTool();
+      setScope(
+        tool,
+        jest.fn(() => Promise.resolve(imageResult)),
+        ['chart:render'],
+      );
 
       const result = await tool.execute({
         tool: 'chart:render',
@@ -290,9 +343,10 @@ describe('InvokeTool', () => {
 
 describe('Input Edge Cases', () => {
   it('should handle empty tool name (via flow)', async () => {
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
+      tools: { getTools: jest.fn(() => []) },
     };
 
     const result = await tool.execute({
@@ -300,15 +354,16 @@ describe('Input Edge Cases', () => {
       input: {},
     });
 
-    // Empty tool name leads to "not found" since no tool has empty name
+    // An empty name matches no tool, so the access check refuses it before the flow.
     assertErrorResult(result);
-    expect(getResultText(result)).toContain('not found');
+    expect(getResultText(result)).toContain('not available');
   });
 
   it('should handle tool name with only whitespace', async () => {
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
+      tools: { getTools: jest.fn(() => []) },
     };
 
     const result = await tool.execute({
@@ -317,13 +372,14 @@ describe('Input Edge Cases', () => {
     });
 
     assertErrorResult(result);
-    expect(getResultText(result)).toContain('not found');
+    expect(getResultText(result)).toContain('not available');
   });
 
   it('should handle very long tool name', async () => {
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
+      tools: { getTools: jest.fn(() => []) },
     };
 
     const veryLongToolName = 'a'.repeat(10000);
@@ -338,9 +394,18 @@ describe('Input Edge Cases', () => {
   it('should handle tool name with special characters', async () => {
     const mockFlowResult = createMockMcpResult({ success: true });
 
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(mockFlowResult)),
+      tools: {
+        getTools: jest.fn(() => [
+          {
+            name: 'app:tool-with-dashes_and_underscores',
+            fullName: 'app:tool-with-dashes_and_underscores',
+            metadata: {},
+          },
+        ]),
+      },
     };
 
     const result = await tool.execute({
@@ -355,9 +420,10 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ data: 'test' });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: mockRunFlow,
+      tools: { getTools: jest.fn(() => [{ name: 'users:list', fullName: 'users:list', metadata: {} }]) },
     };
 
     await tool.execute({
@@ -381,10 +447,8 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    const tool = new (InvokeTool as any)();
-    tool.scope = {
-      runFlow: mockRunFlow,
-    };
+    const tool = createInvokeTool();
+    setScope(tool, mockRunFlow, ['complex:tool']);
 
     const deeplyNestedInput = {
       level1: {
@@ -419,9 +483,10 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: mockRunFlow,
+      tools: { getTools: jest.fn(() => [{ name: 'batch:process', fullName: 'batch:process', metadata: {} }]) },
     };
 
     const inputWithArrays = {
@@ -451,9 +516,10 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: mockRunFlow,
+      tools: { getTools: jest.fn(() => [{ name: 'users:update', fullName: 'users:update', metadata: {} }]) },
     };
 
     await tool.execute({
@@ -477,9 +543,10 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: mockRunFlow,
+      tools: { getTools: jest.fn(() => [{ name: 'users:create', fullName: 'users:create', metadata: {} }]) },
     };
 
     await tool.execute({
@@ -500,9 +567,10 @@ describe('Input Edge Cases', () => {
   });
 
   it('should propagate flow exceptions as error result', async () => {
-    const tool = new (InvokeTool as any)();
+    const tool = createInvokeTool();
     tool.scope = {
       runFlow: jest.fn(() => Promise.reject(new Error('Flow execution failed'))),
+      tools: { getTools: jest.fn(() => [{ name: 'users:list', fullName: 'users:list', metadata: {} }]) },
     };
 
     await expect(

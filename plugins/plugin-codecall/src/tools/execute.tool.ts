@@ -11,7 +11,12 @@ import {
   type ToolCallResult,
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
-import { assertNotSelfReference, isBlockedSelfReference } from '../security';
+import {
+  assertNotSelfReference,
+  checkCodeCallToolAccess,
+  isBlockedSelfReference,
+  type CodeCallPolicyDecision,
+} from '../security';
 import EnclaveService from '../services/enclave.service';
 import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
 import {
@@ -62,6 +67,18 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
   outputSchema: executeToolOutputSchema,
 })
 export default class ExecuteTool extends ToolContext {
+  /**
+   * Resolve the server-side CodeCall policy for a tool name (GHSA-6w3j-82v5-6qrr).
+   *
+   * Shares its decision with discovery and with `codecall:invoke`, so the three cannot
+   * diverge. A name matching no registered tool is denied rather than passed through —
+   * otherwise it would skip every metadata-driven check and reach `tools:call-tool`
+   * unexamined.
+   */
+  private checkToolPolicy(name: string): CodeCallPolicyDecision {
+    return checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), name);
+  }
+
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
 
@@ -83,7 +100,27 @@ export default class ExecuteTool extends ToolContext {
         assertNotSelfReference(name);
 
         // ============================================================
-        // SECURITY LAYER 2: Whitelist check (if configured)
+        // SECURITY LAYER 2: Server-side access policy (GHSA-6w3j-82v5-6qrr)
+        //
+        // This is the authorization boundary. It must run here and not only in
+        // discovery: a script names a tool as a bare string, so a tool merely
+        // hidden from search results is still reachable by name.
+        // ============================================================
+        const decision = this.checkToolPolicy(name);
+        if (!decision.allowed) {
+          const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name, decision.reason);
+          if (throwOnError) {
+            throw error;
+          }
+          return { success: false, error };
+        }
+
+        // ============================================================
+        // SECURITY LAYER 3: Caller-supplied allow-list — NARROWING ONLY
+        //
+        // `allowedTools` comes from the same request as the script, so it can
+        // only ever tighten what the server already permits. It is applied
+        // after the policy above, never instead of it.
         // ============================================================
         if (allowedToolSet && !allowedToolSet.has(name)) {
           const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name);
@@ -158,6 +195,9 @@ export default class ExecuteTool extends ToolContext {
           // Introspection follows the same visibility rules as callTool: CodeCall's own tools
           // are never described, and a script that declared a whitelist only sees those tools.
           if (isBlockedSelfReference(name)) return undefined;
+          // A tool the policy withholds must not leak its description or schemas either
+          // (GHSA-6w3j-82v5-6qrr) — describe is a discovery surface like search.
+          if (!this.checkToolPolicy(name).allowed) return undefined;
           if (allowedToolSet && !allowedToolSet.has(name)) return undefined;
 
           const tools = this.scope.tools.getTools(true);
