@@ -167,8 +167,8 @@ To keep bindings out of `process.env` entirely, add `nodejs_compat_do_not_popula
 ```bash
 npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 
-# Only when auth.mode is `local` or `remote`; a `public` or `static` worker
-# never mints tokens and does not read this.
+# Only when auth.mode is `local` or `remote`; `public` and `transparent`
+# never mint local JWTs and do not read this.
 npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
 
