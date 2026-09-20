@@ -165,8 +165,8 @@ A worker with `NODE_ENV = "production"` in `[vars]` is a production deployment, 
 ```bash
 npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 
-# Only when auth.mode is `local` or `remote`; `public` and `transparent`
-# never mint local JWTs and do not read this.
+# Only when auth.mode is `local` or `remote`; `public`, `transparent` and
+# `static` never mint local JWTs and do not read this.
 npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
 
