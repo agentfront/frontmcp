@@ -357,41 +357,129 @@ function checkIpv4(ip: string): SsrfCheckResult {
 /**
  * Check if an IPv6 address is private/internal.
  */
+/**
+ * Expand an IPv6 address to its eight 16-bit groups.
+ *
+ * SECURITY (GHSA-xx4w-33pp-cmw4): the checks below used to run against the address as
+ * written, so they only recognised one spelling of each blocked range. IPv6 has several
+ * equivalent spellings of the same address — `::ffff:7f00:1`, `::ffff:127.0.0.1` and
+ * `0:0:0:0:0:ffff:127.0.0.1` are all `127.0.0.1` — and matching on the text meant the other
+ * spellings walked past the guard. Normalising first is what makes the range checks mean
+ * what they say.
+ *
+ * @returns Eight group values, or null when the input is not a well-formed IPv6 address.
+ */
+function expandIpv6(ip: string): number[] | null {
+  let text = ip.toLowerCase();
+  if (text.includes('%')) {
+    text = text.slice(0, text.indexOf('%'));
+  }
+
+  // A trailing dotted-quad stands for the last two groups.
+  const dottedQuad = text.match(/^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (dottedQuad) {
+    const octets = dottedQuad[2].split('.').map(Number);
+    if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return null;
+    const high = ((octets[0] << 8) | octets[1]).toString(16);
+    const low = ((octets[2] << 8) | octets[3]).toString(16);
+    text = `${dottedQuad[1]}${high}:${low}`;
+  }
+
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+
+  const parseGroups = (part: string): number[] | null => {
+    if (part === '') return [];
+    const groups: number[] = [];
+    for (const group of part.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+      groups.push(parseInt(group, 16));
+    }
+    return groups;
+  };
+
+  const head = parseGroups(halves[0]);
+  if (head === null) return null;
+
+  if (halves.length === 1) {
+    return head.length === 8 ? head : null;
+  }
+
+  const tail = parseGroups(halves[1]);
+  if (tail === null) return null;
+  if (head.length + tail.length > 7) return null;
+
+  return [...head, ...new Array(8 - head.length - tail.length).fill(0), ...tail];
+}
+
 function checkIpv6(ip: string): SsrfCheckResult {
-  const normalizedIp = ip.toLowerCase();
+  const groups = expandIpv6(ip);
+
+  if (!groups) {
+    // Not parseable as IPv6. Refuse rather than fall through to "allowed": an address this
+    // guard cannot understand is not one it can vouch for.
+    return { allowed: false, reason: `Malformed IPv6 address: ${ip}` };
+  }
+
+  const isZeroPrefix = groups.slice(0, 7).every((group) => group === 0);
 
   // Loopback: ::1
-  if (normalizedIp === '::1') {
+  if (isZeroPrefix && groups[7] === 1) {
     return { allowed: false, reason: 'IPv6 loopback address (::1) is not allowed' };
   }
 
   // Unspecified: ::
-  if (normalizedIp === '::' || normalizedIp === '0:0:0:0:0:0:0:0') {
+  if (isZeroPrefix && groups[7] === 0) {
     return { allowed: false, reason: 'IPv6 unspecified address (::) is not allowed' };
   }
 
   // Link-local: fe80::/10
-  if (
-    normalizedIp.startsWith('fe8') ||
-    normalizedIp.startsWith('fe9') ||
-    normalizedIp.startsWith('fea') ||
-    normalizedIp.startsWith('feb')
-  ) {
+  if ((groups[0] & 0xffc0) === 0xfe80) {
     return { allowed: false, reason: 'IPv6 link-local addresses (fe80::/10) are not allowed' };
   }
 
-  // Unique local: fc00::/7 (fc00::/8 and fd00::/8)
-  if (normalizedIp.startsWith('fc') || normalizedIp.startsWith('fd')) {
+  // Unique local: fc00::/7
+  if ((groups[0] & 0xfe00) === 0xfc00) {
     return { allowed: false, reason: 'IPv6 unique local addresses (fc00::/7) are not allowed' };
   }
 
-  // IPv4-mapped IPv6: ::ffff:x.x.x.x
-  const ipv4MappedMatch = normalizedIp.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (ipv4MappedMatch) {
-    return checkIpv4(ipv4MappedMatch[1]);
+  // Embedded IPv4, in every form that carries one: IPv4-mapped (::ffff:0:0/96),
+  // IPv4-compatible (::/96, deprecated but still routed by some stacks), and the NAT64
+  // well-known prefix (64:ff9b::/96). Each reaches an IPv4 destination, so each has to be
+  // judged by the IPv4 rules rather than waved through.
+  const embedded = extractEmbeddedIpv4(groups);
+  if (embedded) {
+    return checkIpv4(embedded);
   }
 
   return { allowed: true, reason: '' };
+}
+
+/**
+ * The IPv4 address embedded in an IPv6 address, where there is one.
+ */
+function extractEmbeddedIpv4(groups: number[]): string | null {
+  const toDotted = () => {
+    const high = groups[6];
+    const low = groups[7];
+    return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+  };
+
+  const firstFive = groups.slice(0, 5).every((group) => group === 0);
+
+  // ::ffff:a.b.c.d — IPv4-mapped
+  if (firstFive && groups[5] === 0xffff) return toDotted();
+
+  // ::a.b.c.d — IPv4-compatible. `::` and `::1` are handled above, so anything left here
+  // with a non-zero high group is a real embedded address.
+  if (firstFive && groups[5] === 0 && groups[6] !== 0) return toDotted();
+
+  // 64:ff9b::a.b.c.d — NAT64 well-known prefix
+  if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((group) => group === 0)) {
+    return toDotted();
+  }
+
+  return null;
 }
 
 /**
