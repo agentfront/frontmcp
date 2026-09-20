@@ -78,7 +78,7 @@ export function isPublicUrlPinned(): boolean {
  * forwarded headers and sets its own. Prefer pinning `FRONTMCP_PUBLIC_URL`,
  * which takes precedence over everything and is the safest option.
  */
-function isProxyTrusted(): boolean {
+export function isProxyTrusted(): boolean {
   try {
     if (typeof process !== 'undefined' && process.env) {
       const v = process.env['FRONTMCP_TRUST_PROXY'];

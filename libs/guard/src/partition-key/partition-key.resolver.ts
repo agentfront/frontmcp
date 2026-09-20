@@ -25,7 +25,10 @@ export function resolvePartitionKey(
 
   switch (partitionBy) {
     case 'ip':
-      return ctx.clientIp ?? 'unknown-ip';
+      // No shared fallback bucket (GHSA-p3qf-fcwm-35x4). Every client whose IP could not be
+      // established used to land on one literal key, so a single caller could exhaust the
+      // budget for all the others. The session is the narrowest identity still available.
+      return ctx.clientIp ?? `session:${ctx.sessionId}`;
     case 'session':
       return ctx.sessionId;
     case 'userId':

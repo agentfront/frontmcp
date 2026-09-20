@@ -112,6 +112,29 @@ class ExpensiveQueryTool extends ToolContext {
 }
 ```
 
+## `partitionBy: 'ip'` needs a declared trusted proxy
+
+The client IP comes from the socket peer address. `X-Forwarded-For` and `X-Real-IP` are set
+by whoever sent the request, so they are ignored unless you declare a trusted proxy:
+
+```bash
+FRONTMCP_TRUST_PROXY=true          # honour forwarded headers -- ONLY behind a real proxy
+FRONTMCP_TRUSTED_PROXY_DEPTH=1     # how many proxies you run in front of the app
+```
+
+- Behind a load balancer **without** `FRONTMCP_TRUST_PROXY`, every request looks like it came
+  from the balancer and all clients share one bucket.
+- **With** it but no proxy actually in front, a caller forges the header and gets a fresh
+  bucket per request, so the limit never triggers.
+
+The client is read `FRONTMCP_TRUSTED_PROXY_DEPTH` hops back from the end of the chain: callers
+can prepend entries, but only your own proxies append to it. The value is validated as an IP
+address before use.
+
+When no IP can be established the request falls back to a per-session bucket
+(`session:<sessionId>`), never a single shared key -- a shared key lets one client exhaust the
+budget for every other client that also has no IP.
+
 ## Configuration Types
 
 ### RateLimitConfig

@@ -184,6 +184,26 @@ Protect against hanging requests by setting a maximum execution time.
 
 Add a server-wide rate limit that applies to all requests, regardless of which tool is called.
 
+<Warning>
+  **`partitionBy: 'ip'` requires `FRONTMCP_TRUST_PROXY` when you run behind a proxy.**
+
+The client IP comes from the socket peer address by default. `X-Forwarded-For` and
+`X-Real-IP` are set by whoever sent the request, so they are ignored unless you declare a
+trusted proxy with `FRONTMCP_TRUST_PROXY=true`. Without that, a deployment behind a load
+balancer sees every request as coming from the balancer and rate-limits all clients as one.
+With it but no proxy actually in front, a caller can forge the header and mint a fresh
+bucket per request.
+
+Set `FRONTMCP_TRUSTED_PROXY_DEPTH` to the number of proxies you run in front of the app
+(default `1`). The client is read from that many hops back along the chain, because callers
+can prepend entries but only your own proxies append to it.
+
+When no IP can be established the request falls back to a per-session bucket. It is never
+pooled into one shared bucket, which would let a single client exhaust the budget for
+everyone else.
+
+</Warning>
+
 <Steps>
   <Step title="Configure global limits">
     ```typescript

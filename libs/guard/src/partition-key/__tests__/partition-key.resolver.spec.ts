@@ -1,5 +1,4 @@
-import { resolvePartitionKey, buildStorageKey } from '../index';
-import type { PartitionKeyContext } from '../index';
+import { buildStorageKey, resolvePartitionKey, type PartitionKeyContext } from '../index';
 
 describe('resolvePartitionKey', () => {
   const fullContext: PartitionKeyContext = {
@@ -27,12 +26,15 @@ describe('resolvePartitionKey', () => {
       expect(resolvePartitionKey('ip', fullContext)).toBe('10.0.0.1');
     });
 
-    it('should return "unknown-ip" when clientIp is missing', () => {
-      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('unknown-ip');
+    it('should fall back to the session when clientIp is missing', () => {
+      // Not a shared literal key: two IP-less clients must not spend one budget
+      // (GHSA-p3qf-fcwm-35x4).
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('session:sess-1');
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-2' })).toBe('session:sess-2');
     });
 
-    it('should return "unknown-ip" when context is undefined', () => {
-      expect(resolvePartitionKey('ip', undefined)).toBe('unknown-ip');
+    it('should fall back to the anonymous session when context is undefined', () => {
+      expect(resolvePartitionKey('ip', undefined)).toBe('session:anonymous');
     });
   });
 
