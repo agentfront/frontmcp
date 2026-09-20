@@ -6,7 +6,7 @@ description: 'Scaffold a FrontMCP project targeting Cloudflare, configure a cust
 tags: [deployment, json-rpc, cloudflare, worker, custom, domain]
 features:
   - 'Using `frontmcp create --target cloudflare` to scaffold a project with `wrangler.toml` and deploy scripts'
-  - 'Adding a custom domain with `wrangler domains add` for production-ready URLs'
+  - 'Adding a custom domain with `wrangler deploy --domain` for production-ready URLs'
   - 'End-to-end verification of both the health check and MCP JSON-RPC endpoint'
 ---
 
@@ -74,12 +74,9 @@ NODE_ENV = "production"
 ```
 
 ```bash
-# Build and deploy
+# Build and deploy to a custom domain
 frontmcp build --target cloudflare
-wrangler deploy
-
-# Add a custom domain
-wrangler domains add mcp.example.com
+npx wrangler deploy --domain mcp.example.com
 
 # Verify health endpoint (FrontMCP serves /healthz by default)
 curl https://mcp.example.com/healthz
@@ -93,7 +90,7 @@ curl -X POST https://mcp.example.com/mcp \
 ## What This Demonstrates
 
 - Using `frontmcp create --target cloudflare` to scaffold a project with `wrangler.toml` and deploy scripts
-- Adding a custom domain with `wrangler domains add` for production-ready URLs
+- Adding a custom domain with `wrangler deploy --domain` for production-ready URLs
 - End-to-end verification of both the health check and MCP JSON-RPC endpoint
 
 ## Related

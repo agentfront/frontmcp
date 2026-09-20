@@ -234,8 +234,10 @@ module.exports = {};
       expect(toml).toContain('compatibility_date = "2025-01-01"');
       // main path must always reflect the build's actual output dir (#374 round-1 fix).
       expect(toml).toContain('main = "dist/cloudflare/index.js"');
-      // nodejs_compat is emitted regardless of user wrangler overrides.
-      expect(toml).toContain('compatibility_flags = ["nodejs_compat"]');
+      // nodejs_compat is emitted regardless of user wrangler overrides, and
+      // since #536 the process.env bridge flag rides along with it.
+      expect(toml).toContain('"nodejs_compat"');
+      expect(toml).toContain('"nodejs_compat_populate_process_env"');
     });
 
     it('falls back to defaults when deployments[].wrangler is omitted', async () => {
@@ -260,20 +262,33 @@ module.exports = {};
       expect(toml).toContain('compatibility_date = "2024-09-23"');
       // The worker entry require()s @frontmcp/sdk + Express → Node builtins, so
       // the emitted config MUST carry nodejs_compat or the deployed Worker
-      // cannot boot.
-      expect(toml).toContain('compatibility_flags = ["nodejs_compat"]');
+      // cannot boot. #536 adds the process.env bridge flag alongside it.
+      expect(toml).toContain('"nodejs_compat"');
+      expect(toml).toContain('"nodejs_compat_populate_process_env"');
     });
 
-    it('overwrites an existing wrangler.toml on every build (#374 round-1 alwaysWriteConfig)', async () => {
-      tmp = await makeTmpProject('cf-wrangler-overwrite');
+    it('corrects a stale main on every build but keeps the rest of the file (#374 + #535)', async () => {
+      tmp = await makeTmpProject('cf-wrangler-reconcile');
       await writeCloudflareFixture(tmp, `, wrangler: { name: 'updated-name', compatibilityDate: '2025-06-01' }`);
-      // Pre-seed a stale wrangler.toml that points at the wrong main path.
+      // Pre-seed a wrangler.toml that points at the wrong main path AND carries
+      // user-owned sections the build must not touch.
       await writeTextFile(
         tmp,
         'wrangler.toml',
         `name = "stale-name"
 main = "dist/index.js"
 compatibility_date = "2024-01-01"
+
+[vars]
+NODE_ENV = "production"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "real-kv-id"
+
+# a comment the build must preserve
+[triggers]
+crontabs = ["*/5 * * * *"]
 `,
       );
 
@@ -288,11 +303,34 @@ compatibility_date = "2024-01-01"
         throw new Error(`wrangler.toml not written. Build output:\n${stdout}${stderr}`);
       }
       const toml = await readFile(wranglerPath);
-      expect(toml).toContain('name = "updated-name"');
-      expect(toml).toContain('compatibility_date = "2025-06-01"');
+
+      // #374 — `main` still has to track the build output, unconditionally.
       expect(toml).toContain('main = "dist/cloudflare/index.js"');
-      expect(toml).not.toContain('stale-name');
       expect(toml).not.toContain('main = "dist/index.js"');
+
+      // #535 — the build used to render the whole file from a template, which
+      // renamed the worker and deleted every binding. It now rewrites only the
+      // keys it owns: a declared name is kept (with a warning) rather than
+      // silently replaced, and a pinned compatibility_date survives.
+      expect(toml).toContain('name = "stale-name"');
+      expect(toml).not.toContain('updated-name');
+      expect(toml).toContain('compatibility_date = "2024-01-01"');
+      expect(stdout + stderr).toContain('stale-name');
+
+      // Everything the user authored is still there.
+      expect(toml).toContain('[vars]');
+      expect(toml).toContain('NODE_ENV = "production"');
+      expect(toml).toContain('[[kv_namespaces]]');
+      expect(toml).toContain('id = "real-kv-id"');
+      expect(toml).toContain('# a comment the build must preserve');
+      expect(toml).toContain('crontabs = ["*/5 * * * *"]');
+
+      // Both managed flags are merged in, not dropped, even though the
+      // pre-seeded file declared none. Asserting only `nodejs_compat` would let
+      // a regression that drops the process-env flag through, and the worker
+      // would boot with `[vars]` and secrets missing from `process.env` (#536).
+      expect(toml).toContain('"nodejs_compat"');
+      expect(toml).toContain('"nodejs_compat_populate_process_env"');
     });
   });
 });

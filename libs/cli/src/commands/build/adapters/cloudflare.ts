@@ -1,5 +1,60 @@
-import type { CloudflareDeployment } from '../../../config/frontmcp-config.types';
-import type { AdapterTemplate } from '../types';
+import type { CloudflareDeployment, DeploymentTarget } from '../../../config/frontmcp-config.types';
+import type { AdapterBuildContext, AdapterTemplate } from '../types';
+import { mergeWranglerToml, renderWranglerToml, type ManagedWranglerFields } from './wrangler-toml';
+
+/**
+ * `nodejs_compat` gives the Worker the Node API surface the SDK runtime needs
+ * (node:*, Buffer, process, streams). Without it the Worker fails to load, so
+ * the adapter always emits it.
+ */
+const REQUIRED_COMPATIBILITY_FLAG = 'nodejs_compat';
+
+/**
+ * Mirrors `[vars]` and secrets into `process.env`. Cloudflare enables this by
+ * default only for compatibility dates on or after 2025-04-01, and the adapter
+ * defaults to an earlier date, so emit it explicitly (#536).
+ */
+const POPULATE_PROCESS_ENV_FLAG = 'nodejs_compat_populate_process_env';
+
+/** The flag a user sets to deliberately keep `process.env` empty. */
+const OPT_OUT_PROCESS_ENV_FLAG = 'nodejs_compat_do_not_populate_process_env';
+
+/**
+ * `nodejs_compat` only provides the full Node API surface (incl. `require` of
+ * builtins) from this date onward; default to it so a freshly-built worker
+ * boots. Users can still pin an older/newer date.
+ */
+const DEFAULT_COMPATIBILITY_DATE = '2024-09-23';
+
+const DEFAULT_WORKER_NAME = 'frontmcp-worker';
+
+const WORKER_MAIN = 'dist/cloudflare/index.js';
+
+/**
+ * Resolve the final flag list.
+ *
+ * `wrangler deploy` rejects a config carrying both the populate and the opt-out
+ * flag, so the opt-out always wins — including when the user lists both
+ * themselves, which the earlier "don't auto-add" guard did not cover.
+ */
+export function resolveCompatibilityFlags(declared: readonly string[]): string[] {
+  const optedOut = declared.includes(OPT_OUT_PROCESS_ENV_FLAG);
+  const flags = [REQUIRED_COMPATIBILITY_FLAG, ...declared];
+  if (!optedOut) flags.push(POPULATE_PROCESS_ENV_FLAG);
+  const deduped = Array.from(new Set(flags));
+  return optedOut ? deduped.filter((flag) => flag !== POPULATE_PROCESS_ENV_FLAG) : deduped;
+}
+
+function resolveManagedFields(deployment?: CloudflareDeployment): ManagedWranglerFields {
+  const wrangler = deployment?.wrangler ?? {};
+
+  return {
+    name: wrangler.name ?? DEFAULT_WORKER_NAME,
+    main: WORKER_MAIN,
+    compatibilityDate: wrangler.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+    compatibilityFlags: resolveCompatibilityFlags(wrangler.compatibilityFlags ?? []),
+  };
+}
 
 /**
  * Cloudflare Workers adapter - edge deployment on Cloudflare.
@@ -8,11 +63,10 @@ import type { AdapterTemplate } from '../types';
  * Express, no Node `req`/`res` shim.
  *
  * NOTE: this decorator-build path does NOT emit KV / Durable Object / R2 / D1
- * bindings or `[triggers] crontabs` into `wrangler.toml`, and the entry passes
- * only the `Request` to the handler (not `env`/`ctx`). Workers needing bindings
- * or the managed auto-update Cron (`scheduled`) should use `@frontmcp/edge`
- * `createEdgeMcp` with a hand-written `wrangler.toml`. See
- * docs/frontmcp/deployment/cloudflare-worker.mdx.
+ * bindings or `[triggers] crontabs` into `wrangler.toml` — but since #535 it no
+ * longer deletes ones you add by hand either. Workers needing the managed
+ * auto-update Cron (`scheduled`) should use `@frontmcp/edge` `createEdgeMcp`.
+ * See docs/frontmcp/deployment/cloudflare-worker.mdx.
  *
  * @see https://developers.cloudflare.com/workers/
  */
@@ -27,13 +81,71 @@ export const cloudflareAdapter: AdapterTemplate = {
   // env flags are set before the user module's `@FrontMcp` decorator evaluates
   // (ESM import evaluation is ordered, and the decorator reads these at import
   // time). FRONTMCP_WORKER selects FrontMCP's Web-standard fetch handler.
-  getSetupTemplate: () => `// Auto-generated — sets env before the @FrontMcp decorator runs.
+  //
+  // #539 — `transport.http.path` configures the CLI (dev, inspector, generated
+  // client URLs) while the server reads `@FrontMcp({ http: { entryPath } })`,
+  // which defaults to `/`. Nothing reconciled the two, so a project that only
+  // set the documented `transport.http.path` got a worker serving a different
+  // path than every other command in the toolchain. Propagating it through
+  // FRONTMCP_HTTP_ENTRY_PATH reuses the seam `frontmcp dev` already uses (#446):
+  // it supplies the *default*, so an explicit decorator `entryPath` still wins.
+  getSetupTemplate: (context?: AdapterBuildContext) => {
+    const entryPath = context?.transportHttpPath;
+    const entryPathLine = entryPath
+      ? `process.env.FRONTMCP_HTTP_ENTRY_PATH = ${JSON.stringify(entryPath)};\n`
+      : '';
+    return `// Auto-generated — sets env before the @FrontMcp decorator runs.
 process.env.FRONTMCP_SERVERLESS = '1';
 process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 process.env.FRONTMCP_WORKER = '1';
-`,
+${entryPathLine}`;
+  },
 
-  getEntryTemplate: (mainModulePath: string) => `// Auto-generated Cloudflare Workers entry point (ES Module / Module Worker).
+  // #536 — `[vars]` and `wrangler secret put` values arrive as the second
+  // argument to `fetch`; they are NOT in `process.env` unless the
+  // nodejs_compat_populate_process_env flag applies. Without a bridge every
+  // `process.env.MY_API_KEY` read returns undefined in production while working
+  // fine under `frontmcp dev`, which loads .env.
+  //
+  // A worker that set `nodejs_compat_do_not_populate_process_env` asked for the
+  // opposite, and the flag only suppresses Cloudflare's own population at module
+  // evaluation — bridging anyway would put the secrets it excluded back into
+  // `process.env` on the first request, one layer further down where the
+  // operator cannot see it. So the opt-out drops the bridge entirely; bindings
+  // stay reachable through the `env` argument the handler already forwards.
+  getEntryTemplate: (mainModulePath: string, deployment?: DeploymentTarget) => {
+    const declaredFlags = (deployment as CloudflareDeployment | undefined)?.wrangler?.compatibilityFlags ?? [];
+    const bridgeEnv = !declaredFlags.includes(OPT_OUT_PROCESS_ENV_FLAG);
+
+    const bridgeDeclaration = bridgeEnv
+      ? `let envBridged = false;
+
+// Only string bindings are copied — KV/D1/R2/Durable Object bindings are objects
+// and are reachable through the \`env\` argument forwarded below. Existing values
+// win, so a value the platform already populated is never clobbered.
+function bridgeEnvToProcess(env) {
+  if (envBridged || !env) return;
+  envBridged = true;
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== 'string') continue;
+    // Per-key so one rejected assignment cannot skip the remaining bindings.
+    try {
+      if (process.env[key] === undefined) process.env[key] = value;
+    } catch {
+      // A runtime that freezes process.env still serves requests; bindings stay
+      // reachable through the env argument forwarded below.
+    }
+  }
+}
+`
+      : `// This worker declares ${OPT_OUT_PROCESS_ENV_FLAG}, so bindings are
+// deliberately NOT mirrored into process.env. Read them from the \`env\` argument
+// forwarded to the handler below.
+`;
+
+    const bridgeCall = bridgeEnv ? '    bridgeEnvToProcess(env);\n' : '';
+
+    return `// Auto-generated Cloudflare Workers entry point (ES Module / Module Worker).
 // Generated by: frontmcp build --target cloudflare
 //
 // The Worker receives the native Web Request and the SDK routes it straight
@@ -45,18 +157,21 @@ import { getServerlessHandlerAsync } from '@frontmcp/sdk';
 
 let handlerPromise = null;
 
+${bridgeDeclaration}
 export default {
   async fetch(request, env, ctx) {
-    if (!handlerPromise) {
+${bridgeCall}    if (!handlerPromise) {
       handlerPromise = getServerlessHandlerAsync();
     }
     // In worker mode the stored handler is a Web fetch handler:
-    // (Request) => Promise<Response>.
+    // (Request, ctx?, env?) => Promise<Response>. Forwarding ctx and env is what
+    // makes ctx.waitUntil and non-string bindings reachable from a tool (#536).
     const handler = await handlerPromise;
-    return handler(request);
+    return handler(request, ctx, env);
   },
 };
-`,
+`;
+  },
 
   // #375 — fail the build when the user's @FrontMcp config references
   // Node-only storage providers that can't run on Workers.
@@ -100,6 +215,28 @@ export default {
           'config behind a build-time `define` so the bundler can dead-code-eliminate it.',
       );
     }
+
+    // #538 — background tasks need a distributed store on an edge runtime, and
+    // `createTaskStore` throws when one is missing. The throw happens inside
+    // per-request scope initialization, so the worker answers 500 to *every*
+    // request including /healthz. Tasks now default off on edge (see
+    // `Scope.initialize`), which leaves only the explicitly-requested case —
+    // catch that here rather than at the first production request.
+    const tasks = decoratorConfig?.['tasks'];
+    const tasksExplicitlyEnabled =
+      typeof tasks === 'object' && tasks !== null && (tasks as Record<string, unknown>)['enabled'] === true;
+    if (tasksExplicitlyEnabled) {
+      const taskRedis = (tasks as Record<string, unknown>)['redis'] ?? decoratorConfig?.['redis'];
+      if (!taskRedis) {
+        errors.push(
+          '`tasks: { enabled: true }` requires a distributed task store on --target cloudflare — the ' +
+            'in-process runner cannot outlive the response on a Worker, and an in-memory store is not ' +
+            'shared between isolates. Configure `tasks.redis` (Upstash Redis over HTTP works on Workers), ' +
+            'or drop `tasks.enabled` to let the build disable tasks for this target.',
+        );
+      }
+    }
+
     if (errors.length) {
       throw new Error(
         `[--target cloudflare] config incompatible with Cloudflare Workers:\n  - ${errors.join('\n  - ')}`,
@@ -107,37 +244,24 @@ export default {
     }
   },
 
-  // #374 — always write wrangler.toml from the build output. Skipping when
+  // #374 — always reconcile wrangler.toml with the build output. Skipping when
   // the file already exists left users with a wrangler.toml that pointed at
   // dist/index.js while the build emitted dist/cloudflare/index.js, and
   // wrangler deploy silently failed.
+  //
+  // #535 — "reconcile" used to mean "overwrite from a four-line template",
+  // which renamed the worker and deleted every binding. `mergeConfig` below
+  // now rewrites only the managed keys.
   alwaysWriteConfig: true,
 
   // #374 round-2 — merge `frontmcp.config.deployments[].wrangler.{name,
   // compatibilityDate, compatibilityFlags}` into the rendered TOML so values
   // declared in the user's config actually reach `wrangler deploy`. Defaults
   // preserved when the field is absent or no deployment was matched.
-  getConfig: (_cwd, deployment) => {
-    const wrangler = (deployment as CloudflareDeployment | undefined)?.wrangler ?? {};
-    const name = wrangler.name ?? 'frontmcp-worker';
-    // The cloudflare entry (getEntryTemplate) is an ES Module that imports the
-    // SDK's web-fetch handler, which still transitively pulls in Node builtins
-    // (node:*, Buffer, process, streams) through the SDK runtime. On Workers
-    // those exist ONLY behind the `nodejs_compat` flag — without it the Worker
-    // fails to even load. The flag is therefore non-negotiable for this target;
-    // we always emit it and merge in any extra flags the user declared (deduped,
-    // `nodejs_compat` guaranteed first).
-    const flags = Array.from(new Set(['nodejs_compat', ...(wrangler.compatibilityFlags ?? [])]));
-    // `nodejs_compat` only provides the full Node API surface (incl. `require`
-    // of builtins) when compatibility_date >= 2024-09-23; default to that so a
-    // freshly-built worker boots. Users can still pin an older/newer date.
-    const compatibilityDate = wrangler.compatibilityDate ?? '2024-09-23';
-    return `name = "${name}"
-main = "dist/cloudflare/index.js"
-compatibility_date = "${compatibilityDate}"
-compatibility_flags = [${flags.map((f) => `"${f}"`).join(', ')}]
-`;
-  },
+  getConfig: (_cwd, deployment) => renderWranglerToml(resolveManagedFields(deployment as CloudflareDeployment)),
+
+  mergeConfig: (existing, _cwd, deployment) =>
+    mergeWranglerToml(existing, resolveManagedFields(deployment as CloudflareDeployment), resolveCompatibilityFlags),
 
   configFileName: 'wrangler.toml',
 };

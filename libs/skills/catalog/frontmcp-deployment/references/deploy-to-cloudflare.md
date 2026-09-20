@@ -36,7 +36,7 @@ Cloudflare Workers support is **experimental**. The Express-to-Workers adapter h
 ## Prerequisites
 
 - A Cloudflare account (https://dash.cloudflare.com)
-- Wrangler CLI installed: `npm install -g wrangler`
+- Wrangler — `frontmcp create --target cloudflare` adds it as a devDependency, so `npm run deploy` / `npm run dev:worker` use the project-local version. Invoke it directly as `npx wrangler` rather than installing it globally, so the pinned version is the one that runs.
 - A built FrontMCP project
 
 ## Step 1: Create a Cloudflare-targeted Project
@@ -45,7 +45,7 @@ Cloudflare Workers support is **experimental**. The Express-to-Workers adapter h
 npx frontmcp create my-app --target cloudflare
 ```
 
-This generates the project with a `wrangler.toml` and a deploy script (`npm run deploy` runs `wrangler deploy`).
+This generates the project with a `wrangler.toml`, `wrangler` as a devDependency, and `deploy` / `dev:worker` scripts that build first and then run the project-local `wrangler`.
 
 ## Step 2: Build for Cloudflare
 
@@ -57,24 +57,27 @@ This produces:
 
 ```text
 dist/cloudflare/
-  index.js       # Cloudflare Workers entry (CommonJS) — wraps your @FrontMcp server
-  main.js        # Your compiled server module (CommonJS)
-wrangler.toml    # Wrangler configuration (overwritten on every build)
+  index.js       # Cloudflare Workers entry (ES Module / Module Worker) — wraps your @FrontMcp server
+  main.js        # Your compiled server module (ES Module)
+wrangler.toml    # Wrangler configuration (managed keys reconciled on every build)
 ```
 
-Cloudflare Workers use CommonJS (not ESM). The build command sets `--module commonjs` automatically.
+The adapter emits a **Module Worker** (`export default { fetch }`), so the build
+compiles with `--module esnext`. The legacy CommonJS `module.exports` shape is
+read by Cloudflare as a Service Worker, where `nodejs_compat` cannot externalize
+Node builtins and the deploy fails — do not force CommonJS for this target.
 
-> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true` and overwrites the entire `wrangler.toml` on every build with the template below. Hand-edited bindings (`[[kv_namespaces]]`, `[vars]`, `[[d1_databases]]`, etc.) WILL be erased the next time you run `frontmcp build --target cloudflare`. Configure `name`, `compatibility_date`, and extra `compatibility_flags` via your `frontmcp.config` file's `deployments[].wrangler` section, and keep bindings in a separate config file referenced from your toolchain (or re-add them after each build).
+> **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true`, but it rewrites only the keys it manages. `main` is always overwritten (it has to track the build output); `name` and `compatibility_date` are written only when the file does not already declare them; `compatibility_flags` is merged. Hand-edited `[vars]`, `[[kv_namespaces]]`, `[[d1_databases]]`, `[triggers]` and comments survive every build. If `wrangler.toml` and `frontmcp.config` disagree on the worker name, the build keeps the file's value and warns instead of renaming your worker.
 
 ## Step 3: Configure wrangler.toml
 
-The build always writes this. `compatibility_flags = ["nodejs_compat"]` is **always** emitted — the worker entry is an ES Module that imports `@frontmcp/sdk`'s web-fetch handler, which still transitively pulls in Node builtins (no Express on the Worker), so without the flag the deployed Worker fails to load. The default `compatibility_date` is `2024-09-23` (the date that enables full `nodejs_compat`). `main` is `dist/cloudflare/index.js`.
+The build writes this when the file does not exist yet. `nodejs_compat` is **always** emitted — the worker entry is an ES Module that imports `@frontmcp/sdk`'s web-fetch handler, which still transitively pulls in Node builtins (no Express on the Worker), so without the flag the deployed Worker fails to load. `nodejs_compat_populate_process_env` is emitted too, so `[vars]` and secrets are readable as `process.env.*`; add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags` to opt out. The default `compatibility_date` is `2024-09-23` (the date that enables full `nodejs_compat`). `main` is `dist/cloudflare/index.js`.
 
 ```toml
 name = "frontmcp-worker"
 main = "dist/cloudflare/index.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 ```
 
 `name`, `compatibility_date`, and any extra `compatibilityFlags` come from `frontmcp.config.{ts,js}`'s `deployments` array (`nodejs_compat` is merged in automatically). Example:
@@ -96,7 +99,7 @@ export default {
 };
 ```
 
-To add KV storage or other bindings, append them AFTER each build (or use a wrapper script that runs the build then concatenates a `wrangler.bindings.toml` you maintain separately):
+To add KV storage or other bindings, add them to `wrangler.toml` directly — they are preserved across builds:
 
 ```toml
 name = "my-worker"
@@ -115,7 +118,7 @@ NODE_ENV = "production"
 Create the KV namespace via the dashboard or CLI:
 
 ```bash
-wrangler kv:namespace create FRONTMCP_KV
+npx wrangler kv:namespace create FRONTMCP_KV
 ```
 
 Copy the returned `id` into your `wrangler.toml`.
@@ -144,22 +147,59 @@ export default MyServer;
 
 For session storage, use Upstash Redis (HTTP) via `redis: { provider: 'vercel-kv' }` or wire Cloudflare KV directly inside your tools — the SDK does not include a built-in Cloudflare KV provider, and ioredis-style `redis: { ... }` configs are rejected by the Cloudflare adapter at build time (no Node TCP on Workers).
 
+### Secrets, vars and `process.env`
+
+Worker bindings arrive as an argument to `fetch`, not as environment variables. The generated entry copies every **string** binding into `process.env` on the first request (existing values are never overwritten), so ordinary `process.env.MY_API_KEY` reads behave the same on Workers as under `frontmcp dev`. Non-string bindings (KV, D1, R2, Durable Objects) stay on `env`, which the entry forwards to the handler along with `ctx`.
+
+A value read at module-eval time — inside the `@FrontMcp({...})` argument itself — is still `undefined`, because the copy happens on the first request. Read configuration inside `execute()` / `read()`, or rely on `nodejs_compat_populate_process_env` (emitted by default), which populates `process.env` before your module evaluates.
+
+To keep bindings out of `process.env` entirely, add `nodejs_compat_do_not_populate_process_env` to `wrangler.compatibilityFlags`. Cloudflare's flag only suppresses population at module evaluation, so the build also drops the first-request bridge from the generated entry — otherwise it would put back exactly the values you excluded. Every binding is then read from the `env` argument only.
+
+### Required secrets
+
+`NODE_ENV = "production"` in `[vars]` makes this a production deployment, where FrontMCP refuses its development fallbacks:
+
+| Secret | Required when | Failure without it |
+| ------ | ------------- | ------------------ |
+| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}` |
+| `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
+
+```bash
+npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
+
+# Only when auth.mode is `local` or `remote`; `public` and `transparent`
+# never mint local JWTs and do not read this.
+npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
+```
+
+Because `[vars]` reach `process.env`, `npx wrangler dev` sees the same `NODE_ENV=production` the deployment does, so a missing secret fails locally rather than only after a successful deploy.
+
+### Background tasks
+
+Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
+
 ## Step 5: Deploy
 
 ```bash
 # Preview deployment
-wrangler dev
+npx wrangler dev
 
 # Production deployment
-wrangler deploy
+npx wrangler deploy
 ```
 
 ### Custom Domain
 
-Configure a custom domain in the Cloudflare dashboard under **Workers & Pages > your worker > Settings > Domains & Routes**, or via wrangler:
+Configure a custom domain in the Cloudflare dashboard under **Workers & Pages > your worker > Settings > Domains & Routes**, declare it in `wrangler.toml`, or pass it to the deploy:
 
 ```bash
-wrangler domains add mcp.example.com
+npx wrangler deploy --domain mcp.example.com
+```
+
+The `wrangler.toml` form is equivalent and survives across deploys:
+
+```toml
+routes = [{ pattern = "mcp.example.com", custom_domain = true }]
 ```
 
 ## Step 6: Verify
@@ -175,6 +215,8 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 ```
 
 ## Endpoint path, CORS & SSE — config-driven
+
+Two settings name this concept. `transport.http.path` in `frontmcp.config.*` configures the **CLI** (`frontmcp dev`, the inspector, the generated `clients[].url`); `@FrontMcp({ http: { entryPath } })` configures the **server**, and that is what the deployed worker reads. The cloudflare build reconciles them — `transport.http.path` becomes the server's default, an explicit decorator `entryPath` still wins, and the build warns on a mismatch and prints the resolved path (`Server will serve MCP at /mcp`).
 
 The worker's transport is driven by the standard `http` + `transport` config (the same fields the Express host reads), so behaviour is identical on both adapters. The worker serves MCP at **exactly one path** — `http.entryPath` (the worker root `/` when unset) — not a guessed `/` + `/mcp` set. Cloudflare never strips the path before it reaches the worker:
 
@@ -220,8 +262,9 @@ class_name = "FrontMcpSession"
 [[migrations]]
 tag = "v1"
 new_classes = ["FrontMcpSession"]
-[vars]
-MCP_SESSION_SECRET = "..."   # required on production isolates; bridged into process.env
+# MCP_SESSION_SECRET is required on production isolates. Set it as a SECRET, not
+# a var — `[vars]` is committed plaintext:
+#   npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 ```
 
 One DO per session holds a persistent transport so the `GET` notification stream stays open and `tools/call` notifications reach it. It runs the **same `http:request` flow** (auth/session:verify/router/audit/metrics + hooks) as the stateless path — so transparent auth returns `401` + `WWW-Authenticate` on the worker too.
@@ -240,7 +283,7 @@ One DO per session holds a persistent transport so the `GET` notification stream
 | ----------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
 | Worker exceeds size limit     | Too many bundled dependencies                  | Review dependencies and remove unused packages to reduce bundle size      |
 | Module format errors          | Worker bundled as a Service Worker             | FrontMCP Cloudflare builds emit an **ES Module Worker** (`export default { fetch }`); `nodejs_compat` requires it. Don't force `type`/CommonJS |
-| KV binding errors             | Namespace not created or binding name mismatch | Run `wrangler kv:namespace create` and copy the `id` into `wrangler.toml` |
+| KV binding errors             | Namespace not created or binding name mismatch | Run `npx wrangler kv:namespace create` and copy the `id` into `wrangler.toml` |
 | Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects              |
 | CORS failures on MCP endpoint | Missing CORS headers in Worker response        | `@frontmcp/edge`: pass `cors: { origin: true }` to `createEdgeMcp({...})` (transport-level CORS) |
 
@@ -270,8 +313,8 @@ One DO per session holds a persistent transport so the `GET` notification stream
 
 **Deployment**
 
-- [ ] `wrangler dev` serves the MCP endpoint locally
-- [ ] `wrangler deploy` succeeds without errors
+- [ ] `npx wrangler dev` serves the MCP endpoint locally
+- [ ] `npx wrangler deploy` succeeds without errors
 - [ ] Health endpoint responds with 200
 
 **Runtime**

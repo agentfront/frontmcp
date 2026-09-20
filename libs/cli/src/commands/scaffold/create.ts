@@ -182,6 +182,14 @@ function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: Dep
   // was unreachable — reintroduce it (and add a 'desktop'/'cli' target to
   // `DeploymentTarget`) if scaffold should support stdio in the future.
   const port = 3000;
+  // Issue #535 — the scaffold wrote the project name into wrangler.toml but not
+  // into frontmcp.config, so the two disagreed and the build's generated TOML
+  // reset the worker to `frontmcp-worker`. Declaring it here makes the pair
+  // round-trip.
+  const deploymentBlock =
+    deploymentTarget === 'cloudflare'
+      ? `  deployments: [{ target: 'cloudflare', wrangler: { name: '${safeName}' } }],`
+      : `  deployments: [{ target: '${deploymentTarget}' }],`;
   const clientBlock = `  clients: {
     'claude-code': {
       name: '${safeName}',
@@ -199,7 +207,7 @@ function renderFrontmcpConfigTemplate(projectName: string, deploymentTarget: Dep
 export default defineConfig({
   name: '${safeName}',
   entry: './src/main.ts',
-  deployments: [{ target: '${deploymentTarget}' }],
+${deploymentBlock}
 ${transportBlock}
   env: {
     shared: {},
@@ -666,22 +674,29 @@ Outputs:
 `;
 
 // Cloudflare Workers template.
-// NOTE: `frontmcp build --target cloudflare` regenerates the top-level keys
-// (name / main / compatibility_date / compatibility_flags) on every build, so
-// they MUST match the adapter's output: an ES Module Worker at
-// dist/cloudflare/index.js, requiring `nodejs_compat` with date >= 2024-09-23
-// (without the flag the Worker fails to load). KV/cron below are for the
-// managed `@frontmcp/edge` path (which is bundled by wrangler, not `frontmcp
-// build`, so those keys persist there).
+// `frontmcp build --target cloudflare` reconciles the top-level keys with the
+// build output, but since #535 it rewrites only `main` outright and merges
+// `compatibility_flags`; `name`, `compatibility_date`, `[vars]`, bindings and
+// comments below are preserved. The values here match the adapter's defaults:
+// an ES Module Worker at dist/cloudflare/index.js, `nodejs_compat` with date
+// >= 2024-09-23 (without the flag the Worker fails to load), and
+// `nodejs_compat_populate_process_env` so `[vars]` and secrets are readable as
+// `process.env.*` (#536).
 const TEMPLATE_WRANGLER_TOML = (projectName: string) => `
 name = "${projectName}"
 main = "dist/cloudflare/index.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 
 [vars]
 NODE_ENV = "production"
 
+# ── Required secrets (never commit these; set them with \`wrangler secret put\`) ──
+# NODE_ENV = "production" above makes this a production deployment, which means:
+#   wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32 — session-ID encryption
+# and, if you enable auth.mode 'local' or 'remote' (which mint tokens):
+#   wrangler secret put JWT_SECRET           # openssl rand -hex 32 — token signing
+#
 # ── Managed auto-update (only when using @frontmcp/edge createEdgeMcp) ──
 # Last-good bundle cache (createKvBundleCache / kvBundleCacheFromEnv('BUNDLE_CACHE')):
 # [[kv_namespaces]]
@@ -1849,6 +1864,15 @@ function printNextSteps(
 // Package.json with Target-Specific Scripts
 // =============================================================================
 
+/**
+ * Major version, not an exact pin. Wrangler 4 is the line whose `wrangler.toml`
+ * schema the build writes, so the caret is the compatibility contract; runtime
+ * behaviour is pinned separately by the `compatibility_date` the build emits,
+ * not by the CLI version (issue #542). An exact pin here would only hand every
+ * scaffolded project an immediately-stale toolchain to bump by hand.
+ */
+const WRANGLER_VERSION_RANGE = '^4.0.0';
+
 async function upsertPackageJsonWithTarget(
   cwd: string,
   nameOverride: string | undefined,
@@ -1881,7 +1905,14 @@ async function upsertPackageJsonWithTarget(
   }
 
   if (deploymentTarget === 'cloudflare') {
-    baseScripts['deploy'] = 'wrangler deploy';
+    // Issue #542 — `deploy` used to be the only mention of wrangler in the
+    // generated package.json: it was never a devDependency, so the documented
+    // final step failed on a clean machine and whoever did have a global
+    // install deployed with an unpinned version. `dev:worker` is scaffolded
+    // alongside it because running the worker locally is the only way to catch
+    // edge-runtime failures before deploying.
+    baseScripts['deploy'] = 'frontmcp build --target cloudflare && wrangler deploy';
+    baseScripts['dev:worker'] = 'frontmcp build --target cloudflare && wrangler dev';
   }
 
   const base = {
@@ -1901,6 +1932,7 @@ async function upsertPackageJsonWithTarget(
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
+      ...(deploymentTarget === 'cloudflare' ? { wrangler: WRANGLER_VERSION_RANGE } : {}),
       '@frontmcp/testing': frontmcpLibRange,
       '@swc/core': '^1.11.29',
       '@swc/helpers': '^0.5.20',

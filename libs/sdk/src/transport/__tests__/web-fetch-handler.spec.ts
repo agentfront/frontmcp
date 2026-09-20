@@ -16,9 +16,11 @@ import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../common';
 import { App } from '../../common/decorators/app.decorator';
+import { ServerRequestTokens } from '../../common/tokens/server.tokens';
+import { JwtSecretRequiredError, SessionSecretRequiredError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
-import { createWebFetchHandler, type WebFetchHandler } from '../web-fetch-handler';
+import { createWebFetchHandler, runMatchingHttpFlowWeb, type WebFetchHandler } from '../web-fetch-handler';
 
 const echoInput = { message: z.string() };
 
@@ -128,9 +130,7 @@ describe('createWebFetchHandler (Cloudflare Worker path)', () => {
   });
 
   it('serves tools/list statelessly (fresh transport per request, no session)', async () => {
-    const res = await handler(
-      mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
-    );
+    const res = await handler(mcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
 
     expect(res.status).toBe(200);
     const json = await readMcpResult<{ result?: { tools?: Array<{ name: string }> } }>(res);
@@ -248,5 +248,162 @@ describe('createWebFetchHandler config-driven routing, CORS & SSE', () => {
     const buffered = createWebFetchHandler(await scopeFor({ transport: { protocol: 'stateless-api' } }));
     const jsonRes = await buffered(mcpRequestAt('/', INITIALIZE));
     expect(jsonRes.headers.get('content-type')).toContain('application/json');
+  });
+});
+
+/**
+ * Issue #546 — a worker that merely lacks `MCP_SESSION_SECRET` answered a bare
+ * `Internal Server Error`, so the only way to find out why was `wrangler tail`
+ * against live traffic. A configuration fault names a missing setting and
+ * nothing about the request, the user, or any secret's value, so it is safe to
+ * report — and it saves an operator that round trip.
+ */
+describe('createWebFetchHandler misconfiguration reporting (#546)', () => {
+  let instance: FrontMcpInstance;
+  let scope: Scope;
+
+  beforeAll(async () => {
+    instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'misconfig-test', version: '1.0.0' },
+      apps: [WebFetchApp],
+    });
+    scope = instance.getScopes()[0] as Scope;
+  });
+
+  afterAll(async () => {
+    await instance?.dispose?.();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  async function respondToFlowError(error: unknown): Promise<Response> {
+    jest.spyOn(scope, 'runFlow').mockRejectedValue(error);
+    return createWebFetchHandler(scope)(mcpRequestAt('/', INITIALIZE));
+  }
+
+  it('reports a missing session secret as server_misconfigured with the remedy', async () => {
+    const res = await respondToFlowError(new SessionSecretRequiredError('session ID encryption'));
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['error']).toBe('server_misconfigured');
+    expect(body['code']).toBe('SESSION_SECRET_REQUIRED');
+    expect(body['message']).toContain('MCP_SESSION_SECRET');
+  });
+
+  it('reports a missing JWT secret the same way', async () => {
+    const res = await respondToFlowError(new JwtSecretRequiredError('local'));
+
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['code']).toBe('JWT_SECRET_REQUIRED');
+    expect(body['message']).toContain('JWT_SECRET');
+  });
+
+  it('unwraps a configuration fault that arrives wrapped in another error', async () => {
+    const wrapped = new Error('scope initialization failed', {
+      cause: new SessionSecretRequiredError('session ID encryption'),
+    });
+    const res = await respondToFlowError(wrapped);
+
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['code']).toBe('SESSION_SECRET_REQUIRED');
+    // The wrapper's own message is never echoed.
+    expect(JSON.stringify(body)).not.toContain('scope initialization failed');
+  });
+
+  it('still answers a bare Internal Server Error for an ordinary failure', async () => {
+    const res = await respondToFlowError(new Error('boom: postgres://user:hunter2@db/app'));
+
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(text).toBe('Internal Server Error');
+    expect(text).not.toContain('hunter2');
+  });
+});
+
+/**
+ * Issue #546, second path. `SessionSecretRequiredError` is thrown inside the
+ * `http:request` flow, so `flowErrorToHttpOutput` maps it. `JwtSecretRequiredError`
+ * is thrown while the auth instance is CONSTRUCTED — i.e. out of the lazy scope
+ * build that `createFetchHandler` memoizes, before any flow exists. That path
+ * used to reject the handler promise, so the platform answered its own opaque
+ * 500 and the structured body never appeared.
+ */
+describe('createFetchHandler misconfiguration boundary (#546)', () => {
+  const ORIGINAL_NODE_ENV = process.env['NODE_ENV'];
+  const ORIGINAL_JWT_SECRET = process.env['JWT_SECRET'];
+
+  afterEach(() => {
+    if (ORIGINAL_NODE_ENV === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = ORIGINAL_NODE_ENV;
+    if (ORIGINAL_JWT_SECRET === undefined) delete process.env['JWT_SECRET'];
+    else process.env['JWT_SECRET'] = ORIGINAL_JWT_SECRET;
+  });
+
+  it('answers server_misconfigured when the scope build itself fails on a missing secret', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['JWT_SECRET'];
+
+    const handler = await FrontMcpInstance.createFetchHandler({
+      info: { name: 'lazy-misconfig', version: '1.0.0' },
+      apps: [WebFetchApp],
+      auth: { mode: 'local' },
+    } as never);
+
+    const res = await handler(mcpRequestAt('/', INITIALIZE));
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, string>;
+    expect(body['error']).toBe('server_misconfigured');
+    expect(body['code']).toBe('JWT_SECRET_REQUIRED');
+    expect(body['message']).toContain('JWT_SECRET');
+  });
+});
+
+describe('runMatchingHttpFlowWeb worker context (#536)', () => {
+  /**
+   * Non-entry-path requests (auth, well-known, OAuth) are dispatched through
+   * `runMatchingHttpFlowWeb`, not `http:request`. It used to build the
+   * `ServerRequest` without `ctx`/`env`, so exactly the flows most likely to
+   * need a KV-backed store saw `undefined` bindings while `http:request` had
+   * them.
+   */
+  function scopeCapturingServerRequest(): {
+    scope: Scope;
+    captured: () => Record<symbol, unknown> | undefined;
+  } {
+    let seen: Record<symbol, unknown> | undefined;
+    const scope = {
+      findHttpFlowName: async (serverRequest: Record<symbol, unknown>) => {
+        seen = serverRequest;
+        return 'well-known.oauth-protected-resource';
+      },
+      runFlow: async () => undefined,
+    } as unknown as Scope;
+    return { scope, captured: () => seen };
+  }
+
+  it('carries the worker ctx and env into the dispatched flow request', async () => {
+    const { scope, captured } = scopeCapturingServerRequest();
+    const ctx = { waitUntil: () => undefined };
+    const env = { MY_KV: { get: async () => null } };
+
+    await runMatchingHttpFlowWeb(scope, new Request('https://worker.example.com/.well-known/x'), { ctx, env });
+
+    const serverRequest = captured();
+    expect(serverRequest?.[ServerRequestTokens.webCtx]).toBe(ctx);
+    expect(serverRequest?.[ServerRequestTokens.webEnv]).toBe(env);
+  });
+
+  it('leaves both undefined when the caller has neither', async () => {
+    const { scope, captured } = scopeCapturingServerRequest();
+
+    await runMatchingHttpFlowWeb(scope, new Request('https://worker.example.com/.well-known/x'));
+
+    const serverRequest = captured();
+    expect(serverRequest?.[ServerRequestTokens.webCtx]).toBeUndefined();
+    expect(serverRequest?.[ServerRequestTokens.webEnv]).toBeUndefined();
   });
 });

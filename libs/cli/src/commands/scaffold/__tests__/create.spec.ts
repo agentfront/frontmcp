@@ -520,6 +520,47 @@ describe('runCreate', () => {
     });
   });
 
+  describe('cloudflare target wiring (issues #535, #536, #542)', () => {
+    beforeEach(() => {
+      jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    });
+
+    it('pins wrangler as a devDependency so `deploy` works on a clean machine', async () => {
+      await runCreate('cf-wrangler', { yes: true, target: 'cloudflare' });
+
+      const pkg = JSON.parse(readFileSync(path.join(tempDir, 'cf-wrangler', 'package.json'), 'utf8'));
+      expect(pkg.devDependencies.wrangler).toBeDefined();
+      expect(pkg.scripts.deploy).toContain('wrangler deploy');
+      expect(pkg.scripts['dev:worker']).toContain('wrangler dev');
+    });
+
+    it('does not add wrangler for other targets', async () => {
+      await runCreate('node-no-wrangler', { yes: true, target: 'node' });
+
+      const pkg = JSON.parse(readFileSync(path.join(tempDir, 'node-no-wrangler', 'package.json'), 'utf8'));
+      expect(pkg.devDependencies.wrangler).toBeUndefined();
+      expect(pkg.scripts['dev:worker']).toBeUndefined();
+    });
+
+    it('declares the worker name in frontmcp.config so wrangler.toml round-trips', async () => {
+      await runCreate('cf-named', { yes: true, target: 'cloudflare' });
+
+      const config = readFileSync(path.join(tempDir, 'cf-named', 'frontmcp.config.ts'), 'utf8');
+      expect(config).toContain("wrangler: { name: 'cf-named' }");
+
+      const toml = readFileSync(path.join(tempDir, 'cf-named', 'wrangler.toml'), 'utf8');
+      expect(toml).toContain('name = "cf-named"');
+    });
+
+    it('scaffolds the process.env bridge flag so vars and secrets are readable', async () => {
+      await runCreate('cf-flags', { yes: true, target: 'cloudflare' });
+
+      const toml = readFileSync(path.join(tempDir, 'cf-flags', 'wrangler.toml'), 'utf8');
+      expect(toml).toContain('nodejs_compat_populate_process_env');
+      expect(toml).toContain('MCP_SESSION_SECRET');
+    });
+  });
+
   describe('package manager support', () => {
     beforeEach(() => {
       jest.spyOn(process, 'cwd').mockReturnValue(tempDir);

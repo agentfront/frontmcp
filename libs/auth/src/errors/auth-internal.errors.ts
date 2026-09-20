@@ -76,6 +76,34 @@ export class SessionSecretRequiredError extends AuthInternalError {
 }
 
 /**
+ * Thrown when tokens will be minted in production but no signing secret is set.
+ */
+export class JwtSecretRequiredError extends AuthInternalError {
+  constructor(mode: string) {
+    super(
+      `JWT_SECRET is required in production for auth.mode "${mode}". Without it the server signs tokens ` +
+        'with a random per-process secret, so every restart invalidates outstanding tokens and any second ' +
+        'instance or isolate rejects tokens the first one minted.',
+      'JWT_SECRET_REQUIRED',
+    );
+  }
+}
+
+/**
+ * Thrown when a JWT signing secret is present but too weak to use.
+ */
+export class JwtSecretWeakError extends AuthInternalError {
+  constructor(byteLength: number) {
+    super(
+      `JWT_SECRET is ${byteLength} bytes; HS256 requires at least 32 (RFC 7518 §3.2). ` +
+        'A shorter secret is guessable, and whoever guesses it can forge tokens for this server. ' +
+        'Generate one with `openssl rand -hex 32`.',
+      'JWT_SECRET_INVALID',
+    );
+  }
+}
+
+/**
  * Thrown when a credential provider is already registered.
  */
 export class CredentialProviderAlreadyRegisteredError extends AuthInternalError {

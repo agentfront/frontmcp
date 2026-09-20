@@ -1,3 +1,5 @@
+import { createEdgeSessionDurableObject, createEdgeSessionRouter } from '../session-host';
+
 /**
  * Unit tests for the Cloudflare Durable Object session host.
  *
@@ -25,8 +27,6 @@ jest.mock('@frontmcp/sdk', () => ({
   buildPersistentWebStandardMcp: (...args: unknown[]) => buildPersistentWebStandardMcp(...args),
   runHttpRequestFlowWeb: (...args: unknown[]) => runHttpRequestFlowWeb(...args),
 }));
-
-import { createEdgeSessionDurableObject, createEdgeSessionRouter } from '../session-host';
 
 const SESSION_ID_HEADER = 'x-frontmcp-session-id';
 
@@ -154,7 +154,9 @@ describe('createEdgeSessionDurableObject', () => {
     expect(buildScope).toHaveBeenCalledTimes(1);
     expect(buildScope).toHaveBeenCalledWith(env);
     expect(buildPersistentWebStandardMcp).toHaveBeenCalledWith(scope, { sessionId: 'sess-1' });
-    expect(runHttpRequestFlowWeb).toHaveBeenCalledWith(scope, req1, { persistent: { __pair: true } });
+    // #536 — the DO forwards its own bindings so tools can reach KV/D1/R2 through
+    // the request context, the same way the stateless worker path does.
+    expect(runHttpRequestFlowWeb).toHaveBeenCalledWith(scope, req1, { env, persistent: { __pair: true } });
 
     // Second request reuses the memoized scope + pair (built once).
     const req2 = new Request('https://w/mcp', { headers: { [SESSION_ID_HEADER]: 'sess-1' } });
@@ -198,10 +200,7 @@ describe('createEdgeSessionDurableObject', () => {
 
   it('resets the memoized scope and rethrows when buildScope fails, retrying on the next request', async () => {
     const boom = new Error('scope build failed');
-    const buildScope = jest
-      .fn()
-      .mockRejectedValueOnce(boom)
-      .mockResolvedValueOnce(makeScope());
+    const buildScope = jest.fn().mockRejectedValueOnce(boom).mockResolvedValueOnce(makeScope());
     buildPersistentWebStandardMcp.mockResolvedValue({ __pair: true });
     runHttpRequestFlowWeb.mockResolvedValue(new Response('ok', { status: 200 }));
 

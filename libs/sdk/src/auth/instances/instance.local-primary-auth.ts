@@ -59,6 +59,7 @@ import {
   type RemoteAuthOptions,
 } from '../../common/types/options/auth';
 import { installContextExtensions } from '../../context/context-extension';
+import { JwtSecretRequiredError, JwtSecretWeakError } from '../../errors';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { CimdService } from '../cimd';
 import { createCredentialsProviders } from '../credentials';
@@ -87,6 +88,9 @@ export type LocalPrimaryAuthOptions = PublicAuthOptions | LocalAuthOptions | Rem
 // V8-isolate runtimes (Cloudflare Workers) forbid generating random values in
 // global/module-eval scope. The constructor (which runs while a Scope is built,
 // inside a request handler on Workers) calls this, where random is allowed.
+/** RFC 7518 §3.2 — HS256 requires a key at least as long as the SHA-256 output. */
+const MIN_HS256_SECRET_BYTES = 32;
+
 let defaultNoAuthSecret: Uint8Array | undefined;
 function getDefaultNoAuthSecret(): Uint8Array {
   if (!defaultNoAuthSecret) {
@@ -441,11 +445,38 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.host = getEnv('FRONTMCP_PUBLIC_HOST')?.trim() || 'localhost';
     this.issuer = this.deriveIssuer(options);
 
+    // A whitespace-only value is not a secret; treat it as absent so it takes
+    // the branches below rather than silently becoming the signing key. The key
+    // itself is the RAW value — trimming it would change the key material and
+    // invalidate every outstanding token for anyone whose secret has padding.
     const jwtSecret = getEnv('JWT_SECRET');
-    if (jwtSecret) {
-      this.secret = new TextEncoder().encode(jwtSecret);
+    const hasJwtSecret = !!jwtSecret?.trim();
+    if (hasJwtSecret && jwtSecret) {
+      const encoded = new TextEncoder().encode(jwtSecret);
+      // RFC 7518 §3.2: HS256 MUST use a key at least as long as the hash output.
+      // A shorter one is guessable, and a guessed signing key means forged tokens.
+      if (encoded.length < MIN_HS256_SECRET_BYTES) {
+        if (isProduction()) throw new JwtSecretWeakError(encoded.length);
+        this.logger.warn(
+          `JWT_SECRET is ${encoded.length} bytes; HS256 wants at least ${MIN_HS256_SECRET_BYTES} ` +
+            '(RFC 7518). This is refused in production — generate one with `openssl rand -hex 32`.',
+        );
+      }
+      this.secret = encoded;
+    } else if (isProduction() && isOrchestratedMode(options)) {
+      // Issue #546 — local/remote modes run the token endpoint, so they mint
+      // tokens on every authorization. The fallback below is a random secret
+      // generated once per process, which means outstanding tokens die on every
+      // restart and a second instance (or a second Worker isolate) rejects
+      // tokens the first one signed. That is a configuration fault, not a
+      // degraded mode, so refuse rather than warn. Public mode never mints
+      // through this path, so it keeps the warning.
+      throw new JwtSecretRequiredError(options.mode);
     } else {
-      this.logger.warn('JWT_SECRET is not set, using default secret');
+      this.logger.warn(
+        'JWT_SECRET is not set; signing with a random per-process secret. Tokens will not survive a ' +
+          'restart and will not verify across instances. Set JWT_SECRET for any deployment that mints tokens.',
+      );
       this.secret = getDefaultNoAuthSecret();
     }
 

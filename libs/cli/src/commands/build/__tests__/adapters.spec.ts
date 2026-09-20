@@ -111,12 +111,52 @@ describe('Build Adapters', () => {
 
     it('invokes the handler Web-natively and ships no Node req/res shim', () => {
       const entry = cloudflareAdapter.getEntryTemplate('./main.js');
-      // The handler is called with the Web Request — no Node req/res.
-      expect(entry).toContain('handler(request)');
+      // The handler is called with the Web Request — no Node req/res. ctx and
+      // env ride along so waitUntil and bindings stay reachable (#536).
+      expect(entry).toContain('handler(request, ctx, env)');
       // Guard against the old hand-rolled shim creeping back.
       expect(entry).not.toContain('statusCode');
       expect(entry).not.toContain('setHeader');
       expect(entry).not.toContain('app(req, res)');
+    });
+
+    it('bridges string bindings into process.env without clobbering existing values (#536)', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain('bridgeEnvToProcess(env)');
+      // Only strings — KV/D1/R2 bindings are objects and stay on `env`.
+      expect(entry).toContain("if (typeof value !== 'string') continue;");
+      expect(entry).toContain('process.env[key] === undefined');
+    });
+
+    it('drops the process.env bridge when the worker opted out of process-env population', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js', {
+        target: 'cloudflare',
+        wrangler: { compatibilityFlags: ['nodejs_compat_do_not_populate_process_env'] },
+      });
+      // Bridging anyway would put the very bindings the operator excluded back
+      // into process.env on the first request.
+      expect(entry).not.toContain('bridgeEnvToProcess');
+      expect(entry).not.toContain('process.env[key]');
+      // The env argument is still forwarded, so bindings stay reachable.
+      expect(entry).toContain('handler(request, ctx, env)');
+    });
+
+    it('keeps the bridge when the worker declares only unrelated compatibility flags', () => {
+      const entry = cloudflareAdapter.getEntryTemplate('./main.js', {
+        target: 'cloudflare',
+        wrangler: { compatibilityFlags: ['streams_enable_constructors'] },
+      });
+      expect(entry).toContain('bridgeEnvToProcess(env)');
+    });
+
+    it('propagates transport.http.path as the server entryPath default (#539)', () => {
+      const setup = cloudflareAdapter.getSetupTemplate?.({ transportHttpPath: '/mcp' });
+      expect(setup).toContain('process.env.FRONTMCP_HTTP_ENTRY_PATH = "/mcp"');
+    });
+
+    it('omits the entryPath default when no transport path is configured', () => {
+      const setup = cloudflareAdapter.getSetupTemplate?.({});
+      expect(setup).not.toContain('FRONTMCP_HTTP_ENTRY_PATH');
     });
 
     it('should have getConfig method', () => {
@@ -135,7 +175,34 @@ describe('Build Adapters', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
       // Without this the deployed Worker cannot boot — node:* builtins are
       // only available behind nodejs_compat.
-      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
+      expect(config).toContain('"nodejs_compat"');
+    });
+
+    it('emits nodejs_compat_populate_process_env so vars and secrets reach process.env (#536)', () => {
+      const config = cloudflareAdapter.getConfig?.('/test');
+      expect(config).toContain('"nodejs_compat_populate_process_env"');
+    });
+
+    it('drops the populate flag when the user lists BOTH conflicting flags', () => {
+      // wrangler deploy rejects a config carrying both, so the opt-out wins even
+      // when the user asks for both themselves.
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: {
+          compatibilityFlags: ['nodejs_compat_populate_process_env', 'nodejs_compat_do_not_populate_process_env'],
+        },
+      });
+      expect(config).toContain('"nodejs_compat_do_not_populate_process_env"');
+      expect(config).not.toContain('"nodejs_compat_populate_process_env"');
+    });
+
+    it('respects an explicit opt-out rather than emitting two conflicting flags', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp', {
+        target: 'cloudflare' as const,
+        wrangler: { compatibilityFlags: ['nodejs_compat_do_not_populate_process_env'] },
+      });
+      expect(config).toContain('"nodejs_compat_do_not_populate_process_env"');
+      expect(config).not.toContain('"nodejs_compat_populate_process_env"');
     });
 
     it('defaults compatibility_date to one that enables full nodejs_compat (>= 2024-09-23)', () => {
@@ -146,9 +213,11 @@ describe('Build Adapters', () => {
     it('merges user compatibilityFlags while always keeping nodejs_compat first', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp', {
         target: 'cloudflare' as const,
-        wrangler: { compatibilityFlags: ['nodejs_compat_populate_process_env'] },
+        wrangler: { compatibilityFlags: ['my_custom_flag'] },
       });
-      expect(config).toContain('compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]');
+      expect(config).toContain(
+        'compatibility_flags = ["nodejs_compat", "my_custom_flag", "nodejs_compat_populate_process_env"]',
+      );
     });
 
     it('dedupes nodejs_compat when the user also lists it explicitly', () => {
@@ -156,7 +225,7 @@ describe('Build Adapters', () => {
         target: 'cloudflare' as const,
         wrangler: { compatibilityFlags: ['nodejs_compat'] },
       });
-      expect(config).toContain('compatibility_flags = ["nodejs_compat"]');
+      expect(config).toContain('compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]');
     });
 
     it('should have configFileName as wrangler.toml', () => {

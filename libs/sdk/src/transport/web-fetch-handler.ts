@@ -16,7 +16,7 @@ import { type HttpMethod, type ServerRequest } from '../common/interfaces/server
 import { type HttpOutput } from '../common/schemas/http-output.schema';
 import { ServerRequestTokens } from '../common/tokens/server.tokens';
 import { type CorsOptions } from '../common/types/options/http/interfaces';
-import { normalizeEntryPrefix } from '../common/utils/path.utils';
+import { normalizeEntryPrefix, resolveEntryPath } from '../common/utils/path.utils';
 import { PublicMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { compileHostValidation, validateHostHeaders } from '../server/security/host-validation';
@@ -151,7 +151,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
   // `http.entryPath` (the Express gateway prefix) → worker root `/`. The worker
   // serves exactly where it's configured (not a guessed `/` + `/mcp` set); an
   // explicit array still opts into a multi-path allow-list.
-  const rawEntry = options.entryPath ?? (normalizeEntryPrefix(httpConfig?.entryPath) || '/');
+  const rawEntry = options.entryPath ?? (normalizeEntryPrefix(resolveEntryPath(httpConfig?.entryPath)) || '/');
   const entryPaths = new Set((Array.isArray(rawEntry) ? rawEntry : [rawEntry]).map(normalizePath));
   // CORS: explicit option wins, else mirror the scope's `http.cors`.
   const cors = options.cors ?? mapHttpCors(httpConfig?.cors, scope);
@@ -252,7 +252,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
     // matching flow here through the SAME flow pipeline (hookable) instead of
     // hand-rolling discovery. Trailing slashes are normalized.
     if (!entryPaths.has(normalizePath(url.pathname))) {
-      const authResponse = await runMatchingHttpFlowWeb(scope, request);
+      const authResponse = await runMatchingHttpFlowWeb(scope, request, { ctx, env });
       if (authResponse) return withCors(authResponse, request);
       return withCors(Response.json({ error: 'Not Found', entryPaths: [...entryPaths] }, { status: 404 }), request);
     }
@@ -271,7 +271,7 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
       if (routed) return withCors(routed, request);
     }
 
-    const rendered = await runHttpRequestFlowWeb(scope, request, { ctx });
+    const rendered = await runHttpRequestFlowWeb(scope, request, { ctx, env });
     // `next`/`handled`/no-output means no MCP handler claimed the request.
     return withCors(rendered ?? Response.json({ error: 'Not Found' }, { status: 404 }), request);
   };
@@ -288,10 +288,10 @@ export function createWebFetchHandler(scope: Scope, options: CreateWebFetchHandl
 export async function runHttpRequestFlowWeb(
   scope: Scope,
   request: Request,
-  opts: { ctx?: FetchHandlerCtx; persistent?: WebStandardMcpPair } = {},
+  opts: { ctx?: FetchHandlerCtx; env?: unknown; persistent?: WebStandardMcpPair } = {},
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
-  const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent);
+  const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent, opts.env);
   let output: HttpOutput | undefined;
   try {
     output = (await scope.runFlow('http:request', {
@@ -310,10 +310,19 @@ export async function runHttpRequestFlowWeb(
  * Mirrors the Express host's route dispatch for runtimes with no middleware
  * server (Cloudflare Worker / web-fetch). Returns the rendered Web `Response`,
  * or `undefined` when no flow matches (caller 404s).
+ *
+ * Carries the worker `ctx` and `env` for the same reason `http:request` does:
+ * an auth or OAuth flow on a Worker reaches its bindings only through
+ * `ServerRequestTokens.webEnv`, and dropping them here would leave exactly the
+ * flows that need a KV-backed store without one.
  */
-export async function runMatchingHttpFlowWeb(scope: Scope, request: Request): Promise<Response | undefined> {
+export async function runMatchingHttpFlowWeb(
+  scope: Scope,
+  request: Request,
+  opts: { ctx?: FetchHandlerCtx; env?: unknown } = {},
+): Promise<Response | undefined> {
   const url = new URL(request.url);
-  const serverRequest = await toServerRequest(request, url);
+  const serverRequest = await toServerRequest(request, url, opts.ctx, undefined, opts.env);
   const flowName = await scope.findHttpFlowName(serverRequest);
   if (!flowName) return undefined;
   let output: HttpOutput | undefined;
@@ -341,6 +350,7 @@ async function toServerRequest(
   url: URL,
   ctx?: FetchHandlerCtx,
   persistent?: WebStandardMcpPair,
+  env?: unknown,
 ): Promise<ServerRequest> {
   const headers: Record<string, string> = {};
   request.headers.forEach((v, k) => {
@@ -392,8 +402,64 @@ async function toServerRequest(
   const tokenized = serverRequest as unknown as Record<PropertyKey, unknown>;
   tokenized[ServerRequestTokens.webRequest] = webRequest;
   tokenized[ServerRequestTokens.webCtx] = ctx;
+  tokenized[ServerRequestTokens.webEnv] = env;
   if (persistent) tokenized[ServerRequestTokens.webTransport] = persistent;
   return serverRequest;
+}
+
+/**
+ * Error codes that mean "the deployment is misconfigured", not "something went
+ * wrong handling this request". They name a missing setting and nothing about
+ * the request, the user, or any secret's value, so echoing the code is safe and
+ * saves the operator a `wrangler tail` against live traffic (#546).
+ */
+const MISCONFIGURATION_REMEDIES: Record<string, string> = {
+  SESSION_SECRET_REQUIRED:
+    'Set MCP_SESSION_SECRET in the deployment environment (e.g. `wrangler secret put MCP_SESSION_SECRET`). ' +
+    'Session IDs are encrypted with it, and production refuses the development machine-id fallback.',
+  JWT_SECRET_INVALID:
+    'JWT_SECRET is present but too weak: HS256 requires at least 32 bytes (RFC 7518). ' +
+    'Replace it with `openssl rand -hex 32`.',
+  JWT_SECRET_REQUIRED:
+    'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
+    'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
+    'not survive a restart or verify across instances.',
+};
+
+/**
+ * Render a recognized configuration fault as a Web `Response`, or `undefined`
+ * when the error is not one.
+ *
+ * Exported because a missing secret can surface on two different paths: from
+ * inside the `http:request` flow (a `SessionSecretRequiredError` thrown during
+ * `session:verify`) or out of the lazy scope build that `createFetchHandler`
+ * memoizes, which happens BEFORE any flow exists (a `JwtSecretRequiredError`
+ * thrown while the auth instance is constructed). Both must answer the same
+ * structured body, so both go through here.
+ */
+export function misconfigurationResponse(error: unknown): Response | undefined {
+  const misconfiguration = findMisconfiguration(error);
+  if (!misconfiguration) return undefined;
+  return Response.json(
+    { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
+    { status: 500 },
+  );
+}
+
+/**
+ * Recognize an error that carries one of the codes above, however deeply it is
+ * wrapped. The message is never echoed — only the fixed code and remedy are.
+ */
+function findMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && MISCONFIGURATION_REMEDIES[code]) {
+      return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 /**
@@ -402,6 +468,19 @@ async function toServerRequest(
  * `undefined` for `next`/`handled` (no response → the caller 404s).
  */
 function flowErrorToHttpOutput(error: unknown): HttpOutput | undefined {
+  // #546 — a deployment that is merely missing a secret used to answer a bare
+  // `Internal Server Error`, so the only way to learn the cause was to tail the
+  // live worker. Report the configuration fault instead.
+  const misconfiguration = findMisconfiguration(error);
+  if (misconfiguration) {
+    return {
+      kind: 'json',
+      status: 500,
+      contentType: 'application/json; charset=utf-8',
+      body: { error: 'server_misconfigured', code: misconfiguration.code, message: misconfiguration.remedy },
+    };
+  }
+
   if (error instanceof FlowControl) {
     switch (error.type) {
       case 'respond':

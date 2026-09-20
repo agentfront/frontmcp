@@ -7,7 +7,7 @@ import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
-import { type AdapterName } from './types';
+import { type AdapterBuildContext, type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
 import {
   type DeploymentTarget,
@@ -22,6 +22,17 @@ function isTsLike(p: string): boolean {
 }
 
 /**
+ * Normalize an MCP entry path the way the server's web-fetch handler does, so
+ * the build reports and compares the path a client actually has to request.
+ */
+function normalizeServedPath(entryPath: string): string {
+  const withSlash = entryPath.startsWith('/') ? entryPath : `/${entryPath}`;
+  let end = withSlash.length;
+  while (end > 1 && withSlash.charCodeAt(end - 1) === 47) end--;
+  return withSlash.slice(0, end);
+}
+
+/**
  * Generate adapter-specific entry point and config files.
  */
 async function generateAdapterFiles(
@@ -30,13 +41,14 @@ async function generateAdapterFiles(
   entryBasename: string,
   cwd: string,
   deployment?: DeploymentTarget,
+  context?: AdapterBuildContext,
 ): Promise<void> {
   const template = ADAPTERS[adapter];
 
   // Generate serverless setup file first (if adapter has one)
   // This file sets FRONTMCP_SERVERLESS=1 before any imports run
   if (template.getSetupTemplate) {
-    const setupContent = template.getSetupTemplate();
+    const setupContent = template.getSetupTemplate(context);
     const setupPath = path.join(outDir, 'serverless-setup.js');
     await fsp.writeFile(setupPath, setupContent, 'utf8');
     console.log(c('green', `  Generated serverless setup at ${path.relative(cwd, setupPath)}`));
@@ -44,7 +56,7 @@ async function generateAdapterFiles(
 
   // Generate index.js entry point
   const mainModuleName = entryBasename.replace(/\.tsx?$/, '.js');
-  const entryContent = template.getEntryTemplate(`./${mainModuleName}`);
+  const entryContent = template.getEntryTemplate(`./${mainModuleName}`, deployment);
 
   // Skip if no entry template (e.g., node adapter)
   if (entryContent) {
@@ -87,21 +99,32 @@ async function generateAdapterFiles(
     const configPath = path.join(cwd, template.configFileName);
     const exists = await fileExists(configPath);
 
-    const configContent = template.getConfig(cwd, deployment);
-    const writeIt = async (): Promise<void> => {
-      if (typeof configContent === 'string') {
-        await fsp.writeFile(configPath, configContent, 'utf8');
+    const writeContent = async (content: string | object): Promise<void> => {
+      if (typeof content === 'string') {
+        await fsp.writeFile(configPath, content, 'utf8');
       } else {
-        await writeJSON(configPath, configContent);
+        await writeJSON(configPath, content);
       }
     };
 
     if (!exists) {
-      await writeIt();
+      await writeContent(template.getConfig(cwd, deployment));
       console.log(c('green', `  Generated ${template.configFileName}`));
     } else if (template.alwaysWriteConfig) {
-      await writeIt();
-      console.log(c('green', `  Updated ${template.configFileName} (build output reference)`));
+      // #535 — an adapter that can reconcile rewrites only the keys it owns, so
+      // `[vars]`, bindings, `[triggers]` and comments survive the build.
+      if (template.mergeConfig) {
+        const existing = await fsp.readFile(configPath, 'utf8');
+        const merged = template.mergeConfig(existing, cwd, deployment);
+        await writeContent(merged.content);
+        for (const warning of merged.warnings) {
+          console.log(c('yellow', `  ${warning}`));
+        }
+        console.log(c('green', `  Updated ${template.configFileName} (managed keys only)`));
+      } else {
+        await writeContent(template.getConfig(cwd, deployment));
+        console.log(c('green', `  Updated ${template.configFileName} (build output reference)`));
+      }
     } else {
       console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
     }
@@ -259,7 +282,7 @@ async function buildSingleTarget(
     case 'cloudflare':
     case 'distributed': {
       const adapter = TARGET_TO_ADAPTER[target];
-      return runAdapterBuild(targetOpts, adapter, deployment);
+      return runAdapterBuild(targetOpts, adapter, deployment, config);
     }
     default:
       throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda, distributed, mcpb`);
@@ -273,6 +296,7 @@ async function runAdapterBuild(
   opts: ParsedArgs,
   adapter: AdapterName,
   deployment?: DeploymentTarget,
+  config?: FrontMcpConfigParsed,
 ): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
@@ -298,11 +322,42 @@ async function runAdapterBuild(
   // (TS goes through esbuild + Module._compile so we don't need a tsc pass)
   // AND scans the source AST for keys hidden behind env-gated ternaries —
   // round-2 made the env-gated case the headline #375 reproducer.
+  const { loadEntryDecoratorInfo } = await import('./load-entry-config.js');
+  const entryInfo = await loadEntryDecoratorInfo(entry);
   if (template.validate) {
-    const { loadEntryDecoratorInfo } = await import('./load-entry-config.js');
-    const info = await loadEntryDecoratorInfo(entry);
-    template.validate(info.decoratorConfig, { keysSeenInSource: info.keysSeenInSource });
+    template.validate(entryInfo.decoratorConfig, { keysSeenInSource: entryInfo.keysSeenInSource });
   }
+
+  // #539 — `transport.http.path` drives the CLI, `@FrontMcp({ http: { entryPath } })`
+  // drives the server. Hand the former to the adapter as the server's default so a
+  // project that only set the documented option gets a worker on the path the rest
+  // of the toolchain (and the generated client URL) already points at.
+  const transportHttpPath = config?.transport?.http?.path;
+  const decoratorHttp = entryInfo.decoratorConfig?.['http'];
+  const decoratorEntryPath =
+    typeof decoratorHttp === 'object' && decoratorHttp !== null
+      ? (decoratorHttp as Record<string, unknown>)['entryPath']
+      : undefined;
+  const context: AdapterBuildContext = { transportHttpPath };
+
+  if (
+    typeof decoratorEntryPath === 'string' &&
+    transportHttpPath !== undefined &&
+    normalizeServedPath(decoratorEntryPath) !== normalizeServedPath(transportHttpPath)
+  ) {
+    console.log(
+      c(
+        'yellow',
+        `[build] transport.http.path is "${transportHttpPath}" but @FrontMcp({ http: { entryPath } }) is ` +
+          `"${decoratorEntryPath}". The decorator wins at runtime — the server will serve ` +
+          `${normalizeServedPath(decoratorEntryPath)}.`,
+      ),
+    );
+  }
+
+  const servedPath = normalizeServedPath(
+    typeof decoratorEntryPath === 'string' ? decoratorEntryPath : (transportHttpPath ?? ''),
+  );
 
   const moduleFormat = template.moduleFormat;
 
@@ -345,9 +400,11 @@ async function runAdapterBuild(
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));
     const entryBasename = path.basename(entry);
-    await generateAdapterFiles(adapter, outDir, entryBasename, cwd, deployment);
+    await generateAdapterFiles(adapter, outDir, entryBasename, cwd, deployment, context);
   }
 
   console.log(c('green', 'Build completed.'));
   console.log(c('gray', `Output placed in ${path.relative(cwd, outDir)}`));
+  // #539 — the served path was previously invisible until a client 404'd.
+  console.log(c('gray', `Server will serve MCP at ${servedPath}`));
 }
