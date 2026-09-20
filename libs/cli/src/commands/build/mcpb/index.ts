@@ -13,7 +13,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ensureDir, fileExists, runCmd } from '@frontmcp/utils';
+import { ensureDir, fileExists } from '@frontmcp/utils';
+import { runTsc } from '../../../shared/tsc';
 import type { ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { resolveEntry } from '../../../shared/fs';
@@ -90,7 +91,7 @@ export async function buildMcpb(
   await ensureDir(outDir);
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
-  const tscArgs: string[] = ['-y', 'tsc'];
+  const tscArgs: string[] = [];
   if (hasTsconfig) {
     tscArgs.push('--project', tsconfigPath);
   } else {
@@ -100,7 +101,7 @@ export async function buildMcpb(
     tscArgs.push('--target', REQUIRED_DECORATOR_FIELDS.target);
   }
   tscArgs.push('--module', 'commonjs', '--outDir', outDir, '--skipLibCheck');
-  await runCmd('npx', tscArgs);
+  await runTsc(tscArgs, { cwd });
   console.log(`${c('green', '[build:mcpb]')} TypeScript compiled`);
 
   // 4. esbuild bundle → dist/{name}.bundle.js

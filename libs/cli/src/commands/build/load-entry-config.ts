@@ -77,18 +77,27 @@ export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecora
   const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
   process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
   let decoratorConfig: Record<string, unknown> | undefined;
+  // Issue #537: `require()`-ing a TypeScript entry made Node print
+  // "Warning: Failed to load the ES module: …/src/main.ts. Make sure to set
+  // "type": "module" …" on every build. That is a process warning, not a
+  // throw, so the try/catch below could never swallow it, and the advice it
+  // gives breaks the CommonJS layout the scaffold generates. A .ts entry can
+  // only ever be read through the esbuild path anyway, so don't probe.
+  const isTypeScriptEntry = /\.tsx?$/i.test(entry);
   try {
     // Path 1: plain require() — works for compiled JS entries.
-    try {
-      const mod = require(entry) as { default?: unknown } & Record<string, unknown>;
-      const target = mod.default ?? mod;
-      decoratorConfig = readDecoratorMetadata(target);
-    } catch {
-      // require failed (e.g., .ts entry without a hook); fall through to esbuild.
+    if (!isTypeScriptEntry) {
+      try {
+        const mod = require(entry) as { default?: unknown } & Record<string, unknown>;
+        const target = mod.default ?? mod;
+        decoratorConfig = readDecoratorMetadata(target);
+      } catch {
+        // require failed (e.g., an entry with unresolved imports); fall through.
+      }
     }
 
     // Path 2: esbuild transpile + Module._compile, only if the entry is .ts/.tsx.
-    if (!decoratorConfig && /\.tsx?$/i.test(entry)) {
+    if (!decoratorConfig && isTypeScriptEntry) {
       try {
         decoratorConfig = await loadTsEntryViaEsbuild(entry);
       } catch {

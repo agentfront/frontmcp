@@ -125,6 +125,7 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 | Redis connection refused | Redis not running or wrong URL   | Start Redis (`docker compose up redis`) or fix `REDIS_URL` env var    |
 | Nx generator not found   | `@frontmcp/nx` not installed     | Run `npm install -D @frontmcp/nx`                                     |
 | Skills not loading       | Skills placed in wrong directory | Catalog skills go in top-level `skills/`, app skills in `src/skills/` |
+| Build or start fails under Yarn 4 with peer-dependency or `TS2688` errors | Yarn defaults to Plug'n'Play, which enforces peer dependencies strictly | `frontmcp create --pm yarn` scaffolds `.yarnrc.yml` with `nodeLinker: node-modules`; add that file and reinstall for projects scaffolded by an older CLI |
 
 ## Examples
 

@@ -24,7 +24,8 @@ import { generateManifest } from './manifest';
 import { generateRunnerScript } from './runner-script';
 import { generateInstallerScript } from './installer-script';
 import { validateStepGraph } from './setup';
-import { ensureDir, fileExists, runCmd } from '@frontmcp/utils';
+import { ensureDir, fileExists } from '@frontmcp/utils';
+import { runTsc } from '../../../shared/tsc';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 
 export async function buildExec(
@@ -114,7 +115,7 @@ export async function buildExec(
 
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
-  const tscArgs: string[] = ['-y', 'tsc'];
+  const tscArgs: string[] = [];
 
   if (hasTsconfig) {
     tscArgs.push('--project', tsconfigPath);
@@ -129,7 +130,7 @@ export async function buildExec(
   tscArgs.push('--outDir', outDir);
   tscArgs.push('--skipLibCheck');
 
-  await runCmd('npx', tscArgs);
+  await runTsc(tscArgs, { cwd });
   console.log(`${c('green', '[build:exec]')} TypeScript compiled.`);
 
   // 5. Bundle with esbuild

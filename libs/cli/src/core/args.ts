@@ -72,6 +72,8 @@ export interface ParsedArgs {
   buildTarget?: BuildTarget;
   // Build --js flag (cli target: produce JS bundle instead of SEA binary)
   js?: boolean;
+  // Build --no-clean flag (keep whatever is already in outDir)
+  clean?: boolean;
   // MCPB flags
   sea?: boolean;
   mergeFrom?: string;
@@ -151,6 +153,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--db') out.db = argv[++i];
     else if (a === '--background' || a === '-b') out.background = true;
     else if (a === '--js') out.js = true;
+    else if (a === '--no-clean') out.clean = false;
+    else if (a === '--clean') out.clean = true;
     // Process Manager flags
     else if (a === '--port' || a === '-p') {
       const parsed = parseInt(argv[++i], 10);

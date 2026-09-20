@@ -30,6 +30,8 @@ export function toParsedArgs(
     if (options['icon'] !== undefined) out.icon = options['icon'] as string;
     if (options['deterministic'] === false) out.noDeterministic = true;
     if (options['stageOnly'] !== undefined) out.stageOnly = options['stageOnly'] as boolean;
+    // #545 — commander turns `--no-clean` into `clean: false`; default stays true.
+    if (options['clean'] === false) out.clean = false;
   }
 
   // Create

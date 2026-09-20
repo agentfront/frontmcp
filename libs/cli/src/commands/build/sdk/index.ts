@@ -1,7 +1,8 @@
 import * as path from 'path';
 import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
-import { ensureDir, runCmd } from '@frontmcp/utils';
+import { ensureDir } from '@frontmcp/utils';
+import { runTsc } from '../../../shared/tsc';
 import { resolveEntry } from '../../../shared/fs';
 
 /**
@@ -27,13 +28,12 @@ export async function buildSdk(opts: ParsedArgs): Promise<void> {
   // Step 1: Compile TypeScript with declaration emit
   console.log(c('cyan', '[build:sdk] Compiling TypeScript...'));
   const tscArgs = [
-    '-y', 'tsc',
     '--project', path.join(cwd, 'tsconfig.json'),
     '--outDir', outDir,
     '--declaration', '--declarationMap',
     '--skipLibCheck',
   ];
-  await runCmd('npx', tscArgs);
+  await runTsc(tscArgs, { cwd });
 
   // Step 2: Bundle CJS with esbuild
   console.log(c('cyan', '[build:sdk] Bundling CJS...'));

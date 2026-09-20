@@ -17,6 +17,7 @@ export function registerBuildCommands(program: Command): void {
     .option('--icon <path>', 'Override icon path (mcpb target)')
     .option('--no-deterministic', 'Disable deterministic archive output (mcpb target)')
     .option('--stage-only', 'Leave the MCPB staging directory intact and skip zipping (mcpb target)')
+    .option('--no-clean', "Keep the output directory's existing contents instead of clearing it first")
     .action(async (options) => {
       options.outDir = options.outDir || 'dist';
       const { runBuild } = await import('./index.js');
