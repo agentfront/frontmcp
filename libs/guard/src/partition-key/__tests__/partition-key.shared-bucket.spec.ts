@@ -1,11 +1,16 @@
 /**
- * Clients without a resolvable IP must not share one rate-limit bucket
- * (GHSA-p3qf-fcwm-35x4).
+ * What `partitionBy: 'ip'` may key on when there is no IP (GHSA-p3qf-fcwm-35x4).
  *
- * `partitionBy: 'ip'` resolved to `ctx.clientIp ?? 'unknown-ip'`. Every caller whose IP could
- * not be determined landed on the literal key `'unknown-ip'`, so they shared a single budget:
- * one client could exhaust it and 429 all the others. A rate limit that one tenant can spend
- * on another's behalf is a denial-of-service primitive, not a limit.
+ * Two invariants, and they pull against each other:
+ *
+ *  1. **A caller-controlled value can never mint a budget.** The `mcp-session-id` header is
+ *     set by the caller, and a request without one is given a fresh UUID — key on it and
+ *     every request gets its own limit, which is no limit at all.
+ *  2. **Unidentified callers share one bucket, and that is deliberate.** They fall back to
+ *     the authenticated user where there is one, and to a single `ip:unresolved` partition
+ *     where there is not. That bucket is contended — one client can spend it on another's
+ *     behalf — but it is bounded, and bounded contention is the correct trade against an
+ *     unbounded budget. Resolving the real IP (`trustProxy`) is what takes callers out of it.
  */
 import { resolvePartitionKey } from '../partition-key.resolver';
 

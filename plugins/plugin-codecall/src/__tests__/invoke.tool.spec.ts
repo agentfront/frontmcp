@@ -80,20 +80,29 @@ jest.mock('@frontmcp/sdk', () => ({
   },
 }));
 
+/** The mocked `ToolContext` surface these harnesses drive, in place of a real scope. */
+interface MockedToolInstance {
+  scope: { runFlow: jest.Mock; tools: { getTools: jest.Mock } };
+  execute(input: Record<string, unknown>): Promise<unknown>;
+  _setDependency(token: unknown, instance: unknown): void;
+}
+
+type MockedToolCtor = new () => MockedToolInstance;
+
 /**
  * Since GHSA-6w3j-82v5-6qrr, `codecall:invoke` consults the CodeCall access policy before
  * running anything, so a tool has to be registered and the plugin config reachable for a
  * call to get as far as the flow. These helpers give each fixture the surroundings a real
  * scope would have.
  */
-function createInvokeTool(registeredTools: string[] = []): any {
-  const tool = new (InvokeTool as any)();
+function createInvokeTool(registeredTools: string[] = []): MockedToolInstance {
+  const tool = new (InvokeTool as unknown as MockedToolCtor)();
   tool._setDependency(CodeCallConfig, { get: () => undefined, getAll: () => ({}) });
   tool.scope.tools.getTools = jest.fn(() => registeredTools.map((name) => ({ name, fullName: name, metadata: {} })));
   return tool;
 }
 
-function setScope(tool: any, runFlow: jest.Mock, registeredTools: string[] = []): void {
+function setScope(tool: MockedToolInstance, runFlow: jest.Mock, registeredTools: string[] = []): void {
   tool.scope = {
     runFlow,
     tools: {

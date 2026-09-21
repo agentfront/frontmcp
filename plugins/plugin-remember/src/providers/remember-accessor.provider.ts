@@ -1,7 +1,8 @@
-import { FrontMcpContext, Provider, ProviderScope } from '@frontmcp/sdk';
+import { FrontMcpContext, Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
 import { RememberIdentityError } from '../remember.errors';
+import { purgeLegacyRememberEntriesOnce } from '../remember.legacy-purge';
 import type {
   RememberEntry,
   RememberForgetOptions,
@@ -16,6 +17,16 @@ import type { RememberStoreInterface } from './remember-store.interface';
 
 /** Session id the stateless HTTP transport injects into every request. */
 const STATELESS_SESSION_ID = '__stateless__';
+
+/**
+ * Layout version for the scopes whose storage location changed in the GHSA-h6f4-jg8x-38gj and
+ * GHSA-225p-f8jh-f3rh fixes.
+ *
+ * Without it, a pre-fix `remember:session:<id>:<key>` and a post-fix key share a namespace, so
+ * the one-time purge of unreadable entries could not tell them apart and would delete live
+ * data. `global` is not versioned: neither its keys nor its key derivation changed.
+ */
+const STORAGE_LAYOUT_VERSION = 'v2';
 
 /**
  * Make a namespace component unambiguous before it is joined with `:`.
@@ -62,13 +73,32 @@ export class RememberAccessor {
   private readonly config: RememberPluginOptions;
   private readonly keyPrefix: string;
   private readonly encryptionEnabled: boolean;
+  private readonly logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>;
 
-  constructor(store: RememberStoreInterface, ctx: FrontMcpContext, config: RememberPluginOptions) {
+  constructor(
+    store: RememberStoreInterface,
+    ctx: FrontMcpContext,
+    config: RememberPluginOptions,
+    logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
+  ) {
     this.store = store;
     this.ctx = ctx;
     this.config = config;
     this.keyPrefix = config.keyPrefix ?? 'remember:';
     this.encryptionEnabled = config.encryption?.enabled !== false;
+    this.logger = logger;
+  }
+
+  /**
+   * One-time sweep of entries the key-derivation and namespace changes orphaned.
+   *
+   * Runs before the first storage access rather than at startup, because `DynamicPlugin`
+   * exposes no startup hook and providers are not eagerly instantiated. It is a no-op after
+   * the first call for a given store.
+   */
+  private async ensureLegacyEntriesPurged(): Promise<void> {
+    if (this.config.skipLegacyPurge) return;
+    await purgeLegacyRememberEntriesOnce(this.store, this.keyPrefix, this.logger);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +113,7 @@ export class RememberAccessor {
    * @param options - Storage options (scope, ttl, brand, metadata)
    */
   async set<T>(key: string, value: T, options: RememberSetOptions = {}): Promise<void> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -110,6 +141,7 @@ export class RememberAccessor {
    * @returns The stored value or defaultValue if not found
    */
   async get<T>(key: string, options: RememberGetOptions<T> = {}): Promise<T | undefined> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -139,6 +171,7 @@ export class RememberAccessor {
    * @returns The full entry or undefined if not found
    */
   async getEntry<T>(key: string, options: { scope?: RememberScope } = {}): Promise<RememberEntry<T> | undefined> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -167,6 +200,7 @@ export class RememberAccessor {
    * @param options - Options (scope)
    */
   async forget(key: string, options: RememberForgetOptions = {}): Promise<void> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
     await this.store.delete(storageKey);
@@ -180,6 +214,7 @@ export class RememberAccessor {
    * @returns true if the key exists
    */
   async knows(key: string, options: RememberKnowsOptions = {}): Promise<boolean> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
     return this.store.exists(storageKey);
@@ -192,6 +227,7 @@ export class RememberAccessor {
    * @returns Array of keys (without the scope prefix)
    */
   async list(options: RememberListOptions = {}): Promise<string[]> {
+    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const scopePrefix = this.buildScopePrefix(scope);
     const fullPattern = scopePrefix + (options.pattern ?? '*');
@@ -308,7 +344,7 @@ export class RememberAccessor {
   private buildScopePrefix(scope: RememberScope): string {
     switch (scope) {
       case 'session':
-        return `${this.keyPrefix}session:${encodeKeyPart(this.resolveSessionIdentity())}:`;
+        return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:session:${encodeKeyPart(this.resolveSessionIdentity())}:`;
       case 'user': {
         const userId = this.userId;
         if (!userId) {
@@ -319,12 +355,15 @@ export class RememberAccessor {
               "callers would share one namespace. Authenticate the request or use the 'global' scope.",
           );
         }
-        return `${this.keyPrefix}user:${encodeKeyPart(userId)}:`;
+        return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:user:${encodeKeyPart(userId)}:`;
       }
       case 'tool': {
         // Tool scope uses flow name if available
         const toolName = this.ctx.flow?.name ?? 'unknown';
-        return `${this.keyPrefix}tool:${encodeKeyPart(toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`;
+        return (
+          `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:tool:` +
+          `${encodeKeyPart(toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`
+        );
       }
       case 'global':
         return `${this.keyPrefix}global:`;
@@ -366,6 +405,7 @@ export function createRememberAccessor(
   store: RememberStoreInterface,
   ctx: FrontMcpContext,
   config: RememberPluginOptions,
+  logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
 ): RememberAccessor {
-  return new RememberAccessor(store, ctx, config);
+  return new RememberAccessor(store, ctx, config, logger);
 }

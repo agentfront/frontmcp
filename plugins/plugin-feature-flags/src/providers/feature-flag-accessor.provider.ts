@@ -1,10 +1,12 @@
 import { FrontMcpContext, Provider, ProviderScope } from '@frontmcp/sdk';
+
 import type { FeatureFlagAdapter } from '../adapters/feature-flag-adapter.interface';
+import { buildFeatureFlagContext } from '../feature-flag.context';
 import type {
   FeatureFlagContext,
-  FeatureFlagVariant,
   FeatureFlagPluginOptions,
   FeatureFlagRef,
+  FeatureFlagVariant,
 } from '../feature-flag.types';
 
 /**
@@ -89,19 +91,7 @@ export class FeatureFlagAccessor {
    * Build the FeatureFlagContext from the current FrontMcpContext.
    */
   private buildContext(): FeatureFlagContext {
-    const userId = this.config.userIdResolver
-      ? this.config.userIdResolver(this.ctx)
-      : ((this.ctx.authInfo?.extra?.['sub'] as string | undefined) ??
-        (this.ctx.authInfo?.extra?.['userId'] as string | undefined) ??
-        this.ctx.authInfo?.clientId);
-
-    const attributes = this.config.attributesResolver ? this.config.attributesResolver(this.ctx) : {};
-
-    return {
-      userId: userId ?? undefined,
-      sessionId: this.ctx.sessionId,
-      attributes,
-    };
+    return buildFeatureFlagContext(this.ctx, this.config);
   }
 }
 

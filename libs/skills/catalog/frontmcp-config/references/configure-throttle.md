@@ -138,11 +138,29 @@ FRONTMCP_TRUSTED_PROXY_DEPTH=1     # how many proxies you run in front of the ap
 
 The client is read `FRONTMCP_TRUSTED_PROXY_DEPTH` hops back from the end of the chain: callers
 can prepend entries, but only your own proxies append to it. The value is validated as an IP
-address before use.
+address before use. A chain shorter than the configured depth was not built by your proxies,
+so the socket peer is used instead.
 
-When no IP can be established the request falls back to a per-session bucket
-(`session:<sessionId>`), never a single shared key -- a shared key lets one client exhaust the
-budget for every other client that also has no IP.
+> **`FRONTMCP_TRUST_PROXY` is only as good as your network boundary.** Trusting forwarded
+> headers means trusting whoever can set them, so two things must hold:
+>
+> - **Every ingress path traverses the configured proxy chain.** If a caller can reach the
+>   origin directly -- a public origin IP, a peered VPC, a second ingress that skips the
+>   balancer -- they choose the whole `X-Forwarded-For` chain, and counting hops from its end
+>   just lands on an address they picked.
+> - **The edge strips and rebuilds the forwarded headers.** The outermost proxy must discard
+>   any inbound `X-Forwarded-For` and `X-Real-IP` and write its own, so the only entries in
+>   the chain are ones your proxies appended.
+>
+> With depth `1` and no `X-Forwarded-For` at all, `X-Real-IP` is used -- the single-hop nginx
+> convention. It is never consulted alongside a chain, because a caller can send both.
+
+When no IP can be established the request falls back to the authenticated user
+(`user:<userId>`), and to a single `ip:unresolved` partition when there is no user either. It
+never keys on the session id: `mcp-session-id` is caller-supplied and a request without one is
+given a fresh UUID, so keying on it would mint a new budget per request. The shared bucket is
+contended by design -- bounded contention beats an unbounded budget -- and declaring your proxy
+is what takes callers out of it.
 
 ## Configuration Types
 

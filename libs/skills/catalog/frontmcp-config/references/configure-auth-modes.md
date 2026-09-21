@@ -153,17 +153,17 @@ upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Static             | Transparent     | Local                           | Remote                            |
-| ------------------------ | ------------- | ------------------ | --------------- | ------------------------------- | --------------------------------- |
-| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)           | Self-signed (HS256)               |
-| Signing                  | HS256 secret  | n/a                | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
-| Session-token refresh    | No            | No                 | No              | Yes                             | Yes                               |
-| Upstream-token refresh   | n/a           | n/a                | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
-| Identity source          | Anonymous     | Configured token   | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
-| PKCE support             | No            | No                 | No              | Yes                             | Yes                               |
-| Token persistence        | n/a           | n/a                | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
-| Consent (tool selection) | No            | No                 | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
-| Upstream OAuth providers | No            | No                 | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
+| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                            |
+| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | --------------------------------- |
+| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)               |
+| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)       |
+| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                               |
+| Upstream-token refresh   | n/a           | n/a                  | n/a             | On-demand (when wired)          | Not yet wired (re-auth on expiry) |
+| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user                 |
+| PKCE support             | No            | No                   | No              | Yes                             | Yes                               |
+| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis           |
+| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement)   |
+| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)             |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 

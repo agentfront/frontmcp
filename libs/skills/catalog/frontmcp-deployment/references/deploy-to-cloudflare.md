@@ -159,10 +159,10 @@ To keep bindings out of `process.env` entirely, add `nodejs_compat_do_not_popula
 
 `NODE_ENV = "production"` in `[vars]` makes this a production deployment, where FrontMCP refuses its development fallbacks:
 
-| Secret | Required when | Failure without it |
-| ------ | ------------- | ------------------ |
-| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}` |
-| `JWT_SECRET` | `auth.mode` is `local` or `remote` (these mint tokens) | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
+| Secret               | Required when                                                        | Failure without it                                                                                               |
+| -------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}`                                          |
+| `JWT_SECRET`         | `auth.mode` is `local` or `remote` (these mint tokens)               | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
 
 ```bash
 npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
@@ -220,17 +220,17 @@ Two settings name this concept. `transport.http.path` in `frontmcp.config.*` con
 
 The worker's transport is driven by the standard `http` + `transport` config (the same fields the Express host reads), so behaviour is identical on both adapters. The worker serves MCP at **exactly one path** — `http.entryPath` (the worker root `/` when unset) — not a guessed `/` + `/mcp` set. Cloudflare never strips the path before it reaches the worker:
 
-| Clients use | `http.entryPath` | `wrangler.toml` route | Worker serves |
-| --- | --- | --- | --- |
-| `https://mcp.example.com` (subdomain) | omit (`/`) | `routes = [{ pattern = "mcp.example.com", custom_domain = true }]` | `/` |
-| `https://example.com/mcp` (path) | `'/mcp'` | `routes = [{ pattern = "example.com/mcp*", zone_name = "example.com" }]` | `/mcp` |
+| Clients use                           | `http.entryPath` | `wrangler.toml` route                                                    | Worker serves |
+| ------------------------------------- | ---------------- | ------------------------------------------------------------------------ | ------------- |
+| `https://mcp.example.com` (subdomain) | omit (`/`)       | `routes = [{ pattern = "mcp.example.com", custom_domain = true }]`       | `/`           |
+| `https://example.com/mcp` (path)      | `'/mcp'`         | `routes = [{ pattern = "example.com/mcp*", zone_name = "example.com" }]` | `/mcp`        |
 
 ```ts
 createEdgeMcp({
   /* …info, apps… */
   http: {
-    entryPath: '/mcp',       // the ONE path MCP is served at (omit → root '/')
-    cors: { origin: true },  // browser MCP clients (e.g. Inspector "Direct" mode); { origin, credentials, maxAge }
+    entryPath: '/mcp', // the ONE path MCP is served at (omit → root '/')
+    cors: { origin: true }, // browser MCP clients (e.g. Inspector "Direct" mode); { origin, credentials, maxAge }
   },
   // transport: 'legacy'/'modern' → SSE streaming on POST; 'stateless-api' → buffered JSON.
 });
@@ -279,24 +279,24 @@ One DO per session holds a persistent transport so the `GET` notification stream
 
 ## Troubleshooting
 
-| Problem                       | Cause                                          | Solution                                                                  |
-| ----------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Worker exceeds size limit     | Too many bundled dependencies                  | Review dependencies and remove unused packages to reduce bundle size      |
+| Problem                       | Cause                                          | Solution                                                                                                                                       |
+| ----------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker exceeds size limit     | Too many bundled dependencies                  | Review dependencies and remove unused packages to reduce bundle size                                                                           |
 | Module format errors          | Worker bundled as a Service Worker             | FrontMCP Cloudflare builds emit an **ES Module Worker** (`export default { fetch }`); `nodejs_compat` requires it. Don't force `type`/CommonJS |
-| KV binding errors             | Namespace not created or binding name mismatch | Run `npx wrangler kv:namespace create` and copy the `id` into `wrangler.toml` |
-| Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects              |
-| CORS failures on MCP endpoint | Missing CORS headers in Worker response        | `@frontmcp/edge`: pass `cors: { origin: true }` to `createEdgeMcp({...})` (transport-level CORS) |
+| KV binding errors             | Namespace not created or binding name mismatch | Run `npx wrangler kv:namespace create` and copy the `id` into `wrangler.toml`                                                                  |
+| Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects                                                                                   |
+| CORS failures on MCP endpoint | Missing CORS headers in Worker response        | `@frontmcp/edge`: pass `cors: { origin: true }` to `createEdgeMcp({...})` (transport-level CORS)                                               |
 
 ## Common Patterns
 
-| Pattern            | Correct                                                                    | Incorrect                         | Why                                                                                                                                      |
-| ------------------ | -------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Pattern            | Correct                                                                            | Incorrect                         | Why                                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Module format      | ES Module Worker (`main = "dist/cloudflare/index.js"`, `export default { fetch }`) | Service Worker / forced CommonJS  | FrontMCP Cloudflare builds emit an ES Module Worker at this exact path; the build overwrites `wrangler.toml`. `nodejs_compat` requires the Module shape |
-| Transport key      | `transport: { protocol: 'modern' }` (or `{ sse: true, streamable: true }`) | `transport: { type: 'sse' }`      | The schema field is `protocol`; valid presets are `'legacy' \| 'modern' \| 'stateless-api' \| 'full'`, or pass a `ProtocolConfig` object |
-| Storage binding    | `[[kv_namespaces]]` with matching `binding`                                | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers                                                                                              |
-| Compatibility date | Set via `frontmcp.config.deployments[].wrangler.compatibilityDate`         | Hand-editing `wrangler.toml`      | The build overwrites `wrangler.toml`; config-driven values survive                                                                       |
-| Build command      | `frontmcp build --target cloudflare`                                       | `frontmcp build` (no target)      | Default target is Node.js, not Workers                                                                                                   |
-| Secrets            | `wrangler secret put MY_SECRET`                                            | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard                                                                                       |
+| Transport key      | `transport: { protocol: 'modern' }` (or `{ sse: true, streamable: true }`)         | `transport: { type: 'sse' }`      | The schema field is `protocol`; valid presets are `'legacy' \| 'modern' \| 'stateless-api' \| 'full'`, or pass a `ProtocolConfig` object                |
+| Storage binding    | `[[kv_namespaces]]` with matching `binding`                                        | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers                                                                                                             |
+| Compatibility date | Set via `frontmcp.config.deployments[].wrangler.compatibilityDate`                 | Hand-editing `wrangler.toml`      | The build overwrites `wrangler.toml`; config-driven values survive                                                                                      |
+| Build command      | `frontmcp build --target cloudflare`                                               | `frontmcp build` (no target)      | Default target is Node.js, not Workers                                                                                                                  |
+| Secrets            | `wrangler secret put MY_SECRET`                                                    | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard                                                                                                      |
 
 ## Verification Checklist
 

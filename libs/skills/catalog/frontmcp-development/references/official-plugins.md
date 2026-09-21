@@ -273,11 +273,18 @@ session id is not a secret -- the client knows it and it travels in the `mcp-ses
 header -- so it cannot be the key material on its own. Instances with different secrets cannot
 read each other's entries.
 
-**Upgrading past that change orphans existing `session` and `tool` entries.** There is no
-automatic migration and the failure is silent: decryption returns `null`, so the value reads
-as absent. Purge the `remember:session:*` and `remember:tool:*` keys during the upgrade so the
-state is explicit. `user` and `global` entries are unaffected -- they already keyed off the
-master secret.
+**Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
+derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes
+every variable component, which moves any identity containing an escaped character (a `:` in a
+user id, say). Both failures are silent on their own: decryption returns `null` and a moved key
+simply misses, so the value reads as absent.
+
+These three scopes are stored under a `v2:` segment (`remember:v2:session:<identity>:<key>`) and
+the plugin **purges the pre-`v2` entries automatically** on first use, warning with the number
+removed. The version segment is what makes that safe -- a purge pattern of `remember:session:*`
+cannot match a live `remember:v2:session:*` key. Pass `skipLegacyPurge: true` to migrate the data
+yourself instead. `global` is not versioned and not purged: neither its keys nor its key
+derivation changed.
 
 ### Tools Exposed (when `tools.enabled: true`)
 

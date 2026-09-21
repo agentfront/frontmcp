@@ -497,14 +497,14 @@ Use short TTLs for frequently changing data:
 
 ## Cache Behavior Reference
 
-| Behavior           | Description                                                          |
-| ------------------ | -------------------------------------------------------------------- |
-| **Key Derivation** | Deterministic hash from validated input. Same input = same cache key |
-| **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly    |
-| **Default TTL**    | 86400 seconds (1 day) if not specified                               |
-| **Sliding Window** | Extends TTL on reads when enabled                                    |
-| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing           |
-| **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)      |
+| Behavior           | Description                                                                                                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Key Derivation** | Deterministic hash of tool name + validated input + caller identity, so one caller is never served another's entry. `keyByIdentity: false` drops the identity component -- use it only for tools whose output is the same for everybody |
+| **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly                                                                                                                                                                       |
+| **Default TTL**    | 86400 seconds (1 day) if not specified                                                                                                                                                                                                  |
+| **Sliding Window** | Extends TTL on reads when enabled                                                                                                                                                                                                       |
+| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing                                                                                                                                                                              |
+| **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)                                                                                                                                                                         |
 
 ---
 

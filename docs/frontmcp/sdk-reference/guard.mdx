@@ -437,14 +437,14 @@ function resolvePartitionKey(
 ): string
 ```
 
-| Strategy        | Resolved Value                       |
-| --------------- | ------------------------------------ |
-| `undefined`     | `'global'`                           |
-| `'global'`      | `'global'`                           |
-| `'ip'`          | `context.clientIp` or `'unknown-ip'` |
-| `'session'`     | `context.sessionId`                  |
-| `'userId'`      | `context.userId` or `'anonymous'`    |
-| Custom function | `fn(context)`                        |
+| Strategy        | Resolved Value                                                   |
+| --------------- | ---------------------------------------------------------------- |
+| `undefined`     | `'global'`                                                       |
+| `'global'`      | `'global'`                                                       |
+| `'ip'`          | `context.clientIp`, else `user:<userId>`, else `'ip:unresolved'` |
+| `'session'`     | `context.sessionId`                                              |
+| `'userId'`      | `context.userId` or `'anonymous'`                                |
+| Custom function | `fn(context)`                                                    |
 
 ---
 

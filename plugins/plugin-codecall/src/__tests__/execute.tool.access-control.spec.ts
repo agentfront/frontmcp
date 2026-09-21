@@ -12,6 +12,7 @@
  * point that matters: an excluded tool must never reach the flow.
  */
 import CodeCallConfig from '../providers/code-call.config';
+import { checkCodeCallToolAccess } from '../security/codecall-tool-policy';
 import EnclaveService from '../services/enclave.service';
 import ExecuteTool from '../tools/execute.tool';
 
@@ -68,12 +69,21 @@ type ToolStub = { name: string; fullName?: string; metadata?: unknown };
 /** The shape `tools:call-tool` receives, so the assertions type-check against it. */
 type CallToolFlowCall = [flow: string, payload: { request?: { params?: { name?: string } } }];
 
+/** The mocked `ToolContext` surface these harnesses drive, in place of a real scope. */
+interface MockedToolInstance {
+  scope: { runFlow: jest.Mock; tools: { getTools: jest.Mock } };
+  execute(input: Record<string, unknown>): Promise<unknown>;
+  _setDependency(token: unknown, instance: unknown): void;
+}
+
+type MockedToolCtor = new () => MockedToolInstance;
+
 /**
  * Build an ExecuteTool whose enclave hands the `callTool` environment straight back, so a
  * test can drive the exact function an AgentScript would call.
  */
 function createToolHarness(options: { mode?: string; tools?: ToolStub[]; includeTools?: unknown } = {}) {
-  const tool = new (ExecuteTool as any)();
+  const tool = new (ExecuteTool as unknown as MockedToolCtor)();
 
   let capturedEnv: { callTool: (name: string, input: unknown, opts?: unknown) => Promise<unknown> } | undefined;
   const mockEnclave = {
@@ -207,6 +217,19 @@ describe('ExecuteTool — execution-time tool access control (GHSA-6w3j-82v5-6qr
 
     const reached = h.runFlow.mock.calls.some(([flow]: CallToolFlowCall) => flow === 'tools:call-tool');
     expect(reached).toBe(false);
+
+    // `ToolCallError`'s message is deliberately generic, so assert the policy decision
+    // itself: the denial has to be the blocked namespace, not the unknown-tool fallback that
+    // a broken alias resolution would produce.
+    const decision = checkCodeCallToolAccess(
+      { tools: { getTools: () => [{ name: 'wipeConfig', fullName: 'system:wipeConfig' }] } },
+      { get: (key: string) => (key === 'mode' ? 'codecall_only' : undefined) },
+      'wipeConfig',
+    );
+    expect(decision).toEqual({
+      allowed: false,
+      reason: 'Tool "system:wipeConfig" is in a namespace CodeCall never calls',
+    });
   });
 
   it('treats a caller-supplied allowedTools as narrowing only, never widening', async () => {

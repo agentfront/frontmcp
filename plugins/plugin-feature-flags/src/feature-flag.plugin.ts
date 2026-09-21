@@ -3,6 +3,7 @@ import {
   FlowCtxOf,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
+  FrontMcpContextStorage,
   ListResourcesHook,
   ListToolsHook,
   Plugin,
@@ -13,8 +14,14 @@ import {
 
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
 import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
+import { buildFeatureFlagContext } from './feature-flag.context';
 import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
-import type { FeatureFlagPluginOptions, FeatureFlagPluginOptionsInput, FeatureFlagRef } from './feature-flag.types';
+import type {
+  FeatureFlagContext,
+  FeatureFlagPluginOptions,
+  FeatureFlagPluginOptionsInput,
+  FeatureFlagRef,
+} from './feature-flag.types';
 import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
 // Local hook references for prompts and skills flows.
@@ -302,13 +309,17 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const ref = metadata?.featureFlag;
     if (!ref) return;
 
-    const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
     const key = typeof ref === 'string' ? ref : ref.key;
     const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
 
     let enabled: boolean;
     try {
-      enabled = await adapter.isEnabled(key, {});
+      // The same batch call the list hooks make, so the gate and the listing cannot reach
+      // different answers, and so an omitted (unknown) key falls back to `defaultValue`
+      // rather than reading as a disable.
+      const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
+      const results = await adapter.evaluateFlags([key], this.currentFlagContext());
+      enabled = this.isRefEnabled(ref, results);
     } catch {
       enabled = defaultValue;
     }
@@ -347,7 +358,26 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     refs: Map<string, FeatureFlagRef>,
   ): Promise<Map<string, boolean>> {
     const keys = Array.from(refs.keys());
-    return adapter.evaluateFlags(keys, {});
+    return adapter.evaluateFlags(keys, this.currentFlagContext());
+  }
+
+  /**
+   * The caller's evaluation context.
+   *
+   * Passing `{}` here asked the adapter "is this flag on for nobody in particular", which a
+   * targeted adapter can answer differently from "is it on for THIS caller" — enabling access
+   * the caller should not have. The context comes from the same `FrontMcpContext` the
+   * context-scoped accessor reads, so hooks and `this.featureFlags` agree.
+   */
+  private currentFlagContext(): FeatureFlagContext {
+    try {
+      const ctx = this.get(FrontMcpContextStorage)?.getStore();
+      if (!ctx) return {};
+      return buildFeatureFlagContext(ctx, this.options);
+    } catch {
+      // No context storage bound (unit tests, non-request paths) — evaluate anonymously.
+      return {};
+    }
   }
 
   /**
@@ -357,14 +387,13 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    */
   private isRefEnabled(ref: FeatureFlagRef, flagResults: Map<string, boolean>): boolean {
     const key = typeof ref === 'string' ? ref : ref.key;
-    const adapterResult = flagResults.get(key);
     const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
 
-    // An explicit answer from the adapter wins, `false` included. `defaultValue` is for an
-    // answer we do not have — an unknown key or an unavailable adapter. Letting it override
-    // an explicit `false` made listing disagree with `gateEntryExecution`, which honours the
-    // adapter: the entry appeared in the list and was then refused on direct access.
-    if (adapterResult !== undefined) return adapterResult;
+    // An answer from the adapter wins, `false` included: the operator disabled the flag.
+    // An ABSENT key means the adapter has never heard of it, and only then does the ref's
+    // `defaultValue` apply. Both the list hooks and `gateEntryExecution` go through here, so
+    // a capability cannot be listed and then refused on access.
+    if (flagResults.has(key)) return flagResults.get(key) === true;
     return defaultValue;
   }
 }

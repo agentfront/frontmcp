@@ -17,24 +17,38 @@
  * The same shape appears for `user` scope with no authenticated user: everyone pooled under
  * `user:anonymous`.
  */
+import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import { RememberAccessor } from '../providers/remember-accessor.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import { deriveEncryptionKey } from '../remember.crypto';
+import type { RememberPluginOptions } from '../remember.types';
 
-function createStore() {
+function createStore(): { store: RememberStoreInterface; values: Map<string, string> } {
   const values = new Map<string, string>();
   const store: RememberStoreInterface = {
-    getValue: jest.fn(async (key: string) => values.get(key) ?? null),
-    setValue: jest.fn(async (key: string, value: string) => {
-      values.set(key, value);
+    setValue: jest.fn(async (key: string, value: unknown) => {
+      values.set(key, typeof value === 'string' ? value : JSON.stringify(value));
     }),
-    deleteValue: jest.fn(async (key: string) => values.delete(key)),
-    hasValue: jest.fn(async (key: string) => values.has(key)),
-    listKeys: jest.fn(async (prefix: string) => [...values.keys()].filter((k) => k.startsWith(prefix))),
-    clear: jest.fn(async () => values.clear()),
-  } as unknown as RememberStoreInterface;
+    getValue: jest.fn(async <T>(key: string, defaultValue?: T) => (values.get(key) as T | undefined) ?? defaultValue),
+    delete: jest.fn(async (key: string) => {
+      values.delete(key);
+    }),
+    exists: jest.fn(async (key: string) => values.has(key)),
+    keys: jest.fn(async (pattern?: string) => {
+      const all = [...values.keys()];
+      if (!pattern) return all;
+      const regex = new RegExp('^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+      return all.filter((key) => regex.test(key));
+    }),
+    close: jest.fn(async () => {
+      values.clear();
+    }),
+  };
   return { store, values };
 }
+
+const statelessConfig = { type: 'memory', encryption: { enabled: false } } as RememberPluginOptions;
 
 function createAccessor(
   sessionId: string,
@@ -42,9 +56,9 @@ function createAccessor(
   shared?: ReturnType<typeof createStore>,
 ) {
   const backing = shared ?? createStore();
-  const ctx = { sessionId, authInfo, flow: { name: 'billing:refund' } } as never;
+  const ctx = { sessionId, authInfo, flow: { name: 'billing:refund' } } as unknown as FrontMcpContext;
   return {
-    accessor: new RememberAccessor(backing.store, ctx, { encryption: { enabled: false } }),
+    accessor: new RememberAccessor(backing.store, ctx, statelessConfig),
     values: backing.values,
   };
 }
@@ -94,7 +108,7 @@ describe('Remember — stateless isolation (GHSA-225p-f8jh-f3rh, GHSA-h6f4-jg8x-
 
       await accessor.set('theme', 'dark', { scope: 'session' });
 
-      expect([...values.keys()]).toEqual(['remember:session:session-abc:theme']);
+      expect([...values.keys()]).toEqual(['remember:v2:session:session-abc:theme']);
     });
   });
 

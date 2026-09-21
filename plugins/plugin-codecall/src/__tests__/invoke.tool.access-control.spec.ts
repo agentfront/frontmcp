@@ -62,10 +62,19 @@ type ToolStub = { name: string; fullName?: string; metadata?: unknown };
 /** The shape `tools:call-tool` receives, so the assertions type-check against it. */
 type CallToolFlowCall = [flow: string, payload: { request?: { params?: { name?: string } } }];
 
+/** The mocked `ToolContext` surface these harnesses drive, in place of a real scope. */
+interface MockedToolInstance {
+  scope: { runFlow: jest.Mock; tools: { getTools: jest.Mock } };
+  execute(input: Record<string, unknown>): Promise<unknown>;
+  _setDependency(token: unknown, instance: unknown): void;
+}
+
+type MockedToolCtor = new () => MockedToolInstance;
+
 function createInvokeHarness(
   options: { mode?: string; tools?: ToolStub[]; includeTools?: unknown; directCalls?: unknown } = {},
 ) {
-  const tool = new (InvokeTool as any)();
+  const tool = new (InvokeTool as unknown as MockedToolCtor)();
 
   const configValues: Record<string, unknown> = {
     mode: options.mode ?? 'codecall_only',

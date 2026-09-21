@@ -129,21 +129,21 @@ describe('RememberAccessor', () => {
       await accessor.set('key', 'value');
 
       // Check that the key includes session ID
-      const keys = await store.keys('remember:session:test-session-123:*');
+      const keys = await store.keys('remember:v2:session:test-session-123:*');
       expect(keys.length).toBe(1);
     });
 
     it('stores with user scope', async () => {
       await accessor.set('key', 'value', { scope: 'user' });
 
-      const keys = await store.keys('remember:user:user-456:*');
+      const keys = await store.keys('remember:v2:user:user-456:*');
       expect(keys.length).toBe(1);
     });
 
     it('stores with tool scope', async () => {
       await accessor.set('key', 'value', { scope: 'tool' });
 
-      const keys = await store.keys('remember:tool:test-tool:test-session-123:*');
+      const keys = await store.keys('remember:v2:tool:test-tool:test-session-123:*');
       expect(keys.length).toBe(1);
     });
 
@@ -390,7 +390,7 @@ describe('RememberAccessor', () => {
       await encryptedAccessor.set('secret', 'my-password');
 
       // Get raw value from store
-      const raw = await store.getValue<string>('remember:session:test-session-123:secret');
+      const raw = await store.getValue<string>('remember:v2:session:test-session-123:secret');
       expect(raw).toBeDefined();
 
       // Should not be readable as plain JSON
@@ -407,7 +407,7 @@ describe('RememberAccessor', () => {
     it('stores plain JSON when encryption disabled', async () => {
       await accessor.set('plain', 'value');
 
-      const raw = await store.getValue<string>('remember:session:test-session-123:plain');
+      const raw = await store.getValue<string>('remember:v2:session:test-session-123:plain');
       const parsed = JSON.parse(raw!);
 
       expect(parsed.value).toBe('value');
@@ -427,7 +427,7 @@ describe('RememberAccessor', () => {
 
       const keys = await store.keys('custom:*');
       expect(keys.length).toBe(1);
-      expect(keys[0]).toMatch(/^custom:session:/);
+      expect(keys[0]).toMatch(/^custom:v2:session:/);
     });
 
     it('uses default prefix when not specified', async () => {
@@ -475,7 +475,7 @@ describe('RememberAccessor', () => {
 
       await noFlowAccessor.set('key', 'value', { scope: 'tool' });
 
-      const keys = await store.keys('remember:tool:unknown:*');
+      const keys = await store.keys('remember:v2:tool:unknown:*');
       expect(keys.length).toBe(1);
     });
 

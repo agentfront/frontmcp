@@ -134,6 +134,30 @@ describe('extractClientIp — proxy trust (GHSA-p3qf-fcwm-35x4)', () => {
       expect(ip).toBe('198.51.100.7');
     });
 
+    it('does not fall through to x-real-ip, which the caller also controls', () => {
+      // Short chain + forged x-real-ip was the way around the depth check.
+      const ip = extractClientIp(
+        { 'x-forwarded-for': '1.2.3.4', 'x-real-ip': '5.6.7.8' },
+        { trustProxy: true, trustedProxyDepth: 2, peerAddress: '203.0.113.9' },
+      );
+
+      expect(ip).toBe('203.0.113.9');
+    });
+
+    it('uses x-real-ip only when there is no chain at all, at a single hop', () => {
+      expect(extractClientIp({ 'x-real-ip': '198.51.100.7' }, { trustProxy: true, peerAddress: '10.0.0.1' })).toBe(
+        '198.51.100.7',
+      );
+
+      // Beyond one hop there is no way to tell which hop set it.
+      expect(
+        extractClientIp(
+          { 'x-real-ip': '198.51.100.7' },
+          { trustProxy: true, trustedProxyDepth: 2, peerAddress: '10.0.0.1' },
+        ),
+      ).toBe('10.0.0.1');
+    });
+
     it('ignores a non-positive configured depth rather than trusting the wrong entry', () => {
       const ip = extractClientIp(
         { 'x-forwarded-for': 'fake, 198.51.100.7' },

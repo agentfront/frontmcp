@@ -183,17 +183,24 @@ export function extractClientIp(headers: Record<string, unknown>, options?: Clie
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  // Count back past the hops our own proxies appended. A chain SHORTER than the configured
-  // depth was not built by those proxies, so none of its entries is vouched for — clamping
-  // to the leftmost entry would hand the caller the very value it controls. Fall back to the
-  // peer instead.
-  if (forwarded.length >= depth) {
-    const candidate = normalizeIp(forwarded[forwarded.length - depth]);
-    if (candidate) return candidate;
+  if (forwarded.length > 0) {
+    // A chain SHORTER than the configured depth was not built by our proxies, so none of its
+    // entries is vouched for. Return the peer rather than falling through — `x-real-ip` is
+    // just as caller-settable, so consulting it here would hand back a value the caller chose
+    // and undo the check above.
+    if (forwarded.length < depth) return peerIp;
+
+    // Count back past the hops our own proxies appended.
+    return normalizeIp(forwarded[forwarded.length - depth]) ?? peerIp;
   }
 
-  const realIp = normalizeIp(headerValues(headers['x-real-ip'])[0]);
-  if (realIp) return realIp;
+  // No forwarded chain at all. `x-real-ip` is the single value a one-hop proxy (nginx and
+  // friends) sets instead of a chain; beyond one hop there is no way to tell which hop set
+  // it, so it is not usable as the trusted end.
+  if (depth === 1) {
+    const realIp = normalizeIp(headerValues(headers['x-real-ip'])[0]);
+    if (realIp) return realIp;
+  }
 
   return peerIp;
 }

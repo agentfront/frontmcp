@@ -325,21 +325,37 @@ from it alone could be recomputed by anyone who had seen it.
 
 ### Upgrading past the key-derivation change
 
-`session` and `tool` entries written before this change cannot be decrypted after it. There is
-no automatic migration, and the failure is **silent**: decryption returns `null`, so the value
-reads as absent rather than raising.
+Two changes moved data written by earlier versions:
 
-Purge the affected keys as part of the upgrade so the state is explicit rather than
-mysteriously empty:
+- **Key derivation.** `session` and `tool` keys now mix in the master secret, so ciphertext
+  written before the change no longer decrypts.
+- **Namespace encoding.** `session`, `tool` and `user` prefixes now percent-encode every
+  variable component, so an identity containing a character `encodeURIComponent` escapes --
+  a `:` in a user id, for instance -- now lives under a different key.
+
+Both failures used to be **silent**: decryption returns `null` and a moved key simply misses,
+so the value reads as absent rather than raising.
+
+These three scopes are therefore stored under a `v2:` segment
+(`remember:v2:session:<identity>:<key>`), and the plugin **purges the pre-`v2` entries
+automatically** on first use, logging a warning with the number removed. The version segment is
+what makes that safe: a purge pattern of `remember:session:*` cannot match a live
+`remember:v2:session:*` key, not even one written concurrently by another instance.
+
+`global` is not versioned and is not purged -- neither its keys nor its key derivation changed.
+
+If you would rather migrate the data yourself, opt out and handle it before the upgrade:
+
+```typescript
+RememberPlugin.init({ type: 'global-store', skipLegacyPurge: true });
+```
 
 ```bash
 # Redis example -- adjust for your keyPrefix
 redis-cli --scan --pattern 'remember:session:*' | xargs -r redis-cli del
 redis-cli --scan --pattern 'remember:tool:*'    | xargs -r redis-cli del
+redis-cli --scan --pattern 'remember:user:*'    | xargs -r redis-cli del
 ```
-
-`user` and `global` entries are unaffected: those scopes already derived their key from the
-master secret.
 
 ### Secret Persistence
 

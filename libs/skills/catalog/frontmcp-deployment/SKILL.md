@@ -146,15 +146,15 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 
 ## Troubleshooting
 
-| Problem                            | Cause                                        | Solution                                                                        |
-| ---------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| Cold start timeout on serverless   | Bundle too large or heavy initialization     | Lazy-load providers; reduce bundle with tree shaking; increase function timeout |
-| Session lost between requests      | Using memory storage on stateless serverless | Switch to platform-native storage (Vercel KV, DynamoDB, etc.)                   |
-| CORS errors on browser/web clients | HTTP CORS not configured                     | Add CORS config via `configure-http` skill                                      |
-| Build fails with missing module    | Node-only module in browser/edge build       | Use conditional imports or `@frontmcp/utils` cross-platform utilities           |
+| Problem                                                          | Cause                                                                                     | Solution                                                                                                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cold start timeout on serverless                                 | Bundle too large or heavy initialization                                                  | Lazy-load providers; reduce bundle with tree shaking; increase function timeout                                                                                      |
+| Session lost between requests                                    | Using memory storage on stateless serverless                                              | Switch to platform-native storage (Vercel KV, DynamoDB, etc.)                                                                                                        |
+| CORS errors on browser/web clients                               | HTTP CORS not configured                                                                  | Add CORS config via `configure-http` skill                                                                                                                           |
+| Build fails with missing module                                  | Node-only module in browser/edge build                                                    | Use conditional imports or `@frontmcp/utils` cross-platform utilities                                                                                                |
 | `TS2688: Cannot find type definition file for 'node'` under Yarn | An older CLI shelled out to `npx tsc`, which starts a process that never loads `.pnp.cjs` | Upgrade the CLI — the build now runs the project's own `typescript` with the current Node binary, or delegates to `yarn`/`pnpm`/`bun` when there is no local install |
-| `@frontmcp/sdk tried to access <pkg> (a peer dependency)` | Yarn Plug'n'Play enforces peer dependencies that a hoisted `node_modules` tree tolerates | Add `nodeLinker: node-modules` to `.yarnrc.yml` and reinstall (`frontmcp create` now scaffolds this for Yarn projects) |
-| Deleted source file still present in `dist/` | An older CLI never cleared the output directory, or `--no-clean` was passed | Rebuild without `--no-clean`; the build now clears the target's output directory first |
+| `@frontmcp/sdk tried to access <pkg> (a peer dependency)`        | Yarn Plug'n'Play enforces peer dependencies that a hoisted `node_modules` tree tolerates  | Add `nodeLinker: node-modules` to `.yarnrc.yml` and reinstall (`frontmcp create` now scaffolds this for Yarn projects)                                               |
+| Deleted source file still present in `dist/`                     | An older CLI never cleared the output directory, or `--no-clean` was passed               | Rebuild without `--no-clean`; the build now clears the target's output directory first                                                                               |
 
 ## Examples
 

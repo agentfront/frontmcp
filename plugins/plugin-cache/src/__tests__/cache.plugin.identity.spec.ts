@@ -13,6 +13,8 @@
  */
 import 'reflect-metadata';
 
+import type { FlowCtxOf } from '@frontmcp/sdk';
+
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
 
@@ -26,14 +28,15 @@ function createHarness(options: { keyByIdentity?: boolean } = {}) {
     setValue: jest.fn().mockResolvedValue(undefined),
     delete: jest.fn().mockResolvedValue(undefined),
   };
-  (plugin as any).get = (token: unknown) => {
+  const resolve = (token: unknown): unknown => {
     if (token === CacheStoreToken) return store;
     return { getStore: () => ({ metadata: {} }) };
   };
+  (plugin as unknown as { get: (token: unknown) => unknown }).get = resolve;
   return { plugin, store };
 }
 
-function createFlowCtx(authInfo: unknown, sessionId = 'session-1') {
+function createFlowCtx(authInfo: unknown, sessionId = 'session-1'): FlowCtxOf<'tools:call-tool'> {
   return {
     state: {
       tool: {
@@ -50,7 +53,7 @@ function createFlowCtx(authInfo: unknown, sessionId = 'session-1') {
         respond: jest.fn(),
       },
     },
-  } as any;
+  } as unknown as FlowCtxOf<'tools:call-tool'>;
 }
 
 // The SAME clientId with different subjects: varying both would let the test pass even if
