@@ -280,11 +280,18 @@ user id, say). Both failures are silent on their own: decryption returns `null` 
 simply misses, so the value reads as absent.
 
 These three scopes are stored under a `v2:` segment (`remember:v2:session:<identity>:<key>`) and
-the plugin **purges the pre-`v2` entries automatically** on first use, warning with the number
-removed. The version segment is what makes that safe -- a purge pattern of `remember:session:*`
-cannot match a live `remember:v2:session:*` key. Pass `skipLegacyPurge: true` to migrate the data
-yourself instead. `global` is not versioned and not purged: neither its keys nor its key
-derivation changed.
+the plugin **purges the pre-`v2` entries automatically**, warning with the number removed. The
+version segment is what makes that safe -- a purge pattern of `remember:session:*` cannot match a
+live `remember:v2:session:*` key. `global` is not versioned and not purged: neither its keys nor
+its key derivation changed.
+
+**The purge runs ten minutes after the instance starts, on an unreferenced timer, never on the
+request path.** The delay matters: an instance that starts mid-rollout shares the store with the
+instances it is replacing, and those still read and write the legacy prefixes, which the `v2:`
+segment does not protect. Raise `legacyPurgeDelayMs` for a slower rollout, or pass
+`skipLegacyPurge: true` to migrate the data yourself. On serverless and edge runtimes the
+invocation usually ends before the timer fires, so nothing is purged -- clear the legacy prefixes
+manually if you want the storage back.
 
 ### Tools Exposed (when `tools.enabled: true`)
 

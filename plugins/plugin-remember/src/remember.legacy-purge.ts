@@ -18,8 +18,18 @@ import type { RememberStoreInterface } from './providers/remember-store.interfac
  */
 const LEGACY_SCOPES = ['session', 'tool', 'user'] as const;
 
-/** Stores already purged in this process, so the sweep runs once per store. */
-const purged = new WeakSet<RememberStoreInterface>();
+/**
+ * How long after start the sweep waits before deleting anything.
+ *
+ * An instance that starts mid-rollout shares the store with the instances it is replacing,
+ * and those still read and write the legacy prefixes — the `v2:` segment protects this
+ * version's data, not theirs. Waiting out a normal rolling deploy is what keeps an automatic
+ * purge from deleting memory another instance is still serving.
+ */
+const DEFAULT_LEGACY_PURGE_DELAY_MS = 600_000;
+
+/** Stores whose sweep is already armed, so it is scheduled once per store. */
+const scheduled = new WeakSet<RememberStoreInterface>();
 
 /**
  * Delete entries that the key-derivation and namespace-encoding changes orphaned.
@@ -72,23 +82,33 @@ export async function purgeLegacyRememberEntries(
 }
 
 /**
- * Run the purge at most once for a given store.
+ * Arm the sweep for a store, at most once.
  *
  * `DynamicPlugin` exposes no startup lifecycle hook and providers are not eagerly
- * instantiated, so this is triggered from the accessor's first storage access. Move it to a
- * real lifecycle hook if the SDK grows one.
+ * instantiated, so this is armed when the accessor is first constructed. Move it to a real
+ * lifecycle hook if the SDK grows one.
+ *
+ * Deliberately fire-and-forget: nothing on the request path waits for three keyspace scans.
  */
-export async function purgeLegacyRememberEntriesOnce(
+export function scheduleLegacyRememberPurge(
   store: RememberStoreInterface,
   keyPrefix: string,
-  logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
-): Promise<void> {
-  if (purged.has(store)) return;
-  purged.add(store);
-  await purgeLegacyRememberEntries(store, keyPrefix, logger);
+  options: { delayMs?: number; logger?: Pick<FrontMcpLogger, 'warn' | 'debug'> } = {},
+): void {
+  if (scheduled.has(store)) return;
+  scheduled.add(store);
+
+  const timer = setTimeout(() => {
+    void purgeLegacyRememberEntries(store, keyPrefix, options.logger).catch(() => undefined);
+  }, options.delayMs ?? DEFAULT_LEGACY_PURGE_DELAY_MS);
+
+  // Housekeeping must never hold the process open. Optional because the Web timer an edge
+  // runtime returns has no unref; there the invocation usually ends first and nothing is
+  // purged, which is the safe outcome.
+  timer.unref?.();
 }
 
-/** Test seam: forget which stores have been swept. */
+/** Test seam: forget which stores have a sweep armed. */
 export function resetLegacyPurgeStateForTests(store: RememberStoreInterface): void {
-  purged.delete(store);
+  scheduled.delete(store);
 }

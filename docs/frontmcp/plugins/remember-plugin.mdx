@@ -338,13 +338,37 @@ so the value reads as absent rather than raising.
 
 These three scopes are therefore stored under a `v2:` segment
 (`remember:v2:session:<identity>:<key>`), and the plugin **purges the pre-`v2` entries
-automatically** on first use, logging a warning with the number removed. The version segment is
-what makes that safe: a purge pattern of `remember:session:*` cannot match a live
-`remember:v2:session:*` key, not even one written concurrently by another instance.
+automatically**, logging a warning with the number removed. The version segment is what makes
+that safe: a purge pattern of `remember:session:*` cannot match a live `remember:v2:session:*`
+key, not even one written concurrently by another instance.
 
 `global` is not versioned and is not purged -- neither its keys nor its key derivation changed.
 
-If you would rather migrate the data yourself, opt out and handle it before the upgrade:
+### When the purge runs
+
+Ten minutes after the instance starts, on a timer, never on the request path.
+
+The delay is the point. An instance that starts mid-rollout shares the store with the
+instances it is replacing, and those still read and write the legacy prefixes -- the `v2:`
+segment protects this version's data, not theirs. Waiting out a normal rolling deploy is what
+keeps the purge from deleting memory another instance is still serving. Raise
+`legacyPurgeDelayMs` for a slower rollout:
+
+```typescript
+RememberPlugin.init({
+  type: 'global-store',
+  legacyPurgeDelayMs: 1_800_000, // 30 minutes
+});
+```
+
+<Note>
+  **Serverless and edge runtimes.** An invocation that ends before the timer fires never
+  purges, and the timer is unreferenced so it will not hold a process open. That is the safe
+  outcome -- the entries are inert either way. Clear them with the commands below if you want
+  the storage back.
+</Note>
+
+If you would rather migrate the data yourself, opt out entirely:
 
 ```typescript
 RememberPlugin.init({ type: 'global-store', skipLegacyPurge: true });

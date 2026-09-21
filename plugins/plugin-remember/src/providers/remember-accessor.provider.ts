@@ -2,7 +2,7 @@ import { FrontMcpContext, Provider, ProviderScope, type FrontMcpLogger } from '@
 
 import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
 import { RememberIdentityError } from '../remember.errors';
-import { purgeLegacyRememberEntriesOnce } from '../remember.legacy-purge';
+import { scheduleLegacyRememberPurge } from '../remember.legacy-purge';
 import type {
   RememberEntry,
   RememberForgetOptions,
@@ -73,7 +73,6 @@ export class RememberAccessor {
   private readonly config: RememberPluginOptions;
   private readonly keyPrefix: string;
   private readonly encryptionEnabled: boolean;
-  private readonly logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>;
 
   constructor(
     store: RememberStoreInterface,
@@ -86,19 +85,13 @@ export class RememberAccessor {
     this.config = config;
     this.keyPrefix = config.keyPrefix ?? 'remember:';
     this.encryptionEnabled = config.encryption?.enabled !== false;
-    this.logger = logger;
-  }
 
-  /**
-   * One-time sweep of entries the key-derivation and namespace changes orphaned.
-   *
-   * Runs before the first storage access rather than at startup, because `DynamicPlugin`
-   * exposes no startup hook and providers are not eagerly instantiated. It is a no-op after
-   * the first call for a given store.
-   */
-  private async ensureLegacyEntriesPurged(): Promise<void> {
-    if (this.config.skipLegacyPurge) return;
-    await purgeLegacyRememberEntriesOnce(this.store, this.keyPrefix, this.logger);
+    // Armed here rather than at startup because `DynamicPlugin` exposes no startup hook and
+    // providers are not eagerly instantiated. Scheduling only — the sweep itself runs later,
+    // on a timer, so no request ever waits for it.
+    if (!config.skipLegacyPurge) {
+      scheduleLegacyRememberPurge(store, this.keyPrefix, { delayMs: config.legacyPurgeDelayMs, logger });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +106,6 @@ export class RememberAccessor {
    * @param options - Storage options (scope, ttl, brand, metadata)
    */
   async set<T>(key: string, value: T, options: RememberSetOptions = {}): Promise<void> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -141,7 +133,6 @@ export class RememberAccessor {
    * @returns The stored value or defaultValue if not found
    */
   async get<T>(key: string, options: RememberGetOptions<T> = {}): Promise<T | undefined> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -171,7 +162,6 @@ export class RememberAccessor {
    * @returns The full entry or undefined if not found
    */
   async getEntry<T>(key: string, options: { scope?: RememberScope } = {}): Promise<RememberEntry<T> | undefined> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
 
@@ -200,7 +190,6 @@ export class RememberAccessor {
    * @param options - Options (scope)
    */
   async forget(key: string, options: RememberForgetOptions = {}): Promise<void> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
     await this.store.delete(storageKey);
@@ -214,7 +203,6 @@ export class RememberAccessor {
    * @returns true if the key exists
    */
   async knows(key: string, options: RememberKnowsOptions = {}): Promise<boolean> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const storageKey = this.buildStorageKey(key, scope);
     return this.store.exists(storageKey);
@@ -227,7 +215,6 @@ export class RememberAccessor {
    * @returns Array of keys (without the scope prefix)
    */
   async list(options: RememberListOptions = {}): Promise<string[]> {
-    await this.ensureLegacyEntriesPurged();
     const scope = options.scope ?? 'session';
     const scopePrefix = this.buildScopePrefix(scope);
     const fullPattern = scopePrefix + (options.pattern ?? '*');

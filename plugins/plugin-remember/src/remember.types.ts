@@ -121,14 +121,26 @@ export interface BaseRememberPluginOptions {
    * Skip the one-time purge of entries orphaned by the session/tool key-derivation change
    * (GHSA-h6f4-jg8x-38gj) and the namespace encoding (GHSA-225p-f8jh-f3rh).
    *
-   * The purge runs automatically on first use and deletes `session:`, `tool:` and `user:`
-   * entries under this plugin's `keyPrefix`, because they can no longer be read and would
-   * otherwise silently appear absent. Set this to `true` only if you are migrating the data
-   * yourself.
+   * The purge runs automatically, `legacyPurgeDelayMs` after the instance starts, and deletes
+   * the pre-`v2` `session:`, `tool:` and `user:` entries under this plugin's `keyPrefix` —
+   * they can no longer be read and would otherwise silently appear absent. Set this to `true`
+   * only if you are migrating the data yourself.
    *
    * @default false
    */
   skipLegacyPurge?: boolean;
+
+  /**
+   * How long after the instance starts the legacy purge waits before deleting anything.
+   *
+   * An instance that starts mid-rollout shares the store with the instances it is replacing,
+   * and those still read and write the legacy prefixes. The delay lets a rolling deploy finish
+   * first, so the purge cannot delete memory another instance is still serving. Raise it for a
+   * rollout slower than the default.
+   *
+   * @default 600000 (10 minutes)
+   */
+  legacyPurgeDelayMs?: number;
 
   /** Encryption configuration */
   encryption?: {
