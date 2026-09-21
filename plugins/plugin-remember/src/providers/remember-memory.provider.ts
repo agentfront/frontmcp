@@ -1,4 +1,5 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+
 import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
@@ -66,6 +67,20 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
     }
 
     this.memory.set(key, entry);
+  }
+
+  /**
+   * Store a value only if the key is absent.
+   *
+   * A single-threaded runtime makes the check-then-set indivisible; an expired entry counts as
+   * absent, matching what `getValue` would report.
+   */
+  async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    const existing = this.memory.get(key);
+    if (existing && !this.isExpired(existing)) return false;
+
+    await this.setValue(key, value, ttlSeconds);
+    return true;
   }
 
   /**

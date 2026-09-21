@@ -20,6 +20,20 @@ export interface RememberStoreInterface {
   getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined>;
 
   /**
+   * Store a value only if the key is absent.
+   *
+   * Optional. A store whose backend has no conditional write simply omits it, and callers that
+   * need the guarantee fall back to read-then-write and say what that costs. Implement it
+   * wherever the backend has a native primitive (Redis `SET ... NX`, Vercel KV `{ nx: true }`).
+   *
+   * @param key - Storage key
+   * @param value - Value to store (will be JSON serialized)
+   * @param ttlSeconds - Optional time-to-live in seconds
+   * @returns true when this caller created the key, false when it already existed
+   */
+  setIfAbsent?(key: string, value: unknown, ttlSeconds?: number): Promise<boolean>;
+
+  /**
    * Delete a value by key.
    * @param key - Storage key to delete
    */

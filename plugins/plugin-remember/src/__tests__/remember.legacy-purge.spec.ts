@@ -17,6 +17,12 @@ class FakeStore implements RememberStoreInterface {
     this.data.set(key, typeof value === 'string' ? value : JSON.stringify(value));
   }
 
+  async setIfAbsent(key: string, value: unknown): Promise<boolean> {
+    if (this.data.has(key)) return false;
+    await this.setValue(key, value);
+    return true;
+  }
+
   async getValue<T = unknown>(key: string): Promise<T | undefined> {
     return this.data.get(key) as unknown as T | undefined;
   }
@@ -139,6 +145,54 @@ describe('legacy remember purge', () => {
         version: 2,
         firstSeenAt,
       });
+    });
+
+    it('instances booting together settle on one clock', async () => {
+      // Both observe no marker. Each would stamp its own `Date.now()`, so the clock is pinned to
+      // distinct values -- without a conditional write the second overwrites the first and moves
+      // the fleet's clock forward.
+      const base = Date.now();
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(base)
+        .mockReturnValue(base + 60_000);
+
+      const [first, second] = await Promise.all([
+        readLayoutFirstSeenAt(store, 'remember:'),
+        readLayoutFirstSeenAt(store, 'remember:'),
+      ]);
+
+      expect(first).toBe(base);
+      expect(second).toBe(base);
+      expect(JSON.parse(store.data.get(MARKER_KEY) as string).firstSeenAt).toBe(base);
+    });
+
+    it('the loser of a race adopts the winner timestamp, not its own', async () => {
+      const winnerFirstSeenAt = Date.now() - 12_345;
+      jest.spyOn(store, 'setIfAbsent').mockImplementation(async () => {
+        store.data.set(MARKER_KEY, JSON.stringify({ version: 2, firstSeenAt: winnerFirstSeenAt }));
+        return false;
+      });
+
+      await expect(readLayoutFirstSeenAt(store, 'remember:')).resolves.toBe(winnerFirstSeenAt);
+    });
+
+    it('stands down when a lost race leaves no readable marker', async () => {
+      jest.spyOn(store, 'setIfAbsent').mockResolvedValue(false);
+      const logger = { warn: jest.fn(), debug: jest.fn() };
+
+      await expect(readLayoutFirstSeenAt(store, 'remember:', logger)).resolves.toBeUndefined();
+      expect(logger.debug).toHaveBeenCalled();
+    });
+
+    it('falls back to read-then-write on a store without a conditional write', async () => {
+      const plain = new FakeStore() as FakeStore & { setIfAbsent?: unknown };
+      delete plain.setIfAbsent;
+
+      const firstSeenAt = await readLayoutFirstSeenAt(plain, 'remember:');
+
+      expect(firstSeenAt).toBeCloseTo(Date.now(), -2);
+      expect(JSON.parse(plain.data.get(MARKER_KEY) as string).firstSeenAt).toBe(firstSeenAt);
     });
 
     it('never overwrites an existing marker -- the timestamp belongs to the fleet', async () => {

@@ -53,6 +53,18 @@ interface LayoutMarker {
 /** Stores whose sweep is already armed, so it is scheduled once per store. */
 const scheduled = new WeakSet<RememberStoreInterface>();
 
+/** Read a marker's timestamp, or `undefined` if it is missing or unparseable. */
+function parseFirstSeenAt(raw: unknown): number | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const firstSeenAt = (parsed as LayoutMarker | null)?.firstSeenAt;
+    return typeof firstSeenAt === 'number' && Number.isFinite(firstSeenAt) ? firstSeenAt : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * When the first instance on this layout reached this store.
  *
@@ -61,8 +73,13 @@ const scheduled = new WeakSet<RememberStoreInterface>();
  * while" — and an instance that booted early would fire on its own schedule no matter when the
  * last old instance drained.
  *
- * An existing marker is never overwritten: that timestamp belongs to the fleet. `undefined`
- * means the clock could not be established, and the caller must not delete anything on it.
+ * The marker is created with a conditional write, so instances booting together settle on one
+ * timestamp rather than each overwriting the last. Where the store cannot express that, the
+ * fallback is read-then-write, and concurrent first boots can move `firstSeenAt` forward by the
+ * width of that race — immaterial against a window measured in hours, but not a guarantee.
+ *
+ * `undefined` means the clock could not be established, and the caller must not delete anything
+ * on it.
  */
 export async function readLayoutFirstSeenAt(
   store: RememberStoreInterface,
@@ -70,30 +87,36 @@ export async function readLayoutFirstSeenAt(
   logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
 ): Promise<number | undefined> {
   const key = `${keyPrefix}${LAYOUT_MARKER_KEY}`;
+  const standDown = (reason: string, extra: Record<string, unknown> = {}): undefined => {
+    logger?.debug?.(`remember: ${reason}, legacy purge stood down`, { key, ...extra });
+    return undefined;
+  };
 
   try {
-    const raw = await store.getValue<string>(key);
-
-    if (raw) {
-      const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      const firstSeenAt = (parsed as LayoutMarker | null)?.firstSeenAt;
-      if (typeof firstSeenAt === 'number' && Number.isFinite(firstSeenAt)) {
-        return firstSeenAt;
-      }
-      // A marker we cannot read is not a licence to delete: leave it and stand down.
-      logger?.debug?.('remember: layout marker is unreadable, legacy purge stood down', { key });
-      return undefined;
+    const existing = await store.getValue<string>(key);
+    if (existing) {
+      return parseFirstSeenAt(existing) ?? standDown('layout marker is unreadable');
     }
 
     const marker: LayoutMarker = { version: LAYOUT_VERSION, firstSeenAt: Date.now() };
-    await store.setValue(key, JSON.stringify(marker));
-    return marker.firstSeenAt;
+    const serialized = JSON.stringify(marker);
+
+    if (!store.setIfAbsent) {
+      await store.setValue(key, serialized);
+      return marker.firstSeenAt;
+    }
+
+    if (await store.setIfAbsent(key, serialized)) {
+      return marker.firstSeenAt;
+    }
+
+    // Another instance created it first. Its timestamp is the fleet's, not ours.
+    const winner = await store.getValue<string>(key);
+    return parseFirstSeenAt(winner) ?? standDown('layout marker vanished after a lost race');
   } catch (error) {
-    logger?.debug?.('remember: could not establish the layout marker, legacy purge stood down', {
-      key,
+    return standDown('could not establish the layout marker', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return undefined;
   }
 }
 

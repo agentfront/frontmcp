@@ -1,6 +1,7 @@
 // file: plugins/plugin-remember/src/__tests__/remember-vercel-kv.provider.spec.ts
 
 import 'reflect-metadata';
+
 import RememberVercelKvProvider from '../providers/remember-vercel-kv.provider';
 
 // Mock @vercel/kv
@@ -330,6 +331,32 @@ describe('RememberVercelKvProvider', () => {
       const provider = new RememberVercelKvProvider();
       await provider.close();
       // No assertions needed - just verifying it doesn't throw
+    });
+  });
+
+  describe('setIfAbsent', () => {
+    it('sets the nx option and reports the key was created', async () => {
+      mockKvClient.set.mockResolvedValue('OK');
+      const provider = new RememberVercelKvProvider();
+
+      await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(true);
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', 'value', { nx: true });
+    });
+
+    it('passes the TTL alongside nx', async () => {
+      mockKvClient.set.mockResolvedValue('OK');
+      const provider = new RememberVercelKvProvider();
+
+      await provider.setIfAbsent('marker', 'value', 60);
+
+      expect(mockKvClient.set).toHaveBeenCalledWith('remember:marker', 'value', { nx: true, ex: 60 });
+    });
+
+    it('reports false when the key already existed', async () => {
+      mockKvClient.set.mockResolvedValue(null);
+      const provider = new RememberVercelKvProvider();
+
+      await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(false);
     });
   });
 });

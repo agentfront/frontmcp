@@ -387,7 +387,9 @@ CachePlugin.init({
 
 ### Multi-Tenant Caching
 
-Include tenant or user identifiers in your tool inputs to ensure cache isolation:
+Caller isolation is automatic -- the key includes the caller's identity, so one tenant is never
+served another's entry. A `tenantId` in the input is an ordinary field that selects _which_ data
+to fetch:
 
 ```ts
 @Tool({
@@ -400,19 +402,22 @@ Include tenant or user identifiers in your tool inputs to ensure cache isolation
 })
 export default class GetTenantDataTool extends ToolContext {
   async execute(input: { tenantId: string; dataType: string }) {
-    // Cache key includes tenantId automatically via input hash
+    // The caller's identity is already in the key; tenantId selects the data
     return await this.fetchTenantData(input.tenantId, input.dataType);
   }
 }
 ```
 
 <Tip>
-  The cache key is derived from the **entire** input object, so including tenant/user IDs ensures proper isolation.
+  The cache key is a SHA-256 digest of the tool name, the validated input **and the caller's
+  identity**. Identifiers in the input select what is fetched; they are not what keeps callers
+  apart. Set `keyByIdentity: false` only when every caller would get byte-identical output.
 </Tip>
 
 ### Session-Scoped Caching
 
-For user-specific data, include session or user identifiers:
+User-specific data needs no special handling -- the caller's identity is part of the key, so each
+caller gets their own entry:
 
 ```ts
 export const GetUserDashboard = tool({

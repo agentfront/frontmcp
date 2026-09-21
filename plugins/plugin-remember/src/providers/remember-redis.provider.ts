@@ -1,7 +1,9 @@
 import Redis, { Redis as RedisClient } from 'ioredis';
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+
+import type { RedisClientRememberPluginOptions, RedisRememberPluginOptions } from '../remember.types';
 import type { RememberStoreInterface } from './remember-store.interface';
-import type { RedisRememberPluginOptions, RedisClientRememberPluginOptions } from '../remember.types';
 
 /**
  * Combined options type for Redis provider.
@@ -91,6 +93,24 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     } else {
       await this.client.set(fullKey, strValue);
     }
+  }
+
+  /**
+   * Store a value only if the key is absent, via Redis `SET ... NX`.
+   *
+   * `set` resolves to `'OK'` when it created the key and `null` when the key already existed,
+   * so the whole check-and-write is one round trip and two callers racing cannot both win.
+   */
+  async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    const fullKey = this.keyPrefix + key;
+    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+
+    const result =
+      ttlSeconds !== undefined && ttlSeconds > 0
+        ? await this.client.set(fullKey, strValue, 'EX', ttlSeconds, 'NX')
+        : await this.client.set(fullKey, strValue, 'NX');
+
+    return result === 'OK';
   }
 
   /**
