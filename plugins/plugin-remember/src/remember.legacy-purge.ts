@@ -19,17 +19,83 @@ import type { RememberStoreInterface } from './providers/remember-store.interfac
 const LEGACY_SCOPES = ['session', 'tool', 'user'] as const;
 
 /**
- * How long after start the sweep waits before deleting anything.
+ * How long the fleet must have been on the `v2:` layout before anything is deleted.
  *
- * An instance that starts mid-rollout shares the store with the instances it is replacing,
- * and those still read and write the legacy prefixes — the `v2:` segment protects this
- * version's data, not theirs. Waiting out a normal rolling deploy is what keeps an automatic
- * purge from deleting memory another instance is still serving.
+ * An instance that starts mid-rollout shares the store with the instances it is replacing, and
+ * those still read and write the legacy prefixes — the `v2:` segment protects this version's
+ * data, not theirs. A day is far longer than any rollout, and longer than the window in which
+ * a bad deploy gets rolled back, which is the case that matters: a rollback after the sweep
+ * makes the old fleet permanent again with its memory already gone.
+ *
+ * Waiting costs nothing. The entries are unreadable either way.
  */
-const DEFAULT_LEGACY_PURGE_DELAY_MS = 600_000;
+const DEFAULT_LEGACY_PURGE_DELAY_MS = 86_400_000;
+
+/**
+ * Key recording when the `v2:` layout was first seen on this store.
+ *
+ * Deliberately outside every scope prefix, so no purge pattern can match it and no accessor
+ * scope can collide with it.
+ */
+const LAYOUT_MARKER_KEY = '__layout__';
+
+/** The layout this version of the plugin writes. */
+const LAYOUT_VERSION = 2;
+
+/** `setTimeout` overflows past this and fires immediately, so long waits are served in chunks. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+interface LayoutMarker {
+  version: number;
+  firstSeenAt: number;
+}
 
 /** Stores whose sweep is already armed, so it is scheduled once per store. */
 const scheduled = new WeakSet<RememberStoreInterface>();
+
+/**
+ * When the first instance on this layout reached this store.
+ *
+ * The clock has to live in the store, not in the process. A process-local timer restarts on
+ * every deploy and every crash, so it never converges on "the fleet has been on `v2:` for a
+ * while" — and an instance that booted early would fire on its own schedule no matter when the
+ * last old instance drained.
+ *
+ * An existing marker is never overwritten: that timestamp belongs to the fleet. `undefined`
+ * means the clock could not be established, and the caller must not delete anything on it.
+ */
+export async function readLayoutFirstSeenAt(
+  store: RememberStoreInterface,
+  keyPrefix: string,
+  logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
+): Promise<number | undefined> {
+  const key = `${keyPrefix}${LAYOUT_MARKER_KEY}`;
+
+  try {
+    const raw = await store.getValue<string>(key);
+
+    if (raw) {
+      const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const firstSeenAt = (parsed as LayoutMarker | null)?.firstSeenAt;
+      if (typeof firstSeenAt === 'number' && Number.isFinite(firstSeenAt)) {
+        return firstSeenAt;
+      }
+      // A marker we cannot read is not a licence to delete: leave it and stand down.
+      logger?.debug?.('remember: layout marker is unreadable, legacy purge stood down', { key });
+      return undefined;
+    }
+
+    const marker: LayoutMarker = { version: LAYOUT_VERSION, firstSeenAt: Date.now() };
+    await store.setValue(key, JSON.stringify(marker));
+    return marker.firstSeenAt;
+  } catch (error) {
+    logger?.debug?.('remember: could not establish the layout marker, legacy purge stood down', {
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
 
 /**
  * Delete entries that the key-derivation and namespace-encoding changes orphaned.
@@ -89,6 +155,8 @@ export async function purgeLegacyRememberEntries(
  * lifecycle hook if the SDK grows one.
  *
  * Deliberately fire-and-forget: nothing on the request path waits for three keyspace scans.
+ * The timer only decides — it sweeps when the fleet-wide clock has run out, and otherwise
+ * re-arms for the remainder, so a restart costs time already served rather than resetting it.
  */
 export function scheduleLegacyRememberPurge(
   store: RememberStoreInterface,
@@ -98,14 +166,40 @@ export function scheduleLegacyRememberPurge(
   if (scheduled.has(store)) return;
   scheduled.add(store);
 
-  const timer = setTimeout(() => {
-    void purgeLegacyRememberEntries(store, keyPrefix, options.logger).catch(() => undefined);
-  }, options.delayMs ?? DEFAULT_LEGACY_PURGE_DELAY_MS);
+  const delayMs = options.delayMs ?? DEFAULT_LEGACY_PURGE_DELAY_MS;
 
-  // Housekeeping must never hold the process open. Optional because the Web timer an edge
-  // runtime returns has no unref; there the invocation usually ends first and nothing is
-  // purged, which is the safe outcome.
-  timer.unref?.();
+  const arm = (waitMs: number): void => {
+    // `setTimeout` silently fires immediately past the 32-bit limit, so a very long window is
+    // served in chunks; each wake re-reads the marker, so chunking is just a longer sleep.
+    const timer = setTimeout(
+      () => {
+        void attempt().catch(() => undefined);
+      },
+      Math.min(waitMs, MAX_TIMER_MS),
+    );
+
+    // Housekeeping must never hold the process open. Optional because the Web timer an edge
+    // runtime returns has no unref; there the invocation usually ends before the timer fires
+    // and nothing is purged, which is the safe outcome.
+    timer.unref?.();
+  };
+
+  const attempt = async (): Promise<void> => {
+    const firstSeenAt = await readLayoutFirstSeenAt(store, keyPrefix, options.logger);
+    if (firstSeenAt === undefined) return;
+
+    const remainingMs = firstSeenAt + delayMs - Date.now();
+    if (remainingMs > 0) {
+      arm(remainingMs);
+      return;
+    }
+
+    await purgeLegacyRememberEntries(store, keyPrefix, options.logger);
+  };
+
+  // Stamp the marker now rather than when the timer fires, so the window starts at the moment
+  // this layout reached the store. Not awaited — it is one small read, off the request path.
+  void attempt().catch(() => undefined);
 }
 
 /** Test seam: forget which stores have a sweep armed. */

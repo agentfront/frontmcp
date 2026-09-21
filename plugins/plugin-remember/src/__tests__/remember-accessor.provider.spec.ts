@@ -70,6 +70,9 @@ function createConfig(overrides: Partial<RememberPluginOptions> = {}): RememberP
     type: 'memory',
     keyPrefix: 'remember:',
     encryption: { enabled: false }, // Disable encryption for easier testing
+    // These tests enumerate raw store keys; the migration's layout marker is not their
+    // subject and is covered by remember.legacy-purge.spec.ts.
+    skipLegacyPurge: true,
     ...overrides,
   };
 }

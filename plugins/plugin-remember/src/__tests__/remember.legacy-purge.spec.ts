@@ -4,6 +4,7 @@ import { RememberAccessor } from '../providers/remember-accessor.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import {
   purgeLegacyRememberEntries,
+  readLayoutFirstSeenAt,
   resetLegacyPurgeStateForTests,
   scheduleLegacyRememberPurge,
 } from '../remember.legacy-purge';
@@ -54,7 +55,13 @@ const config: RememberPluginOptions = {
   encryption: { enabled: false },
 };
 
-const DEFAULT_DELAY_MS = 600_000;
+const DEFAULT_DELAY_MS = 86_400_000;
+const MARKER_KEY = 'remember:__layout__';
+
+/** Pretend an earlier instance stamped the layout marker `ageMs` ago. */
+function seedLayoutMarker(store: FakeStore, ageMs: number): void {
+  store.data.set(MARKER_KEY, JSON.stringify({ version: 2, firstSeenAt: Date.now() - ageMs }));
+}
 
 function seedLegacyEntries(store: FakeStore): void {
   store.data.set('remember:session:session-abc:theme', 'legacy');
@@ -123,6 +130,44 @@ describe('legacy remember purge', () => {
     expect(deleted).toBe(2);
   });
 
+  describe('the layout marker', () => {
+    it('stamps the marker when none exists', async () => {
+      const firstSeenAt = await readLayoutFirstSeenAt(store, 'remember:');
+
+      expect(firstSeenAt).toBeCloseTo(Date.now(), -2);
+      expect(JSON.parse(store.data.get(MARKER_KEY) as string)).toEqual({
+        version: 2,
+        firstSeenAt,
+      });
+    });
+
+    it('never overwrites an existing marker -- the timestamp belongs to the fleet', async () => {
+      seedLayoutMarker(store, 5_000);
+      const stamped = store.data.get(MARKER_KEY);
+
+      const firstSeenAt = await readLayoutFirstSeenAt(store, 'remember:');
+
+      expect(store.data.get(MARKER_KEY)).toBe(stamped);
+      expect(firstSeenAt).toBe(JSON.parse(stamped as string).firstSeenAt);
+    });
+
+    it('stands down on a malformed marker rather than assuming a clock', async () => {
+      store.data.set(MARKER_KEY, 'not json');
+      const logger = { warn: jest.fn(), debug: jest.fn() };
+
+      await expect(readLayoutFirstSeenAt(store, 'remember:', logger)).resolves.toBeUndefined();
+      expect(logger.debug).toHaveBeenCalled();
+    });
+
+    it('stands down when the store cannot be read', async () => {
+      jest.spyOn(store, 'getValue').mockRejectedValue(new Error('store gone'));
+      const logger = { warn: jest.fn(), debug: jest.fn() };
+
+      await expect(readLayoutFirstSeenAt(store, 'remember:', logger)).resolves.toBeUndefined();
+      expect(logger.debug).toHaveBeenCalled();
+    });
+  });
+
   describe('scheduling', () => {
     beforeEach(() => {
       jest.useFakeTimers();
@@ -132,25 +177,58 @@ describe('legacy remember purge', () => {
       jest.useRealTimers();
     });
 
-    it('deletes nothing until the delay elapses', async () => {
+    it('deletes nothing while the fleet clock is still running', async () => {
       seedLegacyEntries(store);
       const before = [...store.data.keys()];
 
       scheduleLegacyRememberPurge(store, 'remember:');
       await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS - 1);
 
-      expect([...store.data.keys()]).toEqual(before);
+      expect([...store.data.keys()]).toEqual([...before, MARKER_KEY]);
     });
 
-    it('sweeps once the delay elapses', async () => {
+    it('sweeps once the window has passed', async () => {
       seedLegacyEntries(store);
       const logger = { warn: jest.fn(), debug: jest.fn() };
 
       scheduleLegacyRememberPurge(store, 'remember:', { logger });
       await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS);
 
-      expect([...store.data.keys()]).toEqual(['remember:global:banner']);
+      expect([...store.data.keys()].sort()).toEqual([MARKER_KEY, 'remember:global:banner'].sort());
       expect(logger.warn.mock.calls[0][0]).toContain('purged 3 entries');
+    });
+
+    it('a restart does not reset the clock', async () => {
+      // The whole point of keeping the clock in the store: an instance that starts 23h into
+      // the window waits out the last hour, not another full window.
+      seedLegacyEntries(store);
+      seedLayoutMarker(store, DEFAULT_DELAY_MS - 3_600_000);
+
+      scheduleLegacyRememberPurge(store, 'remember:');
+      await jest.advanceTimersByTimeAsync(3_600_000);
+
+      expect(store.data.has('remember:session:session-abc:theme')).toBe(false);
+    });
+
+    it('sweeps on the first wake when the window has already passed', async () => {
+      seedLegacyEntries(store);
+      seedLayoutMarker(store, DEFAULT_DELAY_MS + 1);
+
+      scheduleLegacyRememberPurge(store, 'remember:');
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(store.data.has('remember:session:session-abc:theme')).toBe(false);
+    });
+
+    it('deletes nothing when the clock cannot be established', async () => {
+      seedLegacyEntries(store);
+      store.data.set(MARKER_KEY, 'not json');
+      const before = [...store.data.keys()];
+
+      scheduleLegacyRememberPurge(store, 'remember:');
+      await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS * 2);
+
+      expect([...store.data.keys()]).toEqual(before);
     });
 
     it('honours a custom delay', async () => {
@@ -173,17 +251,19 @@ describe('legacy remember purge', () => {
       expect(keysSpy).toHaveBeenCalledTimes(3);
     });
 
-    it('unrefs the timer so housekeeping cannot hold the process open', () => {
+    it('unrefs the timer so housekeeping cannot hold the process open', async () => {
       const unref = jest.fn();
       jest.spyOn(global, 'setTimeout').mockReturnValue({ unref } as unknown as NodeJS.Timeout);
 
       scheduleLegacyRememberPurge(store, 'remember:');
+      await jest.advanceTimersByTimeAsync(0);
 
-      expect(unref).toHaveBeenCalledTimes(1);
+      expect(unref).toHaveBeenCalled();
     });
 
     it('swallows a sweep that rejects outright', async () => {
       seedLegacyEntries(store);
+      seedLayoutMarker(store, DEFAULT_DELAY_MS + 1);
       jest.spyOn(store, 'keys').mockImplementation(() => {
         throw new Error('store gone');
       });
@@ -228,12 +308,13 @@ describe('legacy remember purge', () => {
       await accessor.set('theme', 'dark');
       await accessor.set('draft', 'text', { scope: 'tool' });
       await accessor.set('profile', 'me', { scope: 'user' });
-      const liveKeys = [...store.data.keys()];
+      const liveKeys = [...store.data.keys()].filter((key) => key !== MARKER_KEY);
       seedLegacyEntries(store);
 
       await jest.advanceTimersByTimeAsync(DEFAULT_DELAY_MS);
 
-      expect([...store.data.keys()].sort()).toEqual([...liveKeys, 'remember:global:banner'].sort());
+      const survivors = [...store.data.keys()].filter((key) => key !== MARKER_KEY);
+      expect(survivors.sort()).toEqual([...liveKeys, 'remember:global:banner'].sort());
       expect(await accessor.get('theme')).toBe('dark');
     });
 

@@ -285,13 +285,20 @@ version segment is what makes that safe -- a purge pattern of `remember:session:
 live `remember:v2:session:*` key. `global` is not versioned and not purged: neither its keys nor
 its key derivation changed.
 
-**The purge runs ten minutes after the instance starts, on an unreferenced timer, never on the
-request path.** The delay matters: an instance that starts mid-rollout shares the store with the
-instances it is replacing, and those still read and write the legacy prefixes, which the `v2:`
-segment does not protect. Raise `legacyPurgeDelayMs` for a slower rollout, or pass
-`skipLegacyPurge: true` to migrate the data yourself. On serverless and edge runtimes the
-invocation usually ends before the timer fires, so nothing is purged -- clear the legacy prefixes
-manually if you want the storage back.
+**The purge runs 24 hours after the fleet first reached the `v2:` layout -- not after this
+process started -- on an unreferenced timer, never on the request path.** The first instance to
+reach the store stamps `<keyPrefix>__layout__` with `{ version, firstSeenAt }`; every instance
+reads it and sweeps only once it is older than the window, re-arming for the remainder until
+then. The clock lives in the store because a process-local timer restarts on every deploy and
+crash, so it never converges on "the fleet has been on `v2:` for a while". The marker is written
+once and never overwritten, and if it cannot be read or parsed the purge stands down rather than
+deleting on an unknown clock.
+
+The window has to outlast the rollout _and_ the period in which a bad deploy is rolled back --
+a rollback after the sweep makes the old fleet permanent again with its memory gone. Tune it
+with `legacyPurgeDelayMs`, or pass `skipLegacyPurge: true` to migrate the data yourself. On
+serverless and edge the invocation usually ends before the timer fires, so nothing is purged;
+clear the legacy prefixes manually if you want the storage back.
 
 ### Tools Exposed (when `tools.enabled: true`)
 

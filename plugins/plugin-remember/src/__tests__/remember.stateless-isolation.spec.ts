@@ -48,7 +48,13 @@ function createStore(): { store: RememberStoreInterface; values: Map<string, str
   return { store, values };
 }
 
-const statelessConfig = { type: 'memory', encryption: { enabled: false } } as RememberPluginOptions;
+// `skipLegacyPurge` because these tests assert on raw store keys and the migration's layout
+// marker is not their subject; it is covered by remember.legacy-purge.spec.ts.
+const statelessConfig = {
+  type: 'memory',
+  encryption: { enabled: false },
+  skipLegacyPurge: true,
+} as RememberPluginOptions;
 
 function createAccessor(
   sessionId: string,

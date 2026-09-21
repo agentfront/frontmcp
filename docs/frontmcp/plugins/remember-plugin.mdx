@@ -346,18 +346,32 @@ key, not even one written concurrently by another instance.
 
 ### When the purge runs
 
-Ten minutes after the instance starts, on a timer, never on the request path.
+Twenty-four hours after the **fleet** first reached the `v2:` layout -- not after this process
+started -- and never on the request path.
 
-The delay is the point. An instance that starts mid-rollout shares the store with the
-instances it is replacing, and those still read and write the legacy prefixes -- the `v2:`
-segment protects this version's data, not theirs. Waiting out a normal rolling deploy is what
-keeps the purge from deleting memory another instance is still serving. Raise
-`legacyPurgeDelayMs` for a slower rollout:
+The first instance to reach the store stamps a marker at `<keyPrefix>__layout__`:
+
+```json
+{ "version": 2, "firstSeenAt": 1758457200000 }
+```
+
+Every instance reads that marker, and sweeps only once it is older than the window; until then
+it re-arms for the remainder. Keeping the clock in the store rather than in the process is what
+makes the window mean something. A process-local timer restarts on every deploy and every
+crash, so it never converges on "the fleet has been on `v2:` for a while", and an instance that
+booted early would fire on its own schedule no matter when the last old instance drained. The
+marker is written once and never overwritten, so a later instance cannot reset it, and whichever
+instance is alive when the window passes completes the sweep.
+
+The window has to outlast two things: the rollout, and the period in which a bad deploy gets
+rolled back. The second is the one that matters -- a rollback after the sweep makes the old
+fleet permanent again with its memory already deleted. Waiting costs nothing, because the
+entries are unreadable the whole time. Tune it with `legacyPurgeDelayMs`:
 
 ```typescript
 RememberPlugin.init({
   type: 'global-store',
-  legacyPurgeDelayMs: 1_800_000, // 30 minutes
+  legacyPurgeDelayMs: 259_200_000, // 3 days, for a long canary
 });
 ```
 
@@ -366,6 +380,12 @@ RememberPlugin.init({
   purges, and the timer is unreferenced so it will not hold a process open. That is the safe
   outcome -- the entries are inert either way. Clear them with the commands below if you want
   the storage back.
+</Note>
+
+<Note>
+  If the marker cannot be read or written -- a permission error, or a value that is not the
+  expected JSON -- the purge stands down and deletes nothing. It never treats a missing clock
+  as licence to delete.
 </Note>
 
 If you would rather migrate the data yourself, opt out entirely:
