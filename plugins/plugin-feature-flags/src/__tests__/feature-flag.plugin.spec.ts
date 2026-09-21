@@ -1,8 +1,8 @@
-import FeatureFlagPlugin from '../feature-flag.plugin';
-import { FeatureFlagAdapterToken, FeatureFlagConfigToken, FeatureFlagAccessorToken } from '../feature-flag.symbols';
-import { StaticFeatureFlagAdapter } from '../adapters/static.adapter';
 import type { FeatureFlagAdapter } from '../adapters/feature-flag-adapter.interface';
+import { StaticFeatureFlagAdapter } from '../adapters/static.adapter';
 import { getFeatureFlags, tryGetFeatureFlags } from '../feature-flag.context-extension';
+import FeatureFlagPlugin from '../feature-flag.plugin';
+import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from '../feature-flag.symbols';
 import * as barrel from '../index';
 
 interface ProviderEntry {
@@ -270,7 +270,7 @@ describe('FeatureFlagPlugin', () => {
       });
 
       it('should allow tools with enabled flags', async () => {
-        (mockAdapter.isEnabled as jest.Mock).mockResolvedValue(true);
+        (mockAdapter.evaluateFlags as jest.Mock).mockResolvedValue(new Map([['flag-a', true]]));
         const flowCtx = {
           state: { tool: { metadata: { name: 'tool-a', featureFlag: 'flag-a' } } },
         } as any;
@@ -279,7 +279,7 @@ describe('FeatureFlagPlugin', () => {
       });
 
       it('should throw for tools with disabled flags', async () => {
-        (mockAdapter.isEnabled as jest.Mock).mockResolvedValue(false);
+        (mockAdapter.evaluateFlags as jest.Mock).mockResolvedValue(new Map([['flag-a', false]]));
         const flowCtx = {
           state: { tool: { metadata: { name: 'tool-a', featureFlag: 'flag-a' } } },
         } as any;

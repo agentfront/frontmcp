@@ -74,13 +74,16 @@ export class FrontMcpContextStorage {
    */
   runFromHeaders<T>(
     headers: Record<string, unknown>,
-    args: Omit<FrontMcpContextArgs, 'traceContext' | 'metadata'>,
+    args: Omit<FrontMcpContextArgs, 'traceContext' | 'metadata'> & { peerAddress?: string },
     fn: () => T | Promise<T>,
   ): T | Promise<T> {
+    const { peerAddress, ...contextArgs } = args;
     const traceContext = parseTraceContext(headers);
-    const metadata = extractMetadata(headers);
+    // The socket peer is the only client address a caller cannot forge; forwarding headers
+    // are used in its place only behind a trusted proxy (GHSA-p3qf-fcwm-35x4).
+    const metadata = extractMetadata(headers, { peerAddress });
     const context = new FrontMcpContext({
-      ...args,
+      ...contextArgs,
       traceContext,
       metadata,
     });

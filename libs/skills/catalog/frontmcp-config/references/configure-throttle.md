@@ -68,8 +68,8 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       allowList: ['10.0.0.0/8', '172.16.0.0/12'], // CIDR ranges
       denyList: ['192.168.1.100'],
       defaultAction: 'allow', // 'allow' | 'deny'
-      trustProxy: true, // trust X-Forwarded-For
-      trustedProxyDepth: 1, // proxy depth to trust
+      // NOTE: trustProxy / trustedProxyDepth are NOT read here -- use the
+      // FRONTMCP_TRUST_PROXY and FRONTMCP_TRUSTED_PROXY_DEPTH environment variables.
     },
   },
 })
@@ -112,6 +112,56 @@ class ExpensiveQueryTool extends ToolContext {
 }
 ```
 
+## `ipFilter` is enforced on every request
+
+`allowList`, `denyList` and `defaultAction` are checked at the start of the request pipeline,
+before the rate-limit check and before authentication. A rejected client gets HTTP 403 with
+JSON-RPC error `-32001`.
+
+An `ipFilter` block works on its own -- you do not need to configure a `global` rate limit
+alongside it for the filter to run.
+
+## `partitionBy: 'ip'` needs a declared trusted proxy
+
+The client IP comes from the socket peer address. `X-Forwarded-For` and `X-Real-IP` are set
+by whoever sent the request, so they are ignored unless you declare a trusted proxy:
+
+```bash
+FRONTMCP_TRUST_PROXY=true          # honour forwarded headers -- ONLY behind a real proxy
+FRONTMCP_TRUSTED_PROXY_DEPTH=1     # how many proxies you run in front of the app
+```
+
+- Behind a load balancer **without** `FRONTMCP_TRUST_PROXY`, every request looks like it came
+  from the balancer and all clients share one bucket.
+- **With** it but no proxy actually in front, a caller forges the header and gets a fresh
+  bucket per request, so the limit never triggers.
+
+The client is read `FRONTMCP_TRUSTED_PROXY_DEPTH` hops back from the end of the chain: callers
+can prepend entries, but only your own proxies append to it. The value is validated as an IP
+address before use. A chain shorter than the configured depth was not built by your proxies,
+so the socket peer is used instead.
+
+> **`FRONTMCP_TRUST_PROXY` is only as good as your network boundary.** Trusting forwarded
+> headers means trusting whoever can set them, so two things must hold:
+>
+> - **Every ingress path traverses the configured proxy chain.** If a caller can reach the
+>   origin directly -- a public origin IP, a peered VPC, a second ingress that skips the
+>   balancer -- they choose the whole `X-Forwarded-For` chain, and counting hops from its end
+>   just lands on an address they picked.
+> - **The edge strips and rebuilds the forwarded headers.** The outermost proxy must discard
+>   any inbound `X-Forwarded-For` and `X-Real-IP` and write its own, so the only entries in
+>   the chain are ones your proxies appended.
+>
+> With depth `1` and no `X-Forwarded-For` at all, `X-Real-IP` is used -- the single-hop nginx
+> convention. It is never consulted alongside a chain, because a caller can send both.
+
+When no IP can be established the request falls back to the authenticated user
+(`user:<userId>`), and to a single `ip:unresolved` partition when there is no user either. It
+never keys on the session id: `mcp-session-id` is caller-supplied and a request without one is
+given a fresh UUID, so keying on it would mint a new budget per request. The shared bucket is
+contended by design -- bounded contention beats an unbounded budget -- and declaring your proxy
+is what takes callers out of it.
+
 ## Configuration Types
 
 ### RateLimitConfig
@@ -138,13 +188,13 @@ class ExpensiveQueryTool extends ToolContext {
 
 ### IpFilterConfig
 
-| Field               | Type                | Default   | Description                         |
-| ------------------- | ------------------- | --------- | ----------------------------------- |
-| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges          |
-| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges          |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy`        | `boolean`           | `false`   | Trust X-Forwarded-For header        |
-| `trustedProxyDepth` | `number`            | `1`       | How many proxy hops to trust        |
+| Field               | Type                | Default   | Description                                      |
+| ------------------- | ------------------- | --------- | ------------------------------------------------ |
+| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                       |
+| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                       |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list              |
+| `trustProxy`        | `boolean`           | `false`   | **Not read.** Use `FRONTMCP_TRUST_PROXY`         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read.** Use `FRONTMCP_TRUSTED_PROXY_DEPTH` |
 
 ## Partition Strategies
 
@@ -220,13 +270,13 @@ done
 
 ## Troubleshooting
 
-| Problem                                         | Cause                                                                    | Solution                                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                     | Configure `storage: { type: 'redis' }` in the throttle block to share counters  |
-| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'` |
-| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time  | Increase the global default or set a per-tool `timeout.executeMs` override      |
-| `X-Forwarded-For` header ignored                | `ipFilter.trustProxy` not enabled or `trustedProxyDepth` too low         | Set `trustProxy: true` and adjust `trustedProxyDepth` to match your proxy chain |
-| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window   | The window is fixed; all counters reset at the end of each `windowMs` interval  |
+| Problem                                         | Cause                                                                                                                                                                                                     | Solution                                                                                             |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                       |
+| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries                                                                                                                                  | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'`                      |
+| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                           |
+| `X-Forwarded-For` header ignored                | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead |
+| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                       |
 
 ## Examples
 

@@ -7,8 +7,9 @@
  * @packageDocumentation
  */
 
-import { buildShell } from '../shell/builder';
 import { generateBridgeIIFE } from '../bridge-runtime';
+import { buildShell } from '../shell/builder';
+import { escapeHtml } from '../utils';
 
 /**
  * Options for creating a default base template.
@@ -34,6 +35,11 @@ export interface DefaultBaseTemplateOptions {
 export function createDefaultBaseTemplate(options: DefaultBaseTemplateOptions): string {
   const { toolName } = options;
 
+  // The name reaches here straight from a `resources/read` URI, so it is caller-controlled
+  // (GHSA-xp6r-ggxc-j7q8). A template must escape what it interpolates rather than trust its
+  // callers to have validated it.
+  const safeToolName = escapeHtml(toolName);
+
   const bridgeScript = `<script>${generateBridgeIIFE({ minify: true })}</script>`;
 
   const content = `
@@ -41,7 +47,7 @@ ${bridgeScript}
 <div id="root">
   <div style="font-family:system-ui,sans-serif;padding:1rem;color:#374151;">
     <p style="color:#6b7280;font-size:0.875rem;">Waiting for tool output...</p>
-    <p style="color:#9ca3af;font-size:0.75rem;">Tool: <code>${toolName}</code></p>
+    <p style="color:#9ca3af;font-size:0.75rem;">Tool: <code>${safeToolName}</code></p>
   </div>
 </div>
 <script>
@@ -51,9 +57,13 @@ ${bridgeScript}
     bridge.onToolResult(function(data) {
       var root = document.getElementById('root');
       if (root && data) {
-        root.innerHTML = '<pre style="font-family:monospace;white-space:pre-wrap;padding:1rem;">' +
-          JSON.stringify(data, null, 2).replace(/</g, '&lt;').replace(/>/g, '&gt;') +
-          '</pre>';
+        // textContent, not innerHTML: the previous version escaped only < and >, leaving
+        // the rendered JSON wrong wherever the data contained an entity, and relying on a
+        // hand-rolled replace for safety (GHSA-rhr9-vhpf-jqp7).
+        var pre = document.createElement('pre');
+        pre.setAttribute('style', 'font-family:monospace;white-space:pre-wrap;padding:1rem;');
+        pre.textContent = JSON.stringify(data, null, 2);
+        root.replaceChildren(pre);
       }
     });
   }

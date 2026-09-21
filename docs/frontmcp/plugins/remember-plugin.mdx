@@ -146,6 +146,20 @@ Memory is organized into four scopes with different visibility and lifetime:
 | `tool`    | Tied to specific tool + session  | Tool-specific cache                   |
 | `global`  | Shared across all sessions/users | Application-wide configuration        |
 
+<Warning>
+  **`session`, `tool`, and `user` scopes require a per-client identity.**
+
+A stateless HTTP transport injects the same session id (`__stateless__`) into every request,
+so it carries no session identity of its own. `session` and `tool` scope therefore fall back
+to the authenticated principal, and an **unauthenticated stateless request is refused** with
+a `RememberIdentityError` rather than being given a namespace it would share with every
+other client. `user` scope is likewise refused when there is no authenticated user.
+
+If the data really is shared across clients, say so with `scope: 'global'`. Otherwise
+authenticate the request or use a stateful transport.
+
+</Warning>
+
 ### Using Scopes
 
 ```ts
@@ -295,9 +309,97 @@ All stored values are encrypted by default using AES-256-GCM.
 
 ### How Keys Are Derived
 
-1. A master secret is derived from `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
-2. Per-entry keys are derived using HKDF-SHA256 with session/user context as salt
+1. A master secret is derived from the `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
+2. Per-entry keys are derived using HKDF-SHA256 over that secret plus the scope's identity
 3. Each entry gets a unique key based on its scope and identity
+
+Every scope mixes in the master secret, `session` and `tool` included. A session id is not a
+secret -- the client knows it and it travels in the `mcp-session-id` header -- so a key derived
+from it alone could be recomputed by anyone who had seen it.
+
+<Warning>
+  Because the key now depends on the master secret, **every instance sharing a store must use
+  the same `REMEMBER_SECRET`**. Without it each instance auto-generates its own and cannot
+  decrypt entries written by the others.
+</Warning>
+
+### Upgrading past the key-derivation change
+
+Two changes moved data written by earlier versions:
+
+- **Key derivation.** `session` and `tool` keys now mix in the master secret, so ciphertext
+  written before the change no longer decrypts.
+- **Namespace encoding.** `session`, `tool` and `user` prefixes now percent-encode every
+  variable component, so an identity containing a character `encodeURIComponent` escapes --
+  a `:` in a user id, for instance -- now lives under a different key.
+
+Both failures used to be **silent**: decryption returns `null` and a moved key simply misses,
+so the value reads as absent rather than raising.
+
+These three scopes are therefore stored under a `v2:` segment
+(`remember:v2:session:<identity>:<key>`), and the plugin **purges the pre-`v2` entries
+automatically**, logging a warning with the number removed. The version segment is what makes
+that safe: a purge pattern of `remember:session:*` cannot match a live `remember:v2:session:*`
+key, not even one written concurrently by another instance.
+
+`global` is not versioned and is not purged -- neither its keys nor its key derivation changed.
+
+### When the purge runs
+
+Twenty-four hours after the **fleet** first reached the `v2:` layout -- not after this process
+started -- and never on the request path.
+
+The first instance to reach the store stamps a marker at `<keyPrefix>__layout__`:
+
+```json
+{ "version": 2, "firstSeenAt": 1758457200000 }
+```
+
+Every instance reads that marker, and sweeps only once it is older than the window; until then
+it re-arms for the remainder. Keeping the clock in the store rather than in the process is what
+makes the window mean something. A process-local timer restarts on every deploy and every
+crash, so it never converges on "the fleet has been on `v2:` for a while", and an instance that
+booted early would fire on its own schedule no matter when the last old instance drained. The
+marker is written once and never overwritten, so a later instance cannot reset it, and whichever
+instance is alive when the window passes completes the sweep.
+
+The window has to outlast two things: the rollout, and the period in which a bad deploy gets
+rolled back. The second is the one that matters -- a rollback after the sweep makes the old
+fleet permanent again with its memory already deleted. Waiting costs nothing, because the
+entries are unreadable the whole time. Tune it with `legacyPurgeDelayMs`:
+
+```typescript
+RememberPlugin.init({
+  type: 'global-store',
+  legacyPurgeDelayMs: 259_200_000, // 3 days, for a long canary
+});
+```
+
+<Note>
+  **Serverless and edge runtimes.** An invocation that ends before the timer fires never
+  purges, and the timer is unreferenced so it will not hold a process open. That is the safe
+  outcome -- the entries are inert either way. Clear them with the commands below if you want
+  the storage back.
+</Note>
+
+<Note>
+  If the marker cannot be read or written -- a permission error, or a value that is not the
+  expected JSON -- the purge stands down and deletes nothing. It never treats a missing clock
+  as licence to delete.
+</Note>
+
+If you would rather migrate the data yourself, opt out entirely:
+
+```typescript
+RememberPlugin.init({ type: 'global-store', skipLegacyPurge: true });
+```
+
+```bash
+# Redis example -- adjust for your keyPrefix
+redis-cli --scan --pattern 'remember:session:*' | xargs -r redis-cli del
+redis-cli --scan --pattern 'remember:tool:*'    | xargs -r redis-cli del
+redis-cli --scan --pattern 'remember:user:*'    | xargs -r redis-cli del
+```
 
 ### Secret Persistence
 

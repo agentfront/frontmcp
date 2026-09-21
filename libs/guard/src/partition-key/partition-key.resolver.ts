@@ -7,6 +7,13 @@
 import type { PartitionKey, PartitionKeyContext } from './types';
 
 /**
+ * Bucket for callers whose IP cannot be established.
+ *
+ * Deliberately not a value that could equal a real IP, so it cannot collide with one.
+ */
+const UNRESOLVED_IP_PARTITION = 'ip:unresolved';
+
+/**
  * Resolve a partition key string from the given strategy and context.
  */
 export function resolvePartitionKey(
@@ -25,7 +32,17 @@ export function resolvePartitionKey(
 
   switch (partitionBy) {
     case 'ip':
-      return ctx.clientIp ?? 'unknown-ip';
+      // The socket peer, where one exists (GHSA-p3qf-fcwm-35x4). Then the authenticated
+      // user, which the server establishes. Never the session id: a caller sets
+      // `mcp-session-id` itself and a request without one is given a fresh UUID, so keying
+      // on it would let a caller mint a new budget per request and never be limited.
+      //
+      // With no identity of either kind the remaining callers share one bounded bucket. That
+      // is a deliberate trade: a shared budget still caps total load, where a per-request key
+      // caps nothing. It only applies where no peer address exists at all (some edge
+      // runtimes) — behind a proxy, set FRONTMCP_TRUST_PROXY so a real client IP is
+      // available and this path is not reached.
+      return ctx.clientIp ?? (ctx.userId ? `user:${ctx.userId}` : UNRESOLVED_IP_PARTITION);
     case 'session':
       return ctx.sessionId;
     case 'userId':

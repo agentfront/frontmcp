@@ -1,6 +1,7 @@
-import { RememberAccessor, createRememberAccessor } from '../providers/remember-accessor.provider';
-import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import type { FrontMcpContext } from '@frontmcp/sdk';
+
+import { createRememberAccessor, RememberAccessor } from '../providers/remember-accessor.provider';
+import type { RememberStoreInterface } from '../providers/remember-store.interface';
 import type { RememberPluginOptions } from '../remember.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +70,9 @@ function createConfig(overrides: Partial<RememberPluginOptions> = {}): RememberP
     type: 'memory',
     keyPrefix: 'remember:',
     encryption: { enabled: false }, // Disable encryption for easier testing
+    // These tests enumerate raw store keys; the migration's layout marker is not their
+    // subject and is covered by remember.legacy-purge.spec.ts.
+    skipLegacyPurge: true,
     ...overrides,
   };
 }
@@ -128,21 +132,21 @@ describe('RememberAccessor', () => {
       await accessor.set('key', 'value');
 
       // Check that the key includes session ID
-      const keys = await store.keys('remember:session:test-session-123:*');
+      const keys = await store.keys('remember:v2:session:test-session-123:*');
       expect(keys.length).toBe(1);
     });
 
     it('stores with user scope', async () => {
       await accessor.set('key', 'value', { scope: 'user' });
 
-      const keys = await store.keys('remember:user:user-456:*');
+      const keys = await store.keys('remember:v2:user:user-456:*');
       expect(keys.length).toBe(1);
     });
 
     it('stores with tool scope', async () => {
       await accessor.set('key', 'value', { scope: 'tool' });
 
-      const keys = await store.keys('remember:tool:test-tool:test-session-123:*');
+      const keys = await store.keys('remember:v2:tool:test-tool:test-session-123:*');
       expect(keys.length).toBe(1);
     });
 
@@ -389,7 +393,7 @@ describe('RememberAccessor', () => {
       await encryptedAccessor.set('secret', 'my-password');
 
       // Get raw value from store
-      const raw = await store.getValue<string>('remember:session:test-session-123:secret');
+      const raw = await store.getValue<string>('remember:v2:session:test-session-123:secret');
       expect(raw).toBeDefined();
 
       // Should not be readable as plain JSON
@@ -406,7 +410,7 @@ describe('RememberAccessor', () => {
     it('stores plain JSON when encryption disabled', async () => {
       await accessor.set('plain', 'value');
 
-      const raw = await store.getValue<string>('remember:session:test-session-123:plain');
+      const raw = await store.getValue<string>('remember:v2:session:test-session-123:plain');
       const parsed = JSON.parse(raw!);
 
       expect(parsed.value).toBe('value');
@@ -426,7 +430,7 @@ describe('RememberAccessor', () => {
 
       const keys = await store.keys('custom:*');
       expect(keys.length).toBe(1);
-      expect(keys[0]).toMatch(/^custom:session:/);
+      expect(keys[0]).toMatch(/^custom:v2:session:/);
     });
 
     it('uses default prefix when not specified', async () => {
@@ -457,14 +461,15 @@ describe('RememberAccessor', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('edge cases', () => {
-    it('handles anonymous user scope', async () => {
+    it('refuses user scope for an anonymous caller', async () => {
       const anonCtx = createMockContext({ authInfo: undefined });
       const anonAccessor = new RememberAccessor(store, anonCtx, config);
 
-      await anonAccessor.set('key', 'value', { scope: 'user' });
-
-      const keys = await store.keys('remember:user:anonymous:*');
-      expect(keys.length).toBe(1);
+      // A shared 'anonymous' namespace made every unauthenticated caller's memory readable by
+      // every other one (GHSA-225p-f8jh-f3rh).
+      await expect(anonAccessor.set('key', 'value', { scope: 'user' })).rejects.toThrow(
+        /without an authenticated user/,
+      );
     });
 
     it('handles unknown tool scope', async () => {
@@ -473,7 +478,7 @@ describe('RememberAccessor', () => {
 
       await noFlowAccessor.set('key', 'value', { scope: 'tool' });
 
-      const keys = await store.keys('remember:tool:unknown:*');
+      const keys = await store.keys('remember:v2:tool:unknown:*');
       expect(keys.length).toBe(1);
     });
 

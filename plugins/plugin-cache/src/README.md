@@ -136,13 +136,13 @@ export default class GetExpenseTool extends ToolContext {
 
 ## ⚖️ Behavior Details
 
-| Behavior           | Description                                                            |
-| ------------------ | ---------------------------------------------------------------------- |
-| **Key Derivation** | Deterministic hash from `ctx.input`. Changing input changes cache key. |
-| **Cache Hits**     | Adds `___cached__: true` to the output (for observability only).       |
-| **Default TTL**    | Plugin `defaultTTL` → falls back to `86400` seconds (1 day).           |
-| **Sliding Window** | Extends TTL on reads when `slideWindow` is true.                       |
-| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing.            |
+| Behavior           | Description                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| **Key Derivation** | SHA-256 of tool name + validated input + caller identity. `keyByIdentity: false` drops identity. |
+| **Cache Hits**     | Adds `___cached__: true` to the output (for observability only).                                 |
+| **Default TTL**    | Plugin `defaultTTL` → falls back to `86400` seconds (1 day).                                     |
+| **Sliding Window** | Extends TTL on reads when `slideWindow` is true.                                                 |
+| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing.                                      |
 
 ---
 
@@ -151,18 +151,18 @@ export default class GetExpenseTool extends ToolContext {
 | Strategy                | Use When                   | Notes                                    |
 | ----------------------- | -------------------------- | ---------------------------------------- |
 | **Time-based**          | Data changes often         | Use short TTLs                           |
-| **Input Shaping**       | Input determines freshness | Include relevant identifiers in input    |
+| **Input Shaping**       | Input determines freshness | Include the fields the result depends on |
 | **Manual Invalidation** | You need explicit control  | Extend or wrap the plugin to delete keys |
 
 ---
 
 ## 🧩 Troubleshooting
 
-| Symptom                     | Possible Cause                               | Fix                                                          |
-| --------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
-| No cache hits               | Tool missing `cache` config or store offline | Add `cache: {}` to tool metadata and verify store connection |
-| Output unexpectedly cached  | Previous result reused                       | Lower TTL or modify input for unique cache key               |
-| Need tenant/session scoping | Same input shared across tenants             | Include tenant/session IDs in the input payload              |
+| Symptom                              | Possible Cause                               | Fix                                                                |
+| ------------------------------------ | -------------------------------------------- | ------------------------------------------------------------------ |
+| No cache hits                        | Tool missing `cache` config or store offline | Add `cache: {}` to tool metadata and verify store connection       |
+| Output unexpectedly cached           | Previous result reused                       | Lower TTL or modify input for unique cache key                     |
+| Want one entry shared by all callers | Each caller is cached separately by default  | Set `keyByIdentity: false`, only for output identical for everyone |
 
 ---
 

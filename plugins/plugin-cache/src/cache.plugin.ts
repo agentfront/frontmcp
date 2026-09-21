@@ -1,20 +1,22 @@
 import {
   DynamicPlugin,
   FlowCtxOf,
+  FrontMcpConfig,
+  FrontMcpConfigType,
+  FrontMcpContextStorage,
+  getGlobalStoreConfig,
+  isVercelKvProvider,
   Plugin,
   ProviderType,
   ToolHook,
-  FrontMcpConfig,
-  FrontMcpConfigType,
-  getGlobalStoreConfig,
-  isVercelKvProvider,
-  FrontMcpContextStorage,
 } from '@frontmcp/sdk';
-import CacheRedisProvider from './providers/cache-redis.provider';
-import CacheMemoryProvider from './providers/cache-memory.provider';
-import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
-import { CachePluginOptions, GlobalStoreCachePluginOptions } from './cache.types';
+import { randomUUID, sha256Hex } from '@frontmcp/utils';
+
 import { CacheStoreToken } from './cache.symbol';
+import { CachePluginOptions, GlobalStoreCachePluginOptions } from './cache.types';
+import CacheMemoryProvider from './providers/cache-memory.provider';
+import CacheRedisProvider from './providers/cache-redis.provider';
+import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
 
 /**
  * Default bypass header for cache.
@@ -196,7 +198,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     }
 
     const cacheStore = this.get(CacheStoreToken);
-    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
+    const hash = this.buildCacheKey(tool.fullName, toolContext);
     const cached = await cacheStore.getValue(hash);
 
     if (cached !== undefined && cached !== null) {
@@ -270,8 +272,54 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const cacheStore = this.get(CacheStoreToken);
     const ttl = this.getTtl(cache);
 
-    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
+    const hash = this.buildCacheKey(tool.fullName, toolContext);
     await cacheStore.setValue(hash, toolContext.output, ttl);
+  }
+
+  /**
+   * The identity a cache entry belongs to (GHSA-r6v6-p4r8-p936).
+   *
+   * Most caches sit in front of tools whose output depends on who is asking. Without this the
+   * key was the tool plus its arguments, so the first caller's response was served to every
+   * later one: `getProfile({})` is the same key for everybody.
+   *
+   * The session is the last resort rather than the first choice, because an authenticated
+   * caller can hold several sessions and should share their own cached entries across them.
+   */
+  private resolveCallerIdentity(toolContext: unknown): string {
+    const ctx = toolContext as {
+      authInfo?: { extra?: Record<string, unknown>; clientId?: string };
+      tryGetContext?: () => { sessionId?: string; authInfo?: { extra?: Record<string, unknown>; clientId?: string } };
+    };
+
+    const requestContext = ctx.tryGetContext?.();
+    const authInfo = ctx.authInfo ?? requestContext?.authInfo;
+
+    const subject = authInfo?.extra?.['sub'] ?? authInfo?.extra?.['userId'];
+    if (typeof subject === 'string' && subject) return `user:${subject}`;
+    if (authInfo?.clientId) return `client:${authInfo.clientId}`;
+
+    const sessionId = requestContext?.sessionId;
+    if (sessionId) return `session:${sessionId}`;
+
+    // No identity at all: give this call its own key rather than one shared with every other
+    // identity-less caller. A cache miss is the safe failure here.
+    return `anonymous:${randomUUID()}`;
+  }
+
+  /**
+   * Build the storage key for a tool call.
+   *
+   * Read and write both go through here. They used to build the key at two separate call
+   * sites, and a key that differs between them silently disables the cache rather than
+   * failing visibly.
+   */
+  private buildCacheKey(toolFullName: string, toolContext: { input?: unknown }): string {
+    const identity = this.options.keyByIdentity === false ? 'shared' : this.resolveCallerIdentity(toolContext);
+
+    // Digest rather than concatenate: `hashObject` joined keys and values with `:` and `;`,
+    // so distinct inputs could produce the same string, and the key grew with the payload.
+    return sha256Hex(JSON.stringify({ identity, tool: toolFullName, input: stableValue(toolContext.input) }));
   }
 
   /**
@@ -283,17 +331,22 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 }
 
-function hashObject(obj: Record<string, unknown>): string {
-  const keys = Object.keys(obj).sort();
-  return keys.reduce((acc, key) => {
-    acc += key + ':';
-    const val = obj[key];
-    if (typeof val === 'object' && val !== null) {
-      acc += hashObject(val as Record<string, unknown>);
-    } else {
-      acc += String(val);
-    }
-    acc += ';';
-    return acc;
-  }, '');
+/**
+ * Reduce a value to a form whose JSON encoding does not depend on key insertion order, so the
+ * same arguments always produce the same key.
+ */
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+  if (typeof value === 'object' && value !== null) {
+    const source = value as Record<string, unknown>;
+    return Object.keys(source)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = stableValue(source[key]);
+        return acc;
+      }, {});
+  }
+  return value;
 }

@@ -1,12 +1,14 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import type { RememberStoreInterface } from './remember-store.interface';
+
 import type { VercelKvRememberPluginOptions } from '../remember.types';
+import type { RememberStoreInterface } from './remember-store.interface';
 
 /**
  * Minimal interface for Vercel KV client operations.
  */
 interface VercelKvClient {
-  set(key: string, value: string, options?: { ex?: number }): Promise<void>;
+  /** Resolves to `'OK'` on write, or `null` when `nx` was set and the key already existed. */
+  set(key: string, value: string, options?: { ex?: number; nx?: boolean }): Promise<string | null>;
   get(key: string): Promise<unknown>;
   del(key: string): Promise<void>;
   exists(key: string): Promise<number>;
@@ -88,6 +90,25 @@ export default class RememberVercelKvProvider implements RememberStoreInterface 
     } else {
       await this.kv.set(fullKey, strValue);
     }
+  }
+
+  /**
+   * Store a value only if the key is absent, via the `nx` option.
+   *
+   * Resolves to `'OK'` when it created the key and `null` when the key already existed, so two
+   * callers racing cannot both win.
+   */
+  async setIfAbsent(key: string, value: unknown, ttlSeconds?: number): Promise<boolean> {
+    const fullKey = this.prefixKey(key);
+    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const ttl = ttlSeconds ?? this.defaultTTL;
+
+    const result =
+      ttl && ttl > 0
+        ? await this.kv.set(fullKey, strValue, { nx: true, ex: ttl })
+        : await this.kv.set(fullKey, strValue, { nx: true });
+
+    return result === 'OK';
   }
 
   /**

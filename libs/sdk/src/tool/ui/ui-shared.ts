@@ -243,8 +243,21 @@ export interface ParsedWidgetUri {
   extension: string;
 }
 
+/**
+ * Tool names a widget URI may name, and the extensions it may ask for.
+ *
+ * SECURITY (GHSA-xp6r-ggxc-j7q8): this used to be `([^.]+)\.(\w+)`, which accepted anything
+ * without a dot — tags, quotes, angle brackets. An unregistered name falls through to the
+ * generated placeholder widget, so a crafted `resources/read` URI reflected arbitrary markup
+ * into the returned document. The template escapes its input now, which is the fix that
+ * actually closes it; this narrower pattern is the second line, keeping HTML metacharacters
+ * out of the value in the first place. The charset covers the tool-name forms FrontMCP
+ * produces (`namespace:tool`, hyphens, underscores, app-qualified names).
+ */
+const WIDGET_URI_PATTERN = /^ui:\/\/widget\/([A-Za-z0-9_:@-]+)\.(html|js|css)$/;
+
 export function parseWidgetUri(uri: string): ParsedWidgetUri | null {
-  const match = uri.match(/^ui:\/\/widget\/([^.]+)\.(\w+)$/);
+  const match = uri.match(WIDGET_URI_PATTERN);
   if (!match) return null;
   return { toolName: match[1], extension: match[2] };
 }

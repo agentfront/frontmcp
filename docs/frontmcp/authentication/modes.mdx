@@ -26,15 +26,15 @@ graph TB
 
 ## Mode Comparison
 
-| Feature                | Public            | Static                 | Transparent       | Local                           | Remote                          |
-| ---------------------- | ----------------- | ---------------------- | ----------------- | ------------------------------- | ------------------------------- |
-| Token Required         | No                | Yes (shared secret)    | Yes (external)    | Yes (FrontMCP-issued)           | Yes (FrontMCP-issued)           |
-| User Identity          | Anonymous         | Per configured token   | From upstream IdP | From login form                 | From upstream IdP               |
-| Token Signing          | HS256 (symmetric) | None — opaque secret   | Upstream IdP      | HS256 (symmetric, `JWT_SECRET`) | HS256 (symmetric, `JWT_SECRET`) |
-| Session Management     | Minimal           | Minimal                | Pass-through      | Full control                    | Full control                    |
-| Multi-provider         | No                | No                     | Single provider   | Multiple via apps               | Multiple via apps               |
-| Progressive Auth       | No                | No                     | No                | Yes                             | Yes                             |
-| Tool-authz enforcement | No                | No                     | No                | Optional                        | Optional                        |
+| Feature                | Public            | Static               | Transparent       | Local                           | Remote                          |
+| ---------------------- | ----------------- | -------------------- | ----------------- | ------------------------------- | ------------------------------- |
+| Token Required         | No                | Yes (shared secret)  | Yes (external)    | Yes (FrontMCP-issued)           | Yes (FrontMCP-issued)           |
+| User Identity          | Anonymous         | Per configured token | From upstream IdP | From login form                 | From upstream IdP               |
+| Token Signing          | HS256 (symmetric) | None — opaque secret | Upstream IdP      | HS256 (symmetric, `JWT_SECRET`) | HS256 (symmetric, `JWT_SECRET`) |
+| Session Management     | Minimal           | Minimal              | Pass-through      | Full control                    | Full control                    |
+| Multi-provider         | No                | No                   | Single provider   | Multiple via apps               | Multiple via apps               |
+| Progressive Auth       | No                | No                   | No                | Yes                             | Yes                             |
+| Tool-authz enforcement | No                | No                   | No                | Optional                        | Optional                        |
 
 ---
 
@@ -94,7 +94,8 @@ sequenceDiagram
 <Note>
   **Bearer tokens in public mode.** A JWT is still verified against this instance's own HS256 secret, so a valid gateway token upgrades the request to that identity. A bearer token that is *not* a JWT is ignored and the request is served anonymously — public mode has no issuer, JWKS or audience to verify it against, and a request carrying a credential must never fare worse than the same request without one.
 
-  That also means a `@Will('checkAuthorization')` hook can implement its own shared-secret check without having to strip the header before the built-in verifier sees it. For a first-class shared secret, prefer [static mode](#static-mode).
+That also means a `@Will('checkAuthorization')` hook can implement its own shared-secret check without having to strip the header before the built-in verifier sees it. For a first-class shared secret, prefer [static mode](#static-mode).
+
 </Note>
 
 ---
@@ -121,14 +122,14 @@ Use it when you want a server protected by one secret without standing up an OAu
 
 ### Configuration Options
 
-| Option          | Type       | Default        | Description                                                                 |
-| --------------- | ---------- | -------------- | --------------------------------------------------------------------------- |
-| `tokens`        | `string[]` | Required       | Accepted credentials. At least one. Read them from the environment.          |
-| `header`        | `string`   | `'authorization'` | Request header carrying the credential.                                   |
-| `scheme`        | `string`   | `'Bearer'`     | Scheme prefix stripped before comparing. `''` for a bare token header.       |
-| `scopes`        | `string[]` | `['static']`   | Scopes granted to an accepted request.                                       |
-| `realm`         | `string`   | `'mcp'`        | Realm reported in the `WWW-Authenticate` challenge.                          |
-| `publicAccess`  | object     | -              | Same tool/prompt access configuration the other modes accept.                |
+| Option         | Type       | Default           | Description                                                            |
+| -------------- | ---------- | ----------------- | ---------------------------------------------------------------------- |
+| `tokens`       | `string[]` | Required          | Accepted credentials. At least one. Read them from the environment.    |
+| `header`       | `string`   | `'authorization'` | Request header carrying the credential.                                |
+| `scheme`       | `string`   | `'Bearer'`        | Scheme prefix stripped before comparing. `''` for a bare token header. |
+| `scopes`       | `string[]` | `['static']`      | Scopes granted to an accepted request.                                 |
+| `realm`        | `string`   | `'mcp'`           | Realm reported in the `WWW-Authenticate` challenge.                    |
+| `publicAccess` | object     | -                 | Same tool/prompt access configuration the other modes accept.          |
 
 An API-key header with no scheme prefix:
 

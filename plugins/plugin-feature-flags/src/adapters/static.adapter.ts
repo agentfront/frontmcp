@@ -1,5 +1,5 @@
-import type { FeatureFlagAdapter } from './feature-flag-adapter.interface';
 import type { FeatureFlagContext, FeatureFlagVariant } from '../feature-flag.types';
+import type { FeatureFlagAdapter } from './feature-flag-adapter.interface';
 
 /**
  * Static/in-memory feature flag adapter.
@@ -34,9 +34,15 @@ export class StaticFeatureFlagAdapter implements FeatureFlagAdapter {
     return { ...flag };
   }
 
+  /**
+   * A key this adapter has never been configured with is OMITTED rather than reported as
+   * `false`. Only then can the caller tell "the operator disabled it" from "nobody configured
+   * it" and apply the ref's `defaultValue` to the second case only.
+   */
   async evaluateFlags(flagKeys: string[], context: FeatureFlagContext): Promise<Map<string, boolean>> {
     const results = new Map<string, boolean>();
     for (const key of flagKeys) {
+      if (this.flags[key] === undefined) continue;
       results.set(key, await this.isEnabled(key, context));
     }
     return results;

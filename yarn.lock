@@ -2542,6 +2542,7 @@ __metadata:
   resolution: "@frontmcp/plugin-cache@workspace:plugins/plugin-cache"
   dependencies:
     "@frontmcp/sdk": "npm:1.5.7"
+    "@frontmcp/utils": "npm:1.5.7"
     ioredis: "npm:^5.8.0"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:

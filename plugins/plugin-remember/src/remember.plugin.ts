@@ -1,20 +1,22 @@
 import {
   DynamicPlugin,
-  Plugin,
-  ProviderType,
-  ProviderScope,
+  FRONTMCP_CONTEXT,
   FrontMcpConfig,
   FrontMcpConfigType,
-  FRONTMCP_CONTEXT,
+  FrontMcpLogger,
   getGlobalStoreConfig,
   isVercelKvProvider,
+  Plugin,
+  ProviderScope,
+  ProviderType,
 } from '@frontmcp/sdk';
-import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
-import { RememberStoreToken, RememberConfigToken, RememberAccessorToken } from './remember.symbols';
+
+import { createRememberAccessor } from './providers/remember-accessor.provider';
 import RememberMemoryProvider from './providers/remember-memory.provider';
 import RememberRedisProvider from './providers/remember-redis.provider';
 import RememberVercelKvProvider from './providers/remember-vercel-kv.provider';
-import { createRememberAccessor } from './providers/remember-accessor.provider';
+import { RememberAccessorToken, RememberConfigToken, RememberStoreToken } from './remember.symbols';
+import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
 
 /**
  * RememberPlugin - Stateful session memory for FrontMCP.
@@ -202,8 +204,8 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
       name: 'remember:accessor',
       provide: RememberAccessorToken,
       scope: ProviderScope.CONTEXT,
-      inject: () => [RememberStoreToken, FRONTMCP_CONTEXT, RememberConfigToken] as const,
-      useFactory: (store, ctx, cfg) => createRememberAccessor(store, ctx, cfg),
+      inject: () => [RememberStoreToken, FRONTMCP_CONTEXT, RememberConfigToken, FrontMcpLogger] as const,
+      useFactory: (store, ctx, cfg, logger) => createRememberAccessor(store, ctx, cfg, logger),
     });
 
     return providers;

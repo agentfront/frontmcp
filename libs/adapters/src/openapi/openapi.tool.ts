@@ -211,7 +211,37 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         headers,
         body: serializedBody,
         signal: controller.signal,
+        // SECURITY (GHSA-qh67-4345-cw2q): never auto-follow redirects. `fetch` defaults to
+        // `redirect: 'follow'`, which re-sends the request to a destination the UPSTREAM
+        // chose, not the operator. Only `baseUrl` is validated, and only for its scheme, so
+        // a 3xx is an unvalidated hop — to a cloud metadata address or an RFC1918 host.
+        // undici also strips only `Authorization` and `Cookie` across origins and forwards
+        // custom headers, which is exactly how this adapter injects API keys, so following
+        // hands the backend credential to the redirect target. `manual` makes the 3xx
+        // visible here so it can be refused instead of chased.
+        redirect: 'manual',
       });
+
+      // A redirect is not followed. REST operations resolve in one hop; surface the 3xx as
+      // a failure rather than chasing it with injected credentials.
+      if (response.status >= 300 && response.status < 400) {
+        logger.warn(`[${openapiTool.name}] upstream returned a redirect; not followed`, {
+          status: response.status,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                status: response.status,
+                error: `Upstream returned a redirect (${response.status}); not followed to protect injected credentials.`,
+              }),
+            },
+          ],
+          isError: true,
+          _meta: { status: response.status, errorCode: 'OPENAPI_REDIRECT_NOT_FOLLOWED' },
+        };
+      }
 
       // 10. Parse response (returns structured OpenApiResponse)
       const apiResponse = await parseResponse(response, { maxResponseSize: options.maxResponseSize });

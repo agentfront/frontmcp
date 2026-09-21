@@ -184,6 +184,29 @@ Protect against hanging requests by setting a maximum execution time.
 
 Add a server-wide rate limit that applies to all requests, regardless of which tool is called.
 
+<Warning>
+  **`partitionBy: 'ip'` requires `FRONTMCP_TRUST_PROXY` when you run behind a proxy.**
+
+The client IP comes from the socket peer address by default. `X-Forwarded-For` and
+`X-Real-IP` are set by whoever sent the request, so they are ignored unless you declare a
+trusted proxy with `FRONTMCP_TRUST_PROXY=true`. Without that, a deployment behind a load
+balancer sees every request as coming from the balancer and rate-limits all clients as one.
+With it but no proxy actually in front, a caller can forge the header and mint a fresh
+bucket per request.
+
+Set `FRONTMCP_TRUSTED_PROXY_DEPTH` to the number of proxies you run in front of the app
+(default `1`). The client is read from that many hops back along the chain, because callers
+can prepend entries but only your own proxies append to it.
+
+When no IP can be established the request falls back to the authenticated user, and to a
+single `ip:unresolved` partition when there is no user either. It never keys on the session
+id: `mcp-session-id` is caller-supplied and a request without one is given a fresh UUID, so
+keying on it would mint a new budget per request. The shared bucket is contended by design --
+bounded contention beats an unbounded budget -- and declaring your proxy is what takes
+callers out of it.
+
+</Warning>
+
 <Steps>
   <Step title="Configure global limits">
     ```typescript
@@ -232,6 +255,22 @@ Add a server-wide rate limit that applies to all requests, regardless of which t
 
 Block malicious IPs and restrict access to known networks.
 
+The filter runs at the start of the request pipeline, before the rate-limit check and before
+authentication. A rejected client gets HTTP 403 with JSON-RPC error `-32001`. An `ipFilter`
+block is enforced on its own -- it does not need a `global` rate limit configured alongside it.
+
+<Warning>
+  The client IP comes from the socket peer unless a trusted proxy is declared. Behind a load
+  balancer, set `FRONTMCP_TRUST_PROXY=true` (and `FRONTMCP_TRUSTED_PROXY_DEPTH` for more than
+  one hop) or every request will appear to come from the balancer and your lists will match
+  the wrong address.
+
+Note that `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` are accepted by the schema
+but are **not** read: client-IP extraction happens in the SDK context layer, before guard
+configuration is reachable. Use the environment variables.
+
+</Warning>
+
 <Steps>
   <Step title="Configure IP filtering">
     ```typescript
@@ -250,8 +289,6 @@ Block malicious IPs and restrict access to known networks.
             '2001:db8::/32',        // IPv6 office range
           ],
           defaultAction: 'deny',    // Block everything not on allowList
-          trustProxy: true,         // Read IP from X-Forwarded-For
-          trustedProxyDepth: 1,
         },
       },
       tools: [MyTool],
@@ -272,15 +309,41 @@ Block malicious IPs and restrict access to known networks.
   </Step>
 
   <Step title="Enable proxy trust">
-    If your server is behind a load balancer or reverse proxy, the client IP will be the proxy's IP unless you enable `trustProxy`:
+    Behind a load balancer or reverse proxy the client IP is the proxy's, unless you declare
+    the proxy as trusted. This is set through the environment, not through `ipFilter`:
 
-    ```typescript
-    ipFilter: {
-      trustProxy: true,
-      trustedProxyDepth: 2,  // If behind 2 proxies (e.g., CloudFront + ALB)
-      // ...
-    }
+    ```bash
+    FRONTMCP_TRUST_PROXY=true
+    FRONTMCP_TRUSTED_PROXY_DEPTH=2   # behind 2 proxies (e.g. CloudFront + ALB)
     ```
+
+    The client is read that many hops back from the end of the `X-Forwarded-For` chain,
+    because callers can prepend entries but only your own proxies append to it. A chain
+    shorter than the configured depth was not built by those proxies, so the socket peer is
+    used instead.
+
+    <Note>
+      `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not
+      read — client-IP extraction happens in the SDK context layer, before guard
+      configuration is reachable. Use the environment variables above.
+    </Note>
+
+    <Warning>
+      **`FRONTMCP_TRUST_PROXY` is only as good as your network boundary.** Trusting forwarded
+      headers means trusting whoever can set them, so two things must hold:
+
+    - **Every ingress path traverses the configured proxy chain.** If a caller can reach the
+      origin directly -- a public origin IP, a peered VPC, a second ingress that skips the
+      balancer -- they choose the whole `X-Forwarded-For` chain, and counting hops from its end
+      just lands on an address they picked.
+    - **The edge strips and rebuilds the forwarded headers.** The outermost proxy must discard
+      any inbound `X-Forwarded-For` and `X-Real-IP` and write its own, so the only entries in the
+      chain are ones your proxies appended.
+
+      With depth `1` and no `X-Forwarded-For` at all, `X-Real-IP` is used -- the single-hop nginx
+      convention. It is never consulted alongside a chain, because a caller can send both.
+
+    </Warning>
 
   </Step>
 </Steps>
@@ -455,7 +518,6 @@ class ReportTool extends ToolContext {
     defaultTimeout: { executeMs: 30_000 },
     ipFilter: {
       denyList: ['192.0.2.0/24'],
-      trustProxy: true,
     },
   },
   tools: [SearchTool, ReportTool],

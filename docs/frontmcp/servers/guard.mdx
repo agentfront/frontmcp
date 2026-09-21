@@ -257,8 +257,6 @@ IP filtering allows or blocks requests based on client IP address, supporting IP
       allowList: ['10.0.0.0/8', '172.16.0.0/12'],
       denyList: ['192.0.2.1', '198.51.100.0/24'],
       defaultAction: 'deny',
-      trustProxy: true,
-      trustedProxyDepth: 1,
     },
   },
   tools: [MyTool],
@@ -286,15 +284,41 @@ class MyApp {}
 
 ### Proxy Configuration
 
-When your server is behind a reverse proxy (Nginx, CloudFront, etc.), enable `trustProxy` to read the client IP from the `X-Forwarded-For` header:
+When your server is behind a reverse proxy (Nginx, CloudFront, etc.), declare the proxy as
+trusted so the client IP is read from `X-Forwarded-For` instead of the socket peer. This is
+set through the environment:
 
-```typescript
-ipFilter: {
-  trustProxy: true,
-  trustedProxyDepth: 2,  // Trust up to 2 proxy hops
-  // ...
-}
+```bash
+FRONTMCP_TRUST_PROXY=true
+FRONTMCP_TRUSTED_PROXY_DEPTH=2   # trust up to 2 proxy hops
 ```
+
+The client is read that many hops back from the end of the chain, because callers can prepend
+entries but only your own proxies append to it. A chain shorter than the configured depth is
+ignored in favour of the socket peer.
+
+<Note>
+  `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not read:
+  client-IP extraction happens in the SDK context layer, before guard configuration is
+  reachable. Use the environment variables above.
+</Note>
+
+<Warning>
+  **`FRONTMCP_TRUST_PROXY` is only as good as your network boundary.** Trusting forwarded
+  headers means trusting whoever can set them, so two things must hold:
+
+- **Every ingress path traverses the configured proxy chain.** If a caller can reach the
+  origin directly -- a public origin IP, a peered VPC, a second ingress that skips the
+  balancer -- they choose the whole `X-Forwarded-For` chain, and counting hops from its end
+  just lands on an address they picked.
+- **The edge strips and rebuilds the forwarded headers.** The outermost proxy must discard
+  any inbound `X-Forwarded-For` and `X-Real-IP` and write its own, so the only entries in the
+  chain are ones your proxies appended.
+
+  With depth `1` and no `X-Forwarded-For` at all, `X-Real-IP` is used -- the single-hop nginx
+  convention. It is never consulted alongside a chain, because a caller can send both.
+
+</Warning>
 
 ---
 
@@ -326,7 +350,6 @@ The `throttle` field in `@FrontMcp` configures all guard features at the app lev
       allowList: ['203.0.113.0/24'],
       denyList: ['192.0.2.1'],
       defaultAction: 'allow',
-      trustProxy: true,
     },
   },
   tools: [SearchTool, ReportTool],

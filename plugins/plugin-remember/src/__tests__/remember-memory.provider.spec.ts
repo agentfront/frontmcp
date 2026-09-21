@@ -347,4 +347,25 @@ describe('RememberMemoryProvider', () => {
       expect(result).toEqual(nested);
     });
   });
+
+  describe('setIfAbsent', () => {
+    it('creates the key and reports that it did', async () => {
+      await expect(provider.setIfAbsent('marker', { firstSeenAt: 1 })).resolves.toBe(true);
+      await expect(provider.getValue('marker')).resolves.toEqual({ firstSeenAt: 1 });
+    });
+
+    it('leaves an existing value untouched and reports that it did not write', async () => {
+      await provider.setValue('marker', { firstSeenAt: 1 });
+
+      await expect(provider.setIfAbsent('marker', { firstSeenAt: 2 })).resolves.toBe(false);
+      await expect(provider.getValue('marker')).resolves.toEqual({ firstSeenAt: 1 });
+    });
+
+    it('treats an expired entry as absent', async () => {
+      await provider.setValue('marker', { firstSeenAt: 1 }, 1);
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 5_000);
+
+      await expect(provider.setIfAbsent('marker', { firstSeenAt: 2 })).resolves.toBe(true);
+    });
+  });
 });

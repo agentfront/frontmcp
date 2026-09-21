@@ -4,12 +4,18 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
 import { ApprovalRequiredError } from '../approval';
-import type { ApprovalStore } from '../stores/approval-store.interface';
-import type { ToolApprovalRequirement, ApprovalContext, ApprovalRecord } from '../types';
-import { ApprovalScope, ApprovalState } from '../types';
 import { ApprovalStoreToken } from '../approval.symbols';
+import type { ApprovalStore } from '../stores/approval-store.interface';
+import {
+  ApprovalScope,
+  ApprovalState,
+  type ApprovalContext,
+  type ApprovalRecord,
+  type ToolApprovalRequirement,
+} from '../types';
 
 /**
  * Hook plugin that checks tool approval before execution.
@@ -100,17 +106,20 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     return Date.now() > approval.expiresAt;
   }
 
+  /**
+   * The context this call is running in, as established by the SESSION (GHSA-r848-p7wf-96rc).
+   *
+   * Deliberately ignores `toolContext.input.context`. The only consumer of this value is
+   * `isPreApprovedContext`, which skips the approval prompt outright, so reading it from the
+   * arguments of the call being gated let a caller name its own pre-approved context and walk
+   * straight past the gate. Only `authInfo.extra.approvalContext`, which the server sets
+   * while authenticating, can say what context a call belongs to.
+   */
   private getCurrentContext(flowCtx: FlowCtxOf<'tools:call-tool'>): ApprovalContext | undefined {
-    const { toolContext } = flowCtx.state;
-    const ctx = toolContext?.tryGetContext?.();
-
-    const inputContext = toolContext?.input?.['context'];
-    const contextFromInput = this.isApprovalContext(inputContext) ? inputContext : undefined;
-
+    const ctx = flowCtx.state.toolContext?.tryGetContext?.();
     const sessionContext = ctx?.authInfo?.extra?.['approvalContext'];
-    const contextFromSession = this.isApprovalContext(sessionContext) ? sessionContext : undefined;
 
-    return contextFromInput ?? contextFromSession;
+    return this.isApprovalContext(sessionContext) ? sessionContext : undefined;
   }
 
   private isApprovalContext(value: unknown): value is ApprovalContext {

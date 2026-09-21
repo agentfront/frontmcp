@@ -1,6 +1,9 @@
 // file: libs/cli/src/shared/__tests__/env.spec.ts
 
+import * as fs from 'fs';
 import * as path from 'path';
+
+import { loadCommandEnv, loadDevEnv, loadEnvFilesSync, parseEnvContent, populateProcessEnv } from '../env';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -12,9 +15,6 @@ jest.mock('fs', () => ({
 jest.mock('../../core/colors', () => ({
   c: jest.fn((color: string, text: string) => `[${color}]${text}`),
 }));
-
-import * as fs from 'fs';
-import { parseEnvContent, loadEnvFilesSync, populateProcessEnv, loadCommandEnv, loadDevEnv } from '../env';
 
 describe('env utilities', () => {
   beforeEach(() => {

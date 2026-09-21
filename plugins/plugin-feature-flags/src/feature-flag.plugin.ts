@@ -3,25 +3,34 @@ import {
   FlowCtxOf,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
-  ListToolsHook,
+  FrontMcpContextStorage,
   ListResourcesHook,
+  ListToolsHook,
   Plugin,
   ProviderScope,
   ProviderType,
   ToolHook,
 } from '@frontmcp/sdk';
 
-import type { FeatureFlagPluginOptions, FeatureFlagPluginOptionsInput, FeatureFlagRef } from './feature-flag.types';
-import { FeatureFlagAdapterToken, FeatureFlagConfigToken, FeatureFlagAccessorToken } from './feature-flag.symbols';
-import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
-import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
+import { StaticFeatureFlagAdapter } from './adapters/static.adapter';
+import { buildFeatureFlagContext } from './feature-flag.context';
+import { FeatureFlagAccessorToken, FeatureFlagAdapterToken, FeatureFlagConfigToken } from './feature-flag.symbols';
+import type {
+  FeatureFlagContext,
+  FeatureFlagPluginOptions,
+  FeatureFlagPluginOptionsInput,
+  FeatureFlagRef,
+} from './feature-flag.types';
+import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
 // Local hook references for prompts and skills flows.
 // These flows register their ExtendFlows types in their own modules, which are not
 // re-exported from the SDK barrel. We cast to bypass the type constraint at compile time.
 const ListPromptsHook = (FlowHooksOf as any)('prompts:list-prompts');
 const SearchSkillsHook = (FlowHooksOf as any)('skills:search');
+const ReadResourceHook = (FlowHooksOf as any)('resources:read-resource');
+const GetPromptHook = (FlowHooksOf as any)('prompts:get-prompt');
 
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
@@ -261,25 +270,62 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    */
   @ToolHook.Will('execute', { priority: 50 })
   async gateToolExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const { tool } = flowCtx.state;
-    if (!tool) return;
+    await this.gateEntryExecution('Tool', flowCtx.state.tool);
+  }
 
-    const ref = (tool.metadata as any)?.featureFlag as FeatureFlagRef | undefined;
+  /**
+   * Execution gate: block resources/read when the resource's feature flag is off.
+   *
+   * GHSA-gf7p-j3hr-h5h4: only tools had this gate, so a flagged resource was merely absent
+   * from resources/list and still readable by URI. Hiding a capability from a listing is not
+   * the same as withholding it — clients cache listings and hold URIs from earlier sessions.
+   */
+  @ReadResourceHook.Will('execute', { priority: 50 })
+  async gateResourceRead(flowCtx: any) {
+    await this.gateEntryExecution('Resource', flowCtx.state.resource);
+  }
+
+  /**
+   * Execution gate: block prompts/get when the prompt's feature flag is off.
+   *
+   * The same gap as resources (GHSA-gf7p-j3hr-h5h4): filtering prompts/list left the prompt
+   * retrievable by name.
+   */
+  @GetPromptHook.Will('execute', { priority: 50 })
+  async gatePromptGet(flowCtx: any) {
+    await this.gateEntryExecution('Prompt', flowCtx.state.prompt);
+  }
+
+  /**
+   * Shared execution gate for tools, resources and prompts.
+   *
+   * One implementation on purpose: the advisory existed because the tool path had a gate and
+   * the other two did not, and three copies would drift apart the same way.
+   */
+  private async gateEntryExecution(kind: string, entry: { metadata?: unknown } | undefined): Promise<void> {
+    if (!entry) return;
+
+    const metadata = entry.metadata as { name?: string; featureFlag?: FeatureFlagRef } | undefined;
+    const ref = metadata?.featureFlag;
     if (!ref) return;
 
-    const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
     const key = typeof ref === 'string' ? ref : ref.key;
     const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
 
     let enabled: boolean;
     try {
-      enabled = await adapter.isEnabled(key, {});
+      // The same batch call the list hooks make, so the gate and the listing cannot reach
+      // different answers, and so an omitted (unknown) key falls back to `defaultValue`
+      // rather than reading as a disable.
+      const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
+      const results = await adapter.evaluateFlags([key], this.currentFlagContext());
+      enabled = this.isRefEnabled(ref, results);
     } catch {
       enabled = defaultValue;
     }
 
     if (!enabled) {
-      throw new Error(`Tool "${tool.metadata.name}" is disabled by feature flag "${key}"`);
+      throw new Error(`${kind} "${metadata?.name}" is disabled by feature flag "${key}"`);
     }
   }
 
@@ -312,7 +358,26 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     refs: Map<string, FeatureFlagRef>,
   ): Promise<Map<string, boolean>> {
     const keys = Array.from(refs.keys());
-    return adapter.evaluateFlags(keys, {});
+    return adapter.evaluateFlags(keys, this.currentFlagContext());
+  }
+
+  /**
+   * The caller's evaluation context.
+   *
+   * Passing `{}` here asked the adapter "is this flag on for nobody in particular", which a
+   * targeted adapter can answer differently from "is it on for THIS caller" — enabling access
+   * the caller should not have. The context comes from the same `FrontMcpContext` the
+   * context-scoped accessor reads, so hooks and `this.featureFlags` agree.
+   */
+  private currentFlagContext(): FeatureFlagContext {
+    try {
+      const ctx = this.get(FrontMcpContextStorage)?.getStore();
+      if (!ctx) return {};
+      return buildFeatureFlagContext(ctx, this.options);
+    } catch {
+      // No context storage bound (unit tests, non-request paths) — evaluate anonymously.
+      return {};
+    }
   }
 
   /**
@@ -322,9 +387,13 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    */
   private isRefEnabled(ref: FeatureFlagRef, flagResults: Map<string, boolean>): boolean {
     const key = typeof ref === 'string' ? ref : ref.key;
-    const adapterResult = flagResults.get(key);
     const defaultValue = typeof ref === 'object' ? (ref.defaultValue ?? false) : false;
-    if (adapterResult === true) return true;
+
+    // An answer from the adapter wins, `false` included: the operator disabled the flag.
+    // An ABSENT key means the adapter has never heard of it, and only then does the ref's
+    // `defaultValue` apply. Both the list hooks and `gateEntryExecution` go through here, so
+    // a capability cannot be listed and then refused on access.
+    if (flagResults.has(key)) return flagResults.get(key) === true;
     return defaultValue;
   }
 }

@@ -66,7 +66,10 @@ describe('StaticFeatureFlagAdapter', () => {
       expect(results.get('flag-a')).toBe(true);
       expect(results.get('flag-b')).toBe(false);
       expect(results.get('flag-c')).toBe(true);
-      expect(results.get('unknown')).toBe(false);
+      // An unconfigured key is OMITTED, not reported as `false`. That is how a caller tells
+      // "the operator disabled it" from "nobody configured it" and applies `defaultValue` to
+      // the second case only.
+      expect(results.has('unknown')).toBe(false);
     });
 
     it('should return empty map for empty keys', async () => {

@@ -1,18 +1,42 @@
-import { FrontMcpContext, Provider, ProviderScope, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
-import type { RememberStoreInterface } from './remember-store.interface';
+import { FrontMcpContext, Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
+
+import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
+import { RememberIdentityError } from '../remember.errors';
+import { scheduleLegacyRememberPurge } from '../remember.legacy-purge';
 import type {
-  RememberScope,
   RememberEntry,
-  RememberPluginOptions,
-  RememberSetOptions,
-  RememberGetOptions,
   RememberForgetOptions,
+  RememberGetOptions,
   RememberKnowsOptions,
   RememberListOptions,
-  PayloadBrandType,
+  RememberPluginOptions,
+  RememberScope,
+  RememberSetOptions,
 } from '../remember.types';
-import { encryptAndSerialize, deserializeAndDecrypt, getKeySourceForScope } from '../remember.crypto';
-import { RememberStoreToken, RememberConfigToken } from '../remember.symbols';
+import type { RememberStoreInterface } from './remember-store.interface';
+
+/** Session id the stateless HTTP transport injects into every request. */
+const STATELESS_SESSION_ID = '__stateless__';
+
+/**
+ * Layout version for the scopes whose storage location changed in the GHSA-h6f4-jg8x-38gj and
+ * GHSA-225p-f8jh-f3rh fixes.
+ *
+ * Without it, a pre-fix `remember:session:<id>:<key>` and a post-fix key share a namespace, so
+ * the one-time purge of unreadable entries could not tell them apart and would delete live
+ * data. `global` is not versioned: neither its keys nor its key derivation changed.
+ */
+const STORAGE_LAYOUT_VERSION = 'v2';
+
+/**
+ * Make a namespace component unambiguous before it is joined with `:`.
+ *
+ * `encodeURIComponent` escapes the separator, so no combination of identity and key can
+ * produce another pair's storage key.
+ */
+function encodeKeyPart(value: string): string {
+  return encodeURIComponent(value);
+}
 
 /**
  * Context-scoped accessor for remember storage.
@@ -50,12 +74,24 @@ export class RememberAccessor {
   private readonly keyPrefix: string;
   private readonly encryptionEnabled: boolean;
 
-  constructor(store: RememberStoreInterface, ctx: FrontMcpContext, config: RememberPluginOptions) {
+  constructor(
+    store: RememberStoreInterface,
+    ctx: FrontMcpContext,
+    config: RememberPluginOptions,
+    logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
+  ) {
     this.store = store;
     this.ctx = ctx;
     this.config = config;
     this.keyPrefix = config.keyPrefix ?? 'remember:';
     this.encryptionEnabled = config.encryption?.enabled !== false;
+
+    // Armed here rather than at startup because `DynamicPlugin` exposes no startup hook and
+    // providers are not eagerly instantiated. Scheduling only — the sweep itself runs later,
+    // on a timer, so no request ever waits for it.
+    if (!config.skipLegacyPurge) {
+      scheduleLegacyRememberPurge(store, this.keyPrefix, { delayMs: config.legacyPurgeDelayMs, logger });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -255,18 +291,66 @@ export class RememberAccessor {
   }
 
   /**
+   * The identity that namespaces session- and tool-scoped storage
+   * (GHSA-225p-f8jh-f3rh).
+   *
+   * In stateless mode the transport injects the literal session id `__stateless__` into every
+   * request, so using it as a namespace put every client's memory under the same keys. A
+   * stateless request carries no session identity: the authenticated principal is the only
+   * per-client identity available, and where there is none the request has no business
+   * reading or writing per-client memory at all.
+   */
+  private resolveSessionIdentity(): string {
+    const sessionId = this.ctx.sessionId;
+
+    if (sessionId !== STATELESS_SESSION_ID) {
+      return sessionId;
+    }
+
+    const userId = this.userId;
+    if (userId) {
+      return `stateless-user:${userId}`;
+    }
+
+    throw new RememberIdentityError(
+      'Remember cannot use session or tool scope for an unauthenticated stateless request: ' +
+        'every such request shares the session id "__stateless__", so the data would be shared ' +
+        'across all clients. Authenticate the request, use a stateful transport, or choose ' +
+        "the 'global' scope if the data really is shared.",
+    );
+  }
+
+  /**
    * Build the scope-specific prefix.
+   *
+   * Every variable component is encoded, because the separator is also a legal character in
+   * a user id, a tool name and a memory key. Left raw, identity `a` with key `b:c` produces
+   * the same storage key as identity `a:b` with key `c` — one client reading or overwriting
+   * another's value through nothing more exotic than a colon in a name.
    */
   private buildScopePrefix(scope: RememberScope): string {
     switch (scope) {
       case 'session':
-        return `${this.keyPrefix}session:${this.ctx.sessionId}:`;
-      case 'user':
-        return `${this.keyPrefix}user:${this.userId ?? 'anonymous'}:`;
+        return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:session:${encodeKeyPart(this.resolveSessionIdentity())}:`;
+      case 'user': {
+        const userId = this.userId;
+        if (!userId) {
+          // 'anonymous' pooled every unauthenticated caller into one namespace, which is the
+          // same cross-client disclosure as the stateless case above.
+          throw new RememberIdentityError(
+            'Remember cannot use user scope without an authenticated user: all unauthenticated ' +
+              "callers would share one namespace. Authenticate the request or use the 'global' scope.",
+          );
+        }
+        return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:user:${encodeKeyPart(userId)}:`;
+      }
       case 'tool': {
         // Tool scope uses flow name if available
         const toolName = this.ctx.flow?.name ?? 'unknown';
-        return `${this.keyPrefix}tool:${toolName}:${this.ctx.sessionId}:`;
+        return (
+          `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:tool:` +
+          `${encodeKeyPart(toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`
+        );
       }
       case 'global':
         return `${this.keyPrefix}global:`;
@@ -277,8 +361,12 @@ export class RememberAccessor {
    * Get the encryption key source for a scope.
    */
   private getKeySource(scope: RememberScope) {
+    // Must match the namespace: a key derived from the raw '__stateless__' id would be the
+    // same constant for every client, exactly as the storage key was.
+    const needsSessionIdentity = scope === 'session' || scope === 'tool';
+
     return getKeySourceForScope(scope, {
-      sessionId: this.ctx.sessionId,
+      sessionId: needsSessionIdentity ? this.resolveSessionIdentity() : this.ctx.sessionId,
       userId: this.userId,
       toolName: this.ctx.flow?.name,
     });
@@ -304,6 +392,7 @@ export function createRememberAccessor(
   store: RememberStoreInterface,
   ctx: FrontMcpContext,
   config: RememberPluginOptions,
+  logger?: Pick<FrontMcpLogger, 'warn' | 'debug'>,
 ): RememberAccessor {
-  return new RememberAccessor(store, ctx, config);
+  return new RememberAccessor(store, ctx, config, logger);
 }

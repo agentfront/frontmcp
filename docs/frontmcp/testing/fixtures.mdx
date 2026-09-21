@@ -52,17 +52,17 @@ test('my test', async ({ mcp }) => {
 
 ### Configuration Options
 
-| Option           | Type                                     | Default             | Description                                        |
-| ---------------- | ---------------------------------------- | ------------------- | -------------------------------------------------- |
-| `server`         | `string`                                 | —                   | Path to server entry file (required)               |
-| `port`           | `number`                                 | Auto                | Port to run server on                              |
-| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                                 |
-| `auth`           | `object`                                 | —                   | Auth configuration                                 |
-| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                                   |
-| `env`            | `Record<string, string>`                 | —                   | Environment variables                              |
-| `startupTimeout` | `number`                                 | `30000`             | Server startup timeout in ms                       |
+| Option           | Type                                     | Default             | Description                                                                                            |
+| ---------------- | ---------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `server`         | `string`                                 | —                   | Path to server entry file (required)                                                                   |
+| `port`           | `number`                                 | Auto                | Port to run server on                                                                                  |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                                                                                     |
+| `auth`           | `object`                                 | —                   | Auth configuration                                                                                     |
+| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                                                                                       |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables                                                                                  |
+| `startupTimeout` | `number`                                 | `30000`             | Server startup timeout in ms                                                                           |
 | `baseUrl`        | `string`                                 | —                   | Connect to an existing server. May also be combined with `server` to override the booted server's URL. |
-| `entryPath`      | `string`                                 | `'/'`               | Where the server mounts MCP (`http.entryPath`)     |
+| `entryPath`      | `string`                                 | `'/'`               | Where the server mounts MCP (`http.entryPath`)                                                         |
 
 ### Servers that serve MCP somewhere other than `/`
 

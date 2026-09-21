@@ -2,7 +2,7 @@
  * Unit tests for metadata extraction utilities
  */
 
-import { extractMetadata, extractClientIp } from '../metadata.utils';
+import { extractClientIp, extractMetadata } from '../metadata.utils';
 
 describe('extractMetadata', () => {
   describe('standard headers', () => {
@@ -123,14 +123,24 @@ describe('extractMetadata', () => {
   });
 
   describe('client IP extraction', () => {
-    it('should extract client IP from headers', () => {
+    it('should extract client IP from headers behind a trusted proxy', () => {
       const headers = {
         'x-forwarded-for': '192.168.1.100',
       };
 
-      const metadata = extractMetadata(headers);
+      const metadata = extractMetadata(headers, { trustProxy: true });
 
       expect(metadata.clientIp).toBe('192.168.1.100');
+    });
+
+    it('should ignore forwarded headers when no proxy is trusted', () => {
+      const headers = {
+        'x-forwarded-for': '192.168.1.100',
+      };
+
+      const metadata = extractMetadata(headers, { trustProxy: false });
+
+      expect(metadata.clientIp).toBeUndefined();
     });
 
     it('should return undefined clientIp when not present', () => {
@@ -153,12 +163,12 @@ describe('extractMetadata', () => {
         'x-frontmcp-environment': 'production',
       };
 
-      const metadata = extractMetadata(headers);
+      const metadata = extractMetadata(headers, { trustProxy: true });
 
       expect(metadata.userAgent).toBe('TestClient/2.0');
       expect(metadata.contentType).toBe('application/json');
       expect(metadata.accept).toBe('application/json');
-      expect(metadata.clientIp).toBe('10.0.0.1');
+      expect(metadata.clientIp).toBe('192.168.1.1');
       expect(metadata.customHeaders).toEqual({
         'x-frontmcp-tenant': 'acme-corp',
         'x-frontmcp-environment': 'production',
@@ -172,37 +182,41 @@ describe('extractClientIp', () => {
     it('should extract single IP', () => {
       const headers = { 'x-forwarded-for': '192.168.1.100' };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.100');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('192.168.1.100');
     });
 
-    it('should extract first IP from comma-separated list', () => {
+    it('should take the IP from the trusted end of a comma-separated list', () => {
+      // X-Forwarded-For is append-only: our own proxy appended the address of the peer it
+      // received from, at the right. Everything to its left was supplied by the caller. With
+      // one trusted proxy the client is therefore the LAST entry, not the first
+      // (GHSA-p3qf-fcwm-35x4).
       const headers = { 'x-forwarded-for': '192.168.1.100, 10.0.0.1, 172.16.0.1' };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.100');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('172.16.0.1');
     });
 
     it('should trim whitespace around IP', () => {
       const headers = { 'x-forwarded-for': '  192.168.1.100  ,  10.0.0.1  ' };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.100');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('10.0.0.1');
     });
 
     it('should handle array header value (some adapters)', () => {
       const headers = { 'x-forwarded-for': ['192.168.1.100, 10.0.0.1'] };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.100');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('10.0.0.1');
     });
 
     it('should return undefined for empty array', () => {
       const headers = { 'x-forwarded-for': [] };
 
-      expect(extractClientIp(headers)).toBeUndefined();
+      expect(extractClientIp(headers, { trustProxy: true })).toBeUndefined();
     });
 
     it('should return undefined for non-string array elements', () => {
       const headers = { 'x-forwarded-for': [123 as any] };
 
-      expect(extractClientIp(headers)).toBeUndefined();
+      expect(extractClientIp(headers, { trustProxy: true })).toBeUndefined();
     });
   });
 
@@ -210,7 +224,7 @@ describe('extractClientIp', () => {
     it('should extract IP from x-real-ip when x-forwarded-for not present', () => {
       const headers = { 'x-real-ip': '192.168.1.200' };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.200');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('192.168.1.200');
     });
 
     it('should prefer x-forwarded-for over x-real-ip', () => {
@@ -219,19 +233,19 @@ describe('extractClientIp', () => {
         'x-real-ip': '192.168.1.200',
       };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.100');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('192.168.1.100');
     });
 
     it('should handle array value for x-real-ip', () => {
       const headers = { 'x-real-ip': ['192.168.1.200'] };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.200');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('192.168.1.200');
     });
 
     it('should return undefined for non-string x-real-ip', () => {
       const headers = { 'x-real-ip': 123 as any };
 
-      expect(extractClientIp(headers)).toBeUndefined();
+      expect(extractClientIp(headers, { trustProxy: true })).toBeUndefined();
     });
   });
 
@@ -242,11 +256,11 @@ describe('extractClientIp', () => {
         'content-type': 'application/json',
       };
 
-      expect(extractClientIp(headers)).toBeUndefined();
+      expect(extractClientIp(headers, { trustProxy: true })).toBeUndefined();
     });
 
     it('should return undefined for empty headers', () => {
-      expect(extractClientIp({})).toBeUndefined();
+      expect(extractClientIp({}, { trustProxy: true })).toBeUndefined();
     });
 
     it('should fallback to x-real-ip when x-forwarded-for is non-string', () => {
@@ -255,7 +269,7 @@ describe('extractClientIp', () => {
         'x-real-ip': '192.168.1.200',
       };
 
-      expect(extractClientIp(headers)).toBe('192.168.1.200');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('192.168.1.200');
     });
   });
 
@@ -263,13 +277,13 @@ describe('extractClientIp', () => {
     it('should extract IPv6 address', () => {
       const headers = { 'x-forwarded-for': '2001:db8::1' };
 
-      expect(extractClientIp(headers)).toBe('2001:db8::1');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('2001:db8::1');
     });
 
-    it('should extract first IPv6 from list', () => {
+    it('should extract the trusted-end IPv6 from a list', () => {
       const headers = { 'x-forwarded-for': '2001:db8::1, 2001:db8::2' };
 
-      expect(extractClientIp(headers)).toBe('2001:db8::1');
+      expect(extractClientIp(headers, { trustProxy: true })).toBe('2001:db8::2');
     });
   });
 });

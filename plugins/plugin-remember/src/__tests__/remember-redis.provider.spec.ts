@@ -1,6 +1,7 @@
 // file: plugins/plugin-remember/src/__tests__/remember-redis.provider.spec.ts
 
 import 'reflect-metadata';
+
 import RememberRedisProvider from '../providers/remember-redis.provider';
 
 // Mock ioredis
@@ -325,6 +326,32 @@ describe('RememberRedisProvider', () => {
       await provider.close();
 
       expect(mockRedis.quit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setIfAbsent', () => {
+    it('uses SET NX and reports the key was created', async () => {
+      mockRedis.set.mockResolvedValue('OK');
+      const provider = new RememberRedisProvider({ type: 'redis-client', client: mockRedis as any });
+
+      await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(true);
+      expect(mockRedis.set).toHaveBeenCalledWith('marker', 'value', 'NX');
+    });
+
+    it('passes the TTL alongside NX', async () => {
+      mockRedis.set.mockResolvedValue('OK');
+      const provider = new RememberRedisProvider({ type: 'redis-client', client: mockRedis as any });
+
+      await provider.setIfAbsent('marker', 'value', 60);
+
+      expect(mockRedis.set).toHaveBeenCalledWith('marker', 'value', 'EX', 60, 'NX');
+    });
+
+    it('reports false when the key already existed', async () => {
+      mockRedis.set.mockResolvedValue(null);
+      const provider = new RememberRedisProvider({ type: 'redis-client', client: mockRedis as any });
+
+      await expect(provider.setIfAbsent('marker', 'value')).resolves.toBe(false);
     });
   });
 });

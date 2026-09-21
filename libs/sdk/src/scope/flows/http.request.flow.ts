@@ -191,7 +191,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
   @Stage('acquireQuota')
   async acquireQuota() {
     const manager = this.scope.rateLimitManager;
-    if (!manager?.config?.global) return;
+    // Deliberately NOT `!manager?.config?.global` (GHSA-hwfp-xv2f-fr8g): that early return
+    // meant a deployment configured with `throttle.ipFilter` alone did no guard work at all,
+    // because the whole stage was skipped when no global rate limit happened to be set.
+    if (!manager) return;
 
     const context = this.tryGetContext();
     const partitionCtx = context
@@ -201,6 +204,27 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           userId: context.authInfo?.clientId as string | undefined,
         }
       : undefined;
+
+    // The configured IP policy is enforced here, before any other guard work. `IpFilter` and
+    // `GuardManager.checkIpFilter` already existed and were unit-tested; nothing on the
+    // request path called them, so allowList/denyList/defaultAction were accepted and had no
+    // effect on a single request.
+    const ipResult = manager.checkIpFilter(partitionCtx?.clientIp);
+    if (ipResult && !ipResult.allowed) {
+      this.logger.warn(`[${this.requestId}] request rejected by ipFilter`, { reason: ipResult.reason });
+      this.respond(
+        httpRespond.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32001, message: 'Forbidden: client IP rejected by ipFilter' },
+          },
+          { status: 403 },
+        ),
+      );
+      return;
+    }
+
+    if (!manager.config?.global) return;
 
     const result = await manager.checkGlobalRateLimit(partitionCtx);
     if (!result.allowed) {

@@ -1,5 +1,4 @@
-import { resolvePartitionKey, buildStorageKey } from '../index';
-import type { PartitionKeyContext } from '../index';
+import { buildStorageKey, resolvePartitionKey, type PartitionKeyContext } from '../index';
 
 describe('resolvePartitionKey', () => {
   const fullContext: PartitionKeyContext = {
@@ -27,12 +26,14 @@ describe('resolvePartitionKey', () => {
       expect(resolvePartitionKey('ip', fullContext)).toBe('10.0.0.1');
     });
 
-    it('should return "unknown-ip" when clientIp is missing', () => {
-      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('unknown-ip');
+    it('should fall back to the authenticated user when clientIp is missing', () => {
+      // Never the session id — the caller sets that (GHSA-p3qf-fcwm-35x4).
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-1', userId: 'user-1' })).toBe('user:user-1');
     });
 
-    it('should return "unknown-ip" when context is undefined', () => {
-      expect(resolvePartitionKey('ip', undefined)).toBe('unknown-ip');
+    it('should use a bounded fallback bucket when there is no identity at all', () => {
+      expect(resolvePartitionKey('ip', { sessionId: 'sess-1' })).toBe('ip:unresolved');
+      expect(resolvePartitionKey('ip', undefined)).toBe('ip:unresolved');
     });
   });
 

@@ -117,6 +117,33 @@ export interface BaseRememberPluginOptions {
   /** Key prefix for all storage keys */
   keyPrefix?: string;
 
+  /**
+   * Skip the one-time purge of entries orphaned by the session/tool key-derivation change
+   * (GHSA-h6f4-jg8x-38gj) and the namespace encoding (GHSA-225p-f8jh-f3rh).
+   *
+   * The purge runs automatically, `legacyPurgeDelayMs` after this layout first reached the
+   * store, and deletes the pre-`v2` `session:`, `tool:` and `user:` entries under this
+   * plugin's `keyPrefix` — they can no longer be read and would otherwise silently appear
+   * absent. Set this to `true` only if you are migrating the data yourself.
+   *
+   * @default false
+   */
+  skipLegacyPurge?: boolean;
+
+  /**
+   * How long the fleet must have been on the `v2:` storage layout before the legacy purge
+   * deletes anything.
+   *
+   * Measured from when the first instance on this layout reached the store, recorded under
+   * `<keyPrefix>__layout__` -- not from this process's start, so a deploy or a crash does not
+   * reset it. An instance that starts mid-rollout shares the store with the instances it is
+   * replacing, and those still read and write the legacy prefixes; the window has to outlast
+   * both the rollout and the window in which a bad deploy gets rolled back.
+   *
+   * @default 86400000 (24 hours)
+   */
+  legacyPurgeDelayMs?: number;
+
   /** Encryption configuration */
   encryption?: {
     /** Whether encryption is enabled (default: true) */

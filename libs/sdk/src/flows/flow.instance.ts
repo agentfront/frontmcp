@@ -183,7 +183,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const mw = this.metadata.middleware;
     if (!mw) return false;
     const path = typeof mw.path === 'string' ? mw.path : '';
-    const hasStaticCanActivate = typeof (this.FlowClass as unknown as { canActivate?: unknown }).canActivate === 'function';
+    const hasStaticCanActivate =
+      typeof (this.FlowClass as unknown as { canActivate?: unknown }).canActivate === 'function';
     const hasMwCanActivate = (mw.canActivate?.length ?? 0) > 0;
     if (!path && !hasStaticCanActivate && !hasMwCanActivate) return false;
     if (this.method && request.method !== this.method) return false;
@@ -239,11 +240,17 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const scope = this.globalProviders.getActiveScope();
 
     // Wrap ENTIRE flow execution in AsyncLocalStorage context
+    // Socket peer address, where the runtime exposes one. Forwarding headers are honoured
+    // only behind a trusted proxy, so without this a Node request has no client IP at all
+    // (GHSA-p3qf-fcwm-35x4).
+    const peerAddress = (request as { socket?: { remoteAddress?: string } }).socket?.remoteAddress;
+
     return storage.runFromHeaders(
       headers,
       {
         sessionId,
         scopeId: scope.id,
+        peerAddress,
       },
       async () => {
         return this.run(input, deps);

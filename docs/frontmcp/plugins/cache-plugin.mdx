@@ -48,8 +48,9 @@ npm install @frontmcp/plugin-cache
 </Steps>
 
 <Info>
-  Cache entries are keyed using a **deterministic hash** of the tool's validated input. The same input always produces
-  the same cache key.
+  Cache entries are keyed using a **deterministic hash** of the tool name, the tool's validated input, and — by default
+  — the **caller's identity**. Two calls share an entry only when all three match, so one user's response is never
+  served to another. See `keyByIdentity` below to opt out for data that is identical for every caller.
 </Info>
 
 ---
@@ -183,6 +184,25 @@ Configure default behavior when registering the plugin:
 
 <ParamField path="defaultTTL" type="number" default="86400">
   Default time-to-live in seconds (applies to all cached tools unless overridden)
+</ParamField>
+
+<ParamField path="keyByIdentity" type="boolean" default="true">
+  Include the caller's identity in the cache key.
+
+On by default. Most cached tools return something that depends on who is asking -- a
+profile, a balance, a tenant's records, anything filtered by the caller's own permissions --
+and a key built only from the tool and its arguments serves the first caller's response to
+everyone else.
+
+The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
+session. A call with no identity at all gets a key of its own rather than one shared with
+every other identity-less caller.
+
+  <Warning>
+    Set this to `false` **only** when every caller would get byte-identical output: public
+    reference data, a currency table, a static document. Anything derived from the caller's
+    permissions, tenant or account must leave it on.
+  </Warning>
 </ParamField>
 
 <ParamField path="config" type="object">
@@ -367,7 +387,9 @@ CachePlugin.init({
 
 ### Multi-Tenant Caching
 
-Include tenant or user identifiers in your tool inputs to ensure cache isolation:
+Caller isolation is automatic -- the key includes the caller's identity, so one tenant is never
+served another's entry. A `tenantId` in the input is an ordinary field that selects _which_ data
+to fetch:
 
 ```ts
 @Tool({
@@ -380,19 +402,22 @@ Include tenant or user identifiers in your tool inputs to ensure cache isolation
 })
 export default class GetTenantDataTool extends ToolContext {
   async execute(input: { tenantId: string; dataType: string }) {
-    // Cache key includes tenantId automatically via input hash
+    // The caller's identity is already in the key; tenantId selects the data
     return await this.fetchTenantData(input.tenantId, input.dataType);
   }
 }
 ```
 
 <Tip>
-  The cache key is derived from the **entire** input object, so including tenant/user IDs ensures proper isolation.
+  The cache key is a SHA-256 digest of the tool name, the validated input **and the caller's
+  identity**. Identifiers in the input select what is fetched; they are not what keeps callers
+  apart. Set `keyByIdentity: false` only when every caller would get byte-identical output.
 </Tip>
 
 ### Session-Scoped Caching
 
-For user-specific data, include session or user identifiers:
+User-specific data needs no special handling -- the caller's identity is part of the key, so each
+caller gets their own entry:
 
 ```ts
 export const GetUserDashboard = tool({
@@ -477,14 +502,14 @@ Use short TTLs for frequently changing data:
 
 ## Cache Behavior Reference
 
-| Behavior           | Description                                                          |
-| ------------------ | -------------------------------------------------------------------- |
-| **Key Derivation** | Deterministic hash from validated input. Same input = same cache key |
-| **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly    |
-| **Default TTL**    | 86400 seconds (1 day) if not specified                               |
-| **Sliding Window** | Extends TTL on reads when enabled                                    |
-| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing           |
-| **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)      |
+| Behavior           | Description                                                                                                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Key Derivation** | Deterministic hash of tool name + validated input + caller identity, so one caller is never served another's entry. `keyByIdentity: false` drops the identity component -- use it only for tools whose output is the same for everybody |
+| **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly                                                                                                                                                                       |
+| **Default TTL**    | 86400 seconds (1 day) if not specified                                                                                                                                                                                                  |
+| **Sliding Window** | Extends TTL on reads when enabled                                                                                                                                                                                                       |
+| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing                                                                                                                                                                              |
+| **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)                                                                                                                                                                         |
 
 ---
 

@@ -33,11 +33,11 @@ import {
   type Type,
 } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
-import { resolveEntryPath } from '../common/utils/path.utils';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/types/options/sqlite';
+import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { createElicitationStore, type ElicitationStore } from '../elicitation';
@@ -381,9 +381,7 @@ export class Scope extends ScopeEntry {
     }
 
     const shouldInitTasks =
-      !tasksExplicitlyDisabled &&
-      !tasksUnavailableOnEdge &&
-      (!this.cliMode || tasksEnabledForCli || isTaskWorker);
+      !tasksExplicitlyDisabled && !tasksUnavailableOnEdge && (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
     const tasksPromise = shouldInitTasks
       ? (async () => {

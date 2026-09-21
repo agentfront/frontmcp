@@ -3,9 +3,10 @@
  */
 
 import 'reflect-metadata';
-import { FrontMcpContextStorage } from '../frontmcp-context-storage';
-import { FrontMcpContext } from '../frontmcp-context';
+
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { FrontMcpContext } from '../frontmcp-context';
+import { FrontMcpContextStorage } from '../frontmcp-context-storage';
 
 describe('FrontMcpContextStorage', () => {
   let storage: FrontMcpContextStorage;
@@ -113,16 +114,22 @@ describe('FrontMcpContextStorage', () => {
         'x-frontmcp-org': 'org-456',
       };
 
-      storage.runFromHeaders(headers, { sessionId: 'test-session', scopeId: 'test-scope' }, () => {
-        const ctx = storage.getStore()!;
+      // No trusted proxy is declared, so the forwarded header is ignored and the socket peer
+      // supplies the client IP (GHSA-p3qf-fcwm-35x4).
+      storage.runFromHeaders(
+        headers,
+        { sessionId: 'test-session', scopeId: 'test-scope', peerAddress: '203.0.113.9' },
+        () => {
+          const ctx = storage.getStore()!;
 
-        expect(ctx.metadata.userAgent).toBe('TestClient/1.0');
-        expect(ctx.metadata.contentType).toBe('application/json');
-        expect(ctx.metadata.accept).toBe('application/json');
-        expect(ctx.metadata.clientIp).toBe('192.168.1.100');
-        expect(ctx.metadata.customHeaders['x-frontmcp-tenant']).toBe('tenant-123');
-        expect(ctx.metadata.customHeaders['x-frontmcp-org']).toBe('org-456');
-      });
+          expect(ctx.metadata.userAgent).toBe('TestClient/1.0');
+          expect(ctx.metadata.contentType).toBe('application/json');
+          expect(ctx.metadata.accept).toBe('application/json');
+          expect(ctx.metadata.clientIp).toBe('203.0.113.9');
+          expect(ctx.metadata.customHeaders['x-frontmcp-tenant']).toBe('tenant-123');
+          expect(ctx.metadata.customHeaders['x-frontmcp-org']).toBe('org-456');
+        },
+      );
     });
 
     it('should generate trace context if not provided', () => {

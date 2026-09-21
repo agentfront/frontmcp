@@ -260,6 +260,46 @@ class MyTool extends ToolContext {
 - `tool` -- Scoped to a specific tool + session combination. Isolated per tool.
 - `global` -- Shared across all sessions and users. Use carefully.
 
+**`session`, `tool`, and `user` scopes require a per-client identity.** A stateless HTTP
+transport injects the same session id (`__stateless__`) into every request, so it carries no
+session identity. `session` and `tool` scope fall back to the authenticated principal, and an
+unauthenticated stateless request is refused with a `RememberIdentityError` rather than given
+a namespace shared with every other client. `user` scope is refused with no authenticated
+user. If the data really is shared, use `scope: 'global'`.
+
+**Set `REMEMBER_SECRET` on every instance that shares a store.** All scopes, `session` and
+`tool` included, derive their encryption key from that secret plus the scope identity. A
+session id is not a secret -- the client knows it and it travels in the `mcp-session-id`
+header -- so it cannot be the key material on its own. Instances with different secrets cannot
+read each other's entries.
+
+**Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
+derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes
+every variable component, which moves any identity containing an escaped character (a `:` in a
+user id, say). Both failures are silent on their own: decryption returns `null` and a moved key
+simply misses, so the value reads as absent.
+
+These three scopes are stored under a `v2:` segment (`remember:v2:session:<identity>:<key>`) and
+the plugin **purges the pre-`v2` entries automatically**, warning with the number removed. The
+version segment is what makes that safe -- a purge pattern of `remember:session:*` cannot match a
+live `remember:v2:session:*` key. `global` is not versioned and not purged: neither its keys nor
+its key derivation changed.
+
+**The purge runs 24 hours after the fleet first reached the `v2:` layout -- not after this
+process started -- on an unreferenced timer, never on the request path.** The first instance to
+reach the store stamps `<keyPrefix>__layout__` with `{ version, firstSeenAt }`; every instance
+reads it and sweeps only once it is older than the window, re-arming for the remainder until
+then. The clock lives in the store because a process-local timer restarts on every deploy and
+crash, so it never converges on "the fleet has been on `v2:` for a while". The marker is written
+once and never overwritten, and if it cannot be read or parsed the purge stands down rather than
+deleting on an unknown clock.
+
+The window has to outlast the rollout _and_ the period in which a bad deploy is rolled back --
+a rollback after the sweep makes the old fleet permanent again with its memory gone. Tune it
+with `legacyPurgeDelayMs`, or pass `skipLegacyPurge: true` to migrate the data yourself. On
+serverless and edge the invocation usually ends before the timer fires, so nothing is purged;
+clear the legacy prefixes manually if you want the storage back.
+
 ### Tools Exposed (when `tools.enabled: true`)
 
 - `remember_this` -- Store a key-value pair in memory
@@ -318,6 +358,21 @@ class WebhookServer {}
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
 - `webhook` -- Sends a PKCE-secured webhook to an external approval service. The external service calls back to confirm or deny. Suitable for compliance workflows requiring out-of-band approval.
 
+### Pre-approved contexts come from the session
+
+`approval.preApprovedContexts` lists contexts that skip the approval check entirely. The
+context a call runs in is taken **only** from `authInfo.extra.approvalContext`, which your
+authentication layer sets while establishing the session.
+
+A `context` field in the gated tool's own arguments is ignored. Do not build a flow that
+expects the caller to declare its context -- the caller of a gated tool must not be able to
+name the context that lets it skip the gate. Set the context when you authenticate:
+
+```typescript
+// In your auth layer, not in tool input
+authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectId };
+```
+
 ### Using `this.approval` in Tools
 
 ```typescript
@@ -372,6 +427,25 @@ When `approval.required` is `true`, the plugin automatically intercepts tool exe
 ## 4. Cache Plugin (`@frontmcp/plugin-cache`)
 
 Automatic tool result caching. Cache responses by tool name patterns or per-tool metadata. Supports sliding window TTL and cache bypass headers.
+
+### Cache keys include the caller's identity
+
+`keyByIdentity` defaults to `true`. Most cached tools return something that depends on who is
+asking -- a profile, a balance, a tenant's records, anything filtered by the caller's own
+permissions -- and a key built only from the tool and its arguments serves the first caller's
+response to everyone else.
+
+The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
+session. A call with no identity at all gets a key of its own rather than one shared with
+every other identity-less caller.
+
+Set `keyByIdentity: false` **only** when every caller would get byte-identical output: public
+reference data, a currency table, a static document.
+
+```typescript
+// Public data, identical for everyone -- safe to share one entry
+CachePlugin.init({ type: 'memory', toolPatterns: ['reference:*'], keyByIdentity: false });
+```
 
 ### Installation
 
@@ -472,13 +546,28 @@ The header name is configurable via `bypassHeader` in the plugin options. Defaul
 
 ### Cache Key
 
-The cache key is computed from the tool name and the serialized input arguments. Two calls with identical tool name and arguments return the same cached result.
+The cache key is a SHA-256 digest of the tool name, the serialized input arguments, and -- by default -- the caller's
+identity. Two calls share an entry only when all three match.
+
+Set `keyByIdentity: false` to drop identity from the key, and only for output that is identical for every caller. See
+"Cache keys include the caller's identity" above.
 
 ---
 
 ## 5. Feature Flags Plugin (`@frontmcp/plugin-feature-flags`)
 
 Gate tools, resources, prompts, and skills behind feature flags. Integrates with popular feature flag services or static configuration.
+
+### A flag withholds the capability, it does not just hide it
+
+A disabled flag filters the entry out of `tools/list`, `resources/list`, `prompts/list` and
+`skills/search`, **and** refuses it on direct access: `tools/call`, `resources/read` and
+`prompts/get` each evaluate the flag before executing.
+
+That matters because a listing is not an access control. Clients cache listings and hold
+resource URIs and prompt names from earlier sessions, so anything gated only at list time
+stays reachable by name. If the adapter is unavailable the gate uses the ref's
+`defaultValue`, and a bare string ref (no default) fails closed.
 
 ### Installation
 

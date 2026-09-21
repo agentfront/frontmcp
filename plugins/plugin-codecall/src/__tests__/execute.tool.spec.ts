@@ -501,6 +501,11 @@ describe('ExecuteTool', () => {
           content: [{ type: 'text', text: '{"id": "user-123"}' }],
           isError: false,
         },
+        // The tool has to be registered for the call to reach the flow at all: since
+        // GHSA-6w3j-82v5-6qrr, a name that resolves to no tool is denied rather than
+        // passed through. A real scope always lists its tools, so registering it here
+        // makes the fixture match reality.
+        tools: [{ name: 'users:create', fullName: 'users:create', metadata: {} }],
       });
 
       let capturedEnv: any;

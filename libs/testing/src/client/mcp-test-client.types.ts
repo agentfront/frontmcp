@@ -4,20 +4,21 @@
  */
 
 import type {
-  InitializeResult,
-  ListToolsResult,
   CallToolResult,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListResourceTemplatesResult,
-  ListPromptsResult,
   GetPromptResult,
-  Tool,
+  Implementation,
+  InitializeResult,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  ListToolsResult,
+  Prompt,
+  ReadResourceResult,
   Resource,
   ResourceTemplate,
-  Prompt,
-  Implementation,
+  Tool,
 } from '@frontmcp/protocol';
+
 import type { TestPlatformType } from '../platform/platform-types';
 
 // ═══════════════════════════════════════════════════════════════════
