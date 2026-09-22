@@ -298,15 +298,22 @@ Never:
 ### Branch targeting
 
 **Open pull requests against the active release branch, not `main`.** The active line is
-`release/1.8.x`. `main` receives the change afterwards through the automatic cherry-pick that
-`.github/workflows/cherry-pick-prompt.yml` opens on every merge to `release/*`.
+`release/1.8.x`. `main` then receives the change through the cherry-pick PR that
+`.github/workflows/cherry-pick-prompt.yml` opens automatically.
 
 Targeting `main` directly means the release branch never gets the fix, so the next patch release
-ships without it. That is how 1.7.2 shipped with twelve closed advisories still live in the
-published packages.
+ships without it. That has already happened once, and it is checkable rather than folklore:
+`git merge-base --is-ancestor 676b55d origin/release/1.7.x` fails, so the twelve advisory fixes
+in #550 are absent from that branch; `git show origin/release/1.7.x:libs/sdk/package.json` reads
+`1.7.2`; and `npm view @frontmcp/sdk versions` lists `1.7.2` as published. Those three facts
+together are the incident — fixes merged, artifacts still vulnerable.
 
-Two consequences worth knowing before they surprise you:
+Three things worth knowing before they surprise you:
 
+- **The cherry-pick is conditional.** Its `if` gate requires the PR to be merged, to target
+  `release/*` or `next/*` (never the default branch), and — the one that catches people —
+  **not to come from a fork**, since a forked PR's `GITHUB_TOKEN` is read-only. Merge a fork PR
+  into a release branch and no cherry-pick PR appears at all; back-port it to `main` by hand.
 - The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
   ("Bot user detected"). Review has to happen on the original PR against the release branch.
 - `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
