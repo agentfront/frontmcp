@@ -295,6 +295,23 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+### Branch targeting
+
+**Open pull requests against the active release branch, not `main`.** The active line is
+`release/1.8.x`. `main` receives the change afterwards through the automatic cherry-pick that
+`.github/workflows/cherry-pick-prompt.yml` opens on every merge to `release/*`.
+
+Targeting `main` directly means the release branch never gets the fix, so the next patch release
+ships without it. That is how 1.7.2 shipped with twelve closed advisories still live in the
+published packages.
+
+Two consequences worth knowing before they surprise you:
+
+- The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
+  ("Bot user detected"). Review has to happen on the original PR against the release branch.
+- `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
+  `main` cannot be released at all until it is back-ported.
+
 ## Task Completion Checklist
 
 **Before completing a task**, run the following cleanup:
