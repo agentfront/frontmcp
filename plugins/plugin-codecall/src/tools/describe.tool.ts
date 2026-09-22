@@ -3,6 +3,7 @@ import { toJSONSchema, z, ZodType, type JSONSchema } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
 import { isBlockedSelfReference } from '../security';
+import { AuditLoggerService } from '../services/audit-logger.service';
 import { generateSmartExample } from '../utils';
 import {
   describeToolDescription,
@@ -36,6 +37,10 @@ type JsonSchema = JSONSchema.JSONSchema;
 export default class DescribeTool extends ToolContext {
   async execute(input: DescribeToolInput): Promise<DescribeToolOutput> {
     const { toolNames } = input;
+
+    const audit = this.tryGet(AuditLoggerService);
+    const executionId = audit ? audit.generateExecutionId() : '';
+    const startedAt = Date.now();
 
     const tools: DescribeToolOutput['tools'] = [];
     const notFound: string[] = [];
@@ -86,6 +91,8 @@ export default class DescribeTool extends ToolContext {
         usageExamples,
       });
     }
+
+    audit?.logDescribe(executionId, toolNames, Date.now() - startedAt);
 
     return {
       tools,

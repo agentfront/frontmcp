@@ -229,25 +229,95 @@ spec:
   </Card>
 </CardGroup>
 
-### Logging
+### Audit logging
 
-CodeCall's internal `AuditLoggerService` emits structured log events for observability. These events can be consumed by your logging infrastructure:
+`AuditLoggerService` emits a structured event at every meaningful point in a CodeCall execution.
+It is registered by the plugin and bridged to the FrontMCP logger by default, so the events appear
+in your normal log output at `info` under the `codecall:audit` prefix — no wiring required.
 
-**Log events:**
+Every event carries `executionId`, which correlates a script run with each tool call it made.
+Durations are in milliseconds.
 
-```json
-// Script execution start
-{ "event": "codecall:execute:start", "executionId": "abc123", "scriptSize": 245 }
+**Execution lifecycle**
 
-// Tool call
-{ "event": "codecall:tool:call", "executionId": "abc123", "tool": "users:list", "duration": 45 }
+| Event                        | Fields beyond `executionId`                                 |
+| ---------------------------- | ----------------------------------------------------------- |
+| `codecall:execution:start`   | `scriptHash`, `scriptLength`                                |
+| `codecall:execution:success` | `scriptHash`, `scriptLength`, `toolCallCount`, `durationMs` |
+| `codecall:execution:failure` | `scriptHash`, `scriptLength`, `error`, `durationMs`         |
+| `codecall:execution:timeout` | `scriptHash`, `scriptLength`, `durationMs`                  |
 
-// Script execution complete
-{ "event": "codecall:execute:complete", "executionId": "abc123", "status": "ok", "duration": 234, "toolCalls": 3 }
+**Tool calls**
 
-// Security event
-{ "event": "codecall:security:blocked", "reason": "self_reference", "tool": "codecall:execute" }
+| Event                        | Fields beyond `executionId`                        |
+| ---------------------------- | -------------------------------------------------- |
+| `codecall:tool:call:start`   | `toolName`, `callDepth`                            |
+| `codecall:tool:call:success` | `toolName`, `callDepth`, `durationMs`              |
+| `codecall:tool:call:failure` | `toolName`, `callDepth`, `errorCode`, `durationMs` |
+
+**Security**
+
+| Event                              | Fields beyond `executionId`                  |
+| ---------------------------------- | -------------------------------------------- |
+| `codecall:security:self-reference` | `blocked`, `reason`                          |
+| `codecall:security:access-denied`  | `blocked`, `reason`                          |
+| `codecall:security:ast-blocked`    | `blocked` (validation issue codes), `reason` |
+
+`access-denied` fires wherever the policy refuses a tool — `callTool`, `codecall:invoke`, and
+`getTool` introspection. Auditing introspection matters: a script sweeping `getTool` across many
+names is reconnaissance, and this is the only place that pattern is visible.
+
+**Meta-tool usage**
+
+| Event                         | Fields beyond `executionId`                       |
+| ----------------------------- | ------------------------------------------------- |
+| `codecall:search:performed`   | `queryLength`, `resultCount`, `durationMs`        |
+| `codecall:describe:performed` | `toolCount`, `toolNames` (first 10), `durationMs` |
+| `codecall:invoke:performed`   | `toolName`, `success`, `durationMs`               |
+
+<Warning>
+  **What is deliberately absent.** No event carries script source, tool arguments, tool results, or
+  search query text. A script is reduced to `scriptHash` + `scriptLength`, and a query to
+  `queryLength`. That is what makes these lines safe to emit at `info` by default.
+
+`scriptHash` is a fast non-cryptographic hash meant for correlating repeat runs. It is
+collision-prone and brute-forceable for short scripts — do not treat it as de-identification if
+you ship logs to a third party.
+
+</Warning>
+
+**Consuming the events directly**
+
+To route events somewhere other than the logger, subscribe to the service:
+
+```ts
+import { AuditLoggerService, type AuditEvent } from '@frontmcp/plugin-codecall';
+
+const audit = scope.providers.get(AuditLoggerService);
+const unsubscribe = audit.subscribe((event: AuditEvent) => {
+  myLogShipper.send(event);
+});
 ```
+
+`AUDIT_EVENT_TYPES` is exported alongside them, so a listener can switch on `event.type` without
+hard-coding the strings.
+
+Fan-out is synchronous and sits on the execution hot path, so a slow subscriber adds latency to
+every tool call. Hand off to a queue rather than doing network I/O inline.
+
+<Note>
+  The file log transport writes only the message, so structured fields are dropped there. Use the
+  structured transport, or subscribe directly, if you need the fields.
+</Note>
+
+<Note>
+  **Safe over stdio.** In stdio mode stdout carries the MCP JSON-RPC frames, so a log line written
+  there would corrupt the wire. `runStdio()` redirects the stdout-bound `console` methods to stderr,
+  and the NDJSON `stdout` sink defaults to stderr under `FRONTMCP_STDIO` for the same reason — it
+  writes the stream directly and so is not covered by that redirection. Audit events therefore reach
+  stderr, not the protocol channel. Passing an explicit `stream` to the sink overrides this, so do
+  not point one at `process.stdout` when serving over stdio.
+</Note>
 
 ### Alerting Recommendations
 

@@ -9,6 +9,8 @@ import SearchTool from '../tools/search.tool';
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
   Tool: (config: any) => (target: any) => target,
+  Provider: (_config: any) => (target: any) => target,
+  ProviderScope: { GLOBAL: 'global', CONTEXT: 'context' },
   ToolContext: class MockToolContext {
     private services = new Map<unknown, unknown>();
     scope = {};
@@ -18,6 +20,10 @@ jest.mock('@frontmcp/sdk', () => ({
     }
 
     get(token: any): any {
+      return this.services.get(token);
+    }
+
+    tryGet(token: any): any {
       return this.services.get(token);
     }
 
