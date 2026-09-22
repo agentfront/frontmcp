@@ -301,12 +301,14 @@ Never:
 `release/1.8.x`. `main` then receives the change through the cherry-pick PR that
 `.github/workflows/cherry-pick-prompt.yml` opens automatically.
 
-Targeting `main` directly means the release branch never gets the fix, so the next patch release
-ships without it. That has already happened once, and it is checkable rather than folklore:
-`git merge-base --is-ancestor 676b55d origin/release/1.7.x` fails, so the twelve advisory fixes
-in #550 are absent from that branch; `git show origin/release/1.7.x:libs/sdk/package.json` reads
-`1.7.2`; and `npm view @frontmcp/sdk versions` lists `1.7.2` as published. Those three facts
-together are the incident — fixes merged, artifacts still vulnerable.
+Targeting `main` directly means the release branch never gets the fix, so every release cut from
+that branch — including the one already published — lacks it. The 1.7 line is the standing
+example, and it is checkable rather than folklore:
+`git merge-base --is-ancestor 676b55d origin/release/1.7.x` exits non-zero, so the twelve
+advisory fixes in #550 are absent from that branch; `git show
+origin/release/1.7.x:libs/sdk/package.json` reads `1.7.2`; and `npm view @frontmcp/sdk versions`
+lists `1.7.2` as published, with no later 1.7.x. Fixes merged, and the newest installable 1.7
+artifact still carries the vulnerable code.
 
 Three things worth knowing before they surprise you:
 
