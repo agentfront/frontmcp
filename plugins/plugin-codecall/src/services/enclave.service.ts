@@ -22,6 +22,13 @@ export interface EnclaveExecutionResult {
     toolName?: string;
     toolInput?: unknown;
     details?: unknown;
+    /**
+     * Distinct AST-validation issue codes, for the `codecall:security:ast-blocked` audit event.
+     *
+     * The enclave reports structured `issues` alongside the human-readable message; this branch
+     * used to discard them, which left the audit event with prose where a pattern belongs.
+     */
+    blockedPatterns?: string[];
     [key: string]: unknown;
   };
   logs: string[];
@@ -205,15 +212,24 @@ export default class EnclaveService {
 
     // Check if it's a validation error
     if (error.code === 'VALIDATION_ERROR') {
+      const issues = (error.data as { issues?: Array<{ code?: string }> } | undefined)?.issues ?? [];
+      const blockedPatterns = [...new Set(issues.map((issue) => issue.code).filter((code): code is string => !!code))];
+
       return {
         success: false,
         error: {
           message: error.message,
           name: 'ValidationError',
           code: error.code,
+          ...(blockedPatterns.length > 0 ? { blockedPatterns } : {}),
         },
         logs,
         timedOut: false,
+        stats: {
+          duration: result.stats.duration,
+          toolCallCount: result.stats.toolCallCount,
+          iterationCount: result.stats.iterationCount,
+        },
       };
     }
 
