@@ -100,12 +100,7 @@ const CONTROL_METHODS = [
  * Adding an entry is a decision to ship an inert security control, so it needs a reason a
  * reviewer can weigh — not a name.
  */
-const KNOWN_UNWIRED_SERVICES: Record<string, string> = {
-  ToolAccessControlService:
-    'Superseded by codecall-tool-policy.ts, which both meta-tools consult. Kept for its own ' +
-    'tests only; wiring it in or deleting it is a breaking change of its own (PR #550).',
-  ErrorEnrichmentService: 'Implemented and unit-tested, never registered by CodeCallPlugin (providers: []).',
-};
+const KNOWN_UNWIRED_SERVICES: Record<string, string> = {};
 
 /**
  * Files that ship. Test scaffolding is excluded because a control referenced only from a fixture
