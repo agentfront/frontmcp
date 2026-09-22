@@ -127,6 +127,11 @@ Fan-out is synchronous and on the execution hot path — hand off to a queue, ne
 inside the listener. Note the file transport writes only the message, so structured fields are
 dropped there; use the structured transport or subscribe directly.
 
+**Over stdio:** stdout carries the MCP JSON-RPC frames, so nothing else may be written there.
+`runStdio()` redirects the stdout-bound `console` methods to stderr, and the NDJSON `stdout` sink
+defaults to stderr when `FRONTMCP_STDIO` is set. Never configure a sink with an explicit
+`stream: process.stdout` on a stdio server — an explicit stream overrides the guard.
+
 ## Examples
 
 | Example                                                                        | Level        | Description                                                                                                                    |

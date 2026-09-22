@@ -305,6 +305,15 @@ every tool call. Hand off to a queue rather than doing network I/O inline.
   structured transport, or subscribe directly, if you need the fields.
 </Note>
 
+<Note>
+  **Safe over stdio.** In stdio mode stdout carries the MCP JSON-RPC frames, so a log line written
+  there would corrupt the wire. `runStdio()` redirects the stdout-bound `console` methods to stderr,
+  and the NDJSON `stdout` sink defaults to stderr under `FRONTMCP_STDIO` for the same reason — it
+  writes the stream directly and so is not covered by that redirection. Audit events therefore reach
+  stderr, not the protocol channel. Passing an explicit `stream` to the sink overrides this, so do
+  not point one at `process.stdout` when serving over stdio.
+</Note>
+
 ### Alerting Recommendations
 
 | Metric              | Warning | Critical    |

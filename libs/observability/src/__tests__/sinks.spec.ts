@@ -1,8 +1,8 @@
-import { StdoutSink } from '../logging/sinks/stdout.sink';
-import { ConsoleSink } from '../logging/sinks/console.sink';
-import { WinstonSink } from '../logging/sinks/winston.sink';
-import { PinoSink } from '../logging/sinks/pino.sink';
 import { CallbackSink } from '../logging/sinks/callback.sink';
+import { ConsoleSink } from '../logging/sinks/console.sink';
+import { PinoSink } from '../logging/sinks/pino.sink';
+import { StdoutSink } from '../logging/sinks/stdout.sink';
+import { WinstonSink } from '../logging/sinks/winston.sink';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
 
 function makeEntry(overrides?: Partial<StructuredLogEntry>): StructuredLogEntry {
@@ -16,6 +16,39 @@ function makeEntry(overrides?: Partial<StructuredLogEntry>): StructuredLogEntry 
 }
 
 describe('StdoutSink', () => {
+  describe('stdio protection', () => {
+    const original = process.env['FRONTMCP_STDIO'];
+    afterEach(() => {
+      if (original === undefined) delete process.env['FRONTMCP_STDIO'];
+      else process.env['FRONTMCP_STDIO'] = original;
+    });
+
+    it('defaults to stdout', () => {
+      delete process.env['FRONTMCP_STDIO'];
+      expect((new StdoutSink() as unknown as { stream: unknown }).stream).toBe(process.stdout);
+    });
+
+    it.each(['1', 'true'])('writes to stderr under FRONTMCP_STDIO=%s', (flag) => {
+      // stdout carries the MCP JSON-RPC frames in stdio mode; a log line there corrupts the wire.
+      // This sink writes the stream directly, so runStdio()'s console redirection does not cover it.
+      process.env['FRONTMCP_STDIO'] = flag;
+      expect((new StdoutSink() as unknown as { stream: unknown }).stream).toBe(process.stderr);
+    });
+
+    it('honours an explicit stream even in stdio mode', () => {
+      process.env['FRONTMCP_STDIO'] = '1';
+      const stream = { write: () => true } as unknown as NodeJS.WritableStream;
+      expect((new StdoutSink({ stream }) as unknown as { stream: unknown }).stream).toBe(stream);
+    });
+
+    it('reads the flag per construction, not at module load', () => {
+      delete process.env['FRONTMCP_STDIO'];
+      expect((new StdoutSink() as unknown as { stream: unknown }).stream).toBe(process.stdout);
+      process.env['FRONTMCP_STDIO'] = '1';
+      expect((new StdoutSink() as unknown as { stream: unknown }).stream).toBe(process.stderr);
+    });
+  });
+
   it('should write NDJSON to the stream', () => {
     const chunks: string[] = [];
     const stream = {
