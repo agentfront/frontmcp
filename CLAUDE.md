@@ -295,6 +295,32 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+### Branch targeting
+
+**Open pull requests against the active release branch, not `main`.** The active line is
+`release/1.8.x`. `main` then receives the change through the cherry-pick PR that
+`.github/workflows/cherry-pick-prompt.yml` opens automatically.
+
+Targeting `main` directly means the release branch never gets the fix, so every release cut from
+that branch — including the one already published — lacks it. The 1.7 line is the standing
+example, and it is checkable rather than folklore:
+`git merge-base --is-ancestor 676b55d origin/release/1.7.x` exits non-zero, so the twelve
+advisory fixes in #550 are absent from that branch; `git show
+origin/release/1.7.x:libs/sdk/package.json` reads `1.7.2`; and `npm view @frontmcp/sdk versions`
+lists `1.7.2` as published, with no later 1.7.x. Fixes merged, and the newest installable 1.7
+artifact still carries the vulnerable code.
+
+Three things worth knowing before they surprise you:
+
+- **The cherry-pick is conditional.** Its `if` gate requires the PR to be merged, to target
+  `release/*` or `next/*` (never the default branch), and — the one that catches people —
+  **not to come from a fork**, since a forked PR's `GITHUB_TOKEN` is read-only. Merge a fork PR
+  into a release branch and no cherry-pick PR appears at all; back-port it to `main` by hand.
+- The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
+  ("Bot user detected"). Review has to happen on the original PR against the release branch.
+- `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
+  `main` cannot be released at all until it is back-ported.
+
 ## Task Completion Checklist
 
 **Before completing a task**, run the following cleanup:
