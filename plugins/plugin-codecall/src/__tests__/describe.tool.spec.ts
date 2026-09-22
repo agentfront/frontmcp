@@ -27,6 +27,11 @@ jest.mock('@frontmcp/sdk', () => ({
     constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
+
+    // Matches the real ToolContext contract: unresolved tokens yield undefined rather than throwing.
+    tryGet<T>(_token: unknown): T | undefined {
+      return undefined;
+    }
   },
 }));
 

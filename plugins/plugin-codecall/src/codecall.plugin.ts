@@ -21,8 +21,22 @@ import {
 } from './codecall.types';
 import CodeCallConfig from './providers/code-call.config';
 import { ToolSearchService } from './services';
+import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
 import EnclaveService from './services/enclave.service';
 import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkillsTool, SearchTool } from './tools';
+
+/**
+ * What a CodeCall audit event contributes to a log line.
+ *
+ * `type` is the message and the logger stamps its own time, so neither is repeated here. Nothing
+ * is added to what the service built: it already reduces a script to a hash and a length and
+ * accepts no tool arguments or results, and that is the whole reason these lines are safe to emit
+ * at info by default.
+ */
+function auditLogFields(event: AuditEvent): Record<string, unknown> {
+  const { executionId, durationMs, data } = event;
+  return durationMs === undefined ? { executionId, ...data } : { executionId, durationMs, ...data };
+}
 
 @Plugin({
   name: 'codecall',
@@ -71,6 +85,21 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         inject: () => [CodeCallConfig],
         useFactory: async (cfg: CodeCallConfig) => {
           return new EnclaveService(cfg);
+        },
+      },
+      {
+        // GHSA-adjacent: production.mdx promised operators these events and nothing emitted them,
+        // because the service was never registered. The subscription lives here, in the factory,
+        // for a reason: there is no provider teardown hook in the SDK, so subscribing anywhere
+        // per-request would grow the listener Set for the life of the process.
+        name: 'codecall:audit-logger',
+        provide: AuditLoggerService,
+        inject: () => [ScopeEntry],
+        useFactory: (scope: ScopeEntry) => {
+          const audit = new AuditLoggerService();
+          const logger = scope.logger.child('codecall:audit');
+          audit.subscribe((event) => logger.info(event.type, auditLogFields(event)));
+          return audit;
         },
       },
       {

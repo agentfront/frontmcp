@@ -1,13 +1,15 @@
 // file: libs/plugins/src/codecall/tools/search.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { ToolSearchService } from '../services';
+import { AuditLoggerService } from '../services/audit-logger.service';
 import {
+  searchToolDescription,
   SearchToolInput,
   searchToolInputSchema,
   SearchToolOutput,
   searchToolOutputSchema,
-  searchToolDescription,
 } from './search.schema';
-import { ToolSearchService } from '../services';
 
 /** Internal type for tracking tool matches across queries */
 interface ToolMatch {
@@ -42,6 +44,10 @@ export default class SearchTool extends ToolContext {
 
     const searchService = this.get(ToolSearchService);
     const warnings: SearchToolOutput['warnings'] = [];
+
+    const audit = this.tryGet(AuditLoggerService);
+    const executionId = audit ? audit.generateExecutionId() : '';
+    const startedAt = Date.now();
 
     // Check for excluded tools that don't exist in the index
     const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !searchService.hasTool(toolName));
@@ -119,6 +125,9 @@ export default class SearchTool extends ToolContext {
         message: `${lowRelevanceCount} result(s) filtered due to relevance below ${minRelevanceScore}`,
       });
     }
+
+    // The query text is never recorded -- the service takes its length only.
+    audit?.logSearch(executionId, queries.join(' '), tools.length, Date.now() - startedAt);
 
     return {
       tools,

@@ -4,6 +4,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import CodeCallConfig from '../providers/code-call.config';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
+import { AuditLoggerService } from '../services/audit-logger.service';
 import {
   invokeToolDescription,
   InvokeToolInput,
@@ -50,8 +51,13 @@ export default class InvokeTool extends ToolContext {
   async execute(input: InvokeToolInput): Promise<InvokeToolOutput> {
     const { tool: toolName, input: toolInput } = input;
 
+    const audit = this.tryGet(AuditLoggerService);
+    const executionId = audit ? audit.generateExecutionId() : '';
+    const startedAt = Date.now();
+
     // Security: Cannot invoke codecall:* tools to prevent recursion attacks
     if (isBlockedSelfReference(toolName)) {
+      audit?.logSecuritySelfReference(executionId, toolName);
       return buildErrorResult(
         `Tool "${toolName}" cannot be invoked directly. CodeCall tools are internal and not accessible via codecall:invoke.`,
       );
@@ -64,6 +70,9 @@ export default class InvokeTool extends ToolContext {
     // tool into an existence oracle for the tools the policy hides from codecall:search.
     const decision = checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), toolName, { directCall: true });
     if (!decision.allowed) {
+      // The real reason is audited server-side even though the response deliberately does not
+      // carry it -- the generic message above is what keeps this from being an existence oracle.
+      audit?.logSecurityAccessDenied(executionId, toolName, decision.reason);
       return buildErrorResult(`Tool "${toolName}" is not available. Use codecall:search to discover available tools.`);
     }
 
@@ -86,9 +95,13 @@ export default class InvokeTool extends ToolContext {
 
     // Flow returns null if tool not found or other pre-execution errors
     if (!result) {
+      audit?.logInvoke(executionId, toolName, false, Date.now() - startedAt);
       return buildErrorResult(`Tool "${toolName}" not found. Use codecall:search to discover available tools.`);
     }
 
+    // `success` is about the invocation reaching the tool, not about what the tool decided:
+    // a tool returning `isError` was still invoked successfully.
+    audit?.logInvoke(executionId, toolName, true, Date.now() - startedAt);
     return result;
   }
 }

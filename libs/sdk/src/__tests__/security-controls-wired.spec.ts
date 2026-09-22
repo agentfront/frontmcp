@@ -104,7 +104,6 @@ const KNOWN_UNWIRED_SERVICES: Record<string, string> = {
   ToolAccessControlService:
     'Superseded by codecall-tool-policy.ts, which both meta-tools consult. Kept for its own ' +
     'tests only; wiring it in or deleting it is a breaking change of its own (PR #550).',
-  AuditLoggerService: 'Implemented and unit-tested, never registered by CodeCallPlugin (providers: []).',
   ErrorEnrichmentService: 'Implemented and unit-tested, never registered by CodeCallPlugin (providers: []).',
 };
 

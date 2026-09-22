@@ -99,6 +99,34 @@ logging: {
 
 Redaction is recursive (handles nested objects) and case-insensitive.
 
+## CodeCall Audit Events
+
+If `CodeCallPlugin` is installed, it emits a structured audit event at every meaningful point in a
+script execution. The plugin registers the bridge itself, so the events reach your normal log
+output at `info` under the `codecall:audit` prefix with no wiring.
+
+Event families, all carrying `executionId` for correlation:
+
+- `codecall:execution:start` / `:success` / `:failure` / `:timeout`
+- `codecall:tool:call:start` / `:success` / `:failure`
+- `codecall:security:self-reference` / `:access-denied` / `:ast-blocked`
+- `codecall:search:performed` / `codecall:describe:performed` / `codecall:invoke:performed`
+
+No event carries script source, tool arguments, tool results, or query text — a script is reduced
+to `scriptHash` + `scriptLength`, a query to `queryLength`. Do not add those fields when building
+on this; the omission is what makes the events safe to emit at `info`.
+
+To route events elsewhere, subscribe rather than parsing logs:
+
+```typescript
+const audit = scope.providers.get(AuditLoggerService);
+const unsubscribe = audit.subscribe((event) => myShipper.send(event));
+```
+
+Fan-out is synchronous and on the execution hot path — hand off to a queue, never do network I/O
+inside the listener. Note the file transport writes only the message, so structured fields are
+dropped there; use the structured transport or subscribe directly.
+
 ## Examples
 
 | Example                                                                        | Level        | Description                                                                                                                    |

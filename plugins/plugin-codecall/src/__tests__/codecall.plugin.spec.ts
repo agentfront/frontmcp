@@ -6,6 +6,7 @@ import CodeCallPlugin from '../codecall.plugin';
 import { type CodeCallMode, type CodeCallPluginOptionsInput } from '../codecall.types';
 import CodeCallConfig from '../providers/code-call.config';
 import { ToolSearchService } from '../services';
+import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
 
 describe('CodeCallPlugin', () => {
@@ -29,7 +30,7 @@ describe('CodeCallPlugin', () => {
   describe('dynamicProviders', () => {
     it('should return array of providers', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      expect(providers).toHaveLength(3);
+      expect(providers).toHaveLength(4);
     });
 
     it('should include codecall:config provider', () => {
@@ -38,6 +39,51 @@ describe('CodeCallPlugin', () => {
       expect(configProvider).toBeDefined();
       expect(configProvider?.provide).toBe(CodeCallConfig);
       expect(configProvider?.useValue).toBeInstanceOf(CodeCallConfig);
+    });
+
+    it('should include codecall:audit-logger provider', () => {
+      const providers = CodeCallPlugin.dynamicProviders({});
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+      expect(auditProvider).toBeDefined();
+      expect(auditProvider?.provide).toBe(AuditLoggerService);
+      expect(typeof auditProvider?.useFactory).toBe('function');
+      expect(typeof auditProvider?.inject).toBe('function');
+    });
+
+    it('subscribes the audit logger to the scope logger', () => {
+      const providers = CodeCallPlugin.dynamicProviders({});
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+
+      const info = jest.fn();
+      const child = jest.fn(() => ({ info }));
+      const audit = auditProvider?.useFactory?.({ logger: { child } } as never) as AuditLoggerService;
+
+      expect(child).toHaveBeenCalledWith('codecall:audit');
+
+      audit.logSecurityAccessDenied('exec_test', 'system:wipeConfig', 'blocked namespace');
+
+      expect(info).toHaveBeenCalledWith('codecall:security:access-denied', {
+        executionId: 'exec_test',
+        blocked: 'system:wipeConfig',
+        reason: 'blocked namespace',
+      });
+    });
+
+    it('never puts script source or tool arguments in a log line', () => {
+      const providers = CodeCallPlugin.dynamicProviders({});
+      const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger');
+
+      const info = jest.fn();
+      const audit = auditProvider?.useFactory?.({
+        logger: { child: () => ({ info }) },
+      } as never) as AuditLoggerService;
+
+      const secret = 'const apiKey = "sk-live-do-not-log-me";';
+      audit.logExecutionStart('exec_test', secret);
+
+      const [, fields] = info.mock.calls[0] as [string, Record<string, unknown>];
+      expect(JSON.stringify(fields)).not.toContain('sk-live-do-not-log-me');
+      expect(fields).toMatchObject({ scriptLength: secret.length });
     });
 
     it('should include codecall:enclave provider', () => {
