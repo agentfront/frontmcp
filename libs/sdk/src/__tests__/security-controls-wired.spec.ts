@@ -100,9 +100,7 @@ const CONTROL_METHODS = [
  * Adding an entry is a decision to ship an inert security control, so it needs a reason a
  * reviewer can weigh — not a name.
  */
-const KNOWN_UNWIRED_SERVICES: Record<string, string> = {
-  AuditLoggerService: 'Implemented and unit-tested, never registered by CodeCallPlugin (providers: []).',
-};
+const KNOWN_UNWIRED_SERVICES: Record<string, string> = {};
 
 /**
  * Files that ship. Test scaffolding is excluded because a control referenced only from a fixture

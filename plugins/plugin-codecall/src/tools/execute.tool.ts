@@ -17,6 +17,7 @@ import {
   isBlockedSelfReference,
   type CodeCallPolicyDecision,
 } from '../security';
+import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
 import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
 import {
@@ -82,6 +83,17 @@ export default class ExecuteTool extends ToolContext {
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
 
+    // `tryGet`, not `get`: audit must never be load-bearing. An unregistered service leaves the
+    // execution path untouched rather than failing the call.
+    const audit = this.tryGet(AuditLoggerService);
+    const executionId = audit ? audit.generateExecutionId() : '';
+
+    // Every tool call a script makes happens at depth 1. A script cannot re-enter CodeCall:
+    // `assertNotSelfReference` and the policy's `codecall:` denial both refuse it, and the
+    // namespaced bindings delegate to this same closure rather than nesting.
+    const callDepth = 1;
+    let toolCallCount = 0;
+
     // Set up the VM environment with tool integration
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
 
@@ -97,6 +109,11 @@ export default class ExecuteTool extends ToolContext {
         // SECURITY LAYER 1: Self-reference blocking (FIRST CHECK)
         // This MUST be the first check - no exceptions, no try/catch
         // ============================================================
+        // Audited before the assert, not around it: the guard below is deliberately outside any
+        // try/catch and must stay that way.
+        if (isBlockedSelfReference(name)) {
+          audit?.logSecuritySelfReference(executionId, name);
+        }
         assertNotSelfReference(name);
 
         // ============================================================
@@ -108,6 +125,7 @@ export default class ExecuteTool extends ToolContext {
         // ============================================================
         const decision = this.checkToolPolicy(name);
         if (!decision.allowed) {
+          audit?.logSecurityAccessDenied(executionId, name, decision.reason);
           const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name, decision.reason);
           if (throwOnError) {
             throw error;
@@ -123,6 +141,7 @@ export default class ExecuteTool extends ToolContext {
         // after the policy above, never instead of it.
         // ============================================================
         if (allowedToolSet && !allowedToolSet.has(name)) {
+          audit?.logSecurityAccessDenied(executionId, name, 'not in the caller-supplied allowedTools list');
           const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name);
           if (throwOnError) {
             throw error;
@@ -134,6 +153,10 @@ export default class ExecuteTool extends ToolContext {
         // Tool execution through the proper flow system
         // This ensures hooks, validation, quota, and all middleware run
         // ============================================================
+        toolCallCount += 1;
+        audit?.logToolCallStart(executionId, name, callDepth);
+        const toolCallStartedAt = Date.now();
+
         try {
           // Build MCP-compatible CallToolRequest
           const request = {
@@ -156,6 +179,13 @@ export default class ExecuteTool extends ToolContext {
           const mcpResult = await this.scope.runFlow('tools:call-tool', { request, ctx });
 
           if (!mcpResult) {
+            audit?.logToolCallFailure(
+              executionId,
+              name,
+              callDepth,
+              Date.now() - toolCallStartedAt,
+              TOOL_CALL_ERROR_CODES.EXECUTION,
+            );
             const error = createToolCallError(TOOL_CALL_ERROR_CODES.EXECUTION, name, 'Flow returned no result');
             if (throwOnError) {
               throw error;
@@ -165,6 +195,8 @@ export default class ExecuteTool extends ToolContext {
 
           // Extract the actual result from MCP CallToolResult format
           const result = extractResultFromCallToolResult(mcpResult);
+
+          audit?.logToolCallSuccess(executionId, name, callDepth, Date.now() - toolCallStartedAt);
 
           // Success path
           if (throwOnError) {
@@ -180,6 +212,8 @@ export default class ExecuteTool extends ToolContext {
           const errorCode = getErrorCode(error);
           const rawMessage = error instanceof Error ? error.message : undefined;
 
+          audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, errorCode);
+
           const sanitizedError = createToolCallError(errorCode, name, rawMessage);
 
           if (throwOnError) {
@@ -194,10 +228,19 @@ export default class ExecuteTool extends ToolContext {
         try {
           // Introspection follows the same visibility rules as callTool: CodeCall's own tools
           // are never described, and a script that declared a whitelist only sees those tools.
-          if (isBlockedSelfReference(name)) return undefined;
+          if (isBlockedSelfReference(name)) {
+            audit?.logSecuritySelfReference(executionId, name);
+            return undefined;
+          }
           // A tool the policy withholds must not leak its description or schemas either
           // (GHSA-6w3j-82v5-6qrr) — describe is a discovery surface like search.
-          if (!this.checkToolPolicy(name).allowed) return undefined;
+          // Denials are audited here too: a script sweeping getTool across many names is
+          // reconnaissance, and it is the one place that pattern is visible.
+          const introspectionDecision = this.checkToolPolicy(name);
+          if (!introspectionDecision.allowed) {
+            audit?.logSecurityAccessDenied(executionId, name, introspectionDecision.reason);
+            return undefined;
+          }
           if (allowedToolSet && !allowedToolSet.has(name)) return undefined;
 
           const tools = this.scope.tools.getTools(true);
@@ -257,11 +300,21 @@ export default class ExecuteTool extends ToolContext {
     const enclaveService = this.get(EnclaveService);
     const config = this.get(CodeCallConfig);
 
+    // Our own clock. `mapEnclaveResult` drops `stats` on two of its four branches, and the
+    // tool-error branch is reachable WITH `timedOut: true` -- so the enclave's own duration is
+    // undefined on precisely the timeout case this needs to report.
+    const startedAt = Date.now();
+    const elapsed = (reported?: number): number => reported ?? Date.now() - startedAt;
+
+    audit?.logExecutionStart(executionId, script);
+
     try {
       const executionResult = await enclaveService.execute(script, environment);
+      const durationMs = elapsed(executionResult.stats?.duration);
 
       // Map execution result to CodeCall result
       if (executionResult.timedOut) {
+        audit?.logExecutionTimeout(executionId, script, durationMs);
         return {
           status: 'timeout',
           error: {
@@ -275,6 +328,8 @@ export default class ExecuteTool extends ToolContext {
 
         // Check if it's a validation error (from AST validation)
         if (error.code === 'VALIDATION_ERROR' || error.name === 'ValidationError') {
+          audit?.logSecurityAstBlocked(executionId, error.blockedPatterns?.join(', ') ?? 'UNKNOWN', error.message);
+          audit?.logExecutionFailure(executionId, script, durationMs, error.message);
           return {
             status: 'illegal_access',
             error: {
@@ -286,6 +341,7 @@ export default class ExecuteTool extends ToolContext {
 
         // Check if it's a tool error
         if (error.toolName) {
+          audit?.logExecutionFailure(executionId, script, durationMs, error.message);
           return {
             status: 'tool_error',
             error: {
@@ -300,6 +356,7 @@ export default class ExecuteTool extends ToolContext {
         }
 
         // Otherwise it's a runtime error
+        audit?.logExecutionFailure(executionId, script, durationMs, error.message);
         return {
           status: 'runtime_error',
           error: {
@@ -312,6 +369,7 @@ export default class ExecuteTool extends ToolContext {
       }
 
       // Success!
+      audit?.logExecutionSuccess(executionId, script, durationMs, toolCallCount);
       return {
         status: 'ok',
         result: executionResult.result,
@@ -321,6 +379,9 @@ export default class ExecuteTool extends ToolContext {
       // Type-safe error handling
       const errorName = error instanceof Error ? error.name : 'Error';
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // The enclave threw rather than returning a result, so there is no `stats` to prefer.
+      audit?.logExecutionFailure(executionId, script, elapsed(), errorMessage);
       const errorStack = error instanceof Error ? error.stack : undefined;
       const errorLoc = (error as { loc?: { line: number; column: number } }).loc;
 
