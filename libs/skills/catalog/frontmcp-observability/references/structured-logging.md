@@ -119,8 +119,10 @@ on this; the omission is what makes the events safe to emit at `info`.
 To route events elsewhere, subscribe rather than parsing logs:
 
 ```typescript
+import { AUDIT_EVENT_TYPES, AuditLoggerService, type AuditEvent } from '@frontmcp/plugin-codecall';
+
 const audit = scope.providers.get(AuditLoggerService);
-const unsubscribe = audit.subscribe((event) => myShipper.send(event));
+const unsubscribe = audit.subscribe((event: AuditEvent) => myShipper.send(event));
 ```
 
 Fan-out is synchronous and on the execution hot path — hand off to a queue, never do network I/O

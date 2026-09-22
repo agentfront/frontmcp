@@ -291,11 +291,16 @@ you ship logs to a third party.
 To route events somewhere other than the logger, subscribe to the service:
 
 ```ts
+import { AuditLoggerService, type AuditEvent } from '@frontmcp/plugin-codecall';
+
 const audit = scope.providers.get(AuditLoggerService);
-const unsubscribe = audit.subscribe((event) => {
+const unsubscribe = audit.subscribe((event: AuditEvent) => {
   myLogShipper.send(event);
 });
 ```
+
+`AUDIT_EVENT_TYPES` is exported alongside them, so a listener can switch on `event.type` without
+hard-coding the strings.
 
 Fan-out is synchronous and sits on the execution hot path, so a slow subscriber adds latency to
 every tool call. Hand off to a queue rather than doing network I/O inline.
