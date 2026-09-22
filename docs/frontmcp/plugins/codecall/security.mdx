@@ -455,12 +455,20 @@ Individual tools opt in or out via the `codecall` metadata field:
 
 ### Default Blocked Patterns
 
-Internally, the `ToolAccessControlService` blocks these patterns by default:
+`codecall-tool-policy.ts` blocks these patterns by default, whatever the configuration says:
 
 - `system:*` - System administration tools
 - `internal:*` - Internal/private tools
 - `__*` - Internal implementation tools
 - `codecall:*` - Self-reference (via the Self-Reference Guard)
+
+The patterns are matched against **every name a tool answers to** — both its bare `name` and its
+qualified `fullName` — so a tool reachable as either `wipeConfig` or `system:wipeConfig` is blocked
+under both spellings.
+
+The same policy decides discovery and execution. A tool it denies is absent from CodeCall search
+results _and_ rejected at `callTool`; hiding a tool from search is not authorization on its own
+(GHSA-6w3j-82v5-6qrr).
 
 ---
 
