@@ -1129,7 +1129,11 @@ describe('DirectClientImpl', () => {
 
     it('captures url instructions from the already-loaded skill', async () => {
       const fetched = '# Remote\n\nFetched at boot.';
-      const skill = skillStub({ name: 'remote', instructions: { url: 'https://example.com/SKILL.md' }, loaded: fetched });
+      const skill = skillStub({
+        name: 'remote',
+        instructions: { url: 'https://example.com/SKILL.md' },
+        loaded: fetched,
+      });
 
       const [entry] = await collect([skill]);
 
@@ -1163,7 +1167,7 @@ describe('DirectClientImpl', () => {
       expect(entry.instructionContent).toBeUndefined();
     });
 
-    it('does not hand one skill another skill\'s SKILL.md when baseDir resolves wrong', async () => {
+    it("does not hand one skill another skill's SKILL.md when baseDir resolves wrong", async () => {
       for (const name of ['alpha', 'beta']) {
         const dir = join(workDir, 'src', 'skills', name);
         await ensureDir(join(dir, 'references'));
