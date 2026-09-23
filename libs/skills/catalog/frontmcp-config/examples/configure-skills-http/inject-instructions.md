@@ -38,8 +38,8 @@ import { MainApp } from './main.app';
     mcpResources: true,
     // 'append' (default) — the skill catalog summary is appended after instructions
     // 'prepend' — summary first, then instructions
-    // 'replace' — summary only (skills drive the entire system prompt)
-    // 'off'    — instructions sent as-is, no summary
+    // 'replace' — instructions only; summary and channel hints dropped (falls back to 'append' if instructions is empty)
+    // 'off'    — no summary; instructions and channel hints still sent
     injectInstructions: 'append',
   },
 })
