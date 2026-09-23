@@ -316,8 +316,14 @@ Three things worth knowing before they surprise you:
   `release/*` or `next/*` (never the default branch), and — the one that catches people —
   **not to come from a fork**, since a forked PR's `GITHUB_TOKEN` is read-only. Merge a fork PR
   into a release branch and no cherry-pick PR appears at all; back-port it to `main` by hand.
-- The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
-  ("Bot user detected"). Review has to happen on the original PR against the release branch.
+- **The cherry-pick PR gets neither review nor CI, unless `RELEASE_BOT_TOKEN` is set.** Opened
+  with the default `GITHUB_TOKEN`, it is authored by `github-actions[bot]`, so CodeRabbit skips
+  it ("Bot user detected") _and_ its workflow runs are held at `action_required` rather than run
+  — no unit, E2E, lint or package-E2E job executes before merge. The single green check is
+  GitHub's default CodeQL setup, which runs outside that gate and reads misleadingly like CI
+  passed. `cherry-pick-prompt.yml` prefers `RELEASE_BOT_TOKEN` when present, which restores both;
+  until it is provisioned, review on the original PR and treat the back-port as untested until
+  the post-merge run on `main`.
 - `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
   `main` cannot be released at all until it is back-ported.
 

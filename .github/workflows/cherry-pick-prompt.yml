@@ -27,11 +27,24 @@ jobs:
        startsWith(github.event.pull_request.base.ref, 'next/'))
     runs-on: ubuntu-latest
     steps:
+      # RELEASE_BOT_TOKEN, when set, is what gives the cherry-pick PR reviewers and CI.
+      # A pull request opened with the default GITHUB_TOKEN is authored by
+      # github-actions[bot], and that has two consequences that are easy to miss because
+      # the PR still looks normal:
+      #   1. CodeRabbit skips it ("Bot user detected"), so the back-port is never reviewed.
+      #   2. Its workflow runs are created but held at `action_required` rather than run,
+      #      so no unit, E2E, lint or package-E2E job executes before merge. The only green
+      #      check is GitHub's default CodeQL setup, which runs outside that gate and reads
+      #      misleadingly like CI passed.
+      # Opening the PR under a separate identity (a PAT or GitHub App installation token
+      # stored as RELEASE_BOT_TOKEN) restores both. The `||` fallback keeps this workflow
+      # working unchanged while that secret does not exist — do not collapse it back to a
+      # bare GITHUB_TOKEN.
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Configure git user
         run: |
@@ -162,7 +175,7 @@ jobs:
       - name: Push branch and create PR
         if: steps.prepare.outputs.conflict == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
           CHERRY_BRANCH: ${{ steps.prepare.outputs.cherry_branch }}
           RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
