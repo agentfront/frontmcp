@@ -9,12 +9,11 @@
  * path can reuse it without depending on the per-bin install module.
  */
 
-import * as os from 'os';
 import * as path from 'path';
 
 import { mkdtemp, rm } from '@frontmcp/utils';
 
-import type { ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
+import type { ExtractedSchema, ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
 
 export interface FromEntryOptions {
   /** Absolute path to the entry file (TypeScript or JavaScript). */
@@ -36,12 +35,14 @@ export function resolvePackageEntry(pkg: string, cwd: string): string {
 
 /**
  * Bundle the project's entry with esbuild and run the schema extractor on
- * the produced CJS bundle. Returns the enumerated skill assets.
+ * the produced CJS bundle. Packages stay external, so the bundle is written
+ * inside `cwd`: Node resolves its bare `require`s by walking up from the
+ * bundle's own directory, which from the OS temp dir finds no project deps.
  *
  * Temporary bundle dir is cleaned up before return regardless of outcome.
  */
-export async function extractProjectSkills(opts: FromEntryOptions): Promise<ExtractedSkillAsset[]> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-skills-from-'));
+export async function extractProjectSchema(opts: FromEntryOptions): Promise<ExtractedSchema> {
+  const tempDir = await mkdtemp(path.join(opts.cwd, '.frontmcp-extract-'));
   const bundlePath = path.join(tempDir, 'entry.cjs');
   try {
     const esbuild = require('esbuild') as typeof import('esbuild');
@@ -59,11 +60,15 @@ export async function extractProjectSkills(opts: FromEntryOptions): Promise<Extr
       absWorkingDir: opts.cwd,
     });
     const { extractSchemas } = await import('../build/exec/cli-runtime/schema-extractor.js');
-    const schema = await extractSchemas(bundlePath);
-    return schema.skillAssets ?? [];
+    return await extractSchemas(bundlePath);
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+export async function extractProjectSkills(opts: FromEntryOptions): Promise<ExtractedSkillAsset[]> {
+  const schema = await extractProjectSchema(opts);
+  return schema.skillAssets ?? [];
 }
 
 function createRequire(cwd: string): NodeJS.Require {

@@ -126,44 +126,24 @@ async function getProjectExtraction(cwd: string): Promise<{
   const extractionPromise = (async () => {
     try {
       const { resolveEntry } = await import('../../shared/fs.js');
-      const { mkdtemp, rm } = await import('@frontmcp/utils');
+      const { extractProjectSchema } = await import('../skills/from-entry.js');
       const entry = await resolveEntry(cwd);
-      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-install-'));
-      const bundlePath = path.join(tempDir, 'entry.cjs');
-      try {
-        const esbuild = require('esbuild') as typeof import('esbuild');
-        await esbuild.build({
-          entryPoints: [entry],
-          bundle: true,
-          write: true,
-          outfile: bundlePath,
-          platform: 'node',
-          format: 'cjs',
-          target: 'es2022',
-          packages: 'external',
-          sourcemap: false,
-          logLevel: 'silent',
-          absWorkingDir: cwd,
-        });
-        const { extractSchemas } = await import('../build/exec/cli-runtime/schema-extractor.js');
-        const schema = await extractSchemas(bundlePath);
-        const skills: PluginEmitterSkillInput[] = (schema.skillAssets ?? []).map((entry) => ({
-          name: entry.skillName,
-          description: entry.description ?? `${entry.skillName} skill`,
-          tags: entry.tags,
-          license: entry.license,
-          instructionFile: entry.instructionFile,
-          resourceDirs: entry.resourceDirs,
-        }));
-        const commands: PluginEmitterCommandInput[] = (schema.prompts ?? []).map((p) => ({
-          name: p.name,
-          description: p.description,
-          arguments: p.arguments,
-        }));
-        return { skills, commands };
-      } finally {
-        await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
-      }
+      const schema = await extractProjectSchema({ entry, cwd });
+      const skills: PluginEmitterSkillInput[] = (schema.skillAssets ?? []).map((asset) => ({
+        name: asset.skillName,
+        description: asset.description ?? `${asset.skillName} skill`,
+        tags: asset.tags,
+        license: asset.license,
+        instructionFile: asset.instructionFile,
+        instructionContent: asset.instructionContent,
+        resourceDirs: asset.resourceDirs,
+      }));
+      const commands: PluginEmitterCommandInput[] = (schema.prompts ?? []).map((p) => ({
+        name: p.name,
+        description: p.description,
+        arguments: p.arguments,
+      }));
+      return { skills, commands };
     } catch (err) {
       // Drop the cache entry so the NEXT install from this cwd retries
       // extraction — without this, a transient esbuild/SDK-boot failure
@@ -232,6 +212,10 @@ async function runClaudeInstall(args: {
 
   const result = await emitClaudePlugin(emitOpts);
 
+  for (const skipped of result.skillsSkipped) {
+    process.stderr.write(c('yellow', `  Skipped skill ${skipped.name}: ${skipped.reason}\n`));
+  }
+
   if (args.opts.dryRun) {
     process.stdout.write(`${c('cyan', '[install:claude] dry-run plan')}\n`);
     process.stdout.write(`  pluginDir: ${result.pluginDir}\n`);
@@ -244,7 +228,7 @@ async function runClaudeInstall(args: {
   process.stdout.write(
     c(
       'green',
-      `✓ Wrote ${result.pluginDir}/ (${args.skills.length} skills, ${args.commands.length} commands, 1 MCP server)\n`,
+      `✓ Wrote ${result.pluginDir}/ (${result.manifest.skills.length} skills, ${args.commands.length} commands, 1 MCP server)\n`,
     ),
   );
   if (result.filesRemoved.length > 0) {
