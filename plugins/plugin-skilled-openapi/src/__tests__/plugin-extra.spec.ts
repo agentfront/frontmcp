@@ -91,6 +91,22 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     expect(target.tool.metadata.description).toContain('---');
   });
 
+  it('points at the skills/* methods, not skill://, when mcpResources is disabled', async () => {
+    const target = { tool: { metadata: { name: 'search_skill', description: 'orig' } } };
+    const skills = fakeSkillRegistryWithOne();
+    const plugin = makePluginWithGet((token) => {
+      if (token === BundleSyncService) return {} as never;
+      if (token === ScopeEntry) return { skills, metadata: { skillsConfig: { mcpResources: false } } } as never;
+      return undefined;
+    });
+
+    await plugin.injectSkillCatalogIntoSearchTool(flowCtxWith([target]) as never);
+
+    expect(target.tool.metadata.description).toContain('billing');
+    expect(target.tool.metadata.description).toContain('skills/load');
+    expect(target.tool.metadata.description).not.toContain('skill://');
+  });
+
   it('falls back to the static description when the catalog is empty', async () => {
     const target = { tool: { metadata: { name: 'search_skill', description: 'orig' } } };
     const emptySkills = { getSkills: jest.fn(() => []) };
