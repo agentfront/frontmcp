@@ -8,13 +8,17 @@ import 'reflect-metadata';
 
 import { LocalTransportAdapter } from '../transport.local.adapter';
 
-type SkillsConfig = { sep2640InInstructions?: boolean; mcpResources?: boolean };
+type SkillsConfig = {
+  sep2640InInstructions?: boolean;
+  mcpResources?: boolean;
+  injectInstructions?: 'off' | 'append' | 'prepend' | 'replace';
+};
 
-function makeAdapter(skillsConfig: SkillsConfig): { buildSkillInstructionHints(): string } {
+function makeAdapter(skillsConfig: SkillsConfig, instructions?: string): { buildSkillInstructionHints(): string } {
   const skill = { metadata: { description: 'Deploy to production' }, getSkillPath: () => 'ops/deploy' };
   const adapter = Object.create(LocalTransportAdapter.prototype);
   adapter.scope = {
-    metadata: { skillsConfig },
+    metadata: { skillsConfig, instructions },
     skills: { hasAny: () => true, getSkills: () => [skill], getSep2640InstructionUris: () => [] },
   };
   return adapter;
@@ -33,5 +37,15 @@ describe('LocalTransportAdapter.buildSkillInstructionHints', () => {
   it('stays silent when mcpResources is disabled, since no skill:// URI would resolve', () => {
     const hints = makeAdapter({ sep2640InInstructions: true, mcpResources: false }).buildSkillInstructionHints();
     expect(hints).toBe('');
+  });
+
+  it("stays silent under 'replace', which sends only the server instructions", () => {
+    const adapter = makeAdapter({ sep2640InInstructions: true, injectInstructions: 'replace' }, 'Server prompt.');
+    expect(adapter.buildSkillInstructionHints()).toBe('');
+  });
+
+  it("keeps the hints when 'replace' falls back to 'append' for empty instructions", () => {
+    const adapter = makeAdapter({ sep2640InInstructions: true, injectInstructions: 'replace' }, '  ');
+    expect(adapter.buildSkillInstructionHints()).toContain('skill://ops/deploy/SKILL.md');
   });
 });

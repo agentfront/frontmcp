@@ -549,7 +549,9 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    * SEP-2640 §Discovery — opt-in `instructions` text listing each
    * MCP-visible skill's `skill://` URI. Returns an empty string unless
    * `skillsConfig.sep2640InInstructions` is true and the `skill://`
-   * resources are served (`skillsConfig.mcpResources` is not false).
+   * resources are served (`skillsConfig.mcpResources` is not false). Also
+   * empty under `injectInstructions: 'replace'` with non-empty server
+   * instructions, which must then be sent alone.
    */
   private buildSkillInstructionHints(): string {
     const skillRegistry = this.scope.skills;
@@ -557,6 +559,9 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
     const skillsConfig = this.scope.metadata?.skillsConfig;
     if (!skillsConfig?.sep2640InInstructions || skillsConfig.mcpResources === false) return '';
+
+    const serverInstructions = (this.scope.metadata.instructions ?? '').trim();
+    if (skillsConfig.injectInstructions === 'replace' && serverInstructions.length > 0) return '';
 
     const visible = skillRegistry.getSkills({ visibility: 'mcp' });
     if (visible.length === 0) return '';
