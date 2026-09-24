@@ -1,12 +1,16 @@
 // errors/__tests__/mcp.error.spec.ts
+import { AuthorityDeniedError } from '@frontmcp/auth';
+
 import {
-  ToolNotFoundError,
+  AuthorityDeniedMcpError,
+  formatMcpErrorResponse,
+  GlobalConfigNotFoundError,
   InvalidInputError,
   InvalidOutputError,
-  ToolExecutionError,
-  GlobalConfigNotFoundError,
   isPublicError,
-  formatMcpErrorResponse,
+  toMcpError,
+  ToolExecutionError,
+  ToolNotFoundError,
 } from '../mcp.error';
 
 describe('MCP Error Handling', () => {
@@ -234,5 +238,22 @@ describe('MCP Error Handling', () => {
 
       expect(response._meta?.stack).toBeDefined();
     });
+  });
+});
+
+describe('toMcpError with an authorities refusal', () => {
+  const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'profile:admin' });
+
+  it('keeps it public, with the AUTHORITY_DENIED code and a 403', () => {
+    const mcpError = toMcpError(denied);
+
+    expect(mcpError).toBeInstanceOf(AuthorityDeniedMcpError);
+    expect(isPublicError(mcpError)).toBe(true);
+    expect(formatMcpErrorResponse(denied, false)._meta).toMatchObject({ code: 'AUTHORITY_DENIED' });
+    expect(formatMcpErrorResponse(denied, false).content[0]).toMatchObject({ text: denied.message });
+  });
+
+  it('keeps the -32003 JSON-RPC error and its denial data', () => {
+    expect((toMcpError(denied) as AuthorityDeniedMcpError).toJsonRpcError()).toEqual(denied.toJsonRpcError());
   });
 });

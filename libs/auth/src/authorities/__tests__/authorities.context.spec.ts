@@ -1,4 +1,4 @@
-import { AuthoritiesContextBuilder, resolveDotPath } from '../authorities.context';
+import { AuthoritiesContextBuilder, isAnonymousSubject, resolveAuthUser, resolveDotPath } from '../authorities.context';
 import type { RelationshipResolver } from '../authorities.types';
 
 describe('resolveDotPath', () => {
@@ -23,6 +23,31 @@ describe('resolveDotPath', () => {
   });
 });
 
+describe('resolveAuthUser', () => {
+  it('prefers the top-level user', () => {
+    expect(resolveAuthUser({ user: { sub: 'top' }, extra: { user: { sub: 'extra' } } })).toEqual({ sub: 'top' });
+  });
+
+  it('falls back to extra.user', () => {
+    expect(resolveAuthUser({ extra: { user: { sub: 'extra' } } })).toEqual({ sub: 'extra' });
+  });
+
+  it('returns an empty user when neither is an object', () => {
+    expect(resolveAuthUser({ extra: { user: 'not-a-user' } })).toEqual({});
+    expect(resolveAuthUser(undefined)).toEqual({});
+  });
+});
+
+describe('isAnonymousSubject', () => {
+  it.each([undefined, '', 'anon:5b2f8c1e', 12345])('treats %p as anonymous', (sub) => {
+    expect(isAnonymousSubject(sub)).toBe(true);
+  });
+
+  it('treats a real subject as signed in', () => {
+    expect(isAnonymousSubject('user-123')).toBe(false);
+  });
+});
+
 describe('AuthoritiesContextBuilder', () => {
   describe('default (no claimsMapping)', () => {
     it('should extract roles from user.roles', () => {
@@ -38,10 +63,10 @@ describe('AuthoritiesContextBuilder', () => {
       expect(ctx.user.permissions).toEqual(['read', 'write']);
     });
 
-    it('should handle missing user gracefully', () => {
+    it('should handle missing user gracefully, with no subject', () => {
       const builder = new AuthoritiesContextBuilder();
       const ctx = builder.build({});
-      expect(ctx.user.sub).toBe('');
+      expect(ctx.user.sub).toBeUndefined();
       expect(ctx.user.roles).toEqual([]);
       expect(ctx.user.permissions).toEqual([]);
     });

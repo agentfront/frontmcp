@@ -22,7 +22,7 @@ interface AuthoritiesEvaluator {
 }
 ```
 
-The `policy` parameter is whatever value is passed under the evaluator's key in the `custom` field. The `ctx` parameter provides the full evaluation context including user info, input, environment, and the relationship resolver.
+The `policy` parameter is whatever value is passed under the evaluator's key in the `custom` field. The `ctx` parameter provides the full evaluation context including user info, input, environment, and the relationship resolver. `ctx.user.sub` is `undefined` for anonymous callers, so an evaluator that keys on the caller should decide explicitly what an anonymous caller gets.
 
 The return value must be an `AuthoritiesResult`:
 
@@ -109,6 +109,9 @@ const tenantAllowlistGuard: AuthoritiesEvaluator = {
 const activeSubscriptionGuard: AuthoritiesEvaluator = {
   name: 'activeSubscription',
   evaluate: async (_policy, ctx) => {
+    if (ctx.user.sub === undefined) {
+      return { granted: false, deniedBy: 'sign-in required', evaluatedPolicies: ['custom.activeSubscription'] };
+    }
     const row = await db.query('SELECT active FROM subscriptions WHERE user_id = $1', [ctx.user.sub]);
     const active = row?.active === true;
     return {
@@ -279,6 +282,13 @@ export const featureFlagEvaluator: AuthoritiesEvaluator = {
   name: 'featureFlag',
   async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { flag, inverse } = policy as FeatureFlagPolicy;
+    if (ctx.user.sub === undefined) {
+      return {
+        granted: false,
+        deniedBy: 'custom.featureFlag: sign-in required',
+        evaluatedPolicies: ['custom.featureFlag'],
+      };
+    }
     const enabled = await featureFlags.isEnabled(flag, ctx.user.sub);
     const granted = inverse ? !enabled : enabled;
 
@@ -399,7 +409,8 @@ export const rateLimitEvaluator: AuthoritiesEvaluator = {
   name: 'rateLimit',
   async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { max, windowSeconds } = policy as RateLimitPolicy;
-    const key = `${ctx.user.sub}`;
+    // Anonymous callers share one bucket
+    const key = ctx.user.sub ?? 'anonymous';
     const now = Date.now();
 
     let entry = counters.get(key);
