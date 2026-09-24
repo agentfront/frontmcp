@@ -89,6 +89,16 @@ test.describe('SEP-2640 Skills Resources E2E', () => {
     });
   });
 
+  test.describe('initialize instructions', () => {
+    test('point clients at a skill:// URI the server actually serves', async ({ mcp }) => {
+      const pointedAt = mcp.instructions.match(/`(skills?:\/\/[^`]+)`/)?.[1];
+      expect(pointedAt).toBe('skill://index.json');
+
+      const result = await mcp.resources.read(pointedAt ?? '');
+      expect(result).toBeSuccessful();
+    });
+  });
+
   test.describe('skill://index.json', () => {
     test('should return the SEP-2640 discovery document', async ({ mcp }) => {
       const result = await mcp.resources.read('skill://index.json');

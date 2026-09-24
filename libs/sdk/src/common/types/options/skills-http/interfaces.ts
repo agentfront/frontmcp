@@ -287,10 +287,11 @@ export interface SkillsConfigOptions {
 
   /**
    * SEP-2640 §Discovery — opt-in inclusion of skill URIs in the server's
-   * `instructions` field. When `true`, the transport adapter prepends a
+   * `instructions` field. When `true`, the transport adapter adds a
    * short "Available skills:" block listing each MCP-visible skill's
    * `skill://` URI so models that only see server instructions can still
-   * find them.
+   * find them. Ignored when `mcpResources` is false, since those URIs would
+   * not resolve.
    *
    * @default false (opt-in to keep the instructions field lean by default)
    */
