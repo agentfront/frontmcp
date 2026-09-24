@@ -22,7 +22,7 @@ interface AuthoritiesEvaluator {
 }
 ```
 
-The `policy` parameter is whatever value is passed under the evaluator's key in the `custom` field. The `ctx` parameter provides the full evaluation context including user info, input, environment, and the relationship resolver.
+The `policy` parameter is whatever value is passed under the evaluator's key in the `custom` field. The `ctx` parameter provides the full evaluation context including user info, input, environment, and the relationship resolver. `ctx.user.sub` is `undefined` for anonymous callers, so an evaluator that keys on the caller should decide explicitly what an anonymous caller gets.
 
 The return value must be an `AuthoritiesResult`:
 

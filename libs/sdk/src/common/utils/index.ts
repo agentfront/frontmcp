@@ -1,3 +1,4 @@
+export * from './auth-info.utils';
 export * from './caller-dir.utils';
 export * from './decide-request-intent.utils';
 export * from './path.utils';
