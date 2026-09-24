@@ -64,3 +64,11 @@ export class MissingClientCapabilityError extends PublicMcpError {
     super(message, 'MISSING_REQUIRED_CLIENT_CAPABILITY', 400);
   }
 }
+
+/**
+ * Whether an error is an MRTR signal that the 2026-07-28 dispatcher answers
+ * (an `input_required` result or `-32021`), rather than a failure to report.
+ */
+export function isMrtrSignal(error: unknown): error is InputRequiredSignal | MissingClientCapabilityError {
+  return error instanceof InputRequiredSignal || error instanceof MissingClientCapabilityError;
+}

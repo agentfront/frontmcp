@@ -1,5 +1,6 @@
 // file: libs/sdk/src/agent/flows/call-agent.flow.ts
 
+import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
@@ -261,7 +262,6 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       let requiredScopes: string[] | undefined;
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
-        const { resolveRequiredScopes } = await import('@frontmcp/auth');
         requiredScopes = resolveRequiredScopes(
           result.denial,
           scopeMapping,
@@ -269,7 +269,6 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
         );
       }
 
-      const { AuthorityDeniedError } = await import('@frontmcp/auth');
       throw new AuthorityDeniedError({
         entryType: 'Agent',
         entryName: agent.fullName || agent.name,

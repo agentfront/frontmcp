@@ -7,6 +7,7 @@ import {
   GlobalConfigNotFoundError,
   InvalidInputError,
   InvalidOutputError,
+  isClientFacingError,
   isPublicError,
   toMcpError,
   ToolExecutionError,
@@ -255,5 +256,19 @@ describe('toMcpError with an authorities refusal', () => {
 
   it('keeps the -32003 JSON-RPC error and its denial data', () => {
     expect((toMcpError(denied) as AuthorityDeniedMcpError).toJsonRpcError()).toEqual(denied.toJsonRpcError());
+  });
+
+  describe('isClientFacingError', () => {
+    it('is true for a public error and for an authorities refusal', () => {
+      const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'roles' });
+
+      expect(isClientFacingError(new ToolNotFoundError('my_tool'))).toBe(true);
+      expect(isClientFacingError(denied)).toBe(true);
+    });
+
+    it('is false for an internal or plain error', () => {
+      expect(isClientFacingError(new ToolExecutionError('my_tool'))).toBe(false);
+      expect(isClientFacingError(new Error('boom'))).toBe(false);
+    });
   });
 });
