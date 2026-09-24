@@ -24,7 +24,8 @@ import {
   type ScopeEntry,
 } from '../common';
 import { shouldCacheProviders, type DistributedEnabled } from '../common/types/options/transport';
-import { validateSessionId } from '../context/frontmcp-context';
+import { FrontMcpContext, validateSessionId } from '../context/frontmcp-context';
+import { FRONTMCP_CONTEXT } from '../context/frontmcp-context.provider';
 import {
   DependencyCycleError,
   InvalidDependencyScopeError,
@@ -911,9 +912,9 @@ export default class ProviderRegistry
       sessionProviders = cached.providers;
     }
 
-    // Pre-built providers (e.g. FrontMcpContext) belong to this request only: they always
-    // replace cached ones, and anything built from them is rebuilt instead of cached.
-    const requestTokens = new Set<Token>(contextProviders?.keys() ?? []);
+    // Pre-built providers always replace cached ones. Anything built from the request's own
+    // context (FrontMcpContext and the tokens it carries) is rebuilt instead of cached.
+    const requestTokens = requestScopedTokens(contextProviders);
     const contextStore = new Map<Token, unknown>(sessionProviders ?? []);
     for (const [token, instance] of contextProviders ?? []) {
       contextStore.set(token, instance);
@@ -1090,4 +1091,10 @@ export default class ProviderRegistry
 
     throw new ProviderNotAvailableError(tokenName(token), 'not found in views. Ensure it was built via buildViews()');
   }
+}
+
+function requestScopedTokens(contextProviders: Map<Token, unknown> | undefined): Set<Token> {
+  const requestContext = contextProviders?.get(FRONTMCP_CONTEXT);
+  const carriedTokens = requestContext instanceof FrontMcpContext ? requestContext.getContextTokens().keys() : [];
+  return new Set<Token>([FRONTMCP_CONTEXT, ...(carriedTokens as Iterable<Token>)]);
 }

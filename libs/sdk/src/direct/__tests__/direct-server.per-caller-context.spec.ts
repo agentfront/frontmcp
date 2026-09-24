@@ -121,6 +121,13 @@ describe('DirectMcpServer implicit session per caller', () => {
     expect(first).not.toBe(second);
   });
 
+  it('keys a caller without an issuer as the direct issuer it is given', async () => {
+    const withoutIssuer = await sessionOf({ token: 'token-a', user: { sub: 'alice' } });
+    const withDirectIssuer = await sessionOf({ token: 'token-a', user: { sub: 'alice', iss: 'direct' } });
+
+    expect(withoutIssuer).toBe(withDirectIssuer);
+  });
+
   it('keeps the same subject from two issuers apart', async () => {
     const first = await sessionOf({ token: 'token-a', user: { sub: 'alice', iss: 'https://idp-one.example' } });
     const second = await sessionOf({ token: 'token-b', user: { sub: 'alice', iss: 'https://idp-two.example' } });
