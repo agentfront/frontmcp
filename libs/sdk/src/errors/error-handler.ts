@@ -1,7 +1,17 @@
 // errors/error-handler.ts
-import { FlowControl } from '../common';
 import { isProduction } from '@frontmcp/utils';
-import { McpError, formatMcpErrorResponse, toMcpError } from './mcp.error';
+
+import { FlowControl } from '../common';
+import { McpError, toMcpError } from './mcp.error';
+
+/**
+ * What the failing request was working on, logged next to the error.
+ */
+export interface ErrorLogContext {
+  flowName?: string;
+  toolName?: string;
+  [key: string]: unknown;
+}
 
 export interface ErrorHandlerOptions {
   /**
@@ -40,21 +50,20 @@ export class ErrorHandler {
   /**
    * Handle an error and return a formatted MCP response
    */
-  handle(error: any, context?: { flowName?: string; toolName?: string }) {
+  handle(error: any, context?: ErrorLogContext) {
     // Transform error if transformer is provided
     const transformedError = this.errorTransformer ? this.errorTransformer(error) : error;
 
-    // Log the error
-    this.logError(transformedError, context);
-
-    // Format for MCP response
-    return formatMcpErrorResponse(transformedError, this.isDevelopment);
+    // Log and answer with the same MCP error, so the logged error id is the one the client sees
+    const mcpError = toMcpError(transformedError);
+    this.logError(mcpError, context);
+    return mcpError.toMcpError(this.isDevelopment);
   }
 
   /**
    * Log error with appropriate level
    */
-  private logError(error: any, context?: { flowName?: string; toolName?: string }) {
+  logError(error: any, context?: ErrorLogContext) {
     if (!this.logger) return;
 
     const meta = {

@@ -77,6 +77,8 @@ inputSchema: {
 }
 ```
 
+`tools/list` describes what the caller sends: a field with `.default()` is not listed as required, and a field with `.transform()` is listed by its input type.
+
 ## Refinements
 
 For cross-field validation, wrap individual fields:

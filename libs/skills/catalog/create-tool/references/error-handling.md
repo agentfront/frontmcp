@@ -45,7 +45,7 @@ async execute(input: { id: string }) {
 
 ## Infrastructure errors → propagate
 
-For errors the framework should handle uniformly (network failure, DB unavailable, timeout), just let them throw. The framework wraps them in an `InternalMcpError` with the message redacted before reaching the client, and logs the original for ops.
+For errors the framework should handle uniformly (network failure, DB unavailable, timeout), just let them throw. The framework wraps them in an `InternalMcpError` with the message redacted before reaching the client, and logs it once, with the same `errorId` the client sees. The logged message includes the original error's message and stack in every environment; the wrapper's own stack is logged in development only. A `PublicMcpError` (or subclass) thrown from `execute()` is not wrapped: tools, resources and prompts pass it on with its own message and code.
 
 ## MCP error classes
 
@@ -103,12 +103,14 @@ The `data` payload lets you surface structured info to the client (rate-limit re
 
 ## `PublicMcpError` vs raw `Error`
 
-| Throw                                  | Client sees                                                             |
-| -------------------------------------- | ----------------------------------------------------------------------- |
-| `new PublicMcpError('Quota exceeded')` | `{ code: -32603, message: 'Quota exceeded' }`                           |
-| `new Error('Quota exceeded')`          | `{ code: -32603, message: 'Internal error' }` (the message is REDACTED) |
+| Throw                                  | `resources/read` / `prompts/get` error                                    |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `new PublicMcpError('Quota exceeded')` | `{ code: -32602, message: 'Quota exceeded' }`                             |
+| `new Error('Quota exceeded')`          | `{ code: -32603, message: 'Internal FrontMCP error. … error ID: err_…' }` |
 
-Raw `Error`s have their messages **redacted** before reaching the client — the framework treats them as potentially-sensitive infrastructure errors. For anything the client should read, use `PublicMcpError` or a subclass.
+`tools/call` answers with an `isError: true` result instead, carrying the same message plus `_meta.code` and `_meta.errorId`. The error's `data` always carries the `errorId`. A public error's JSON-RPC code comes from its `toJsonRpcError()`, else its `statusCode`: 401 → -32001, 403 → -32003, other 4xx → -32602.
+
+In production, raw `Error`s have their messages **redacted** before reaching the client — the framework treats them as potentially-sensitive infrastructure errors. For anything the client should read, use `PublicMcpError` or a subclass.
 
 ## Non-null assertions are forbidden
 

@@ -6,8 +6,8 @@
  * authorities engine, and exposes convenience query methods.
  */
 
+import { resolveAuthUser, resolveDotPath, signedInSubject } from '../authorities/authorities.context';
 import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
-import { resolveDotPath } from '../authorities/authorities.context';
 import type { FrontMcpAuthContext, FrontMcpAuthUser } from './frontmcp-auth-context';
 
 /**
@@ -74,10 +74,12 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
 
   constructor(source: AuthContextSourceInfo, claimsMapping?: AuthoritiesClaimsMapping) {
     // -- User identity -------------------------------------------------
-    const rawUser = source.user ?? {};
-    const sub = claimsMapping?.userId
-      ? String(resolveDotPath(this.buildRawClaims(source), claimsMapping.userId) ?? rawUser.sub ?? '')
-      : String(rawUser.sub ?? '');
+    const rawUser: NonNullable<AuthContextSourceInfo['user']> = resolveAuthUser(source);
+    const mappedSub = claimsMapping?.userId
+      ? resolveDotPath(this.buildRawClaims(source), claimsMapping.userId)
+      : undefined;
+    const signedInSub = signedInSubject(rawUser.sub, mappedSub);
+    const sub = signedInSub ?? (typeof rawUser.sub === 'string' ? rawUser.sub : '');
 
     this.user = Object.freeze({
       sub,
@@ -87,7 +89,7 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     });
 
     // -- Anonymous detection -------------------------------------------
-    this.isAnonymous = sub === '' || sub.startsWith('anon:');
+    this.isAnonymous = signedInSub === undefined;
 
     // -- Mode ----------------------------------------------------------
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;
@@ -173,7 +175,7 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
    * Mirrors the logic in AuthoritiesContextBuilder.build().
    */
   private buildRawClaims(source: AuthContextSourceInfo): Record<string, unknown> {
-    const rawUser = source.user ?? {};
+    const rawUser = resolveAuthUser(source);
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;
     const authorizationClaims = (extraAuth?.['claims'] as Record<string, unknown>) ?? {};
     return {
