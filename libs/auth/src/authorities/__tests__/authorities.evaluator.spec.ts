@@ -1,7 +1,7 @@
 import {
-  evaluateRbacRoles,
-  evaluateRbacPermissions,
   evaluateAbac,
+  evaluateRbacPermissions,
+  evaluateRbacRoles,
   evaluateRebac,
   resolveResourceId,
 } from '../authorities.evaluator';
@@ -93,7 +93,11 @@ describe('RBAC Permissions Evaluator', () => {
     const ctx = createCtx({ user: { sub: 'u1', roles: [], permissions: ['posts:read'], claims: {} } });
     const result = evaluateRbacPermissions({ any: ['users:read', 'users:write'] }, ctx);
     expect(result.granted).toBe(false);
-    expect(result.denial).toEqual({ kind: 'permissions', path: 'permissions.any', missing: ['users:read', 'users:write'] });
+    expect(result.denial).toEqual({
+      kind: 'permissions',
+      path: 'permissions.any',
+      missing: ['users:read', 'users:write'],
+    });
   });
 });
 
@@ -127,9 +131,12 @@ describe('ABAC Evaluator', () => {
         user: { sub: 'u1', roles: [], permissions: [], claims: { org_id: 'org-42' } },
         input: { tenantId: 'org-42' },
       });
-      const result = evaluateAbac({
-        match: { 'claims.org_id': { fromInput: 'tenantId' } },
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          match: { 'claims.org_id': { fromInput: 'tenantId' } },
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
   });
@@ -139,9 +146,12 @@ describe('ABAC Evaluator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { level: 5 } },
       });
-      const result = evaluateAbac({
-        conditions: [{ path: 'claims.level', op: 'eq', value: 5 }],
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          conditions: [{ path: 'claims.level', op: 'eq', value: 5 }],
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
 
@@ -149,9 +159,12 @@ describe('ABAC Evaluator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { status: 'active' } },
       });
-      const result = evaluateAbac({
-        conditions: [{ path: 'claims.status', op: 'neq', value: 'banned' }],
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          conditions: [{ path: 'claims.status', op: 'neq', value: 'banned' }],
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
 
@@ -159,9 +172,12 @@ describe('ABAC Evaluator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { region: 'us-west' } },
       });
-      const result = evaluateAbac({
-        conditions: [{ path: 'claims.region', op: 'in', value: ['us-east', 'us-west', 'eu-west'] }],
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          conditions: [{ path: 'claims.region', op: 'in', value: ['us-east', 'us-west', 'eu-west'] }],
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
 
@@ -169,9 +185,12 @@ describe('ABAC Evaluator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { region: 'us-west' } },
       });
-      const result = evaluateAbac({
-        conditions: [{ path: 'claims.region', op: 'notIn', value: ['cn-north', 'cn-east'] }],
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          conditions: [{ path: 'claims.region', op: 'notIn', value: ['cn-north', 'cn-east'] }],
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
 
@@ -204,74 +223,98 @@ describe('ABAC Evaluator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { email: 'user@example.com' } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'contains', value: '@example.com' }] }, ctx).granted).toBe(true);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'contains', value: '@example.com' }] }, ctx).granted,
+      ).toBe(true);
     });
 
     it('should handle contains operator for arrays', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { tags: ['vip', 'beta'] } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.tags', op: 'contains', value: 'vip' }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'claims.tags', op: 'contains', value: 'vip' }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should handle startsWith operator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { email: 'admin@corp.com' } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'startsWith', value: 'admin' }] }, ctx).granted).toBe(true);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'startsWith', value: 'admin' }] }, ctx).granted,
+      ).toBe(true);
     });
 
     it('should handle endsWith operator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { email: 'admin@corp.com' } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'endsWith', value: '@corp.com' }] }, ctx).granted).toBe(true);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'endsWith', value: '@corp.com' }] }, ctx).granted,
+      ).toBe(true);
     });
 
     it('should handle exists operator (true)', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { verified: true } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.verified', op: 'exists', value: true }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'claims.verified', op: 'exists', value: true }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should handle exists operator (false = must not exist)', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: {} },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.missing', op: 'exists', value: false }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'claims.missing', op: 'exists', value: false }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should handle matches (regex) operator', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { email: 'user@acme.com' } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '^.+@acme\\.com$' }] }, ctx).granted).toBe(true);
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '^.+@evil\\.com$' }] }, ctx).granted).toBe(false);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '^.+@acme\\.com$' }] }, ctx).granted,
+      ).toBe(true);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '^.+@evil\\.com$' }] }, ctx).granted,
+      ).toBe(false);
     });
 
     it('should handle invalid regex gracefully', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { email: 'test' } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '[invalid' }] }, ctx).granted).toBe(false);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'claims.email', op: 'matches', value: '[invalid' }] }, ctx).granted,
+      ).toBe(false);
     });
 
     it('should resolve dot-path into nested user claims', () => {
       const ctx = createCtx({
         user: { sub: 'u1', roles: [], permissions: [], claims: { org: { id: 'org-42' } } },
       });
-      expect(evaluateAbac({ conditions: [{ path: 'claims.org.id', op: 'eq', value: 'org-42' }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'claims.org.id', op: 'eq', value: 'org-42' }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should resolve input paths', () => {
       const ctx = createCtx({ input: { region: 'us-west' } });
-      expect(evaluateAbac({ conditions: [{ path: 'input.region', op: 'eq', value: 'us-west' }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'input.region', op: 'eq', value: 'us-west' }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should resolve env paths', () => {
       const ctx = createCtx({ env: { NODE_ENV: 'production' } });
-      expect(evaluateAbac({ conditions: [{ path: 'env.NODE_ENV', op: 'eq', value: 'production' }] }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ conditions: [{ path: 'env.NODE_ENV', op: 'eq', value: 'production' }] }, ctx).granted).toBe(
+        true,
+      );
     });
 
     it('should deny when condition fails', () => {
@@ -294,9 +337,12 @@ describe('ABAC Evaluator', () => {
         user: { sub: 'u1', roles: [], permissions: [], claims: { tenantId: 'tenant-1' } },
         input: { tenantId: 'tenant-1' },
       });
-      const result = evaluateAbac({
-        conditions: [{ path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }],
-      }, ctx);
+      const result = evaluateAbac(
+        {
+          conditions: [{ path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }],
+        },
+        ctx,
+      );
       expect(result.granted).toBe(true);
     });
   });
@@ -333,6 +379,23 @@ describe('ReBAC Evaluator', () => {
   });
 
   describe('evaluateRebac', () => {
+    it('should deny an anonymous caller without asking the relationship resolver', async () => {
+      const check = jest.fn(async () => true);
+      const ctx = createCtx({
+        user: { sub: undefined, roles: [], permissions: [], claims: {} },
+        relationships: { check },
+        input: { siteId: 'site-1' },
+      });
+
+      const result = await evaluateRebac(
+        { type: 'member', resource: 'site', resourceId: { fromInput: 'siteId' } },
+        ctx,
+      );
+
+      expect(result.granted).toBe(false);
+      expect(check).not.toHaveBeenCalled();
+    });
+
     it('should grant when relationship resolver returns true', async () => {
       const resolver: RelationshipResolver = {
         check: async (type, resource, resourceId, userSub) => {
@@ -350,10 +413,7 @@ describe('ReBAC Evaluator', () => {
     it('should deny when relationship resolver returns false', async () => {
       const resolver: RelationshipResolver = { check: async () => false };
       const ctx = createCtx({ relationships: resolver, input: { siteId: 'site-1' } });
-      const result = await evaluateRebac(
-        { type: 'owner', resource: 'site', resourceId: { fromInput: 'siteId' } },
-        ctx,
-      );
+      const result = await evaluateRebac({ type: 'owner', resource: 'site', resourceId: { fromInput: 'siteId' } }, ctx);
       expect(result.granted).toBe(false);
       expect(result.deniedBy).toContain('owner');
       expect(result.denial).toEqual({

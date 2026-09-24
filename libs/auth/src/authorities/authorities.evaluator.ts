@@ -4,17 +4,17 @@
  * Pure functions for evaluating RBAC, ABAC, and ReBAC policies.
  */
 
+import { resolveDotPath } from './authorities.context';
 import type {
-  RbacRolesPolicy,
-  RbacPermissionsPolicy,
-  AbacPolicy,
   AbacCondition,
+  AbacPolicy,
+  AuthoritiesEvaluationContext,
+  AuthoritiesResult,
+  RbacPermissionsPolicy,
+  RbacRolesPolicy,
   RebacPolicy,
   ResourceIdRef,
-  AuthoritiesResult,
-  AuthoritiesEvaluationContext,
 } from './authorities.types';
-import { resolveDotPath } from './authorities.context';
 
 // ============================================
 // RBAC Evaluators
@@ -249,6 +249,15 @@ export function resolveResourceId(ref: ResourceIdRef, ctx: AuthoritiesEvaluation
  * Evaluate a single ReBAC policy.
  */
 async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
+  if (ctx.user.sub === undefined) {
+    return {
+      granted: false,
+      deniedBy: `relationships: an anonymous caller cannot be '${policy.type}' of ${policy.resource}`,
+      denial: { kind: 'relationships', path: 'user.sub', expected: 'a signed-in caller', actual: undefined },
+      evaluatedPolicies: ['relationships'],
+    };
+  }
+  const userSub = ctx.user.sub;
   const resourceId = resolveResourceId(policy.resourceId, ctx);
   if (resourceId === undefined) {
     return {
@@ -264,12 +273,12 @@ async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluati
     };
   }
 
-  const hasRelationship = await ctx.relationships.check(policy.type, policy.resource, resourceId, ctx.user.sub, ctx);
+  const hasRelationship = await ctx.relationships.check(policy.type, policy.resource, resourceId, userSub, ctx);
 
   if (!hasRelationship) {
     return {
       granted: false,
-      deniedBy: `relationships: user '${ctx.user.sub}' is not '${policy.type}' of ${policy.resource}:${resourceId}`,
+      deniedBy: `relationships: user '${userSub}' is not '${policy.type}' of ${policy.resource}:${resourceId}`,
       denial: {
         kind: 'relationships',
         path: 'relationships',

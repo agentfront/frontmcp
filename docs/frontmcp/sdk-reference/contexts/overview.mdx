@@ -187,7 +187,7 @@ Contexts that extend `ExecutionContextBase` provide a context-aware `fetch()`
 
 ```typescript
 async execute(input) {
-  // Auto-injects auth headers, trace context
+  // Adds trace context; the caller's token only for origins allow-listed in @FrontMcp({ fetch })
   const response = await this.fetch('https://api.example.com/data', {
     method: 'POST',
     body: JSON.stringify(input),

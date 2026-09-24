@@ -182,6 +182,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const { sessionId, authInfo } = this.state;
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
+        this.tryGetContext()?.platformType ??
         (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
 
       this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);

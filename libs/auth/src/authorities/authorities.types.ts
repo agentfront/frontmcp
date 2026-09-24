@@ -314,8 +314,8 @@ export interface RelationshipResolver {
 export interface AuthoritiesEvaluationContext {
   /** Resolved user information */
   user: {
-    /** User subject identifier */
-    sub: string;
+    /** User subject identifier; undefined for anonymous callers */
+    sub?: string;
     /** User roles (extracted via claimsMapping) */
     roles: string[];
     /** User permissions (extracted via claimsMapping) */

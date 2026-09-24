@@ -897,7 +897,7 @@ export default class ProviderRegistry
     // In distributed/serverless mode, caching is disabled because sessions may
     // land on different server instances. CONTEXT providers are stateless facades
     // that delegate to storage, so rebuilding them per-request has minimal cost.
-    let contextStore: Map<Token, unknown>;
+    let sessionProviders: Map<Token, unknown> | undefined;
 
     if (this.sessionCacheEnabled) {
       // Traditional mode: cache providers per session
@@ -908,19 +908,15 @@ export default class ProviderRegistry
       } else {
         cached.lastAccess = Date.now();
       }
-      contextStore = cached.providers;
-    } else {
-      // Distributed mode: no caching, rebuild providers each request
-      contextStore = new Map<Token, unknown>();
+      sessionProviders = cached.providers;
     }
 
-    // Merge pre-built context providers (e.g., FrontMcpContext from flow)
-    if (contextProviders) {
-      for (const [token, instance] of contextProviders) {
-        if (!contextStore.has(token)) {
-          contextStore.set(token, instance);
-        }
-      }
+    // Pre-built providers (e.g. FrontMcpContext) belong to this request only: they always
+    // replace cached ones, and anything built from them is rebuilt instead of cached.
+    const requestTokens = new Set<Token>(contextProviders?.keys() ?? []);
+    const contextStore = new Map<Token, unknown>(sessionProviders ?? []);
+    for (const [token, instance] of contextProviders ?? []) {
+      contextStore.set(token, instance);
     }
 
     // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)
@@ -947,10 +943,27 @@ export default class ProviderRegistry
       await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
     }
 
+    if (sessionProviders) {
+      for (const [token, instance] of contextStore) {
+        if (!sessionProviders.has(token) && !this.dependsOnAny(token, requestTokens)) {
+          sessionProviders.set(token, instance);
+        }
+      }
+    }
+
     return {
       global,
       context: contextStore,
     };
+  }
+
+  private dependsOnAny(token: Token, targets: ReadonlySet<Token>, visited = new Set<Token>()): boolean {
+    if (targets.has(token)) return true;
+    if (visited.has(token)) return false;
+    visited.add(token);
+    const found = this.lookupDefInHierarchy(token);
+    if (!found) return false;
+    return found.registry.discoveryDeps(found.rec).some((dep) => this.dependsOnAny(dep, targets, visited));
   }
 
   /**

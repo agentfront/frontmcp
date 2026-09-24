@@ -334,7 +334,7 @@ new_classes = ["FrontMcpSession"]
 MCP_SESSION_SECRET = "..." # or `wrangler secret put MCP_SESSION_SECRET`
 ```
 
-The worker routes a request to its session DO by `Mcp-Session-Id` (minting one on `initialize`); the router falls back to stateless handling if the binding isn't present. Without `sessions`, the worker stays stateless (request/response tools work; no server push).
+The worker routes a request to its session DO by `Mcp-Session-Id` (minting one on `initialize`); the router falls back to stateless handling if the binding isn't present. Without `sessions`, the worker stays stateless (request/response tools work; no server push). A session-based (2025-06-18) client then gets no `Mcp-Session-Id` from `initialize` and each of its requests is served on its own.
 
 <Note>
 `MCP_SESSION_SECRET` is required on a production isolate (`NODE_ENV=production`) — the flow's `session:verify` stage encrypts session IDs with it. `createEdgeMcp` bridges Worker `env` vars/secrets into `process.env` so FrontMCP's config resolution sees them.
