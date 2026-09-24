@@ -37,10 +37,8 @@ export {
   PROTOCOL_PRESETS,
   // Helper functions
   expandProtocolConfig,
-  toLegacyProtocolFlags,
   isDistributedMode,
   shouldCacheProviders,
-  expandTransportConfig,
 } from './schema';
 
 export type {
@@ -50,7 +48,4 @@ export type {
   TransportPersistenceConfigInput,
   PlatformDetectionConfigType,
   DistributedConfigInput,
-  // Internal types
-  LegacyProtocolFlags,
-  ExpandedTransportConfig,
 } from './schema';

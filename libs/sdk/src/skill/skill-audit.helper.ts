@@ -80,8 +80,7 @@ export function setSkillAuditFactory(factory: SkillAuditFactory | undefined): vo
 }
 
 /**
- * @internal — used by tests only. Returns whether a factory has been
- * registered.
+ * Whether a skill audit factory has been registered.
  */
 export function hasSkillAuditFactory(): boolean {
   return typeof injectedFactory === 'function';

@@ -15,7 +15,7 @@ import {
   type ProviderEntry,
   type ScopeEntry,
 } from '../common';
-import { installContextExtensions } from '../context';
+import { installContextExtensions } from '../context/context-extension';
 import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
 import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
 import PromptRegistry from '../prompt/prompt.registry';

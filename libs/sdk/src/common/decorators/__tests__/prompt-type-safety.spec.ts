@@ -24,6 +24,32 @@ class ValidPrompt extends PromptContext {
   }
 }
 
+// ── Valid: the documented forms, without `arguments` or `as const` ──
+
+@Prompt({ name: 'daily-standup' })
+class NoArgumentsPrompt extends PromptContext {
+  async execute() {
+    return 'What did you do yesterday?';
+  }
+}
+
+@Prompt({ name: 'pair', arguments: [] })
+class MessageListPrompt extends PromptContext {
+  async execute() {
+    return [
+      { role: 'user', content: { type: 'text', text: 'First message' } },
+      { role: 'assistant', content: { type: 'text', text: 'Response template' } },
+    ];
+  }
+}
+
+@Prompt({ name: 'task', arguments: [{ name: 'text' }] })
+class ObjectPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    return { task: 'summarize', input: args['text'] };
+  }
+}
+
 // ── Invalid: Prompt class not extending PromptContext ────────
 
 function _testNotPromptContext() {
@@ -39,6 +65,9 @@ function _testNotPromptContext() {
 
 // Suppress unused variable/function warnings
 void ValidPrompt;
+void NoArgumentsPrompt;
+void MessageListPrompt;
+void ObjectPrompt;
 void _testNotPromptContext;
 
 // ════════════════════════════════════════════════════════════════

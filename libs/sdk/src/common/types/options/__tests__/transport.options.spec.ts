@@ -5,9 +5,9 @@ import {
   persistenceConfigSchema,
   TransportOptionsInput,
   expandProtocolConfig,
-  toLegacyProtocolFlags,
   PROTOCOL_PRESETS,
 } from '../transport';
+import { toLegacyProtocolFlags } from '../transport/schema';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
 function getRedisProperty<K extends string>(redis: unknown, key: K): unknown {

@@ -67,7 +67,6 @@ export { connect, connectOpenAI, connectClaude, connectLangChain, connectVercelA
 // Implementation (for advanced use)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export { DirectClientImpl } from './direct-client';
 export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './llm-platform';
 export type {
   OpenAITool,

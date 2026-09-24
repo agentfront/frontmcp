@@ -108,7 +108,6 @@ export {
   uniqueId,
   jsonEmbed,
   createTemplateHelpers,
-  resetIdCounter,
 } from './template-helpers';
 
 // ============================================
