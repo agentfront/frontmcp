@@ -146,7 +146,7 @@ The `@ResourceTemplate` decorator accepts:
 
 - `name` (required) -- unique resource template name
 - `title` (optional) -- human-readable display title for UIs (if omitted, `name` is used)
-- `uriTemplate` (required) -- URI pattern with `{paramName}` placeholders (RFC 6570 style)
+- `uriTemplate` (required) -- URI pattern with RFC 6570 placeholders: `{paramName}` matches one path segment; `{+paramName}` (reserved expansion) can span several, e.g. `files://{+path}` matches `files://docs/a/b.txt` with `path = "docs/a/b.txt"`. Other RFC 6570 operators are not supported
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
@@ -574,13 +574,13 @@ When a client requests completions for the `userId` parameter with a partial str
 
 ## Troubleshooting
 
-| Problem                                          | Cause                                            | Solution                                                                           |
-| ------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Resource not appearing in `resources/list`       | Not registered in `resources` array              | Add resource class to `@App` or `@FrontMcp` `resources` array                      |
-| URI validation error at startup                  | Missing or invalid URI scheme                    | Ensure URI has a scheme like `config://`, `https://`, or `custom://`               |
-| Template parameters are empty                    | Using `@Resource` instead of `@ResourceTemplate` | Switch to `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders |
-| Binary content is garbled                        | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
-| `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
+| Problem                                            | Cause                                            | Solution                                                                           |
+| -------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Resource not appearing in `resources/list`         | Not registered in `resources` array              | Add resource class to `@App` or `@FrontMcp` `resources` array                      |
+| URI validation error at startup                    | Missing or invalid URI scheme                    | Ensure URI has a scheme like `config://`, `https://`, or `custom://`               |
+| Template parameters are empty                      | Using `@Resource` instead of `@ResourceTemplate` | Switch to `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders |
+| Binary content is garbled                          | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
+| `this.get(TOKEN)` throws ProviderNotAvailableError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
 
 ## Examples
 

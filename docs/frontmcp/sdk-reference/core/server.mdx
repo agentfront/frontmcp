@@ -77,7 +77,7 @@ start(): Promise<void>
 
 ```typescript
 interface HttpOptions {
-  port?: number;                                   // default 3001
+  port?: number;                                   // default: PORT env var, else 3000
   entryPath?: string;                              // MCP JSON-RPC entry path (default: '')
   hostFactory?:                                    // Custom host adapter (instance or factory)
     | FrontMcpServer

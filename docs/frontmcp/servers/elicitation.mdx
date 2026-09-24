@@ -35,6 +35,19 @@ Elicitation is ideal for:
 
 ## Basic Usage
 
+Elicitation is off by default. Enable it on the server first:
+
+```ts
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  elicitation: { enabled: true },
+})
+export default class Server {}
+```
+
+Without it, `this.elicit()` throws `ElicitationDisabledError`, and the call fails with `_meta.code: "ELICITATION_DISABLED"` ("Elicitation is disabled on this server.").
+
 ### Class Style (ToolContext)
 
 Use `this.elicit()` within any tool that extends `ToolContext`:
@@ -296,6 +309,10 @@ Schema validation uses the same `InvalidInputError` as tool input validation (HT
 ## Timeout Handling
 
 Elicitation requests have a configurable timeout. When the timeout expires, an `ElicitationTimeoutError` is thrown to **kill the tool execution** and release resources.
+
+<Note>
+Timeouts and the single pending elicit below apply to session clients (protocol revisions before 2026-07-28), where `elicit()` waits for the answer. Under 2026-07-28, `elicit()` does not wait: the call returns `input_required`, and the entry runs again from the top when the client retries with the answer. See [Elicitation under MCP 2026-07-28](#elicitation-under-mcp-2026-07-28).
+</Note>
 
 ### Default Timeout
 
@@ -700,7 +717,7 @@ The LLM reads these instructions, asks the user, then calls the `sendElicitation
 
 ### The sendElicitationResult Tool
 
-This system tool is **automatically registered** for clients that don't support elicitation. It:
+This system tool is **automatically registered** for session clients (protocol revisions before 2026-07-28) that don't support elicitation. A 2026-07-28 client that does not declare the capability gets error `-32021` instead, as that revision requires. The tool:
 
 - Is hidden from clients that support standard elicitation
 - Accepts the `elicitId`, user `action`, and `content`

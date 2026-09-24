@@ -342,7 +342,7 @@ frontmcp dev
 | Pattern               | Correct                                                                                           | Incorrect                                                               | Why                                                                                          |
 | --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Token definition      | `const DB: Token<DbService> = Symbol('DbService')` (typed Symbol)                                 | `const DB = 'database'` (string literal)                                | Typed `Token<T>` enables compile-time type checking on `this.get()`                          |
-| DI resolution         | `this.get(TOKEN)` with error handling                                                             | `this.tryGet(TOKEN)!` with non-null assertion                           | `get` throws a clear `DependencyNotFoundError`; non-null assertions hide failures            |
+| DI resolution         | `this.get(TOKEN)` with error handling                                                             | `this.tryGet(TOKEN)!` with non-null assertion                           | `get` throws a clear `ProviderNotAvailableError`; non-null assertions hide failures          |
 | Lifecycle             | `AsyncProvider({ useFactory })` for async setup; constructor for sync                             | Using `onInit()` / `onDestroy()` lifecycle hooks                        | `@Provider` has no lifecycle hooks; `AsyncProvider` factories are awaited before resolution  |
 | Registration scope    | Register at `@App` level for app-scoped, `@FrontMcp` for server-scoped                            | Registering same provider in multiple apps                              | Server-scoped providers are shared; duplicating causes multiple instances                    |
 | Config provider       | `readonly` properties from `process.env`                                                          | Mutable properties that change at runtime                               | Providers are singletons; mutable state can cause race conditions                            |
@@ -366,13 +366,13 @@ frontmcp dev
 - [ ] `this.get(TOKEN)` resolves the provider in tools, resources, and agents
 - [ ] Provider is a singleton (same instance across all contexts)
 - [ ] Resource-owning providers expose an explicit `close()` / `stop()` method that the host calls before `server.dispose()`
-- [ ] Missing provider throws `DependencyNotFoundError` with a clear message
+- [ ] Missing provider throws `ProviderNotAvailableError` with a clear message
 
 ## Troubleshooting
 
 | Problem                                | Cause                                                   | Solution                                                                                      |
 | -------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `DependencyNotFoundError` at runtime   | Provider not registered in scope                        | Add provider (class or `AsyncProvider` factory) to `providers` array in `@App` or `@FrontMcp` |
+| `ProviderNotAvailableError` at runtime | Provider not registered in scope                        | Add provider (class or `AsyncProvider` factory) to `providers` array in `@App` or `@FrontMcp` |
 | Provider constructor throws at startup | Missing environment variable or unreachable service     | Validate env in the constructor; restart with the missing config supplied                     |
 | `AsyncProvider` factory rejects        | Async setup error (DB unreachable, schema fetch failed) | The factory error aborts boot — fix the dependency or wrap with retry inside `useFactory`     |
 | Multiple instances of same provider    | Registered in multiple apps instead of server level     | Move to `@FrontMcp` `providers` for shared, server-scoped access                              |

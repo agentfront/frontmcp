@@ -429,13 +429,13 @@ This creates the prompt file, spec file, and updates barrel exports.
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                               | Solution                                                                                  |
-| ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Prompt not appearing in `prompts/list`            | Not registered in `prompts` array                   | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                 |
-| `MissingPromptArgumentError` on optional argument | Argument marked `required: true` incorrectly        | Set `required: false` for optional arguments in the `arguments` array                     |
-| LLM ignores priming messages                      | Only using `user` role messages                     | Add `assistant` role messages to prime the conversation pattern                           |
-| Type error on `execute()` return                  | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
-| `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
+| Problem                                            | Cause                                               | Solution                                                                                  |
+| -------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Prompt not appearing in `prompts/list`             | Not registered in `prompts` array                   | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                 |
+| `MissingPromptArgumentError` on optional argument  | Argument marked `required: true` incorrectly        | Set `required: false` for optional arguments in the `arguments` array                     |
+| LLM ignores priming messages                       | Only using `user` role messages                     | Add `assistant` role messages to prime the conversation pattern                           |
+| Type error on `execute()` return                   | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
+| `this.get(TOKEN)` throws ProviderNotAvailableError | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
 
 ## Examples
 

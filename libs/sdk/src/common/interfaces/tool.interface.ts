@@ -150,8 +150,8 @@ export abstract class ToolContext<
    * Uses 'notifications/message' per MCP 2025-11-25 spec.
    *
    * @param message - The notification message (string) or structured data (object)
-   * @param level - Log level: 'debug', 'info', 'warning', or 'error' (default: 'info')
-   * @returns true if the notification was sent, false if session unavailable
+   * @param level - One of the eight MCP log levels, 'debug' through 'emergency' (default: 'info')
+   * @returns true if the notification was sent; false without a session, or below the level the client asked for
    *
    * @example
    * ```typescript

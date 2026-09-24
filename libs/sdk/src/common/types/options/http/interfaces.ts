@@ -83,7 +83,7 @@ export interface HttpRouteConfig {
 export interface HttpOptionsInterface {
   /**
    * Port number to listen on.
-   * @default 3001
+   * @default Number(process.env.PORT) || 3000
    */
   port?: number;
 

@@ -82,7 +82,7 @@ class InternalMcpError extends McpError {
   readonly statusCode = 500;
 
   getPublicMessage(): string {
-    return `Internal FrontMCP error. Contact support with ID: ${this.errorId}`;
+    return `Internal FrontMCP error. Please contact support with error ID: ${this.errorId}`;
   }
 }
 ```
@@ -261,8 +261,10 @@ try {
 ```typescript
 // InternalMcpError hides message from clients
 throw new InternalMcpError('Database connection failed: timeout after 30s');
-// Client sees: "Internal FrontMCP error. Contact support with ID: err_abc123"
+// Client sees: "Internal FrontMCP error. Please contact support with error ID: err_3f9a1c2b7d4e8f06"
 ```
+
+A generated error ID is `err_` followed by 16 hex characters (8 random bytes).
 
 ### Use Error IDs for Tracking
 

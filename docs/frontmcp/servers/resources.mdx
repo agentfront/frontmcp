@@ -87,7 +87,7 @@ const AppConfig = resource({
 
 ## Resource Templates
 
-Resource templates use **dynamic URIs** with parameters following [RFC 6570](https://tools.ietf.org/html/rfc6570) Level 1 syntax. Parameters are extracted automatically and passed to `execute()`.
+Resource templates use **dynamic URIs** with [RFC 6570](https://tools.ietf.org/html/rfc6570) parameters: `{var}` matches one path segment, and `{+var}` (reserved expansion) can span several, as in `files://{+path}`. Other RFC 6570 operators are not supported. Parameters are extracted automatically and passed to `execute()`.
 
 ### Class Style
 
@@ -535,7 +535,7 @@ To learn how clients discover your resources via MCP flows like `resources/list`
 
 ### URI Template Encoding
 
-Resource template parameters are **percent-encoded** per [RFC 6570](https://datatracker.ietf.org/doc/html/rfc6570) Level 1 during URI expansion. This is important when parameters contain special characters like `://`, `/`, or spaces.
+`{var}` parameters are **percent-encoded** per [RFC 6570](https://datatracker.ietf.org/doc/html/rfc6570) simple expansion when a URI is built; `{+var}` parameters keep reserved characters such as `/` unencoded. This is important when parameters contain special characters like `://`, `/`, or spaces.
 
 For example, if a tool returns a raw ID like `x-coredata://3823FD9C/ICNote/p216` and you use it as a template parameter in `notes://note/{noteId}`, the expanded URI becomes:
 
