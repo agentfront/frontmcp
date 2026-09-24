@@ -1568,6 +1568,9 @@ program
             cliVersion: cliVersion,
             dryRun: opts.dryRun,
           });
+          for (var ski = 0; ski < result.skillsSkipped.length; ski++) {
+            console.error('  Skipped skill ' + result.skillsSkipped[ski].name + ': ' + result.skillsSkipped[ski].reason);
+          }
           if (opts.dryRun) {
             console.log('[install:claude] dry-run plan');
             console.log('  pluginDir: ' + result.pluginDir);

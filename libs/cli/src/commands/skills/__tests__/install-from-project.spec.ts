@@ -177,6 +177,32 @@ describe('installSkill --from-entry / --from-package', () => {
     expect(writtenFiles['/test/project/.claude/skills/wanted/examples/<copy>']).toBe('/proj/examples');
   });
 
+  it('installs inline and URL-sourced instructions captured from the entry', async () => {
+    mockExtract.mockResolvedValue([
+      { skillName: 'math-helper', description: 'Math', instructionContent: '# Math\n\nAdd carefully.' },
+    ]);
+
+    await installSkill('math-helper', { provider: 'claude', fromEntry: 'src/main.ts' });
+
+    const written = writtenFiles['/test/project/.claude/skills/math-helper/SKILL.md'];
+    expect(written).toContain('name: math-helper');
+    expect(written).toContain('# Math\n\nAdd carefully.');
+  });
+
+  it('skips a skill with no instructions rather than installing an empty SKILL.md', async () => {
+    mockExtract.mockResolvedValue([
+      { skillName: 'empty', description: 'nothing captured' },
+      { skillName: 'kept', description: 'has a body', instructionContent: 'body' },
+    ]);
+
+    await installSkill(undefined, { provider: 'claude', fromEntry: 'src/main.ts', all: true });
+
+    expect(writtenFiles['/test/project/.claude/skills/empty/SKILL.md']).toBeUndefined();
+    expect(mockDirs.has('/test/project/.claude/skills/empty')).toBe(false);
+    expect(writtenFiles['/test/project/.claude/skills/kept/SKILL.md']).toBeDefined();
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('no instructions were captured from the skill'));
+  });
+
   it('errors when the named skill is not exposed by the entry', async () => {
     mockExtract.mockResolvedValue([
       { skillName: 'a', description: 'a' },

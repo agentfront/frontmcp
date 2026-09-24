@@ -7,7 +7,7 @@ import { getSelfVersion } from '../../core/version';
 import { resolveEntry } from '../../shared/fs';
 import { assertValidPluginName } from '../build/exec/cli-runtime/plugin-emitter';
 import type { ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
-import { composeSkillMd, hasFrontmatter } from '../build/exec/cli-runtime/skill-md-compose';
+import { composeSkillMd, hasFrontmatter, readSkillInstructions } from '../build/exec/cli-runtime/skill-md-compose';
 import { getCatalogDir, loadCatalog } from './catalog';
 import { extractProjectSkills, resolvePackageEntry } from './from-entry';
 
@@ -344,13 +344,15 @@ async function installFromProject(args: InstallFromProjectArgs): Promise<void> {
 }
 
 async function materializeProjectSkill(asset: ExtractedSkillAsset, targetDir: string): Promise<void> {
-  await ensureDir(targetDir);
+  const instructions = await readSkillInstructions(asset);
+  if ('skipReason' in instructions) {
+    throw new Error(instructions.skipReason);
+  }
 
-  const body =
-    asset.instructionFile && (await fileExists(asset.instructionFile)) ? await readFile(asset.instructionFile) : '';
+  await ensureDir(targetDir);
   const skillMd = composeSkillMd(
     { name: asset.skillName, description: asset.description, tags: asset.tags, license: asset.license },
-    body,
+    instructions.body,
   );
   await writeFile(path.join(targetDir, 'SKILL.md'), skillMd);
 

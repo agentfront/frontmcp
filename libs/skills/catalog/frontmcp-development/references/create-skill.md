@@ -430,6 +430,13 @@ catalog-installed skill, so the CLAUDE.md auto-generated block, the
 uniformly. See `frontmcp-skills-usage` for the full flag list and
 selector matrix.
 
+Each skill's body comes from whichever source its `@Skill` declares: an
+`instructions: { file }` file is copied as written (so frontmatter such as
+`allowed-tools` survives), while inline and `{ url }` instructions become the
+body. A skill whose instructions cannot be resolved, such as a `file` that no
+longer exists, is skipped with a warning naming the skill and the reason,
+instead of being installed as an empty `SKILL.md`.
+
 If you also want to ship slash commands and a `.claude-plugin/plugin.json`
 manifest, install the project as a Claude Code plugin instead of just the
 skills:

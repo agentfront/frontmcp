@@ -238,6 +238,56 @@ describe('plugin-emitter (issue #411)', () => {
       expect(written).not.toContain('should-not-overwrite-source-frontmatter');
     });
 
+    it('writes inline instruction content as the SKILL.md body', async () => {
+      const destRoot = path.join(tmp, 'plugins');
+      await emitClaudePlugin({
+        destRoot,
+        name: 'inline-bin',
+        version: '1.0.0',
+        description: 'd',
+        mcpCommand: 'inline-bin',
+        mcpArgs: ['serve', '--stdio'],
+        envHints: [],
+        skills: [{ name: 'math-helper', description: 'Math', instructionContent: '# Math\n\nAdd carefully.' }],
+        commands: [],
+        cliVersion: '0.5.0',
+      });
+
+      const skillMd = await readFile(path.join(destRoot, 'inline-bin', 'skills', 'math-helper', 'SKILL.md'));
+      expect(skillMd).toContain('name: math-helper');
+      expect(skillMd).toContain('# Math\n\nAdd carefully.');
+    });
+
+    it('skips a skill with no instructions instead of writing an empty SKILL.md', async () => {
+      const destRoot = path.join(tmp, 'plugins');
+      const result = await emitClaudePlugin({
+        destRoot,
+        name: 'partial-bin',
+        version: '1.0.0',
+        description: 'd',
+        mcpCommand: 'partial-bin',
+        mcpArgs: ['serve', '--stdio'],
+        envHints: [],
+        skills: [
+          { name: 'empty', description: 'nothing captured' },
+          { name: 'lost', description: 'file gone', instructionFile: path.join(tmp, 'missing.md') },
+          { name: 'kept', description: 'has a body', instructionContent: 'body' },
+        ],
+        commands: [],
+        cliVersion: '0.5.0',
+      });
+
+      const pluginDir = path.join(destRoot, 'partial-bin');
+      expect(result.skillsSkipped).toEqual([
+        { name: 'empty', reason: 'no instructions were captured from the skill' },
+        { name: 'lost', reason: `instruction file not found at ${path.join(tmp, 'missing.md')}` },
+      ]);
+      expect(result.manifest.skills).toEqual(['kept']);
+      expect(await fileExists(path.join(pluginDir, 'skills', 'empty'))).toBe(false);
+      expect(await fileExists(path.join(pluginDir, 'skills', 'lost'))).toBe(false);
+      expect(await fileExists(path.join(pluginDir, 'skills', 'kept', 'SKILL.md'))).toBe(true);
+    });
+
     it('dryRun does not touch the filesystem', async () => {
       const destRoot = path.join(tmp, 'plugins');
       const result = await emitClaudePlugin({
@@ -399,7 +449,7 @@ describe('plugin-emitter (issue #411)', () => {
           {
             name: 'managed',
             description: 'managed skill',
-            instructionFile: undefined,
+            instructionContent: 'managed body',
           },
         ],
         commands: [],

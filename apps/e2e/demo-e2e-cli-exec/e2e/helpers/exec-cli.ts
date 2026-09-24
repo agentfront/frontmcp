@@ -19,6 +19,10 @@ let buildDone = false;
 let seaBuildDone = false;
 let seaBuildAvailable = false;
 
+export function getFixtureDir(): string {
+  return FIXTURE_DIR;
+}
+
 export function getDistDir(): string {
   return DIST_DIR;
 }
@@ -89,10 +93,10 @@ const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', '
  * Used for testing CLI-level commands like `skills search`, `skills list`, etc.
  * Resolves @frontmcp/skills via monorepo workspace symlinks.
  */
-export function runFrontmcpCli(args: string[], extraEnv?: Record<string, string>): CliResult {
+export function runFrontmcpCli(args: string[], extraEnv?: Record<string, string>, cwd = ROOT_DIR): CliResult {
   try {
     const stdout = execFileSync('node', [FRONTMCP_BIN, ...args], {
-      cwd: ROOT_DIR,
+      cwd,
       timeout: 30000,
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },

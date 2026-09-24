@@ -103,6 +103,12 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     // Tags from `@Skill({ tags: ['greeting', 'helper'] })` must round-trip
     // through bin-meta.json → composeSkillMd → SKILL.md frontmatter.
     expect(greetingMd).toMatch(/tags:\s*\[[^\]]*greeting[^\]]*helper[^\]]*\]/);
+
+    // Inline `@Skill({ instructions: '...' })` bodies must survive the build, not install as frontmatter alone.
+    const mathMd = fs.readFileSync(path.join(pluginDir, 'skills', 'math-helper', 'SKILL.md'), 'utf8');
+    expect(mathMd).toContain('name: math-helper');
+    expect(mathMd).toContain('## Math Helper');
+    expect(mathMd).toContain('Use the add tool to perform addition operations.');
   });
 
   it('install --status reports the plugin as installed for the matching scope', () => {
