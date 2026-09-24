@@ -25,7 +25,7 @@ export interface JsonRpcError {
 
 export interface JsonRpcMessage {
   jsonrpc: '2.0';
-  id?: number | string;
+  id?: number | string | null;
   method?: string;
   params?: Record<string, unknown>;
   result?: Record<string, unknown>;
@@ -33,6 +33,7 @@ export interface JsonRpcMessage {
 }
 
 export interface Rpc20260728Options {
+  path?: string;
   headers?: Record<string, string>;
   capabilities?: Record<string, unknown>;
   meta?: Record<string, unknown>;
@@ -86,7 +87,7 @@ export async function rpc20260728(
     },
   };
   const response = await handler(
-    new Request('http://localhost/', {
+    new Request(new URL(options.path ?? '/', 'http://localhost'), {
       method: 'POST',
       body: JSON.stringify(body),
       headers: {
@@ -99,10 +100,15 @@ export async function rpc20260728(
       },
     }),
   );
-  const messages = parseMessages(await response.text(), response.headers.get('content-type') ?? '');
-  const message = messages.find((candidate) => candidate.id === id) ?? messages[0];
+  const text = await response.text();
+  const messages = parseMessages(text, response.headers.get('content-type') ?? '');
+  const message =
+    messages.find((candidate) => candidate.id === id) ??
+    messages.find((candidate) => candidate.id === null && candidate.error !== undefined);
   if (!message) {
-    throw new Error(`rpc20260728: ${method} returned HTTP ${response.status} with no JSON-RPC message`);
+    throw new Error(
+      `rpc20260728: ${method} returned HTTP ${response.status} with no response to request ${id}: ${text}`,
+    );
   }
   return {
     status: response.status,
@@ -114,7 +120,7 @@ export async function rpc20260728(
 
 function parseMessages(text: string, contentType: string): JsonRpcMessage[] {
   if (!text) return [];
-  if (!contentType.includes('text/event-stream')) {
+  if (!contentType.toLowerCase().includes('text/event-stream')) {
     return [JSON.parse(text) as JsonRpcMessage];
   }
   return text
