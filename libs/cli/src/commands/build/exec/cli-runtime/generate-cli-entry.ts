@@ -3,6 +3,8 @@
  * This creates a commander.js-based CLI where each MCP tool is a subcommand.
  */
 
+import { extractTemplateParams } from '@frontmcp/utils';
+
 import { type CliConfig, type OAuthConfig } from '../config';
 import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet';
 import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
@@ -476,34 +478,64 @@ resourceCmd
   });`;
 }
 
+interface TemplateParamOption {
+  name: string;
+  flag: string;
+  optionKey: string;
+  reserved: boolean;
+}
+
+function toTemplateParamOptions(uriTemplate: string): TemplateParamOption[] {
+  return extractTemplateParams(uriTemplate).map((name) => ({
+    name,
+    flag: camelToKebab(name),
+    optionKey: kebabToCamel(camelToKebab(name)),
+    reserved: uriTemplate.includes(`{+${name}}`),
+  }));
+}
+
+// Reserved `{+name}` params were once exposed as `--+name`; that flag stays accepted but hidden.
+function templateOptionLines(param: TemplateParamOption): string {
+  const description = `'Template parameter: ${param.name}'`;
+  if (!param.reserved) return `  .requiredOption('--${param.flag} <value>', ${description})`;
+  return [
+    `  .option('--${param.flag} <value>', ${description})`,
+    `  .addOption(new Option('--+${param.flag} <value>').hideHelp())`,
+  ].join('\n');
+}
+
+function templateParamAssignment(param: TemplateParamOption): string {
+  const target = `templateParams[${JSON.stringify(param.name)}]`;
+  const value = `rawOpts[${JSON.stringify(param.optionKey)}]`;
+  if (!param.reserved) return `${target} = ${value};`;
+  const legacyValue = `rawOpts[${JSON.stringify(`+${param.optionKey}`)}]`;
+  const missingMessage = JSON.stringify(`error: required option '--${param.flag} <value>' not specified`);
+  return [
+    `${target} = ${value} !== undefined ? ${value} : ${legacyValue};`,
+    `if (${target} === undefined) this.error(${missingMessage}, { code: 'commander.missingMandatoryOptionValue' });`,
+  ].join('\n    ');
+}
+
 function generateTemplateCommands(templates: ExtractedResourceTemplate[]): string {
   if (!templates || templates.length === 0) return '// No resource templates extracted';
 
   const subcommands = templates.map((tmpl) => {
     const cmdName = camelToKebab(tmpl.name).replace(/_/g, '-');
-    // Extract {param} placeholders from URI template
-    const paramNames = extractTemplateParams(tmpl.uriTemplate);
-    const optionLines = paramNames
-      .map((p) => `  .requiredOption('--${camelToKebab(p)} <value>', 'Template parameter: ${p}')`)
-      .join('\n');
-
-    const paramMapping = paramNames
-      .map((p) => {
-        const camel = kebabToCamel(camelToKebab(p));
-        return `uri = uri.replace('{${p}}', encodeURIComponent(rawOpts[${JSON.stringify(camel)}]));`;
-      })
-      .join('\n      ');
+    const params = toTemplateParamOptions(tmpl.uriTemplate);
+    const optionLines = params.map(templateOptionLines).join('\n');
+    const paramMapping = params.map(templateParamAssignment).join('\n    ');
 
     return `templateCmd
   .command(${JSON.stringify(cmdName)})
   .description(${JSON.stringify(tmpl.description || `Read resource from template: ${tmpl.uriTemplate}`)})
 ${optionLines}
   .action(async function(opts) {
+    var rawOpts = this.opts();
+    var templateParams = {};
+    ${paramMapping}
     try {
       var client = await getClient();
-      var rawOpts = this.opts();
-      var uri = ${JSON.stringify(tmpl.uriTemplate)};
-      ${paramMapping}
+      var uri = require('@frontmcp/utils').expandUriTemplate(${JSON.stringify(tmpl.uriTemplate)}, templateParams);
       var result = await client.readResource(uri);
       var mode = program.opts().output || 'text';
       console.log(fmt.formatResourceResult(result, mode));
@@ -1964,14 +1996,7 @@ program.parseAsync(process.argv).then(async function() {
 });`;
 }
 
-/**
- * Extract {param} placeholders from a URI template string.
- */
-export function extractTemplateParams(uriTemplate: string): string[] {
-  const matches = uriTemplate.match(/\{([^}]+)\}/g);
-  if (!matches) return [];
-  return matches.map((m) => m.slice(1, -1));
-}
+export { extractTemplateParams };
 
 function kebabToCamel(str: string): string {
   return str.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
