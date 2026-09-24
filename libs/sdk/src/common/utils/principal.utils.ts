@@ -77,7 +77,7 @@ export function resolvePrincipal(
   if (contextBuilder) {
     const ctx = contextBuilder.build(info as never);
     return {
-      sub: ctx.user.sub,
+      sub: ctx.user.sub ?? '',
       roles: ctx.user.roles,
       permissions: ctx.user.permissions,
       scopes,

@@ -91,25 +91,41 @@ describe('web fetch handler request context', () => {
     expect(result.platform).toBe('cursor');
   });
 
-  it('returns an mcp-session-id header for a 2025-06-18 initialize', async () => {
-    const response = await server.handler(
-      new Request('http://localhost/', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'legacy', version: '1.0.0' } },
+  it('serves a 2025-06-18 client statelessly, without an mcp-session-id', async () => {
+    const postLegacy = (body: unknown) =>
+      server.handler(
+        new Request('http://localhost/', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'mcp-protocol-version': '2025-06-18',
+          },
+          body: JSON.stringify(body),
         }),
-      }),
-    );
-    await response.text();
+      );
 
-    expect({ status: response.status, sessionId: response.headers.get('mcp-session-id') }).toEqual({
-      status: 200,
-      sessionId: expect.any(String),
+    const initialize = await postLegacy({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'legacy', version: '1.0.0' } },
     });
+    await initialize.text();
+    const toolCall = await postLegacy({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'request_info', arguments: {} },
+    });
+    const toolCallBody = await toolCall.text();
+
+    expect({
+      initializeStatus: initialize.status,
+      sessionId: initialize.headers.get('mcp-session-id'),
+      toolCallStatus: toolCall.status,
+      toolCallSucceeded: toolCallBody.includes('"result"') && !toolCallBody.includes('"isError":true'),
+    }).toEqual({ initializeStatus: 200, sessionId: null, toolCallStatus: 200, toolCallSucceeded: true });
   });
 });
 

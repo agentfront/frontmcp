@@ -1,5 +1,6 @@
 // file: libs/sdk/src/resource/flows/read-resource.flow.ts
 
+import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
@@ -7,6 +8,7 @@ import { randomBytes } from '@frontmcp/utils';
 import {
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -17,6 +19,7 @@ import {
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  isClientFacingError,
   ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
@@ -182,6 +185,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const { sessionId, authInfo } = this.state;
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
+        this.tryGetContext()?.platformType ??
         (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
 
       this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
@@ -258,7 +262,6 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       let requiredScopes: string[] | undefined;
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
-        const { resolveRequiredScopes } = await import('@frontmcp/auth');
         requiredScopes = resolveRequiredScopes(
           result.denial,
           scopeMapping,
@@ -266,7 +269,6 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
         );
       }
 
-      const { AuthorityDeniedError } = await import('@frontmcp/auth');
       throw new AuthorityDeniedError({
         entryType: 'Resource',
         entryName: resource.fullName || resource.name,
@@ -323,6 +325,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       this.state.set('resourceContext', context);
       this.logger.verbose('createResourceContext:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('createResourceContext: failed to create context', error);
       throw new ResourceReadError(input.uri, error instanceof Error ? error : undefined);
     }
@@ -351,6 +354,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       resourceContext.output = await resourceContext.execute(input.uri, params);
       this.logger.verbose('execute:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('execute: resource read failed', error);
       throw new ResourceReadError(input.uri, error instanceof Error ? error : undefined);
     }

@@ -64,6 +64,8 @@ const SearchTool = tool({
 
 </CodeGroup>
 
+A tool's own `rateLimit` and `concurrency` are enforced without a `throttle` option. Set `throttle.enabled: false` to turn every guard off, including these.
+
 ---
 
 ## How Guard Integrates with Flows
@@ -76,10 +78,10 @@ Execute stages:  validateInput → execute (wrapped with timeout) → validateOu
 Finalize stages: releaseSemaphore → releaseQuota → ...
 ```
 
-1. **acquireQuota** — Checks global and per-entity rate limits. Throws `RateLimitError` if exceeded.
-2. **acquireSemaphore** — Acquires a concurrency slot. Throws `ConcurrencyLimitError` if no slot available.
+1. **acquireQuota** — Checks global and per-entity rate limits. Throws `RateLimitError` if exceeded. Over HTTP, `throttle.global` is checked once per request by the `http:request` flow; stdio and direct calls check it here.
+2. **acquireSemaphore** — Takes a slot from `throttle.globalConcurrency` and from the entity's `concurrency` (else `throttle.defaultConcurrency`). Throws `ConcurrencyLimitError` if no slot is available.
 3. **execute** — Wrapped with `withTimeout` if a timeout is configured. Throws `ExecutionTimeoutError` if exceeded.
-4. **releaseSemaphore** — Releases the concurrency slot back to the pool.
+4. **releaseSemaphore** — Releases the concurrency slot back to the pool. After a timeout, the slot stays taken until the timed-out `execute()` actually returns.
 5. **releaseQuota** — Cleans up rate limit state.
 
 ---
@@ -140,6 +142,10 @@ Partition keys determine how rate limits are bucketed:
 | `'session'`     | Per MCP session ID     | Per-connection limits           |
 | `'userId'`      | Per authenticated user | Per-user quotas                 |
 | Custom function | `(ctx) => string`      | Tenant, org, or custom grouping |
+
+A `'session'` bucket is only ever a session the server verified: a `mcp-session-id` the server does not accept is ignored. A request without a verified session (every MCP 2026-07-28 request, stateless HTTP, or a session id the server rejected) is not given a fresh bucket: it falls back to the signed-in user, and anonymous callers share one `anonymous` bucket. `'userId'` never counts an anonymous caller as a user; it falls back to the session the same way.
+
+`throttle.global` partitioned by `'ip'` or `'global'` is checked before authentication. Partitioned by `'session'`, `'userId'` or a function, it is checked right after authentication, on the verified identity.
 
 **Custom partition key example:**
 
@@ -208,6 +214,8 @@ The semaphore uses pub/sub notifications when available (Redis) for efficient sl
 ## Execution Timeout
 
 Timeout wraps the `execute` stage with a deadline. If execution exceeds the configured duration, it throws `ExecutionTimeoutError`.
+
+When the deadline passes, a tool's `this.signal` is aborted, and so are the requests the tool made with `this.fetch()`. Pass the signal to other cancellable work too: the deadline answers the client, but it cannot stop code that ignores the signal. Until `execute()` returns, it keeps its concurrency slot, so a `maxConcurrent` limit still holds.
 
 ### Per-Tool Timeout
 
@@ -437,7 +445,7 @@ Guard throws specific error classes when limits are exceeded:
 | `IpBlockedError`        | `IP_BLOCKED`          | 403         | Client IP is on deny list     |
 | `IpNotAllowedError`     | `IP_NOT_ALLOWED`      | 403         | Client IP not on allow list   |
 
-These errors are automatically serialized to appropriate MCP error responses by the transport layer.
+A `tools/call` that hits a limit answers with an error result whose `_meta.code` is the code above, in production too.
 
 ---
 
