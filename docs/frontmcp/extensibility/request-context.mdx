@@ -119,6 +119,8 @@ Entries are matched by origin (scheme, host and port), so `https://api.internal.
 
 A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect, so those headers never reach an origin you did not list. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
+`requestTimeout` applies when you pass no `signal` in the options; a `Request`'s own signal still aborts it.
+
 ### Custom Headers
 
 Additional headers can be passed and will be merged:
