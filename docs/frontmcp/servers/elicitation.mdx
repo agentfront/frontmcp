@@ -542,6 +542,22 @@ class AdminAuditPlugin extends DynamicPlugin {
 
 ---
 
+## Elicitation under MCP 2026-07-28
+
+Protocol 2026-07-28 has no server-to-client requests, so `this.elicit()` works through input requests:
+
+1. The first call answers with `resultType: "input_required"`, the question under `inputRequests`, and a `requestState`.
+2. The client retries the same call with `inputResponses` and that `requestState`.
+3. The entry runs again **from the top**, and each `elicit()` it has already asked returns the answer the client sent. Code before an `elicit()` runs on every round, so keep side effects after the last `elicit()` or make them idempotent.
+
+The same rules apply as in a session:
+
+- `elicitation.enabled: true` is required.
+- An accepted answer is validated against the schema. A mismatch fails the call with `INVALID_INPUT`, and an unknown `action` is rejected the same way.
+- A client that did not declare the `elicitation` capability (or the requested mode) gets error `-32021` instead of a question.
+- The `sendElicitationResult` fallback tool is not listed to 2026-07-28 clients.
+- Anonymous callers can answer across rounds: their `requestState` is bound to one shared anonymous principal, not to the per-request anonymous id.
+
 ## Client Capability Detection
 
 Not all MCP clients support elicitation. FrontMCP automatically checks client capabilities before sending elicitation requests.

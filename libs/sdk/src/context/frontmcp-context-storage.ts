@@ -19,12 +19,12 @@
  */
 
 import { type AuthInfo } from '@frontmcp/protocol';
-import { AsyncLocalStorage } from '@frontmcp/utils';
+import { AsyncLocalStorage, randomUUID } from '@frontmcp/utils';
 
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
-import { FrontMcpContext, type FrontMcpContextArgs } from './frontmcp-context';
+import { FrontMcpContext, type FrontMcpContextArgs, type FrontMcpContextConfig } from './frontmcp-context';
 import { extractMetadata } from './metadata.utils';
 import { parseTraceContext } from './trace-context';
 
@@ -49,6 +49,19 @@ const frontmcpContextStorage = new AsyncLocalStorage<FrontMcpContext>();
   scope: ProviderScope.GLOBAL,
 })
 export class FrontMcpContextStorage {
+  private contextConfig: FrontMcpContextConfig = {};
+
+  /**
+   * Apply server-wide defaults (from `@FrontMcp({ fetch })`) to every context this storage creates.
+   *
+   * @param contextConfig - Defaults; a context's own config still overrides them
+   * @returns This storage
+   */
+  configure(contextConfig: FrontMcpContextConfig = {}): this {
+    this.contextConfig = contextConfig;
+    return this;
+  }
+
   /**
    * Run a callback with a new FrontMcpContext.
    *
@@ -57,7 +70,7 @@ export class FrontMcpContextStorage {
    * @returns Result of the callback
    */
   run<T>(args: FrontMcpContextArgs, fn: () => T | Promise<T>): T | Promise<T> {
-    const context = new FrontMcpContext(args);
+    const context = new FrontMcpContext(this.withServerConfig(args));
     return frontmcpContextStorage.run(context, fn);
   }
 
@@ -82,12 +95,40 @@ export class FrontMcpContextStorage {
     // The socket peer is the only client address a caller cannot forge; forwarding headers
     // are used in its place only behind a trusted proxy (GHSA-p3qf-fcwm-35x4).
     const metadata = extractMetadata(headers, { peerAddress });
-    const context = new FrontMcpContext({
-      ...contextArgs,
-      traceContext,
-      metadata,
-    });
+    const context = new FrontMcpContext(
+      this.withServerConfig({
+        ...contextArgs,
+        traceContext,
+        metadata,
+      }),
+    );
     return frontmcpContextStorage.run(context, fn);
+  }
+
+  /**
+   * Run with the context of an incoming HTTP request: its `mcp-session-id` (a fresh anonymous
+   * id when it sends none), its trace context and metadata, and the socket peer when the
+   * runtime exposes one. Every adapter enters its flows through this, so they all see the
+   * same context for the same request.
+   *
+   * @param request - The request's headers, and its socket where the runtime has one
+   * @param scopeId - Scope handling the request
+   * @param fn - Async function to run
+   * @returns Result of the callback
+   */
+  runForHttpRequest<T>(
+    request: { headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
+    scopeId: string,
+    fn: () => T | Promise<T>,
+  ): T | Promise<T> {
+    const headers = request.headers ?? {};
+    const headerSessionId = typeof headers['mcp-session-id'] === 'string' ? headers['mcp-session-id'].trim() : '';
+    const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
+    return this.runFromHeaders(headers, { sessionId, scopeId, peerAddress: request.socket?.remoteAddress }, fn);
+  }
+
+  private withServerConfig(args: FrontMcpContextArgs): FrontMcpContextArgs {
+    return { ...args, config: { ...this.contextConfig, ...args.config } };
   }
 
   /**

@@ -39,8 +39,11 @@ export {
   // Prompt errors
   PromptNotFoundError,
   PromptExecutionError,
+  // Guard errors
+  GuardLimitMcpError,
   // Utilities
   isPublicError,
+  isClientFacingError,
   toMcpError,
   formatMcpErrorResponse,
   extractPublicMessage,
@@ -106,7 +109,12 @@ export {
 } from './elicitation.error';
 
 // Export MRTR signals (protocol 2026-07-28)
-export { InputRequiredSignal, MissingClientCapabilityError, SamplingNotAvailableError } from './mrtr.error';
+export {
+  InputRequiredSignal,
+  isMrtrSignal,
+  MissingClientCapabilityError,
+  SamplingNotAvailableError,
+} from './mrtr.error';
 
 // Export remote MCP errors
 export {

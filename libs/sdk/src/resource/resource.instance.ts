@@ -237,9 +237,11 @@ export class ResourceInstance<
 
   /**
    * Convert the raw resource return value into an MCP ReadResourceResult.
+   *
+   * @param readUri - The URI that was read; content URIs of a template's result are based on it
    */
-  override parseOutput(raw: Out): ParsedResourceResult {
-    const uri = this.isTemplate ? this.uriTemplate! : this.uri!;
+  override parseOutput(raw: Out, readUri?: string): ParsedResourceResult {
+    const uri = readUri ?? (this.isTemplate ? this.uriTemplate! : this.uri!);
     const mimeType = this.metadata.mimeType;
 
     // If raw is already in ReadResourceResult format
@@ -271,9 +273,9 @@ export class ResourceInstance<
   /**
    * Safe version of parseOutput that returns success/error instead of throwing.
    */
-  override safeParseOutput(raw: Out): ResourceSafeTransformResult<ParsedResourceResult> {
+  override safeParseOutput(raw: Out, readUri?: string): ResourceSafeTransformResult<ParsedResourceResult> {
     try {
-      return { success: true, data: this.parseOutput(raw) };
+      return { success: true, data: this.parseOutput(raw, readUri) };
     } catch (error: unknown) {
       return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
     }

@@ -11,7 +11,12 @@ import { toJSONSchema, z, type ZodType } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type FrontMcpContext } from '../../context';
-import { ElicitationDisabledError, ElicitationFallbackRequired, ElicitationNotSupportedError } from '../../errors';
+import {
+  ElicitationDisabledError,
+  ElicitationFallbackRequired,
+  ElicitationNotSupportedError,
+  InvalidInputError,
+} from '../../errors';
 import { supportsElicitation, type ClientCapabilities } from '../../notification';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation.types';
 
@@ -105,7 +110,17 @@ export async function performElicit<S extends ZodType>(
       requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
       ...(options?.mode ? { mode: options.mode } : {}),
     });
-    return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    if (answer.status !== 'accept') {
+      return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    }
+    const parsedContent = zodSchema.safeParse(answer.content);
+    if (!parsedContent.success) {
+      throw new InvalidInputError(
+        'The elicitation answer does not match the requested schema',
+        parsedContent.error.issues,
+      );
+    }
+    return { status: 'accept', content: parsedContent.data } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
   }
 
   // 2. Validate session

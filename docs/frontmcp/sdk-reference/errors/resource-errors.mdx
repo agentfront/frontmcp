@@ -46,7 +46,7 @@ throw new ResourceNotFoundError('file:///missing.txt');
 
 ### ResourceReadError
 
-Thrown when reading a resource fails. This is an internal error — details are hidden from clients.
+Thrown when reading a resource fails. This is an internal error — details are hidden from clients. A public error thrown from `execute()` or passed to `this.fail()`, such as `ResourceNotFoundError`, is not wrapped.
 
 | Property        | Type                 | Value                 |
 | --------------- | -------------------- | --------------------- |

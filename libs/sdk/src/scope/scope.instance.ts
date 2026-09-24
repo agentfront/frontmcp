@@ -722,6 +722,8 @@ export class Scope extends ScopeEntry {
     // Fail-fast: entries with 'authorities' metadata but no engine configured
     this.validateAuthoritiesConfig();
 
+    await this.initGuardForDeclaredLimits();
+
     // ═══ BATCH 3: Cross-registry finalization (sequential) ═══
 
     // Register sendElicitationResult system tool if elicitation is enabled
@@ -1253,7 +1255,7 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useClass: FrontMcpContextStorage,
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
@@ -1404,7 +1406,8 @@ export class Scope extends ScopeEntry {
 
   /**
    * Guard manager for rate limiting, concurrency control, IP filtering, and timeout.
-   * Returns undefined if throttle is not configured or disabled.
+   * Returns undefined when `throttle.enabled` is not set and no tool or agent declares
+   * its own `rateLimit` or `concurrency`, or when `throttle.enabled` is `false`.
    */
   get rateLimitManager(): GuardManager | undefined {
     return this._rateLimitManager;
@@ -1538,6 +1541,24 @@ export class Scope extends ScopeEntry {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Scope: authorities init failed — ${msg}`);
     }
+  }
+
+  /**
+   * Tools and agents that declare their own `rateLimit` or `concurrency` are guarded even
+   * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`.
+   */
+  private async initGuardForDeclaredLimits(): Promise<void> {
+    const throttleConfig = this.metadata.throttle;
+    if (this._rateLimitManager || this.cliMode || throttleConfig?.enabled === false) return;
+
+    const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
+    const declaresLimits = guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency);
+    if (!declaresLimits) return;
+
+    this._rateLimitManager = await createGuardManager({
+      config: { ...throttleConfig, enabled: true },
+      logger: this.logger,
+    });
   }
 
   /**

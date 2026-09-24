@@ -7,6 +7,7 @@ import {
 
 import { FlowControl } from '../../common';
 import {
+  ErrorHandler,
   formatMcpErrorResponse,
   InputRequiredSignal,
   InternalMcpError,
@@ -22,6 +23,7 @@ export default function callToolRequestHandler({
   scope,
 }: McpHandlerOptions): McpHandler<CallToolRequest, CallToolResult> {
   const logger = scope.logger.child('call-tool-request-handler');
+  const errorHandler = new ErrorHandler({ logger });
 
   return {
     requestSchema: CallToolRequestSchema,
@@ -62,7 +64,7 @@ export default function callToolRequestHandler({
           if (e.type === 'fail') {
             const original = (e as { originalError?: unknown }).originalError;
             if (original !== undefined) {
-              return formatMcpErrorResponse(original);
+              return errorHandler.handle(original, { toolName });
             }
           }
           // For handled, next, abort (and `fail` with no original error) — return appropriate response
@@ -94,12 +96,7 @@ export default function callToolRequestHandler({
           throw toSdkMcpError(e);
         }
 
-        // Log detailed error info
-        logger.error('CallTool Failed', {
-          tool: toolName,
-          error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
-        });
-        return formatMcpErrorResponse(e);
+        return errorHandler.handle(e, { toolName });
       }
     },
   } satisfies McpHandler<CallToolRequest, CallToolResult>;

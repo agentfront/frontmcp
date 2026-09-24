@@ -79,6 +79,8 @@ Use `this.get` (throws) when the tool genuinely requires the dependency. Use `th
 
 `this.fetch` is a thin wrapper around the standard `fetch` that propagates the request's `traceContext` so downstream services can stitch the call into the same trace.
 
+It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead. A request that does carry forwarded caller headers is sent with `redirect: 'manual'`, so a 3xx comes back to the tool instead of following to another origin; with an explicit `redirect: 'error'`, the redirect rejects the `fetch` instead.
+
 ```typescript
 async execute(input: { url: string }) {
   const response = await this.fetch(input.url);
@@ -99,6 +101,8 @@ this.fetch(url, {
   signal: AbortSignal.timeout(5_000),
 });
 ```
+
+The configured `requestTimeout` (30s by default) applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both. `this.fetch()` is also aborted with `this.signal`, so a cancelled or timed-out call stops its requests.
 
 > Don't `try/catch` around the fetch and swallow errors — let infrastructure errors propagate to the framework. Only use `this.fail` for **business-logic** errors. See [`error-handling.md`](./error-handling.md).
 
