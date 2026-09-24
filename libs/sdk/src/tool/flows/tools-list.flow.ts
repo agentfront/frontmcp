@@ -279,9 +279,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
 
-      // Get elicitation support from session payload (set during MCP initialize)
-      // authInfo is guaranteed by parseInput (throws if missing for authorized flow)
-      const supportsElicitation = authInfo.sessionIdPayload?.supportsElicitation;
+      // Session clients report elicitation support at initialize. Under 2026-07-28 elicitation goes through
+      // input requests (or fails with -32021), so the fallback sendElicitationResult tool is never listed.
+      const usesInputRequests = this.tryGetContext()?.getMrtrExchange() !== undefined;
+      const supportsElicitation = usesInputRequests || authInfo.sessionIdPayload?.supportsElicitation;
 
       // Get tools appropriate for this client's elicitation support
       const scopeTools = this.scope.tools.getToolsForListing(supportsElicitation);

@@ -2,6 +2,8 @@
  * Node.js environment access.
  */
 
+import { hasEdgeGlobalScope } from './edge-scope';
+
 export function getEnv(key: string): string | undefined;
 export function getEnv(key: string, defaultValue: string): string;
 export function getEnv(key: string, defaultValue?: string): string | undefined {
@@ -34,8 +36,7 @@ export function setEnv(key: string, value: string): void {
 }
 
 export function isEdgeRuntime(): boolean {
-  if (typeof globalThis !== 'undefined' && 'EdgeRuntime' in globalThis) return true;
-  if (typeof globalThis !== 'undefined' && 'caches' in globalThis && !('window' in globalThis)) return true;
+  if (hasEdgeGlobalScope()) return true;
   return process.env['EDGE_RUNTIME'] !== undefined && process.env['VERCEL_ENV'] !== undefined;
 }
 
