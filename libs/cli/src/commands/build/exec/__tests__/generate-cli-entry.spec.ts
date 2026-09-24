@@ -380,6 +380,41 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'--repo <value>'");
     });
 
+    it('keeps simple params required and expands them through the same helper', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          resourceTemplates: [{ uriTemplate: 'users://{userId}/profile', name: 'user_profile', description: 'Profile' }],
+        }),
+      }));
+
+      expect(source).toContain(".requiredOption('--user-id <value>', 'Template parameter: userId')");
+      expect(source).toContain('templateParams["userId"] = rawOpts["userId"];');
+      expect(source).not.toContain("'--+user-id");
+    });
+
+    it('expands reserved-expansion params with their operator semantics, so "/" is not encoded', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          resourceTemplates: [
+            {
+              uriTemplate: 'skill://{+skillPath}/{+filePath}',
+              name: 'sep2640-skill-file',
+              description: 'Read a skill file',
+            },
+          ],
+        }),
+      }));
+
+      expect(source).toContain(".option('--skill-path <value>', 'Template parameter: skillPath')");
+      expect(source).toContain(".option('--file-path <value>', 'Template parameter: filePath')");
+      expect(source).toContain(".addOption(new Option('--+skill-path <value>').hideHelp())");
+      expect(source).toContain(
+        'templateParams["skillPath"] = rawOpts["skillPath"] !== undefined ? rawOpts["skillPath"] : rawOpts["+skillPath"];',
+      );
+      expect(source).toContain(`expandUriTemplate("skill://{+skillPath}/{+filePath}", templateParams)`);
+      expect(source).not.toContain('encodeURIComponent(rawOpts');
+    });
+
     it('should not generate template commands when no templates', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({ resourceTemplates: [] }),
@@ -1187,6 +1222,10 @@ describe('extractTemplateParams', () => {
 
   it('should handle params with various characters', () => {
     expect(extractTemplateParams('data://{my-param}/{another_param}')).toEqual(['my-param', 'another_param']);
+  });
+
+  it('should strip the RFC 6570 reserved-expansion operator from the name', () => {
+    expect(extractTemplateParams('skill://{+skillPath}/{+filePath}')).toEqual(['skillPath', 'filePath']);
   });
 });
 
