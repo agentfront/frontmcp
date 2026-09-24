@@ -200,7 +200,7 @@ is what takes callers out of it.
 
 - **`'global'`** — Single shared counter for all clients. Use for global capacity limits.
 - **`'ip'`** — Separate counter per client IP. Use for per-client rate limiting.
-- **`'session'`** — Separate counter per MCP session. Use for per-session fairness. A request with no session (every MCP 2026-07-28 request, and stateless HTTP) falls back to the signed-in user; anonymous callers share one `anonymous` counter.
+- **`'session'`** — Separate counter per MCP session the server verified; a `mcp-session-id` it does not accept is ignored. Use for per-session fairness. A request without a verified session (every MCP 2026-07-28 request, stateless HTTP, or a rejected session id) falls back to the signed-in user; anonymous callers share one `anonymous` counter. A `throttle.global` partitioned by session, user or a function is checked right after authentication; one partitioned by `'ip'` or `'global'` is checked before it.
 - **`'userId'`** — Separate counter per signed-in user. Anonymous callers fall back to the session, as above.
 
 ## Distributed Rate Limiting
@@ -267,7 +267,7 @@ done
 
 - [ ] Sending requests beyond the rate limit returns HTTP 429
 - [ ] Blocked IPs receive HTTP 403
-- [ ] Tool executions that exceed `executeMs` return an `EXECUTION_TIMEOUT` error and abort `this.signal`; the tool passes `this.signal` to `fetch` and other cancellable work so it stops too
+- [ ] Tool executions that exceed `executeMs` return an `EXECUTION_TIMEOUT` error and abort `this.signal` and the tool's pending `this.fetch()` requests; the tool passes `this.signal` to other cancellable work so it stops too
 
 ## Troubleshooting
 

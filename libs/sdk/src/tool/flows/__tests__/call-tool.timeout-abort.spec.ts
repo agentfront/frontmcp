@@ -56,7 +56,53 @@ function callDeploy(handler: WebFetchHandler) {
   return rpc20260728(handler, 'tools/call', { name: 'deploy', arguments: {} });
 }
 
+async function createUpstreamCallServer(): Promise<{ handler: WebFetchHandler; upstreamSignals: AbortSignal[] }> {
+  const upstreamSignals: AbortSignal[] = [];
+
+  @Tool({ name: 'sync_orders', inputSchema: {}, timeout: { executeMs: TIMEOUT_MS } })
+  class SyncOrdersTool extends ToolContext {
+    async execute() {
+      await this.fetch('https://upstream.example.com/orders');
+      return { synced: true };
+    }
+  }
+
+  @App({ id: 'orders-sync', name: 'orders-sync', tools: [SyncOrdersTool] })
+  class OrdersSyncApp {}
+
+  global.fetch = jest.fn((_input: RequestInfo | URL, options?: RequestInit) => {
+    const signal = options?.signal;
+    if (signal) upstreamSignals.push(signal);
+    return new Promise<Response>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason));
+    });
+  });
+
+  const { handler } = await createTestFetchServer({
+    info: { name: 'timeout-abort-upstream', version: '1.0.0' },
+    apps: [OrdersSyncApp],
+    throttle: { enabled: true },
+  });
+  return { handler, upstreamSignals };
+}
+
 describe('call-tool execution timeout', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('aborts the outbound this.fetch() of an execute() that passed its timeout', async () => {
+    const { handler, upstreamSignals } = await createUpstreamCallServer();
+
+    const { message } = await rpc20260728(handler, 'tools/call', { name: 'sync_orders', arguments: {} });
+
+    expect(message.result?.['isError']).toBe(true);
+    expect(upstreamSignals).toHaveLength(1);
+    expect(upstreamSignals[0]?.aborted).toBe(true);
+  });
+
   it('aborts this.signal of an execute() that passed its timeout', async () => {
     const { handler, tracker } = await createDeployServer();
 

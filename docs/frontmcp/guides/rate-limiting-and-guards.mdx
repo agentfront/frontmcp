@@ -154,7 +154,7 @@ Protect against hanging requests by setting a maximum execution time.
     }
     ```
 
-    If execution takes longer than 30 seconds, it throws `ExecutionTimeoutError` (408) and aborts `this.signal`. Pass `this.signal` to `fetch` and other cancellable calls so the work stops too.
+    If execution takes longer than 30 seconds, it throws `ExecutionTimeoutError` (408) and aborts `this.signal`, along with the tool's pending `this.fetch()` requests. Pass `this.signal` to other cancellable calls so the work stops too.
 
   </Step>
 

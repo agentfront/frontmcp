@@ -6,6 +6,7 @@ import {
   type OrchestratedProviderState,
   type OrchestratedTokenStore,
 } from '@frontmcp/auth';
+import { type GuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -27,6 +28,7 @@ import {
   intentSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  partitionsByIdentity,
   ServerRequestTokens,
   toLegacyProtocolFlags,
   type Authorization,
@@ -48,6 +50,8 @@ const plan = {
     'acquireSemaphore',
     // route request to the correct flow
     'checkAuthorization',
+    // rate limits keyed on the caller's verified identity
+    'acquireIdentityQuota',
     'router',
   ],
   execute: [
@@ -190,8 +194,6 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
     const context = this.tryGetContext();
     const partitionCtx = buildPartitionContext(context);
-    const requestBody = this.rawInput.request.body as { id?: string | number | null } | undefined;
-    const jsonRpcId = requestBody?.id ?? null;
 
     // The configured IP policy is enforced here, before any other guard work. `IpFilter` and
     // `GuardManager.checkIpFilter` already existed and were unit-tested; nothing on the
@@ -204,7 +206,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         httpRespond.json(
           {
             jsonrpc: '2.0',
-            id: jsonRpcId,
+            id: this.jsonRpcRequestId(),
             error: { code: -32001, message: 'Forbidden: client IP rejected by ipFilter' },
           },
           { status: 403 },
@@ -213,24 +215,41 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       return;
     }
 
-    if (!manager.config?.global) return;
+    const globalConfig = manager.config?.global;
+    if (!globalConfig || partitionsByIdentity(globalConfig.partitionBy)) return;
+    await this.enforceGlobalRateLimit(manager);
+  }
 
-    const result = await manager.checkGlobalRateLimit(partitionCtx);
+  @Stage('acquireIdentityQuota')
+  async acquireIdentityQuota() {
+    const manager = this.scope.rateLimitManager;
+    const globalConfig = manager?.config?.global;
+    if (!manager || !globalConfig || !partitionsByIdentity(globalConfig.partitionBy)) return;
+    await this.enforceGlobalRateLimit(manager);
+  }
+
+  private async enforceGlobalRateLimit(manager: GuardManager): Promise<void> {
+    const context = this.tryGetContext();
+    const result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
     context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
-    if (!result.allowed) {
-      const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
-      this.respond(
-        httpRespond.json(
-          {
-            jsonrpc: '2.0',
-            id: jsonRpcId,
-            error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
-          },
-          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-        ),
-      );
-      return;
-    }
+    if (result.allowed) return;
+
+    const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
+    this.respond(
+      httpRespond.json(
+        {
+          jsonrpc: '2.0',
+          id: this.jsonRpcRequestId(),
+          error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
+        },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+      ),
+    );
+  }
+
+  private jsonRpcRequestId(): string | number | null {
+    const requestBody = this.rawInput.request.body as { id?: string | number | null } | undefined;
+    return requestBody?.id ?? null;
   }
 
   @Stage('checkAuthorization')

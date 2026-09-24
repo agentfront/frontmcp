@@ -132,6 +132,29 @@ describe('call-tool guard configuration', () => {
     });
   });
 
+  describe('partitions', () => {
+    it('keys a session-partitioned throttle.global on a verified session, not the session header', async () => {
+      const server = await createGuardedServer(
+        {},
+        { enabled: true, global: { maxRequests: 2, windowMs: 60_000, partitionBy: 'session' } },
+      );
+
+      const outcomes: string[] = [];
+      for (const forgedSessionId of ['forged-1', 'forged-2', 'forged-3']) {
+        const response = await rpc20260728(
+          server.handler,
+          'tools/call',
+          { name: server.toolName, arguments: {} },
+          { headers: { 'mcp-session-id': forgedSessionId } },
+        );
+        outcomes.push(outcomeOf(response));
+      }
+
+      expect(outcomes.slice(0, 2)).toEqual(['ok', 'ok']);
+      expect(outcomes[2]).not.toBe('ok');
+    });
+  });
+
   describe('error codes', () => {
     it('answers a reached concurrency limit with CONCURRENCY_LIMIT', async () => {
       const server = await createGuardedServer({ concurrency: { maxConcurrent: 1 } }, { enabled: true }, 150);

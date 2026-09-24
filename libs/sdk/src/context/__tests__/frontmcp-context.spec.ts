@@ -624,6 +624,33 @@ describe('FrontMcpContext', () => {
       expect(headers.get('x-frontmcp-org')).toBe('org-456');
     });
 
+    it('should abort the request when the execution signal aborts', async () => {
+      const ctx = new FrontMcpContext(validArgs);
+      const execution = new AbortController();
+
+      await ctx.fetch('https://api.example.com/data', undefined, execution.signal);
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0];
+      const sentSignal = options.signal as AbortSignal;
+
+      expect(sentSignal.aborted).toBe(false);
+      execution.abort(new Error('execution timed out'));
+      expect(sentSignal.aborted).toBe(true);
+    });
+
+    it('should keep the request timeout alongside an execution signal', async () => {
+      global.fetch = jest.fn(
+        (_input: RequestInfo | URL, options?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+          }),
+      );
+      const ctx = new FrontMcpContext({ ...validArgs, config: { requestTimeout: 20 } });
+
+      const pending = ctx.fetch('https://api.example.com/data', undefined, new AbortController().signal);
+
+      await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+    });
+
     it('should use timeout from config', async () => {
       const ctx = new FrontMcpContext({
         ...validArgs,

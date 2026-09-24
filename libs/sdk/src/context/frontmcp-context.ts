@@ -712,9 +712,14 @@ export class FrontMcpContext {
    *
    * @param input - Request URL or Request object
    * @param init - Request options
+   * @param executionSignal - Aborts the request as well, on top of the caller's signal or the request timeout
    * @returns Fetch response
    */
-  async fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+  async fetch(
+    input: RequestInfo | URL,
+    init?: FrontMcpFetchInit | RequestInit,
+    executionSignal?: AbortSignal,
+  ): Promise<Response> {
     let effectiveInit: RequestInit = (init ?? {}) as RequestInit;
     let effectiveInput: RequestInfo | URL = input;
 
@@ -800,7 +805,8 @@ export class FrontMcpContext {
       );
     }
 
-    const signal = userSignal ?? controller?.signal;
+    const requestSignal = userSignal ?? controller?.signal;
+    const signal = executionSignal && requestSignal ? AbortSignal.any([executionSignal, requestSignal]) : requestSignal;
     const requestedRedirect = effectiveInit.redirect ?? inputRequest?.redirect;
 
     try {

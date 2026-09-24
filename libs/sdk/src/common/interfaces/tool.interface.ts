@@ -1,3 +1,4 @@
+import { type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type FuncType, type Type } from '@frontmcp/di';
 import { type ZodType } from '@frontmcp/lazy-zod';
 
@@ -93,6 +94,16 @@ export abstract class ToolContext<
   }
 
   abstract execute(input: In): Promise<Out>;
+
+  /**
+   * Like {@link ExecutionContextBase.fetch}, and also aborted with {@link signal}, so a
+   * cancelled or timed-out call stops its outbound requests.
+   */
+  override fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+    const context = this.tryGetContext();
+    if (context && this.signal) return context.fetch(input, init, this.signal);
+    return super.fetch(input, init);
+  }
 
   public get input(): In {
     return this._input as In;

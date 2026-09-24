@@ -61,7 +61,7 @@ interface IpFilterConfig {
 
 - **`'global'`**: Single counter shared by all clients. Protects total server capacity.
 - **`'ip'`**: Separate counter per client IP. Fair per-client limiting.
-- **`'session'`**: Separate counter per MCP session. Fair per-session limiting. A request with no session (every MCP 2026-07-28 request) falls back to the signed-in user; anonymous callers share one `anonymous` counter.
+- **`'session'`**: Separate counter per MCP session the server verified; a `mcp-session-id` it does not accept is ignored. Fair per-session limiting. A request without a verified session (every MCP 2026-07-28 request, or a rejected session id) falls back to the signed-in user; anonymous callers share one `anonymous` counter.
 
 ## Priority Order
 

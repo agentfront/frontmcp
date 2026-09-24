@@ -3,6 +3,7 @@ import {
   ConcurrencyLimitError,
   type ConcurrencyConfig,
   type GuardManager,
+  type PartitionKey,
   type PartitionKeyContext,
   type SemaphoreTicket,
 } from '@frontmcp/guard';
@@ -19,28 +20,36 @@ export const GLOBAL_RATE_LIMIT_CHECKED = Symbol.for('frontmcp:guard:global-rate-
 export interface PartitionSource {
   sessionId: string;
   metadata?: { clientIp?: string };
-  authInfo?: { clientId?: unknown };
+  authInfo?: { clientId?: unknown; sessionId?: unknown; extra?: { sessionId?: unknown } };
 }
 
 /**
  * The guard partition context for a request.
  *
- * A per-request placeholder session (`anon:…`, given to requests that carry no session,
- * including every MCP 2026-07-28 request) is not a session: keying on it would give each
- * request a fresh budget. Such requests fall back to the signed-in user, or to one shared
- * `anonymous` partition. An anonymous subject is never a user id.
+ * Only a session the server verified is a partition: the client picks the `mcp-session-id`
+ * it sends, and a request without one gets a per-request placeholder (`anon:…`), so keying on
+ * either would give each request a fresh budget. Other requests fall back to the signed-in
+ * user, or to one shared `anonymous` partition. An anonymous subject is never a user id.
  */
 export function buildPartitionContext(source: PartitionSource | undefined): PartitionKeyContext | undefined {
   if (!source) return undefined;
   const clientId = source.authInfo?.clientId;
   const userId = isAnonymousSubject(clientId) ? undefined : String(clientId);
-  const hasSession = !source.sessionId.startsWith('anon:');
+  const verifiedSessionId = source.authInfo?.sessionId ?? source.authInfo?.extra?.sessionId;
   const callerKey = userId ? `user:${userId}` : 'anonymous';
   return {
-    sessionId: hasSession ? source.sessionId : callerKey,
+    sessionId: verifiedSessionId === source.sessionId ? source.sessionId : callerKey,
     clientIp: source.metadata?.clientIp,
     userId,
   };
+}
+
+/**
+ * Whether a partition is keyed on the caller's identity, which is known only once the
+ * request is authorized.
+ */
+export function partitionsByIdentity(partitionBy: PartitionKey | undefined): boolean {
+  return partitionBy === 'session' || partitionBy === 'userId' || typeof partitionBy === 'function';
 }
 
 /**
