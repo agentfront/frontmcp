@@ -79,7 +79,7 @@ Use `this.get` (throws) when the tool genuinely requires the dependency. Use `th
 
 `this.fetch` is a thin wrapper around the standard `fetch` that propagates the request's `traceContext` so downstream services can stitch the call into the same trace.
 
-It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead. A request that does carry forwarded caller headers is sent with `redirect: 'manual'`, so a 3xx comes back to the tool instead of following to another origin.
+It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead. A request that does carry forwarded caller headers is sent with `redirect: 'manual'`, so a 3xx comes back to the tool instead of following to another origin; with an explicit `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
 ```typescript
 async execute(input: { url: string }) {
