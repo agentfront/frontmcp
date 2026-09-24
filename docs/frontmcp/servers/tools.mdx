@@ -210,7 +210,7 @@ class CalculateTotalTool extends ToolContext {
 }
 ```
 
-A result that does not match `outputSchema` fails the call: the client gets an error result with `_meta.code: "INVALID_OUTPUT"`, and nothing from the rejected result is sent. When the result matches, fields the schema does not declare are dropped.
+A result that does not match `outputSchema` fails the call: the client gets an error result with `_meta.code: "INVALID_OUTPUT"`, and nothing from the rejected result is sent. When the result matches, fields the schema does not declare are dropped. A number field holding `Infinity`, `-Infinity`, or `NaN` also fails with `INVALID_OUTPUT`, unless the server sets `output: { allowNonFinite: true }`.
 
 ### Output schema exposure
 
