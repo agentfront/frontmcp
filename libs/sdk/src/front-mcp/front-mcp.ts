@@ -240,8 +240,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    *
    * export default FrontMcpInstance.createHandler(config);
    */
-  public static async createHandler(options: FrontMcpConfigType): Promise<unknown> {
-    const frontMcp = new FrontMcpInstance(options);
+  public static async createHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<unknown> {
+    const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
     await frontMcp.ready;
 
     const server = frontMcp.providers.get(FrontMcpServer);
@@ -272,7 +272,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const handler = await FrontMcpInstance.createFetchHandler(config);
    * export default { fetch: (request) => handler(request) };
    */
-  public static async createFetchHandler(options: FrontMcpConfigType): Promise<WebFetchHandler> {
+  public static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler> {
     // Defer ALL instance/scope construction to the first request. On V8 isolates
     // (Cloudflare Workers) the @FrontMcp decorator runs this at module-eval
     // (global) scope, where timers / random / I-O are forbidden — yet scope
@@ -284,7 +284,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     let building: Promise<WebFetchHandler> | undefined;
 
     const build = async (): Promise<WebFetchHandler> => {
-      const frontMcp = new FrontMcpInstance(options);
+      const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
       await frontMcp.ready;
       const scope = frontMcp.getScopes()[0] as Scope | undefined;
       if (!scope) {

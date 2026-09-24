@@ -19,6 +19,7 @@ import {
   loggingOptionsSchema,
   metricsOptionsSchema,
   observabilityOptionsSchema,
+  outboundFetchOptionsSchema,
   paginationOptionsSchema,
   pubsubOptionsSchema,
   redisOptionsSchema,
@@ -35,6 +36,7 @@ import {
   type LoggingOptionsInput,
   type MetricsOptionsInput,
   type ObservabilityOptionsInterface,
+  type OutboundFetchOptionsInput,
   type PaginationOptions,
   type PubsubOptionsInput,
   type RawZodShape,
@@ -144,6 +146,12 @@ export interface FrontMcpBaseMetadata {
    * Currently only tool list pagination is supported (tools/list endpoint).
    */
   pagination?: PaginationOptions;
+
+  /**
+   * What `this.fetch()` adds to upstream requests. By default neither the caller's
+   * access token nor its `x-frontmcp-*` headers leave this server.
+   */
+  fetch?: OutboundFetchOptionsInput;
 
   /**
    * Elicitation configuration.
@@ -554,6 +562,7 @@ export const frontMcpBaseSchema = z.object({
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
+  fetch: outboundFetchOptionsSchema.optional(),
   elicitation: elicitationOptionsSchema.optional(),
   skillsConfig: skillsConfigOptionsSchema.optional(),
   extApps: extAppsOptionsSchema.optional(),
@@ -782,6 +791,7 @@ const frontMcpLiteSchema = z.object({
     .optional()
     .transform((val) => val ?? transportOptionsSchema.parse({})),
   pagination: z.any().optional(),
+  fetch: z.any().optional(),
   elicitation: z.any().optional(),
   extApps: z.any().optional(),
   sqlite: z.any().optional(),

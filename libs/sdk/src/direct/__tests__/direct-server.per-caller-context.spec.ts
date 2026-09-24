@@ -80,3 +80,33 @@ describe('DirectMcpServer per-call authContext without a sessionId', () => {
     expect(bob.upstreamAuthorization).not.toBe('Bearer token-of-alice');
   });
 });
+
+describe('DirectMcpServer with @FrontMcp({ fetch }) allow-listing the upstream origin', () => {
+  const originalFetch = global.fetch;
+
+  it("sends each caller's own token from this.fetch()", async () => {
+    const fetchMock = jest.fn().mockImplementation(async () => new Response('{}'));
+    global.fetch = fetchMock;
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'direct-allow-listed', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+      fetch: { forwardCallerTokenTo: [new URL(upstreamUrl).origin] },
+    });
+
+    try {
+      const sentAuthorization: Array<string | null> = [];
+      for (const user of ['alice', 'bob']) {
+        fetchMock.mockClear();
+        await server.callTool('whoami', {}, { authContext: { token: `token-of-${user}`, user: { sub: user } } });
+        const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+        sentAuthorization.push(new Headers(init.headers).get('authorization'));
+      }
+
+      expect(sentAuthorization).toEqual(['Bearer token-of-alice', 'Bearer token-of-bob']);
+    } finally {
+      global.fetch = originalFetch;
+      await server.dispose();
+    }
+  });
+});
