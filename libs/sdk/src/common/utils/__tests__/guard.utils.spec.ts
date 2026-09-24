@@ -107,6 +107,18 @@ describe('acquireConcurrencySlots', () => {
     await expect(acquireConcurrencySlots(manager, 'tool-b', undefined, undefined)).resolves.toBeDefined();
   });
 
+  it('gives the global slot back when releasing the entity slot fails', async () => {
+    const manager = await managerWith({ globalConcurrency: { maxConcurrent: 1 } });
+    jest.spyOn(manager, 'acquireSemaphore').mockResolvedValueOnce({
+      ticket: 'entity-ticket',
+      release: () => Promise.reject(new Error('storage unavailable')),
+    });
+    const ticket = await acquireConcurrencySlots(manager, 'tool-a', { maxConcurrent: 1 }, undefined);
+
+    await expect(ticket?.release()).rejects.toThrow('storage unavailable');
+    await expect(acquireConcurrencySlots(manager, 'tool-b', undefined, undefined)).resolves.toBeDefined();
+  });
+
   it('gives the global slot back when queueing for the entity limit times out', async () => {
     const manager = await managerWith({ globalConcurrency: { maxConcurrent: 2 } });
     const queued = { maxConcurrent: 1, queueTimeoutMs: 20 };

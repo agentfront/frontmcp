@@ -79,7 +79,7 @@ Finalize stages: releaseSemaphore → releaseQuota → ...
 ```
 
 1. **acquireQuota** — Checks global and per-entity rate limits. Throws `RateLimitError` if exceeded. Over HTTP, `throttle.global` is checked once per request by the `http:request` flow; stdio and direct calls check it here.
-2. **acquireSemaphore** — Takes a slot from `throttle.globalConcurrency` and from the entity's `concurrency` (else `throttle.defaultConcurrency`). Throws `ConcurrencyLimitError` if no slot is available.
+2. **acquireSemaphore** — Takes a slot from `throttle.globalConcurrency` and from the entity's `concurrency` (else `throttle.defaultConcurrency`). Throws `ConcurrencyLimitError` if no slot is available. A tool called from another tool with `this.callTool()` runs inside its caller's global slot and takes only its own `concurrency` slot.
 3. **execute** — Wrapped with `withTimeout` if a timeout is configured. Throws `ExecutionTimeoutError` if exceeded.
 4. **releaseSemaphore** — Releases the concurrency slot back to the pool. After a timeout, the slot stays taken until the timed-out `execute()` actually returns.
 5. **releaseQuota** — Cleans up rate limit state.
