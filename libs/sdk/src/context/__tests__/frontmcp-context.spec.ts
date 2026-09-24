@@ -651,6 +651,31 @@ describe('FrontMcpContext', () => {
       await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
     });
 
+    it('should apply the request timeout to a Request input', async () => {
+      global.fetch = jest.fn(
+        (_input: RequestInfo | URL, options?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+          }),
+      );
+      const ctx = new FrontMcpContext({ ...validArgs, config: { requestTimeout: 20 } });
+
+      await expect(ctx.fetch(new Request('https://api.example.com/data'))).rejects.toMatchObject({
+        name: 'TimeoutError',
+      });
+    });
+
+    it("should abort a Request input with the Request's own signal", async () => {
+      const ctx = new FrontMcpContext(validArgs);
+      const caller = new AbortController();
+
+      await ctx.fetch(new Request('https://api.example.com/data', { signal: caller.signal }));
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0];
+      caller.abort();
+
+      expect((options.signal as AbortSignal).aborted).toBe(true);
+    });
+
     it('should use timeout from config', async () => {
       const ctx = new FrontMcpContext({
         ...validArgs,
