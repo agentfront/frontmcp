@@ -70,7 +70,7 @@ class DeleteUserTool extends ToolContext {
 
 If a user without the required role calls `delete_user`, the `checkEntryAuthorities` flow stage throws an `AuthorityDeniedError` with MCP error code `-32003` before the handler executes. A `tools/call` answers it as an error result with `_meta.code: "AUTHORITY_DENIED"` and the denial message, in production too.
 
-The `authenticated` profile above admits only signed-in callers: an anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub` in the evaluation context, so `exists` fails for it.
+The `authenticated` profile above admits only signed-in callers: an anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub` in the evaluation context, even when `claimsMapping.userId` points at another claim, so `exists` fails for it. A subject that is not a string counts as anonymous too.
 
 <Note>
 **Boot-time fail-fast.** If any entry — a tool, resource, prompt, agent, **or skill** — declares `authorities` but the server has no authorities engine configured (no `@FrontMcp({ authorities: { … } })`), startup fails with an `AuthConfigurationError`. This prevents a silent bypass where an entry looks protected but is actually open to everyone. Either add the `authorities` config or remove `authorities` from the entry. Servers with **no** `authorities` config and **no** gated entries are unaffected.

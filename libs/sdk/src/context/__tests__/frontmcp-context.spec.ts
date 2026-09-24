@@ -552,6 +552,25 @@ describe('FrontMcpContext', () => {
       expect(redirectModes).toEqual(['manual', 'manual', 'manual', 'error', 'follow']);
     });
 
+    it("should keep a Request input's own redirect mode and headers", async () => {
+      const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
+      ctx.updateAuthInfo({ token: 'test-token' });
+
+      await ctx.fetch(new Request('https://api.example.com/data', { redirect: 'error' }));
+      await ctx.fetch(
+        new Request('https://api.example.com/data', { headers: { Authorization: 'Bearer request-token' } }),
+      );
+      await ctx.fetch(new Request('https://other.example.com/data', { headers: { 'x-api-version': '2' } }));
+
+      const [errorRedirect, ownAuthorization, otherOrigin] = (global.fetch as jest.Mock).mock.calls.map(
+        ([, options]) => options,
+      );
+      expect(errorRedirect.redirect).toBe('error');
+      expect((ownAuthorization.headers as Headers).get('Authorization')).toBe('Bearer request-token');
+      expect((otherOrigin.headers as Headers).get('x-api-version')).toBe('2');
+      expect((otherOrigin.headers as Headers).get('Authorization')).toBeNull();
+    });
+
     it('should not inject Authorization when already present', async () => {
       const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
       ctx.updateAuthInfo({ token: 'test-token' });

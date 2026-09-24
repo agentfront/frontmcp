@@ -74,4 +74,28 @@ describe('malformed subjects', () => {
 
     expect(context.user.sub).toBeUndefined();
   });
+
+  it('keeps an anon: subject anonymous when claimsMapping.userId resolves another claim', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'email' } });
+
+    const context = builder.build({ user: { sub: ANONYMOUS_SUBJECT, email: 'guest@example.com' } });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+
+  it('does not turn a non-string mapped user id into a subject', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { oid: 12345 } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+
+  it('uses the mapped user id of a caller that carries no sub', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { oid: 'user-7' } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBe('user-7');
+  });
 });

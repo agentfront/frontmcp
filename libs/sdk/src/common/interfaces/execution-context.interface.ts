@@ -254,10 +254,10 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Fetch a URL with context-aware header injection.
    *
    * When FrontMcpContext is available, delegates to ctx.fetch() which:
-   * - Auto-injects Authorization header (if authInfo.token is available)
-   * - Auto-injects W3C traceparent header for distributed tracing
-   * - Auto-injects x-request-id header
-   * - Auto-injects custom headers from request metadata
+   * - Sends the caller's token only to origins in `fetch.forwardCallerTokenTo`
+   * - Sends the request's x-frontmcp-* headers only to origins in `fetch.forwardCustomHeadersTo`
+   * - Auto-injects W3C traceparent and x-request-id headers for distributed tracing
+   * - Does not follow redirects while it forwards the caller's token or headers
    *
    * Falls back to standard fetch if context is not available.
    */

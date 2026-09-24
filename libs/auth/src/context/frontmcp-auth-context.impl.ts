@@ -6,7 +6,7 @@
  * authorities engine, and exposes convenience query methods.
  */
 
-import { resolveAuthUser, resolveDotPath } from '../authorities/authorities.context';
+import { resolveAuthUser, resolveDotPath, signedInSubject } from '../authorities/authorities.context';
 import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
 import type { FrontMcpAuthContext, FrontMcpAuthUser } from './frontmcp-auth-context';
 
@@ -75,9 +75,11 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
   constructor(source: AuthContextSourceInfo, claimsMapping?: AuthoritiesClaimsMapping) {
     // -- User identity -------------------------------------------------
     const rawUser: NonNullable<AuthContextSourceInfo['user']> = resolveAuthUser(source);
-    const sub = claimsMapping?.userId
-      ? String(resolveDotPath(this.buildRawClaims(source), claimsMapping.userId) ?? rawUser.sub ?? '')
-      : String(rawUser.sub ?? '');
+    const mappedSub = claimsMapping?.userId
+      ? resolveDotPath(this.buildRawClaims(source), claimsMapping.userId)
+      : undefined;
+    const signedInSub = signedInSubject(rawUser.sub, mappedSub);
+    const sub = signedInSub ?? (typeof rawUser.sub === 'string' ? rawUser.sub : '');
 
     this.user = Object.freeze({
       sub,
@@ -87,7 +89,7 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     });
 
     // -- Anonymous detection -------------------------------------------
-    this.isAnonymous = sub === '' || sub.startsWith('anon:');
+    this.isAnonymous = signedInSub === undefined;
 
     // -- Mode ----------------------------------------------------------
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;

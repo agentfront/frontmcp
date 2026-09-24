@@ -124,6 +124,21 @@ describe('FrontMcpAuthContextImpl', () => {
       const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'not-anon:user' } });
       expect(ctx.isAnonymous).toBe(false);
     });
+
+    it('should be true for a non-string sub instead of coercing it', () => {
+      const ctx = new FrontMcpAuthContextImpl({ extra: { user: { sub: 12345 } } });
+      expect(ctx.isAnonymous).toBe(true);
+      expect(ctx.user.sub).toBe('');
+    });
+
+    it('should stay true for an anon: sub when claimsMapping.userId resolves another claim', () => {
+      const ctx = new FrontMcpAuthContextImpl(
+        { user: { sub: 'anon:guest-42', email: 'guest@example.com' } },
+        { userId: 'email' },
+      );
+      expect(ctx.isAnonymous).toBe(true);
+      expect(ctx.user.sub).toBe('anon:guest-42');
+    });
   });
 
   // =========================================================================
