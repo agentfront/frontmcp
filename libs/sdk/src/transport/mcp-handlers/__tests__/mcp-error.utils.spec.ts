@@ -9,6 +9,7 @@ import {
   ResourceNotFoundError,
   UnauthorizedError,
 } from '../../../errors';
+import { AuthorityDeniedMcpError } from '../../../errors/mcp.error';
 import { errorBehindFlowControl, toReportedError, toSdkMcpError } from '../mcp-error.utils';
 
 function thrownFlowControl(raise: () => never): FlowControl {
@@ -41,10 +42,22 @@ describe('errorBehindFlowControl', () => {
 });
 
 describe('toReportedError', () => {
-  it('keeps an error that already has a JSON-RPC shape', () => {
+  it('keeps a protocol McpError', () => {
+    const error = new McpError(-32601, 'Method not found');
+
+    expect(toReportedError(error)).toBe(error);
+  });
+
+  it('keeps a FrontMCP error with a JSON-RPC shape', () => {
+    const notFound = new ResourceNotFoundError('orders://1');
+
+    expect(toReportedError(notFound)).toBe(notFound);
+  });
+
+  it('turns an authorities refusal into a FrontMCP error with an error id', () => {
     const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'roles' });
 
-    expect(toReportedError(denied)).toBe(denied);
+    expect(toReportedError(denied)).toBeInstanceOf(AuthorityDeniedMcpError);
   });
 
   it('turns a plain error into the FrontMCP error that is logged and answered with', () => {
@@ -66,11 +79,28 @@ describe('toSdkMcpError', () => {
     expect(toSdkMcpError(error)).toBe(error);
   });
 
-  it('uses the JSON-RPC shape an error declares', () => {
-    const error = toSdkMcpError(new ResourceNotFoundError('orders://1'));
+  it('uses the JSON-RPC shape an error declares, with the error id that was logged', () => {
+    const notFound = new ResourceNotFoundError('orders://1');
+
+    const error = toSdkMcpError(toReportedError(notFound));
 
     expect(error.code).toBe(-32002);
-    expect(error.data).toEqual({ uri: 'orders://1' });
+    expect(error.data).toEqual({ uri: 'orders://1', errorId: notFound.errorId });
+  });
+
+  it('answers an authorities refusal with its code and data, and the error id that was logged', () => {
+    const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'roles' });
+    const reported = toReportedError(denied) as AuthorityDeniedMcpError;
+
+    const error = toSdkMcpError(reported);
+
+    expect(error.code).toBe(-32003);
+    expect(error.data).toEqual({
+      entryType: 'Tool',
+      entryName: 'delete_user',
+      deniedBy: 'roles',
+      errorId: reported.errorId,
+    });
   });
 
   it('answers a public error with its message and a code from its status', () => {

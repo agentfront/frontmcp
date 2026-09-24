@@ -4,8 +4,9 @@
  * instead of the default -32603.
  *
  * Errors that already expose a `toJsonRpcError()` method (e.g. TaskNotFoundError)
- * are converted verbatim. Other public errors keep their message and get a code
- * from their HTTP status; internal errors are masked in production.
+ * keep its code, message and data, plus their `errorId`. Other public errors keep
+ * their message and get a code from their HTTP status; internal errors are masked
+ * in production.
  *
  * Imports go through `@frontmcp/protocol` so we can later drop the direct
  * dependency on the upstream MCP SDK package without touching call sites.
@@ -17,9 +18,11 @@ import { McpError } from '@frontmcp/protocol';
 import { isProduction } from '@frontmcp/utils';
 
 import { FlowControl } from '../../common';
-import { InternalMcpError, MCP_ERROR_CODES, toMcpError } from '../../errors';
+import { InternalMcpError, MCP_ERROR_CODES, toMcpError, type McpError as FrontMcpError } from '../../errors';
 
-type JsonRpcErrorSource = { toJsonRpcError: () => { code: number; message: string; data?: unknown } };
+type JsonRpcErrorSource = {
+  toJsonRpcError: () => { code: number; message: string; data?: Record<string, unknown> };
+};
 
 function hasJsonRpcError(err: unknown): err is JsonRpcErrorSource {
   return typeof (err as Partial<JsonRpcErrorSource> | null)?.toJsonRpcError === 'function';
@@ -43,24 +46,23 @@ export function errorBehindFlowControl(err: unknown): unknown {
 }
 
 /**
- * The error a failed request answers with, as a FrontMCP error where it isn't
- * already one with a JSON-RPC shape. Log this one, then pass it to
- * `toSdkMcpError`, so the logged error id is the one the client sees.
+ * The error a failed request answers with, as a FrontMCP error unless it is
+ * already a protocol error. Log this one, then pass it to `toSdkMcpError`, so
+ * the logged error id is the one the client sees.
  */
-export function toReportedError(err: unknown): unknown {
+export function toReportedError(err: unknown): McpError | FrontMcpError {
   const failure = errorBehindFlowControl(err);
-  return failure instanceof McpError || hasJsonRpcError(failure) ? failure : toMcpError(failure);
+  return failure instanceof McpError ? failure : toMcpError(failure);
 }
 
 export function toSdkMcpError(err: unknown): McpError {
-  const failure = errorBehindFlowControl(err);
-  if (failure instanceof McpError) return failure;
-  if (hasJsonRpcError(failure)) {
-    const jsonRpc = failure.toJsonRpcError();
-    return new McpError(jsonRpc.code, jsonRpc.message, jsonRpc.data);
+  const error = toReportedError(err);
+  if (error instanceof McpError) return error;
+  if (hasJsonRpcError(error)) {
+    const jsonRpc = error.toJsonRpcError();
+    return new McpError(jsonRpc.code, jsonRpc.message, { ...jsonRpc.data, errorId: error.errorId });
   }
 
-  const error = toMcpError(failure);
   const data = { errorId: error.errorId, code: error.code };
   if (error.isPublic) {
     return new McpError(jsonRpcCodeForStatus(error.statusCode), error.getPublicMessage(), data);
