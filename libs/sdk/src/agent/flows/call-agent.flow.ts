@@ -1,16 +1,19 @@
 // file: libs/sdk/src/agent/flows/call-agent.flow.ts
 
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
-import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import {
+  acquireConcurrencySlots,
   AgentContext,
   AgentEntry,
+  buildPartitionContext,
   Flow,
   FlowBase,
   FlowHooksOf,
+  GLOBAL_RATE_LIMIT_CHECKED,
   type FlowPlan,
   type FlowRunOptions,
 } from '../../common';
@@ -69,6 +72,8 @@ const stateSchema = z.object({
     .optional(),
   // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
   semaphoreTicket: z.any().optional(),
+  // A timed-out execute() that is still running; its concurrency slot is released when it settles
+  abandonedExecution: z.instanceof(Promise).optional(),
 });
 
 // ============================================================================
@@ -397,18 +402,14 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     const { agent } = this.state.required;
     const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
+    const partitionCtx = buildPartitionContext(context);
 
-    // Check global rate limit
-    const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
-    if (!globalResult.allowed) {
-      throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+    // Check global rate limit, unless http:request already counted this request
+    if (!context?.has(GLOBAL_RATE_LIMIT_CHECKED)) {
+      const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
+      if (!globalResult.allowed) {
+        throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+      }
     }
 
     // Check per-agent rate limit
@@ -436,26 +437,13 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     }
 
     const { agent } = this.state.required;
-    const config = agent.metadata.concurrency;
-    if (!config) {
-      this.state.agentContext?.mark('acquireSemaphore');
-      this.logger.verbose('acquireSemaphore:done (no concurrency config)');
-      return;
-    }
-
-    const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
-
-    const ticket = await manager.acquireSemaphore(agent.metadata.name, config, partitionCtx);
-    if (!ticket) {
-      throw new ConcurrencyLimitError(agent.metadata.name, config.maxConcurrent);
-    }
+    const partitionCtx = buildPartitionContext(this.tryGetContext());
+    const ticket = await acquireConcurrencySlots(
+      manager,
+      agent.metadata.name,
+      agent.metadata.concurrency,
+      partitionCtx,
+    );
 
     this.state.set('semaphoreTicket', ticket);
     this.state.agentContext?.mark('acquireSemaphore');
@@ -507,16 +495,12 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       agent.metadata.execution?.timeout ??
       this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
-    try {
-      const doExecute = async () => {
-        agentContext.output = await agentContext.execute(agentContext.input);
-      };
+    const running = (async () => {
+      agentContext.output = await agentContext.execute(agentContext.input);
+    })();
 
-      if (timeoutMs) {
-        await withTimeout(doExecute, timeoutMs, agent.metadata.name);
-      } else {
-        await doExecute();
-      }
+    try {
+      await (timeoutMs ? withTimeout(() => running, timeoutMs, agent.metadata.name) : running);
 
       // Track execution metadata
       this.state.set('executionMeta', {
@@ -530,6 +514,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
           agent: agent.metadata.name,
           timeoutMs,
         });
+        this.state.set('abandonedExecution', running);
         throw error;
       }
       this.logger.error('execute: agent execution failed', error);
@@ -563,12 +548,18 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.logger.verbose('releaseSemaphore:start');
     const ticket = this.state.semaphoreTicket as SemaphoreTicket | undefined;
     if (ticket) {
-      try {
-        await ticket.release();
-        this.logger.verbose('releaseSemaphore: slot released');
-      } catch (error) {
-        this.logger.warn('releaseSemaphore: failed to release slot', error);
-      }
+      const release = async () => {
+        try {
+          await ticket.release();
+          this.logger.verbose('releaseSemaphore: slot released');
+        } catch (error) {
+          this.logger.warn('releaseSemaphore: failed to release slot', error);
+        }
+      };
+      // A timed-out execute() keeps its slot until it actually stops running
+      const abandonedExecution = this.state.abandonedExecution;
+      if (abandonedExecution) void abandonedExecution.then(release, release);
+      else await release();
     }
     this.state.agentContext?.mark('releaseSemaphore');
     this.logger.verbose('releaseSemaphore:done');

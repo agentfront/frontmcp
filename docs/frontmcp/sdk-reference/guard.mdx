@@ -400,25 +400,25 @@ Wraps an async function with an execution deadline.
 
 ```typescript
 async function withTimeout<T>(
-  fn: () => Promise<T>,
+  fn: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   entityName: string,
 ): Promise<T>
 ```
 
-| Parameter    | Type               | Description                            |
-| ------------ | ------------------ | -------------------------------------- |
-| `fn`         | `() => Promise<T>` | Async function to execute              |
-| `timeoutMs`  | `number`           | Maximum execution time in milliseconds |
-| `entityName` | `string`           | Name included in error message         |
+| Parameter    | Type                                  | Description                            |
+| ------------ | ------------------------------------- | -------------------------------------- |
+| `fn`         | `(signal: AbortSignal) => Promise<T>` | Async function to execute              |
+| `timeoutMs`  | `number`                              | Maximum execution time in milliseconds |
+| `entityName` | `string`                              | Name included in error message         |
 
-Throws `ExecutionTimeoutError` if the deadline is exceeded. Uses `AbortController` + `Promise.race` internally.
+Throws `ExecutionTimeoutError` if the deadline is exceeded, and aborts the `signal` passed to `fn` so the work can stop. Uses `AbortController` + `Promise.race` internally.
 
 ```typescript
 import { withTimeout } from '@frontmcp/guard';
 
 const result = await withTimeout(
-  () => fetchData(),
+  (signal) => fetch(url, { signal }),
   5000,
   'data-fetcher',
 );
@@ -443,7 +443,7 @@ function resolvePartitionKey(
 | `'global'`      | `'global'`                                                       |
 | `'ip'`          | `context.clientIp`, else `user:<userId>`, else `'ip:unresolved'` |
 | `'session'`     | `context.sessionId`                                              |
-| `'userId'`      | `context.userId` or `'anonymous'`                                |
+| `'userId'`      | `context.userId`, else `context.sessionId`                       |
 | Custom function | `fn(context)`                                                    |
 
 ---

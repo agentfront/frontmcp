@@ -1,10 +1,12 @@
 // errors/__tests__/mcp.error.spec.ts
 import { AuthorityDeniedError } from '@frontmcp/auth';
+import { ConcurrencyLimitError, ExecutionTimeoutError } from '@frontmcp/guard';
 
 import {
   AuthorityDeniedMcpError,
   formatMcpErrorResponse,
   GlobalConfigNotFoundError,
+  GuardLimitMcpError,
   InvalidInputError,
   InvalidOutputError,
   isClientFacingError,
@@ -269,6 +271,24 @@ describe('toMcpError with an authorities refusal', () => {
     it('is false for an internal or plain error', () => {
       expect(isClientFacingError(new ToolExecutionError('my_tool'))).toBe(false);
       expect(isClientFacingError(new Error('boom'))).toBe(false);
+    });
+  });
+
+  describe('guard errors', () => {
+    it('answers a guard limit with its own code and status, as a public error', () => {
+      const mapped = toMcpError(new ConcurrencyLimitError('deploy', 1));
+
+      expect(mapped).toBeInstanceOf(GuardLimitMcpError);
+      expect(mapped.isPublic).toBe(true);
+      expect(mapped.code).toBe('CONCURRENCY_LIMIT');
+      expect(mapped.statusCode).toBe(429);
+    });
+
+    it('keeps the execution timeout message for the client', () => {
+      const response = formatMcpErrorResponse(new ExecutionTimeoutError('deploy', 50), false);
+
+      expect(response._meta?.code).toBe('EXECUTION_TIMEOUT');
+      expect(response.content[0].text).toContain('timed out after 50ms');
     });
   });
 });
