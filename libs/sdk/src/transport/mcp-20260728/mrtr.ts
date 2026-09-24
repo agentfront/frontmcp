@@ -81,7 +81,7 @@ export interface RootsAnswer {
 const ELICIT_ACTIONS: readonly unknown[] = ['accept', 'decline', 'cancel'];
 
 function toElicitResult(response: Record<string, unknown>): { status: ElicitStatus; content?: unknown } {
-  const action = response['action'] ?? response['status'];
+  const action = 'action' in response ? response['action'] : response['status'];
   if (action !== undefined && !ELICIT_ACTIONS.includes(action)) {
     throw new InvalidInputError(`Unknown elicitation action "${String(action)}"`);
   }

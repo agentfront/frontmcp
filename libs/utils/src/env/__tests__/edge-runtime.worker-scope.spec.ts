@@ -25,7 +25,7 @@ function defineGlobal(key: string, value: unknown): void {
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true, enumerable: true });
 }
 
-function installBrowserDedicatedWorkerScope(): () => void {
+function installGlobals(values: Record<string, unknown>): () => void {
   const savedGlobals = WORKER_GLOBAL_KEYS.map((key) => ({
     key,
     descriptor: Object.getOwnPropertyDescriptor(globalThis, key),
@@ -33,12 +33,10 @@ function installBrowserDedicatedWorkerScope(): () => void {
   const savedEnv = EDGE_ENV_KEYS.map((key) => ({ key, value: process.env[key] }));
   EDGE_ENV_KEYS.forEach((key) => delete process.env[key]);
 
-  defineGlobal('caches', { open: async () => undefined, match: async () => undefined });
-  defineGlobal('self', globalThis);
-  defineGlobal('WorkerGlobalScope', WorkerGlobalScope);
-  defineGlobal('DedicatedWorkerGlobalScope', DedicatedWorkerGlobalScope);
-  defineGlobal('importScripts', () => undefined);
-  defineGlobal('navigator', { userAgent: BROWSER_USER_AGENT });
+  WORKER_GLOBAL_KEYS.forEach((key) => {
+    if (key in values) defineGlobal(key, values[key]);
+    else Reflect.deleteProperty(globalThis, key);
+  });
 
   return () => {
     savedGlobals.forEach(({ key, descriptor }) => {
@@ -52,6 +50,17 @@ function installBrowserDedicatedWorkerScope(): () => void {
   };
 }
 
+const cacheStorage = { open: async () => undefined, match: async () => undefined };
+
+const browserDedicatedWorkerGlobals = {
+  caches: cacheStorage,
+  self: globalThis,
+  WorkerGlobalScope,
+  DedicatedWorkerGlobalScope,
+  importScripts: () => undefined,
+  navigator: { userAgent: BROWSER_USER_AGENT },
+};
+
 describe.each([
   ['node build', isEdgeRuntimeInNodeBuild],
   ['browser build', isEdgeRuntimeInBrowserBuild],
@@ -59,7 +68,7 @@ describe.each([
   let restoreGlobals: () => void;
 
   beforeEach(() => {
-    restoreGlobals = installBrowserDedicatedWorkerScope();
+    restoreGlobals = installGlobals(browserDedicatedWorkerGlobals);
   });
 
   afterEach(() => {
@@ -71,5 +80,33 @@ describe.each([
     expect('EdgeRuntime' in globalThis).toBe(false);
 
     expect(isEdgeRuntime()).toBe(false);
+  });
+});
+
+describe.each([
+  ['node build', isEdgeRuntimeInNodeBuild],
+  ['browser build', isEdgeRuntimeInBrowserBuild],
+])('isEdgeRuntime (%s) inside a Cloudflare Worker', (_build, isEdgeRuntime) => {
+  let restoreGlobals: (() => void) | undefined;
+
+  afterEach(() => {
+    restoreGlobals?.();
+  });
+
+  it('classifies a Cloudflare Worker global scope as an edge runtime', () => {
+    restoreGlobals = installGlobals({
+      caches: cacheStorage,
+      self: globalThis,
+      WorkerGlobalScope,
+      navigator: { userAgent: 'Cloudflare-Workers' },
+    });
+
+    expect(isEdgeRuntime()).toBe(true);
+  });
+
+  it('classifies a Cloudflare Worker without navigator (compatibility date before 2022-03-21) as an edge runtime', () => {
+    restoreGlobals = installGlobals({ caches: cacheStorage, self: globalThis, WorkerGlobalScope });
+
+    expect(isEdgeRuntime()).toBe(true);
   });
 });
