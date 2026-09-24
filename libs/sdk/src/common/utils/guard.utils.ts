@@ -54,7 +54,8 @@ export function partitionsByIdentity(partitionBy: PartitionKey | undefined): boo
 
 /**
  * Take a slot from `throttle.globalConcurrency` and from the entity's own limit (its
- * `concurrency`, else `throttle.defaultConcurrency`).
+ * `concurrency`, else `throttle.defaultConcurrency`). A nested call (`skipGlobal`) runs inside
+ * its caller's global slot, so it takes only its own.
  *
  * @returns One ticket that releases every slot taken, or undefined when no limit applies
  * @throws ConcurrencyLimitError when a limit is full, QueueTimeoutError when queueing timed out
@@ -64,9 +65,10 @@ export async function acquireConcurrencySlots(
   entityName: string,
   entityConfig: ConcurrencyConfig | undefined,
   partitionContext: PartitionKeyContext | undefined,
+  options: { skipGlobal?: boolean } = {},
 ): Promise<SemaphoreTicket | undefined> {
-  const globalConfig = manager.config.globalConcurrency;
-  const globalTicket = await manager.acquireGlobalSemaphore(partitionContext);
+  const globalConfig = options.skipGlobal ? undefined : manager.config.globalConcurrency;
+  const globalTicket = globalConfig ? await manager.acquireGlobalSemaphore(partitionContext) : null;
   if (globalConfig && !globalTicket) {
     throw new ConcurrencyLimitError('global', globalConfig.maxConcurrent);
   }
