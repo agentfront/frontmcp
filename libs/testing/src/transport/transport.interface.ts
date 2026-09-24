@@ -26,6 +26,8 @@ export interface JsonRpcResponse {
 
 export type TransportState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+export type NotificationHandler = (notification: JsonRpcRequest) => void;
+
 /**
  * Interface that all MCP transports must implement
  */
@@ -128,6 +130,12 @@ export interface McpTransport {
    * this handler is called to provide the user's response.
    */
   setElicitationHandler?(handler: ElicitationHandler | undefined): void;
+
+  /**
+   * Open the session's standalone GET stream, where the server sends
+   * notifications that are not tied to a request's own response.
+   */
+  openNotificationStream?(): Promise<void>;
 }
 
 /**
@@ -164,4 +172,6 @@ export interface TransportConfig {
   clientInfo?: ClientInfo;
   /** Handler for server→client elicitation requests during tool execution */
   elicitationHandler?: ElicitationHandler;
+  /** Handler for server notifications streamed during a request */
+  notificationHandler?: NotificationHandler;
 }

@@ -168,7 +168,7 @@ expect(tools).toContainTool('create-note');
 
 // Result matchers
 expect(result).toBeSuccessful();
-expect(result).toBeError(-32602);
+expect(result).toBeError('INVALID_INPUT');
 
 // Content matchers
 expect(result).toHaveTextContent();

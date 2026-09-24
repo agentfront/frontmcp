@@ -1,17 +1,9 @@
 import { McpTestClient } from '../../client/mcp-test-client';
 import type { ToolResultWrapper } from '../../client/mcp-test-client.types';
 import { mcpMatchers } from '../mcp-matchers';
+import type {} from '../matcher-types';
 
 expect.extend(mcpMatchers);
-
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace jest {
-    interface Matchers<R> {
-      toBeError(expectedCode?: number | string): R;
-    }
-  }
-}
 
 const BASE_URL = 'http://localhost:3006';
 
@@ -70,5 +62,11 @@ describe('toBeError with tool error codes', () => {
     const result = await callToolWithMissingInput();
 
     expect(() => expect(result).toBeError('NOT_FOUND')).toThrow(/INVALID_INPUT/);
+  });
+
+  it('still matches a numeric JSON-RPC code against the error code', async () => {
+    const result = await callToolWithMissingInput();
+
+    expect(() => expect(result).toBeError(-32602)).toThrow(/Expected error code -32602, but got undefined/);
   });
 });

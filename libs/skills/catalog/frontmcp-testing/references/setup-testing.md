@@ -421,15 +421,15 @@ A nested `test.describe` inherits an outer skip. The `(name, fn)` form still ski
 import { expect } from '@frontmcp/testing';
 ```
 
-| Matcher                   | Asserts                                               |
-| ------------------------- | ----------------------------------------------------- |
-| `toContainTool(name)`     | Tools list includes a tool with the given name        |
-| `toContainResource(uri)`  | Resources list includes a resource with the given URI |
-| `toContainPrompt(name)`   | Prompts list includes a prompt with the given name    |
-| `toBeSuccessful()`        | Tool call result is not an error                      |
-| `toBeError()`             | Tool call result is an MCP error                      |
-| `toHaveTextContent(text)` | Result contains text content matching the string      |
-| `toHaveMimeType(mime)`    | Resource content has the expected MIME type           |
+| Matcher                   | Asserts                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `toContainTool(name)`     | Tools list includes a tool with the given name                                                                     |
+| `toContainResource(uri)`  | Resources list includes a resource with the given URI                                                              |
+| `toContainPrompt(name)`   | Prompts list includes a prompt with the given name                                                                 |
+| `toBeSuccessful()`        | Tool call result is not an error                                                                                   |
+| `toBeError(code?)`        | Result is an error; a string code matches `_meta.code` (`'INVALID_INPUT'`), a number matches a JSON-RPC error code |
+| `toHaveTextContent(text)` | Result contains text content matching the string                                                                   |
+| `toHaveMimeType(mime)`    | Resource content has the expected MIME type                                                                        |
 
 ## Running Tests with Nx
 

@@ -19,6 +19,7 @@ export type {
   RequestTrace,
   NotificationEntry,
   ProgressUpdate,
+  ToolCallOptions,
   SessionInfo,
   AuthState,
   TransportState,

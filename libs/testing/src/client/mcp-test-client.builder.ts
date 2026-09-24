@@ -95,7 +95,8 @@ export class McpTestClientBuilder {
   }
 
   /**
-   * Set the MCP protocol version to request
+   * Set the MCP protocol version to request (default '2025-06-18').
+   * '2026-07-28' has no initialize handshake, so `build()` throws for it.
    */
   withProtocolVersion(version: string): this {
     this.config.protocolVersion = version;

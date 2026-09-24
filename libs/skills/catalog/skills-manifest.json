@@ -3449,6 +3449,7 @@
                 "Calling tools via `client.tools.call(name, args)` and asserting success with `toBeSuccessful()`",
                 "Asserting text content with the `toHaveTextContent()` matcher",
                 "Asserting error results with `toBeError()` for invalid input and unknown tools",
+                "Matching the tool error code: invalid input is an `isError` result with `_meta.code: \"INVALID_INPUT\"`, so `toBeError('INVALID_INPUT')` matches it (a numeric code matches JSON-RPC errors only)",
                 "Testing edge cases like zero values"
               ]
             }

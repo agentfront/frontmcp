@@ -9,6 +9,7 @@ import type {
   JsonRpcRequest,
   JsonRpcResponse,
   McpTransport,
+  NotificationHandler,
   TransportConfig,
   TransportState,
 } from './transport.interface';
@@ -23,7 +24,7 @@ const DEFAULT_TIMEOUT = 30000;
  */
 export class StreamableHttpTransport implements McpTransport {
   private readonly config: Required<
-    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'entryPath'>
+    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'notificationHandler' | 'entryPath'>
   > & {
     interceptors?: InterceptorChain;
     clientInfo?: ClientInfo;
@@ -38,6 +39,8 @@ export class StreamableHttpTransport implements McpTransport {
   private interceptors?: InterceptorChain;
   private readonly publicMode: boolean;
   private elicitationHandler?: ElicitationHandler;
+  private readonly notificationHandler?: NotificationHandler;
+  private notificationStream?: AbortController;
 
   constructor(config: TransportConfig) {
     this.config = {
@@ -55,6 +58,7 @@ export class StreamableHttpTransport implements McpTransport {
     this.interceptors = config.interceptors;
     this.publicMode = config.publicMode ?? false;
     this.elicitationHandler = config.elicitationHandler;
+    this.notificationHandler = config.notificationHandler;
   }
 
   async connect(): Promise<void> {
@@ -343,7 +347,31 @@ export class StreamableHttpTransport implements McpTransport {
     }
   }
 
+  async openNotificationStream(): Promise<void> {
+    if (!this.sessionId || this.notificationStream) return;
+    const controller = new AbortController();
+    const { 'Content-Type': _contentType, ...headers } = this.buildHeaders();
+    try {
+      const response = await fetch(this.mcpUrl(), {
+        method: 'GET',
+        headers: { ...headers, Accept: 'text/event-stream' },
+        signal: controller.signal,
+      });
+      const isEventStream = response.headers.get('content-type')?.includes('text/event-stream') ?? false;
+      if (!response.ok || !response.body || !isEventStream) {
+        await response.body?.cancel();
+        this.log(`Server offers no notification stream (HTTP ${response.status})`);
+        return;
+      }
+      this.notificationStream = controller;
+      void this.readNotificationStream(response.body.getReader());
+    } catch (error) {
+      this.log('Failed to open the notification stream:', error);
+    }
+  }
+
   async close(): Promise<void> {
+    this.closeNotificationStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
     this.log('StreamableHTTP transport closed');
@@ -394,6 +422,7 @@ export class StreamableHttpTransport implements McpTransport {
   }
 
   async simulateDisconnect(): Promise<void> {
+    this.closeNotificationStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
   }
@@ -418,6 +447,30 @@ export class StreamableHttpTransport implements McpTransport {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════
+
+  private closeNotificationStream(): void {
+    this.notificationStream?.abort();
+    this.notificationStream = undefined;
+  }
+
+  private async readNotificationStream(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const completeEvents = buffer.split('\n\n');
+        buffer = completeEvents.pop() ?? '';
+        for (const eventText of completeEvents) {
+          for (const event of this.parseSSEEvents(eventText, undefined).events) {
+            await this.handleSSEEvent(event);
+          }
+        }
+      }
+    } catch (error) {
+      this.log('Notification stream ended:', error);
+    }
+  }
 
   /**
    * Handle SSE response with elicitation support.
@@ -589,6 +642,14 @@ export class StreamableHttpTransport implements McpTransport {
       if ('method' in parsed && parsed.method === 'elicitation/create') {
         await this.handleElicitationRequest(parsed as JsonRpcRequest);
         // This is not the final response - continue reading
+        return {
+          isFinal: false,
+          response: { jsonrpc: '2.0', id: null, result: undefined },
+        };
+      }
+
+      if ('method' in parsed && parsed.id === undefined) {
+        this.notificationHandler?.(parsed);
         return {
           isFinal: false,
           response: { jsonrpc: '2.0', id: null, result: undefined },

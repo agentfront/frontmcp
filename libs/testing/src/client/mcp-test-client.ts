@@ -13,7 +13,7 @@ import {
   type ResponseInterceptor,
 } from '../interceptor';
 import { StreamableHttpTransport } from '../transport/streamable-http.transport';
-import type { McpTransport } from '../transport/transport.interface';
+import type { JsonRpcRequest, McpTransport } from '../transport/transport.interface';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type {
   AuthState,
@@ -43,6 +43,7 @@ import type {
   TestClientCapabilities,
   TestTransportType,
   Tool,
+  ToolCallOptions,
   ToolResultWrapper,
 } from './mcp-test-client.types';
 
@@ -52,6 +53,7 @@ import type {
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
+const UNSUPPORTED_PROTOCOL_VERSIONS = ['2026-07-28'];
 const DEFAULT_CLIENT_INFO = {
   name: '@frontmcp/testing',
   version: '0.4.0',
@@ -106,6 +108,8 @@ export class McpTestClient {
   private _traces: RequestTrace[] = [];
   private _notifications: NotificationEntry[] = [];
   private _progressUpdates: ProgressUpdate[] = [];
+  private collectingProgress = false;
+  private progressTokenCounter = 0;
 
   // Interceptor chain
   private _interceptors: InterceptorChain;
@@ -118,6 +122,12 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   constructor(config: McpTestClientConfig) {
+    if (config.protocolVersion && UNSUPPORTED_PROTOCOL_VERSIONS.includes(config.protocolVersion)) {
+      throw new Error(
+        `McpTestClient does not support protocol version ${config.protocolVersion}: it has no initialize handshake. ` +
+          `Use ${DEFAULT_PROTOCOL_VERSION} or earlier.`,
+      );
+    }
     this.config = {
       baseUrl: config.baseUrl,
       entryPath: config.entryPath,
@@ -239,6 +249,7 @@ export class McpTestClient {
       jsonrpc: '2.0',
       method: 'notifications/initialized',
     });
+    await this.transport.openNotificationStream?.();
 
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
 
@@ -376,8 +387,12 @@ export class McpTestClient {
     /**
      * Call a tool by name with arguments
      */
-    call: async (name: string, args?: Record<string, unknown>): Promise<ToolResultWrapper> => {
-      const response = await this.callTool(name, args);
+    call: async (
+      name: string,
+      args?: Record<string, unknown>,
+      options: ToolCallOptions = {},
+    ): Promise<ToolResultWrapper> => {
+      const response = await this.callTool(name, args, this.progressTokenFor(options));
       return this.wrapToolResult(response);
     },
   };
@@ -555,6 +570,7 @@ export class McpTestClient {
      * Collect progress notifications specifically
      */
     collectProgress: (): ProgressCollector => {
+      this.collectingProgress = true;
       return new ProgressCollector(this._progressUpdates);
     },
 
@@ -910,12 +926,35 @@ export class McpTestClient {
     return this.request<ListToolsResult>('tools/list', {});
   }
 
-  private async callTool(name: string, args?: Record<string, unknown>): Promise<McpResponse<CallToolResult>> {
+  private async callTool(
+    name: string,
+    args?: Record<string, unknown>,
+    progressToken?: string | number,
+  ): Promise<McpResponse<CallToolResult>> {
     return this.request<CallToolResult>('tools/call', {
       name,
       arguments: args ?? {},
+      ...(progressToken !== undefined && { _meta: { progressToken } }),
     });
   }
+
+  private progressTokenFor(options: ToolCallOptions): string | number | undefined {
+    if (options.progressToken !== undefined) return options.progressToken;
+    return this.collectingProgress ? `progress-${++this.progressTokenCounter}` : undefined;
+  }
+
+  private readonly recordNotification = (notification: JsonRpcRequest): void => {
+    const timestamp = new Date();
+    this._notifications.push({ method: notification.method, params: notification.params, timestamp });
+    if (notification.method !== 'notifications/progress') return;
+    const { progress, total, progressToken } = notification.params ?? {};
+    this._progressUpdates.push({
+      progress: Number(progress),
+      total: typeof total === 'number' ? total : undefined,
+      progressToken: typeof progressToken === 'string' || typeof progressToken === 'number' ? progressToken : undefined,
+      timestamp,
+    });
+  };
 
   private async listResources(): Promise<McpResponse<ListResourcesResult>> {
     return this.request<ListResourcesResult>('resources/list', {});
@@ -973,6 +1012,7 @@ export class McpTestClient {
           interceptors: this._interceptors,
           clientInfo: this.config.clientInfo,
           elicitationHandler: this._elicitationHandler,
+          notificationHandler: this.recordNotification,
         });
       case 'sse':
         // TODO: Implement SSE transport

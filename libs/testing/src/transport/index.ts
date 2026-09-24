@@ -9,5 +9,6 @@ export type {
   TransportState,
   JsonRpcRequest,
   JsonRpcResponse,
+  NotificationHandler,
 } from './transport.interface';
 export { StreamableHttpTransport } from './streamable-http.transport';
