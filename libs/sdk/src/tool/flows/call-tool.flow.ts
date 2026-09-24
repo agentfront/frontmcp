@@ -43,6 +43,7 @@ import {
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  isClientFacingError,
   MissingClientCapabilityError,
   RateLimitError,
   TaskAugmentationNotSupportedError,
@@ -914,6 +915,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.state.set('toolContext', context);
       this.logger.verbose('createToolCallContext:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('createToolCallContext: failed to create context', error);
       throw new ToolExecutionError(tool.metadata.name, error instanceof Error ? error : undefined);
     }
@@ -1239,6 +1241,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         return;
       }
 
+      // A public error (e.g. InvalidInputError) already says what the caller should see
+      if (isClientFacingError(error)) throw error;
       this.logger.error('execute: tool execution failed', error);
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',

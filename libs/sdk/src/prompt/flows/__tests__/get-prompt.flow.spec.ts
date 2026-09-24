@@ -1,12 +1,19 @@
 import 'reflect-metadata';
-import GetPromptFlow from '../get-prompt.flow';
+
+import {
+  addPromptToMock,
+  createMockPromptEntry,
+  createMockPromptRegistry,
+} from '../../../__test-utils__/mocks/prompt-registry.mock';
 import { FlowControl } from '../../../common/interfaces/flow.interface';
 import {
-  createMockPromptRegistry,
-  createMockPromptEntry,
-  addPromptToMock,
-} from '../../../__test-utils__/mocks/prompt-registry.mock';
-import { InvalidMethodError, InvalidInputError, PromptNotFoundError, PromptExecutionError } from '../../../errors';
+  InvalidInputError,
+  InvalidMethodError,
+  MissingPromptArgumentError,
+  PromptExecutionError,
+  PromptNotFoundError,
+} from '../../../errors';
+import GetPromptFlow from '../get-prompt.flow';
 
 describe('GetPromptFlow', () => {
   // Create mock dependencies
@@ -448,7 +455,7 @@ describe('GetPromptFlow', () => {
       expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
-    it('should throw error for missing required argument', async () => {
+    it('passes a missing required argument on as MissingPromptArgumentError, not an execution failure', async () => {
       const promptRegistry = createMockPromptRegistry();
       const promptEntry = createMockPromptEntry('required-args', {
         name: 'required-args',
@@ -469,7 +476,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeInstanceOf(PromptExecutionError);
+      expect(result.error).toBeInstanceOf(MissingPromptArgumentError);
     });
   });
 

@@ -6,6 +6,7 @@ import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@f
 import {
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -16,6 +17,7 @@ import {
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  isClientFacingError,
   PromptExecutionError,
   PromptNotFoundError,
 } from '../../errors';
@@ -274,6 +276,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       this.state.set('promptContext', context);
       this.logger.verbose('createPromptContext:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('createPromptContext: failed to create context', error);
       throw new PromptExecutionError(input.name, error instanceof Error ? error : undefined);
     }
@@ -296,6 +299,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       promptContext.output = await promptContext.execute(parsedArgs);
       this.logger.verbose('execute:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('execute: prompt execution failed', error);
       throw new PromptExecutionError(input.name, error instanceof Error ? error : undefined);
     }

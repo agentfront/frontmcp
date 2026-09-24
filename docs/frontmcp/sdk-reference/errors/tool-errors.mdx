@@ -66,7 +66,7 @@ try {
 ```
 
 <Note>
-`ToolExecutionError` extends `InternalMcpError`. Clients receive a generic message with an `errorId` for support correlation, not the original stack trace.
+`ToolExecutionError` extends `InternalMcpError`. Clients receive a generic message with an `errorId` for support correlation, not the original stack trace. A public error thrown from `execute()`, such as `InvalidInputError`, is not wrapped: the client gets its own message and code.
 </Note>
 
 ---
@@ -98,7 +98,7 @@ throw new PromptNotFoundError('summarize');
 
 ### PromptExecutionError
 
-Thrown when a prompt's `execute()` method throws an unexpected error. This is an internal error.
+Thrown when a prompt's `execute()` method throws an unexpected error. This is an internal error. A public error, such as `MissingPromptArgumentError` or one passed to `this.fail()`, is not wrapped.
 
 | Property        | Type                 | Value                     |
 | --------------- | -------------------- | ------------------------- |
