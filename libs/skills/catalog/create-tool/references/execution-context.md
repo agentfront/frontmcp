@@ -102,6 +102,8 @@ this.fetch(url, {
 });
 ```
 
+The 30s `requestTimeout` applies when you pass no `signal` in the options; a `Request`'s own signal still aborts it.
+
 > Don't `try/catch` around the fetch and swallow errors — let infrastructure errors propagate to the framework. Only use `this.fail` for **business-logic** errors. See [`error-handling.md`](./error-handling.md).
 
 ## Notifications: `this.notify` + `this.progress`
