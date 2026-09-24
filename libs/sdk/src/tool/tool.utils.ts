@@ -389,11 +389,27 @@ function parseAgainstOutputSchema(schema: z.ZodType, value: unknown): unknown {
   if (parseResult.success) {
     return parseResult.data;
   }
+  if (parseResult.error.issues.every((issue) => isNonFiniteNumberIssue(issue, value))) {
+    return value;
+  }
   const firstIssue = parseResult.error.issues[0];
   throw new InvalidOutputError({
     reason: 'output does not match outputSchema',
     path: firstIssue?.path.length ? firstIssue.path.join('.') : undefined,
   });
+}
+
+/** A non-finite number is left to the server's `output.allowNonFinite` policy, applied when the call finalizes. */
+function isNonFiniteNumberIssue(issue: z.ZodError['issues'][number], root: unknown): boolean {
+  if (issue.code !== 'invalid_type' || issue.expected !== 'number') {
+    return false;
+  }
+  const valueAtPath = issue.path.reduce<unknown>(
+    (node, key) =>
+      typeof node === 'object' && node !== null ? (node as Record<PropertyKey, unknown>)[key] : undefined,
+    root,
+  );
+  return typeof valueAtPath === 'number' && !Number.isFinite(valueAtPath);
 }
 
 function isZodRawShape(descriptor: unknown): descriptor is Record<string, z.ZodType> {
