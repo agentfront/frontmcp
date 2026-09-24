@@ -751,7 +751,8 @@ export class FrontMcpContext {
       }
     }
 
-    const headers = new Headers(effectiveInit.headers);
+    const inputRequest = effectiveInput instanceof Request ? effectiveInput : undefined;
+    const headers = new Headers(effectiveInit.headers ?? inputRequest?.headers);
     const targetOrigin = originOf(requestUrlOf(effectiveInput));
 
     // The caller's token goes only to allow-listed origins, and never alongside provider credentials.
@@ -787,7 +788,7 @@ export class FrontMcpContext {
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
     // fire-and-forget signals whose internal abort listeners are never cleaned up).
-    const userSignal = effectiveInit.signal ?? (input instanceof Request ? input.signal : undefined);
+    const userSignal = effectiveInit.signal ?? inputRequest?.signal;
     let controller: AbortController | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -800,6 +801,7 @@ export class FrontMcpContext {
     }
 
     const signal = userSignal ?? controller?.signal;
+    const requestedRedirect = effectiveInit.redirect ?? inputRequest?.redirect;
 
     try {
       return await fetch(effectiveInput, {
@@ -807,7 +809,7 @@ export class FrontMcpContext {
         headers,
         signal,
         // A redirect could carry forwarded caller headers to an origin nobody allow-listed.
-        redirect: forwardsCallerHeaders && effectiveInit.redirect !== 'error' ? 'manual' : effectiveInit.redirect,
+        redirect: forwardsCallerHeaders && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
       });
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);

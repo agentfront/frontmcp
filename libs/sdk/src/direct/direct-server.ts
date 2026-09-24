@@ -71,7 +71,7 @@ function callerSessionId(authContext: DirectAuthContext | undefined, defaultSess
   const subject = authContext?.user?.sub;
   const issuer = authContext?.user?.['iss'];
   const callerIdentity = subject
-    ? JSON.stringify([typeof issuer === 'string' ? issuer : '', subject])
+    ? JSON.stringify([typeof issuer === 'string' ? issuer : 'direct', subject])
     : authContext?.token;
   return callerIdentity ? `${baseSessionId}:${sha256Hex(callerIdentity)}` : baseSessionId;
 }
