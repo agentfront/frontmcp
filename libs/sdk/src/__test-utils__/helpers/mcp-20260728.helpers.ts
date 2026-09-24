@@ -101,7 +101,14 @@ export async function rpc20260728(
     }),
   );
   const text = await response.text();
-  const messages = parseMessages(text, response.headers.get('content-type') ?? '');
+  let messages: JsonRpcMessage[];
+  try {
+    messages = parseMessages(text, response.headers.get('content-type') ?? '');
+  } catch (error) {
+    throw new Error(`rpc20260728: ${method} returned HTTP ${response.status} with an unparseable body: ${text}`, {
+      cause: error,
+    });
+  }
   const message =
     messages.find((candidate) => candidate.id === id) ??
     messages.find((candidate) => candidate.id === null && candidate.error !== undefined);
@@ -114,7 +121,7 @@ export async function rpc20260728(
     status: response.status,
     headers: response.headers,
     message,
-    notifications: messages.filter((candidate) => candidate.id !== id),
+    notifications: messages.filter((candidate) => candidate.id === undefined),
   };
 }
 

@@ -755,8 +755,12 @@ export class FrontMcpContext {
 
     // The caller's token goes only to allow-listed origins, and never alongside provider credentials.
     const forwardsCallerToken =
-      targetOrigin !== undefined && this.config.forwardCallerTokenTo.includes(targetOrigin);
-    if (forwardsCallerToken && this._authInfo.token && !providerCredentialsUsed && !headers.has('Authorization')) {
+      targetOrigin !== undefined &&
+      this.config.forwardCallerTokenTo.includes(targetOrigin) &&
+      this._authInfo.token !== undefined &&
+      !providerCredentialsUsed &&
+      !headers.has('Authorization');
+    if (forwardsCallerToken) {
       headers.set('Authorization', `Bearer ${this._authInfo.token}`);
     }
 
@@ -770,15 +774,14 @@ export class FrontMcpContext {
       }
     }
 
-    const forwardsCustomHeaders =
-      targetOrigin !== undefined && this.config.forwardCustomHeadersTo.includes(targetOrigin);
-    if (forwardsCustomHeaders) {
-      for (const [key, value] of Object.entries(this.metadata.customHeaders)) {
-        if (!headers.has(key)) {
-          headers.set(key, value);
-        }
-      }
+    const forwardedCustomHeaders =
+      targetOrigin !== undefined && this.config.forwardCustomHeadersTo.includes(targetOrigin)
+        ? Object.entries(this.metadata.customHeaders).filter(([key]) => !headers.has(key))
+        : [];
+    for (const [key, value] of forwardedCustomHeaders) {
+      headers.set(key, value);
     }
+    const forwardsCallerHeaders = forwardsCallerToken || forwardedCustomHeaders.length > 0;
 
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
@@ -802,6 +805,8 @@ export class FrontMcpContext {
         ...effectiveInit,
         headers,
         signal,
+        // A redirect could carry forwarded caller headers to an origin nobody allow-listed.
+        redirect: forwardsCallerHeaders && effectiveInit.redirect !== 'error' ? 'manual' : effectiveInit.redirect,
       });
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
