@@ -379,22 +379,25 @@ describe('ReBAC Evaluator', () => {
   });
 
   describe('evaluateRebac', () => {
-    it('should deny an anonymous caller without asking the relationship resolver', async () => {
-      const check = jest.fn(async () => true);
-      const ctx = createCtx({
-        user: { sub: undefined, roles: [], permissions: [], claims: {} },
-        relationships: { check },
-        input: { siteId: 'site-1' },
-      });
+    it.each([undefined, '', 'anon:5b2f8c1e'])(
+      'should deny an anonymous caller (sub %p) without asking the relationship resolver',
+      async (anonymousSub) => {
+        const check = jest.fn(async () => true);
+        const ctx = createCtx({
+          user: { sub: anonymousSub, roles: [], permissions: [], claims: {} },
+          relationships: { check },
+          input: { siteId: 'site-1' },
+        });
 
-      const result = await evaluateRebac(
-        { type: 'member', resource: 'site', resourceId: { fromInput: 'siteId' } },
-        ctx,
-      );
+        const result = await evaluateRebac(
+          { type: 'member', resource: 'site', resourceId: { fromInput: 'siteId' } },
+          ctx,
+        );
 
-      expect(result.granted).toBe(false);
-      expect(check).not.toHaveBeenCalled();
-    });
+        expect(result.granted).toBe(false);
+        expect(check).not.toHaveBeenCalled();
+      },
+    );
 
     it('should grant when relationship resolver returns true', async () => {
       const resolver: RelationshipResolver = {
