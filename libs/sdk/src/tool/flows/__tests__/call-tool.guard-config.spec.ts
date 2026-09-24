@@ -90,6 +90,14 @@ describe('call-tool guard configuration', () => {
       expect(outcomes).toEqual(['ok', 'ok', 'RATE_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED']);
     });
 
+    it('leaves a per-tool rateLimit unenforced when throttle.enabled is explicitly false', async () => {
+      const server = await createGuardedServer({ rateLimit: { maxRequests: 1, windowMs: 60_000 } }, { enabled: false });
+
+      const outcomes = await callSequentially(server, 3);
+
+      expect(outcomes).toEqual(['ok', 'ok', 'ok']);
+    });
+
     it('enforces a per-tool concurrency limit without throttle.enabled', async () => {
       const server = await createGuardedServer({ concurrency: { maxConcurrent: 1 } }, undefined, 150);
 

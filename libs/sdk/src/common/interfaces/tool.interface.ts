@@ -32,10 +32,8 @@ export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
   /**
-   * AbortSignal that fires when the enclosing request is cancelled.
-   * Populated for task-augmented `tools/call` invocations so long-running work
-   * can observe `tasks/cancel` promptly (MCP 2025-11-25 tasks spec).
-   * Non-task invocations leave this unset.
+   * AbortSignal that fires when the enclosing request is cancelled (including
+   * `tasks/cancel` for task-augmented calls, MCP 2025-11-25 tasks spec).
    */
   signal?: AbortSignal;
 };
@@ -72,8 +70,10 @@ export abstract class ToolContext<
   private readonly _progressToken?: string | number;
 
   /**
-   * AbortSignal exposed to tool authors. Fires when a task-augmented call is
-   * cancelled via `tasks/cancel` (MCP 2025-11-25). Undefined for non-task calls.
+   * AbortSignal exposed to tool authors. Fires when the request is cancelled
+   * (including `tasks/cancel` for a task-augmented call) and when the tool's
+   * execution timeout passes. Pass it to `fetch` and other cancellable work so
+   * a timed-out call stops instead of running on.
    */
   readonly signal?: AbortSignal;
 

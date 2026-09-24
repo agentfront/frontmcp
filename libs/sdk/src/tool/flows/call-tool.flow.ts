@@ -1,6 +1,6 @@
 // tools/flows/call-tool.flow.ts
 import { signIncrementalAuthTicket } from '@frontmcp/auth';
-import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import {
@@ -22,10 +22,13 @@ import {
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import {
+  acquireConcurrencySlots,
+  buildPartitionContext,
   Flow,
   FlowBase,
   FlowControl,
   FlowHooksOf,
+  GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
   ToolContext,
   ToolEntry,
@@ -133,6 +136,10 @@ const stateSchema = z.object({
   jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
   // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
   semaphoreTicket: z.any().optional(),
+  // Aborts the tool's this.signal: linked to the request's signal, and fired on an execution timeout
+  executionAbort: z.instanceof(AbortController).optional(),
+  // A timed-out execute() that is still running; its concurrency slot is released when it settles
+  abandonedExecution: z.instanceof(Promise).optional(),
   // Task augmentation request (MCP 2025-11-25 tasks spec). Present when the
   // client sent `params.task`. `ttl` MUST be positive — 0 or negative values
   // create a task that expires the instant it's persisted, which looks to the
@@ -879,7 +886,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Create context-aware providers that include scoped providers from both
       // the scope (via flow deps) and the tool's app (via toolViews).
       const contextProviders = new FlowContextProviders(tool.providers, mergedContextDeps);
-      const context = tool.create(input.arguments, { ...ctx, progressToken, contextProviders });
+      const executionAbort = linkedAbortController((ctx as { signal?: AbortSignal }).signal);
+      this.state.set('executionAbort', executionAbort);
+      const context = tool.create(input.arguments, {
+        ...ctx,
+        progressToken,
+        contextProviders,
+        signal: executionAbort.signal,
+      });
       const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();
@@ -1017,21 +1031,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const { tool } = this.state.required;
     const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
+    const partitionCtx = buildPartitionContext(context);
 
-    // Check global rate limit first
-    const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
-    if (!globalResult.allowed) {
-      this.logger.warn('acquireQuota: global rate limit exceeded', {
-        retryAfterMs: globalResult.retryAfterMs,
-      });
-      throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+    // Check global rate limit first, unless http:request already counted this request
+    if (!context?.has(GLOBAL_RATE_LIMIT_CHECKED)) {
+      const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
+      if (!globalResult.allowed) {
+        this.logger.warn('acquireQuota: global rate limit exceeded', {
+          retryAfterMs: globalResult.retryAfterMs,
+        });
+        throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+      }
     }
 
     // Check per-tool rate limit
@@ -1060,30 +1070,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     const { tool } = this.state.required;
-    const config = tool.metadata.concurrency;
-    if (!config) {
-      this.state.toolContext?.mark('acquireSemaphore');
-      this.logger.verbose('acquireSemaphore:done (no concurrency config)');
-      return;
-    }
-
-    const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
-
-    const ticket = await manager.acquireSemaphore(tool.metadata.name, config, partitionCtx);
-    if (!ticket) {
-      this.logger.warn('acquireSemaphore: concurrency limit reached', {
-        tool: tool.metadata.name,
-        maxConcurrent: config.maxConcurrent,
-      });
-      throw new ConcurrencyLimitError(tool.metadata.name, config.maxConcurrent);
-    }
+    const partitionCtx = buildPartitionContext(this.tryGetContext());
+    const ticket = await acquireConcurrencySlots(manager, tool.metadata.name, tool.metadata.concurrency, partitionCtx);
 
     this.state.set('semaphoreTicket', ticket);
     this.state.toolContext?.mark('acquireSemaphore');
@@ -1126,17 +1114,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const timeoutMs =
       tool.metadata.timeout?.executeMs ?? this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
+    const running = (async () => {
+      toolContext.output = await toolContext.execute(toolContext.input);
+    })();
+
     try {
-      const doExecute = async () => {
-        toolContext.output = await toolContext.execute(toolContext.input);
-      };
-
-      if (timeoutMs) {
-        await withTimeout(doExecute, timeoutMs, tool.metadata.name);
-      } else {
-        await doExecute();
-      }
-
+      await (timeoutMs ? withTimeout(() => running, timeoutMs, tool.metadata.name) : running);
       this.logger.verbose('execute:done');
     } catch (error) {
       // FlowControl is a control-flow signal (this.fail / this.respond / this.handled
@@ -1152,12 +1135,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       if (error instanceof InputRequiredSignal || error instanceof MissingClientCapabilityError) {
         throw error;
       }
-      // Re-throw timeout errors without wrapping
+      // Re-throw timeout errors without wrapping, after telling the still-running execute() to stop
       if (error instanceof ExecutionTimeoutError) {
         this.logger.warn('execute: tool execution timed out', {
           tool: tool.metadata.name,
           timeoutMs,
         });
+        this.state.executionAbort?.abort(error);
+        this.state.set('abandonedExecution', running);
         throw error;
       }
       // Handle elicitation fallback for clients that don't support elicitation
@@ -1271,12 +1256,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('releaseSemaphore:start');
     const ticket = this.state.semaphoreTicket as SemaphoreTicket | undefined;
     if (ticket) {
-      try {
-        await ticket.release();
-        this.logger.verbose('releaseSemaphore: slot released');
-      } catch (error) {
-        this.logger.warn('releaseSemaphore: failed to release slot', error);
-      }
+      const release = async () => {
+        try {
+          await ticket.release();
+          this.logger.verbose('releaseSemaphore: slot released');
+        } catch (error) {
+          this.logger.warn('releaseSemaphore: failed to release slot', error);
+        }
+      };
+      // A timed-out execute() keeps its slot until it actually stops running
+      const abandonedExecution = this.state.abandonedExecution;
+      if (abandonedExecution) void abandonedExecution.then(release, release);
+      else await release();
     }
     this.state.toolContext?.mark('releaseSemaphore');
     this.logger.verbose('releaseSemaphore:done');
@@ -1594,4 +1585,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.respond(result);
     this.logger.verbose('finalize:done');
   }
+}
+
+/**
+ * An AbortController that also aborts when the given signal does.
+ */
+function linkedAbortController(signal: AbortSignal | undefined): AbortController {
+  const controller = new AbortController();
+  if (signal?.aborted) controller.abort(signal.reason);
+  else signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  return controller;
 }

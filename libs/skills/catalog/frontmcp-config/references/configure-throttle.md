@@ -200,7 +200,8 @@ is what takes callers out of it.
 
 - **`'global'`** — Single shared counter for all clients. Use for global capacity limits.
 - **`'ip'`** — Separate counter per client IP. Use for per-client rate limiting.
-- **`'session'`** — Separate counter per MCP session. Use for per-session fairness.
+- **`'session'`** — Separate counter per MCP session. Use for per-session fairness. A request with no session (every MCP 2026-07-28 request, and stateless HTTP) falls back to the signed-in user; anonymous callers share one `anonymous` counter.
+- **`'userId'`** — Separate counter per signed-in user. Anonymous callers fall back to the session, as above.
 
 ## Distributed Rate Limiting
 
@@ -246,7 +247,7 @@ done
 
 ### Configuration
 
-- [ ] `throttle.enabled` is set to `true` in the `@FrontMcp` decorator
+- [ ] `throttle.enabled` is set to `true` in the `@FrontMcp` decorator for the server-level options (`global`, `globalConcurrency`, the `default*` settings, `ipFilter`). A tool's own `rateLimit`/`concurrency` apply without it; `throttle.enabled: false` turns every guard off
 - [ ] `global.maxRequests` and `global.windowMs` are set to reasonable production values
 - [ ] `defaultTimeout.executeMs` is configured to prevent runaway tool executions
 - [ ] IP filter `defaultAction` matches your security posture (`allow` for open, `deny` for restricted)
@@ -266,7 +267,7 @@ done
 
 - [ ] Sending requests beyond the rate limit returns HTTP 429
 - [ ] Blocked IPs receive HTTP 403
-- [ ] Tool executions that exceed `executeMs` are terminated and return a timeout error
+- [ ] Tool executions that exceed `executeMs` return an `EXECUTION_TIMEOUT` error and abort `this.signal`; the tool passes `this.signal` to `fetch` and other cancellable work so it stops too
 
 ## Troubleshooting
 

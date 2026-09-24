@@ -39,6 +39,8 @@ export {
   // Prompt errors
   PromptNotFoundError,
   PromptExecutionError,
+  // Guard errors
+  GuardLimitMcpError,
   // Utilities
   isPublicError,
   isClientFacingError,

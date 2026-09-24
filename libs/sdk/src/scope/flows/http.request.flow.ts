@@ -13,12 +13,14 @@ import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow'
 import {
   authInfoFromAuthorization,
   authorizeSessionTermination,
+  buildPartitionContext,
   decideIntent,
   decisionSchema,
   Flow,
   FlowBase,
   FlowControl,
   FlowHooksOf,
+  GLOBAL_RATE_LIMIT_CHECKED,
   httpInputSchema,
   httpOutputSchema,
   httpRespond,
@@ -187,13 +189,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     if (!manager) return;
 
     const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
+    const partitionCtx = buildPartitionContext(context);
+    const requestBody = this.rawInput.request.body as { id?: string | number | null } | undefined;
+    const jsonRpcId = requestBody?.id ?? null;
 
     // The configured IP policy is enforced here, before any other guard work. `IpFilter` and
     // `GuardManager.checkIpFilter` already existed and were unit-tested; nothing on the
@@ -206,6 +204,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         httpRespond.json(
           {
             jsonrpc: '2.0',
+            id: jsonRpcId,
             error: { code: -32001, message: 'Forbidden: client IP rejected by ipFilter' },
           },
           { status: 403 },
@@ -217,12 +216,14 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     if (!manager.config?.global) return;
 
     const result = await manager.checkGlobalRateLimit(partitionCtx);
+    context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
     if (!result.allowed) {
       const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
       this.respond(
         httpRespond.json(
           {
             jsonrpc: '2.0',
+            id: jsonRpcId,
             error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
           },
           { status: 429, headers: { 'Retry-After': String(retryAfter) } },
