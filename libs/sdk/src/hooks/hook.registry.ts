@@ -126,7 +126,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     const { flow, stage, target } = rec.metadata;
 
     if (embedded && target) {
-      this.indexByClass(target.constructor ?? target, entry);
+      this.indexByClass(rec.metadata.static ? target : target.constructor, entry);
     } else if (!embedded) {
       this.indexByFlowStage(flow, String(stage), entry);
       this.indexByFlow(flow, entry);

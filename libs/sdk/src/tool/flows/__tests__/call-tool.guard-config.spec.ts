@@ -90,6 +90,14 @@ describe('call-tool guard configuration', () => {
       expect(outcomes).toEqual(['ok', 'ok', 'RATE_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED']);
     });
 
+    it('leaves a per-tool rateLimit unenforced when throttle.enabled is explicitly false', async () => {
+      const server = await createGuardedServer({ rateLimit: { maxRequests: 1, windowMs: 60_000 } }, { enabled: false });
+
+      const outcomes = await callSequentially(server, 3);
+
+      expect(outcomes).toEqual(['ok', 'ok', 'ok']);
+    });
+
     it('enforces a per-tool concurrency limit without throttle.enabled', async () => {
       const server = await createGuardedServer({ concurrency: { maxConcurrent: 1 } }, undefined, 150);
 
@@ -121,6 +129,29 @@ describe('call-tool guard configuration', () => {
 
       expect(outcomes.slice(0, 4)).toEqual(['ok', 'ok', 'ok', 'ok']);
       expect(outcomes[4]).not.toBe('ok');
+    });
+  });
+
+  describe('partitions', () => {
+    it('keys a session-partitioned throttle.global on a verified session, not the session header', async () => {
+      const server = await createGuardedServer(
+        {},
+        { enabled: true, global: { maxRequests: 2, windowMs: 60_000, partitionBy: 'session' } },
+      );
+
+      const outcomes: string[] = [];
+      for (const forgedSessionId of ['forged-1', 'forged-2', 'forged-3']) {
+        const response = await rpc20260728(
+          server.handler,
+          'tools/call',
+          { name: server.toolName, arguments: {} },
+          { headers: { 'mcp-session-id': forgedSessionId } },
+        );
+        outcomes.push(outcomeOf(response));
+      }
+
+      expect(outcomes.slice(0, 2)).toEqual(['ok', 'ok']);
+      expect(outcomes[2]).not.toBe('ok');
     });
   });
 

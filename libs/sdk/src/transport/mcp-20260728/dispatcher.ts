@@ -7,6 +7,7 @@
  * behaviour: method admission (removed methods now 404), the MRTR exchange,
  * and result decoration.
  */
+import { isAnonymousSubject } from '@frontmcp/auth';
 import {
   MCP_20260728_ERROR_CODES,
   MCP_20260728_REMOVED_METHODS,
@@ -21,6 +22,7 @@ import { type Scope } from '../../scope';
 import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
 import { createMcpHandlers } from '../mcp-handlers';
+import { toSdkMcpError } from '../mcp-handlers/mcp-error.utils';
 import { buildDiscoverResult } from './discover';
 import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
@@ -74,11 +76,12 @@ export const MRTR_CAPABLE_METHODS = ['tools/call', 'prompts/get', 'resources/rea
  *
  * Falls back to a fixed anonymous marker rather than a random value: public
  * servers must still be able to redeem their own state on the retry, and there
- * is no principal to separate anonymous callers by.
+ * is no principal to separate anonymous callers by. An anonymous caller's
+ * client id (`anon:…`) is minted per request, so it is not a principal either.
  */
 export function resolvePrincipal(authInfo: Record<string, unknown> | undefined): string {
   const clientId = authInfo?.['clientId'];
-  if (typeof clientId === 'string' && clientId.length > 0) return clientId;
+  if (!isAnonymousSubject(clientId)) return clientId as string;
 
   const token = authInfo?.['token'];
   // Hash the WHOLE token. A prefix would collide: every HS256 JWT starts with
@@ -233,10 +236,11 @@ export function toJsonRpcError(error: unknown): { status: number; error: JsonRpc
 
   if (typeof withJsonRpc?.toJsonRpcError === 'function') {
     payload = withJsonRpc.toJsonRpcError();
-  } else if (error instanceof McpError) {
-    payload = { code: error.code, message: error.message, data: (error as { data?: unknown }).data };
   } else {
-    payload = { code: -32603, message: error instanceof Error ? error.message : String(error) };
+    const sdkError = toSdkMcpError(error);
+    // McpError prefixes its message with "MCP error <code>: "; the code is already in the payload
+    const message = sdkError.message.replace(/^MCP error -?\d+: /, '');
+    payload = { code: sdkError.code, message, data: sdkError.data };
   }
 
   // Retired in 2026-07-28: resource-not-found is now Invalid Params.

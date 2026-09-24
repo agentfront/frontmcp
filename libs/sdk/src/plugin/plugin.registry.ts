@@ -15,9 +15,9 @@ import {
   type ProviderEntry,
   type ScopeEntry,
 } from '../common';
-import { installContextExtensions } from '../context';
+import { installContextExtensions } from '../context/context-extension';
 import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import { normalizeProvider } from '../provider/provider.utils';
@@ -234,7 +234,7 @@ export default class PluginRegistry
         );
       }
 
-      const hooks = normalizeHooksFromCls(pluginInstance);
+      const hooks = [...normalizeHooksFromCls(pluginInstance), ...normalizeHooksFromProviders(providers)];
       if (hooks.length > 0) {
         // Determine which scope to use for hook registration:
         // - scope='app' (default): register hooks to own scope (app-level)

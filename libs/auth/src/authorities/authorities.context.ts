@@ -5,8 +5,8 @@
  * Handles JWT shape differences across IdPs (Auth0, Keycloak, Okta, etc.).
  */
 
-import type { AuthoritiesEvaluationContext, RelationshipResolver } from './authorities.types';
 import type { AuthoritiesClaimsMapping } from './authorities.profiles';
+import type { AuthoritiesEvaluationContext, RelationshipResolver } from './authorities.types';
 
 /**
  * Resolve a dot-path value from a nested object.
@@ -79,6 +79,33 @@ export interface AuthInfoLike {
 }
 
 /**
+ * The caller's claims, wherever the entry point put them: top-level `user`, or
+ * `extra.user` (MCP 2026-07-28 and the HTTP flow's context).
+ */
+export function resolveAuthUser(authInfo: Partial<AuthInfoLike> | undefined): NonNullable<AuthInfoLike['user']> {
+  const extraUser = authInfo?.extra?.['user'];
+  if (authInfo?.user) return authInfo.user;
+  return typeof extraUser === 'object' && extraUser !== null ? (extraUser as NonNullable<AuthInfoLike['user']>) : {};
+}
+
+/**
+ * Whether a subject names no signed-in caller: missing, not a string, empty, or an anonymous placeholder (`anon:…`).
+ */
+export function isAnonymousSubject(sub: unknown): boolean {
+  return typeof sub !== 'string' || sub === '' || sub.startsWith('anon:');
+}
+
+/**
+ * The signed-in subject of a caller, or undefined for an anonymous one. A caller whose own
+ * subject is anonymous stays anonymous, whatever `claimsMapping.userId` resolves to; a mapped
+ * user id that is not a usable string falls back to the caller's own subject.
+ */
+export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | undefined {
+  if (rawSub !== undefined && isAnonymousSubject(rawSub)) return undefined;
+  return [mappedSub, rawSub].find((candidate): candidate is string => !isAnonymousSubject(candidate));
+}
+
+/**
  * Options for building an evaluation context.
  */
 export interface AuthoritiesContextBuilderOptions {
@@ -114,7 +141,7 @@ export class AuthoritiesContextBuilder {
       const resolved = this.claimsResolver(authInfo);
       return {
         user: {
-          sub: authInfo?.user?.sub ?? '',
+          sub: signedInSubject(resolveAuthUser(authInfo).sub),
           roles: resolved.roles,
           permissions: resolved.permissions,
           claims: resolved.claims,
@@ -126,7 +153,7 @@ export class AuthoritiesContextBuilder {
     }
 
     // Extract raw claims from various sources
-    const user = authInfo?.user ?? {};
+    const user = resolveAuthUser(authInfo);
     const authorization = authInfo?.extra?.['authorization'] as Record<string, unknown> | undefined;
     const authorizationClaims = (authorization?.['claims'] as Record<string, unknown>) ?? {};
     // Merge precedence: user fields override authorizationClaims on conflict.
@@ -161,14 +188,12 @@ export class AuthoritiesContextBuilder {
       permissions = toStringArray((user as Record<string, unknown>)['permissions'] ?? []);
     }
 
-    // Resolve user sub
-    const sub = this.claimsMapping?.userId
-      ? String(resolveDotPath(rawClaims, this.claimsMapping.userId) ?? '')
-      : (user.sub ?? '');
+    // Anonymous callers have no sub, so `user.sub exists` excludes them
+    const mappedSub = this.claimsMapping?.userId ? resolveDotPath(rawClaims, this.claimsMapping.userId) : undefined;
 
     return {
       user: {
-        sub,
+        sub: signedInSubject(user.sub, mappedSub),
         roles,
         permissions,
         claims: rawClaims,

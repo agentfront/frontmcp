@@ -78,7 +78,7 @@ interface PromptArgument {
 
 ## Return Format
 
-Prompts must return `GetPromptResult`:
+`execute()` returns a `GetPromptResult`, or a string, a message array or an object that the SDK turns into one (see [Return Values](/frontmcp/servers/prompts#return-values)). The full form is:
 
 ```typescript
 interface GetPromptResult {

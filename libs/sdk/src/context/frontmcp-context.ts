@@ -20,6 +20,7 @@ import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type SessionIdPayload } from '../common/types';
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { InvalidInputError } from '../errors/mcp.error';
+import type { AIPlatformType, ClientInfo } from '../notification';
 import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
@@ -90,8 +91,10 @@ export interface RequestMetadata {
  * Configuration for the context.
  */
 export interface FrontMcpContextConfig {
-  /** Auto-inject auth headers in fetch requests (default: true) */
-  autoInjectAuthHeaders?: boolean;
+  /** Origins that fetch() may send the caller's access token to (default: none) */
+  forwardCallerTokenTo?: string[];
+  /** Origins that fetch() may send the request's x-frontmcp-* headers to (default: none) */
+  forwardCustomHeadersTo?: string[];
   /** Auto-inject tracing headers in fetch requests (default: true) */
   autoInjectTracingHeaders?: boolean;
   /** Default fetch request timeout in milliseconds (default: 30000) */
@@ -242,7 +245,7 @@ export class FrontMcpContext {
   // =====================
 
   /** Context configuration */
-  readonly config: FrontMcpContextConfig;
+  readonly config: Required<FrontMcpContextConfig>;
 
   // =====================
   // Metadata
@@ -256,6 +259,8 @@ export class FrontMcpContext {
   // =====================
 
   private _authInfo: Partial<AuthInfo>;
+  private _clientInfo?: ClientInfo;
+  private _platformType?: AIPlatformType;
   private _sessionMetadata?: SessionIdPayload;
   private _credentialMiddleware?: FetchCredentialMiddleware;
 
@@ -297,7 +302,8 @@ export class FrontMcpContext {
 
     // Configuration with defaults
     this.config = {
-      autoInjectAuthHeaders: args.config?.autoInjectAuthHeaders ?? true,
+      forwardCallerTokenTo: toOrigins(args.config?.forwardCallerTokenTo),
+      forwardCustomHeadersTo: toOrigins(args.config?.forwardCustomHeadersTo),
       autoInjectTracingHeaders: args.config?.autoInjectTracingHeaders ?? true,
       requestTimeout: args.config?.requestTimeout ?? 30000,
     };
@@ -334,6 +340,30 @@ export class FrontMcpContext {
    */
   updateAuthInfo(authInfo: Partial<AuthInfo>): void {
     this._authInfo = { ...this._authInfo, ...authInfo };
+  }
+
+  /**
+   * The client's self-reported identity, sent with this request (MCP 2026-07-28 `_meta`).
+   * Session-based clients report it once at initialize instead; see the notification service.
+   */
+  get clientInfo(): ClientInfo | undefined {
+    return this._clientInfo;
+  }
+
+  /** The AI platform detected from this request's client info; undefined when none was recognized. */
+  get platformType(): AIPlatformType | undefined {
+    return this._platformType;
+  }
+
+  /**
+   * Record the client info a request carries, and the platform detected from it.
+   * An `'unknown'` platform is not recorded, so lookups fall back to the session's platform.
+   *
+   * @internal
+   */
+  setClientInfo(clientInfo: ClientInfo, platformType: AIPlatformType): void {
+    this._clientInfo = clientInfo;
+    this._platformType = platformType === 'unknown' ? undefined : platformType;
   }
 
   /**
@@ -675,16 +705,21 @@ export class FrontMcpContext {
    * Perform a fetch request with automatic header injection.
    *
    * Injects:
-   * - Authorization header (if authInfo.token is available and autoInjectAuthHeaders is true)
+   * - Authorization header with the caller's token, only for origins in forwardCallerTokenTo
    * - W3C traceparent header (if autoInjectTracingHeaders is true)
    * - x-request-id header
-   * - Custom headers from request metadata
+   * - The request's x-frontmcp-* headers, only for origins in forwardCustomHeadersTo
    *
    * @param input - Request URL or Request object
    * @param init - Request options
+   * @param executionSignal - Aborts the request as well, on top of the caller's signal or the request timeout
    * @returns Fetch response
    */
-  async fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+  async fetch(
+    input: RequestInfo | URL,
+    init?: FrontMcpFetchInit | RequestInit,
+    executionSignal?: AbortSignal,
+  ): Promise<Response> {
     let effectiveInit: RequestInit = (init ?? {}) as RequestInit;
     let effectiveInput: RequestInfo | URL = input;
 
@@ -696,7 +731,7 @@ export class FrontMcpContext {
         providerCredentialsUsed = true;
         if (this._credentialMiddleware) {
           const result = await this._credentialMiddleware.applyCredentials(
-            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+            requestUrlOf(input),
             init as FrontMcpFetchInit,
           );
           effectiveInit = result.init;
@@ -721,15 +756,19 @@ export class FrontMcpContext {
       }
     }
 
-    const headers = new Headers(effectiveInit.headers);
+    const inputRequest = effectiveInput instanceof Request ? effectiveInput : undefined;
+    const headers = new Headers(effectiveInit.headers ?? inputRequest?.headers);
+    const targetOrigin = originOf(requestUrlOf(effectiveInput));
 
-    // Auto-inject MCP session token ONLY for non-provider requests.
-    // When provider credentials are used, the provider's applier handles auth —
-    // never leak the MCP session token to upstream services.
-    if (this.config.autoInjectAuthHeaders && this._authInfo.token && !providerCredentialsUsed) {
-      if (!headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${this._authInfo.token}`);
-      }
+    // The caller's token goes only to allow-listed origins, and never alongside provider credentials.
+    const forwardsCallerToken =
+      targetOrigin !== undefined &&
+      this.config.forwardCallerTokenTo.includes(targetOrigin) &&
+      this._authInfo.token !== undefined &&
+      !providerCredentialsUsed &&
+      !headers.has('Authorization');
+    if (forwardsCallerToken) {
+      headers.set('Authorization', `Bearer ${this._authInfo.token}`);
     }
 
     // Auto-inject tracing headers
@@ -742,40 +781,65 @@ export class FrontMcpContext {
       }
     }
 
-    // Inject custom headers from request metadata
-    for (const [key, value] of Object.entries(this.metadata.customHeaders)) {
-      if (!headers.has(key)) {
-        headers.set(key, value);
-      }
+    const forwardedCustomHeaders =
+      targetOrigin !== undefined && this.config.forwardCustomHeadersTo.includes(targetOrigin)
+        ? Object.entries(this.metadata.customHeaders).filter(([key]) => !headers.has(key))
+        : [];
+    for (const [key, value] of forwardedCustomHeaders) {
+      headers.set(key, value);
     }
+    const forwardsCallerHeaders = forwardsCallerToken || forwardedCustomHeaders.length > 0;
 
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
     // fire-and-forget signals whose internal abort listeners are never cleaned up).
-    const userSignal = effectiveInit.signal ?? (input instanceof Request ? input.signal : undefined);
-    let controller: AbortController | undefined;
+    // A Request always carries a signal, so only a signal passed in init replaces the timeout.
+    let requestSignal = effectiveInit.signal ?? undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    if (!userSignal) {
-      controller = new AbortController();
+    if (!requestSignal) {
+      const controller = new AbortController();
       timeoutId = setTimeout(
-        () => controller?.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+        () => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
         this.config.requestTimeout ?? 30000,
       );
+      requestSignal = inputRequest ? AbortSignal.any([inputRequest.signal, controller.signal]) : controller.signal;
     }
 
-    const signal = userSignal ?? controller?.signal;
+    const signal = executionSignal ? AbortSignal.any([executionSignal, requestSignal]) : requestSignal;
+    const requestedRedirect = effectiveInit.redirect ?? inputRequest?.redirect;
 
     try {
       return await fetch(effectiveInput, {
         ...effectiveInit,
         headers,
         signal,
+        // A redirect could carry forwarded caller headers to an origin nobody allow-listed.
+        redirect: forwardsCallerHeaders && requestedRedirect !== 'error' ? 'manual' : requestedRedirect,
       });
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     }
   }
+}
+
+function requestUrlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+function originOf(url: string): string | undefined {
+  try {
+    const { origin, protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function toOrigins(entries: string[] | undefined): string[] {
+  return (entries ?? []).map(originOf).filter((origin): origin is string => origin !== undefined);
 }
 
 /**

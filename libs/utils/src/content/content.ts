@@ -15,7 +15,7 @@
  * - Error → { name, message, stack }
  * - Map → plain object
  * - Set → array
- * - Circular references → dropped (undefined)
+ * - Circular references → dropped (undefined); a value referenced more than once without a cycle is kept each time
  *
  * @param value - Any JavaScript value
  * @returns JSON-safe version of the value
@@ -28,7 +28,20 @@
  * // { key: 'value' }
  */
 export function sanitizeToJson(value: unknown): unknown {
-  const seen = new WeakSet<object>();
+  // Only the containers on the current path: a value seen again there is a cycle.
+  const ancestors = new WeakSet<object>();
+
+  function withinAncestors<T>(container: object, build: () => T): T | undefined {
+    if (ancestors.has(container)) {
+      return undefined;
+    }
+    ancestors.add(container);
+    try {
+      return build();
+    } finally {
+      ancestors.delete(container);
+    }
+  }
 
   function sanitize(val: unknown): unknown {
     if (typeof val === 'function' || typeof val === 'symbol') {
@@ -52,40 +65,34 @@ export function sanitizeToJson(value: unknown): unknown {
     }
 
     if (val instanceof Map) {
-      const obj: Record<string, unknown> = {};
-      for (const [k, v] of val.entries()) {
-        obj[String(k)] = sanitize(v);
-      }
-      return obj;
+      return withinAncestors(val, () => {
+        const obj: Record<string, unknown> = {};
+        for (const [k, v] of val.entries()) {
+          obj[String(k)] = sanitize(v);
+        }
+        return obj;
+      });
     }
 
     if (val instanceof Set) {
-      return Array.from(val).map(sanitize);
+      return withinAncestors(val, () => Array.from(val).map(sanitize));
     }
 
     if (Array.isArray(val)) {
-      if (seen.has(val)) {
-        return undefined;
-      }
-      seen.add(val);
-      return val.map(sanitize);
+      return withinAncestors(val, () => val.map(sanitize));
     }
 
     if (val && typeof val === 'object') {
-      if (seen.has(val)) {
-        // Drop circular references
-        return undefined;
-      }
-      seen.add(val);
-
-      const sanitized: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(val)) {
-        const clean = sanitize(value);
-        if (clean !== undefined) {
-          sanitized[key] = clean;
+      return withinAncestors(val, () => {
+        const sanitized: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(val)) {
+          const clean = sanitize(value);
+          if (clean !== undefined) {
+            sanitized[key] = clean;
+          }
         }
-      }
-      return sanitized;
+        return sanitized;
+      });
     }
 
     // Primitives pass through

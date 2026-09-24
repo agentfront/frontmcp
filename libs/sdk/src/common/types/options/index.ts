@@ -9,6 +9,7 @@ export * from './logging';
 export * from './redis';
 export * from './transport';
 export * from './pagination';
+export * from './outbound-fetch';
 export * from './elicitation';
 export * from './skills-http';
 export * from './ext-apps';

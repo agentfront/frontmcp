@@ -113,15 +113,11 @@ Object.assign(FrontMcpTool, {
   remote: toolRemote,
 });
 
-export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool };
-
 /**
- * This is a modified version of the original decorator, with the following changes:
+ * The typed form of the decorator:
  * - Added support for ZodRawShape as inputSchema
  * - Added support for outputSchema: any of the allowed forms
  * - Added rich error messages for input/output type mismatches
- *
- * Don't move below code outside the decorator file, it will break the module augmentation.
  */
 // ---------- zod helpers ----------
 type __Shape = z.ZodRawShape;
@@ -385,12 +381,9 @@ type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>)
     ? C & (new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
     : never;
 
-declare module '@frontmcp/sdk' {
-  // ---------- the decorator (overloads) ----------
-
-  // 1) Overload: outputSchema PROVIDED → strict return typing
-  // @ts-expect-error - Module augmentation requires decorator overload
-  export function Tool<I extends __Shape, O extends __OutputSchema>(
+type ToolDecorator = {
+  // outputSchema provided: execute() must return the declared output
+  <I extends __Shape, O extends __OutputSchema>(
     opts: ToolMetadataOptions<I, O> & { outputSchema: O },
   ): <C extends __Ctor>(
     cls: C &
@@ -399,11 +392,17 @@ declare module '@frontmcp/sdk' {
       __MustReturn<C, ToolOutputOf<{ outputSchema: O }>>,
   ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 
-  // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
-  // @ts-expect-error - Module augmentation requires decorator overload
-  export function Tool<I extends __Shape>(
+  // outputSchema not provided: execute() can return any
+  <I extends __Shape>(
     opts: ToolMetadataOptions<I, any> & { outputSchema?: never },
   ): <C extends __Ctor>(
     cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<{ inputSchema: I }>> & __MustReturn<C, ToolOutputOf<{}>>,
   ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{}>>;
-}
+
+  esm: typeof toolEsm;
+  remote: typeof toolRemote;
+};
+
+const Tool = FrontMcpTool as unknown as ToolDecorator;
+
+export { FrontMcpTool, Tool, frontMcpTool, frontMcpTool as tool };

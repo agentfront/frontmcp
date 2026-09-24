@@ -42,8 +42,11 @@ function hasMetadataCompat(token: symbol, target: object): boolean {
   return Reflect.getMetadataKeys(target).some((k) => typeof k === 'symbol' && k.description === desc);
 }
 
-export const annotatedFrontMcpAppSchema = z.custom<Type>(
-  (v): v is Type => {
+/** A class reference; declared in this package so published declarations name it from here, not from a monorepo path. */
+export interface AnnotatedClass extends Type {}
+
+export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     // Check for class-based @App() decorator
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpLocalAppTokens.type, v)) {
       return true;
@@ -62,8 +65,8 @@ export const annotatedFrontMcpAppSchema = z.custom<Type>(
   { message: 'apps items must be annotated with @App() | @FrontMcpApp() or be a valid remote app configuration.' },
 );
 
-export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpProvidersSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpProviderTokens.type, v)) {
       return true;
     }
@@ -85,8 +88,8 @@ export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
   { message: 'providers items must be annotated with @Provider() | @FrontMcpProvider().' },
 );
 
-export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpAuthProvidersSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpAuthProviderTokens.type, v)) {
       return true;
     }
@@ -108,8 +111,8 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
   { message: 'auth providers items must be annotated with @AuthProvider() | @FrontMcpAuthProvider().' },
 );
 
-export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpPluginsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpPluginTokens.type, v)) {
       return true;
     }
@@ -131,8 +134,8 @@ export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
   { message: 'plugins items must be annotated with @Plugin() | @FrontMcpPlugin().' },
 );
 
-export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpAdaptersSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpAdapterTokens.type, v)) {
       return true;
     }
@@ -154,8 +157,8 @@ export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
   { message: 'adapters items must be annotated with @Adapter() | @FrontMcpAdapter().' },
 );
 
-export const annotatedFrontMcpToolsSchema = z.custom<Type | string>(
-  (v): v is Type | string => {
+export const annotatedFrontMcpToolsSchema = z.custom<AnnotatedClass | string>(
+  (v): v is AnnotatedClass | string => {
     // ESM package specifier string (e.g., '@acme/tools@^1.0.0')
     if (typeof v === 'string') {
       return isPackageSpecifier(v);
@@ -168,8 +171,8 @@ export const annotatedFrontMcpToolsSchema = z.custom<Type | string>(
   { message: 'tools items must be annotated with @Tool() | @FrontMcpTool() or be a package specifier string.' },
 );
 
-export const annotatedFrontMcpResourcesSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpResourcesSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     return (
       typeof v === 'function' &&
       // Class-based @Resource decorator
@@ -188,8 +191,8 @@ export const annotatedFrontMcpResourcesSchema = z.custom<Type>(
   },
 );
 
-export const annotatedFrontMcpPromptsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpPromptsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     return (
       typeof v === 'function' &&
       // Class-based @Prompt decorator
@@ -201,8 +204,8 @@ export const annotatedFrontMcpPromptsSchema = z.custom<Type>(
   { message: 'prompts items must be annotated with @Prompt() | @FrontMcpPrompt() or use prompt() builder.' },
 );
 
-export const annotatedFrontMcpLoggerSchema = z.custom<Type>(
-  (v): v is Type => typeof v === 'function' && hasMetadataCompat(FrontMcpLogTransportTokens.type, v),
+export const annotatedFrontMcpLoggerSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => typeof v === 'function' && hasMetadataCompat(FrontMcpLogTransportTokens.type, v),
   { message: 'logger items must be annotated with @Logger() | @FrontMcpLogger().' },
 );
 
@@ -244,8 +247,8 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
   },
 );
 
-export const annotatedFrontMcpJobsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpJobsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpJobTokens.type, v)) {
         return true;
@@ -260,8 +263,8 @@ export const annotatedFrontMcpJobsSchema = z.custom<Type>(
   { message: 'jobs items must be annotated with @Job() | @FrontMcpJob() or use job() builder.' },
 );
 
-export const annotatedFrontMcpWorkflowsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpWorkflowsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpWorkflowTokens.type, v)) {
         return true;
@@ -276,8 +279,8 @@ export const annotatedFrontMcpWorkflowsSchema = z.custom<Type>(
   { message: 'workflows items must be annotated with @Workflow() | @FrontMcpWorkflow() or use workflow() builder.' },
 );
 
-export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpSkillsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     // Check for class-based @Skill decorator
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpSkillTokens.type, v)) {
@@ -307,8 +310,8 @@ export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
   { message: 'skills items must be annotated with @Skill() | @FrontMcpSkill() or use skill() builder.' },
 );
 
-export const annotatedFrontMcpChannelsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpChannelsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
     if (typeof v === 'function') {
       if (hasMetadataCompat(FrontMcpChannelTokens.type, v)) {
         return true;

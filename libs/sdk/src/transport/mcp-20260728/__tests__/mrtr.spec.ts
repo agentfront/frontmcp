@@ -1,4 +1,4 @@
-import { InputRequiredSignal, MissingClientCapabilityError } from '../../../errors';
+import { InputRequiredSignal, InvalidInputError, MissingClientCapabilityError } from '../../../errors';
 import { buildInputRequiredResult, MrtrExchange } from '../mrtr';
 import { computeRequestBinding, decodeRequestState, type RequestStateBinding } from '../request-state';
 
@@ -67,6 +67,15 @@ describe('MrtrExchange — elicitation', () => {
   it('defaults an answer with no action to cancel', () => {
     const ex = exchange({ clientCapabilities: ELICITATION_CAPABLE, inputResponses: { 'elicitation-1': {} } });
     expect(ex.resolveElicitation(PENDING)).toEqual({ status: 'cancel' });
+  });
+
+  it('rejects an explicit null action instead of reading it as cancel', () => {
+    const ex = exchange({
+      clientCapabilities: ELICITATION_CAPABLE,
+      inputResponses: { 'elicitation-1': { action: null, status: 'accept' } },
+    });
+
+    expect(() => ex.resolveElicitation(PENDING)).toThrow(InvalidInputError);
   });
 
   it('derives keys from call order so a replayed tool lines up', () => {

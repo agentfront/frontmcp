@@ -6,32 +6,37 @@ import {
   type OrchestratedProviderState,
   type OrchestratedTokenStore,
 } from '@frontmcp/auth';
+import { type GuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import {
+  authInfoFromAuthorization,
   authorizeSessionTermination,
+  buildPartitionContext,
   decideIntent,
   decisionSchema,
   Flow,
   FlowBase,
   FlowControl,
   FlowHooksOf,
+  GLOBAL_RATE_LIMIT_CHECKED,
   httpInputSchema,
   httpOutputSchema,
   httpRespond,
   intentSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  partitionsByIdentity,
   ServerRequestTokens,
-  toLegacyProtocolFlags,
   type Authorization,
   type FlowPlan,
   type FlowRunOptions,
   type ScopeEntry,
   type ServerRequest,
 } from '../../common';
+import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type Scope } from '../scope.instance';
@@ -45,6 +50,8 @@ const plan = {
     'acquireSemaphore',
     // route request to the correct flow
     'checkAuthorization',
+    // rate limits keyed on the caller's verified identity
+    'acquireIdentityQuota',
     'router',
   ],
   execute: [
@@ -86,17 +93,6 @@ export const httpRequestStateSchema = z.object({
 
 const name = 'http:request' as const;
 const { Stage } = FlowHooksOf('http:request');
-
-/**
- * Parse a verified user claim's space-delimited `scope` (RFC 6749 §3.3) into a
- * scopes array. Shared by the Node and web-transport `authInfo` mappings so
- * both surface the same grant; the `scope` claim is present at runtime but not
- * declared on the `UserClaim` type, so it is read through a narrow cast.
- */
-function parseUserScopes(user: { scope?: unknown } | undefined): string[] {
-  const s = user?.scope;
-  return typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : [];
-}
 
 declare global {
   interface ExtendFlows {
@@ -197,13 +193,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     if (!manager) return;
 
     const context = this.tryGetContext();
-    const partitionCtx = context
-      ? {
-          sessionId: context.sessionId,
-          clientIp: context.metadata?.clientIp,
-          userId: context.authInfo?.clientId as string | undefined,
-        }
-      : undefined;
+    const partitionCtx = buildPartitionContext(context);
 
     // The configured IP policy is enforced here, before any other guard work. `IpFilter` and
     // `GuardManager.checkIpFilter` already existed and were unit-tested; nothing on the
@@ -216,6 +206,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         httpRespond.json(
           {
             jsonrpc: '2.0',
+            id: this.jsonRpcRequestId(),
             error: { code: -32001, message: 'Forbidden: client IP rejected by ipFilter' },
           },
           { status: 403 },
@@ -224,22 +215,41 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       return;
     }
 
-    if (!manager.config?.global) return;
+    const globalConfig = manager.config?.global;
+    if (!globalConfig || partitionsByIdentity(globalConfig.partitionBy)) return;
+    await this.enforceGlobalRateLimit(manager);
+  }
 
-    const result = await manager.checkGlobalRateLimit(partitionCtx);
-    if (!result.allowed) {
-      const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
-      this.respond(
-        httpRespond.json(
-          {
-            jsonrpc: '2.0',
-            error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
-          },
-          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-        ),
-      );
-      return;
-    }
+  @Stage('acquireIdentityQuota')
+  async acquireIdentityQuota() {
+    const manager = this.scope.rateLimitManager;
+    const globalConfig = manager?.config?.global;
+    if (!manager || !globalConfig || !partitionsByIdentity(globalConfig.partitionBy)) return;
+    await this.enforceGlobalRateLimit(manager);
+  }
+
+  private async enforceGlobalRateLimit(manager: GuardManager): Promise<void> {
+    const context = this.tryGetContext();
+    const result = await manager.checkGlobalRateLimit(buildPartitionContext(context));
+    context?.set(GLOBAL_RATE_LIMIT_CHECKED, true);
+    if (result.allowed) return;
+
+    const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
+    this.respond(
+      httpRespond.json(
+        {
+          jsonrpc: '2.0',
+          id: this.jsonRpcRequestId(),
+          error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
+        },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+      ),
+    );
+  }
+
+  private jsonRpcRequestId(): string | number | null {
+    const requestBody = this.rawInput.request.body as { id?: string | number | null } | undefined;
+    return requestBody?.id ?? null;
   }
 
   @Stage('checkAuthorization')
@@ -262,25 +272,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       if (result.kind === 'authorized' && result.authorization) {
         const ctx = this.tryGetContext();
         if (ctx) {
-          // Build AuthInfo from the authorization object
-          // AuthInfo is the MCP SDK's auth type with token, clientId, scopes, etc.
-          const { token, user, session } = result.authorization;
-
-          ctx.updateAuthInfo({
-            token,
-            clientId: user.sub,
-            // Populate scopes from the verified token's `scope` claim instead of
-            // hardcoding `[]`, so any consumer that authorizes on
-            // `authInfo.scopes` sees the real grant (same accessor as the web path).
-            scopes: parseUserScopes(user as { scope?: unknown } | undefined),
-            // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
-            expiresAt: user.exp ? user.exp * 1000 : undefined,
-            extra: {
-              user,
-              sessionId: session?.id,
-              sessionPayload: session?.payload,
-            },
-          });
+          const { token, user } = result.authorization;
+          ctx.updateAuthInfo(authInfoFromAuthorization(result.authorization));
 
           // Bind `this.orchestration` for tools in orchestrated (local/remote)
           // mode so `this.orchestration.getToken(id)` resolves a live upstream
@@ -690,21 +683,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // The verified authorization the `router` stage attached. Project it to the
       // MCP `AuthInfo` shape the handlers expect (same mapping as checkAuthorization).
       const authorization = req[ServerRequestTokens.auth] as Authorization | undefined;
-      const authInfo = authorization
-        ? {
-            token: authorization.token,
-            clientId: authorization.user?.sub,
-            // Same scope parsing as the Node path so scope-aware handlers behave
-            // identically on the web transport.
-            scopes: parseUserScopes(authorization.user as { scope?: unknown } | undefined),
-            expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
-            extra: {
-              user: authorization.user,
-              sessionId: authorization.session?.id,
-              sessionPayload: authorization.session?.payload,
-            },
-          }
-        : undefined;
+      const authInfo = authorization ? authInfoFromAuthorization(authorization) : undefined;
 
       // Stateful sessions: a Durable Object threads its persistent server +
       // transport here so the GET notification stream stays open across requests.

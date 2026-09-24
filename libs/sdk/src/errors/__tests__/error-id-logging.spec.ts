@@ -92,4 +92,14 @@ describe('error ids in production logs', () => {
     expect(clientText).toContain(errorId);
     expect(serverLog).toContain(errorId);
   });
+
+  it('logs the error id returned in the data of an error with a JSON-RPC shape', async () => {
+    const firstLineOfCall = capturedLogLines.length;
+
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'orders://missing' });
+
+    const errorId = (message.error?.data as { errorId?: string } | undefined)?.errorId;
+    expect(errorId).toMatch(/^err_/);
+    expect(capturedLogLines.slice(firstLineOfCall).join('\n')).toContain(errorId);
+  });
 });

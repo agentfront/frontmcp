@@ -14,6 +14,7 @@ import {
   type FlowName,
   type FlowOutputOf,
   type FlowType,
+  type FrontMcpAuth,
 } from '../common';
 import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
@@ -242,7 +243,7 @@ export class AgentScope {
   // Delegated to Parent Scope
   // ============================================================================
 
-  get auth() {
+  get auth(): FrontMcpAuth {
     return this.parentScope.auth;
   }
 
@@ -319,7 +320,7 @@ class AgentScopeEntry {
     this.logger = agentScope.logger;
   }
 
-  get auth() {
+  get auth(): FrontMcpAuth {
     return this.agentScope.auth;
   }
 

@@ -86,7 +86,7 @@ interface PromptArgument {
 }
 ```
 
-Required arguments are validated before `execute()` runs. Missing required arguments throw `MissingPromptArgumentError`.
+Required arguments are validated before `execute()` runs. Missing required arguments throw `MissingPromptArgumentError`, which the client receives as a JSON-RPC `-32602` error (so does an unknown prompt name).
 
 ### GetPromptResult Structure
 
@@ -402,13 +402,13 @@ This creates the prompt file, spec file, and updates barrel exports.
 
 ## Common Patterns
 
-| Pattern             | Correct                                                           | Incorrect                                           | Why                                                                   |
-| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
-| Return type         | `execute()` returns `Promise<GetPromptResult>`                    | Returning a plain string or array of strings        | MCP protocol requires `{ messages: [...] }` structure                 |
-| Argument validation | Mark arguments as `required: true` in `arguments` array           | Manually checking `args.field` inside `execute()`   | Framework validates required arguments before `execute()` runs        |
-| Multi-turn priming  | Use `assistant` role messages to prime expected response patterns | Putting all instructions in a single `user` message | Alternating roles guides the LLM toward structured output             |
-| Resource embedding  | Use `type: 'resource'` content with a resource URI                | Inlining resource data as raw text in the prompt    | Resource references let clients resolve content dynamically           |
-| Error handling      | Use `this.fail(err)` for validation failures in execute           | `throw new Error(...)` directly                     | `this.fail` triggers the error flow with proper MCP error propagation |
+| Pattern             | Correct                                                                  | Incorrect                                           | Why                                                                        |
+| ------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Return type         | `execute()` returns a `GetPromptResult`, string, message array or object | Returning nothing                                   | Strings, message arrays and objects are converted to `{ messages: [...] }` |
+| Argument validation | Mark arguments as `required: true` in `arguments` array                  | Manually checking `args.field` inside `execute()`   | Framework validates required arguments before `execute()` runs             |
+| Multi-turn priming  | Use `assistant` role messages to prime expected response patterns        | Putting all instructions in a single `user` message | Alternating roles guides the LLM toward structured output                  |
+| Resource embedding  | Use `type: 'resource'` content with a resource URI                       | Inlining resource data as raw text in the prompt    | Resource references let clients resolve content dynamically                |
+| Error handling      | Use `this.fail(err)` for validation failures in execute                  | `throw new Error(...)` directly                     | `this.fail` triggers the error flow with proper MCP error propagation      |
 
 ## Verification Checklist
 

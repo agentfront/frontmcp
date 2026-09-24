@@ -2,7 +2,8 @@ import { FrontMcpFlowHookTokens, type HookMetadata } from '../common';
 import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
 
 export type StageEntry<C> = {
-  method: (ctx: C) => Promise<void>;
+  /** `next` is passed only to an Around hook: it runs the rest of the stage. */
+  method: (ctx: C, next?: () => Promise<void>) => Promise<void>;
   _priority: number;
   _order: number;
 };
@@ -64,7 +65,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
     const entry: StageEntry<C> = {
       _priority: m.priority ?? 0,
       _order: order++,
-      method: async (ctx: any) => {
+      method: async (ctx: any, next = async () => undefined) => {
         const target = m.static ? (FlowClass as any) : ctx;
         const impl =
           typeof (m as any).method === 'function' ? (m as any).method : target?.[m.method as keyof typeof target];
@@ -73,7 +74,6 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {};
           return m.static ? impl.call(FlowClass, ctx, next) : impl.call(ctx, ctx, next);
         } else {
           return m.static ? impl.call(FlowClass, ctx) : impl.call(ctx, ctx);
@@ -108,7 +108,7 @@ export function mergeHookMetasIntoStageMap<C>(
     const entry: StageEntry<C> = {
       _priority: m.priority ?? 0,
       _order: order++,
-      method: async (ctx: any) => {
+      method: async (ctx: any, next = async () => undefined) => {
         const target = m.target;
         if (!target) {
           console.warn(`[flow] Hook target is missing for method ${m.method}`);
@@ -123,10 +123,9 @@ export function mergeHookMetasIntoStageMap<C>(
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {};
-          return m.static ? impl.call(target, ctx, next) : impl.call(target, ctx, next);
+          return impl.call(target, ctx, next);
         } else {
-          return m.static ? impl.call(target, ctx) : impl.call(target, ctx);
+          return impl.call(target, ctx);
         }
       },
     };
