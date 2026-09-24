@@ -695,13 +695,16 @@ export class AgentInstance<
   override getToolDefinition(): Tool {
     const metadata = this.record.metadata;
 
-    // Convert input schema to JSON Schema using toJSONSchema utility
+    // The agent's tool entry is the single source of its input JSON Schema; convert here only without one
     let inputSchema: Tool['inputSchema'] = {
       type: 'object',
       properties: {},
     };
 
-    if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
+    const toolInputSchema = this.agentToolInstance?.getInputJsonSchema();
+    if (toolInputSchema) {
+      inputSchema = toolInputSchema as Tool['inputSchema'];
+    } else if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
         inputSchema = toJSONSchema(z.object(this.inputSchema), {
           io: 'input',
