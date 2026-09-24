@@ -389,27 +389,56 @@ function parseAgainstOutputSchema(schema: z.ZodType, value: unknown): unknown {
   if (parseResult.success) {
     return parseResult.data;
   }
-  if (parseResult.error.issues.every((issue) => isNonFiniteNumberIssue(issue, value))) {
-    return value;
+  const { issues } = parseResult.error;
+  // A non-finite number is left to the server's `output.allowNonFinite` policy, applied when the call finalizes:
+  // parse with finite stand-ins so undeclared fields are still stripped, then put the original numbers back.
+  if (issues.every((issue) => isNonFiniteNumberIssue(issue, value))) {
+    const withStandIns = issues.reduce(
+      (current, issue) => withValueAt(current, issue.path, finiteStandIn(valueAt(value, issue.path) as number)),
+      value,
+    );
+    const retry = schema.safeParse(withStandIns);
+    if (retry.success) {
+      return issues.reduce((parsed, issue) => withValueAt(parsed, issue.path, valueAt(value, issue.path)), retry.data);
+    }
   }
-  const firstIssue = parseResult.error.issues[0];
+  const firstIssue = issues[0];
   throw new InvalidOutputError({
     reason: 'output does not match outputSchema',
     path: firstIssue?.path.length ? firstIssue.path.join('.') : undefined,
   });
 }
 
-/** A non-finite number is left to the server's `output.allowNonFinite` policy, applied when the call finalizes. */
 function isNonFiniteNumberIssue(issue: z.ZodError['issues'][number], root: unknown): boolean {
   if (issue.code !== 'invalid_type' || issue.expected !== 'number') {
     return false;
   }
-  const valueAtPath = issue.path.reduce<unknown>(
+  const valueAtPath = valueAt(root, issue.path);
+  return typeof valueAtPath === 'number' && !Number.isFinite(valueAtPath);
+}
+
+/** A finite number on the same side of zero, so range checks still see the value's sign. */
+function finiteStandIn(value: number): number {
+  return Number.isNaN(value) ? 0 : Math.sign(value) * Number.MAX_VALUE;
+}
+
+function valueAt(root: unknown, path: readonly PropertyKey[]): unknown {
+  return path.reduce<unknown>(
     (node, key) =>
       typeof node === 'object' && node !== null ? (node as Record<PropertyKey, unknown>)[key] : undefined,
     root,
   );
-  return typeof valueAtPath === 'number' && !Number.isFinite(valueAtPath);
+}
+
+/** A copy of `root` with `replacement` at `path`; the containers along the path are copied, not changed. */
+function withValueAt(root: unknown, path: readonly PropertyKey[], replacement: unknown): unknown {
+  if (path.length === 0) {
+    return replacement;
+  }
+  const [key, ...rest] = path;
+  const container = (Array.isArray(root) ? [...root] : { ...(root as object) }) as Record<PropertyKey, unknown>;
+  container[key] = withValueAt(container[key], rest, replacement);
+  return container;
 }
 
 function isZodRawShape(descriptor: unknown): descriptor is Record<string, z.ZodType> {

@@ -115,6 +115,10 @@ Configure fetch behavior for the whole server with `@FrontMcp({ fetch })`:
 class Server {}
 ```
 
+<Note>
+**Upgrading from `autoInjectAuthHeaders`:** that context option is gone. It sent the caller's token to every origin. To keep sending it to a service you trust, list that service's origin in `fetch.forwardCallerTokenTo`; every other origin gets no token.
+</Note>
+
 Entries are matched by origin (scheme, host and port), so `https://api.internal.example/v1` allows every path on `https://api.internal.example` but not `http://api.internal.example` or `https://other.api.internal.example`.
 
 A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect, so those headers never reach an origin you did not list. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.

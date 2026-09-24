@@ -32,7 +32,26 @@ class ConfirmPrompt extends PromptContext {
   }
 }
 
-@App({ id: 'mrtr', name: 'mrtr', resources: [ReportResource], prompts: [ConfirmPrompt] })
+@ResourceTemplate({ name: 'archive', uriTemplate: 'archive://{id}', mimeType: 'text/plain' })
+class ArchiveResource extends ResourceContext<{ id: string }> {
+  async execute(): Promise<never> {
+    this.fail(new InputRequiredSignal(INPUT_REQUESTS, REQUEST_STATE));
+  }
+}
+
+@Prompt({ name: 'confirm_through_fail', arguments: [] })
+class ConfirmThroughFailPrompt extends PromptContext {
+  async execute(): Promise<never> {
+    this.fail(new InputRequiredSignal(INPUT_REQUESTS, REQUEST_STATE));
+  }
+}
+
+@App({
+  id: 'mrtr',
+  name: 'mrtr',
+  resources: [ReportResource, ArchiveResource],
+  prompts: [ConfirmPrompt, ConfirmThroughFailPrompt],
+})
 class MrtrApp {}
 
 describe('MRTR on resources/read and prompts/get (2026-07-28)', () => {
@@ -46,6 +65,23 @@ describe('MRTR on resources/read and prompts/get (2026-07-28)', () => {
 
   it('answers a resource that needs input with an input_required result', async () => {
     const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'reports://1' });
+
+    expect(message.error).toBeUndefined();
+    expect(message.result).toMatchObject(expectedResult);
+  });
+
+  it('answers a resource that asks for input through this.fail() with an input_required result', async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'archive://1' });
+
+    expect(message.error).toBeUndefined();
+    expect(message.result).toMatchObject(expectedResult);
+  });
+
+  it('answers a prompt that asks for input through this.fail() with an input_required result', async () => {
+    const { message } = await rpc20260728(server.handler, 'prompts/get', {
+      name: 'confirm_through_fail',
+      arguments: {},
+    });
 
     expect(message.error).toBeUndefined();
     expect(message.result).toMatchObject(expectedResult);
