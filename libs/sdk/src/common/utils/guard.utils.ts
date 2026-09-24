@@ -93,8 +93,11 @@ export async function acquireConcurrencySlots(
   return {
     ticket: heldEntityTicket.ticket,
     release: async () => {
-      await heldEntityTicket.release();
-      await globalTicket.release();
+      try {
+        await heldEntityTicket.release();
+      } finally {
+        await globalTicket.release();
+      }
     },
   };
 }
