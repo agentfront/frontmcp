@@ -715,6 +715,14 @@ export class AuthorityDeniedMcpError extends PublicMcpError {
 }
 
 /**
+ * Whether an error thrown inside an entry already says what the client should see
+ * (a public error, or an authorities refusal), so a flow passes it on unwrapped.
+ */
+export function isClientFacingError(error: unknown): boolean {
+  return isPublicError(error) || error instanceof AuthorityDeniedError;
+}
+
+/**
  * Convert any error to an MCP error
  */
 export function toMcpError(error: any): McpError {

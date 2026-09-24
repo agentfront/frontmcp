@@ -22,6 +22,8 @@
  * based.
  */
 
+import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
+
 import type { ScopeEntry, SkillEntry } from '../common';
 import type { SkillRegistryInterface } from './skill.registry';
 
@@ -99,11 +101,9 @@ export async function assertSkillAuthorized(
   let requiredScopes: string[] | undefined;
   const scopeMapping = scope.authoritiesScopeMapping;
   if (scopeMapping && result.denial) {
-    const { resolveRequiredScopes } = await import('@frontmcp/auth');
     requiredScopes = resolveRequiredScopes(result.denial, scopeMapping, authorities);
   }
 
-  const { AuthorityDeniedError } = await import('@frontmcp/auth');
   throw new AuthorityDeniedError({
     entryType: 'Skill',
     entryName: skill.fullName || skill.name,
