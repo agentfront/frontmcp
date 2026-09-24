@@ -1,5 +1,5 @@
 // tools/flows/call-tool.flow.ts
-import { signIncrementalAuthTicket } from '@frontmcp/auth';
+import { AuthorityDeniedError, resolveRequiredScopes, signIncrementalAuthTicket } from '@frontmcp/auth';
 import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
@@ -839,7 +839,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       let requiredScopes: string[] | undefined;
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
-        const { resolveRequiredScopes } = await import('@frontmcp/auth');
         requiredScopes = resolveRequiredScopes(
           result.denial,
           scopeMapping,
@@ -847,7 +846,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         );
       }
 
-      const { AuthorityDeniedError } = await import('@frontmcp/auth');
       throw new AuthorityDeniedError({
         entryType: 'Tool',
         entryName: tool.fullName || tool.name,
