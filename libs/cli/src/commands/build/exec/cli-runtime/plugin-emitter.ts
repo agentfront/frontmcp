@@ -28,7 +28,7 @@ import {
   writeFile,
 } from '@frontmcp/utils';
 
-import { composeSkillMd } from './skill-md-compose';
+import { composeSkillMd, readSkillInstructions } from './skill-md-compose';
 
 // ============================================================================
 // Public types
@@ -44,8 +44,10 @@ export interface PluginEmitterSkillInput {
   tags?: string[];
   /** License from `@Skill({ license })`. Forwarded into the synthesized frontmatter. */
   license?: string;
-  /** Absolute path to SKILL.md. When missing, only frontmatter is emitted. */
+  /** Absolute path to SKILL.md. Takes precedence over `instructionContent`. */
   instructionFile?: string;
+  /** Instruction text for skills with no source file (inline or URL-sourced). */
+  instructionContent?: string;
   /** Absolute paths to the skill's resource subdirectories. */
   resourceDirs?: {
     references?: string;
@@ -91,6 +93,8 @@ export interface EmitClaudePluginResult {
   filesPreserved: string[];
   /** Managed files from a previous install that were removed this run. */
   filesRemoved: string[];
+  /** Skills left out because they had no instructions to install. */
+  skillsSkipped: Array<{ name: string; reason: string }>;
 }
 
 export interface ClaudePluginManifest {
@@ -221,8 +225,16 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
   // path or in synthesized SKILL.md frontmatter — same rules as command
   // names (issue #411 security pass), so a malicious `@Skill({ name: '../x' })`
   // can't escape the plugin tree.
+  const skillsSkipped: EmitClaudePluginResult['skillsSkipped'] = [];
+  const installedSkillNames: string[] = [];
   for (const skill of [...opts.skills].sort((a, b) => a.name.localeCompare(b.name))) {
     assertValidPluginName(skill.name, 'emitClaudePlugin.skill');
+    const instructions = await readSkillInstructions(skill);
+    if ('skipReason' in instructions) {
+      skillsSkipped.push({ name: skill.name, reason: instructions.skipReason });
+      continue;
+    }
+    installedSkillNames.push(skill.name);
     const skillDir = path.join(pluginDir, 'skills', skill.name);
     const skillMd = path.join(skillDir, 'SKILL.md');
     plannedFiles.push({
@@ -230,9 +242,6 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
       relPath: path.relative(pluginDir, skillMd),
       action: async () => {
         await ensureDir(skillDir);
-        const body = skill.instructionFile && (await fileExists(skill.instructionFile))
-          ? await readFile(skill.instructionFile)
-          : '';
         // The instruction file is typically a raw markdown body authored by
         // the user; Claude Code's filesystem loader needs YAML frontmatter
         // with at least `name` + `description`. composeSkillMd preserves a
@@ -242,7 +251,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
           skillMd,
           composeSkillMd(
             { name: skill.name, description: skill.description, tags: skill.tags, license: skill.license },
-            body,
+            instructions.body,
           ),
         );
       },
@@ -289,7 +298,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     mcpServers: {
       [opts.name]: makeMcpServerEntry(opts),
     },
-    skills: opts.skills.map((s) => s.name).sort(),
+    skills: installedSkillNames,
     ...(opts.commands.length > 0 ? { commands: opts.commands.map((c) => c.name).sort() } : {}),
     _meta: {
       frontmcp: {
@@ -352,6 +361,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     filesWritten: written,
     filesPreserved: preserved,
     filesRemoved: removed,
+    skillsSkipped,
   };
 }
 

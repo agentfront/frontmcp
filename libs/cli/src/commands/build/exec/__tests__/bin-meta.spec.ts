@@ -71,6 +71,14 @@ describe('writeBinMeta (issue #411)', () => {
     ]);
   });
 
+  it('points inline-instruction skills at the file copySkillAssets stages for them', async () => {
+    const schema = makeSchema({ skillAssets: [{ skillName: 'math', instructionContent: '# Math body' }] });
+    await writeBinMeta(tmp, makeConfig(), schema);
+
+    const meta = (await readJSON(path.join(tmp, 'bin-meta.json'))) as { skills: unknown[] };
+    expect(meta.skills).toEqual([{ name: 'math', instructionFile: path.join('_skills', 'math--instructions.md') }]);
+  });
+
   it('omits undefined skill fields (description, resourceDirs) instead of emitting "key: null"', async () => {
     const schema = makeSchema({
       skillAssets: [

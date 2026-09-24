@@ -15,6 +15,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ExtractedSkillAsset } from './cli-runtime/schema-extractor';
 
+/**
+ * Name of a skill's instructions under `_skills/`. Inline and URL-sourced skills have no
+ * source file, so their content is staged as `<skill>--instructions.md`.
+ */
+export function stagedInstructionsName(asset: ExtractedSkillAsset): string | undefined {
+  if (asset.instructionFile) return `${asset.skillName}--${path.basename(asset.instructionFile)}`;
+  if (asset.instructionContent) return `${asset.skillName}--instructions.md`;
+  return undefined;
+}
+
 export interface SkillAssetsResult {
   /** Absolute path to the created `_skills/` directory (empty string if no assets copied). */
   skillsDir: string;
@@ -49,11 +59,9 @@ export function copySkillAssets(
   for (const asset of skillAssets) {
     const entry: (typeof manifest)[string] = {};
 
-    if (asset.instructionFile && fs.existsSync(asset.instructionFile)) {
-      const filename = path.basename(asset.instructionFile);
-      const dest = path.join(skillsDir, `${asset.skillName}--${filename}`);
-      fs.copyFileSync(asset.instructionFile, dest);
-      entry.instructions = `_skills/${asset.skillName}--${filename}`;
+    const stagedInstructions = stageInstructions(asset, skillsDir);
+    if (stagedInstructions) {
+      entry.instructions = stagedInstructions;
       copiedCount++;
     }
 
@@ -79,4 +87,18 @@ export function copySkillAssets(
   );
 
   return { skillsDir, copiedCount };
+}
+
+function stageInstructions(asset: ExtractedSkillAsset, skillsDir: string): string | undefined {
+  const stagedName = stagedInstructionsName(asset);
+  if (!stagedName) return undefined;
+
+  const dest = path.join(skillsDir, stagedName);
+  if (asset.instructionFile) {
+    if (!fs.existsSync(asset.instructionFile)) return undefined;
+    fs.copyFileSync(asset.instructionFile, dest);
+  } else {
+    fs.writeFileSync(dest, asset.instructionContent ?? '');
+  }
+  return `_skills/${stagedName}`;
 }

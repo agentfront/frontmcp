@@ -50,6 +50,8 @@ export interface ExtractedSkillAsset {
   skillName: string;
   baseDir?: string;
   instructionFile?: string;
+  /** Mirrors `SkillAssetEntry.instructionContent`, set for inline and URL-sourced skills. */
+  instructionContent?: string;
   resourceDirs?: {
     references?: string;
     examples?: string;
@@ -160,6 +162,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
         skillName: string;
         baseDir?: string;
         instructionFile?: string;
+        instructionContent?: string;
         resources?: Record<string, string | undefined>;
         description?: string;
         tags?: string[];
@@ -259,6 +262,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
           skillName: e.skillName,
           baseDir: e.baseDir,
           instructionFile: e.instructionFile,
+          instructionContent: e.instructionContent,
           resourceDirs: e.resources as ExtractedSkillAsset['resourceDirs'],
           description: e.description,
           tags: e.tags,
