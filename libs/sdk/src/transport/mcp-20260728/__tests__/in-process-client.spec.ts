@@ -72,6 +72,14 @@ describe('in-process 2026-07-28 client', () => {
       await expect(rpc20260728(notificationOnly, 'tools/list')).rejects.toThrow(/HTTP 200 with no response to request/);
     });
 
+    it('rejects a reply with a different non-null response id', async () => {
+      const otherRequestReply = async () => Response.json({ jsonrpc: '2.0', id: 'other-request', result: {} });
+
+      await expect(rpc20260728(otherRequestReply, 'tools/list')).rejects.toThrow(
+        /HTTP 200 with no response to request/,
+      );
+    });
+
     it('reports the status and body of a reply that is not JSON-RPC', async () => {
       const htmlError = async () =>
         new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } });
