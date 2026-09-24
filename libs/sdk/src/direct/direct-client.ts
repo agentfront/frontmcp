@@ -667,11 +667,17 @@ export class DirectClientImpl implements DirectClient {
           entry.instructionFile = resolved;
         } else if (!filePath.startsWith('/')) {
           // Search from project root using a glob-like walk for the relative path
-          const fromCwd = findFileFromRoot(process.cwd(), filePath);
+          const fromCwd = findFileFromRoot(process.cwd(), filePath, meta.name);
           if (fromCwd) {
             entry.instructionFile = fromCwd.absolute;
             entry.baseDir = fromCwd.baseDir;
           }
+        }
+      } else if (meta.instructions) {
+        try {
+          entry.instructionContent = await skill.loadInstructions();
+        } catch {
+          // Left unset so the installer reports the skill as skipped rather than writing an empty body
         }
       }
 
@@ -701,9 +707,15 @@ export class DirectClientImpl implements DirectClient {
 /**
  * Search for a relative file path (e.g., './docs/foo.md') starting from a root directory.
  * Walks src/ subdirectories to find the file when baseDir from stack-walking is incorrect
- * in bundled environments.
+ * in bundled environments. Several skills can declare the same relative path, so a match is
+ * only returned when it is unambiguous: the sole match, or the one in a directory named
+ * after the skill.
  */
-function findFileFromRoot(root: string, relativePath: string): { absolute: string; baseDir: string } | undefined {
+function findFileFromRoot(
+  root: string,
+  relativePath: string,
+  skillName: string,
+): { absolute: string; baseDir: string } | undefined {
   const fs = require('fs');
   const path = require('path');
 
@@ -716,9 +728,13 @@ function findFileFromRoot(root: string, relativePath: string): { absolute: strin
     const srcRoot = path.join(root, srcDir);
     if (!fs.existsSync(srcRoot)) continue;
 
-    // Walk recursively looking for the file
-    const found = walkForFile(srcRoot, cleanRelative, fs, path);
-    if (found) return found;
+    const matches: { absolute: string; baseDir: string }[] = [];
+    walkForFile(srcRoot, cleanRelative, fs, path, matches);
+    if (matches.length === 0) continue;
+    if (matches.length === 1) return matches[0];
+
+    const namedAfterSkill = matches.filter((match) => path.basename(match.baseDir) === skillName);
+    return namedAfterSkill.length === 1 ? namedAfterSkill[0] : undefined;
   }
   return undefined;
 }
@@ -728,15 +744,16 @@ function walkForFile(
   targetRelative: string,
   fs: typeof import('fs'),
   path: typeof import('path'),
+  matches: { absolute: string; baseDir: string }[],
   maxDepth = 10,
-): { absolute: string; baseDir: string } | undefined {
+): void {
   // Check if targetRelative exists relative to this dir
   const candidate = path.join(dir, targetRelative);
   if (fs.existsSync(candidate)) {
-    return { absolute: candidate, baseDir: dir };
+    matches.push({ absolute: candidate, baseDir: dir });
   }
 
-  if (maxDepth <= 0) return undefined;
+  if (maxDepth <= 0) return;
 
   // Recurse into subdirectories
   try {
@@ -748,12 +765,10 @@ function walkForFile(
         entry.name !== 'node_modules' &&
         entry.name !== 'dist'
       ) {
-        const result = walkForFile(path.join(dir, entry.name), targetRelative, fs, path, maxDepth - 1);
-        if (result) return result;
+        walkForFile(path.join(dir, entry.name), targetRelative, fs, path, matches, maxDepth - 1);
       }
     }
   } catch {
     // Ignore read errors
   }
-  return undefined;
 }

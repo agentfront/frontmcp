@@ -61,6 +61,15 @@ describe('copySkillAssets', () => {
     expect(manifest.alpha.references).toBe('_skills/alpha--references');
   });
 
+  it('stages inline instructions as a file so the installed bin can read them', () => {
+    const result = copySkillAssets(tmpDir, [{ skillName: 'math', instructionContent: '# Math body' }]);
+
+    expect(result.copiedCount).toBe(1);
+    expect(fs.readFileSync(path.join(tmpDir, '_skills', 'math--instructions.md'), 'utf-8')).toBe('# Math body');
+    const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, '_skills', 'manifest.json'), 'utf-8'));
+    expect(manifest.math.instructions).toBe('_skills/math--instructions.md');
+  });
+
   it('skips missing instruction files without throwing', () => {
     const result = copySkillAssets(tmpDir, [
       { skillName: 'ghost', instructionFile: '/does/not/exist.md' },

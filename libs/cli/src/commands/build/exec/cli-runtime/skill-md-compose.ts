@@ -12,6 +12,8 @@
  * verbatim — the user is treated as the authoritative source.
  */
 
+import { fileExists, readFile } from '@frontmcp/utils';
+
 export interface SkillFrontmatter {
   name: string;
   description?: string;
@@ -20,6 +22,33 @@ export interface SkillFrontmatter {
 }
 
 const FRONTMATTER_DELIMITER = '---';
+
+export interface SkillInstructionsSource {
+  instructionFile?: string;
+  instructionContent?: string;
+}
+
+export type SkillInstructionsResult = { body: string } | { skipReason: string };
+
+/**
+ * Resolve the body to install for a skill: the raw instruction file when there is one, so
+ * user frontmatter survives, else the captured inline or URL-sourced content. A skill with
+ * neither yields a skip reason, because installing frontmatter alone looks installed and
+ * does nothing.
+ */
+export async function readSkillInstructions(source: SkillInstructionsSource): Promise<SkillInstructionsResult> {
+  if (source.instructionFile && (await fileExists(source.instructionFile))) {
+    return { body: await readFile(source.instructionFile) };
+  }
+  if (source.instructionContent) {
+    return { body: source.instructionContent };
+  }
+  return {
+    skipReason: source.instructionFile
+      ? `instruction file not found at ${source.instructionFile}`
+      : 'no instructions were captured from the skill',
+  };
+}
 
 /**
  * @returns the body with a `---` frontmatter block prepended, unless the

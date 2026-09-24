@@ -2,6 +2,11 @@
  * DirectClientImpl Tests
  */
 
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { ensureDir, mkdtemp, rm, writeFile } from '@frontmcp/utils';
+
 import type { Scope } from '../../scope/scope.instance';
 import {
   SkillsListResultSchema,
@@ -1075,6 +1080,148 @@ describe('DirectClientImpl', () => {
         arguments: { runId: 'wf-1' },
       });
       expect(result).toEqual({ runId: 'wf-1', status: 'completed' });
+    });
+  });
+  describe('collectSkillAssets', () => {
+    let workDir: string;
+    let cwdSpy: jest.SpyInstance;
+
+    type SkillStubOptions = {
+      name: string;
+      instructions: unknown;
+      baseDir?: string;
+      loaded?: string | Error;
+      resources?: Record<string, string>;
+    };
+
+    const skillStub = ({ name, instructions, baseDir, loaded, resources }: SkillStubOptions) => ({
+      metadata: { name, description: `${name} description`, instructions },
+      getBaseDir: () => baseDir,
+      getResources: () => resources,
+      loadInstructions: jest.fn(() =>
+        loaded instanceof Error ? Promise.reject(loaded) : Promise.resolve(loaded ?? ''),
+      ),
+    });
+
+    const collect = async (skills: ReturnType<typeof skillStub>[]) => {
+      const scope = { ...createMockScope(), skills: { getSkills: () => skills } } as unknown as Scope;
+      const client = await DirectClientImpl.create(scope);
+      return (await client.collectSkillAssets()).entries;
+    };
+
+    beforeEach(async () => {
+      workDir = await mkdtemp(join(tmpdir(), 'collect-skill-assets-'));
+      cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(workDir);
+    });
+
+    afterEach(async () => {
+      cwdSpy.mockRestore();
+      await rm(workDir, { recursive: true, force: true });
+    });
+
+    it('captures inline instructions as content, since there is no file to point at', async () => {
+      const inline = '# Math\n\nAdd numbers carefully.';
+      const [entry] = await collect([skillStub({ name: 'math-helper', instructions: inline, loaded: inline })]);
+
+      expect(entry.instructionContent).toBe(inline);
+      expect(entry.instructionFile).toBeUndefined();
+    });
+
+    it('captures url instructions from the already-loaded skill', async () => {
+      const fetched = '# Remote\n\nFetched at boot.';
+      const skill = skillStub({
+        name: 'remote',
+        instructions: { url: 'https://example.com/SKILL.md' },
+        loaded: fetched,
+      });
+
+      const [entry] = await collect([skill]);
+
+      expect(entry.instructionContent).toBe(fetched);
+      expect(skill.loadInstructions).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps file-based instructions on the raw file so user frontmatter survives', async () => {
+      const skillDir = join(workDir, 'greeting');
+      await ensureDir(skillDir);
+      await writeFile(join(skillDir, 'SKILL.md'), '---\nallowed-tools: Read\n---\nbody');
+      const skill = skillStub({ name: 'greeting', instructions: { file: './SKILL.md' }, baseDir: skillDir });
+
+      const [entry] = await collect([skill]);
+
+      expect(entry.instructionFile).toBe(join(skillDir, 'SKILL.md'));
+      expect(entry.instructionContent).toBeUndefined();
+      expect(skill.loadInstructions).not.toHaveBeenCalled();
+    });
+
+    it('leaves content unset when a non-file skill fails to load, instead of throwing', async () => {
+      const skill = skillStub({
+        name: 'remote',
+        instructions: { url: 'https://example.com/SKILL.md' },
+        loaded: new Error('fetch failed'),
+      });
+
+      const [entry] = await collect([skill]);
+
+      expect(entry.skillName).toBe('remote');
+      expect(entry.instructionContent).toBeUndefined();
+    });
+
+    it("does not hand one skill another skill's SKILL.md when baseDir resolves wrong", async () => {
+      for (const name of ['alpha', 'beta']) {
+        const dir = join(workDir, 'src', 'skills', name);
+        await ensureDir(join(dir, 'references'));
+        await writeFile(join(dir, 'SKILL.md'), `${name} body`);
+        await writeFile(join(dir, 'references', 'guide.md'), `${name} reference`);
+      }
+      const wrongBaseDir = join(workDir, 'dist', 'nowhere');
+      const skills = ['alpha', 'beta'].map((name) =>
+        skillStub({
+          name,
+          instructions: { file: './SKILL.md' },
+          baseDir: wrongBaseDir,
+          resources: { references: './references' },
+        }),
+      );
+
+      const entries = await collect(skills);
+      const byName = Object.fromEntries(entries.map((e) => [e.skillName, e]));
+
+      expect(byName['alpha'].instructionFile).toBe(join(workDir, 'src', 'skills', 'alpha', 'SKILL.md'));
+      expect(byName['beta'].instructionFile).toBe(join(workDir, 'src', 'skills', 'beta', 'SKILL.md'));
+      expect(byName['beta'].resources?.references).toBe(join(workDir, 'src', 'skills', 'beta', 'references'));
+    });
+
+    it('still finds a relocated file when only one candidate exists', async () => {
+      const docsDir = join(workDir, 'src', 'apps', 'demo', 'skills');
+      await ensureDir(join(docsDir, 'docs'));
+      await writeFile(join(docsDir, 'docs', 'greeting-guide.md'), 'guide');
+      const skill = skillStub({
+        name: 'greeting-helper',
+        instructions: { file: './docs/greeting-guide.md' },
+        baseDir: join(workDir, 'dist', 'nowhere'),
+      });
+
+      const [entry] = await collect([skill]);
+
+      expect(entry.instructionFile).toBe(join(docsDir, 'docs', 'greeting-guide.md'));
+      expect(entry.baseDir).toBe(docsDir);
+    });
+
+    it('leaves the file unresolved rather than guess between unrelated candidates', async () => {
+      for (const name of ['alpha', 'beta']) {
+        await ensureDir(join(workDir, 'src', name));
+        await writeFile(join(workDir, 'src', name, 'SKILL.md'), `${name} body`);
+      }
+      const skill = skillStub({
+        name: 'gamma',
+        instructions: { file: './SKILL.md' },
+        baseDir: join(workDir, 'dist', 'nowhere'),
+      });
+
+      const [entry] = await collect([skill]);
+
+      expect(entry.instructionFile).toBeUndefined();
     });
   });
 });

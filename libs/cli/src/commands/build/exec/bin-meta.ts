@@ -20,6 +20,7 @@ import { writeJSON } from '@frontmcp/utils';
 
 import type { FrontmcpExecConfig } from './config';
 import type { ExtractedSchema } from './cli-runtime/schema-extractor';
+import { stagedInstructionsName } from './skill-assets';
 
 export interface BinMeta {
   name: string;
@@ -59,9 +60,8 @@ export async function writeBinMeta(
     skills: schema.skillAssets.map((asset) => {
       // The bin runtime expects RELATIVE paths under `_skills/` so the bundle
       // is portable across install destinations.
-      const instructionFile = asset.instructionFile
-        ? path.join('_skills', `${asset.skillName}--${path.basename(asset.instructionFile)}`)
-        : undefined;
+      const stagedName = stagedInstructionsName(asset);
+      const instructionFile = stagedName ? path.join('_skills', stagedName) : undefined;
       const resourceDirs: BinMeta['skills'][number]['resourceDirs'] = {};
       for (const kind of ['references', 'examples', 'scripts', 'assets'] as const) {
         if (asset.resourceDirs?.[kind]) {

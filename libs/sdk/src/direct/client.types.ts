@@ -799,6 +799,8 @@ export interface SkillAssetEntry {
   baseDir?: string;
   /** Absolute path to instructions file (if file-based) */
   instructionFile?: string;
+  /** Instruction text for inline and URL-sourced skills, which have no file to copy */
+  instructionContent?: string;
   /** Absolute paths to resource directories */
   resources?: {
     references?: string;
