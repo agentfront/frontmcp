@@ -1253,7 +1253,7 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useClass: FrontMcpContextStorage,
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,

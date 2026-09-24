@@ -112,6 +112,19 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
 
+    const scope = this.providers.getActiveScope();
+
+    // HTTP flows run by adapters without a middleware server (the Web fetch handler)
+    // enter through the same request context the Express middleware builds.
+    const httpRequest = (input as { request?: ServerRequest } | undefined)?.request;
+    if (httpRequest?.headers && !(input as { ctx?: unknown }).ctx) {
+      return Promise.resolve(
+        contextStorage.runForHttpRequest(httpRequest, scope.id, async () => {
+          return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
+        }),
+      );
+    }
+
     // Extract session info from MCP handler context (input.ctx.authInfo)
     // MCP handlers pass { request, ctx } where ctx has authInfo
     const mcpCtx = (input as any)?.ctx;
@@ -122,8 +135,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     const rawSessionId = authInfo?.sessionId;
     const sessionId =
       typeof rawSessionId === 'string' && rawSessionId.trim().length > 0 ? rawSessionId.trim() : `anon:${randomUUID()}`;
-
-    const scope = this.providers.getActiveScope();
 
     // Wrap flow execution in FrontMcpContext
     return Promise.resolve(

@@ -85,6 +85,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                     |
 | `throttle?`     | Server-level guard config (see note below)                                                                                                                                   |
 | `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                            |
+| `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`        |
 | `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                       |
 | `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation)                                                                                                |
 | `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps                                                                                                         |

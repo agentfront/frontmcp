@@ -603,6 +603,10 @@ export class AgentContext<
     if (payloadPlatform && payloadPlatform !== 'unknown') {
       return payloadPlatform;
     }
+    const requestPlatform = this.tryGetContext()?.platformType;
+    if (requestPlatform && requestPlatform !== 'unknown') {
+      return requestPlatform;
+    }
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       return 'unknown';
@@ -614,6 +618,10 @@ export class AgentContext<
    * Get the client info (name and version) for the current session.
    */
   get clientInfo(): ClientInfo | undefined {
+    const requestClientInfo = this.tryGetContext()?.clientInfo;
+    if (requestClientInfo) {
+      return requestClientInfo;
+    }
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       return undefined;
