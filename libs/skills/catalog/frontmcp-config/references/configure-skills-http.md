@@ -64,7 +64,7 @@ The new top-level `instructions?: string` field on `@FrontMcp` is forwarded verb
 | `prepend` | Catalog summary first, then channel hints, then server `instructions`.                                                                                                                          |
 | `replace` | Surface ONLY the server `instructions`; the catalog AND channel hints are dropped. When `instructions` is empty/undefined this falls back to `'append'` so a misconfig doesn't drop everything. |
 
-The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer; the footer points clients at `skill://index.json` and `skill://<skillPath>/SKILL.md` for full content (SEP-2640 — singular scheme).
+The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically.
 
@@ -137,7 +137,7 @@ See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Local dev, no skills                      | `skillsConfig` unset                                                                                  |
 | Public server, hand-curated server prompt | `instructions: '...'`, `injectInstructions: 'off'`                                                    |
-| Server with many dynamic skills           | `injectInstructions: 'append'` (default) or `'replace'` if you want skills to drive the entire prompt |
+| Server with many dynamic skills           | `injectInstructions: 'append'` (default) or `'prepend'` if skill guidance must lead the prompt        |
 | Multi-pod production                      | `cache: { enabled: true, redis: {...} }`, `audit: { signer: Rs256, store: StorageAdapterAuditStore }` |
 | Compliance / forensic requirements        | RS256 signer + persistent store + scheduled `verifyChain(...)` in CI                                  |
 

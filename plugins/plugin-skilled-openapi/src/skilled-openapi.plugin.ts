@@ -195,7 +195,9 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     }
 
     const scope = this.get(ScopeEntry);
-    const catalog = buildSkillsCatalogSummary(scope.skills);
+    const catalog = buildSkillsCatalogSummary(scope.skills, {
+      mcpResources: scope.metadata?.skillsConfig?.mcpResources,
+    });
     const description = catalog ? `${searchSkillDescription}\n\n---\n\n${catalog}` : searchSkillDescription;
     // `metadata` is readonly at the type level only; rebuild (not append) from
     // the static base so repeated lists stay idempotent.

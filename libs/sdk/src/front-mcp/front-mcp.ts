@@ -682,6 +682,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
           channelInstructions: buildChannelInstructions(scope.channels),
           skillRegistry: scope.skills,
           policy: scope.metadata.skillsConfig?.injectInstructions,
+          mcpResources: scope.metadata.skillsConfig?.mcpResources,
         });
       const instructions = composeInstructions();
 

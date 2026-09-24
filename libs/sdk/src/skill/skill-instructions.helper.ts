@@ -7,13 +7,12 @@
  *   text that clients usually inject verbatim into the model context. Pushing
  *   every skill's full SKILL.md body would balloon every initialize response
  *   and burn token budget on tool calls. Instead, we ship a bounded catalog
- *   summary (`**name**: description`) plus a pointer to the `skills://catalog`
- *   resource and the `skills://{name}/SKILL.md` resource template for the full
- *   content.
+ *   summary (`**name**: description`) plus a pointer to where the full content
+ *   is served: the SEP-2640 `skill://index.json` resource, or the
+ *   `skills/search` and `skills/load` MCP extension methods when
+ *   `skillsConfig.mcpResources` is false and no `skill://` resource exists.
  * - Resolution is sync — the registry already holds metadata at boot. The
- *   per-skill `instructions` markdown body stays lazy and reachable through
- *   `skills://` resources or the `skills/search` and `skills/load` MCP
- *   extension methods.
+ *   per-skill `instructions` markdown body stays lazy.
  * - Off / replace policies short-circuit before we touch the registry, so a
  *   server with `injectInstructions: 'off'` pays zero cost regardless of how
  *   many bundle skills are loaded.
@@ -23,6 +22,7 @@
  *   restart.
  */
 
+import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
 import type { SkillRegistryInterface } from './skill.registry';
 
 export type InjectInstructionsPolicy = 'off' | 'append' | 'prepend' | 'replace';
@@ -38,10 +38,9 @@ const MAX_SKILL_CATALOG_CHARS = 16_000;
 
 /**
  * Maximum overhead reserved for the truncation footer (worst-case length of
- * `_(catalog truncated — showing X of Y skills; use the skills://catalog
- * resource to browse)_` with realistic counts). We reserve this up-front so
- * the final string never exceeds `MAX_SKILL_CATALOG_CHARS` after the footer
- * is appended.
+ * `_(catalog truncated — showing X of Y skills; <pointer>)_` with realistic
+ * counts). We reserve this up-front so the final string never exceeds
+ * `MAX_SKILL_CATALOG_CHARS` after the footer is appended.
  */
 const TRUNCATION_FOOTER_RESERVE = 160;
 
@@ -54,7 +53,29 @@ interface ComposeOptions {
   skillRegistry?: SkillRegistryInterface;
   /** Merge policy from `skillsConfig.injectInstructions`. */
   policy?: InjectInstructionsPolicy;
+  /** `skillsConfig.mcpResources`; when false the catalog points at the `skills/*` methods. */
+  mcpResources?: boolean;
 }
+
+export interface SkillsCatalogSummaryOptions {
+  /** `skillsConfig.mcpResources`; when false no `skill://` resource is served. Defaults to true. */
+  mcpResources?: boolean;
+}
+
+interface CatalogPointers {
+  header: string;
+  truncationHint: string;
+}
+
+const RESOURCE_POINTERS: CatalogPointers = {
+  header: `Available skills (read the \`${SKILL_INDEX_URI}\` resource for each skill's \`SKILL.md\` URI):`,
+  truncationHint: `read \`${SKILL_INDEX_URI}\` to browse`,
+};
+
+const METHOD_POINTERS: CatalogPointers = {
+  header: 'Available skills (load full content with the `skills/load` request, or find others with `skills/search`):',
+  truncationHint: 'use `skills/search` to find the rest',
+};
 
 /**
  * Sanitize a skill description so it can be embedded as a single bullet in a
@@ -115,17 +136,13 @@ export function sanitizeName(raw: string | undefined): string {
   return s.length > MAX_SKILL_NAME_CHARS ? `${s.slice(0, MAX_SKILL_NAME_CHARS)}…` : s;
 }
 
-const CATALOG_HEADER =
-  'Available skills (read the `skills://catalog` resource to browse, ' +
-  'or `skills://{name}/SKILL.md` for full content):';
-
 /**
  * Build a bounded catalog summary of MCP-visible skills.
  *
  * Output shape:
  *
  * ```
- * Available skills (read the `skills://catalog` resource to browse, or `skills://{name}/SKILL.md` for full content):
+ * Available skills (read the `skill://index.json` resource for each skill's `SKILL.md` URI):
  *
  * - **skill_name**: short description
  * - **another_skill**: ...
@@ -136,14 +153,18 @@ const CATALOG_HEADER =
  * reserve included), with a `_(catalog truncated — showing N of M skills…)_`
  * footer appended when the cap is hit.
  */
-export function buildSkillsCatalogSummary(skillRegistry: SkillRegistryInterface | undefined): string {
+export function buildSkillsCatalogSummary(
+  skillRegistry: SkillRegistryInterface | undefined,
+  options: SkillsCatalogSummaryOptions = {},
+): string {
   if (!skillRegistry) return '';
 
   // `visibility: 'mcp'` matches both `'mcp'` and `'both'` (see `getSkills`).
   const skills = skillRegistry.getSkills({ visibility: 'mcp' });
   if (skills.length === 0) return '';
 
-  const lines: string[] = [CATALOG_HEADER, ''];
+  const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
+  const lines: string[] = [pointers.header, ''];
 
   let truncated = false;
   let shownCount = 0;
@@ -168,8 +189,7 @@ export function buildSkillsCatalogSummary(skillRegistry: SkillRegistryInterface 
   if (truncated) {
     lines.push(
       '',
-      `_(catalog truncated — showing ${shownCount} of ${skills.length} skills; ` +
-        'read `skills://catalog` to browse)_',
+      `_(catalog truncated — showing ${shownCount} of ${skills.length} skills; ${pointers.truncationHint})_`,
     );
   }
 
@@ -213,7 +233,7 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
     return joinSections([user, channel]);
   }
 
-  const catalog = buildSkillsCatalogSummary(options.skillRegistry);
+  const catalog = buildSkillsCatalogSummary(options.skillRegistry, { mcpResources: options.mcpResources });
   if (policy === 'prepend') {
     return joinSections([catalog, channel, user]);
   }

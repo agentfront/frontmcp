@@ -76,9 +76,10 @@ export interface FrontMcpBaseMetadata {
    * skill instructions per `skillsConfig.injectInstructions`.
    *
    * Keep this short — clients typically include it verbatim in the model
-   * context window. The full skill catalog is exposed via the
-   * `skills://catalog` resource and the `skills://{name}/SKILL.md` resource
-   * template (or the `skills/search` MCP extension method).
+   * context window. The full skill catalog is exposed via the SEP-2640
+   * `skill://index.json` resource and `skill://{skillPath}/SKILL.md`
+   * resources, or the `skills/search` and `skills/load` MCP extension
+   * methods when `skillsConfig.mcpResources` is false.
    *
    * @see `skillsConfig.injectInstructions` for the merge policy. Note that
    *   `'replace'` falls back to `'append'` semantics when `instructions` is

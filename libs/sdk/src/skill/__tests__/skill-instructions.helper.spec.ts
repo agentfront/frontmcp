@@ -75,10 +75,9 @@ describe('skill-instructions.helper', () => {
 
       const summary = buildSkillsCatalogSummary(registry);
       expect(summary).toContain('Available skills');
-      // Catalog now points at the actual MCP-visible discovery surface
-      // (resource + resource template), not the SDK direct-client method.
-      expect(summary).toContain('skills://catalog');
-      expect(summary).toContain('skills://{name}/SKILL.md');
+      // Points at the discovery index the server actually serves, not the removed plural scheme.
+      expect(summary).toContain('skill://index.json');
+      expect(summary).not.toContain('skills://');
       // Must NOT mislead the LLM about a non-existent MCP tool.
       expect(summary).not.toContain('searchSkills');
       expect(summary).toContain('- **review_pr**: Review a pull request');
@@ -102,6 +101,34 @@ describe('skill-instructions.helper', () => {
       // Footer reports both shown and total counts (issue 6).
       expect(summary).toMatch(/catalog truncated — showing \d+ of 200 skills/);
       // Hard cap NOT exceeded by the footer (issue 5).
+      expect(summary.length).toBeLessThanOrEqual(16_000);
+    });
+
+    it('points the truncation footer at the served index', () => {
+      const skills = Array.from({ length: 200 }, (_, i) => ({
+        metadata: { name: `skill_${i}`, description: 'x'.repeat(200) },
+      }));
+      const summary = buildSkillsCatalogSummary(makeRegistry(skills));
+      expect(summary).toMatch(/catalog truncated — showing \d+ of 200 skills; read `skill:\/\/index\.json`/);
+      expect(summary).not.toContain('skills://');
+    });
+
+    it('points at the skills/* methods instead of skill:// when mcpResources is disabled', () => {
+      const registry = makeRegistry([{ metadata: { name: 'deploy', description: 'Deploy to production' } }]);
+      const summary = buildSkillsCatalogSummary(registry, { mcpResources: false });
+      expect(summary).toContain('skills/load');
+      expect(summary).toContain('skills/search');
+      expect(summary).not.toContain('skill://');
+      expect(summary).toContain('- **deploy**: Deploy to production');
+    });
+
+    it('keeps a truncated catalog free of skill:// when mcpResources is disabled', () => {
+      const skills = Array.from({ length: 200 }, (_, i) => ({
+        metadata: { name: `skill_${i}`, description: 'x'.repeat(200) },
+      }));
+      const summary = buildSkillsCatalogSummary(makeRegistry(skills), { mcpResources: false });
+      expect(summary).toMatch(/catalog truncated — showing \d+ of 200 skills; use `skills\/search`/);
+      expect(summary).not.toContain('skill://');
       expect(summary.length).toBeLessThanOrEqual(16_000);
     });
 
@@ -171,6 +198,13 @@ describe('skill-instructions.helper', () => {
 
   describe('composeInitializeInstructions', () => {
     const registry = makeRegistry([{ metadata: { name: 'demo', description: 'A demo skill' } }]);
+
+    it('forwards mcpResources so a server without skill:// resources never advertises them', () => {
+      const out = composeInitializeInstructions({ skillRegistry: registry, mcpResources: false });
+      expect(out).toContain('- **demo**: A demo skill');
+      expect(out).toContain('skills/load');
+      expect(out).not.toContain('skill://');
+    });
 
     it("'replace' policy returns only the user instructions", () => {
       const out = composeInitializeInstructions({
