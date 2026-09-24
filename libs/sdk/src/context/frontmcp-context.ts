@@ -19,8 +19,8 @@ import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type SessionIdPayload } from '../common/types';
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
-import type { AIPlatformType, ClientInfo } from '../notification';
 import { InvalidInputError } from '../errors/mcp.error';
+import type { AIPlatformType, ClientInfo } from '../notification';
 import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
@@ -350,19 +350,20 @@ export class FrontMcpContext {
     return this._clientInfo;
   }
 
-  /** The AI platform detected from this request's client info. */
+  /** The AI platform detected from this request's client info; undefined when none was recognized. */
   get platformType(): AIPlatformType | undefined {
     return this._platformType;
   }
 
   /**
    * Record the client info a request carries, and the platform detected from it.
+   * An `'unknown'` platform is not recorded, so lookups fall back to the session's platform.
    *
    * @internal
    */
   setClientInfo(clientInfo: ClientInfo, platformType: AIPlatformType): void {
     this._clientInfo = clientInfo;
-    this._platformType = platformType;
+    this._platformType = platformType === 'unknown' ? undefined : platformType;
   }
 
   /**

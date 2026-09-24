@@ -268,6 +268,25 @@ describe('FrontMcpContext', () => {
     });
   });
 
+  describe('setClientInfo', () => {
+    it('records the client info and the platform detected from it', () => {
+      const ctx = new FrontMcpContext(validArgs);
+
+      ctx.setClientInfo({ name: 'claude-ai', version: '1.0.0' }, 'claude');
+
+      expect(ctx.clientInfo).toEqual({ name: 'claude-ai', version: '1.0.0' });
+      expect(ctx.platformType).toBe('claude');
+    });
+
+    it('records no platform when none was recognized, so lookups fall back to the session', () => {
+      const ctx = new FrontMcpContext(validArgs);
+
+      ctx.setClientInfo({ name: 'my-agent', version: '1.0.0' }, 'unknown');
+
+      expect(ctx.platformType).toBeUndefined();
+    });
+  });
+
   describe('references (transport, flow, scope)', () => {
     it('should return undefined transport by default', () => {
       const ctx = new FrontMcpContext(validArgs);

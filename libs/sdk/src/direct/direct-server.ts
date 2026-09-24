@@ -68,8 +68,12 @@ function buildAuthInfo(authContext?: DirectAuthContext, defaultSessionId?: strin
  */
 function callerSessionId(authContext: DirectAuthContext | undefined, defaultSessionId?: string): string {
   const baseSessionId = defaultSessionId ?? `direct:${randomUUID()}`;
-  const callerIdentity = authContext?.user?.sub ?? authContext?.token;
-  return callerIdentity === undefined ? baseSessionId : `${baseSessionId}:${sha256Hex(callerIdentity)}`;
+  const subject = authContext?.user?.sub;
+  const issuer = authContext?.user?.['iss'];
+  const callerIdentity = subject
+    ? JSON.stringify([typeof issuer === 'string' ? issuer : '', subject])
+    : authContext?.token;
+  return callerIdentity ? `${baseSessionId}:${sha256Hex(callerIdentity)}` : baseSessionId;
 }
 
 /**
