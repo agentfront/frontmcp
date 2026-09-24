@@ -5,7 +5,7 @@ description: Define the tool's output contract — Zod shape, primitives, media,
 
 # `outputSchema` reference
 
-`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns and gives the framework permission to strip any fields you didn't declare — the safety net against accidental PII / token / debug-trace leaks.
+`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns and gives the framework permission to strip any fields you didn't declare — the safety net against accidental PII / token / debug-trace leaks. A result that does not match fails the call with `_meta.code: 'INVALID_OUTPUT'`, and nothing from the rejected result is sent.
 
 ## Supported shapes
 

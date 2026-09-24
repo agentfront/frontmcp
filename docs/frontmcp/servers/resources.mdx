@@ -384,6 +384,8 @@ class OrderDetails extends ResourceContext {
 }
 ```
 
+When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read, for example `orders://42`, and `orders://42#0`, `orders://42#1` for array items without their own `uri`.
+
 ### File System Resource
 
 ```ts

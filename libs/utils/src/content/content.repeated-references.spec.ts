@@ -32,4 +32,11 @@ describe('sanitizeToJson with repeated (non-cyclic) references', () => {
 
     expect(sanitizeToJson(value)).toEqual(JSON.parse(JSON.stringify(value)));
   });
+
+  it('drops a Map entry that points back at the Map itself', () => {
+    const registry = new Map<string, unknown>([['name', 'root']]);
+    registry.set('self', registry);
+
+    expect(sanitizeToJson(registry)).toEqual({ name: 'root', self: undefined });
+  });
 });
