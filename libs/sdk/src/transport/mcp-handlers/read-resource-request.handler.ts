@@ -3,7 +3,7 @@
 import { ReadResourceRequestSchema, type ReadResourceRequest, type ReadResourceResult } from '@frontmcp/protocol';
 
 import { ErrorHandler, isMrtrSignal } from '../../errors';
-import { toReportedError, toSdkMcpError } from './mcp-error.utils';
+import { errorBehindFlowControl, toReportedError, toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function readResourceRequestHandler({
@@ -23,9 +23,10 @@ export default function readResourceRequestHandler({
         logger.verbose('resources/read completed', { uri, durationMs: Date.now() - start });
         return result;
       } catch (e) {
-        // MRTR signals are answered by the 2026-07-28 dispatcher, not reported as failures
-        if (isMrtrSignal(e)) throw e;
-        const failure = toReportedError(e);
+        // MRTR signals, thrown or passed to this.fail(), are answered by the 2026-07-28 dispatcher
+        const cause = errorBehindFlowControl(e);
+        if (isMrtrSignal(cause)) throw cause;
+        const failure = toReportedError(cause);
         errorHandler.logError(failure, { flowName: 'resources:read-resource', uri });
         // Preserve structured JSON-RPC codes (e.g. AuthorityDeniedError -32003,
         // ResourceNotFoundError -32002) instead of letting the generic dispatch
