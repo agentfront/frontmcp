@@ -71,6 +71,25 @@ describe('in-process 2026-07-28 client', () => {
 
       await expect(rpc20260728(notificationOnly, 'tools/list')).rejects.toThrow(/HTTP 200 with no response to request/);
     });
+
+    it('reports the status and body of a reply that is not JSON-RPC', async () => {
+      const htmlError = async () =>
+        new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } });
+
+      await expect(rpc20260728(htmlError, 'tools/list')).rejects.toThrow(
+        /HTTP 502 with an unparseable body: <html>Bad Gateway<\/html>/,
+      );
+    });
+
+    it('returns an error with a null id as the response, not as a notification', async () => {
+      const nullIdError = async () =>
+        Response.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, { status: 400 });
+
+      const { message, notifications } = await rpc20260728(nullIdError, 'tools/list');
+
+      expect(message.error?.code).toBe(-32700);
+      expect(notifications).toEqual([]);
+    });
   });
 
   describe('transparent auth server', () => {
