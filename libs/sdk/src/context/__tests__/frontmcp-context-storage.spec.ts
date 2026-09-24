@@ -15,6 +15,48 @@ describe('FrontMcpContextStorage', () => {
     storage = new FrontMcpContextStorage();
   });
 
+  describe('configure', () => {
+    it("applies the server's defaults to every context it creates, under each context's own config", () => {
+      storage.configure({ forwardCallerTokenTo: ['https://api.example.com'], requestTimeout: 1000 });
+
+      storage.run({ sessionId: 'configured', scopeId: 'scope', config: { requestTimeout: 2000 } }, () => {
+        const config = storage.getStoreOrThrow().config;
+        expect(config.forwardCallerTokenTo).toEqual(['https://api.example.com']);
+        expect(config.requestTimeout).toBe(2000);
+      });
+    });
+  });
+
+  describe('runForHttpRequest', () => {
+    it("uses the request's mcp-session-id, trace context and metadata", () => {
+      storage.runForHttpRequest(
+        {
+          headers: {
+            'mcp-session-id': 'session-from-header',
+            'user-agent': 'spec-agent/1.0',
+            traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          },
+        },
+        'scope',
+        () => {
+          const ctx = storage.getStoreOrThrow();
+          expect(ctx.sessionId).toBe('session-from-header');
+          expect(ctx.metadata.userAgent).toBe('spec-agent/1.0');
+          expect(ctx.traceContext.traceId).toBe('0af7651916cd43dd8448eb211c80319c');
+        },
+      );
+    });
+
+    it('gives a request without an mcp-session-id its own anonymous session id', () => {
+      const sessionIds = [1, 2].map(() =>
+        storage.runForHttpRequest({ headers: {} }, 'scope', () => storage.getStoreOrThrow().sessionId),
+      );
+
+      expect(sessionIds[0]).toMatch(/^anon:/);
+      expect(sessionIds[0]).not.toBe(sessionIds[1]);
+    });
+  });
+
   describe('run', () => {
     it('should run callback with context available', () => {
       const result = storage.run({ sessionId: 'test-session', scopeId: 'test-scope' }, () => {

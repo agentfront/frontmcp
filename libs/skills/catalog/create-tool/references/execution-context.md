@@ -79,6 +79,8 @@ Use `this.get` (throws) when the tool genuinely requires the dependency. Use `th
 
 `this.fetch` is a thin wrapper around the standard `fetch` that propagates the request's `traceContext` so downstream services can stitch the call into the same trace.
 
+It does **not** send the caller's MCP access token or the request's `x-frontmcp-*` headers anywhere unless the target origin is allow-listed in `@FrontMcp({ fetch: { forwardCallerTokenTo, forwardCustomHeadersTo } })` (both default to `[]`). The MCP spec forbids passing the client's token to upstream APIs; call third-party services with `credentials: { provider }` instead.
+
 ```typescript
 async execute(input: { url: string }) {
   const response = await this.fetch(input.url);
