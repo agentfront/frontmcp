@@ -219,6 +219,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
         channelInstructions: buildChannelInstructions(this.scope.channels),
         skillRegistry: this.scope.skills,
         policy: this.scope.metadata.skillsConfig?.injectInstructions,
+        mcpResources: this.scope.metadata.skillsConfig?.mcpResources,
       });
       const sep2640Hints = this.buildSkillInstructionHints();
       return [composed, sep2640Hints].filter((s) => s.length > 0).join('\n\n---\n\n');
@@ -547,14 +548,20 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   /**
    * SEP-2640 §Discovery — opt-in `instructions` text listing each
    * MCP-visible skill's `skill://` URI. Returns an empty string unless
-   * `skillsConfig.sep2640InInstructions` is true.
+   * `skillsConfig.sep2640InInstructions` is true and the `skill://`
+   * resources are served (`skillsConfig.mcpResources` is not false). Also
+   * empty under `injectInstructions: 'replace'` with non-empty server
+   * instructions, which must then be sent alone.
    */
   private buildSkillInstructionHints(): string {
     const skillRegistry = this.scope.skills;
     if (!skillRegistry?.hasAny()) return '';
 
-    const skillsConfig = this.scope.metadata?.skillsConfig as { sep2640InInstructions?: boolean } | undefined;
-    if (!skillsConfig?.sep2640InInstructions) return '';
+    const skillsConfig = this.scope.metadata?.skillsConfig;
+    if (!skillsConfig?.sep2640InInstructions || skillsConfig.mcpResources === false) return '';
+
+    const serverInstructions = (this.scope.metadata.instructions ?? '').trim();
+    if (skillsConfig.injectInstructions === 'replace' && serverInstructions.length > 0) return '';
 
     const visible = skillRegistry.getSkills({ visibility: 'mcp' });
     if (visible.length === 0) return '';
