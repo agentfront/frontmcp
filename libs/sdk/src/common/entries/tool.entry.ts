@@ -132,7 +132,7 @@ export abstract class ToolEntry<
     // Convert Zod schema shape to JSON Schema
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
-        return toJSONSchema(z.object(this.inputSchema));
+        return toJSONSchema(z.object(this.inputSchema), { io: 'input', unrepresentable: 'any' });
       } catch (error) {
         // Log the error for debugging purposes
         if (isDebug() || isDevelopment()) {

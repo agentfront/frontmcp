@@ -1,11 +1,13 @@
 // file: libs/sdk/src/prompt/flows/get-prompt.flow.ts
 
+import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import {
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -16,9 +18,11 @@ import {
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  isClientFacingError,
   PromptExecutionError,
   PromptNotFoundError,
 } from '../../errors';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
@@ -212,7 +216,6 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       let requiredScopes: string[] | undefined;
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
-        const { resolveRequiredScopes } = await import('@frontmcp/auth');
         requiredScopes = resolveRequiredScopes(
           result.denial,
           scopeMapping,
@@ -220,7 +223,6 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
         );
       }
 
-      const { AuthorityDeniedError } = await import('@frontmcp/auth');
       throw new AuthorityDeniedError({
         entryType: 'Prompt',
         entryName: prompt.fullName || prompt.name,
@@ -262,18 +264,12 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       // the scope (via flow deps) and the prompt's app (via promptViews).
       const contextProviders = new FlowContextProviders(prompt.providers, mergedContextDeps);
       const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
-      const promptHooks = this.scope.hooks.getClsHooks(prompt.record.provide).map((hook) => {
-        hook.run = async () => {
-          return context[hook.metadata.method]();
-        };
-        return hook;
-      });
-
-      this.appendContextHooks(promptHooks);
+      this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(prompt.record.provide), context));
       context.mark('createPromptContext');
       this.state.set('promptContext', context);
       this.logger.verbose('createPromptContext:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('createPromptContext: failed to create context', error);
       throw new PromptExecutionError(input.name, error instanceof Error ? error : undefined);
     }
@@ -296,6 +292,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       promptContext.output = await promptContext.execute(parsedArgs);
       this.logger.verbose('execute:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('execute: prompt execution failed', error);
       throw new PromptExecutionError(input.name, error instanceof Error ? error : undefined);
     }

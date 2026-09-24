@@ -1,4 +1,6 @@
 // errors/mcp.error.ts
+import { AuthorityDeniedError } from '@frontmcp/auth';
+import { GuardError } from '@frontmcp/guard';
 import { bytesToHex, isProduction, randomBytes } from '@frontmcp/utils';
 
 /**
@@ -696,11 +698,55 @@ export function isPublicError(error: any): error is PublicMcpError {
 }
 
 /**
+ * An authorities policy refused the caller. Public, so the caller and the model learn why.
+ * Mapped to JSON-RPC -32003 (FORBIDDEN).
+ */
+export class AuthorityDeniedMcpError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+  private readonly denialData: Record<string, unknown> | undefined;
+
+  constructor(denied: AuthorityDeniedError) {
+    super(denied.message, denied.code, denied.statusCode);
+    this.denialData = denied.toJsonRpcError().data;
+  }
+
+  toJsonRpcError(): { code: number; message: string; data?: Record<string, unknown> } {
+    return { code: this.mcpErrorCode, message: this.getPublicMessage(), data: this.denialData };
+  }
+}
+
+/**
+ * A guard limit refused or stopped the call (rate limit, concurrency, queue or execution
+ * timeout). Public, so the caller learns which limit it hit, under the guard's own code.
+ */
+export class GuardLimitMcpError extends PublicMcpError {
+  constructor(error: GuardError) {
+    super(error.message, error.code, error.statusCode);
+  }
+}
+
+/**
+ * Whether an error thrown inside an entry already says what the client should see
+ * (a public error, or an authorities refusal), so a flow passes it on unwrapped.
+ */
+export function isClientFacingError(error: unknown): boolean {
+  return isPublicError(error) || error instanceof AuthorityDeniedError;
+}
+
+/**
  * Convert any error to an MCP error
  */
 export function toMcpError(error: any): McpError {
   if (error instanceof McpError) {
     return error;
+  }
+
+  if (error instanceof AuthorityDeniedError) {
+    return new AuthorityDeniedMcpError(error);
+  }
+
+  if (error instanceof GuardError) {
+    return new GuardLimitMcpError(error);
   }
 
   if (error instanceof Error) {

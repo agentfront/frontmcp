@@ -123,6 +123,8 @@ For loading **entire apps** (all tools, resources, prompts), use [`App.esm()`](/
 
 Tools use Zod schemas for type-safe input validation. The schema is automatically converted to JSON Schema for MCP protocol compatibility.
 
+`tools/list` describes the input the caller sends, not the value after parsing: a field with `.default()` is not listed as required, and a field with `.transform()` is listed by its input type. The same JSON Schema is used for agents and skills.
+
 ### Basic Types
 
 ```ts
@@ -207,6 +209,8 @@ class CalculateTotalTool extends ToolContext {
   }
 }
 ```
+
+A result that does not match `outputSchema` fails the call: the client gets an error result with `_meta.code: "INVALID_OUTPUT"`, and nothing from the rejected result is sent. When the result matches, fields the schema does not declare are dropped. A number field holding `Infinity`, `-Infinity`, or `NaN` also fails with `INVALID_OUTPUT`, unless the server sets `output: { allowNonFinite: true }`.
 
 ### Output schema exposure
 
@@ -359,7 +363,7 @@ execute() {
 | `description`       | Helps the model understand when and how to use this tool                                                                         |
 | `inputSchema`       | Zod schema defining expected input parameters                                                                                    |
 | `outputSchema`      | Zod schema for validating and documenting output                                                                                 |
-| `title`             | Human-friendly name for UI display                                                                                               |
+| `title`             | Human-friendly name listed by `tools/list`; omitted when not set, so `annotations.title` applies                                 |
 | `icons`             | Array of icons for visual representation in clients                                                                              |
 | `tags`              | Categorization for organization and filtering                                                                                    |
 | `annotations`       | MCP-defined hints about tool behavior                                                                                            |

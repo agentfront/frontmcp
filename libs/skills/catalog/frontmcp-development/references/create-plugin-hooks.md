@@ -188,12 +188,12 @@ Both `@Will` and `@Did` (and `@Around`) accept an optional options object:
 
 ```typescript
 @Will('execute', {
-  priority: 10,                          // Higher runs first (default: 0)
+  priority: 10,                          // Lower runs first (default: 0)
   filter: (ctx) => ctx.toolName !== 'health_check',  // Predicate to skip
 })
 ```
 
-- **priority** (`number`) - Execution order when multiple hooks target the same stage. Higher values run first. Default: `0`.
+- **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did` and `@Around` alike. Default: `0`.
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context. Return `false` to skip this hook for the current invocation.
 
 ## Examples
@@ -307,6 +307,8 @@ export class MyApp {}
 
 Plugins are initialized in array order. Hook priority determines execution order within the same stage.
 
+Hooks declared on an app's providers, on its plugins, and on those plugins' providers run only for that app's tools. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
+
 ## Using Hooks Inside a @Tool Class
 
 You can add hook methods directly on a `@Tool` class to intercept its own execution flow. The hooks apply only when **this tool** is called:
@@ -383,10 +385,10 @@ Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
 | Pattern               | Correct                                                               | Incorrect                                                              | Why                                                                                |
 | --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Hook decorator source | `const { Will, Did } = ToolHook;` or `FlowHooksOf('tools:call-tool')` | Importing `Will` directly from `@frontmcp/sdk`                         | Decorators must be bound to a specific flow via `FlowHooksOf` or pre-built exports |
-| Hook priority         | `@Will('execute', { priority: 100 })` for early hooks                 | Relying on array order without priority                                | Multiple hooks on the same stage need explicit priority; higher runs first         |
-| Around next()         | `const result = await next(); return result;`                         | Forgetting to call `next()` in `@Around`                               | Omitting `next()` silently skips the wrapped stage and all downstream hooks        |
+| Hook priority         | `@Will('execute', { priority: -100 })` for early hooks                | Relying on array order without priority                                | Multiple hooks on the same stage need explicit priority; lower runs first          |
+| Around next()         | `await next();`                                                       | Forgetting to call `next()` in `@Around`                               | Omitting `next()` skips the wrapped stage; its `@Did` hooks still run              |
 | Filter predicate      | `filter: (ctx) => ctx.toolName !== 'health_check'`                    | Checking tool name inside the hook body and returning early            | Filters skip the hook cleanly; returning early may leave state inconsistent        |
-| Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for all tools; tool-level hooks fire only for that tool          |
+| Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for every tool of the app; tool-level hooks only for that tool   |
 
 ## Verification Checklist
 
@@ -411,7 +413,7 @@ Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
 | Hook never fires                              | Plugin not registered in `plugins` array         | Add plugin class to `@App` or `@FrontMcp` `plugins` array                         |
 | Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`            | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)            |
 | `@Around` skips the stage entirely            | `next()` not called inside the around handler    | Always `await next()` to execute the wrapped stage                                |
-| Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; higher numbers execute first                      |
+| Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; lower numbers execute first                       |
 | `@Stage` replacement causes downstream errors | Return value shape does not match stage contract | Ensure the return matches what the next stage expects (e.g., MCP response format) |
 
 ## Examples

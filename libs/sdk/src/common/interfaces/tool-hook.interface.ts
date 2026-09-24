@@ -3,8 +3,8 @@
  *
  * Ordering notes:
  * - "will*" stages run before the action; "did*" run after.
- * - Higher `priority()` runs earlier for "will*" (outermost for wrappers), and later for "did*".
- * - `aroundExecute` wraps the actual execution block (including will/didExecute inside).
+ * - Within a stage, a lower `priority` runs first, for "will*", "did*" and "around*" alike.
+ * - `aroundExecute` wraps the execution itself: willExecute runs before it and didExecute after it.
  *
  * Control flow:
  * - Hooks may call `ctx.respond(value)` to short-circuit with a value.

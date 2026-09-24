@@ -17,13 +17,13 @@ The `withTimeout` function wraps an async function with a deadline using `AbortC
 import { withTimeout } from '@frontmcp/guard';
 
 const result = await withTimeout(
-  () => fetchRemoteData(),
+  (signal) => fetchRemoteData({ signal }),
   5_000, // timeout in ms
   'fetch-remote', // entity name (used in error message)
 );
 ```
 
-If the function does not complete within 5 seconds, an `ExecutionTimeoutError` is thrown with code `EXECUTION_TIMEOUT` and HTTP status `408`.
+If the function does not complete within 5 seconds, the `signal` it was given is aborted and an `ExecutionTimeoutError` is thrown with code `EXECUTION_TIMEOUT` and HTTP status `408`. The deadline cannot stop work that ignores the signal.
 
 ## No External Dependencies
 

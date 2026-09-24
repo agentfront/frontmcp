@@ -703,7 +703,10 @@ export class AgentInstance<
 
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
-        inputSchema = toJSONSchema(z.object(this.inputSchema)) as Tool['inputSchema'];
+        inputSchema = toJSONSchema(z.object(this.inputSchema), {
+          io: 'input',
+          unrepresentable: 'any',
+        }) as Tool['inputSchema'];
       } catch {
         // Fallback to empty schema if conversion fails
         this.scope.logger.warn(`Failed to convert input schema for agent ${this.name}`);

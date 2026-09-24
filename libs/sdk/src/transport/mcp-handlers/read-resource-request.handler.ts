@@ -2,13 +2,15 @@
 
 import { ReadResourceRequestSchema, type ReadResourceRequest, type ReadResourceResult } from '@frontmcp/protocol';
 
-import { toSdkMcpError } from './mcp-error.utils';
+import { ErrorHandler, isMrtrSignal } from '../../errors';
+import { errorBehindFlowControl, toReportedError, toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function readResourceRequestHandler({
   scope,
 }: McpHandlerOptions): McpHandler<ReadResourceRequest, ReadResourceResult> {
   const logger = scope.logger.child('read-resource-request-handler');
+  const errorHandler = new ErrorHandler({ logger });
 
   return {
     requestSchema: ReadResourceRequestSchema,
@@ -21,14 +23,15 @@ export default function readResourceRequestHandler({
         logger.verbose('resources/read completed', { uri, durationMs: Date.now() - start });
         return result;
       } catch (e) {
-        logger.error('resources/read failed', {
-          uri,
-          error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
-        });
+        // MRTR signals, thrown or passed to this.fail(), are answered by the 2026-07-28 dispatcher
+        const cause = errorBehindFlowControl(e);
+        if (isMrtrSignal(cause)) throw cause;
+        const failure = toReportedError(cause);
+        errorHandler.logError(failure, { flowName: 'resources:read-resource', uri });
         // Preserve structured JSON-RPC codes (e.g. AuthorityDeniedError -32003,
         // ResourceNotFoundError -32002) instead of letting the generic dispatch
         // flatten them to -32603 — mirrors the skills/load handler.
-        throw toSdkMcpError(e);
+        throw toSdkMcpError(failure);
       }
     },
   };

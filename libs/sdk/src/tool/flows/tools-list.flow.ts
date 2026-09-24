@@ -15,7 +15,7 @@ import {
 
 import 'reflect-metadata';
 
-import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+import { z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
@@ -279,9 +279,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
 
-      // Get elicitation support from session payload (set during MCP initialize)
-      // authInfo is guaranteed by parseInput (throws if missing for authorized flow)
-      const supportsElicitation = authInfo.sessionIdPayload?.supportsElicitation;
+      // Session clients report elicitation support at initialize. Under 2026-07-28 elicitation goes through
+      // input requests (or fails with -32021), so the fallback sendElicitationResult tool is never listed.
+      const usesInputRequests = this.tryGetContext()?.getMrtrExchange() !== undefined;
+      const supportsElicitation = usesInputRequests || authInfo.sessionIdPayload?.supportsElicitation;
 
       // Get tools appropriate for this client's elicitation support
       const scopeTools = this.scope.tools.getToolsForListing(supportsElicitation);
@@ -443,30 +444,14 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       );
 
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
-        // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
-        let inputSchema: any;
-        if (tool.rawInputSchema) {
-          // Already converted to JSON Schema
-          inputSchema = tool.rawInputSchema;
-        } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
-          // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
-          // Convert to JSON Schema
-          try {
-            // as any used here to prevent hard ts-check on tool input that is redundant
-            // and just slow down the build process. types here are unnecessary.
-            inputSchema = toJSONSchema(z.object(tool.inputSchema));
-          } catch (e) {
-            this.logger.warn(`Failed to convert inputSchema for tool ${finalName}:`, e);
-            inputSchema = { type: 'object', properties: {} };
-          }
-        } else {
-          // No schema defined - use empty object schema
-          inputSchema = { type: 'object', properties: {} };
-        }
+        const inputSchema = (tool.getInputJsonSchema() ?? {
+          type: 'object',
+          properties: {},
+        }) as ResponseToolItem['inputSchema'];
 
         const item: ResponseToolItem = {
           name: finalName,
-          title: tool.metadata.name,
+          ...(tool.metadata.title && { title: tool.metadata.title }),
           description: tool.metadata.description,
           annotations: tool.metadata.annotations,
           inputSchema,

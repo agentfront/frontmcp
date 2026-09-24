@@ -46,3 +46,64 @@ describe('documented authenticated profile against anonymous callers', () => {
     expect(granted).toBe(false);
   });
 });
+
+describe('owner checks against anonymous callers with a missing input value', () => {
+  const anonymousContext = () => new AuthoritiesContextBuilder().build({ user: { sub: ANONYMOUS_SUBJECT } }, {});
+
+  function createOwnerProfileEngine(): AuthoritiesEngine {
+    const profiles = new AuthoritiesProfileRegistry();
+    profiles.registerAll({
+      ownerByCondition: {
+        attributes: { conditions: [{ path: 'user.sub', op: 'eq', value: { fromInput: 'ownerSub' } }] },
+      },
+      ownerByMatch: { attributes: { match: { 'user.sub': { fromInput: 'ownerSub' } } } },
+    });
+    return new AuthoritiesEngine(profiles, new AuthoritiesEvaluatorRegistry());
+  }
+
+  it.each(['ownerByCondition', 'ownerByMatch'])('denies %s when the owner input is absent', async (profile) => {
+    const result = await createOwnerProfileEngine().evaluate(profile, anonymousContext());
+
+    expect(result.granted).toBe(false);
+  });
+});
+
+describe('malformed subjects', () => {
+  it('builds a context without a subject for a non-string sub instead of throwing', () => {
+    const context = new AuthoritiesContextBuilder().build({ extra: { user: { sub: 12345 } } });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+
+  it('keeps an anon: subject anonymous when claimsMapping.userId resolves another claim', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'email' } });
+
+    const context = builder.build({ user: { sub: ANONYMOUS_SUBJECT, email: 'guest@example.com' } });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+
+  it('does not turn a non-string mapped user id into a subject', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { oid: 12345 } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+
+  it('keeps the signed-in sub when the mapped user id is not a string', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { sub: 'user-1', oid: 12345 } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBe('user-1');
+  });
+
+  it('uses the mapped user id of a caller that carries no sub', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { oid: 'user-7' } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBe('user-7');
+  });
+});

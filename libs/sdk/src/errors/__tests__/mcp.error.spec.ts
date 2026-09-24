@@ -1,12 +1,19 @@
 // errors/__tests__/mcp.error.spec.ts
+import { AuthorityDeniedError } from '@frontmcp/auth';
+import { ConcurrencyLimitError, ExecutionTimeoutError } from '@frontmcp/guard';
+
 import {
-  ToolNotFoundError,
+  AuthorityDeniedMcpError,
+  formatMcpErrorResponse,
+  GlobalConfigNotFoundError,
+  GuardLimitMcpError,
   InvalidInputError,
   InvalidOutputError,
-  ToolExecutionError,
-  GlobalConfigNotFoundError,
+  isClientFacingError,
   isPublicError,
-  formatMcpErrorResponse,
+  toMcpError,
+  ToolExecutionError,
+  ToolNotFoundError,
 } from '../mcp.error';
 
 describe('MCP Error Handling', () => {
@@ -233,6 +240,55 @@ describe('MCP Error Handling', () => {
       const response = formatMcpErrorResponse(error);
 
       expect(response._meta?.stack).toBeDefined();
+    });
+  });
+});
+
+describe('toMcpError with an authorities refusal', () => {
+  const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'profile:admin' });
+
+  it('keeps it public, with the AUTHORITY_DENIED code and a 403', () => {
+    const mcpError = toMcpError(denied);
+
+    expect(mcpError).toBeInstanceOf(AuthorityDeniedMcpError);
+    expect(isPublicError(mcpError)).toBe(true);
+    expect(formatMcpErrorResponse(denied, false)._meta).toMatchObject({ code: 'AUTHORITY_DENIED' });
+    expect(formatMcpErrorResponse(denied, false).content[0]).toMatchObject({ text: denied.message });
+  });
+
+  it('keeps the -32003 JSON-RPC error and its denial data', () => {
+    expect((toMcpError(denied) as AuthorityDeniedMcpError).toJsonRpcError()).toEqual(denied.toJsonRpcError());
+  });
+
+  describe('isClientFacingError', () => {
+    it('is true for a public error and for an authorities refusal', () => {
+      const denied = new AuthorityDeniedError({ entryType: 'Tool', entryName: 'delete_user', deniedBy: 'roles' });
+
+      expect(isClientFacingError(new ToolNotFoundError('my_tool'))).toBe(true);
+      expect(isClientFacingError(denied)).toBe(true);
+    });
+
+    it('is false for an internal or plain error', () => {
+      expect(isClientFacingError(new ToolExecutionError('my_tool'))).toBe(false);
+      expect(isClientFacingError(new Error('boom'))).toBe(false);
+    });
+  });
+
+  describe('guard errors', () => {
+    it('answers a guard limit with its own code and status, as a public error', () => {
+      const mapped = toMcpError(new ConcurrencyLimitError('deploy', 1));
+
+      expect(mapped).toBeInstanceOf(GuardLimitMcpError);
+      expect(mapped.isPublic).toBe(true);
+      expect(mapped.code).toBe('CONCURRENCY_LIMIT');
+      expect(mapped.statusCode).toBe(429);
+    });
+
+    it('keeps the execution timeout message for the client', () => {
+      const response = formatMcpErrorResponse(new ExecutionTimeoutError('deploy', 50), false);
+
+      expect(response._meta?.code).toBe('EXECUTION_TIMEOUT');
+      expect(response.content[0].text).toContain('timed out after 50ms');
     });
   });
 });

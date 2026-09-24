@@ -10,12 +10,12 @@
  * unqualified tool names.
  */
 
-import { createSkillToolGuardHook } from '../hooks/skill-tool.hook';
-import { SkillSessionManager } from '../session/skill-session.manager';
-import { MemorySkillSessionStore } from '../session/skill-session-store.interface';
 import type { SkillContent } from '../../common/interfaces';
+import { ToolApprovalRequiredError, ToolNotAllowedError } from '../errors/tool-not-allowed.error';
+import { createSkillToolGuardHook } from '../hooks/skill-tool.hook';
+import { MemorySkillSessionStore } from '../session/skill-session-store.interface';
+import { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillLoadResult } from '../skill-storage.interface';
-import { ToolNotAllowedError, ToolApprovalRequiredError } from '../errors/tool-not-allowed.error';
 
 describe('SkillToolGuardHook', () => {
   let sessionManager: SkillSessionManager;
@@ -62,13 +62,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        // Assign the context to the hook
-        Object.assign(hook, ctx);
-
         // Should not throw - tool is in allowlist
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -87,11 +82,7 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -110,12 +101,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should use metadata.name which is 'allowed_tool'
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -134,12 +121,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should fall back to input.name which is 'allowed_tool'
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -159,12 +142,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should extract base name after last colon
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -182,12 +161,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should extract base name from fullName
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
   });
@@ -205,12 +180,8 @@ describe('SkillToolGuardHook', () => {
           state: {},
         };
 
-        Object.assign(hook, ctx);
-
         // Should skip silently when no tool name
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -225,12 +196,8 @@ describe('SkillToolGuardHook', () => {
         },
       };
 
-      Object.assign(hook, ctx);
-
       // Should skip when no session
-      await expect(
-        (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-      ).resolves.not.toThrow();
+      await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
     });
 
     it('should skip when no active skill', async () => {
@@ -245,12 +212,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should skip when no active skill
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
 
@@ -268,12 +231,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should throw ToolNotAllowedError in strict mode
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).rejects.toThrow(ToolNotAllowedError);
+        await expect(hook.checkSkillToolAuthorization(ctx)).rejects.toThrow(ToolNotAllowedError);
       });
     });
   });
@@ -293,11 +252,7 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).rejects.toThrow(ToolNotAllowedError);
+        await expect(hook.checkSkillToolAuthorization(ctx)).rejects.toThrow(ToolNotAllowedError);
       });
     });
 
@@ -316,11 +271,7 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).rejects.toThrow(ToolApprovalRequiredError);
+        await expect(hook.checkSkillToolAuthorization(ctx)).rejects.toThrow(ToolApprovalRequiredError);
       });
     });
 
@@ -339,12 +290,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should not throw in permissive mode
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
     });
   });
@@ -366,12 +313,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should invoke callback and allow after approval
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).resolves.not.toThrow();
+        await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
 
         expect(onApprovalRequired).toHaveBeenCalledWith('unknown_tool', 'test-skill');
       });
@@ -393,12 +336,8 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
         // Should throw after denial
-        await expect(
-          (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization(),
-        ).rejects.toThrow(ToolApprovalRequiredError);
+        await expect(hook.checkSkillToolAuthorization(ctx)).rejects.toThrow(ToolApprovalRequiredError);
       });
     });
   });
@@ -417,9 +356,7 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
-        await (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization();
+        await hook.checkSkillToolAuthorization(ctx);
 
         const session = sessionManager.getActiveSession();
         expect(session?.toolCallCount).toBe(1);
@@ -439,9 +376,7 @@ describe('SkillToolGuardHook', () => {
           },
         };
 
-        Object.assign(hook, ctx);
-
-        await (hook as { checkSkillToolAuthorization: () => Promise<void> }).checkSkillToolAuthorization();
+        await hook.checkSkillToolAuthorization(ctx);
 
         const session = sessionManager.getActiveSession();
         // Tool call not recorded when tracking is disabled

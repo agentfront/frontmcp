@@ -3,6 +3,7 @@ import { idFromString } from '@frontmcp/utils';
 import AdapterRegistry from '../../adapter/adapter.registry';
 import AgentRegistry from '../../agent/agent.registry';
 import { AppEntry, FrontMcpLogger, type AppRecord, type LocalAppMetadata } from '../../common';
+import { normalizeHooksFromProviders } from '../../hooks/hooks.utils';
 import PluginRegistry, { type PluginScopeInfo } from '../../plugin/plugin.registry';
 import PromptRegistry from '../../prompt/prompt.registry';
 import ProviderRegistry from '../../provider/provider.registry';
@@ -61,6 +62,15 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
       parentScope: !isStandalone ? this.scopeProviders.getActiveScope() : undefined,
       isStandaloneApp: isStandalone,
     };
+    // Before plugins load: providers a plugin exports are copied into this registry and hook through the plugin.
+    const providerHooks = normalizeHooksFromProviders(this.appProviders).map((hook) => ({
+      ...hook,
+      metadata: { ...hook.metadata, owner: appOwner },
+    }));
+    if (providerHooks.length > 0) {
+      await scopeInfo.ownScope.hooks.registerHooks(false, ...providerHooks);
+    }
+
     this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner, scopeInfo);
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready
     this.logger?.verbose(`App ${this.metadata.name}: ${this.appPlugins.getPlugins().length} plugin(s) registered`);

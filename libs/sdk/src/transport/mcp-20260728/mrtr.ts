@@ -26,7 +26,7 @@
 import type { InputRequests, InputResponses } from '@frontmcp/protocol';
 
 import { type ElicitStatus } from '../../elicitation';
-import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors';
+import { InputRequiredSignal, InvalidInputError, MissingClientCapabilityError } from '../../errors';
 import { encodeRequestState, type RequestStateBinding } from './request-state';
 
 /** Requests the client may be asked to fulfil, and the capability each needs. */
@@ -78,10 +78,15 @@ export interface RootsAnswer {
  * `status`. Both spellings are accepted so a client that mirrors either one is
  * understood.
  */
+const ELICIT_ACTIONS: readonly unknown[] = ['accept', 'decline', 'cancel'];
+
 function toElicitResult(response: Record<string, unknown>): { status: ElicitStatus; content?: unknown } {
-  const action = (response['action'] ?? response['status']) as ElicitStatus | undefined;
+  const action = 'action' in response ? response['action'] : response['status'];
+  if (action !== undefined && !ELICIT_ACTIONS.includes(action)) {
+    throw new InvalidInputError(`Unknown elicitation action "${String(action)}"`);
+  }
   return {
-    status: action ?? 'cancel',
+    status: (action as ElicitStatus | undefined) ?? 'cancel',
     ...(response['content'] === undefined ? {} : { content: response['content'] }),
   };
 }

@@ -3,7 +3,8 @@
  * Mock factory for PromptRegistry
  */
 
-import { PromptMetadata, PromptKind, PromptRecord, PromptEntry } from '../../common';
+import { PromptEntry, PromptKind, PromptMetadata, PromptRecord } from '../../common';
+import { MissingPromptArgumentError } from '../../errors';
 
 /**
  * Creates a mock PromptRegistry for testing
@@ -112,7 +113,7 @@ export function createMockPromptEntry(
       const requiredArgs = fullMetadata.arguments?.filter((a) => a.required) || [];
       for (const arg of requiredArgs) {
         if (!args?.[arg.name]) {
-          throw new Error(`Missing required argument: ${arg.name}`);
+          throw new MissingPromptArgumentError(arg.name);
         }
       }
       return args || {};
