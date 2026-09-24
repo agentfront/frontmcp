@@ -47,6 +47,51 @@ describe('in-process 2026-07-28 client', () => {
     });
   });
 
+  describe('server with a configured entry path', () => {
+    it('reaches the server at the path given to rpc20260728', async () => {
+      const server = await createTestFetchServer({
+        info: { name: 'harness-entry-path', version: '1.0.0' },
+        apps: [HarnessApp],
+        http: { entryPath: '/mcp' },
+      });
+
+      const { status, message } = await rpc20260728(server.handler, 'tools/list', {}, { path: '/mcp' });
+
+      expect(status).toBe(200);
+      expect(message.result?.['tools']).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'echo' })]));
+    });
+  });
+
+  describe('response matching', () => {
+    it('rejects a reply that carries no response to the request', async () => {
+      const notificationOnly = async () =>
+        new Response('event: message\ndata: {"jsonrpc":"2.0","method":"notifications/message","params":{}}\n\n', {
+          headers: { 'content-type': 'Text/Event-Stream' },
+        });
+
+      await expect(rpc20260728(notificationOnly, 'tools/list')).rejects.toThrow(/HTTP 200 with no response to request/);
+    });
+
+    it('reports the status and body of a reply that is not JSON-RPC', async () => {
+      const htmlError = async () =>
+        new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } });
+
+      await expect(rpc20260728(htmlError, 'tools/list')).rejects.toThrow(
+        /HTTP 502 with an unparseable body: <html>Bad Gateway<\/html>/,
+      );
+    });
+
+    it('returns an error with a null id as the response, not as a notification', async () => {
+      const nullIdError = async () =>
+        Response.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, { status: 400 });
+
+      const { message, notifications } = await rpc20260728(nullIdError, 'tools/list');
+
+      expect(message.error?.code).toBe(-32700);
+      expect(notifications).toEqual([]);
+    });
+  });
+
   describe('transparent auth server', () => {
     it('accepts a token signed by the test issuer', async () => {
       const issuer = await createTestJwtIssuer();

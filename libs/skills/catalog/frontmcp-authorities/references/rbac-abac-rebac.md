@@ -161,6 +161,8 @@ interface AbacCondition {
 | `exists`     | Value exists (not null/undefined) | `{ path: 'user.sub', op: 'exists', value: true }`                           |
 | `matches`    | Regex match                       | `{ path: 'claims.email', op: 'matches', value: '^.*@(acme\|corp)\\.com$' }` |
 
+An anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub`, so `{ path: 'user.sub', op: 'exists', value: true }` admits signed-in callers only. An expected value that resolves to nothing (for example a missing `fromInput` field) never satisfies `eq` or `match`, even when the actual value is missing too. A denied `tools/call` returns an error result with `_meta.code: 'AUTHORITY_DENIED'`.
+
 ### Dynamic Value References
 
 Instead of hardcoding values, reference runtime data from tool input or JWT claims.

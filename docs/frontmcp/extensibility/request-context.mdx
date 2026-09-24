@@ -77,33 +77,47 @@ const requestLoggerProvider = {
 
 ## Context-Aware Fetch
 
-FrontMcpContext provides a `fetch()` method that automatically injects headers:
+FrontMcpContext provides a `fetch()` method that adds request context to outgoing requests:
 
 ```ts
 const ctx = this.context;
 
-// Automatically injects:
-// - Authorization: Bearer <token> (if authInfo.token is available)
+// Always (unless autoInjectTracingHeaders is false):
 // - traceparent: <W3C trace context>
 // - x-request-id: <request ID>
-// - Custom x-frontmcp-* headers from request metadata
+// Only for origins you allow-list (see Configuration):
+// - Authorization: Bearer <the caller's MCP access token>
+// - the incoming request's x-frontmcp-* headers
 const response = await ctx.fetch('https://api.example.com/data');
 ```
 
+<Warning>
+The MCP authorization spec forbids passing the token a client sent to your server on to other services. By default `fetch()` sends neither the caller's token nor its `x-frontmcp-*` headers anywhere. To call an upstream API with its own credentials, use `credentials: { provider }`.
+</Warning>
+
 ### Configuration
 
-Configure fetch behavior via context config:
+Configure fetch behavior for the whole server with `@FrontMcp({ fetch })`:
 
 ```ts
-// In FrontMcpContextArgs
-{
-  config: {
-    autoInjectAuthHeaders: true,       // Default: true
-    autoInjectTracingHeaders: true,    // Default: true
-    requestTimeout: 30000,             // Default: 30000ms
-  }
-}
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  fetch: {
+    // Origins that accept this server's own tokens (default: [])
+    forwardCallerTokenTo: ['https://api.internal.example'],
+    // Origins that may receive the request's x-frontmcp-* headers (default: [])
+    forwardCustomHeadersTo: ['https://api.internal.example'],
+    autoInjectTracingHeaders: true, // Default: true
+    requestTimeout: 30000, // Default: 30000ms
+  },
+})
+class Server {}
 ```
+
+Entries are matched by origin (scheme, host and port), so `https://api.internal.example/v1` allows every path on `https://api.internal.example` but not `http://api.internal.example` or `https://other.api.internal.example`.
+
+A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect, so those headers never reach an origin you did not list. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
 ### Custom Headers
 

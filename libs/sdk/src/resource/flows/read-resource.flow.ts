@@ -7,6 +7,7 @@ import { randomBytes } from '@frontmcp/utils';
 import {
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -17,6 +18,7 @@ import {
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
+  isClientFacingError,
   ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
@@ -182,6 +184,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const { sessionId, authInfo } = this.state;
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
+        this.tryGetContext()?.platformType ??
         (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
 
       this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
@@ -323,6 +326,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       this.state.set('resourceContext', context);
       this.logger.verbose('createResourceContext:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('createResourceContext: failed to create context', error);
       throw new ResourceReadError(input.uri, error instanceof Error ? error : undefined);
     }
@@ -351,6 +355,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       resourceContext.output = await resourceContext.execute(input.uri, params);
       this.logger.verbose('execute:done');
     } catch (error) {
+      if (error instanceof FlowControl || isClientFacingError(error)) throw error;
       this.logger.error('execute: resource read failed', error);
       throw new ResourceReadError(input.uri, error instanceof Error ? error : undefined);
     }

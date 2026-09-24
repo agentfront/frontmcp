@@ -86,7 +86,7 @@ interface PromptArgument {
 }
 ```
 
-Required arguments are validated before `execute()` runs. Missing required arguments throw `MissingPromptArgumentError`.
+Required arguments are validated before `execute()` runs. Missing required arguments throw `MissingPromptArgumentError`, which the client receives as a JSON-RPC `-32602` error (so does an unknown prompt name).
 
 ### GetPromptResult Structure
 

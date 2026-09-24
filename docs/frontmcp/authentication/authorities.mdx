@@ -68,7 +68,9 @@ class DeleteUserTool extends ToolContext {
 }
 ```
 
-If a user without the required role calls `delete_user`, the `checkEntryAuthorities` flow stage throws an `AuthorityDeniedError` with MCP error code `-32003` before the handler executes.
+If a user without the required role calls `delete_user`, the `checkEntryAuthorities` flow stage throws an `AuthorityDeniedError` with MCP error code `-32003` before the handler executes. A `tools/call` answers it as an error result with `_meta.code: "AUTHORITY_DENIED"` and the denial message, in production too.
+
+The `authenticated` profile above admits only signed-in callers: an anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub` in the evaluation context, so `exists` fails for it.
 
 <Note>
 **Boot-time fail-fast.** If any entry — a tool, resource, prompt, agent, **or skill** — declares `authorities` but the server has no authorities engine configured (no `@FrontMcp({ authorities: { … } })`), startup fails with an `AuthConfigurationError`. This prevents a silent bypass where an entry looks protected but is actually open to everyone. Either add the `authorities` config or remove `authorities` from the entry. Servers with **no** `authorities` config and **no** gated entries are unaffected.
@@ -371,6 +373,8 @@ The `conditions` field supports a rich set of operators for more complex checks.
 | `exists`     | Value is defined (`true`) or undefined (`false`)   | boolean        |
 | `matches`    | Regular expression match                           | string (regex) |
 
+An anonymous caller has no `user.sub`, so `{ path: 'user.sub', op: 'exists', value: true }` admits signed-in callers only. An expected value that resolves to nothing (for example a missing `fromInput` field) never satisfies `eq` or `match`, even when the actual value is missing too.
+
 ### Dynamic Value References
 
 Condition values can reference runtime data instead of using static literals.
@@ -612,6 +616,9 @@ const rateLimitEvaluator: AuthoritiesEvaluator = {
   name: 'rateLimit',
   async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext) {
     const { maxPerMinute } = policy as { maxPerMinute: number };
+    if (ctx.user.sub === undefined) {
+      return { granted: false, deniedBy: 'rateLimit: sign-in required', evaluatedPolicies: ['custom.rateLimit'] };
+    }
     const count = await getRequestCount(ctx.user.sub);
 
     return {
@@ -622,6 +629,8 @@ const rateLimitEvaluator: AuthoritiesEvaluator = {
   },
 };
 ```
+
+`ctx.user.sub` is `undefined` for anonymous callers, so an evaluator that keys on the caller should decide explicitly what an anonymous caller gets.
 
 ### Registering Evaluators
 

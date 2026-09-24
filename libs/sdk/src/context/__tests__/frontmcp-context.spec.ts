@@ -2,14 +2,14 @@
  * Unit tests for FrontMcpContext and validateSessionId
  */
 
+import { InvalidInputError } from '../../errors/mcp.error';
 import {
   FrontMcpContext,
-  validateSessionId,
   SESSION_ID_MAX_LENGTH,
   SESSION_ID_VALID_PATTERN,
+  validateSessionId,
 } from '../frontmcp-context';
 import { generateTraceContext } from '../trace-context';
-import { InvalidInputError } from '../../errors/mcp.error';
 
 describe('validateSessionId', () => {
   describe('valid session IDs', () => {
@@ -177,7 +177,8 @@ describe('FrontMcpContext', () => {
     it('should set default config values', () => {
       const ctx = new FrontMcpContext(validArgs);
 
-      expect(ctx.config.autoInjectAuthHeaders).toBe(true);
+      expect(ctx.config.forwardCallerTokenTo).toEqual([]);
+      expect(ctx.config.forwardCustomHeadersTo).toEqual([]);
       expect(ctx.config.autoInjectTracingHeaders).toBe(true);
       expect(ctx.config.requestTimeout).toBe(30000);
     });
@@ -186,13 +187,15 @@ describe('FrontMcpContext', () => {
       const ctx = new FrontMcpContext({
         ...validArgs,
         config: {
-          autoInjectAuthHeaders: false,
+          forwardCallerTokenTo: ['https://api.example.com/v1', 'not a url'],
+          forwardCustomHeadersTo: ['https://internal.example.com:443'],
           autoInjectTracingHeaders: false,
           requestTimeout: 60000,
         },
       });
 
-      expect(ctx.config.autoInjectAuthHeaders).toBe(false);
+      expect(ctx.config.forwardCallerTokenTo).toEqual(['https://api.example.com']);
+      expect(ctx.config.forwardCustomHeadersTo).toEqual(['https://internal.example.com']);
       expect(ctx.config.autoInjectTracingHeaders).toBe(false);
       expect(ctx.config.requestTimeout).toBe(60000);
     });
@@ -262,6 +265,25 @@ describe('FrontMcpContext', () => {
       ctx.updateSessionMetadata(metadata);
 
       expect(ctx.sessionMetadata).toBe(metadata);
+    });
+  });
+
+  describe('setClientInfo', () => {
+    it('records the client info and the platform detected from it', () => {
+      const ctx = new FrontMcpContext(validArgs);
+
+      ctx.setClientInfo({ name: 'claude-ai', version: '1.0.0' }, 'claude');
+
+      expect(ctx.clientInfo).toEqual({ name: 'claude-ai', version: '1.0.0' });
+      expect(ctx.platformType).toBe('claude');
+    });
+
+    it('records no platform when none was recognized, so lookups fall back to the session', () => {
+      const ctx = new FrontMcpContext(validArgs);
+
+      ctx.setClientInfo({ name: 'my-agent', version: '1.0.0' }, 'unknown');
+
+      expect(ctx.platformType).toBeUndefined();
     });
   });
 
@@ -483,8 +505,8 @@ describe('FrontMcpContext', () => {
       expect(headers.get('x-request-id')).toBe(ctx.requestId);
     });
 
-    it('should inject Authorization header when token is available', async () => {
-      const ctx = new FrontMcpContext(validArgs);
+    it('should inject the caller token for an allow-listed origin', async () => {
+      const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
       ctx.updateAuthInfo({ token: 'test-bearer-token' });
 
       await ctx.fetch('https://api.example.com/data');
@@ -495,8 +517,43 @@ describe('FrontMcpContext', () => {
       expect(headers.get('Authorization')).toBe('Bearer test-bearer-token');
     });
 
+    it('should not treat another scheme or subdomain of an allow-listed origin as allow-listed', async () => {
+      const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
+      ctx.updateAuthInfo({ token: 'test-token' });
+
+      await ctx.fetch('http://api.example.com/data');
+      await ctx.fetch('https://evil.api.example.com/data');
+      await ctx.fetch('/relative/path');
+
+      const sentAuthorization = (global.fetch as jest.Mock).mock.calls.map(([, options]) =>
+        (options.headers as Headers).get('Authorization'),
+      );
+      expect(sentAuthorization).toEqual([null, null, null]);
+    });
+
+    it('should not follow redirects for a request that carries forwarded caller headers', async () => {
+      const ctx = new FrontMcpContext({
+        ...validArgs,
+        config: {
+          forwardCallerTokenTo: ['https://api.example.com'],
+          forwardCustomHeadersTo: ['https://headers.example.com'],
+        },
+        metadata: { customHeaders: { 'x-frontmcp-tenant': 'tenant-123' } },
+      });
+      ctx.updateAuthInfo({ token: 'test-token' });
+
+      await ctx.fetch('https://api.example.com/data');
+      await ctx.fetch('https://api.example.com/data', { redirect: 'follow' });
+      await ctx.fetch('https://headers.example.com/data');
+      await ctx.fetch('https://api.example.com/data', { redirect: 'error' });
+      await ctx.fetch('https://other.example.com/data', { redirect: 'follow' });
+
+      const redirectModes = (global.fetch as jest.Mock).mock.calls.map(([, options]) => options.redirect);
+      expect(redirectModes).toEqual(['manual', 'manual', 'manual', 'error', 'follow']);
+    });
+
     it('should not inject Authorization when already present', async () => {
-      const ctx = new FrontMcpContext(validArgs);
+      const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
       ctx.updateAuthInfo({ token: 'test-token' });
 
       await ctx.fetch('https://api.example.com/data', {
@@ -509,11 +566,10 @@ describe('FrontMcpContext', () => {
       expect(headers.get('Authorization')).toBe('Bearer existing-token');
     });
 
-    it('should not inject headers when disabled in config', async () => {
+    it('should not inject the caller token or tracing headers unless configured to', async () => {
       const ctx = new FrontMcpContext({
         ...validArgs,
         config: {
-          autoInjectAuthHeaders: false,
           autoInjectTracingHeaders: false,
         },
       });
@@ -528,9 +584,10 @@ describe('FrontMcpContext', () => {
       expect(headers.get('traceparent')).toBeNull();
     });
 
-    it('should inject custom headers from metadata', async () => {
+    it('should inject custom headers from metadata for an allow-listed origin', async () => {
       const ctx = new FrontMcpContext({
         ...validArgs,
+        config: { forwardCustomHeadersTo: ['https://api.example.com'] },
         metadata: {
           customHeaders: {
             'x-frontmcp-tenant': 'tenant-123',

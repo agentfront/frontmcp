@@ -15,7 +15,7 @@ import {
   type ListToolsResult,
   type ReadResourceResult,
 } from '@frontmcp/protocol';
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
 import { InternalMcpError } from '../errors';
@@ -38,7 +38,7 @@ function buildAuthInfo(authContext?: DirectAuthContext, defaultSessionId?: strin
   }
 
   // Build minimal auth info - flows handle missing fields gracefully
-  const sessionId = authContext?.sessionId ?? defaultSessionId ?? `direct:${randomUUID()}`;
+  const sessionId = authContext?.sessionId ?? callerSessionId(authContext, defaultSessionId);
   // UserClaim requires both 'iss' (issuer) and 'sub' (subject)
   const user = authContext?.user
     ? { iss: 'direct', sub: authContext.user.sub ?? 'direct', ...authContext.user }
@@ -60,6 +60,20 @@ function buildAuthInfo(authContext?: DirectAuthContext, defaultSessionId?: strin
   }
 
   return authInfo;
+}
+
+/**
+ * Calls without an explicit sessionId share a session only with calls from the same caller,
+ * so one caller's session-scoped state is never visible to another.
+ */
+function callerSessionId(authContext: DirectAuthContext | undefined, defaultSessionId?: string): string {
+  const baseSessionId = defaultSessionId ?? `direct:${randomUUID()}`;
+  const subject = authContext?.user?.sub;
+  const issuer = authContext?.user?.['iss'];
+  const callerIdentity = subject
+    ? JSON.stringify([typeof issuer === 'string' ? issuer : '', subject])
+    : authContext?.token;
+  return callerIdentity ? `${baseSessionId}:${sha256Hex(callerIdentity)}` : baseSessionId;
 }
 
 /**

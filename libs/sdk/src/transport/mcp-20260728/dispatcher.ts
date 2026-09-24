@@ -21,6 +21,7 @@ import { type Scope } from '../../scope';
 import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
 import { createMcpHandlers } from '../mcp-handlers';
+import { toSdkMcpError } from '../mcp-handlers/mcp-error.utils';
 import { buildDiscoverResult } from './discover';
 import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
@@ -233,10 +234,11 @@ export function toJsonRpcError(error: unknown): { status: number; error: JsonRpc
 
   if (typeof withJsonRpc?.toJsonRpcError === 'function') {
     payload = withJsonRpc.toJsonRpcError();
-  } else if (error instanceof McpError) {
-    payload = { code: error.code, message: error.message, data: (error as { data?: unknown }).data };
   } else {
-    payload = { code: -32603, message: error instanceof Error ? error.message : String(error) };
+    const sdkError = toSdkMcpError(error);
+    // McpError prefixes its message with "MCP error <code>: "; the code is already in the payload
+    const message = sdkError.message.replace(/^MCP error -?\d+: /, '');
+    payload = { code: sdkError.code, message, data: sdkError.data };
   }
 
   // Retired in 2026-07-28: resource-not-found is now Invalid Params.

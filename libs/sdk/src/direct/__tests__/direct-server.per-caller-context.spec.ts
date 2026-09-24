@@ -17,7 +17,14 @@ class WhoAmITool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [WhoAmITool] })
+@Tool({ name: 'session_of_caller', inputSchema: {} })
+class SessionOfCallerTool extends ToolContext {
+  async execute() {
+    return { sessionId: this.context.sessionId };
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [WhoAmITool, SessionOfCallerTool] })
 class DeskApp {}
 
 interface WhoAmIResult {
@@ -78,5 +85,76 @@ describe('DirectMcpServer per-call authContext without a sessionId', () => {
     const bob = await callAs('bob');
 
     expect(bob.upstreamAuthorization).not.toBe('Bearer token-of-alice');
+  });
+});
+
+describe('DirectMcpServer implicit session per caller', () => {
+  let server: DirectMcpServer;
+
+  async function sessionOf(authContext: { token?: string; user?: { sub?: string; iss?: string } }): Promise<string> {
+    const response = await server.callTool('session_of_caller', {}, { authContext });
+    return (response.structuredContent as { sessionId: string }).sessionId;
+  }
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'direct-session-per-caller', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  it('keeps one session for repeated calls from the same caller', async () => {
+    const caller = { token: 'token-a', user: { sub: 'alice', iss: 'https://idp.example' } };
+
+    expect(await sessionOf(caller)).toBe(await sessionOf(caller));
+  });
+
+  it('keys callers with an empty subject by their token', async () => {
+    const first = await sessionOf({ token: 'token-a', user: { sub: '' } });
+    const second = await sessionOf({ token: 'token-b', user: { sub: '' } });
+
+    expect(first).not.toBe(second);
+  });
+
+  it('keeps the same subject from two issuers apart', async () => {
+    const first = await sessionOf({ token: 'token-a', user: { sub: 'alice', iss: 'https://idp-one.example' } });
+    const second = await sessionOf({ token: 'token-b', user: { sub: 'alice', iss: 'https://idp-two.example' } });
+
+    expect(first).not.toBe(second);
+  });
+});
+
+describe('DirectMcpServer with @FrontMcp({ fetch }) allow-listing the upstream origin', () => {
+  const originalFetch = global.fetch;
+
+  it("sends each caller's own token from this.fetch()", async () => {
+    const fetchMock = jest.fn().mockImplementation(async () => new Response('{}'));
+    global.fetch = fetchMock;
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'direct-allow-listed', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+      fetch: { forwardCallerTokenTo: [new URL(upstreamUrl).origin] },
+    });
+
+    try {
+      const sentAuthorization: Array<string | null> = [];
+      for (const user of ['alice', 'bob']) {
+        fetchMock.mockClear();
+        await server.callTool('whoami', {}, { authContext: { token: `token-of-${user}`, user: { sub: user } } });
+        const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+        sentAuthorization.push(new Headers(init.headers).get('authorization'));
+      }
+
+      expect(sentAuthorization).toEqual(['Bearer token-of-alice', 'Bearer token-of-bob']);
+    } finally {
+      global.fetch = originalFetch;
+      await server.dispose();
+    }
   });
 });
