@@ -16,6 +16,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
 
 import {
+  authInfoFromAuthorization,
   Flow,
   FlowBase,
   FlowHooksOf,
@@ -434,13 +435,11 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       frontmcpContext: this.tryGetContext(),
       authInfo: auth
         ? {
-            token: auth.token,
-            clientId: auth.user?.sub,
+            ...authInfoFromAuthorization(auth),
             // Sessions no longer exist at the protocol level, but the shared
             // handlers key per-request state (memory, credentials) off an id.
             // Derive a request-scoped one so nothing leaks between calls.
             sessionId: auth.session?.id,
-            extra: { user: auth.user, sessionId: auth.session?.id },
           }
         : undefined,
       isAnonymous: this.state.required.isAnonymous,

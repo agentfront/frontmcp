@@ -150,6 +150,8 @@ if (this.auth.hasRole('admin')) {
 }
 ```
 
+`this.auth` reads roles and permissions through the server's `authorities.claimsMapping` when one is configured, the same mapping the authorities engine uses, on every transport (including MCP 2026-07-28 requests).
+
 ### Execution Tracking
 
 #### mark(stage)
