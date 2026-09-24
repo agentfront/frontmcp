@@ -55,7 +55,7 @@ Hard deadline on a single execution.
 ```
 
 - **Scope**: per call. Wraps the entire `execute()` invocation.
-- **Behavior on timeout**: the framework throws an `ExecutionTimeoutError` (from `@frontmcp/guard`, code `'EXECUTION_TIMEOUT'`, HTTP status 408) and aborts the wrapped execution. The abort is internal to the timeout guard — it is **not** surfaced into `execute()` as a readable signal, so don't expect to observe it from inside the tool body.
+- **Behavior on timeout**: the framework throws an `ExecutionTimeoutError` (from `@frontmcp/guard`, code `'EXECUTION_TIMEOUT'`, HTTP status 408) and aborts `this.signal`, so `execute()` can observe the abort and pass the signal to cancellable work (see [Timeout and abort signals](#timeout-and-abort-signals)).
 - **Default**: no timeout. Tools can hang forever unless `timeout` is set.
 
 ## Interaction
@@ -88,19 +88,18 @@ Order of effects per call:
 
 ## Timeout and abort signals
 
-`timeout` does **not** hand your `execute()` an abort signal — the abort lives inside the timeout guard and is not exposed on the context. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
+`this.signal` is aborted when the call is cancelled (including `tasks/cancel` for a task-augmented call) and when its `timeout` passes. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
 
-The only tool-level abort signal is `this.signal`, and it is populated **only** for task-augmented `tools/call` invocations (cancelled via `tasks/cancel`) — not by `timeout`. It is `undefined` for ordinary calls, so guard for that:
+`this.fetch()` is aborted with `this.signal` on its own, on top of its per-request timeout (default 30s). Pass `this.signal` to any other cancellable work, so a timed-out call stops instead of running on:
 
 ```typescript
-async execute(input: { url: string }) {
-  // this.signal is defined only for task-augmented calls; undefined otherwise
-  const response = await this.fetch(input.url, { signal: this.signal });
-  return response.json();
+async execute(input: { reportId: string }) {
+  const response = await this.fetch(`https://reports.example.com/${input.reportId}`);
+  return this.get(ReportRenderer).render(await response.json(), { signal: this.signal });
 }
 ```
 
-For ordinary calls, rely on `this.fetch`'s own per-request timeout (default 30s) to bound in-flight HTTP work; `timeout` then caps the overall `execute()` duration.
+The deadline answers the client, but it cannot stop code that ignores the signal. Until `execute()` returns, the call keeps its concurrency slot.
 
 ## See also
 
