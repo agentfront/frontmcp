@@ -6,13 +6,7 @@ import {
   createMockPromptRegistry,
 } from '../../../__test-utils__/mocks/prompt-registry.mock';
 import { FlowControl } from '../../../common/interfaces/flow.interface';
-import {
-  InvalidInputError,
-  InvalidMethodError,
-  MissingPromptArgumentError,
-  PromptExecutionError,
-  PromptNotFoundError,
-} from '../../../errors';
+import { InvalidInputError, MissingPromptArgumentError, PromptNotFoundError } from '../../../errors';
 import GetPromptFlow from '../get-prompt.flow';
 
 describe('GetPromptFlow', () => {
