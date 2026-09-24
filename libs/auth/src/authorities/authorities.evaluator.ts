@@ -126,8 +126,9 @@ function resolveValue(value: unknown, ctx: AuthoritiesEvaluationContext): unknow
  */
 function applyOperator(actual: unknown, op: string, expected: unknown): boolean {
   switch (op) {
+    // A missing expected value (e.g. an absent fromInput) never matches, even an absent actual value
     case 'eq':
-      return actual === expected;
+      return expected !== undefined && actual === expected;
     case 'neq':
       return actual !== expected;
     case 'in':
@@ -191,7 +192,7 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
     for (const [path, expectedRaw] of Object.entries(policy.match)) {
       const actual = resolveDotPath(envelope, path);
       const expected = resolveValue(expectedRaw, ctx);
-      if (actual !== expected) {
+      if (expected === undefined || actual !== expected) {
         return {
           granted: false,
           deniedBy: `attributes.match: '${path}' expected '${String(expected)}' but got '${String(actual)}'`,

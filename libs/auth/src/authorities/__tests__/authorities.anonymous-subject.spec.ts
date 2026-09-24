@@ -46,3 +46,32 @@ describe('documented authenticated profile against anonymous callers', () => {
     expect(granted).toBe(false);
   });
 });
+
+describe('owner checks against anonymous callers with a missing input value', () => {
+  const anonymousContext = () => new AuthoritiesContextBuilder().build({ user: { sub: ANONYMOUS_SUBJECT } }, {});
+
+  function createOwnerProfileEngine(): AuthoritiesEngine {
+    const profiles = new AuthoritiesProfileRegistry();
+    profiles.registerAll({
+      ownerByCondition: {
+        attributes: { conditions: [{ path: 'user.sub', op: 'eq', value: { fromInput: 'ownerSub' } }] },
+      },
+      ownerByMatch: { attributes: { match: { 'user.sub': { fromInput: 'ownerSub' } } } },
+    });
+    return new AuthoritiesEngine(profiles, new AuthoritiesEvaluatorRegistry());
+  }
+
+  it.each(['ownerByCondition', 'ownerByMatch'])('denies %s when the owner input is absent', async (profile) => {
+    const result = await createOwnerProfileEngine().evaluate(profile, anonymousContext());
+
+    expect(result.granted).toBe(false);
+  });
+});
+
+describe('malformed subjects', () => {
+  it('builds a context without a subject for a non-string sub instead of throwing', () => {
+    const context = new AuthoritiesContextBuilder().build({ extra: { user: { sub: 12345 } } });
+
+    expect(context.user.sub).toBeUndefined();
+  });
+});
