@@ -1,7 +1,5 @@
 import 'reflect-metadata';
 
-import { randomUUID } from '@frontmcp/utils';
-
 import {
   FlowControl,
   FlowEntry,
@@ -230,32 +228,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return this.run(input, deps);
     }
 
-    // Extract context parameters from request
-    const headers = (request.headers ?? {}) as Record<string, unknown>;
-    // Generate unique ID for anonymous sessions to prevent session collision
-    // All unauthenticated requests previously shared 'anonymous', causing data leakage
-    // Handle empty strings explicitly: '' ?? 'fallback' returns '', not 'fallback'
-    const headerSessionId = typeof headers['mcp-session-id'] === 'string' ? headers['mcp-session-id'].trim() : '';
-    const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
     const scope = this.globalProviders.getActiveScope();
 
-    // Wrap ENTIRE flow execution in AsyncLocalStorage context
-    // Socket peer address, where the runtime exposes one. Forwarding headers are honoured
-    // only behind a trusted proxy, so without this a Node request has no client IP at all
-    // (GHSA-p3qf-fcwm-35x4).
-    const peerAddress = (request as { socket?: { remoteAddress?: string } }).socket?.remoteAddress;
-
-    return storage.runFromHeaders(
-      headers,
-      {
-        sessionId,
-        scopeId: scope.id,
-        peerAddress,
-      },
-      async () => {
-        return this.run(input, deps);
-      },
-    );
+    // Wrap ENTIRE flow execution in AsyncLocalStorage context. The socket peer is the only
+    // client address a caller cannot forge (GHSA-p3qf-fcwm-35x4).
+    return storage.runForHttpRequest(request, scope.id, async () => {
+      return this.run(input, deps);
+    });
   }
 
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {

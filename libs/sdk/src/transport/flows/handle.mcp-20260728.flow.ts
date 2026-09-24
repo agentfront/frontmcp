@@ -28,6 +28,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { FrontMcpContextStorage } from '../../context';
+import { detectAIPlatform, type ClientInfo } from '../../notification';
 import { type Scope } from '../../scope';
 import {
   createSubscriptionStream,
@@ -427,6 +428,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       typeof rawProgressToken === 'string' || typeof rawProgressToken === 'number' ? rawProgressToken : undefined;
     const sink = new RequestNotificationSink(logLevel, progressToken);
 
+    const clientInfo = toClientInfo(meta[MCP_20260728_META.clientInfo]);
+    if (clientInfo) {
+      const platformType = detectAIPlatform(clientInfo, this.scope.metadata.transport?.platformDetection);
+      this.tryGetContext()?.setClientInfo(clientInfo, platformType);
+    }
+
     const dispatchOptions = {
       scope: this.scope as unknown as Scope,
       body,
@@ -499,3 +506,9 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
 
 /** Re-exported so the router stage of `http:request` can classify without importing the module. */
 export { isProtocol20260728Request, MCP_HEADERS, readHeader };
+
+function toClientInfo(value: unknown): ClientInfo | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { name, version } = value as Record<string, unknown>;
+  return typeof name === 'string' && typeof version === 'string' ? { name, version } : undefined;
+}

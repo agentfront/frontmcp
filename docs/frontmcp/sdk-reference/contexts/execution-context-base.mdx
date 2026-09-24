@@ -206,9 +206,8 @@ fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>
 
 Automatically injects:
 
-- Authorization headers
-- Trace context headers
-- Custom headers from context
+- Trace context headers (`traceparent`, `x-request-id`)
+- The caller's `Authorization` token and the request's `x-frontmcp-*` headers, only for origins listed in [`@FrontMcp({ fetch })`](/frontmcp/extensibility/request-context#context-aware-fetch)
 
 ```typescript
 const response = await this.fetch('https://api.example.com/data', {

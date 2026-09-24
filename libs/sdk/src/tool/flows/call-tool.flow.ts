@@ -1322,6 +1322,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // finally default to 'unknown' (conservative: skip UI for unknown clients)
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
+        this.tryGetContext()?.platformType ??
         (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
         'unknown';
 

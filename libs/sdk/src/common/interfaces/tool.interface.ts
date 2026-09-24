@@ -377,6 +377,11 @@ export abstract class ToolContext<
       return payloadPlatform;
     }
 
+    const requestPlatform = this.tryGetContext()?.platformType;
+    if (requestPlatform && requestPlatform !== 'unknown') {
+      return requestPlatform;
+    }
+
     // Fall back to notification service (detected from MCP clientInfo during initialize)
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
@@ -400,6 +405,10 @@ export abstract class ToolContext<
    * ```
    */
   get clientInfo(): ClientInfo | undefined {
+    const requestClientInfo = this.tryGetContext()?.clientInfo;
+    if (requestClientInfo) {
+      return requestClientInfo;
+    }
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       return undefined;
