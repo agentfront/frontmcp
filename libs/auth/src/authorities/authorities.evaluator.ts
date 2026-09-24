@@ -4,7 +4,7 @@
  * Pure functions for evaluating RBAC, ABAC, and ReBAC policies.
  */
 
-import { resolveDotPath } from './authorities.context';
+import { isAnonymousSubject, resolveDotPath } from './authorities.context';
 import type {
   AbacCondition,
   AbacPolicy,
@@ -250,7 +250,8 @@ export function resolveResourceId(ref: ResourceIdRef, ctx: AuthoritiesEvaluation
  * Evaluate a single ReBAC policy.
  */
 async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
-  if (ctx.user.sub === undefined) {
+  const userSub = ctx.user.sub;
+  if (userSub === undefined || isAnonymousSubject(userSub)) {
     return {
       granted: false,
       deniedBy: `relationships: an anonymous caller cannot be '${policy.type}' of ${policy.resource}`,
@@ -258,7 +259,6 @@ async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluati
       evaluatedPolicies: ['relationships'],
     };
   }
-  const userSub = ctx.user.sub;
   const resourceId = resolveResourceId(policy.resourceId, ctx);
   if (resourceId === undefined) {
     return {

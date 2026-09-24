@@ -96,6 +96,16 @@ export function isAnonymousSubject(sub: unknown): boolean {
 }
 
 /**
+ * The signed-in subject of a caller, or undefined for an anonymous one. A caller whose own
+ * subject is anonymous stays anonymous, whatever `claimsMapping.userId` resolves to.
+ */
+export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | undefined {
+  if (rawSub !== undefined && isAnonymousSubject(rawSub)) return undefined;
+  const subject = mappedSub ?? rawSub;
+  return typeof subject === 'string' && !isAnonymousSubject(subject) ? subject : undefined;
+}
+
+/**
  * Options for building an evaluation context.
  */
 export interface AuthoritiesContextBuilderOptions {
@@ -129,10 +139,9 @@ export class AuthoritiesContextBuilder {
     // If a custom claimsResolver is provided, use it directly
     if (this.claimsResolver) {
       const resolved = this.claimsResolver(authInfo);
-      const resolvedSub = resolveAuthUser(authInfo).sub;
       return {
         user: {
-          sub: isAnonymousSubject(resolvedSub) ? undefined : resolvedSub,
+          sub: signedInSubject(resolveAuthUser(authInfo).sub),
           roles: resolved.roles,
           permissions: resolved.permissions,
           claims: resolved.claims,
@@ -179,14 +188,12 @@ export class AuthoritiesContextBuilder {
       permissions = toStringArray((user as Record<string, unknown>)['permissions'] ?? []);
     }
 
-    // Resolve user sub; anonymous callers have none, so `user.sub exists` excludes them
-    const sub = this.claimsMapping?.userId
-      ? String(resolveDotPath(rawClaims, this.claimsMapping.userId) ?? '')
-      : (user.sub ?? '');
+    // Anonymous callers have no sub, so `user.sub exists` excludes them
+    const mappedSub = this.claimsMapping?.userId ? resolveDotPath(rawClaims, this.claimsMapping.userId) : undefined;
 
     return {
       user: {
-        sub: isAnonymousSubject(sub) ? undefined : sub,
+        sub: signedInSubject(user.sub, mappedSub),
         roles,
         permissions,
         claims: rawClaims,
