@@ -5,8 +5,8 @@ import { randomUUID } from 'crypto';
 /**
  * Audit Plugin that demonstrates Will/Did hook patterns.
  *
- * Will hooks run BEFORE tool execution (higher priority = runs first)
- * Did hooks run AFTER tool execution (higher priority = runs first)
+ * Will hooks run BEFORE tool execution, and Did hooks AFTER it.
+ * Within each, a lower priority runs first: 50 before 100.
  */
 @Plugin({
   name: 'audit',
@@ -16,8 +16,8 @@ export default class AuditPlugin {
   private startTimes: Map<string, number> = new Map();
 
   /**
-   * Will hook with HIGH priority (100) - runs first
-   * Used for early audit logging before execution
+   * Will hook with priority 100 - runs after the priority 50 Will hook
+   * Records the start time for the duration measured by the Did hook
    */
   @ToolHook.Will('execute', { priority: 100 })
   async willExecuteHighPriority(flowCtx: FlowCtxOf<'tools:call-tool'>) {
@@ -40,7 +40,7 @@ export default class AuditPlugin {
   }
 
   /**
-   * Will hook with LOW priority (50) - runs after high priority
+   * Will hook with priority 50 - runs first
    * Used for validation or additional pre-processing
    */
   @ToolHook.Will('execute', { priority: 50 })
@@ -59,8 +59,8 @@ export default class AuditPlugin {
   }
 
   /**
-   * Did hook with HIGH priority (100) - runs first after execution
-   * Used for immediate post-execution logging
+   * Did hook with priority 100 - runs after the priority 50 Did hook
+   * Logs the output and the measured duration
    */
   @ToolHook.Did('execute', { priority: 100 })
   async didExecuteHighPriority(flowCtx: FlowCtxOf<'tools:call-tool'>) {
@@ -89,7 +89,7 @@ export default class AuditPlugin {
   }
 
   /**
-   * Did hook with LOW priority (50) - runs after high priority
+   * Did hook with priority 50 - runs first after execution
    * Used for cleanup or final logging
    */
   @ToolHook.Did('execute', { priority: 50 })

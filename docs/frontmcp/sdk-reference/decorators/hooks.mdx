@@ -116,7 +116,7 @@ class AuditHooks {
 
 ## @Around (Wrapper Hook)
 
-Wrap stage execution for full control:
+Wrap stage execution for full control. The stage's Will hooks run first, `next()` runs the stage itself, and its Did hooks run after the Around hook returns. An Around hook that does not call `next()` skips the stage. With several Around hooks on one stage, each `next()` runs the next one, and the innermost runs the stage.
 
 ```typescript
 const { Around } = FlowHooksOf('tools:call-tool');
@@ -199,6 +199,26 @@ class MyApp {}
 class AuditPlugin {}
 ```
 
+### On an Entry Class
+
+A hook declared on a `@Tool`, `@Resource`, `@Prompt` or `@Agent` class runs only for that entry, on the instance created for each call:
+
+```typescript
+@Tool({ name: 'get_ticket', inputSchema: {} })
+class GetTicketTool extends ToolContext {
+  @Will('execute')
+  async recordAccess() {
+    this.logger.info('get_ticket called');
+  }
+
+  async execute() {
+    return { ok: true };
+  }
+}
+```
+
+Hooks from an app's providers, and from the plugins and plugin providers it lists, run only for that app's tools. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
+
 ## Hook Context
 
 Hooks receive flow context with access to:
@@ -223,7 +243,7 @@ ctx.logger.info('Processing');
 
 ## Error Handling
 
-Errors in hooks are caught and logged:
+A hook that throws stops the flow, and the error reaches the client like an error from the stage itself. An Around hook sees a failing stage as a rejected `next()`, so it can catch, retry or rethrow:
 
 ```typescript
 @Will('execute')

@@ -282,12 +282,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Compute next order base after any class-defined entries.
     let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
 
-    // Get tool owner ID if this is a tool call flow
-    // The tool owner ID is set by the CallToolFlow.findTool stage
-    const toolOwnerId = (input as any)?._toolOwnerId;
+    const hookOwnerId = (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
 
     const initialInjectedHooks =
-      (this.hooks.getFlowHooksForOwner(name, toolOwnerId) as HookEntry<
+      (this.hooks.getFlowHooksForOwner(name, hookOwnerId) as HookEntry<
         FlowInputOf<Name>,
         Name,
         FlowStagesOf<Name>,
@@ -297,7 +295,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     let contextReady = false;
 
     const materializeAndMerge = async (
-      newHooks: HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[],
+      newHooks: Array<Pick<HookEntry, 'metadata'>>,
       opts?: { orderStart?: number },
     ) => {
       if (!newHooks?.length || !contextReady) return;
@@ -321,9 +319,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       }
     };
 
-    const appendContextHooks = async (
-      hooks: HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[],
-    ) => {
+    const appendContextHooks = async (hooks: Array<Pick<HookEntry, 'metadata'>>) => {
       await materializeAndMerge(hooks);
     };
 
@@ -344,9 +340,17 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     let responded: FlowOutputOf<Name> | undefined;
 
+    const toStageResult = (e: unknown): StageResult => {
+      if (e instanceof FlowControl) {
+        if (e.type === 'respond') responded = e.output as FlowOutputOf<Name>;
+        return { outcome: e.type, control: e };
+      }
+      return { outcome: 'unknown_error', control: e as Error };
+    };
+
     // Robust list runner (doesn't skip mid-run insertions)
     const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
-      const getList = () => ((stages as any)[key] ?? []) as Array<{ method: (ctx: any) => Promise<void> }>;
+      const getList = () => ((stages as any)[key] ?? []) as StageMap<any>[string];
       const seen = new Set<any>();
 
       while (true) {
@@ -358,23 +362,33 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           await item.method(context);
         } catch (e: any) {
-          if (e instanceof FlowControl) {
-            if (e.type === 'respond') {
-              if (!opts?.ignoreRespond) {
-                responded = e.output as FlowOutputOf<Name>;
-                return { outcome: 'respond', control: e };
-              }
-              continue;
-            }
-            return { outcome: e.type, control: e };
-          }
-          return { outcome: 'unknown_error', control: e as Error };
+          if (e instanceof FlowControl && e.type === 'respond' && opts?.ignoreRespond) continue;
+          return toStageResult(e);
         }
       }
       return { outcome: 'ok' };
     };
 
-    // Run exactly one stage in order: will → around → stage → did (did runs once)
+    // Each Around hook's next() runs the next Around hook, and the innermost one runs the stage body.
+    // next() rejects when the body fails, so an Around hook can catch, retry or rethrow.
+    const runAroundChain = async (stageName: string, index = 0): Promise<StageResult> => {
+      const around = ((stages as any)[AROUND(stageName)] ?? [])[index] as StageMap<any>[string][number] | undefined;
+      if (!around) return runList(stageName, { ignoreRespond: false });
+
+      let innerResult: StageResult = { outcome: 'ok' };
+      const next = async () => {
+        innerResult = await runAroundChain(stageName, index + 1);
+        if (innerResult.outcome !== 'ok' && innerResult.outcome !== 'respond') throw innerResult.control;
+      };
+      try {
+        await around.method(context, next);
+      } catch (e) {
+        return toStageResult(e);
+      }
+      return innerResult;
+    };
+
+    // Run exactly one stage in order: will → around(stage) → did (did runs once)
     const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
       // 1) willStage
       {
@@ -383,25 +397,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
       }
 
-      // 2) aroundStage (acts as pre-handlers unless you later add true wrapping)
-      {
-        const res = await runList(AROUND(stageName));
-        if (res.outcome === 'respond' && stopOnRespond) return res;
-        if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
+      // 2) stage, wrapped by its Around hooks
+      const bodyOutcome = await runAroundChain(stageName);
+      if (bodyOutcome.outcome !== 'ok' && bodyOutcome.outcome !== 'respond') {
+        // fail/abort/next/handled/unknown → do NOT run did
+        return bodyOutcome;
       }
 
-      // 3) stage
-      let bodyOutcome: StageResult = { outcome: 'ok' };
-      {
-        const res = await runList(stageName, { ignoreRespond: false });
-        bodyOutcome = res;
-        if (res.outcome !== 'ok' && res.outcome !== 'respond') {
-          // fail/abort/next/handled/unknown → do NOT run did
-          return res;
-        }
-      }
-
-      // 4) didStage (run once regardless of body respond)
+      // 3) didStage (run once regardless of body respond)
       {
         const res = await runList(DID(stageName), { ignoreRespond: true });
         if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;

@@ -23,6 +23,7 @@ import {
   ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
 
@@ -313,14 +314,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
       const contextProviders = new FlowContextProviders(resource.providers, mergedContextDeps);
       const context = resource.create(input.uri, params, { ...ctx, contextProviders });
-      const resourceHooks = this.scope.hooks.getClsHooks(resource.record.provide).map((hook) => {
-        hook.run = async () => {
-          return context[hook.metadata.method]();
-        };
-        return hook;
-      });
-
-      this.appendContextHooks(resourceHooks);
+      this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(resource.record.provide), context));
       context.mark('createResourceContext');
       this.state.set('resourceContext', context);
       this.logger.verbose('createResourceContext:done');

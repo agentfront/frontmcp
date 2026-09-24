@@ -34,6 +34,7 @@ import {
   ToolEntry,
   type FlowPlan,
   type FlowRunOptions,
+  type ScopeEntry,
 } from '../../common';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
@@ -57,6 +58,7 @@ import {
   ToolNotConsentedError,
   ToolNotFoundError,
 } from '../../errors';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
 import { generateTaskId } from '../../task/helpers/task-id';
@@ -124,8 +126,6 @@ const stateSchema = z.object({
   // Store the raw executed output for plugins to see
   rawOutput: z.any().optional(),
   output: outputSchema,
-  // Tool owner ID for hook filtering (set during parseInput)
-  _toolOwnerId: z.string().optional(),
   // UI result from applyUI stage (if UI config exists)
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
@@ -201,6 +201,12 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
   access: 'authorized',
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
+  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+    const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    const tool = scope.tools.getTools(true).find((entry) => entry.fullName === toolName || entry.name === toolName);
+    return tool?.owner?.id;
+  }
+
   logger = this.scopeLogger.child('CallToolFlow');
 
   @Stage('parseInput')
@@ -226,16 +232,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'tools/call');
     }
 
-    // Find the tool early to get its owner ID for hook filtering
-    const { name } = params;
-    const activeTools = this.scope.tools.getTools(true);
-    const tool = activeTools.find((entry) => {
-      return entry.fullName === name || entry.name === name;
-    });
-
-    // Store tool owner ID in state for hook filtering
-    const toolOwnerId = tool?.owner?.id;
-
     // Extract progressToken from request's _meta (for progress notifications)
     const progressToken = params._meta?.progressToken;
 
@@ -250,7 +246,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set({
       input: params,
       authInfo: ctx.authInfo,
-      _toolOwnerId: toolOwnerId,
       progressToken,
       jsonRpcRequestId,
       taskRequest,
@@ -892,14 +887,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         contextProviders,
         signal: executionAbort.signal,
       });
-      const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
-        hook.run = async () => {
-          return context[hook.metadata.method]();
-        };
-        return hook;
-      });
-
-      this.appendContextHooks(toolHooks);
+      this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(tool.record.provide), context));
       context.mark('createToolCallContext');
 
       // Set tool name and input for fallback elicitation support

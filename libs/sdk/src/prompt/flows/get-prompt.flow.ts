@@ -22,6 +22,7 @@ import {
   PromptExecutionError,
   PromptNotFoundError,
 } from '../../errors';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
@@ -263,14 +264,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       // the scope (via flow deps) and the prompt's app (via promptViews).
       const contextProviders = new FlowContextProviders(prompt.providers, mergedContextDeps);
       const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
-      const promptHooks = this.scope.hooks.getClsHooks(prompt.record.provide).map((hook) => {
-        hook.run = async () => {
-          return context[hook.metadata.method]();
-        };
-        return hook;
-      });
-
-      this.appendContextHooks(promptHooks);
+      this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(prompt.record.provide), context));
       context.mark('createPromptContext');
       this.state.set('promptContext', context);
       this.logger.verbose('createPromptContext:done');
