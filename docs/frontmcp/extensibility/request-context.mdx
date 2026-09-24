@@ -117,6 +117,8 @@ class Server {}
 
 Entries are matched by origin (scheme, host and port), so `https://api.internal.example/v1` allows every path on `https://api.internal.example` but not `http://api.internal.example` or `https://other.api.internal.example`.
 
+A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect: it is sent with `redirect: 'manual'` (or `'error'`, if you ask for that), so a 3xx comes back to your code instead of taking those headers to an origin you did not list.
+
 ### Custom Headers
 
 Additional headers can be passed and will be merged:

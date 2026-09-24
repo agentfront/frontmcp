@@ -512,6 +512,27 @@ describe('FrontMcpContext', () => {
       expect(sentAuthorization).toEqual([null, null, null]);
     });
 
+    it('should not follow redirects for a request that carries forwarded caller headers', async () => {
+      const ctx = new FrontMcpContext({
+        ...validArgs,
+        config: {
+          forwardCallerTokenTo: ['https://api.example.com'],
+          forwardCustomHeadersTo: ['https://headers.example.com'],
+        },
+        metadata: { customHeaders: { 'x-frontmcp-tenant': 'tenant-123' } },
+      });
+      ctx.updateAuthInfo({ token: 'test-token' });
+
+      await ctx.fetch('https://api.example.com/data');
+      await ctx.fetch('https://api.example.com/data', { redirect: 'follow' });
+      await ctx.fetch('https://headers.example.com/data');
+      await ctx.fetch('https://api.example.com/data', { redirect: 'error' });
+      await ctx.fetch('https://other.example.com/data', { redirect: 'follow' });
+
+      const redirectModes = (global.fetch as jest.Mock).mock.calls.map(([, options]) => options.redirect);
+      expect(redirectModes).toEqual(['manual', 'manual', 'manual', 'error', 'follow']);
+    });
+
     it('should not inject Authorization when already present', async () => {
       const ctx = new FrontMcpContext({ ...validArgs, config: { forwardCallerTokenTo: ['https://api.example.com'] } });
       ctx.updateAuthInfo({ token: 'test-token' });
