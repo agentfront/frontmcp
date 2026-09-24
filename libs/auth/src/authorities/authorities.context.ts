@@ -89,10 +89,10 @@ export function resolveAuthUser(authInfo: Partial<AuthInfoLike> | undefined): No
 }
 
 /**
- * Whether a subject names no signed-in caller: missing, empty, or an anonymous placeholder (`anon:…`).
+ * Whether a subject names no signed-in caller: missing, not a string, empty, or an anonymous placeholder (`anon:…`).
  */
-export function isAnonymousSubject(sub: string | undefined): boolean {
-  return sub === undefined || sub === '' || sub.startsWith('anon:');
+export function isAnonymousSubject(sub: unknown): boolean {
+  return typeof sub !== 'string' || sub === '' || sub.startsWith('anon:');
 }
 
 /**

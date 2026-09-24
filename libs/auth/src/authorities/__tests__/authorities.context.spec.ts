@@ -39,7 +39,7 @@ describe('resolveAuthUser', () => {
 });
 
 describe('isAnonymousSubject', () => {
-  it.each([undefined, '', 'anon:5b2f8c1e'])('treats %p as anonymous', (sub) => {
+  it.each([undefined, '', 'anon:5b2f8c1e', 12345])('treats %p as anonymous', (sub) => {
     expect(isAnonymousSubject(sub)).toBe(true);
   });
 

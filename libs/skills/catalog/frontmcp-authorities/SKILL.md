@@ -215,6 +215,7 @@ other policy fields via `operator` (default AND).
 import type { AuthorityGuardFn } from '@frontmcp/auth';
 
 const requireActiveSubscription: AuthorityGuardFn = async (ctx) => {
+  if (ctx.user.sub === undefined) return 'sign-in required';
   const active = await db.isSubscriptionActive(ctx.user.sub);
   return active ? true : 'subscription is not active';
 };
