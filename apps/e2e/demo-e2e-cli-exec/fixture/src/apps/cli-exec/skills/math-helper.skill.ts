@@ -2,6 +2,7 @@ import { Skill } from '@frontmcp/sdk';
 
 @Skill({
   name: 'math-helper',
+  skillPath: ['demo', 'math-helper'],
   description: 'A helper skill for math operations',
   instructions: `
 ## Math Helper
