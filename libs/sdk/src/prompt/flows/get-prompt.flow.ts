@@ -1,5 +1,6 @@
 // file: libs/sdk/src/prompt/flows/get-prompt.flow.ts
 
+import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
@@ -214,7 +215,6 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       let requiredScopes: string[] | undefined;
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
-        const { resolveRequiredScopes } = await import('@frontmcp/auth');
         requiredScopes = resolveRequiredScopes(
           result.denial,
           scopeMapping,
@@ -222,7 +222,6 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
         );
       }
 
-      const { AuthorityDeniedError } = await import('@frontmcp/auth');
       throw new AuthorityDeniedError({
         entryType: 'Prompt',
         entryName: prompt.fullName || prompt.name,
