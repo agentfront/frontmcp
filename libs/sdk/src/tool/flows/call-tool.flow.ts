@@ -1069,7 +1069,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const { tool } = this.state.required;
     const partitionCtx = buildPartitionContext(this.tryGetContext());
-    const ticket = await acquireConcurrencySlots(manager, tool.metadata.name, tool.metadata.concurrency, partitionCtx);
+    const isNestedCall = (this.input.ctx as { internalCall?: boolean } | undefined)?.internalCall === true;
+    const ticket = await acquireConcurrencySlots(manager, tool.metadata.name, tool.metadata.concurrency, partitionCtx, {
+      skipGlobal: isNestedCall,
+    });
 
     this.state.set('semaphoreTicket', ticket);
     this.state.toolContext?.mark('acquireSemaphore');
