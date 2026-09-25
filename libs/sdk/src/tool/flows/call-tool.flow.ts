@@ -201,10 +201,13 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
   access: 'authorized',
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
-  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+  static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
-    const tool = scope.tools.getTools(true).find((entry) => entry.fullName === toolName || entry.name === toolName);
-    return tool?.owner?.id;
+    if (typeof toolName !== 'string') return undefined;
+    const tool = lookupTool(scope, toolName);
+    if (tool) return tool.owner?.id;
+    await loadRemoteAppCapabilities(scope);
+    return lookupTool(scope, toolName)?.owner?.id;
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
@@ -261,105 +264,26 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('ensureRemoteCapabilities')
   async ensureRemoteCapabilities() {
     this.logger.verbose('ensureRemoteCapabilities:start');
-
-    // Get all apps from all app registries (same approach as ToolRegistry.initialize)
-    // This finds remote apps that may be in parent scopes
-    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
-    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
-
-    for (const appRegistry of appRegistries) {
-      const apps = appRegistry.getApps();
-      for (const app of apps) {
-        if (app.isRemote) {
-          remoteApps.push(app);
-        }
-      }
-    }
-
-    this.logger.verbose(
-      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    const remoteAppCount = await loadRemoteAppCapabilities(this.scope, (appId, error) =>
+      this.logger.warn(`Failed to load capabilities for remote app ${appId}: ${error.message}`),
     );
-
-    if (remoteApps.length === 0) {
-      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
-      return;
-    }
-
-    // Trigger capability loading for all remote apps in parallel
-    const loadPromises = remoteApps.map(async (app) => {
-      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
-      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
-        try {
-          await app.ensureCapabilitiesLoaded();
-        } catch (error) {
-          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
-        }
-      }
-    });
-
-    await Promise.all(loadPromises);
-    this.logger.verbose('ensureRemoteCapabilities:done');
+    this.logger.verbose(`ensureRemoteCapabilities:done (${remoteAppCount} remote app(s))`);
   }
 
   @Stage('findTool')
   async findTool() {
     this.logger.verbose('findTool:start');
     // TODO: add support for session based tools
-    const activeTools = this.scope.tools.getTools(true);
-    this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
-
     const { name } = this.state.required.input;
-    // Hyphen ↔ underscore name fallback (issue #408).
-    //
-    // Job-management tools renamed from `execute-job` to `execute_job` etc.
-    // to align with the MCP/OpenAI snake_case convention. Agents (and any
-    // user who memorized the hyphen form before the rename) get a permissive
-    // lookup so they don't see TOOL_NOT_FOUND. Only kicks in when the exact
-    // name missed, so it never masks a real typo. The alias is shared between
-    // the local scope lookup AND the remote-registry fallback below — if it
-    // only applied to the first lookup, legacy callers could still miss a
-    // tool living in a remote app.
-    const alias = /[-_]/.test(name)
-      ? name.includes('_')
-        ? name.replace(/_/g, '-')
-        : name.replace(/-/g, '_')
-      : undefined;
-    const candidateNames = alias ? [name, alias] : [name];
-    const matchesCandidate = (entry: { fullName: string; name: string }) =>
-      candidateNames.includes(entry.fullName) || candidateNames.includes(entry.name);
-
     // Agent invocations (use-agent:*) are routed to agents:call-agent flow
     // by the call-tool-request handler, so they won't reach here
-    let tool = activeTools.find(matchesCandidate);
-
-    // Fallback: search directly in remote app registries
-    // This handles timing issues where subscription callbacks haven't propagated tools yet
-    if (!tool) {
-      this.logger.verbose(`findTool: tool "${name}" not in scope registry, checking remote apps directly`);
-
-      const appRegistries = this.scope.providers.getRegistries('AppRegistry');
-      for (const appRegistry of appRegistries) {
-        const apps = appRegistry.getApps();
-        for (const app of apps) {
-          if (app.isRemote) {
-            const remoteTools = app.tools.getTools(true);
-            const remoteTool = remoteTools.find(matchesCandidate);
-            if (remoteTool) {
-              this.logger.verbose(`findTool: found tool "${name}" in remote app "${app.id}"`);
-              tool = remoteTool;
-              break;
-            }
-          }
-        }
-        if (tool) break;
-      }
-    }
+    const tool = lookupTool(this.scope, name);
 
     // When the resolution came through the alias rather than the original
     // request name, log a one-time deprecation hint so callers can migrate
-    // off the legacy spelling. `alias` is undefined when the request name
-    // had no `-`/`_`, so this branch is skipped for clean snake_case calls.
-    if (tool && alias && tool.fullName !== name && tool.name !== name) {
+    // off the legacy spelling.
+    if (tool && tool.fullName !== name && tool.name !== name) {
+      const [, alias] = toolNameCandidates(name);
       this.logger.warn(
         `findTool: tool "${name}" resolved via legacy name alias to "${alias}". ` +
           `Update callers to use "${alias}" — the alias will be removed in a future release.`,
@@ -1579,6 +1503,57 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 /**
  * An AbortController that also aborts when the given signal does.
  */
+/**
+ * Hyphen ↔ underscore name fallback (issue #408). Job-management tools were renamed from
+ * `execute-job` to `execute_job`, so a caller using the old spelling still finds the tool.
+ * The alias only applies after the exact name misses, so it never masks a real typo.
+ */
+function toolNameCandidates(name: string): string[] {
+  if (!/[-_]/.test(name)) return [name];
+  return [name, name.includes('_') ? name.replace(/_/g, '-') : name.replace(/-/g, '_')];
+}
+
+/** Loads the capabilities of every remote app, including apps of parent scopes, and returns how many there are. */
+async function loadRemoteAppCapabilities(
+  scope: ScopeEntry,
+  onError: (appId: string, error: Error) => void = () => undefined,
+): Promise<number> {
+  const remoteApps = scope.providers
+    .getRegistries('AppRegistry')
+    .flatMap((appRegistry) => appRegistry.getApps())
+    .filter((app) => app.isRemote);
+  await Promise.all(
+    remoteApps.map(async (app) => {
+      if (!('ensureCapabilitiesLoaded' in app) || typeof app.ensureCapabilitiesLoaded !== 'function') return;
+      try {
+        await app.ensureCapabilitiesLoaded();
+      } catch (error) {
+        onError(app.id, error as Error);
+      }
+    }),
+  );
+  return remoteApps.length;
+}
+
+/** Finds a tool by name or alias in the scope, then in remote apps whose tools have not reached the scope yet. */
+function lookupTool(scope: ScopeEntry, name: string): ToolEntry | undefined {
+  const candidateNames = toolNameCandidates(name);
+  const matchesCandidate = (entry: { fullName: string; name: string }) =>
+    candidateNames.includes(entry.fullName) || candidateNames.includes(entry.name);
+
+  const scopeTool = scope.tools.getTools(true).find(matchesCandidate);
+  if (scopeTool) return scopeTool;
+
+  for (const appRegistry of scope.providers.getRegistries('AppRegistry')) {
+    for (const app of appRegistry.getApps()) {
+      if (!app.isRemote) continue;
+      const remoteTool = app.tools.getTools(true).find(matchesCandidate);
+      if (remoteTool) return remoteTool;
+    }
+  }
+  return undefined;
+}
+
 function linkedAbortController(signal: AbortSignal | undefined): AbortController {
   const controller = new AbortController();
   if (signal?.aborted) controller.abort(signal.reason);

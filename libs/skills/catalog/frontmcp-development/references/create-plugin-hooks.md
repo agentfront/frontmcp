@@ -251,21 +251,22 @@ export class CachePlugin {
 
   @Around('execute', { priority: 90 })
   async cacheResults(ctx, next) {
-    const key = `${ctx.toolName}:${JSON.stringify(ctx.input)}`;
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+    const key = `${name}:${JSON.stringify(toolArguments)}`;
+    const toolContext = ctx.state.required.toolContext;
     const cached = this.cache.get(key);
 
     if (cached && cached.expiry > Date.now()) {
-      return cached.data;
+      toolContext.output = cached.data;
+      return; // not calling next() skips the execute stage
     }
 
-    const result = await next();
+    await next(); // resolves with no value; the result is on toolContext.output
 
     this.cache.set(key, {
-      data: result,
+      data: toolContext.output,
       expiry: Date.now() + 60_000,
     });
-
-    return result;
   }
 }
 ```
@@ -387,7 +388,8 @@ Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
 | Hook decorator source | `const { Will, Did } = ToolHook;` or `FlowHooksOf('tools:call-tool')` | Importing `Will` directly from `@frontmcp/sdk`                         | Decorators must be bound to a specific flow via `FlowHooksOf` or pre-built exports |
 | Hook priority         | `@Will('execute', { priority: -100 })` for early hooks                | Relying on array order without priority                                | Multiple hooks on the same stage need explicit priority; lower runs first          |
 | Around next()         | `await next();`                                                       | Forgetting to call `next()` in `@Around`                               | Omitting `next()` skips the wrapped stage; its `@Did` hooks still run              |
-| Filter predicate      | `filter: (ctx) => ctx.toolName !== 'health_check'`                    | Checking tool name inside the hook body and returning early            | Filters skip the hook cleanly; returning early may leave state inconsistent        |
+| Around error recovery | `catch { ctx.state.required.toolContext.output = fallback; }`         | Catching a rejected `next()` without setting the output                | Returning normally handles the failure: the stage counts as successful             |
+| Filter predicate      | `filter: (ctx) => ctx.state.required.input.name !== 'health_check'`   | Checking tool name inside the hook body and returning early            | A filtered-out hook is skipped cleanly; for `@Around`, the stage still runs        |
 | Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for every tool of the app; tool-level hooks only for that tool   |
 
 ## Verification Checklist

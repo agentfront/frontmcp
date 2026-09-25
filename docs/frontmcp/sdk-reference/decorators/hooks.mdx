@@ -116,7 +116,7 @@ class AuditHooks {
 
 ## @Around (Wrapper Hook)
 
-Wrap stage execution for full control. The stage's Will hooks run first, `next()` runs the stage itself, and its Did hooks run after the Around hook returns. An Around hook that does not call `next()` skips the stage. With several Around hooks on one stage, each `next()` runs the next one, and the innermost runs the stage.
+Wrap stage execution for full control. The stage's Will hooks run first, `next()` runs the stage itself, and its Did hooks run after the Around hook returns. An Around hook that does not call `next()` skips the stage. With several Around hooks on one stage, each `next()` runs the next one, and the innermost runs the stage. For `tools:call-tool`, the tool's result is `ctx.state.required.toolContext.output`.
 
 ```typescript
 const { Around } = FlowHooksOf('tools:call-tool');
@@ -128,14 +128,13 @@ class CachingHooks {
     const cached = await this.cache.get(cacheKey);
 
     if (cached) {
-      ctx.state.set('output', cached);
+      ctx.state.required.toolContext.output = cached;
       return; // Skip actual execution
     }
 
     await next(); // Execute the stage
 
-    const output = ctx.state.get('output');
-    await this.cache.set(cacheKey, output);
+    await this.cache.set(cacheKey, ctx.state.required.toolContext.output);
   }
 }
 ```
@@ -243,7 +242,7 @@ ctx.logger.info('Processing');
 
 ## Error Handling
 
-A hook that throws stops the flow, and the error reaches the client like an error from the stage itself. An Around hook sees a failing stage as a rejected `next()`, so it can catch, retry or rethrow:
+A hook that throws stops the flow, and the error reaches the client like an error from the stage itself. An Around hook sees a failing stage as a rejected `next()`. It can rethrow, retry by calling `next()` again, or catch the rejection and return normally. Returning normally handles the failure: the stage counts as successful, so set the output the stage would have produced first. An Around hook skipped by its `filter` still runs the stage:
 
 ```typescript
 @Will('execute')
@@ -258,7 +257,7 @@ async errorHandler(ctx, next) {
     await next();
   } catch (error) {
     ctx.logger.error('Execution failed', { error });
-    // Re-throw or handle
+    // Rethrow to keep the failure; returning instead would handle it
     throw error;
   }
 }
@@ -333,25 +332,24 @@ class CacheHooks {
   private ttl = 60000; // 1 minute
 
   @Around('execute', {
-    filter: (ctx) => ctx.state.get('toolMetadata')?.annotations?.idempotentHint === true
+    filter: (ctx) => ctx.state.tool?.metadata.annotations?.idempotentHint === true
   })
   async cacheIdempotent(ctx, next) {
-    const toolName = ctx.state.get('toolName');
-    const input = ctx.state.get('input');
-    const cacheKey = `${toolName}:${JSON.stringify(input)}`;
+    const { name: toolName, arguments: toolArguments } = ctx.state.required.input;
+    const cacheKey = `${toolName}:${JSON.stringify(toolArguments)}`;
+    const toolContext = ctx.state.required.toolContext;
 
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
       ctx.logger.debug('Cache hit', { toolName });
-      ctx.state.set('output', cached.value);
+      toolContext.output = cached.value;
       return;
     }
 
     await next();
 
-    const output = ctx.state.get('output');
     this.cache.set(cacheKey, {
-      value: output,
+      value: toolContext.output,
       expires: Date.now() + this.ttl,
     });
   }
