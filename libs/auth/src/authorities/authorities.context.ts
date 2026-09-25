@@ -97,12 +97,12 @@ export function isAnonymousSubject(sub: unknown): boolean {
 
 /**
  * The signed-in subject of a caller, or undefined for an anonymous one. A caller whose own
- * subject is anonymous stays anonymous, whatever `claimsMapping.userId` resolves to.
+ * subject is anonymous stays anonymous, whatever `claimsMapping.userId` resolves to; a mapped
+ * user id that is not a usable string falls back to the caller's own subject.
  */
 export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | undefined {
   if (rawSub !== undefined && isAnonymousSubject(rawSub)) return undefined;
-  const subject = mappedSub ?? rawSub;
-  return typeof subject === 'string' && !isAnonymousSubject(subject) ? subject : undefined;
+  return [mappedSub, rawSub].find((candidate): candidate is string => !isAnonymousSubject(candidate));
 }
 
 /**

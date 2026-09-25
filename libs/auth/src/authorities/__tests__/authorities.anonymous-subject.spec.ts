@@ -91,6 +91,14 @@ describe('malformed subjects', () => {
     expect(context.user.sub).toBeUndefined();
   });
 
+  it('keeps the signed-in sub when the mapped user id is not a string', () => {
+    const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
+
+    const context = builder.build({ user: { sub: 'user-1', oid: 12345 } as AuthInfoLike['user'] });
+
+    expect(context.user.sub).toBe('user-1');
+  });
+
   it('uses the mapped user id of a caller that carries no sub', () => {
     const builder = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'oid' } });
 
