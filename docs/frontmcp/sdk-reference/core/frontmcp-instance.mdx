@@ -48,7 +48,7 @@ await FrontMcpInstance.bootstrap(config);
 Create a serverless handler without starting a server.
 
 ```typescript
-static async createHandler(options: FrontMcpConfigType): Promise<unknown>
+static async createHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<unknown>
 ```
 
 Best for: Serverless deployments (Vercel, AWS Lambda).
@@ -60,6 +60,24 @@ import config from '../src/server';
 
 export default FrontMcpInstance.createHandler(config);
 ```
+
+### createFetchHandler(options)
+
+Create a Web-standard `fetch` handler, `(request: Request) => Promise<Response>`, for runtimes without Node `req`/`res`: Cloudflare Workers, Deno and Bun.
+
+```typescript
+static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler>
+```
+
+It accepts the same config as `@FrontMcp()`. The instance is built on the first request, because isolate runtimes forbid timers and I/O at module evaluation. Requests run through the same `http:request` flow as the Express host, with the same request context: the user agent, `x-frontmcp-*` headers, `traceparent` and the MCP 2026-07-28 `_meta` client info.
+
+```typescript
+// worker entry
+const handler = await FrontMcpInstance.createFetchHandler(config);
+export default { fetch: (request: Request) => handler(request) };
+```
+
+The handler is stateless: session-based (2025-06-18) clients get no `Mcp-Session-Id` and every request stands alone. See [Cloudflare Worker](/frontmcp/deployment/cloudflare-worker) for stateful sessions with Durable Objects.
 
 ### createDirect(options)
 
