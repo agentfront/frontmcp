@@ -355,7 +355,6 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       this.logger.verbose('execute:done');
     } catch (error) {
       if (error instanceof FlowControl || isClientFacingError(error)) throw error;
-      this.logger.error('execute: resource read failed', error);
       throw new ResourceReadError(input.uri, error instanceof Error ? error : undefined);
     }
   }

@@ -517,7 +517,6 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
         this.state.set('abandonedExecution', running);
         throw error;
       }
-      this.logger.error('execute: agent execution failed', error);
       throw new AgentExecutionError(agent.metadata.name, error instanceof Error ? error : undefined);
     }
   }
