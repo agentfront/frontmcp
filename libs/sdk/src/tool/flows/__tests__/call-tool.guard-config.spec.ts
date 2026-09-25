@@ -122,6 +122,36 @@ describe('call-tool guard configuration', () => {
       expect(server.tracker.maxRunning).toBe(1);
     });
 
+    it("runs a tool called with this.callTool() inside its caller's throttle.globalConcurrency slot", async () => {
+      @Tool({ name: 'lookup_rate', inputSchema: {} })
+      class LookupRateTool extends ToolContext {
+        async execute() {
+          return { rate: 1.1 };
+        }
+      }
+
+      @Tool({ name: 'convert_price', inputSchema: {} })
+      class ConvertPriceTool extends ToolContext {
+        async execute() {
+          const rate = await this.callTool('lookup_rate');
+          return { nestedFailed: rate.isError === true };
+        }
+      }
+
+      @App({ id: 'pricing', name: 'pricing', tools: [LookupRateTool, ConvertPriceTool] })
+      class PricingApp {}
+
+      const { handler } = await createTestFetchServer({
+        info: { name: 'guard-config-nested-call', version: '1.0.0' },
+        apps: [PricingApp],
+        throttle: { enabled: true, globalConcurrency: { maxConcurrent: 1 } },
+      });
+      const response = await rpc20260728(handler, 'tools/call', { name: 'convert_price', arguments: {} });
+
+      expect(outcomeOf(response)).toBe('ok');
+      expect(response.message.result?.['structuredContent']).toEqual({ nestedFailed: false });
+    });
+
     it('counts each tools/call once against throttle.global', async () => {
       const server = await createGuardedServer({}, { enabled: true, global: { maxRequests: 4, windowMs: 60_000 } });
 
