@@ -80,16 +80,48 @@ function stubStreamingServer(): SentMessage[] {
   return sentMessages;
 }
 
-async function connectClient(): Promise<McpTestClient> {
-  const client = McpTestClient.create({ baseUrl: BASE_URL, publicMode: true }).build();
+const connectedClients: McpTestClient[] = [];
+
+async function connectClient(timeoutMs?: number): Promise<McpTestClient> {
+  const builder = McpTestClient.create({ baseUrl: BASE_URL, publicMode: true });
+  const client = (timeoutMs === undefined ? builder : builder.withTimeout(timeoutMs)).build();
+  connectedClients.push(client);
   await client.connect();
   return client;
+}
+
+function stubSessionStream(openSessionStream: (init: RequestInit | undefined) => Response | Promise<Response>): void {
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'GET') return openSessionStream(init);
+    const message = JSON.parse(String(init?.body)) as SentMessage;
+    if (message.method === 'initialize') return initializeResponse(message.id);
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+}
+
+function chunkedStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+      controller.close();
+    },
+  });
+}
+
+async function waitUntil(condition: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('condition not met in time');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
 
 describe('StreamableHttpTransport server notifications on SSE responses', () => {
   const realFetch = globalThis.fetch;
 
-  afterEach(() => {
+  afterEach(async () => {
+    await Promise.all(connectedClients.splice(0).map((client) => client.disconnect()));
     globalThis.fetch = realFetch;
   });
 
@@ -163,5 +195,62 @@ describe('StreamableHttpTransport server notifications on SSE responses', () => 
 
     expect(listChanged.method).toBe('notifications/tools/list_changed');
     await mcp.disconnect();
+  });
+
+  it('sends the negotiated MCP-Protocol-Version on the session stream request', async () => {
+    const streamRequestHeaders: Array<Record<string, string>> = [];
+    stubSessionStream((init) => {
+      streamRequestHeaders.push(init?.headers as Record<string, string>);
+      return sessionStreamResponse();
+    });
+
+    await connectClient();
+
+    expect(streamRequestHeaders[0]).toEqual(expect.objectContaining({ 'MCP-Protocol-Version': '2025-06-18' }));
+  });
+
+  it('does not hold connect() on a session stream whose response never arrives, and aborts it on disconnect', async () => {
+    let streamSignal: AbortSignal | undefined;
+    stubSessionStream(
+      (init) =>
+        new Promise<Response>((_resolve, reject) => {
+          streamSignal = init?.signal ?? undefined;
+          streamSignal?.addEventListener('abort', () => reject(streamSignal?.reason));
+        }),
+    );
+
+    const mcp = await connectClient(200);
+    await mcp.disconnect();
+
+    expect(streamSignal?.aborted).toBe(true);
+  });
+
+  it('reopens the session stream after the server ends it', async () => {
+    let streamRequestCount = 0;
+    stubSessionStream(() => {
+      streamRequestCount += 1;
+      return sessionStreamResponse();
+    });
+
+    await connectClient();
+
+    await waitUntil(() => streamRequestCount >= 2, 2000);
+    expect(streamRequestCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('reads session stream events separated by CRLF, even when a line ending is split across chunks', async () => {
+    const eventData = JSON.stringify(listChangedNotification);
+    stubSessionStream(
+      () =>
+        new Response(chunkedStream([`event: message\r\ndata: ${eventData}\r`, '\n\r\n']), {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    );
+    const mcp = await connectClient();
+
+    const listChanged = await mcp.notifications.collect().waitFor('notifications/tools/list_changed', 1000);
+
+    expect(listChanged.method).toBe('notifications/tools/list_changed');
   });
 });

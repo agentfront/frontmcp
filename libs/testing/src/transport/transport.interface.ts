@@ -134,8 +134,9 @@ export interface McpTransport {
   /**
    * Open the session's standalone GET stream, where the server sends
    * notifications that are not tied to a request's own response.
+   * @param protocolVersion - The version negotiated at initialize, sent as `MCP-Protocol-Version`
    */
-  openNotificationStream?(): Promise<void>;
+  openNotificationStream?(protocolVersion: string): Promise<void>;
 }
 
 /**

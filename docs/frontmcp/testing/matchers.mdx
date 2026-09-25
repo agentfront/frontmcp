@@ -57,8 +57,11 @@ expect(result).toBeError();
 // Tool error code: invalid input is an isError result with _meta.code "INVALID_INPUT"
 expect(result).toBeError('INVALID_INPUT');
 
-// JSON-RPC error code
-expect(await mcp.tools.call('unknown-tool', {})).toBeError(-32601);
+// An unknown tool is also an isError result, with _meta.code "TOOL_NOT_FOUND"
+expect(await mcp.tools.call('unknown-tool', {})).toBeError('TOOL_NOT_FOUND');
+
+// JSON-RPC error code: an unknown prompt is a JSON-RPC error
+expect(await mcp.prompts.get('unknown-prompt')).toBeError(-32602);
 ```
 
 Errors raised while a tool runs, including invalid input, come back as a tool result with `isError: true` and a string `_meta.code` (`INVALID_INPUT`, `NOT_FOUND`, `INTERNAL_ERROR`, …), not as a JSON-RPC error. Use the string form for them.
