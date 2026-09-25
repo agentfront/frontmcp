@@ -42,10 +42,12 @@ function createStage(options: {
     },
     logger: { debug: jest.fn(), verbose: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
     requestId: 'req-1',
+    rawInput: { request: { body: { jsonrpc: '2.0', id: 7, method: 'tools/call' } } },
     tryGetContext: () => ({
       sessionId: 'session-1',
       metadata: { clientIp: options.clientIp ?? '127.0.0.1' },
       authInfo: undefined,
+      set: jest.fn(),
     }),
     respond: (value: unknown) => {
       responded.push(value as Responded);
@@ -74,6 +76,7 @@ describe('http:request acquireQuota — ipFilter enforcement (GHSA-hwfp-xv2f-fr8
 
     expect(responded).toHaveLength(1);
     expect(responded[0].status).toBe(403);
+    expect(responded[0].body).toMatchObject({ jsonrpc: '2.0', id: 7 });
   });
 
   it('does not run the rate-limit check for a rejected IP', async () => {
@@ -110,6 +113,7 @@ describe('http:request acquireQuota — ipFilter enforcement (GHSA-hwfp-xv2f-fr8
 
     expect(responded).toHaveLength(1);
     expect(responded[0].status).toBe(429);
+    expect(responded[0].body).toMatchObject({ jsonrpc: '2.0', id: 7 });
   });
 
   it('is a no-op when no filter is configured and no global limit is set', async () => {

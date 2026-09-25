@@ -207,7 +207,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
       runFlow: (
         flowName: 'tools:call-tool',
         input: { request: unknown; ctx: unknown },
-      ) => Promise<{ success: boolean; result?: CallToolResult; error?: Error }>;
+      ) => Promise<CallToolResult | undefined>;
     };
     const requestMeta: Record<string, unknown> = {};
     if (opts?.progressToken !== undefined) requestMeta['progressToken'] = opts.progressToken;
@@ -225,14 +225,11 @@ export abstract class ExecutionContextBase<Out = unknown> {
       internalCall: true as const,
       ...(opts?.signal && { signal: opts.signal }),
     };
-    const outcome = await scope.runFlow('tools:call-tool', { request, ctx });
-    if (!outcome.success) {
-      throw outcome.error ?? new Error(`callTool("${name}") failed`);
-    }
-    if (!outcome.result) {
+    const result = await scope.runFlow('tools:call-tool', { request, ctx });
+    if (!result) {
       throw new Error(`callTool("${name}") returned no result`);
     }
-    return outcome.result;
+    return result;
   }
 
   /**

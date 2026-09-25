@@ -102,7 +102,7 @@ this.fetch(url, {
 });
 ```
 
-The configured `requestTimeout` (30s by default) applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both.
+The configured `requestTimeout` (30s by default) applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both. `this.fetch()` is also aborted with `this.signal`, so a cancelled or timed-out call stops its requests.
 
 > Don't `try/catch` around the fetch and swallow errors — let infrastructure errors propagate to the framework. Only use `this.fail` for **business-logic** errors. See [`error-handling.md`](./error-handling.md).
 
