@@ -92,7 +92,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
 
     const rawAuth = require('@frontmcp/auth');
     const auth = (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
-    this._authContext = auth.buildAuthContext(this._authInfo);
+    this._authContext = auth.buildAuthContext(this._authInfo, this.scope.metadata.authorities?.claimsMapping);
     return this._authContext;
   }
 
