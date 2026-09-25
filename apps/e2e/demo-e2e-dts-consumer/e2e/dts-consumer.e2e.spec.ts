@@ -24,7 +24,11 @@ function toFixtureDiagnostic(diagnostic: ts.Diagnostic): FixtureDiagnostic {
   return { fileName, location: `${path.relative(workspaceRoot, fileName)}:${line + 1}`, summary };
 }
 
-function compileFixture(): FixtureDiagnostic[] {
+const fixtureFiles = ['tool-must-fail.ts', 'prompts-must-compile.ts'].map((fileName) =>
+  path.join(fixtureDir, fileName),
+);
+
+function compileFixture(): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
   const sdkPathOverride = sdkDeclarationsOverride
     ? { paths: { '@frontmcp/sdk': [path.join(sdkDeclarationsDir, 'index.d.ts')] } }
     : {};
@@ -38,7 +42,10 @@ function compileFixture(): FixtureDiagnostic[] {
     throw new Error(`Unable to read ${path.join(fixtureDir, 'tsconfig.json')}`);
   }
   const program = ts.createProgram({ rootNames: parsedConfig.fileNames, options: parsedConfig.options });
-  return ts.getPreEmitDiagnostics(program).map(toFixtureDiagnostic);
+  return {
+    diagnostics: [...parsedConfig.errors, ...ts.getPreEmitDiagnostics(program)].map(toFixtureDiagnostic),
+    sourceFiles: program.getSourceFiles().map((sourceFile) => path.resolve(sourceFile.fileName)),
+  };
 }
 
 function describeEach(diagnostics: FixtureDiagnostic[]): string[] {
@@ -57,9 +64,15 @@ function groupBySummary(diagnostics: FixtureDiagnostic[]): string[] {
 
 describe('@frontmcp/sdk declarations in a strict consumer project', () => {
   let diagnostics: FixtureDiagnostic[];
+  let sourceFiles: string[];
 
   beforeAll(() => {
-    diagnostics = compileFixture();
+    ({ diagnostics, sourceFiles } = compileFixture());
+  });
+
+  it('compiles every fixture file, with no diagnostic outside a file', () => {
+    expect(sourceFiles).toEqual(expect.arrayContaining(fixtureFiles));
+    expect(describeEach(diagnostics.filter((diagnostic) => diagnostic.fileName === ''))).toEqual([]);
   });
 
   const inFixtureFile = (fileName: string) =>
