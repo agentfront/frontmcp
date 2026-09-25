@@ -57,7 +57,12 @@ function ResourceTemplate(providedMetadata: ResourceTemplateMetadata): ClassDeco
 
 ## URI Template Syntax
 
-Templates follow RFC 6570 Level 1:
+Templates support two RFC 6570 operators:
+
+- `{var}`: Level 1 simple expansion. It matches one path segment (no `/`), and the value is percent-encoded when the URI is built.
+- `{+var}`: Level 2 reserved expansion. It can span several segments, so `files://{+path}` matches `files://docs/a/b.txt` with `path = "docs/a/b.txt"`, and reserved characters such as `/` pass through unencoded.
+
+Other operators (`{#var}`, `{?var}`, `{&var}`, `{;var}`, `{.var}`, `{/var}`) are not supported.
 
 ```typescript
 // Simple parameter
@@ -76,6 +81,12 @@ Templates follow RFC 6570 Level 1:
 @ResourceTemplate({
   name: 'api-resource',
   uriTemplate: 'api://v1/resources/{resourceId}',
+})
+
+// Several segments in one parameter
+@ResourceTemplate({
+  name: 'nested-file',
+  uriTemplate: 'files://{+path}',
 })
 ```
 

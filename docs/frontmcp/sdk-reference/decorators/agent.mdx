@@ -299,7 +299,7 @@ protected async invokeAgent(
 ```typescript
 protected async notify(
   message: string | Record<string, unknown>,
-  level?: 'debug' | 'info' | 'warning' | 'error'
+  level?: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'
 ): Promise<boolean>
 
 protected async progress(

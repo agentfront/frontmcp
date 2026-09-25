@@ -54,7 +54,7 @@ Get a required dependency from the provider registry.
 get<T>(token: Token<T>): T
 ```
 
-**Throws:** `DependencyNotFoundError` if token is not registered.
+**Throws:** `ProviderNotAvailableError` (`PROVIDER_NOT_AVAILABLE`) when no registry up the hierarchy provides the token. Its message names a class token; a string or symbol token shows as `[ref]` (`Provider "[ref]" is not available: not found in local or parent registries`). Use `tryGet()` to get `undefined` instead.
 
 ```typescript
 const userService = this.get(UserServiceToken);

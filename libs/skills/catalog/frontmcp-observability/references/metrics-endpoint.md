@@ -27,7 +27,7 @@ import { FrontMcp } from '@frontmcp/sdk';
 class Server {}
 ```
 
-Then scrape: `curl http://localhost:3001/metrics` — Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
+Then scrape: `curl http://localhost:3000/metrics` (the default port is `PORT`, else 3000) — Content-Type is the canonical Prometheus `text/plain; version=0.0.4; charset=utf-8`.
 
 ## Configuration
 

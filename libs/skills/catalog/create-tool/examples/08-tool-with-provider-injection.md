@@ -70,7 +70,7 @@ import { inputSchema, outputSchema, type GetUserInput, type GetUserOutput } from
 })
 export class GetUserTool extends ToolContext {
   async execute(input: GetUserInput): Promise<GetUserOutput> {
-    const users = this.get(USER_SERVICE); // throws DependencyNotFoundError if not registered
+    const users = this.get(USER_SERVICE); // throws ProviderNotAvailableError if not registered
     const user = await users.findById(input.id);
     if (!user) {
       this.fail(new ResourceNotFoundError(`user:${input.id}`)); // never returns
@@ -106,5 +106,5 @@ export class MainApp {}
 
 ## `this.get` vs `this.tryGet`
 
-- `this.get(TOKEN)` — throws `DependencyNotFoundError` if not registered. Use when the tool genuinely requires the dep.
+- `this.get(TOKEN)` — throws `ProviderNotAvailableError` if not registered. Use when the tool genuinely requires the dep.
 - `this.tryGet(TOKEN)` — returns `undefined` if not registered. Use when the tool degrades gracefully (e.g. optional cache).
