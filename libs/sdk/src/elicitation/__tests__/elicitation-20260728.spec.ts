@@ -64,11 +64,11 @@ describe('elicitation under MCP 2026-07-28', () => {
     return tools.map((tool) => tool.name);
   }
 
-  it('rejects an accepted answer whose content does not match the requested schema with INVALID_INPUT', async () => {
+  async function acceptFirstElicitation(toolName: string, content: Record<string, unknown>) {
     const firstRound = await rpc20260728(
       server.handler,
       'tools/call',
-      { name: 'order_shirt', arguments: {} },
+      { name: toolName, arguments: {} },
       { capabilities: ELICITATION_CAPABILITIES },
     );
     const inputRequired = firstRound.message.result as ToolCallResult | undefined;
@@ -79,46 +79,35 @@ describe('elicitation under MCP 2026-07-28', () => {
       server.handler,
       'tools/call',
       {
-        name: 'order_shirt',
+        name: toolName,
         arguments: {},
-        inputResponses: { [inputKey]: { action: 'accept', content: { size: 42 } } },
+        inputResponses: { [inputKey]: { action: 'accept', content } },
         requestState: inputRequired?.requestState,
       },
       { capabilities: ELICITATION_CAPABILITIES },
     );
     const answered = secondRound.message.result as ToolCallResult | undefined;
-    const refusalCode = secondRound.message.error?.code ?? answered?._meta?.['code'];
+    return { answered, refusalCode: secondRound.message.error?.code ?? answered?._meta?.['code'] };
+  }
+
+  it('rejects an accepted answer whose content does not match the requested schema with INVALID_INPUT', async () => {
+    const { answered, refusalCode } = await acceptFirstElicitation('order_shirt', { size: 42 });
 
     expect(answered?.structuredContent).toBeUndefined();
     expect([-32602, 'INVALID_INPUT']).toContain(refusalCode);
   });
 
   it('validates an accepted answer against a schema with an async refinement', async () => {
-    const firstRound = await rpc20260728(
-      server.handler,
-      'tools/call',
-      { name: 'pick_username', arguments: {} },
-      { capabilities: ELICITATION_CAPABILITIES },
-    );
-    const inputRequired = firstRound.message.result as ToolCallResult | undefined;
-    const [inputKey] = Object.keys(inputRequired?.inputRequests ?? {});
+    const { answered } = await acceptFirstElicitation('pick_username', { username: 'ada' });
 
-    const secondRound = await rpc20260728(
-      server.handler,
-      'tools/call',
-      {
-        name: 'pick_username',
-        arguments: {},
-        inputResponses: { [inputKey]: { action: 'accept', content: { username: 'ada' } } },
-        requestState: inputRequired?.requestState,
-      },
-      { capabilities: ELICITATION_CAPABILITIES },
-    );
+    expect(answered?.structuredContent).toEqual({ status: 'accept', username: 'ada' });
+  });
 
-    expect((secondRound.message.result as ToolCallResult | undefined)?.structuredContent).toEqual({
-      status: 'accept',
-      username: 'ada',
-    });
+  it('rejects an accepted answer that fails an async refinement with INVALID_INPUT', async () => {
+    const { answered, refusalCode } = await acceptFirstElicitation('pick_username', { username: 'taken' });
+
+    expect(answered?.structuredContent).toBeUndefined();
+    expect([-32602, 'INVALID_INPUT']).toContain(refusalCode);
   });
 
   it('does not list sendElicitationResult to a client that declares the elicitation capability', async () => {
