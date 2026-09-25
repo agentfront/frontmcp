@@ -18,7 +18,7 @@ import {
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
-import { InternalMcpError } from '../errors';
+import { ErrorHandler, InternalMcpError, toMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { type ConnectOptions, type DirectClient } from './client.types';
 import {
@@ -85,6 +85,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   readonly ready: Promise<void>;
   private _isDisposed = false;
   private readonly defaultSessionId: string;
+  private errorHandler?: ErrorHandler;
 
   constructor(scope: Scope) {
     this.scope = scope;
@@ -128,23 +129,14 @@ export class DirectMcpServerImpl implements DirectMcpServer {
 
       return await this.scope.runFlowForOutput(flowName as any, { request, ctx });
     } catch (e) {
-      // FlowControl is a control flow mechanism, not an error
-      if (e instanceof FlowControl) {
-        if (e.type === 'respond') {
-          return e.output as T;
-        }
-        // For `fail`, propagate the original error (set by FlowControl.fail)
-        // so PublicMcpError messages reach the CLI/HTTP error formatter
-        // intact instead of being flattened to "Unknown error".
-        if (e.type === 'fail') {
-          const original = (e as { originalError?: Error }).originalError;
-          if (original instanceof Error) throw original;
-        }
-        // For other flow control types (abort, etc.), include details in error
-        const details = e.output ? `: ${JSON.stringify(e.output)}` : '';
-        throw new InternalMcpError(`Flow ended with ${e.type}${details}`);
+      if (e instanceof FlowControl && e.type === 'respond') {
+        return e.output as T;
       }
-      throw e;
+      // Logged here, once, since no request handler reports a direct call's failure
+      const failure = toDirectFailure(e);
+      this.errorHandler ??= new ErrorHandler({ logger: this.scope.logger.child('direct-server') });
+      this.errorHandler.logError(toMcpError(failure), { flowName });
+      throw failure;
     }
   }
 
@@ -290,4 +282,19 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       }
     }
   }
+}
+
+/** The error a direct call rejects with: FlowControl is a control flow mechanism, not an error. */
+function toDirectFailure(error: unknown): unknown {
+  if (!(error instanceof FlowControl)) return error;
+  // For `fail`, propagate the original error (set by FlowControl.fail)
+  // so PublicMcpError messages reach the CLI/HTTP error formatter
+  // intact instead of being flattened to "Unknown error".
+  if (error.type === 'fail') {
+    const original = (error as { originalError?: Error }).originalError;
+    if (original instanceof Error) return original;
+  }
+  // For other flow control types (abort, etc.), include details in error
+  const details = error.output ? `: ${JSON.stringify(error.output)}` : '';
+  return new InternalMcpError(`Flow ended with ${error.type}${details}`);
 }
