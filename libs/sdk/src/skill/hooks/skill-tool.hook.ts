@@ -1,7 +1,7 @@
 // file: libs/sdk/src/skill/hooks/skill-tool.hook.ts
 
 import { FlowHooksOf, type FrontMcpLogger } from '../../common';
-import { ToolNotAllowedError, ToolApprovalRequiredError } from '../errors/tool-not-allowed.error';
+import { ToolApprovalRequiredError, ToolNotAllowedError } from '../errors/tool-not-allowed.error';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { ToolAuthorizationResult } from '../session/skill-session.types';
 
@@ -34,7 +34,7 @@ export interface SkillToolGuardHookOptions {
  * Hook context provided to the skill tool guard.
  * Matches the state available during checkToolAuthorization stage.
  */
-interface SkillToolHookContext {
+export interface SkillToolHookContext {
   state: {
     tool?: { metadata: { name: string }; fullName?: string };
     input?: { name: string };
@@ -45,7 +45,7 @@ interface SkillToolHookContext {
  * Base interface for the skill tool guard hook class.
  */
 export interface SkillToolGuardHookClass {
-  new (): { checkSkillToolAuthorization(): Promise<void> };
+  new (): { checkSkillToolAuthorization(ctx: SkillToolHookContext): Promise<void> };
 }
 
 /**
@@ -146,13 +146,10 @@ export function createSkillToolGuardHook(
   class SkillToolGuardHookImpl {
     /**
      * Hook that runs BEFORE checkToolAuthorization stage.
-     * Priority 100 ensures it runs before any other Will hooks on this stage.
+     * A low priority runs it before other Will hooks on this stage (lower runs first).
      */
-    @Will('checkToolAuthorization', { priority: 100 })
-    async checkSkillToolAuthorization(): Promise<void> {
-      // Access the hook context (injected by flow runtime)
-      const ctx = this as unknown as SkillToolHookContext;
-
+    @Will('checkToolAuthorization', { priority: -1000 })
+    async checkSkillToolAuthorization(ctx: SkillToolHookContext): Promise<void> {
       // Get the tool name from state (set by findTool stage)
       // IMPORTANT: Use base name (metadata.name) not fullName, because allowlists
       // are built from unqualified tool names. fullName includes owner prefix

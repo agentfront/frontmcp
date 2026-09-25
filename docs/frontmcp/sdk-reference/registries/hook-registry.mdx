@@ -51,7 +51,7 @@ getFlowHooks(flow: string): ReadonlyArray<HookEntry>
 
 ```typescript
 const hooks = registry.getFlowHooks('tools:call-tool');
-// Hooks are sorted: highest priority first
+// Registry order is highest priority first; within a stage, hooks run lowest priority first
 ```
 
 ### getFlowStageHooks()
@@ -130,7 +130,7 @@ registry.registerHooks(false, {
 interface HookEntry {
   flow: string;           // Flow name (e.g., 'tools:call-tool')
   stage: string;          // Stage name (e.g., 'beforeExecute')
-  priority: number;       // Execution priority (higher = first)
+  priority: number;       // Order within a stage (lower runs first)
   handler: HookHandler;   // Handler function
   ownerId?: string;       // Owner filter
   embedded: boolean;      // Whether embedded in a class
@@ -169,10 +169,10 @@ Most flows have these stages:
 
 ## Priority
 
-Hooks are sorted by priority (descending):
+The registry lists hooks by priority, highest first. When a flow runs a stage, its hooks run in ascending priority:
 
 ```typescript
-// Priority 100 runs before priority 50
+// Priority 50 runs before priority 100
 registry.registerHooks(false,
   { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 100, handler: firstHook },
   { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 50, handler: secondHook },

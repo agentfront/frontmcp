@@ -779,7 +779,7 @@ export class Scope extends ScopeEntry {
       const guardHookInstance = new GuardHookClass();
       const hookRecords = normalizeHooksFromCls(guardHookInstance);
       if (hookRecords.length > 0) {
-        await this.scopeHooks.registerHooks(true, ...hookRecords);
+        await this.scopeHooks.registerHooks(false, ...hookRecords);
         this.logger.verbose('Skill tool authorization guard hook registered');
       }
 
