@@ -8,6 +8,7 @@ features:
   - 'Calling tools via `client.tools.call(name, args)` and asserting success with `toBeSuccessful()`'
   - 'Asserting text content with the `toHaveTextContent()` matcher'
   - 'Asserting error results with `toBeError()` for invalid input and unknown tools'
+  - 'Matching the tool error code: invalid input is an `isError` result with `_meta.code: "INVALID_INPUT"`, so `toBeError(''INVALID_INPUT'')` matches it (a numeric code matches JSON-RPC errors only)'
   - 'Testing edge cases like zero values'
 ---
 
@@ -53,7 +54,7 @@ describe('Tool Call E2E', () => {
 
   it('returns an error for invalid input', async () => {
     const result = await client.tools.call('add_numbers', { a: 'bad' });
-    expect(result).toBeError();
+    expect(result).toBeError('INVALID_INPUT');
   });
 
   it('returns an error for a nonexistent tool', async () => {
@@ -74,6 +75,7 @@ describe('Tool Call E2E', () => {
 - Calling tools via `client.tools.call(name, args)` and asserting success with `toBeSuccessful()`
 - Asserting text content with the `toHaveTextContent()` matcher
 - Asserting error results with `toBeError()` for invalid input and unknown tools
+- Matching the tool error code: invalid input is an `isError` result with `_meta.code: "INVALID_INPUT"`, so `toBeError('INVALID_INPUT')` matches it (a numeric code matches JSON-RPC errors only)
 - Testing edge cases like zero values
 
 ## Related

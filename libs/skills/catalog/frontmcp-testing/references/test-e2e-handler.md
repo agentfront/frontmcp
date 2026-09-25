@@ -67,6 +67,41 @@ describe('Server E2E', () => {
 });
 ```
 
+## Error Codes
+
+Errors raised while a tool runs, including invalid input, come back as a tool result with `isError: true` and a string `_meta.code`, not as a JSON-RPC error. Match them with the string form, and keep the numeric form for JSON-RPC errors:
+
+```typescript
+expect(await client.tools.call('add_numbers', { a: 5 })).toBeError('INVALID_INPUT');
+expect(await client.tools.call('nonexistent_tool', {})).toBeError('TOOL_NOT_FOUND');
+expect(await client.prompts.get('nonexistent_prompt')).toBeError(-32602);
+```
+
+A tool without an `outputSchema` that returns a plain number sends `{ value: 8 }`, so assert `expect(result.json()).toEqual({ value: 8 })`.
+
+## Notifications and Progress
+
+After `initialize`, `McpTestClient` opens the session's notification stream (a `GET` on the MCP endpoint) and records what the server sends there and on each request's own response:
+
+```typescript
+it('records progress and log messages', async () => {
+  const progress = client.notifications.collectProgress(); // tools.call now sends a _meta.progressToken
+  const notifications = client.notifications.collect();
+  await client.raw.request({ jsonrpc: '2.0', id: 1, method: 'logging/setLevel', params: { level: 'info' } });
+
+  await client.tools.call('import_files', {});
+
+  await progress.waitForComplete(5000);
+  expect(progress.all.length).toBeGreaterThan(0);
+  await notifications.waitFor('notifications/message', 5000);
+});
+```
+
+- Pass `{ progressToken }` as the third argument of `tools.call()` to choose the token yourself.
+- The server sends `notifications/message` (from `this.notify()`) only after `logging/setLevel`.
+- Session-stream notifications can arrive after the call's result, so wait with `waitFor()` / `waitForComplete()` before asserting.
+- `McpTestClient` speaks `2025-06-18` by default. `2026-07-28` has no `initialize` handshake, so `withProtocolVersion('2026-07-28')` makes `build()` throw.
+
 ## Examples
 
 | Example                                                                                        | Level        | Description                                                                                                          |
