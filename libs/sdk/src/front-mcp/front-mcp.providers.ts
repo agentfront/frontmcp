@@ -1,6 +1,12 @@
 import { ProviderScope } from '@frontmcp/di';
 
-import { AsyncProvider, FrontMcpServer, type FrontMcpConfigType, type ProviderValueType } from '../common';
+import {
+  AsyncProvider,
+  FrontMcpServer,
+  type FrontMcpConfigType,
+  type ProviderType,
+  type ProviderValueType,
+} from '../common';
 import { FrontMcpContextStorage } from '../context';
 import { NoopFrontMcpServer } from '../server/noop-server';
 import { FrontMcpServerInstance } from '../server/server.instance';
@@ -39,7 +45,7 @@ const noopServer: ProviderValueType<FrontMcpServer> = {
   useValue: new NoopFrontMcpServer(),
 };
 
-export function createMcpGlobalProviders(metadata: FrontMcpConfigType) {
+export function createMcpGlobalProviders(metadata: FrontMcpConfigType): ProviderType[] {
   const isCli = !!(metadata as Record<string, unknown>)['__cliMode'];
   const isNoServe = metadata.serve === false;
   const serverProvider = isCli || isNoServe ? noopServer : frontMcpServer;

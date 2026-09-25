@@ -69,7 +69,7 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
   /**
    * A list of arguments to use for templating the prompt.
    */
-  arguments: PromptArgument[];
+  arguments?: PromptArgument[];
 
   /**
    * A list of icons that can be used to represent this resource template.

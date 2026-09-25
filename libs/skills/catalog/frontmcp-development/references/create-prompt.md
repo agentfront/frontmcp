@@ -90,7 +90,7 @@ Required arguments are validated before `execute()` runs. Missing required argum
 
 ### GetPromptResult Structure
 
-The `execute()` method must return a `GetPromptResult`:
+`execute()` returns a `GetPromptResult`, or a string, a message array or an object that the SDK converts into one. The full form is:
 
 ```typescript
 interface GetPromptResult {
@@ -108,6 +108,8 @@ Messages use two roles:
 
 - `user` -- represents the human side of the conversation
 - `assistant` -- primes the conversation with expected response patterns
+
+The result is checked against this shape. A message with another `role`, such as `'system'`, or content that is not a valid content block fails the call with `INVALID_OUTPUT`.
 
 ### Available Context Methods and Properties
 
@@ -402,13 +404,13 @@ This creates the prompt file, spec file, and updates barrel exports.
 
 ## Common Patterns
 
-| Pattern             | Correct                                                           | Incorrect                                           | Why                                                                   |
-| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
-| Return type         | `execute()` returns `Promise<GetPromptResult>`                    | Returning a plain string or array of strings        | MCP protocol requires `{ messages: [...] }` structure                 |
-| Argument validation | Mark arguments as `required: true` in `arguments` array           | Manually checking `args.field` inside `execute()`   | Framework validates required arguments before `execute()` runs        |
-| Multi-turn priming  | Use `assistant` role messages to prime expected response patterns | Putting all instructions in a single `user` message | Alternating roles guides the LLM toward structured output             |
-| Resource embedding  | Use `type: 'resource'` content with a resource URI                | Inlining resource data as raw text in the prompt    | Resource references let clients resolve content dynamically           |
-| Error handling      | Use `this.fail(err)` for validation failures in execute           | `throw new Error(...)` directly                     | `this.fail` triggers the error flow with proper MCP error propagation |
+| Pattern             | Correct                                                                  | Incorrect                                           | Why                                                                        |
+| ------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Return type         | `execute()` returns a `GetPromptResult`, string, message array or object | Returning nothing                                   | Strings, message arrays and objects are converted to `{ messages: [...] }` |
+| Argument validation | Mark arguments as `required: true` in `arguments` array                  | Manually checking `args.field` inside `execute()`   | Framework validates required arguments before `execute()` runs             |
+| Multi-turn priming  | Use `assistant` role messages to prime expected response patterns        | Putting all instructions in a single `user` message | Alternating roles guides the LLM toward structured output                  |
+| Resource embedding  | Use `type: 'resource'` content with a resource URI                       | Inlining resource data as raw text in the prompt    | Resource references let clients resolve content dynamically                |
+| Error handling      | Use `this.fail(err)` for validation failures in execute                  | `throw new Error(...)` directly                     | `this.fail` triggers the error flow with proper MCP error propagation      |
 
 ## Verification Checklist
 
@@ -429,13 +431,13 @@ This creates the prompt file, spec file, and updates barrel exports.
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                               | Solution                                                                                  |
-| ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Prompt not appearing in `prompts/list`            | Not registered in `prompts` array                   | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                 |
-| `MissingPromptArgumentError` on optional argument | Argument marked `required: true` incorrectly        | Set `required: false` for optional arguments in the `arguments` array                     |
-| LLM ignores priming messages                      | Only using `user` role messages                     | Add `assistant` role messages to prime the conversation pattern                           |
-| Type error on `execute()` return                  | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
-| `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
+| Problem                                           | Cause                                                                        | Solution                                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Prompt not appearing in `prompts/list`            | Not registered in `prompts` array                                            | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                             |
+| `MissingPromptArgumentError` on optional argument | Argument marked `required: true` incorrectly                                 | Set `required: false` for optional arguments in the `arguments` array                                 |
+| LLM ignores priming messages                      | Only using `user` role messages                                              | Add `assistant` role messages to prime the conversation pattern                                       |
+| Call fails with `INVALID_OUTPUT`                  | A message uses a role other than `user` or `assistant`, or malformed content | Use `role: 'user'` or `'assistant'` and a valid content block such as `{ type: 'text', text: '...' }` |
+| `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope                                             | Register provider in `providers` array of `@App` or `@FrontMcp`                                       |
 
 ## Examples
 

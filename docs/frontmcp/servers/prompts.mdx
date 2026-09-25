@@ -147,7 +147,7 @@ class MyApp {}
 
 ## Return Values
 
-Prompts return messages that clients can render or send to a model. The SDK supports multiple return formats.
+Prompts return messages that clients can render or send to a model. The SDK supports multiple return formats, and each one type-checks as written: a message `role` given as a string literal needs no `as const`, and `arguments` can be left out.
 
 ### Simple String Return
 
