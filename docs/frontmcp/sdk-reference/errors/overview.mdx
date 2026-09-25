@@ -211,6 +211,11 @@ The same rules apply to tools, resources and prompts, whether the error is throw
 - **Anything else is wrapped** in `ToolExecutionError`, `ResourceReadError` or `PromptExecutionError`. In production the client sees only the generic message with the `errorId`.
 - **Every failure is logged once**, with the same `errorId` the client sees and the error code. For an error the SDK wrapped, the logged message includes the original error's message and stack in every environment; the stack of the reported error itself is logged in development only.
 
+Two predicates exported from `@frontmcp/sdk` apply the same rules in code that catches errors around entries, such as hooks:
+
+- `isClientFacingError(error: unknown): boolean` is true for a public error (`PublicMcpError` or a subclass) and for an authorities refusal (`AuthorityDeniedError`). The flows pass these on unwrapped.
+- `isMrtrSignal(error: unknown): error is InputRequiredSignal | MissingClientCapabilityError` is true for the two signals the 2026-07-28 dispatcher answers itself: an `input_required` result and a `-32021` error. Rethrow them instead of reporting them as failures.
+
 `tools/call` answers with a result that has `isError: true` and `_meta.code` / `_meta.errorId`. `resources/read` and `prompts/get` answer with a JSON-RPC error. Its code comes from the error's `toJsonRpcError()` when it has one; otherwise it depends on `statusCode`:
 
 | `statusCode`      | JSON-RPC code |
