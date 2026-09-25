@@ -78,6 +78,28 @@ describe('MrtrExchange — elicitation', () => {
     expect(() => ex.resolveElicitation(PENDING)).toThrow(InvalidInputError);
   });
 
+  it('rejects an action whose string conversion throws', () => {
+    const ex = exchange({
+      clientCapabilities: ELICITATION_CAPABLE,
+      inputResponses: { 'elicitation-1': { action: { toString: null } } },
+    });
+
+    expect(() => ex.resolveElicitation(PENDING)).toThrow(InvalidInputError);
+  });
+
+  it.each([
+    ['a string', 'accept'],
+    ['a number', 1],
+    ['an array', ['accept']],
+  ])('rejects an answer that is %s instead of an object', (_kind, answer) => {
+    const ex = exchange({
+      clientCapabilities: ELICITATION_CAPABLE,
+      inputResponses: { 'elicitation-1': answer as unknown as Record<string, unknown> },
+    });
+
+    expect(() => ex.resolveElicitation(PENDING)).toThrow(InvalidInputError);
+  });
+
   it('derives keys from call order so a replayed tool lines up', () => {
     const ex = exchange({
       clientCapabilities: ELICITATION_CAPABLE,

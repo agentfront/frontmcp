@@ -6,6 +6,7 @@ const WORKER_GLOBAL_KEYS = [
   'self',
   'WorkerGlobalScope',
   'DedicatedWorkerGlobalScope',
+  'ServiceWorkerGlobalScope',
   'importScripts',
   'navigator',
 ];
@@ -20,6 +21,8 @@ class WorkerGlobalScope {
 }
 
 class DedicatedWorkerGlobalScope extends WorkerGlobalScope {}
+
+class ServiceWorkerGlobalScope extends WorkerGlobalScope {}
 
 function defineGlobal(key: string, value: unknown): void {
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true, enumerable: true });
@@ -98,6 +101,7 @@ describe.each([
       caches: cacheStorage,
       self: globalThis,
       WorkerGlobalScope,
+      ServiceWorkerGlobalScope,
       navigator: { userAgent: 'Cloudflare-Workers' },
     });
 
@@ -105,7 +109,12 @@ describe.each([
   });
 
   it('classifies a Cloudflare Worker without navigator (compatibility date before 2022-03-21) as an edge runtime', () => {
-    restoreGlobals = installGlobals({ caches: cacheStorage, self: globalThis, WorkerGlobalScope });
+    restoreGlobals = installGlobals({
+      caches: cacheStorage,
+      self: globalThis,
+      WorkerGlobalScope,
+      ServiceWorkerGlobalScope,
+    });
 
     expect(isEdgeRuntime()).toBe(true);
   });

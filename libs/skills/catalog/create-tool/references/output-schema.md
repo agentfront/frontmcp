@@ -5,7 +5,7 @@ description: Define the tool's output contract — Zod shape, primitives, media,
 
 # `outputSchema` reference
 
-`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns and gives the framework permission to strip any fields you didn't declare — the safety net against accidental PII / token / debug-trace leaks. A result that does not match fails the call with `_meta.code: 'INVALID_OUTPUT'`, and nothing from the rejected result is sent. A number field holding `Infinity`, `-Infinity`, or `NaN` fails the same way, unless the server sets `output: { allowNonFinite: true }`.
+`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns and gives the framework permission to strip any fields you didn't declare, which guards against accidental PII / token / debug-trace leaks in the result. The exception is a `_meta` object on the returned value: it is copied into the response's `_meta` without validation, so never put secrets there. A result that does not match fails the call with `_meta.code: 'INVALID_OUTPUT'`, and nothing from the rejected result is sent. A number field holding `Infinity`, `-Infinity`, or `NaN` fails the same way, unless the server sets `output: { allowNonFinite: true }`. JSON cannot encode those values, so with that setting the client receives `null` in their place.
 
 ## Supported shapes
 
