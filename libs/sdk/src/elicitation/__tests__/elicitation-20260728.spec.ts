@@ -97,6 +97,12 @@ describe('elicitation under MCP 2026-07-28', () => {
     expect([-32602, 'INVALID_INPUT']).toContain(refusalCode);
   });
 
+  it('returns the parsed content of an accepted answer that matches the requested schema', async () => {
+    const { answered } = await acceptFirstElicitation('order_shirt', { size: 'M' });
+
+    expect(answered?.structuredContent).toEqual({ status: 'accept', size: 'M', typeofSize: 'string' });
+  });
+
   it('validates an accepted answer against a schema with an async refinement', async () => {
     const { answered } = await acceptFirstElicitation('pick_username', { username: 'ada' });
 
