@@ -166,7 +166,7 @@ export interface McpTestClientConfig {
   timeout?: number;
   /** Enable debug logging (default: false) */
   debug?: boolean;
-  /** MCP protocol version to request (default: '2024-11-05') */
+  /** MCP protocol version to request (default: '2025-06-18'; '2026-07-28' is not supported and throws) */
   protocolVersion?: string;
   /** Client info to send during initialization and for platform detection */
   clientInfo?: ClientInfo;
@@ -358,6 +358,14 @@ export interface NotificationEntry {
   params?: unknown;
   /** Timestamp received */
   timestamp: Date;
+}
+
+export interface ToolCallOptions {
+  /**
+   * Sent as `_meta.progressToken`. Defaults to a generated token while
+   * `notifications.collectProgress()` is active, so the server streams progress.
+   */
+  progressToken?: string | number;
 }
 
 export interface ProgressUpdate {

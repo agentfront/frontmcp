@@ -42,16 +42,17 @@ export interface McpMatchers<R = unknown> {
 
   /**
    * Check if result is an error, optionally with a specific error code
-   * @param expectedCode - Optional specific MCP error code to match
+   * @param expectedCode - A JSON-RPC error code (number), or a tool error code (string) matched against `_meta.code`
    *
    * @example
    * ```typescript
    * const result = await mcp.tools.call('unknown-tool', {});
    * expect(result).toBeError();
    * expect(result).toBeError(-32601); // Method not found
+   * expect(await mcp.tools.call('add', { a: 5 })).toBeError('INVALID_INPUT');
    * ```
    */
-  toBeError(expectedCode?: number): R;
+  toBeError(expectedCode?: number | string): R;
 
   /**
    * Check if tool result has text content, optionally containing specific text

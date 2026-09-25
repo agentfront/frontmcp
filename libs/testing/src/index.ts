@@ -59,6 +59,7 @@ export type {
   RequestTrace,
   NotificationEntry,
   ProgressUpdate,
+  ToolCallOptions,
   SessionInfo,
   AuthState,
 } from './client/mcp-test-client.types';
