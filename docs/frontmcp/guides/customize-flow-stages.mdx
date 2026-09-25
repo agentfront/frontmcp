@@ -579,11 +579,11 @@ export default class ToolIsolationPlugin {
   </Accordion>
 
   <Accordion title="2. Set Appropriate Priorities">
-    - **Validation**: High priority (90-100)
+    - **Validation**: Low priority (1-20)
     - **Transformation**: Medium priority (40-60)
-    - **Logging/Metrics**: Low priority (1-20)
+    - **Logging/Metrics** (Did hooks): High priority (90-100)
 
-    This ensures validation runs before transformation, and logging captures everything.
+    Lower priorities run first, so validation runs before transformation, and late Did hooks capture everything.
 
   </Accordion>
 
