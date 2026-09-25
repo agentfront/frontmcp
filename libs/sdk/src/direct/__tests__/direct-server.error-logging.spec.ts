@@ -7,6 +7,7 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type DirectMcpServer } from '../direct.types';
 
 const THROWN_MESSAGE = 'inventory service timed out for sku 42';
+const reservationFailure = new Error('warehouse refused the reservation for sku 42');
 
 const capturedLogLines: string[] = [];
 
@@ -25,7 +26,14 @@ class CheckStockTool extends ToolContext {
   }
 }
 
-@App({ id: 'shop', name: 'Shop', tools: [CheckStockTool] })
+@Tool({ name: 'reserve_stock', inputSchema: {} })
+class ReserveStockTool extends ToolContext {
+  async execute(): Promise<{ reserved: boolean }> {
+    this.fail(reservationFailure);
+  }
+}
+
+@App({ id: 'shop', name: 'Shop', tools: [CheckStockTool, ReserveStockTool] })
 class ShopApp {}
 
 describe('DirectMcpServer failure logging', () => {
@@ -49,6 +57,16 @@ describe('DirectMcpServer failure logging', () => {
     await expect(server.callTool('check_stock', {})).rejects.toThrow();
 
     const failureLines = capturedLogLines.filter((line) => line.includes(THROWN_MESSAGE));
+    expect(failureLines).toHaveLength(1);
+    expect(failureLines[0]).toContain("flowName: 'tools:call-tool'");
+  });
+
+  it('rejects with the Error passed to this.fail() and logs it once with the flow name', async () => {
+    capturedLogLines.length = 0;
+
+    await expect(server.callTool('reserve_stock', {})).rejects.toBe(reservationFailure);
+
+    const failureLines = capturedLogLines.filter((line) => line.includes(reservationFailure.message));
     expect(failureLines).toHaveLength(1);
     expect(failureLines[0]).toContain("flowName: 'tools:call-tool'");
   });
