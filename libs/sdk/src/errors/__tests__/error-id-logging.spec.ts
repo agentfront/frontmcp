@@ -65,10 +65,12 @@ describe('error ids in production logs', () => {
     const firstLineOfCall = capturedLogLines.length;
     const { message } = await rpc20260728(server.handler, 'tools/call', { name: 'lookup', arguments: { how } });
     const result = message.result as { content: Array<{ text: string }>; _meta: { errorId: string } };
+    const serverLogLines = capturedLogLines.slice(firstLineOfCall);
     return {
       errorId: result._meta.errorId,
       clientText: result.content[0]?.text ?? '',
-      serverLog: capturedLogLines.slice(firstLineOfCall).join('\n'),
+      serverLog: serverLogLines.join('\n'),
+      serverLogLines,
     };
   }
 
@@ -78,6 +80,12 @@ describe('error ids in production logs', () => {
     expect(clientText).toContain(errorId);
     expect(serverLog).toContain(THROWN_MESSAGE);
     expect(serverLog).toContain(errorId);
+  });
+
+  it('logs an Error thrown in execute() once', async () => {
+    const { serverLogLines } = await callLookupAndCaptureLogs('throw');
+
+    expect(serverLogLines.filter((line) => line.includes(THROWN_MESSAGE))).toHaveLength(1);
   });
 
   it('logs the failure of an Error passed to this.fail()', async () => {
