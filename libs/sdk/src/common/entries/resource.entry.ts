@@ -81,12 +81,12 @@ export abstract class ResourceEntry<
   /**
    * Convert the raw resource return value (Out) into an MCP ReadResourceResult.
    */
-  abstract parseOutput(result: Out): ParsedResourceResult;
+  abstract parseOutput(result: Out, readUri?: string): ParsedResourceResult;
 
   /**
    * Safe version of parseOutput that returns success/error instead of throwing.
    */
-  abstract safeParseOutput(raw: Out): ResourceSafeTransformResult<ParsedResourceResult>;
+  abstract safeParseOutput(raw: Out, readUri?: string): ResourceSafeTransformResult<ParsedResourceResult>;
 
   /**
    * Match a URI against this resource.

@@ -1229,7 +1229,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       // A public error (e.g. InvalidInputError) already says what the caller should see
       if (isClientFacingError(error)) throw error;
-      this.logger.error('execute: tool execution failed', error);
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',
         error instanceof Error ? error : undefined,
@@ -1509,7 +1508,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         tool: tool.metadata.name,
         errors: parseResult.error,
       });
-      throw new InvalidOutputError();
+      throw parseResult.error instanceof InvalidOutputError ? parseResult.error : new InvalidOutputError();
     }
 
     // Reject non-finite numbers (Infinity / -Infinity / NaN) — JSON.stringify

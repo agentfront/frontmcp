@@ -9,10 +9,27 @@ import {
   rpc20260728,
   type TestFetchServer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, LogLevel, LogTransport, LogTransportInterface, Tool, ToolContext, type LogRecord } from '../../common';
+import {
+  Agent,
+  AgentContext,
+  App,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  Prompt,
+  PromptContext,
+  Resource,
+  ResourceContext,
+  Tool,
+  ToolContext,
+  type LogRecord,
+} from '../../common';
 
 const THROWN_MESSAGE = 'db timeout while loading order 1234';
 const FAILED_MESSAGE = 'payment provider returned 502 for order 1234';
+const RESOURCE_MESSAGE = 'inventory store unreachable while reading stock';
+const PROMPT_MESSAGE = 'template store unreachable while rendering summary';
+const AGENT_MESSAGE = 'refund ledger unreachable while planning refund';
 const FAKE_SESSION_SECRET = 'error-id-logging-spec-fake-session-secret-0123456789';
 
 const capturedLogLines: string[] = [];
@@ -36,7 +53,39 @@ class LookupTool extends ToolContext {
   }
 }
 
-@App({ id: 'shop', name: 'shop', tools: [LookupTool] })
+@Resource({ name: 'stock', uri: 'stock://today', mimeType: 'text/plain' })
+class StockResource extends ResourceContext {
+  async execute(): Promise<{ contents: [] }> {
+    throw new Error(RESOURCE_MESSAGE);
+  }
+}
+
+@Prompt({ name: 'summary', arguments: [] })
+class SummaryPrompt extends PromptContext {
+  async execute(): Promise<{ messages: [] }> {
+    throw new Error(PROMPT_MESSAGE);
+  }
+}
+
+@Agent({
+  name: 'refunds',
+  inputSchema: {},
+  llm: { adapter: { completion: jest.fn(), streamCompletion: jest.fn() } },
+})
+class RefundsAgent extends AgentContext {
+  override async execute(_input: Record<string, never>): Promise<Record<string, never>> {
+    throw new Error(AGENT_MESSAGE);
+  }
+}
+
+@App({
+  id: 'shop',
+  name: 'shop',
+  tools: [LookupTool],
+  resources: [StockResource],
+  prompts: [SummaryPrompt],
+  agents: [RefundsAgent],
+})
 class ShopApp {}
 
 describe('error ids in production logs', () => {
@@ -65,10 +114,12 @@ describe('error ids in production logs', () => {
     const firstLineOfCall = capturedLogLines.length;
     const { message } = await rpc20260728(server.handler, 'tools/call', { name: 'lookup', arguments: { how } });
     const result = message.result as { content: Array<{ text: string }>; _meta: { errorId: string } };
+    const serverLogLines = capturedLogLines.slice(firstLineOfCall);
     return {
       errorId: result._meta.errorId,
       clientText: result.content[0]?.text ?? '',
-      serverLog: capturedLogLines.slice(firstLineOfCall).join('\n'),
+      serverLog: serverLogLines.join('\n'),
+      serverLogLines,
     };
   }
 
@@ -80,10 +131,16 @@ describe('error ids in production logs', () => {
     expect(serverLog).toContain(errorId);
   });
 
-  it('logs the failure of an Error passed to this.fail()', async () => {
-    const { serverLog } = await callLookupAndCaptureLogs('fail');
+  it('logs an Error thrown in execute() once', async () => {
+    const { serverLogLines } = await callLookupAndCaptureLogs('throw');
 
-    expect(serverLog).toContain(FAILED_MESSAGE);
+    expect(serverLogLines.filter((line) => line.includes(THROWN_MESSAGE))).toHaveLength(1);
+  });
+
+  it('logs the failure of an Error passed to this.fail() once', async () => {
+    const { serverLogLines } = await callLookupAndCaptureLogs('fail');
+
+    expect(serverLogLines.filter((line) => line.includes(FAILED_MESSAGE))).toHaveLength(1);
   });
 
   it('logs the error id shown to the client for an Error passed to this.fail()', async () => {
@@ -101,5 +158,18 @@ describe('error ids in production logs', () => {
     const errorId = (message.error?.data as { errorId?: string } | undefined)?.errorId;
     expect(errorId).toMatch(/^err_/);
     expect(capturedLogLines.slice(firstLineOfCall).join('\n')).toContain(errorId);
+  });
+
+  it.each([
+    ['resources/read', { uri: 'stock://today' }, RESOURCE_MESSAGE],
+    ['prompts/get', { name: 'summary', arguments: {} }, PROMPT_MESSAGE],
+    ['tools/call', { name: 'invoke_refunds', arguments: {} }, AGENT_MESSAGE],
+  ])('logs an Error thrown while serving %s once', async (method, params, thrownMessage) => {
+    const firstLineOfCall = capturedLogLines.length;
+
+    await rpc20260728(server.handler, method, params);
+
+    const serverLogLines = capturedLogLines.slice(firstLineOfCall);
+    expect(serverLogLines.filter((line) => line.includes(thrownMessage))).toHaveLength(1);
   });
 });

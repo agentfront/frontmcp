@@ -1,6 +1,6 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
-import { toJSONSchema, z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
+import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
 import {
   type AudioContent,
   type ContentBlock,
@@ -22,7 +22,7 @@ import {
   type ToolRecord,
   type ToolType,
 } from '../common';
-import { InvalidEntityError } from '../errors';
+import { InvalidEntityError, InvalidOutputError } from '../errors';
 import { isPackageSpecifier, parsePackageSpecifier } from '../esm-loader/package-specifier';
 import { toStructuredContent } from '../utils/content.utils';
 
@@ -330,85 +330,46 @@ function parseSingleValue(
 
   // Zod primitives
   if (descriptor instanceof ZodString) {
+    const stringValue = parseAgainstOutputSchema(descriptor, value);
     return {
-      blocks: [makePrimitiveTextContent(value)],
-      parsedValue: value,
+      blocks: [makePrimitiveTextContent(stringValue)],
+      parsedValue: stringValue,
       isPrimitive: true,
     };
   }
 
-  if (descriptor instanceof ZodNumber) {
-    const parseResult = descriptor.safeParse(value);
-    const numValue = parseResult.success ? parseResult.data : typeof value === 'number' ? value : Number(value);
+  if (descriptor instanceof ZodNumber || descriptor instanceof ZodBoolean) {
     return {
       blocks: [makePrimitiveTextContent(value)],
-      parsedValue: isNaN(numValue) ? null : numValue,
-      isPrimitive: false,
-    };
-  }
-
-  if (descriptor instanceof ZodBoolean) {
-    const parseResult = descriptor.safeParse(value);
-    const boolValue = parseResult.success ? parseResult.data : Boolean(value);
-    return {
-      blocks: [makePrimitiveTextContent(value)],
-      parsedValue: boolValue,
+      parsedValue: parseAgainstOutputSchema(descriptor, value),
       isPrimitive: false,
     };
   }
 
   if (descriptor instanceof ZodBigInt) {
-    const parseResult = descriptor.safeParse(value);
-    const bigIntValue = parseResult.success ? parseResult.data : typeof value === 'bigint' ? value : null;
     return {
       blocks: [makePrimitiveTextContent(value)],
-      parsedValue: bigIntValue !== null ? bigIntValue.toString() : null,
+      parsedValue: String(parseAgainstOutputSchema(descriptor, value)),
       isPrimitive: false,
     };
   }
 
   if (descriptor instanceof ZodDate) {
-    const parseResult = descriptor.safeParse(value);
-    const dateValue = parseResult.success ? parseResult.data : value instanceof Date ? value : null;
+    const dateValue = parseAgainstOutputSchema(descriptor, value) as Date;
     return {
       blocks: [makePrimitiveTextContent(value)],
-      parsedValue: dateValue
-        ? {
-            iso: dateValue.toISOString(),
-            timeInMilli: dateValue.getTime(),
-          }
-        : null,
+      parsedValue: { iso: dateValue.toISOString(), timeInMilli: dateValue.getTime() },
       isPrimitive: false,
     };
   }
 
   // Anything else (Zod object/array/union, ZodRawShape, plain object) → JSON/structured
-  // Use Zod parsing if it's a Zod schema
   let parsedValue: any;
 
   if (descriptor instanceof z.ZodType) {
-    // Use Zod to parse and validate
-    const parseResult = descriptor.safeParse(value);
-    if (parseResult.success) {
-      parsedValue = toStructuredContent(parseResult.data);
-    } else {
-      // Validation failed, use sanitized raw value
-      parsedValue = toStructuredContent(value);
-    }
-  } else if (typeof descriptor === 'object' && descriptor !== null) {
-    // ZodRawShape or plain object - try to create a Zod object schema
-    try {
-      const schema = z.object(descriptor);
-      const parseResult = schema.safeParse(value);
-      if (parseResult.success) {
-        parsedValue = toStructuredContent(parseResult.data);
-      } else {
-        parsedValue = toStructuredContent(value);
-      }
-    } catch {
-      // Fallback to sanitized content
-      parsedValue = toStructuredContent(value);
-    }
+    parsedValue = toStructuredContent(parseAgainstOutputSchema(descriptor, value));
+  } else if (isZodRawShape(descriptor)) {
+    parsedValue = toStructuredContent(parseAgainstOutputSchema(z.object(descriptor), value));
   } else {
     parsedValue = toStructuredContent(value);
   }
@@ -418,6 +379,74 @@ function parseSingleValue(
     parsedValue,
     isPrimitive: false,
   };
+}
+
+/**
+ * The value an output schema accepts, or an InvalidOutputError naming the first mismatch.
+ */
+function parseAgainstOutputSchema(schema: z.ZodType, value: unknown): unknown {
+  const parseResult = schema.safeParse(value);
+  if (parseResult.success) {
+    return parseResult.data;
+  }
+  const { issues } = parseResult.error;
+  // A non-finite number is left to the server's `output.allowNonFinite` policy, applied when the call finalizes:
+  // parse with finite stand-ins so undeclared fields are still stripped, then put the original numbers back.
+  if (issues.every((issue) => isNonFiniteNumberIssue(issue, value))) {
+    const withStandIns = issues.reduce(
+      (current, issue) => withValueAt(current, issue.path, finiteStandIn(valueAt(value, issue.path) as number)),
+      value,
+    );
+    const retry = schema.safeParse(withStandIns);
+    if (retry.success) {
+      return issues.reduce((parsed, issue) => withValueAt(parsed, issue.path, valueAt(value, issue.path)), retry.data);
+    }
+  }
+  const firstIssue = issues[0];
+  throw new InvalidOutputError({
+    reason: 'output does not match outputSchema',
+    path: firstIssue?.path.length ? firstIssue.path.join('.') : undefined,
+  });
+}
+
+function isNonFiniteNumberIssue(issue: z.ZodError['issues'][number], root: unknown): boolean {
+  if (issue.code !== 'invalid_type' || issue.expected !== 'number') {
+    return false;
+  }
+  const valueAtPath = valueAt(root, issue.path);
+  return typeof valueAtPath === 'number' && !Number.isFinite(valueAtPath);
+}
+
+/** A finite number on the same side of zero, so range checks still see the value's sign. */
+function finiteStandIn(value: number): number {
+  return Number.isNaN(value) ? 0 : Math.sign(value) * Number.MAX_VALUE;
+}
+
+function valueAt(root: unknown, path: readonly PropertyKey[]): unknown {
+  return path.reduce<unknown>(
+    (node, key) =>
+      typeof node === 'object' && node !== null ? (node as Record<PropertyKey, unknown>)[key] : undefined,
+    root,
+  );
+}
+
+/** A copy of `root` with `replacement` at `path`; the containers along the path are copied, not changed. */
+function withValueAt(root: unknown, path: readonly PropertyKey[], replacement: unknown): unknown {
+  if (path.length === 0) {
+    return replacement;
+  }
+  const [key, ...rest] = path;
+  const container = (Array.isArray(root) ? [...root] : { ...(root as object) }) as Record<PropertyKey, unknown>;
+  container[key] = withValueAt(container[key], rest, replacement);
+  return container;
+}
+
+function isZodRawShape(descriptor: unknown): descriptor is Record<string, z.ZodType> {
+  return (
+    typeof descriptor === 'object' &&
+    descriptor !== null &&
+    Object.values(descriptor).every((field) => field instanceof z.ZodType)
+  );
 }
 
 function makePrimitiveTextContent(value: unknown): TextContent {
@@ -477,23 +506,7 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
  */
 export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefinition[] {
   return tools.map((tool) => {
-    // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
-    let parameters: Record<string, unknown>;
-    if (tool.rawInputSchema) {
-      // Already converted to JSON Schema
-      parameters = tool.rawInputSchema as Record<string, unknown>;
-    } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
-      // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
-      // Convert to JSON Schema using the same approach as tools-list.flow.ts
-      try {
-        parameters = toJSONSchema(z.object(tool.inputSchema)) as Record<string, unknown>;
-      } catch {
-        parameters = { type: 'object', properties: {} };
-      }
-    } else {
-      // No schema defined - use empty object schema
-      parameters = { type: 'object', properties: {} };
-    }
+    const parameters = tool.getInputJsonSchema() ?? { type: 'object', properties: {} };
 
     return {
       name: tool.metadata.id ?? tool.metadata.name,
