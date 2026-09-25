@@ -2,10 +2,10 @@
  * DirectMcpServerImpl tests
  */
 
-import { DirectMcpServerImpl } from '../direct-server';
 import { FlowControl } from '../../common';
 import { InternalMcpError } from '../../errors';
 import type { Scope } from '../../scope/scope.instance';
+import { DirectMcpServerImpl } from '../direct-server';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -26,7 +26,7 @@ jest.mock('../direct-client', () => ({
 }));
 
 /** Minimal Scope interface required by DirectMcpServerImpl */
-type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService'>;
+type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService' | 'logger'>;
 
 describe('DirectMcpServerImpl', () => {
   // Mock Scope with type-safe partial
@@ -35,6 +35,7 @@ describe('DirectMcpServerImpl', () => {
     transportService: {
       destroy: jest.fn().mockResolvedValue(undefined),
     } as unknown as Scope['transportService'],
+    logger: { child: () => ({ error: jest.fn(), warn: jest.fn() }) } as unknown as Scope['logger'],
   });
 
   beforeEach(() => {
