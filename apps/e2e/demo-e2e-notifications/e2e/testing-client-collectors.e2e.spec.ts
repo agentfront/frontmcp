@@ -42,4 +42,12 @@ test.describe('McpTestClient notification collectors', () => {
 
     expect(result).toBeError('INVALID_INPUT');
   });
+
+  test('toBeError matches the tool error code of an unknown tool', async ({ mcp }) => {
+    expect(await mcp.tools.call('unknown-tool', {})).toBeError('TOOL_NOT_FOUND');
+  });
+
+  test('toBeError matches the JSON-RPC error code of an unknown prompt', async ({ mcp }) => {
+    expect(await mcp.prompts.get('unknown-prompt')).toBeError(-32602);
+  });
 });

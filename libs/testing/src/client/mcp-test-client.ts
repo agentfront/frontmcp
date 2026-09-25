@@ -249,7 +249,7 @@ export class McpTestClient {
       jsonrpc: '2.0',
       method: 'notifications/initialized',
     });
-    await this.transport.openNotificationStream?.();
+    await this.transport.openNotificationStream?.(this.initResult.protocolVersion);
 
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
 

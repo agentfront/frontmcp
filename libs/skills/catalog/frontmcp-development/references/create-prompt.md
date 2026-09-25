@@ -90,7 +90,7 @@ Required arguments are validated before `execute()` runs. Missing required argum
 
 ### GetPromptResult Structure
 
-The `execute()` method must return a `GetPromptResult`:
+`execute()` returns a `GetPromptResult`, or a string, a message array or an object that the SDK converts into one. The full form is:
 
 ```typescript
 interface GetPromptResult {
@@ -108,6 +108,8 @@ Messages use two roles:
 
 - `user` -- represents the human side of the conversation
 - `assistant` -- primes the conversation with expected response patterns
+
+The result is checked against this shape. A message with another `role`, such as `'system'`, or content that is not a valid content block fails the call with `INVALID_OUTPUT`.
 
 ### Available Context Methods and Properties
 
@@ -429,13 +431,13 @@ This creates the prompt file, spec file, and updates barrel exports.
 
 ## Troubleshooting
 
-| Problem                                            | Cause                                               | Solution                                                                                  |
-| -------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Prompt not appearing in `prompts/list`             | Not registered in `prompts` array                   | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                 |
-| `MissingPromptArgumentError` on optional argument  | Argument marked `required: true` incorrectly        | Set `required: false` for optional arguments in the `arguments` array                     |
-| LLM ignores priming messages                       | Only using `user` role messages                     | Add `assistant` role messages to prime the conversation pattern                           |
-| Type error on `execute()` return                   | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
-| `this.get(TOKEN)` throws ProviderNotAvailableError | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
+| Problem                                            | Cause                                                                        | Solution                                                                                              |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Prompt not appearing in `prompts/list`             | Not registered in `prompts` array                                            | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                             |
+| `MissingPromptArgumentError` on optional argument  | Argument marked `required: true` incorrectly                                 | Set `required: false` for optional arguments in the `arguments` array                                 |
+| LLM ignores priming messages                       | Only using `user` role messages                                              | Add `assistant` role messages to prime the conversation pattern                                       |
+| Call fails with `INVALID_OUTPUT`                   | A message uses a role other than `user` or `assistant`, or malformed content | Use `role: 'user'` or `'assistant'` and a valid content block such as `{ type: 'text', text: '...' }` |
+| `this.get(TOKEN)` throws ProviderNotAvailableError | Provider not registered in scope                                             | Register provider in `providers` array of `@App` or `@FrontMcp`                                       |
 
 ## Examples
 

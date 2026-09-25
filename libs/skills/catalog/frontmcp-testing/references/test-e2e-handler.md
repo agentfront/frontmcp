@@ -73,7 +73,8 @@ Errors raised while a tool runs, including invalid input, come back as a tool re
 
 ```typescript
 expect(await client.tools.call('add_numbers', { a: 5 })).toBeError('INVALID_INPUT');
-expect(await client.tools.call('nonexistent_tool', {})).toBeError();
+expect(await client.tools.call('nonexistent_tool', {})).toBeError('TOOL_NOT_FOUND');
+expect(await client.prompts.get('nonexistent_prompt')).toBeError(-32602);
 ```
 
 A tool without an `outputSchema` that returns a plain number sends `{ value: 8 }`, so assert `expect(result.json()).toEqual({ value: 8 })`.

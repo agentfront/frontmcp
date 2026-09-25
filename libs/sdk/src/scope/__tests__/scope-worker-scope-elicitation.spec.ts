@@ -76,10 +76,16 @@ describe('Scope with elicitation inside a browser Web Worker', () => {
     })
       .then((server) => rpc20260728(server.handler, 'tools/list'))
       .then(
-        ({ status }) => ({ status }),
+        ({ status, message }) => ({
+          status,
+          error: message.error,
+          toolNames: ((message.result?.['tools'] as Array<{ name: string }> | undefined) ?? []).map(
+            (tool) => tool.name,
+          ),
+        }),
         (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
       );
 
-    expect(outcome).toEqual({ status: 200 });
+    expect(outcome).toEqual({ status: 200, error: undefined, toolNames: expect.arrayContaining(['ping']) });
   });
 });

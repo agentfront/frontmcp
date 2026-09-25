@@ -31,7 +31,18 @@ class OrderShirtTool extends ToolContext {
   }
 }
 
-@App({ id: 'shop', name: 'Shop', tools: [OrderShirtTool] })
+@Tool({ name: 'pick_username', inputSchema: {} })
+class PickUsernameTool extends ToolContext {
+  async execute() {
+    const usernameSchema = z
+      .object({ username: z.string() })
+      .refine(async ({ username }) => username !== 'taken', 'That username is taken');
+    const answer = await this.elicit('Which username?', usernameSchema);
+    return { status: answer.status, username: answer.content?.username };
+  }
+}
+
+@App({ id: 'shop', name: 'Shop', tools: [OrderShirtTool, PickUsernameTool] })
 class ShopApp {}
 
 const ELICITATION_CAPABILITIES = { elicitation: { form: {} } };
@@ -80,6 +91,34 @@ describe('elicitation under MCP 2026-07-28', () => {
 
     expect(answered?.structuredContent).toBeUndefined();
     expect([-32602, 'INVALID_INPUT']).toContain(refusalCode);
+  });
+
+  it('validates an accepted answer against a schema with an async refinement', async () => {
+    const firstRound = await rpc20260728(
+      server.handler,
+      'tools/call',
+      { name: 'pick_username', arguments: {} },
+      { capabilities: ELICITATION_CAPABILITIES },
+    );
+    const inputRequired = firstRound.message.result as ToolCallResult | undefined;
+    const [inputKey] = Object.keys(inputRequired?.inputRequests ?? {});
+
+    const secondRound = await rpc20260728(
+      server.handler,
+      'tools/call',
+      {
+        name: 'pick_username',
+        arguments: {},
+        inputResponses: { [inputKey]: { action: 'accept', content: { username: 'ada' } } },
+        requestState: inputRequired?.requestState,
+      },
+      { capabilities: ELICITATION_CAPABILITIES },
+    );
+
+    expect((secondRound.message.result as ToolCallResult | undefined)?.structuredContent).toEqual({
+      status: 'accept',
+      username: 'ada',
+    });
   });
 
   it('does not list sendElicitationResult to a client that declares the elicitation capability', async () => {

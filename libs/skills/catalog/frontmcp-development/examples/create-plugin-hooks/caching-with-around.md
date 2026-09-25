@@ -30,21 +30,22 @@ export class CachePlugin {
 
   @Around('execute', { priority: 90 })
   async cacheResults(ctx, next) {
-    const key = `${ctx.toolName}:${JSON.stringify(ctx.input)}`;
+    const { name, arguments: toolArguments } = ctx.state.required.input;
+    const key = `${name}:${JSON.stringify(toolArguments)}`;
+    const toolContext = ctx.state.required.toolContext;
     const cached = this.cache.get(key);
 
     if (cached && cached.expiry > Date.now()) {
-      return cached.data;
+      toolContext.output = cached.data;
+      return; // not calling next() skips the execute stage
     }
 
-    const result = await next();
+    await next(); // resolves with no value; the result is on toolContext.output
 
     this.cache.set(key, {
-      data: result,
+      data: toolContext.output,
       expiry: Date.now() + 60_000,
     });
-
-    return result;
   }
 }
 ```

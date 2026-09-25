@@ -96,7 +96,7 @@ describe('tools/call output schema enforcement', () => {
       const content = (result['content'] as Array<{ text?: string }> | undefined) ?? [];
 
       expect(isError).toBe(false);
-      expect(result['structuredContent']).not.toHaveProperty('internalCostCenter');
+      expect(result['structuredContent']).toEqual({ ratio: null });
       expect(content.map((block) => block.text ?? '').join('\n')).not.toContain('CC-7731');
     });
 
