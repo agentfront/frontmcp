@@ -30,13 +30,13 @@ import {
   normalizeScopeBase,
   partitionsByIdentity,
   ServerRequestTokens,
-  toLegacyProtocolFlags,
   type Authorization,
   type FlowPlan,
   type FlowRunOptions,
   type ScopeEntry,
   type ServerRequest,
 } from '../../common';
+import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type Scope } from '../scope.instance';

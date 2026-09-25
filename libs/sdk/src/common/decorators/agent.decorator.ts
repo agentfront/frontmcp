@@ -160,8 +160,6 @@ Object.assign(FrontMcpAgent, {
   remote: agentRemote,
 });
 
-export { FrontMcpAgent, FrontMcpAgent as Agent, frontMcpAgent, frontMcpAgent as agent };
-
 // ============================================================================
 // Type Inference Helpers
 // ============================================================================
@@ -367,12 +365,9 @@ export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = 
   timeout?: TimeoutConfigInput;
 };
 
-declare module '@frontmcp/sdk' {
-  // ---------- the decorator (overloads) ----------
-
-  // 1) Overload: outputSchema PROVIDED → strict return typing
-  // @ts-expect-error - Module augmentation requires decorator overload
-  export function Agent<I extends __Shape, O extends __OutputSchema>(
+type AgentDecorator = {
+  // outputSchema provided: execute() must return the declared output
+  <I extends __Shape, O extends __OutputSchema>(
     opts: AgentMetadataOptions<I, O> & { outputSchema: O },
   ): <C extends __Ctor>(
     cls: C &
@@ -381,11 +376,17 @@ declare module '@frontmcp/sdk' {
       __MustReturn<C, AgentOutputOf<{ outputSchema: O }>>,
   ) => __Rewrap<C, AgentInputOf<{ inputSchema: I }>, AgentOutputOf<{ outputSchema: O }>>;
 
-  // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
-  // @ts-expect-error - Module augmentation requires decorator overload
-  export function Agent<I extends __Shape>(
+  // outputSchema not provided: execute() can return any
+  <I extends __Shape>(
     opts: AgentMetadataOptions<I, any> & { outputSchema?: never },
   ): <C extends __Ctor>(
     cls: C & __MustExtendCtx<C> & __MustParam<C, AgentInputOf<{ inputSchema: I }>> & __MustReturn<C, AgentOutputOf<{}>>,
   ) => __Rewrap<C, AgentInputOf<{ inputSchema: I }>, AgentOutputOf<{}>>;
-}
+
+  esm: typeof agentEsm;
+  remote: typeof agentRemote;
+};
+
+const Agent = FrontMcpAgent as unknown as AgentDecorator;
+
+export { FrontMcpAgent, Agent, frontMcpAgent, frontMcpAgent as agent };

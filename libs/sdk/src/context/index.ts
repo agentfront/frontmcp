@@ -49,11 +49,3 @@ export type { TraceContext } from './trace-context';
 // =====================
 export { extractMetadata, extractClientIp } from './metadata.utils';
 
-// =====================
-// Context Extension (Plugin System)
-// =====================
-export {
-  installContextExtensions,
-  isContextExtensionInstalled,
-  getInstalledContextExtensions,
-} from './context-extension';

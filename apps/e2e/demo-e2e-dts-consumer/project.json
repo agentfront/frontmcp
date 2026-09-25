@@ -1,0 +1,40 @@
+{
+  "name": "demo-e2e-dts-consumer",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-dts-consumer/fixture",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:dts-consumer"],
+  "targets": {
+    "build": {
+      "executor": "nx:noop",
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-dts-consumer"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-dts-consumer/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": false
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-dts-consumer-e2e"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-dts-consumer/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": false
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-dts-consumer"
+      }
+    }
+  }
+}
