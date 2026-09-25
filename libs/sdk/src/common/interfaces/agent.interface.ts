@@ -452,7 +452,7 @@ export class AgentContext<
    * Use this to report progress during long-running operations.
    *
    * @param message - The notification message (string) or structured data (object)
-   * @param level - Log level: 'debug', 'info', 'warning', or 'error' (default: 'info')
+   * @param level - One of the eight MCP log levels, 'debug' through 'emergency' (default: 'info')
    * @returns true if the notification was sent, false if session unavailable
    *
    * @example

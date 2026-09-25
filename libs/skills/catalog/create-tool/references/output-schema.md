@@ -17,6 +17,11 @@ description: Define the tool's output contract — Zod shape, primitives, media,
 | **Media literal**     | Binary / link content                                                       | `'image'`, `'audio'`, `'resource'`, `'resource_link'`              |
 | **Array of literals** | Multi-content response                                                      | `['string', 'image']` — text + image in one response               |
 
+Two runtime facts that follow from the shape:
+
+- Without an `outputSchema`, a plain value is wrapped: `return 'hello'` sends `{"value":"hello"}` as text and `structuredContent: { value: 'hello' }` (numbers likewise, `{ value: 8 }`). Declare `outputSchema: 'string'` (or `'number'`) to send the bare value as text.
+- `execute()` must return something. Returning `undefined` fails the call with `_meta.code: 'FLOW_EXITED_WITHOUT_OUTPUT'`; return an explicit result such as `{ ok: true }` from side-effect-only tools.
+
 ## Zod raw shape (most common)
 
 ```typescript

@@ -12,7 +12,7 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 | Method                                                           | Purpose                                                                                                        |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `execute(input: In): Promise<Out>`                               | The method you implement                                                                                       |
-| `this.get(token)`                                                | Resolve a DI dependency. Throws `DependencyNotFoundError` if not registered.                                   |
+| `this.get(token)`                                                | Resolve a DI dependency. Throws `ProviderNotAvailableError` if not registered.                                 |
 | `this.tryGet(token)`                                             | Resolve a DI dependency. Returns `undefined` if not registered.                                                |
 | `this.fail(err)`                                                 | Abort execution, trigger the error flow. **Never returns.** Use for business-logic errors.                     |
 | `this.respond(value)`                                            | Early-return with a value. Validates against `outputSchema`. **Never returns** (throws `FlowControl.respond`). |
@@ -57,7 +57,7 @@ interface UserService { findById(id: string): Promise<User | null>; }
 const USER_SERVICE: Token<UserService> = Symbol('UserService');
 
 async execute(input: { userId: string }) {
-  // Throws DependencyNotFoundError if USER_SERVICE isn't registered in scope
+  // Throws ProviderNotAvailableError if USER_SERVICE isn't registered in scope
   const users = this.get(USER_SERVICE);
 
   // Returns undefined if not registered — for optional deps
@@ -123,7 +123,7 @@ async execute(input: { items: string[] }) {
 }
 ```
 
-- `this.notify(msg, level?)` — sends `notifications/message` to the client (`debug` / `info` / `warning` / `error`). Always-best-effort.
+- `this.notify(msg, level?)` — sends `notifications/message` to the client at any of the eight MCP levels (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`), only once the client has asked for that level or a lower one (`logging/setLevel`, or `_meta["io.modelcontextprotocol/logLevel"]` under 2026-07-28). Always-best-effort: returns `false` when nothing was sent.
 - `this.progress(n, total?, msg?)` — sends `notifications/progress` IF the request had a progress token. Returns `false` when no token was provided (so the call costs almost nothing if nobody's listening).
 - `this.mark(stage)` — server-side breadcrumb, surfaced in logs / metrics / traces. No client notification.
 - `this.notifyResourceUpdated(uri)` — sends `notifications/resources/updated` to every session subscribed to `uri` (via `resources/subscribe`); no-op for non-subscribers. Call it when a tool mutates state that backs a `@Resource` so subscribers re-fetch.

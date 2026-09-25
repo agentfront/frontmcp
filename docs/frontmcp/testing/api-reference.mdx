@@ -95,18 +95,21 @@ interface ToolResult {
   // Status checks
   isSuccess: boolean;
   isError: boolean;
+  durationMs: number;
 
   // Content accessors
-  text(): string;                    // Get text content
-  json<T = unknown>(): T;            // Parse JSON content
-  image(): { data: string; mimeType: string };
+  text(): string | undefined;        // First text content
+  json<T = unknown>(): T;            // Parsed JSON text (structuredContent for Tool UI results)
+  hasTextContent(): boolean;
+  hasImageContent(): boolean;
+  hasResourceContent(): boolean;
+  hasToolUI(): boolean;
 
-  // Raw access
-  raw: CallToolResult;               // Raw MCP response
-  content: Content[];                // Content array
+  // Raw access: content items are in raw.content
+  raw: CallToolResult;
 
-  // Error info (if isError)
-  error?: { code: number; message: string };
+  // JSON-RPC error info; a tool error is an isError result with raw._meta.code
+  error?: { code: number; message: string; data?: unknown };
 }
 ```
 
@@ -146,12 +149,15 @@ mcp.resources.read(uri: string): Promise<ResourceContent>
 
 ```ts
 interface ResourceContent {
-  text(): string;                    // Get text content
-  json<T = unknown>(): T;            // Parse JSON content
-  blob(): Uint8Array;                // Get binary content
-  mimeType: string;                  // Content MIME type
-  uri: string;                       // Resource URI
-  raw: ReadResourceResult;           // Raw MCP response
+  isSuccess: boolean;
+  isError: boolean;
+  durationMs: number;
+  text(): string | undefined;        // First text content
+  json<T = unknown>(): T;            // Parsed JSON text
+  mimeType(): string | undefined;    // MIME type of the first content item
+  hasMimeType(type: string): boolean;
+  raw: ReadResourceResult;           // Raw MCP response: URIs and blobs are in raw.contents
+  error?: { code: number; message: string; data?: unknown };
 }
 ```
 
@@ -181,8 +187,13 @@ mcp.prompts.get(name: string, args?: Record<string, string>): Promise<PromptResu
 
 ```ts
 interface PromptResult {
+  isSuccess: boolean;
+  isError: boolean;
+  durationMs: number;
   messages: PromptMessage[];         // Array of messages
   description?: string;              // Optional description
+  raw: GetPromptResult;              // Raw MCP response
+  error?: { code: number; message: string; data?: unknown };
 }
 
 interface PromptMessage {

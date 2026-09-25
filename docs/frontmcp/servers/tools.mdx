@@ -269,22 +269,39 @@ Tools support multiple return formats. The SDK automatically converts your retur
 
 ### Simple Returns
 
-```ts
-// String -> text content
-execute() {
-  return 'Operation completed successfully';
-}
+Without an `outputSchema`, the result is sent as JSON: in `structuredContent`, and as JSON text in `content`. A plain value (string, number, boolean or array) is wrapped as `{ value: … }`:
 
-// Object -> auto-serialized to JSON
+```ts
+// Object -> structuredContent { id, status }, text '{"id":"123","status":"created"}'
 execute() {
   return { id: '123', status: 'created' };
 }
 
-// Number/Boolean -> converted to text
+// String -> structuredContent { value: 'Operation completed' }, text '{"value":"Operation completed"}'
+execute() {
+  return 'Operation completed';
+}
+
+// Number -> structuredContent { value: 42 }, text '{"value":42}'
 execute() {
   return 42;
 }
 ```
+
+To send plain text or a bare number, declare the primitive output type. The text content is then the value itself, and `structuredContent` is `{ content: value }`:
+
+```ts
+@Tool({ name: 'greet', inputSchema: { name: z.string() }, outputSchema: 'string' })
+class GreetTool extends ToolContext {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`; // text content: Hello, Alice!
+  }
+}
+```
+
+<Warning>
+`execute()` must return a value. A tool that returns `undefined` (for example, an `async execute()` with no `return`) fails with `_meta.code: "FLOW_EXITED_WITHOUT_OUTPUT"` ("Flow exited without producing output"). Return an explicit result, such as `{ ok: true }`, from tools that only have side effects.
+</Warning>
 
 ### Full MCP Format
 
@@ -610,7 +627,7 @@ class LongTaskTool extends ToolContext {
 }
 ```
 
-Log levels: `'debug'`, `'info'`, `'warning'`, `'error'`
+Log levels are the eight MCP levels: `'debug'`, `'info'`, `'notice'`, `'warning'`, `'error'`, `'critical'`, `'alert'`, `'emergency'`. A message is sent only at or above the level the client asked for: with `logging/setLevel` on a session, or with `_meta["io.modelcontextprotocol/logLevel"]` on a 2026-07-28 request. Until the client asks, `notify()` returns `false`.
 
 ### Sending Progress
 
