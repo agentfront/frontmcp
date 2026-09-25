@@ -88,10 +88,10 @@ describe('error ids in production logs', () => {
     expect(serverLogLines.filter((line) => line.includes(THROWN_MESSAGE))).toHaveLength(1);
   });
 
-  it('logs the failure of an Error passed to this.fail()', async () => {
-    const { serverLog } = await callLookupAndCaptureLogs('fail');
+  it('logs the failure of an Error passed to this.fail() once', async () => {
+    const { serverLogLines } = await callLookupAndCaptureLogs('fail');
 
-    expect(serverLog).toContain(FAILED_MESSAGE);
+    expect(serverLogLines.filter((line) => line.includes(FAILED_MESSAGE))).toHaveLength(1);
   });
 
   it('logs the error id shown to the client for an Error passed to this.fail()', async () => {
