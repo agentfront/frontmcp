@@ -48,6 +48,8 @@ describe('DirectMcpServer failure logging', () => {
 
     await expect(server.callTool('check_stock', {})).rejects.toThrow();
 
-    expect(capturedLogLines.filter((line) => line.includes(THROWN_MESSAGE))).toHaveLength(1);
+    const failureLines = capturedLogLines.filter((line) => line.includes(THROWN_MESSAGE));
+    expect(failureLines).toHaveLength(1);
+    expect(failureLines[0]).toContain("flowName: 'tools:call-tool'");
   });
 });
