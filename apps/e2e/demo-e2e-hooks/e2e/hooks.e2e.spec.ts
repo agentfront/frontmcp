@@ -46,23 +46,21 @@ test.describe('Hooks E2E', () => {
       expect(content).toContain('"hookType":"did"');
     });
 
-    test('should execute hooks in priority order', async ({ mcp }) => {
+    test('should execute hooks with a lower priority first', async ({ mcp }) => {
       await mcp.tools.call('clear-audit-log', {});
       await mcp.tools.call('audited-tool', { message: 'test' });
 
-      const result = await mcp.tools.call('get-audit-log', {});
+      const result = await mcp.tools.call('get-audit-log', { toolName: 'audited-tool' });
 
       expect(result).toBeSuccessful();
 
-      const content = JSON.stringify(result);
-
-      // Check execution order array contains expected patterns
-      // Will hooks: high priority (100) runs before low priority (50)
-      // Did hooks: high priority (100) runs before low priority (50)
-      expect(content).toContain('will:execute:100');
-      expect(content).toContain('will:execute:50');
-      expect(content).toContain('did:execute:100');
-      expect(content).toContain('did:execute:50');
+      const data = result.json<{ entries: Array<{ hookType: string; priority: number }> }>();
+      expect(data.entries.map((entry) => `${entry.hookType}:${entry.priority}`)).toEqual([
+        'will:50',
+        'will:100',
+        'did:50',
+        'did:100',
+      ]);
     });
 
     test('should track execution order correctly', async ({ mcp }) => {

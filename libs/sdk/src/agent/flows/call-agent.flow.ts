@@ -25,6 +25,7 @@ import {
   InvalidOutputError,
   RateLimitError,
 } from '../../errors';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { type SdkAuthInfo } from '../../server/server.types';
 
 // ============================================================================
@@ -342,24 +343,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     try {
       const context = agent.create(input.arguments, { ...ctx, progressToken });
-      const agentHooks = this.scope.hooks.getClsHooks(agent.record.provide).map((hook) => {
-        const originalRun = hook.run;
-        hook.run = async (hookInput, hookCtx) => {
-          const methodName = hook.metadata.method;
-          const contextRecord = context as unknown as Record<string, (() => Promise<void>) | undefined>;
-          const method = contextRecord[methodName];
-          if (method) {
-            await method.call(context);
-          }
-          // Fall back to original run if no method found
-          if (!method && originalRun) {
-            return originalRun(hookInput, hookCtx);
-          }
-        };
-        return hook;
-      });
-
-      this.appendContextHooks(agentHooks);
+      this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(agent.record.provide), context));
       context.mark('createAgentContext');
 
       // Wire transport to FrontMcpContext for elicitation support

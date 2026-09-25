@@ -55,6 +55,15 @@ export class FlowControl extends Error {
 
 // 1) The actual abstract class (value)
 export abstract class FlowBase<N extends FlowName = FlowName> {
+  /**
+   * The id of the app that owns the entry a run targets, read from the raw input before hooks load.
+   * App-scoped hooks run only when it matches their app.
+   */
+  static resolveHookOwnerId?: (
+    rawInput: unknown,
+    scope: ScopeEntry,
+  ) => string | undefined | Promise<string | undefined>;
+
   protected input: FlowInputOf<N>;
   state: FlowStateOf<N> = FlowState.create({});
   scopeLogger: FrontMcpLogger;
@@ -63,7 +72,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     protected readonly metadata: FlowMetadata<N>,
     readonly rawInput: Partial<FlowInputOf<N>> | any,
     protected readonly scope: ScopeEntry,
-    protected readonly appendContextHooks: (hooks: HookEntry[]) => void,
+    protected readonly appendContextHooks: (hooks: Array<Pick<HookEntry, 'metadata'>>) => void,
     protected readonly deps: ReadonlyMap<Token, unknown> = new Map(),
   ) {
     this.input = (metadata.inputSchema as any)?.parse?.(rawInput);

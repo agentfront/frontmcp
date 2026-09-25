@@ -20,7 +20,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
   </Card>
 
   <Card title="Priority" icon="arrow-up-1-9">
-    Higher priority runs first for Will/Stage; Did runs in reverse order
+    Within a stage, a lower priority runs first, for Will, Did and Stage hooks alike
   </Card>
   <Card title="Context" icon="database">
     Shared state object passed through all stages, allowing data flow between hooks
@@ -346,32 +346,34 @@ export default class TransformPlugin {
 ## Priority System
 
 <Info>
-  Priority determines execution order. Higher priority runs **first** for Will/Stage hooks, and **last** for Did hooks.
+  Priority sets the order within a stage: a lower priority runs **first**, for Will, Did and Stage hooks alike. Hooks with the same priority run in the order they were registered.
 </Info>
 
 ```ts
 class PriorityExample {
-  @ToolHook.Will('execute', { priority: 100 })
+  @ToolHook.Will('execute', { priority: 50 })
   async firstValidation() {
     // Runs first
   }
 
-  @ToolHook.Will('execute', { priority: 50 })
+  @ToolHook.Will('execute', { priority: 100 })
   async secondValidation() {
     // Runs second
   }
 
-  @ToolHook.Did('execute', { priority: 100 })
+  @ToolHook.Did('execute', { priority: 50 })
   async firstCleanup() {
-    // Runs last (Did reverses order)
+    // Runs first after the stage
   }
 
-  @ToolHook.Did('execute', { priority: 50 })
-  async secondCleanup() {
-    // Runs first
+  @ToolHook.Did('execute', { priority: 100 })
+  async lastCleanup() {
+    // Runs last
   }
 }
 ```
+
+To run a Will hook before everything else, give it a very low priority (the observability plugin uses `-1000`). To run a Did hook after everything else, give it a very high one (`1000`).
 
 ---
 
@@ -577,11 +579,11 @@ export default class ToolIsolationPlugin {
   </Accordion>
 
   <Accordion title="2. Set Appropriate Priorities">
-    - **Validation**: High priority (90-100)
+    - **Validation**: Low priority (1-20)
     - **Transformation**: Medium priority (40-60)
-    - **Logging/Metrics**: Low priority (1-20)
+    - **Logging/Metrics** (Did hooks): High priority (90-100)
 
-    This ensures validation runs before transformation, and logging captures everything.
+    Lower priorities run first, so validation runs before transformation, and late Did hooks capture everything.
 
   </Accordion>
 
