@@ -55,7 +55,7 @@ Hard deadline on a single execution.
 ```
 
 - **Scope**: per call. Wraps the entire `execute()` invocation.
-- **Behavior on timeout**: the framework throws an `ExecutionTimeoutError` (from `@frontmcp/guard`, code `'EXECUTION_TIMEOUT'`, HTTP status 408) and aborts the wrapped execution. The abort is internal to the timeout guard — it is **not** surfaced into `execute()` as a readable signal, so don't expect to observe it from inside the tool body.
+- **Behavior on timeout**: the framework throws an `ExecutionTimeoutError` (from `@frontmcp/guard`, code `'EXECUTION_TIMEOUT'`, HTTP status 408) and aborts `this.signal`, so `execute()` can observe the abort and pass the signal to cancellable work (see [Timeout and abort signals](#timeout-and-abort-signals)).
 - **Default**: no timeout. Tools can hang forever unless `timeout` is set.
 
 ## Interaction
