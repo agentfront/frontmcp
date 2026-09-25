@@ -80,7 +80,7 @@ class BadTool extends ToolContext {
 | Property            | Type                                                        | Description                                                                                                                                                                                                                         |
 | ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `description`       | `string`                                                    | Tool description for AI                                                                                                                                                                                                             |
-| `outputSchema`      | `ZodType`                                                   | Output validation schema                                                                                                                                                                                                            |
+| `outputSchema`      | `ToolOutputType`                                            | Output validation schema: a Zod schema or raw shape, a literal (`'string'`, `'number'`, `'boolean'`, `'date'`, `'image'`, `'audio'`, `'resource'`, `'resource_link'`), or an array of these for multiple content items              |
 | `id`                | `string`                                                    | Stable identifier for tracking                                                                                                                                                                                                      |
 | `tags`              | `string[]`                                                  | Categorization tags                                                                                                                                                                                                                 |
 | `visibility`        | `'public' \| 'hidden' \| 'internal'`                        | Discovery visibility. `hidden` hides from public lists; `internal` keeps it for in-process callers only                                                                                                                             |
@@ -110,11 +110,17 @@ class BadTool extends ToolContext {
   }),
 })
 
-// Primitive outputs
+// Primitive outputs: 'string', 'number', 'boolean', 'date'
 @Tool({
   name: 'calculate',
   inputSchema: { expression: z.string() },
   outputSchema: 'number', // Returns a number
+})
+
+@Tool({
+  name: 'greet',
+  inputSchema: { name: z.string() },
+  outputSchema: 'string', // Returns plain text, not { value: ... }
 })
 
 // MCP content types
@@ -135,7 +141,15 @@ class BadTool extends ToolContext {
   inputSchema: { uri: z.string() },
   outputSchema: 'resource', // Returns MCP resource
 })
+
+@Tool({
+  name: 'link_document',
+  inputSchema: { uri: z.string() },
+  outputSchema: 'resource_link', // Returns a link to an MCP resource
+})
 ```
+
+Without an `outputSchema`, a plain value (string, number, boolean or array) is sent wrapped as `{ value: … }`. Use a primitive literal to send it as is.
 
 ### Authorization
 
@@ -320,10 +334,14 @@ async execute(input) {
 
 ### Error Handling
 
+Fail with a `PublicMcpError` subclass, such as `InvalidInputError`, so the client gets its message and code. A plain `Error` is an internal error: the client gets `_meta.code: "SERVER_ERROR"`, and in production only "Internal FrontMCP error. Please contact support with error ID: err\_…".
+
 ```typescript
+import { InvalidInputError } from '@frontmcp/sdk';
+
 async execute(input) {
   if (!input.valid) {
-    this.fail(new Error('Invalid input'));
+    this.fail(new InvalidInputError('Invalid input'));
   }
 
   // Early return with output
@@ -353,7 +371,7 @@ type Output = ToolOutputOf<typeof metadata>; // { result: number }
 ## Full Example
 
 ```typescript
-import { Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { Tool, ToolContext, App, FrontMcp, InvalidInputError } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
@@ -394,7 +412,7 @@ class CalculateTool extends ToolContext {
       case 'subtract': result = input.a - input.b; break;
       case 'multiply': result = input.a * input.b; break;
       case 'divide':
-        if (input.b === 0) this.fail(new Error('Division by zero'));
+        if (input.b === 0) this.fail(new InvalidInputError('Division by zero'));
         result = input.a / input.b;
         break;
     }

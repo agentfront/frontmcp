@@ -216,7 +216,7 @@ Send log message notification.
 ```typescript
 protected notify(
   message: string | Record<string, unknown>,
-  level?: 'debug' | 'info' | 'warning' | 'error'
+  level?: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'
 ): Promise<boolean>
 ```
 
