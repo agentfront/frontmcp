@@ -53,9 +53,6 @@ describe('resources/read on a resource template that returns a shorthand value',
   });
 
   it('bases every content URI of an array result on the read URI', async () => {
-    const uris = await readContentUris('attachments://9');
-
-    expect(uris).toHaveLength(2);
-    expect(uris.filter((uri) => !uri.startsWith('attachments://9'))).toEqual([]);
+    expect(await readContentUris('attachments://9')).toEqual(['attachments://9#0', 'attachments://9#1']);
   });
 });

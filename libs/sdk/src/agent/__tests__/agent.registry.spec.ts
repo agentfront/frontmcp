@@ -377,7 +377,7 @@ describe('AgentRegistry', () => {
         llm: { adapter: mockLlmAdapter },
       })
       class DefaultsAgent extends AgentContext {
-        override async execute(input: { query: string }) {
+        override async execute(input: { limit: number; query: string }) {
           return { result: input.query };
         }
       }
