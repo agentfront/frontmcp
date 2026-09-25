@@ -119,7 +119,7 @@ Entries are matched by origin (scheme, host and port), so `https://api.internal.
 
 A request that carries the caller's token or `x-frontmcp-*` headers never follows a redirect, so those headers never reach an origin you did not list. It is sent with `redirect: 'manual'`, and a 3xx comes back to your code; if you ask for `redirect: 'error'`, the redirect rejects the `fetch` instead.
 
-`requestTimeout` applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both.
+`requestTimeout` applies when you pass no `signal` in the options, and so does the `Request`'s own signal; a `signal` passed in the options replaces both. Inside a tool, `this.fetch()` is also aborted when the call is cancelled or its execution timeout passes.
 
 ### Custom Headers
 

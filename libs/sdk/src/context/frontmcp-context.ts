@@ -712,9 +712,14 @@ export class FrontMcpContext {
    *
    * @param input - Request URL or Request object
    * @param init - Request options
+   * @param executionSignal - Aborts the request as well, on top of the caller's signal or the request timeout
    * @returns Fetch response
    */
-  async fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+  async fetch(
+    input: RequestInfo | URL,
+    init?: FrontMcpFetchInit | RequestInit,
+    executionSignal?: AbortSignal,
+  ): Promise<Response> {
     let effectiveInit: RequestInit = (init ?? {}) as RequestInit;
     let effectiveInput: RequestInfo | URL = input;
 
@@ -789,18 +794,19 @@ export class FrontMcpContext {
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
     // fire-and-forget signals whose internal abort listeners are never cleaned up).
     // A Request always carries a signal, so only a signal passed in init replaces the timeout.
-    let signal = effectiveInit.signal ?? undefined;
+    let requestSignal = effectiveInit.signal ?? undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    if (!signal) {
+    if (!requestSignal) {
       const controller = new AbortController();
       timeoutId = setTimeout(
         () => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
         this.config.requestTimeout ?? 30000,
       );
-      signal = inputRequest ? AbortSignal.any([inputRequest.signal, controller.signal]) : controller.signal;
+      requestSignal = inputRequest ? AbortSignal.any([inputRequest.signal, controller.signal]) : controller.signal;
     }
 
+    const signal = executionSignal ? AbortSignal.any([executionSignal, requestSignal]) : requestSignal;
     const requestedRedirect = effectiveInit.redirect ?? inputRequest?.redirect;
 
     try {

@@ -1,5 +1,6 @@
 // errors/mcp.error.ts
 import { AuthorityDeniedError } from '@frontmcp/auth';
+import { GuardError } from '@frontmcp/guard';
 import { bytesToHex, isProduction, randomBytes } from '@frontmcp/utils';
 
 /**
@@ -715,6 +716,16 @@ export class AuthorityDeniedMcpError extends PublicMcpError {
 }
 
 /**
+ * A guard limit refused or stopped the call (rate limit, concurrency, queue or execution
+ * timeout). Public, so the caller learns which limit it hit, under the guard's own code.
+ */
+export class GuardLimitMcpError extends PublicMcpError {
+  constructor(error: GuardError) {
+    super(error.message, error.code, error.statusCode);
+  }
+}
+
+/**
  * Whether an error thrown inside an entry already says what the client should see
  * (a public error, or an authorities refusal), so a flow passes it on unwrapped.
  */
@@ -732,6 +743,10 @@ export function toMcpError(error: any): McpError {
 
   if (error instanceof AuthorityDeniedError) {
     return new AuthorityDeniedMcpError(error);
+  }
+
+  if (error instanceof GuardError) {
+    return new GuardLimitMcpError(error);
   }
 
   if (error instanceof Error) {

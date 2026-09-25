@@ -70,7 +70,7 @@ By the end of this guide, your server will have:
     ```
 
     <Tip>
-    Setting `throttle.enabled: true` is required. Without it, rate limit decorators on tools are ignored.
+    A tool's own `rateLimit` and `concurrency` are enforced without `throttle`. Setting `throttle.enabled: true` also turns on the app-level options (`global`, `defaultRateLimit`, `ipFilter`, …), and `throttle.enabled: false` turns every guard off.
     </Tip>
 
   </Step>
@@ -154,7 +154,7 @@ Protect against hanging requests by setting a maximum execution time.
     }
     ```
 
-    If execution takes longer than 30 seconds, it throws `ExecutionTimeoutError` (408).
+    If execution takes longer than 30 seconds, it throws `ExecutionTimeoutError` (408) and aborts `this.signal`, along with the tool's pending `this.fetch()` requests. Pass `this.signal` to other cancellable calls so the work stops too.
 
   </Step>
 

@@ -54,7 +54,7 @@ export {
 export { AuthoritiesEngine } from './authorities.engine';
 
 // Context builder
-export { AuthoritiesContextBuilder } from './authorities.context';
+export { AuthoritiesContextBuilder, isAnonymousSubject } from './authorities.context';
 export type { ClaimsResolverFn } from './authorities.context';
 
 // Registries

@@ -1,3 +1,4 @@
+import { type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type FuncType, type Type } from '@frontmcp/di';
 import { type ZodType } from '@frontmcp/lazy-zod';
 
@@ -32,10 +33,8 @@ export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
   /**
-   * AbortSignal that fires when the enclosing request is cancelled.
-   * Populated for task-augmented `tools/call` invocations so long-running work
-   * can observe `tasks/cancel` promptly (MCP 2025-11-25 tasks spec).
-   * Non-task invocations leave this unset.
+   * AbortSignal that fires when the enclosing request is cancelled (including
+   * `tasks/cancel` for task-augmented calls, MCP 2025-11-25 tasks spec).
    */
   signal?: AbortSignal;
 };
@@ -72,8 +71,10 @@ export abstract class ToolContext<
   private readonly _progressToken?: string | number;
 
   /**
-   * AbortSignal exposed to tool authors. Fires when a task-augmented call is
-   * cancelled via `tasks/cancel` (MCP 2025-11-25). Undefined for non-task calls.
+   * AbortSignal exposed to tool authors. Fires when the request is cancelled
+   * (including `tasks/cancel` for a task-augmented call) and when the tool's
+   * execution timeout passes. Pass it to `fetch` and other cancellable work so
+   * a timed-out call stops instead of running on.
    */
   readonly signal?: AbortSignal;
 
@@ -93,6 +94,16 @@ export abstract class ToolContext<
   }
 
   abstract execute(input: In): Promise<Out>;
+
+  /**
+   * Like {@link ExecutionContextBase.fetch}, and also aborted with {@link signal}, so a
+   * cancelled or timed-out call stops its outbound requests.
+   */
+  override fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+    const context = this.tryGetContext();
+    if (context && this.signal) return context.fetch(input, init, this.signal);
+    return super.fetch(input, init);
+  }
 
   public get input(): In {
     return this._input as In;
