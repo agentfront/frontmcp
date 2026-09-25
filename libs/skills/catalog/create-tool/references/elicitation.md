@@ -121,6 +121,15 @@ if (result.status === 'decline') {
 }
 ```
 
+## Under MCP 2026-07-28
+
+There are no server-to-client requests in this revision. `this.elicit()` answers the first call with `resultType: 'input_required'` and a `requestState`; the client retries with `inputResponses`, and `execute()` runs again **from the top** with each asked `elicit()` returning its answer. Keep side effects after the last `elicit()`, or make them idempotent.
+
+- An accepted answer is validated against the schema; a mismatch (or an unknown `action`) fails the call with `INVALID_INPUT`.
+- A client without the `elicitation` capability for the mode gets error `-32021`. Capabilities come with each request, and `this.elicit()` checks them itself. A session-based check such as `this.scope.notifications.getClientCapabilities(sessionId)` finds nothing here, so call `this.elicit()` directly.
+- `sendElicitationResult` is not listed to 2026-07-28 clients.
+- Anonymous callers keep their `requestState` across rounds (it binds to one shared anonymous principal).
+
 ## See also
 
 - [`19-tool-with-elicitation`](../examples/19-tool-with-elicitation.md)
