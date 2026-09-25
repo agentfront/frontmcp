@@ -550,7 +550,9 @@ Protocol 2026-07-28 has no server-to-client requests, so `this.elicit()` works t
 2. The client retries the same call with `inputResponses` and that `requestState`.
 3. The entry runs again **from the top**, and each `elicit()` it has already asked returns the answer the client sent. Code before an `elicit()` runs on every round, so keep side effects after the last `elicit()` or make them idempotent.
 
-The same rules apply as in a session:
+Capabilities come with each request, not from a session. `this.elicit()` checks the request's own capabilities, so do not use the session-based [manual capability check](#manual-capability-check) under this revision. Call `this.elicit()` directly.
+
+Otherwise the same rules apply as in a session:
 
 - `elicitation.enabled: true` is required.
 - An accepted answer is validated against the schema. A mismatch fails the call with `INVALID_INPUT`, and an unknown `action` is rejected the same way.
@@ -572,7 +574,7 @@ When you call `this.elicit()`, FrontMCP:
 
 ### Manual Capability Check
 
-You can check elicitation support before calling `elicit()`:
+A session client's capabilities can be checked before calling `elicit()`. The check looks them up by session id, so it only applies to session clients. A [2026-07-28](#elicitation-under-mcp-2026-07-28) request has no session, so the lookup finds nothing:
 
 ```ts
 import { supportsElicitation } from '@frontmcp/sdk';

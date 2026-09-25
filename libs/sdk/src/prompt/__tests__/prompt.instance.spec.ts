@@ -1,8 +1,9 @@
 import 'reflect-metadata';
+
+import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
+import { Prompt, prompt, PromptContext, PromptKind } from '../../common';
 import { PromptInstance } from '../prompt.instance';
-import { PromptKind, Prompt, prompt, PromptContext } from '../../common';
 import { normalizePrompt } from '../prompt.utils';
-import { createMockProviderRegistry, createMockOwner } from '../../__test-utils__/mocks';
 
 describe('PromptInstance', () => {
   describe('constructor', () => {
@@ -371,7 +372,7 @@ describe('PromptInstance', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should handle undefined output', async () => {
+    it('should return a failure for undefined output, which has no valid prompt message', async () => {
       @Prompt({
         name: 'safe-undefined',
         arguments: [],
@@ -387,7 +388,7 @@ describe('PromptInstance', () => {
       await instance.ready;
 
       const result = instance.safeParseOutput(undefined);
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
   });
 

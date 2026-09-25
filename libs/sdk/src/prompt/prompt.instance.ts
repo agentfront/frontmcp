@@ -1,6 +1,6 @@
 // file: libs/sdk/src/prompt/prompt.instance.ts
 
-import { type GetPromptResult } from '@frontmcp/protocol';
+import { GetPromptResultSchema, type GetPromptResult } from '@frontmcp/protocol';
 
 import {
   PromptContext,
@@ -130,7 +130,7 @@ export class PromptInstance extends PromptEntry {
    * Convert the raw prompt return value into an MCP GetPromptResult.
    */
   override parseOutput(raw: unknown): ParsedPromptResult {
-    return buildParsedPromptResult(raw, this.metadata);
+    return GetPromptResultSchema.parse(buildParsedPromptResult(raw, this.metadata));
   }
 
   /**

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
+
 import {
   createTestFetchServer,
   rpc20260728,
@@ -76,10 +78,81 @@ class GetInvoiceTool extends ToolContext {
 @App({ id: 'billing', name: 'Billing', tools: [GetInvoiceTool] })
 class BillingApp {}
 
+@Plugin({ name: 'filtered-around' })
+class FilteredAroundPlugin {
+  @ToolHook.Around('execute', { filter: () => false })
+  async skippedAround(_ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>) {
+    trace.push('skipped Around ran');
+    await next();
+  }
+}
+
+@Plugin({ name: 'fallback' })
+class FallbackPlugin {
+  @ToolHook.Around('execute')
+  async fallbackOnFailure(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>) {
+    try {
+      await next();
+    } catch {
+      trace.push('Around: recovered');
+      ctx.state.required.toolContext.output = { recovered: true };
+    }
+  }
+}
+
+@Provider({ name: 'nested-audit-hooks' })
+class NestedAuditHooks {
+  @ToolHook.Will('execute')
+  onNestedPluginProvider() {
+    trace.push('hook on nested plugin provider');
+  }
+}
+
+@Plugin({ name: 'nested-audit', providers: [NestedAuditHooks], exports: [NestedAuditHooks] })
+class NestedAuditPlugin {}
+
+@Plugin({ name: 'audit-bundle', plugins: [NestedAuditPlugin] })
+class AuditBundlePlugin {}
+
+@Tool({ name: 'get_report', inputSchema: {} })
+class GetReportTool extends ToolContext {
+  async execute() {
+    trace.push('EXECUTE get_report');
+    return { ok: true };
+  }
+}
+
+@Tool({ name: 'get_forecast', inputSchema: {}, outputSchema: { recovered: z.boolean() } })
+class GetForecastTool extends ToolContext {
+  async execute(): Promise<{ recovered: boolean }> {
+    throw new Error('The forecast service is down');
+  }
+}
+
+@App({
+  id: 'ops',
+  name: 'Ops',
+  tools: [GetReportTool, GetForecastTool],
+  plugins: [FilteredAroundPlugin, FallbackPlugin],
+})
+class OpsApp {}
+
+@Tool({ name: 'get_audit_log', inputSchema: {} })
+class GetAuditLogTool extends ToolContext {
+  async execute() {
+    trace.push('EXECUTE get_audit_log');
+    return { ok: true };
+  }
+}
+
+@App({ id: 'audit', name: 'Audit', tools: [GetAuditLogTool], plugins: [AuditBundlePlugin] })
+class AuditApp {}
+
 describe('tools:call-tool flow hooks', () => {
   let server: TestFetchServer;
   let deskTrace: string[];
   let billingTrace: string[];
+  let reportTrace: string[];
 
   async function traceToolCall(name: string): Promise<string[]> {
     trace.length = 0;
@@ -90,10 +163,11 @@ describe('tools:call-tool flow hooks', () => {
   beforeAll(async () => {
     server = await createTestFetchServer({
       info: { name: 'flow-hooks', version: '1.0.0' },
-      apps: [DeskApp, BillingApp],
+      apps: [DeskApp, BillingApp, OpsApp],
     });
     deskTrace = await traceToolCall('get_ticket');
     billingTrace = await traceToolCall('get_invoice');
+    reportTrace = await traceToolCall('get_report');
   });
 
   it('runs the execute stage inside the next() of an Around hook', () => {
@@ -120,5 +194,34 @@ describe('tools:call-tool flow hooks', () => {
 
   it('does not run hooks of a plugin registered on another app', () => {
     expect(billingTrace).toEqual(['EXECUTE get_invoice']);
+  });
+
+  it('does not run hooks of another app when the tool is called by its hyphenated alias', async () => {
+    expect(await traceToolCall('get-invoice')).toEqual(['EXECUTE get_invoice']);
+  });
+
+  it('runs the stage when an Around hook is skipped by its filter', () => {
+    expect(reportTrace).toContain('EXECUTE get_report');
+    expect(reportTrace).not.toContain('skipped Around ran');
+  });
+
+  it('lets an Around hook recover a failing stage by catching the rejected next()', async () => {
+    const { message } = await rpc20260728(server.handler, 'tools/call', { name: 'get_forecast', arguments: {} });
+
+    expect(message.result?.['isError']).toBeFalsy();
+    expect(message.result?.['structuredContent']).toEqual({ recovered: true });
+  });
+});
+
+describe('tools:call-tool hooks from nested plugins', () => {
+  it('runs a hook on a provider exported by a nested plugin once', async () => {
+    const server = await createTestFetchServer({
+      info: { name: 'flow-hooks-nested-plugins', version: '1.0.0' },
+      apps: [AuditApp],
+    });
+    trace.length = 0;
+    await rpc20260728(server.handler, 'tools/call', { name: 'get_audit_log', arguments: {} });
+
+    expect(trace.filter((entry) => entry === 'hook on nested plugin provider')).toHaveLength(1);
   });
 });

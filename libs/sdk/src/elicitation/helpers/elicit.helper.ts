@@ -113,7 +113,7 @@ export async function performElicit<S extends ZodType>(
     if (answer.status !== 'accept') {
       return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
     }
-    const parsedContent = zodSchema.safeParse(answer.content);
+    const parsedContent = await zodSchema.safeParseAsync(answer.content);
     if (!parsedContent.success) {
       throw new InvalidInputError(
         'The elicitation answer does not match the requested schema',

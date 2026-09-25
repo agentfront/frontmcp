@@ -30,6 +30,8 @@ import { cloneStageMap, collectFlowHookMap, mergeHookMetasIntoStageMap, type Sta
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
+const FAILED_OUTCOMES: ReadonlySet<StageOutcome> = new Set(['fail', 'abort', 'unknown_error']);
+
 interface StageResult {
   outcome: StageOutcome;
   control?: FlowControl | Error;
@@ -282,7 +284,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Compute next order base after any class-defined entries.
     let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
 
-    const hookOwnerId = (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
+    const hookOwnerId = await (FlowClass as typeof FlowBase).resolveHookOwnerId?.(input, scope);
 
     const initialInjectedHooks =
       (this.hooks.getFlowHooksForOwner(name, hookOwnerId) as HookEntry<
@@ -385,7 +387,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       } catch (e) {
         return toStageResult(e);
       }
-      return innerResult;
+      // Returning normally after a rejected next() means the hook handled that failure.
+      return FAILED_OUTCOMES.has(innerResult.outcome) ? { outcome: 'ok' } : innerResult;
     };
 
     // Run exactly one stage in order: will → around(stage) → did (did runs once)
