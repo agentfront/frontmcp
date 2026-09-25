@@ -84,7 +84,7 @@ const toBeSuccessful: MatcherFunction<[]> = function (received) {
 /**
  * Check if result is an error, optionally with a specific error code
  */
-const toBeError: MatcherFunction<[expectedCode?: number]> = function (received, expectedCode) {
+const toBeError: MatcherFunction<[expectedCode?: number | string]> = function (received, expectedCode) {
   const result = received as ResultWrapper;
 
   if (typeof result !== 'object' || result === null || !('isError' in result)) {
@@ -94,11 +94,9 @@ const toBeError: MatcherFunction<[expectedCode?: number]> = function (received, 
     };
   }
 
-  let pass = result.isError;
-
-  if (pass && expectedCode !== undefined) {
-    pass = result.error?.code === expectedCode;
-  }
+  const receivedCode = typeof expectedCode === 'string' ? result.raw?._meta?.['code'] : result.error?.code;
+  const codeMatches = expectedCode === undefined || receivedCode === expectedCode;
+  const pass = result.isError && codeMatches;
 
   return {
     pass,
@@ -106,8 +104,8 @@ const toBeError: MatcherFunction<[expectedCode?: number]> = function (received, 
       if (!result.isError) {
         return 'Expected result to be an error, but it was successful';
       }
-      if (expectedCode !== undefined && result.error?.code !== expectedCode) {
-        return `Expected error code ${expectedCode}, but got ${result.error?.code}`;
+      if (!codeMatches) {
+        return `Expected error code ${expectedCode}, but got ${String(receivedCode)}`;
       }
       return 'Expected result not to be an error';
     },

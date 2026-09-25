@@ -46,7 +46,7 @@ expect(result).toBeSuccessful();
 
 ### toBeError
 
-Check if a result is an error, optionally with a specific error code:
+Check if a result is an error, optionally with a specific error code. A string is matched against the tool error code in `_meta.code`; a number is matched against a JSON-RPC error code:
 
 ```ts
 const result = await mcp.tools.call('create-note', {});
@@ -54,9 +54,17 @@ const result = await mcp.tools.call('create-note', {});
 // Any error
 expect(result).toBeError();
 
-// Specific error code
-expect(result).toBeError(-32602); // Invalid params
+// Tool error code: invalid input is an isError result with _meta.code "INVALID_INPUT"
+expect(result).toBeError('INVALID_INPUT');
+
+// An unknown tool is also an isError result, with _meta.code "TOOL_NOT_FOUND"
+expect(await mcp.tools.call('unknown-tool', {})).toBeError('TOOL_NOT_FOUND');
+
+// JSON-RPC error code: an unknown prompt is a JSON-RPC error
+expect(await mcp.prompts.get('unknown-prompt')).toBeError(-32602);
 ```
+
+Errors raised while a tool runs, including invalid input, come back as a tool result with `isError: true` and a string `_meta.code` (`INVALID_INPUT`, `NOT_FOUND`, `INTERNAL_ERROR`, …), not as a JSON-RPC error. Use the string form for them.
 
 **Common MCP Error Codes:**
 
@@ -306,11 +314,11 @@ The matchers are fully typed. TypeScript will autocomplete matcher names and val
 // ✓ TypeScript knows these matchers
 expect(tools).toContainTool('name');
 expect(result).toBeSuccessful();
-expect(result).toBeError(-32602);
+expect(result).toBeError('INVALID_INPUT');
 
 // ✗ TypeScript errors on invalid matchers
 expect(tools).toContainsTool('name'); // Typo caught
-expect(result).toBeError('invalid'); // Wrong argument type
+expect(result).toBeError(true); // Wrong argument type
 ```
 
 ---

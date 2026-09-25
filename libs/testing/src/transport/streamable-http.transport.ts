@@ -9,11 +9,13 @@ import type {
   JsonRpcRequest,
   JsonRpcResponse,
   McpTransport,
+  NotificationHandler,
   TransportConfig,
   TransportState,
 } from './transport.interface';
 
 const DEFAULT_TIMEOUT = 30000;
+const NOTIFICATION_STREAM_REOPEN_DELAY_MS = 250;
 
 /**
  * StreamableHTTP transport for MCP communication
@@ -23,7 +25,7 @@ const DEFAULT_TIMEOUT = 30000;
  */
 export class StreamableHttpTransport implements McpTransport {
   private readonly config: Required<
-    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'entryPath'>
+    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'notificationHandler' | 'entryPath'>
   > & {
     interceptors?: InterceptorChain;
     clientInfo?: ClientInfo;
@@ -38,6 +40,10 @@ export class StreamableHttpTransport implements McpTransport {
   private interceptors?: InterceptorChain;
   private readonly publicMode: boolean;
   private elicitationHandler?: ElicitationHandler;
+  private readonly notificationHandler?: NotificationHandler;
+  private notificationStream?: AbortController;
+  private notificationProtocolVersion = '';
+  private notificationStreamReopenTimer?: ReturnType<typeof setTimeout>;
 
   constructor(config: TransportConfig) {
     this.config = {
@@ -55,6 +61,7 @@ export class StreamableHttpTransport implements McpTransport {
     this.interceptors = config.interceptors;
     this.publicMode = config.publicMode ?? false;
     this.elicitationHandler = config.elicitationHandler;
+    this.notificationHandler = config.notificationHandler;
   }
 
   async connect(): Promise<void> {
@@ -343,7 +350,13 @@ export class StreamableHttpTransport implements McpTransport {
     }
   }
 
+  async openNotificationStream(protocolVersion: string): Promise<void> {
+    this.notificationProtocolVersion = protocolVersion;
+    await this.connectNotificationStream();
+  }
+
   async close(): Promise<void> {
+    this.closeNotificationStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
     this.log('StreamableHTTP transport closed');
@@ -394,6 +407,7 @@ export class StreamableHttpTransport implements McpTransport {
   }
 
   async simulateDisconnect(): Promise<void> {
+    this.closeNotificationStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
   }
@@ -418,6 +432,79 @@ export class StreamableHttpTransport implements McpTransport {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════
+
+  private closeNotificationStream(): void {
+    clearTimeout(this.notificationStreamReopenTimer);
+    this.notificationStream?.abort();
+    this.notificationStream = undefined;
+  }
+
+  /** Opens the stream without holding up the caller past the request timeout; close() aborts it at any point. */
+  private async connectNotificationStream(): Promise<void> {
+    if (!this.sessionId || this.notificationStream) return;
+    const controller = new AbortController();
+    this.notificationStream = controller;
+    const { 'Content-Type': _contentType, ...headers } = this.buildHeaders();
+    const established = fetch(this.mcpUrl(), {
+      method: 'GET',
+      headers: { ...headers, Accept: 'text/event-stream', 'MCP-Protocol-Version': this.notificationProtocolVersion },
+      signal: controller.signal,
+    }).then(
+      async (response) => {
+        const isEventStream = response.headers.get('content-type')?.includes('text/event-stream') ?? false;
+        if (!response.ok || !response.body || !isEventStream) {
+          await response.body?.cancel();
+          this.log(`Server offers no notification stream (HTTP ${response.status})`);
+          this.releaseNotificationStream(controller);
+          return;
+        }
+        void this.readNotificationStream(controller, response.body.getReader());
+      },
+      (error: unknown) => {
+        this.log('Failed to open the notification stream:', error);
+        this.releaseNotificationStream(controller);
+      },
+    );
+    let establishTimer: ReturnType<typeof setTimeout> | undefined;
+    const establishDeadline = new Promise<void>((resolve) => {
+      establishTimer = setTimeout(resolve, this.config.timeout);
+    });
+    await Promise.race([established, establishDeadline]);
+    clearTimeout(establishTimer);
+  }
+
+  private releaseNotificationStream(controller: AbortController): void {
+    if (this.notificationStream === controller) this.notificationStream = undefined;
+  }
+
+  private async readNotificationStream(
+    controller: AbortController,
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+  ): Promise<void> {
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+        const { completeEvents, remainder } = splitSSEEvents(buffer + decoder.decode(chunk.value, { stream: true }));
+        buffer = remainder;
+        for (const eventText of completeEvents) {
+          for (const event of this.parseSSEEvents(eventText, undefined).events) {
+            await this.handleSSEEvent(event);
+          }
+        }
+      }
+    } catch (error) {
+      this.log('Notification stream ended:', error);
+    } finally {
+      reader.releaseLock();
+    }
+    if (controller.signal.aborted || this.notificationStream !== controller) return;
+    this.releaseNotificationStream(controller);
+    this.notificationStreamReopenTimer = setTimeout(
+      () => void this.connectNotificationStream(),
+      NOTIFICATION_STREAM_REOPEN_DELAY_MS,
+    );
+  }
 
   /**
    * Handle SSE response with elicitation support.
@@ -589,6 +676,14 @@ export class StreamableHttpTransport implements McpTransport {
       if ('method' in parsed && parsed.method === 'elicitation/create') {
         await this.handleElicitationRequest(parsed as JsonRpcRequest);
         // This is not the final response - continue reading
+        return {
+          isFinal: false,
+          response: { jsonrpc: '2.0', id: null, result: undefined },
+        };
+      }
+
+      if ('method' in parsed && parsed.id === undefined) {
+        this.notificationHandler?.(parsed);
         return {
           isFinal: false,
           response: { jsonrpc: '2.0', id: null, result: undefined },
@@ -813,4 +908,13 @@ export class StreamableHttpTransport implements McpTransport {
       sseSessionId,
     };
   }
+}
+
+/** Splits complete SSE events off the buffer, accepting CRLF, CR and LF line endings, even split across chunks. */
+function splitSSEEvents(buffer: string): { completeEvents: string[]; remainder: string } {
+  const endsWithCarriageReturn = buffer.endsWith('\r');
+  const normalized = (endsWithCarriageReturn ? buffer.slice(0, -1) : buffer).replace(/\r\n?/g, '\n');
+  const completeEvents = normalized.split('\n\n');
+  const remainder = completeEvents.pop() ?? '';
+  return { completeEvents, remainder: endsWithCarriageReturn ? `${remainder}\r` : remainder };
 }

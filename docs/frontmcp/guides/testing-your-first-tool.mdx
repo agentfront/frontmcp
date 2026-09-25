@@ -107,9 +107,13 @@ test('add tool returns correct sum', async ({ mcp }) => {
   });
 
   expect(result).toBeSuccessful();
-  expect(result.json()).toBe(8);
+  expect(result.json()).toEqual({ value: 8 });
 });
 ```
+
+<Note>
+A tool without an `outputSchema` that returns a plain value (a number, string or array) sends it as `{ value: … }`, so `json()` returns `{ value: 8 }`. Declare `outputSchema: 'number'` to send the bare number instead.
+</Note>
 
 ### Testing Multiple Scenarios
 
@@ -118,19 +122,19 @@ test.describe('Calculator Tools', () => {
   test('add returns sum of two numbers', async ({ mcp }) => {
     const result = await mcp.tools.call('calculator:add', { a: 10, b: 5 });
     expect(result).toBeSuccessful();
-    expect(result.json()).toBe(15);
+    expect(result.json()).toEqual({ value: 15 });
   });
 
   test('multiply returns product', async ({ mcp }) => {
     const result = await mcp.tools.call('calculator:multiply', { a: 4, b: 7 });
     expect(result).toBeSuccessful();
-    expect(result.json()).toBe(28);
+    expect(result.json()).toEqual({ value: 28 });
   });
 
   test('divide handles division', async ({ mcp }) => {
     const result = await mcp.tools.call('calculator:divide', { a: 20, b: 4 });
     expect(result).toBeSuccessful();
-    expect(result.json()).toBe(5);
+    expect(result.json()).toEqual({ value: 5 });
   });
 });
 ```
@@ -153,9 +157,11 @@ test('missing required input returns validation error', async ({ mcp }) => {
     // missing 'b' parameter
   });
 
-  expect(result).toBeError(-32602); // Invalid params
+  expect(result).toBeError('INVALID_INPUT');
 });
 ```
+
+Invalid tool input comes back as a tool result with `isError: true` and `_meta.code: "INVALID_INPUT"`, not as a JSON-RPC error, so match it with the string code. A numeric code such as `toBeError(-32601)` matches JSON-RPC errors only.
 
 ---
 
@@ -267,24 +273,24 @@ test.describe('Calculator App', () => {
   test.describe('Basic Operations', () => {
     test('add works', async ({ mcp }) => {
       const result = await mcp.tools.call('calculator:add', { a: 1, b: 2 });
-      expect(result.json()).toBe(3);
+      expect(result.json()).toEqual({ value: 3 });
     });
 
     test('subtract works', async ({ mcp }) => {
       const result = await mcp.tools.call('calculator:subtract', { a: 5, b: 3 });
-      expect(result.json()).toBe(2);
+      expect(result.json()).toEqual({ value: 2 });
     });
   });
 
   test.describe('Advanced Operations', () => {
     test('power works', async ({ mcp }) => {
       const result = await mcp.tools.call('calculator:pow', { base: 2, exp: 8 });
-      expect(result.json()).toBe(256);
+      expect(result.json()).toEqual({ value: 256 });
     });
 
     test('sqrt works', async ({ mcp }) => {
       const result = await mcp.tools.call('calculator:sqrt', { n: 16 });
-      expect(result.json()).toBe(4);
+      expect(result.json()).toEqual({ value: 4 });
     });
   });
 
@@ -330,7 +336,7 @@ test.describe('MCP Server E2E Tests', () => {
       const result = await mcp.tools.call('calculator:add', { a: 100, b: 200 });
 
       expect(result).toBeSuccessful();
-      expect(result.json()).toBe(300);
+      expect(result.json()).toEqual({ value: 300 });
     });
 
     test('invalid input returns error', async ({ mcp }) => {
@@ -339,7 +345,7 @@ test.describe('MCP Server E2E Tests', () => {
         b: 5,
       });
 
-      expect(result).toBeError(-32602);
+      expect(result).toBeError('INVALID_INPUT');
     });
   });
 

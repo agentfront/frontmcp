@@ -79,13 +79,14 @@ mcp.tools.list(): Promise<Tool[]>
 Call a tool with arguments.
 
 ```ts
-mcp.tools.call(name: string, args?: Record<string, unknown>): Promise<ToolResult>
+mcp.tools.call(name: string, args?: Record<string, unknown>, options?: ToolCallOptions): Promise<ToolResult>
 ```
 
-| Parameter | Type                      | Description               |
-| --------- | ------------------------- | ------------------------- |
-| `name`    | `string`                  | Tool name                 |
-| `args`    | `Record<string, unknown>` | Tool arguments (optional) |
+| Parameter               | Type                      | Description                                                                                                                |
+| ----------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | `string`                  | Tool name                                                                                                                  |
+| `args`                  | `Record<string, unknown>` | Tool arguments (optional)                                                                                                  |
+| `options.progressToken` | `string \| number`        | Sent as `_meta.progressToken` (optional). Defaults to a generated token while `notifications.collectProgress()` is active. |
 
 **Returns:** `ToolResult` with methods:
 
@@ -223,7 +224,7 @@ mcp.serverInfo: {
 
 #### protocolVersion
 
-Get the MCP protocol version.
+Get the MCP protocol version the server negotiated. The client requests `2025-06-18` unless `withProtocolVersion()` sets another revision. `2026-07-28` has no `initialize` handshake, so `McpTestClient` does not support it and `build()` throws for it.
 
 ```ts
 mcp.protocolVersion: string
@@ -303,6 +304,50 @@ Send raw string data (for testing parse errors).
 
 ```ts
 mcp.raw.sendRaw(data: string): Promise<JsonRpcResponse>
+```
+
+---
+
+### Notifications API
+
+After `initialize`, the client opens the session's notification stream (a `GET` on the MCP endpoint), as MCP clients do. Everything the server sends there, and any notification streamed on a request's own response, is recorded.
+
+#### notifications.collect
+
+Return a collector over the server notifications received so far and from now on.
+
+```ts
+const notifications = mcp.notifications.collect();
+notifications.received; // NotificationEntry[]: { method, params, timestamp }
+notifications.has('notifications/message'); // boolean
+await notifications.waitFor('notifications/message', 5000); // resolves with the entry
+```
+
+The server sends `notifications/message` (what `this.notify()` logs) only after the client sets a level:
+
+```ts
+await mcp.raw.request({ jsonrpc: '2.0', id: 1, method: 'logging/setLevel', params: { level: 'info' } });
+```
+
+#### notifications.collectProgress
+
+Return a collector over `notifications/progress`. While it is active, `tools.call()` sends a generated `_meta.progressToken`, so `this.progress()` in the tool reports progress.
+
+```ts
+const progress = mcp.notifications.collectProgress();
+await mcp.tools.call('import_files', {});
+await progress.waitForComplete(5000); // until progress reaches total
+progress.all; // ProgressUpdate[]: { progress, total, progressToken, timestamp }
+```
+
+Notifications on the session stream can arrive after the call's result, so wait with `waitFor()` or `waitForComplete()` before asserting on them.
+
+#### notifications.send
+
+Send a notification to the server.
+
+```ts
+mcp.notifications.send(method: string, params?: Record<string, unknown>): Promise<void>
 ```
 
 ---
@@ -1300,7 +1345,7 @@ expect(tools).toContainTool(name: string): void
 
 ```ts
 expect(result).toBeSuccessful(): void
-expect(result).toBeError(code?: number): void
+expect(result).toBeError(code?: number | string): void
 ```
 
 ### Content Matchers
