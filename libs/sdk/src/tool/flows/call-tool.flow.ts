@@ -1508,7 +1508,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         tool: tool.metadata.name,
         errors: parseResult.error,
       });
-      throw new InvalidOutputError();
+      throw parseResult.error instanceof InvalidOutputError ? parseResult.error : new InvalidOutputError();
     }
 
     // Reject non-finite numbers (Infinity / -Infinity / NaN) — JSON.stringify

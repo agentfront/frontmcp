@@ -151,6 +151,8 @@ The `@ResourceTemplate` decorator accepts:
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
 
+When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read: `users://42/profile`, or `users://42/profile#0`, `#1` for array items without their own `uri`.
+
 ### Class-Based Pattern
 
 Use `@ResourceTemplate` with `uriTemplate` instead of `uri`. Type the `ResourceContext` generic parameter to get typed `params`.

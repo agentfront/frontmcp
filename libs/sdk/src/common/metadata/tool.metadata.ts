@@ -283,6 +283,11 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   name: string;
 
   /**
+   * Human-readable title listed by `tools/list`. When omitted, `annotations.title` is the only title.
+   */
+  title?: string;
+
+  /**
    * Short summary describing what the tool does and when to use it.
    */
   description?: string;
@@ -520,6 +525,7 @@ export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
+    title: z.string().optional(),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
     outputSchema: toolOutputSchema.optional(),
