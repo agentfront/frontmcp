@@ -368,6 +368,31 @@ describe('AgentRegistry', () => {
       expect(toolDef?.name).toBe('invoke_tool-agent');
       expect(toolDef?.description).toContain('Agent that can be invoked as a tool');
     });
+
+    it('takes the input schema from the agent tool entry, described by input type', async () => {
+      @Agent({
+        id: 'defaults-agent',
+        name: 'defaults-agent',
+        inputSchema: { limit: z.number().default(10), query: z.string() },
+        llm: { adapter: mockLlmAdapter },
+      })
+      class DefaultsAgent extends AgentContext {
+        override async execute(input: { query: string }) {
+          return { result: input.query };
+        }
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+      const registry = new AgentRegistry(providers, [DefaultsAgent], owner);
+      await registry.ready;
+
+      const agent = registry.findById('defaults-agent');
+      const toolDef = agent?.getToolDefinition();
+
+      expect(toolDef?.inputSchema).toBe(agent?.getToolInstance()?.getInputJsonSchema());
+      expect(toolDef?.inputSchema.required).toEqual(['query']);
+    });
   });
 
   describe('Inline Agents', () => {

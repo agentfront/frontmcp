@@ -45,7 +45,7 @@ Protect your FrontMCP server with rate limiting, concurrency control, execution 
       partitionBy: 'global', // shared across all clients
     },
 
-    // Global concurrency limit
+    // Global concurrency limit (a tool called with this.callTool() runs inside its caller's slot)
     globalConcurrency: {
       maxConcurrent: 50,
       partitionBy: 'global',
