@@ -143,8 +143,7 @@ export function expandProtocolConfig(protocol: ProtocolPreset | ProtocolConfig |
 // ============================================
 
 /**
- * Internal configuration format compatible with decide-request-intent.utils.ts
- * @internal
+ * Protocol flags in the format decide-request-intent.utils.ts reads.
  */
 export interface LegacyProtocolFlags {
   enableLegacySSE: boolean;

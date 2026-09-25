@@ -1,3 +1,4 @@
+import { authOptionsSchema } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { isValidMcpUri } from '@frontmcp/utils';
 
@@ -29,7 +30,7 @@ import {
   annotatedFrontMcpToolsSchema,
   annotatedFrontMcpWorkflowsSchema,
 } from '../schemas';
-import { authOptionsSchema, type AuthOptionsInput, type RawZodShape } from '../types';
+import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';

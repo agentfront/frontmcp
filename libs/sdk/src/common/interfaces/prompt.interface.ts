@@ -10,8 +10,17 @@ import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
 
+/** A message returned by a prompt; `role` is checked when the prompt runs, so a string literal needs no `as const`. */
+export interface PromptMessageInput {
+  role: string;
+  content: Record<string, unknown>;
+}
+
+/** What a prompt's execute() may return; each form is turned into a GetPromptResult. */
+export type PromptExecuteResult = string | PromptMessageInput[] | Record<string, unknown> | GetPromptResult;
+
 export interface PromptInterface {
-  execute(args: Record<string, string>): Promise<GetPromptResult>;
+  execute(args: Record<string, string>): Promise<PromptExecuteResult>;
 }
 
 /**
@@ -54,12 +63,12 @@ export abstract class PromptContext {
   protected activeStage = 'init';
 
   // ---- OUTPUT storages (backing fields)
-  private _output?: GetPromptResult;
+  private _output?: PromptExecuteResult;
 
   private _error?: Error;
 
   // ---- histories
-  private readonly _outputHistory: HistoryEntry<GetPromptResult>[] = [];
+  private readonly _outputHistory: HistoryEntry<PromptExecuteResult>[] = [];
 
   constructor(ctorArgs: PromptCtorArgs) {
     const { metadata, args, providers, logger, authInfo } = ctorArgs;
@@ -75,7 +84,7 @@ export abstract class PromptContext {
     this.authInfo = authInfo;
   }
 
-  abstract execute(args: Record<string, string>): Promise<GetPromptResult>;
+  abstract execute(args: Record<string, string>): Promise<PromptExecuteResult>;
 
   get<T>(token: Token<T>): T {
     return this.providers.get(token);
@@ -95,16 +104,16 @@ export abstract class PromptContext {
     }
   }
 
-  public get output(): GetPromptResult | undefined {
+  public get output(): PromptExecuteResult | undefined {
     return this._output;
   }
 
-  public set output(v: GetPromptResult | undefined) {
+  public set output(v: PromptExecuteResult | undefined) {
     this._output = v;
     this._outputHistory.push({ at: Date.now(), stage: this.activeStage, value: v });
   }
 
-  public get outputHistory(): ReadonlyArray<HistoryEntry<GetPromptResult>> {
+  public get outputHistory(): ReadonlyArray<HistoryEntry<PromptExecuteResult>> {
     return this._outputHistory;
   }
 
