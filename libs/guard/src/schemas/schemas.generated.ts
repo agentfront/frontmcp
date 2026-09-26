@@ -65,17 +65,17 @@ export interface IpFilterConfigInput {
   /** IP addresses or CIDR ranges to always block. */
   denyList?: Array<string>;
   /**
-   * Default action when IP matches neither list.
+   * Default action when IP matches neither list, or no client IP could be established.
    * @default "allow"
    */
   defaultAction?: 'allow' | 'deny';
   /**
-   * Trust X-Forwarded-For header.
+   * Not read; setting it logs a startup warning. Set the FRONTMCP_TRUST_PROXY environment variable to trust X-Forwarded-For.
    * @default false
    */
   trustProxy?: boolean;
   /**
-   * Max number of proxies to trust from X-Forwarded-For.
+   * Not read; setting it logs a startup warning. Set the FRONTMCP_TRUSTED_PROXY_DEPTH environment variable instead.
    * @default 1
    */
   trustedProxyDepth?: number;

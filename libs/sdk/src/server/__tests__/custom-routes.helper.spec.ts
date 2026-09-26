@@ -1,12 +1,20 @@
 // server/__tests__/custom-routes.helper.spec.ts
 
-import { type FrontMcpLogger, type HttpRouteConfig, type ServerRequest, type ServerResponse } from '../../common';
+import {
+  httpRespond,
+  type FrontMcpLogger,
+  type HttpRouteConfig,
+  type ServerRequest,
+  type ServerResponse,
+} from '../../common';
 import {
   assertNotReserved,
   computeReservedPaths,
   registerCustomHttpRoutes,
   ReservedRouteCollisionError,
   wrapWithAuth,
+  wrapWithIpFilter,
+  type CheckClientIpFn,
   type VerifyResult,
 } from '../custom-routes.helper';
 
@@ -184,9 +192,38 @@ describe('custom-routes.helper', () => {
     });
   });
 
+  describe('wrapWithIpFilter (GHSA-hwfp-xv2f-fr8g)', () => {
+    it('answers with the rejection and never runs the handler', async () => {
+      const inner = jest.fn();
+      const res = makeRes();
+      const wrapped = wrapWithIpFilter(inner, async () => httpRespond.forbidden());
+
+      await wrapped({} as ServerRequest, res, async () => {});
+
+      expect({ status: res.statusCode, body: res.body, handled: inner.mock.calls.length }).toEqual({
+        status: 403,
+        body: { error: 'Forbidden' },
+        handled: 0,
+      });
+    });
+
+    it('runs the handler when the flow answers nothing', async () => {
+      const inner = jest.fn();
+      const req = {} as ServerRequest;
+      const res = makeRes();
+
+      const wrapped = wrapWithIpFilter(inner, async () => undefined);
+
+      await wrapped(req, res, async () => {});
+
+      expect(inner).toHaveBeenCalledWith(req, res, expect.any(Function));
+    });
+  });
+
   describe('registerCustomHttpRoutes', () => {
     const logger = makeLogger();
     const verifySession = jest.fn(async () => ({ kind: 'authorized', authorization: {} }) as VerifyResult);
+    const checkClientIp: CheckClientIpFn = jest.fn(async () => undefined);
 
     function makeServer() {
       return {
@@ -205,6 +242,7 @@ describe('custom-routes.helper', () => {
         routes: undefined,
         server: server as never,
         verifySession,
+        checkClientIp,
         entryPath: '',
         routeBase: '',
         logger,
@@ -213,6 +251,7 @@ describe('custom-routes.helper', () => {
         routes: [],
         server: server as never,
         verifySession,
+        checkClientIp,
         entryPath: '',
         routeBase: '',
         logger,
@@ -220,7 +259,7 @@ describe('custom-routes.helper', () => {
       expect(server.registerRoute).not.toHaveBeenCalled();
     });
 
-    it('registers a public route directly (no auth wrapper)', () => {
+    it('registers a public route behind the ipFilter check only (no auth wrapper)', async () => {
       const server = makeServer();
       const handler = jest.fn();
       const routes: HttpRouteConfig[] = [{ method: 'GET', path: '/ping', handler }];
@@ -229,12 +268,46 @@ describe('custom-routes.helper', () => {
         routes,
         server: server as never,
         verifySession,
+        checkClientIp,
         entryPath: '',
         routeBase: '',
         logger,
       });
 
-      expect(server.registerRoute).toHaveBeenCalledWith('GET', '/ping', handler);
+      const [method, path, registered] = server.registerRoute.mock.calls[0];
+      await registered({} as ServerRequest, makeRes(), async () => {});
+      expect({ method, path }).toEqual({ method: 'GET', path: '/ping' });
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(verifySession).not.toHaveBeenCalled();
+    });
+
+    it('checks the client IP before an auth:true route verifies the session (GHSA-hwfp-xv2f-fr8g)', async () => {
+      const server = makeServer();
+      const handler = jest.fn();
+      const verify = jest.fn(async () => ({ kind: 'authorized', authorization: {} }) as VerifyResult);
+      const rejectAll: CheckClientIpFn = async () => httpRespond.forbidden();
+
+      registerCustomHttpRoutes({
+        routes: [{ method: 'GET', path: '/secret', handler, auth: true }],
+        server: server as never,
+        verifySession: verify,
+        checkClientIp: rejectAll,
+        entryPath: '',
+        routeBase: '',
+        logger,
+      });
+
+      const res = makeRes();
+      await server.registerRoute.mock.calls[0][2]({} as ServerRequest, res, async () => {});
+      expect({
+        status: res.statusCode,
+        verified: verify.mock.calls.length,
+        handled: handler.mock.calls.length,
+      }).toEqual({
+        status: 403,
+        verified: 0,
+        handled: 0,
+      });
     });
 
     it('wraps an auth:true route (registered handler differs from the user handler)', () => {
@@ -246,6 +319,7 @@ describe('custom-routes.helper', () => {
         routes,
         server: server as never,
         verifySession,
+        checkClientIp,
         entryPath: '',
         routeBase: '',
         logger,
@@ -270,6 +344,7 @@ describe('custom-routes.helper', () => {
           routes,
           server: server as never,
           verifySession,
+          checkClientIp,
           entryPath: '/mcp',
           routeBase: '',
           logger,

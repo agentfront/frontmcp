@@ -36,6 +36,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { base64urlEncode, randomBytes, randomUUID } from '@frontmcp/utils';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   httpInputSchema,
@@ -84,7 +85,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'validateInput'],
+  pre: ['checkIpFilter', 'parseInput', 'validateInput'],
   execute: ['registerClient', 'respondRegistration'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -160,6 +161,11 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   /** The local AS primary auth, which owns the DCR client registry (#462). */
   private get localAuth(): LocalPrimaryAuth {
     return this.scope.auth as LocalPrimaryAuth;
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

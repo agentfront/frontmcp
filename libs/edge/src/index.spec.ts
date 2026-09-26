@@ -49,7 +49,13 @@ describe('createEdgeMcp', () => {
   });
 
   const mcp = (body: unknown): Promise<Response> =>
-    worker.fetch(new Request('https://worker.example.com/mcp', { method: 'POST', headers: MCP_HEADERS, body: JSON.stringify(body) }));
+    worker.fetch(
+      new Request('https://worker.example.com/mcp', {
+        method: 'POST',
+        headers: MCP_HEADERS,
+        body: JSON.stringify(body),
+      }),
+    );
 
   it('returns a Worker module synchronously (no eager build)', () => {
     const w = createEdgeMcp({ info: { name: 'lazy', version: '1.0.0' }, apps: [WorkerApp], tasks: { enabled: false } });
@@ -75,7 +81,12 @@ describe('createEdgeMcp', () => {
     expect((list.result?.tools ?? []).map((t) => t.name)).toContain('echo');
 
     const call = await readMcp<{ result?: { content?: Array<{ text?: string }> } }>(
-      await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { message: 'hi' } } }),
+      await mcp({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { message: 'hi' } },
+      }),
     );
     expect(call.result?.content?.[0]?.text).toBe('Echo: hi');
   });
@@ -84,6 +95,44 @@ describe('createEdgeMcp', () => {
     const res = await worker.fetch(new Request('https://worker.example.com/healthz'));
     expect(res.status).toBe(200);
     expect((await res.json()).status).toBe('ok');
+  });
+
+  describe('client IP from the second fetch argument (GHSA-p3qf-fcwm-35x4)', () => {
+    const discovery = () => new Request('https://worker.example.com/.well-known/oauth-protected-resource');
+    const createFiltered = (ipFilter: {
+      allowList?: string[];
+      denyList?: string[];
+      defaultAction?: 'allow' | 'deny';
+    }) =>
+      createEdgeMcp({
+        info: { name: 'worker-ip-filter', version: '1.0.0' },
+        apps: [WorkerApp],
+        tasks: { enabled: false },
+        throttle: { enabled: true, ipFilter },
+      });
+
+    it.each(['Deno', 'Bun'])('reads it on %s', async (runtimeGlobal) => {
+      Object.defineProperty(globalThis, runtimeGlobal, { value: {}, configurable: true });
+      try {
+        const filtered = createFiltered({ denyList: ['203.0.113.0/24'] });
+
+        const denoDenied = await filtered.fetch(discovery(), { remoteAddr: { hostname: '203.0.113.9' } });
+        const bunDenied = await filtered.fetch(discovery(), { requestIP: () => ({ address: '203.0.113.9' }) });
+        const denoAllowed = await filtered.fetch(discovery(), { remoteAddr: { hostname: '198.51.100.7' } });
+
+        expect([denoDenied.status, bunDenied.status, denoAllowed.status]).toEqual([403, 403, 200]);
+      } finally {
+        Reflect.deleteProperty(globalThis, runtimeGlobal);
+      }
+    });
+
+    it('does not read a Worker env object as the peer when no ExecutionContext is passed', async () => {
+      const filtered = createFiltered({ allowList: ['198.51.100.0/24'], defaultAction: 'deny' });
+
+      const response = await filtered.fetch(discovery(), { remoteAddr: { hostname: '198.51.100.7' } });
+
+      expect(response.status).toBe(403);
+    });
   });
 
   it('exposes a Cron `scheduled` handler only in managed mode', () => {

@@ -5,6 +5,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   getRequestBaseUrl,
@@ -93,7 +94,7 @@ export const wellKnownAsStateSchema = z.object({
 });
 
 const wellKnownAsPlan = {
-  pre: ['parseInput'],
+  pre: ['checkIpFilter', 'parseInput'],
   execute: ['collectData'],
 } as const satisfies FlowPlan<string>;
 
@@ -128,6 +129,11 @@ const Stage = StageHookOf(name);
 export default class WellKnownAsFlow extends FlowBase<typeof name> {
   static canActivate(request: ServerRequest, scope: ScopeEntry) {
     return makeWellKnownPaths('oauth-authorization-server', scope.entryPath, scope.routeBase).has(request.path);
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

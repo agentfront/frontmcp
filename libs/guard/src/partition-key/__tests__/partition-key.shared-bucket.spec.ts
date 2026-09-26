@@ -10,7 +10,8 @@
  *     the authenticated user where there is one, and to a single `ip:unresolved` partition
  *     where there is not. That bucket is contended — one client can spend it on another's
  *     behalf — but it is bounded, and bounded contention is the correct trade against an
- *     unbounded budget. Resolving the real IP (`trustProxy`) is what takes callers out of it.
+ *     unbounded budget. Resolving the real IP (the socket or platform peer, or
+ *     `FRONTMCP_TRUST_PROXY` behind a proxy) is what takes callers out of it.
  */
 import { resolvePartitionKey } from '../partition-key.resolver';
 

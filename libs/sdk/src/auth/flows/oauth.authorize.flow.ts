@@ -39,6 +39,7 @@ import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/uti
 
 import {
   computeResource,
+  enforceIpFilter,
   Flow,
   FlowBase,
   HttpHtmlSchema,
@@ -204,6 +205,7 @@ const outputSchema = z.union([
 
 const plan = {
   pre: [
+    'checkIpFilter',
     'parseInput',
     'validateInput',
     'checkIfAuthorized', // used for direct code generation if refresh-token is provided
@@ -271,6 +273,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
   }
   private logger = this.scope.logger.child('OauthAuthorizeFlow');
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
 
   @Stage('parseInput')
   async parseInput() {

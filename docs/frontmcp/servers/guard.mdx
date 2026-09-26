@@ -274,21 +274,42 @@ class MyApp {}
 
 ### Filter Precedence
 
-1. **Deny list** is checked first. If matched, the request is blocked with `IpBlockedError` (403).
+1. **Deny list** is checked first. If matched, the request is blocked with HTTP 403.
 2. **Allow list** is checked next. If matched, the request proceeds.
-3. **Default action** applies if neither list matches:
+3. **Default action** applies if neither list matches, and when no client IP could be established:
    - `'allow'` (default) — Request proceeds.
-   - `'deny'` — Request is blocked with `IpNotAllowedError` (403).
+   - `'deny'` — Request is blocked with HTTP 403.
+
+A blocked MCP request (`<entryPath>`, `/sse`, `/message`) gets JSON-RPC error `-32001`. Every
+other route answers `{ "error": "forbidden", "message": "Client IP rejected by ipFilter" }`.
+
+### Route Coverage
+
+The filter is the `checkIpFilter` stage at the start of every HTTP-facing flow, ahead of rate
+limiting and authentication: the MCP endpoint, `/oauth/*`, `/.well-known/*`, `llm.txt` /
+`llm_full.txt`, the skills HTTP API, and custom `http.routes` (through the `http:ip-filter`
+flow, before `auth: true` verification). Health and readiness probes (`/healthz`, `/readyz`,
+`/health`) and `/metrics` (bearer-token protected) are exempt.
+
+### Client IP Sources
+
+| Runtime                 | Client IP                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| Node / Express          | Socket peer; `::ffff:a.b.c.d` from a dual-stack socket matches IPv4 rules           |
+| Behind a declared proxy | `X-Forwarded-For` (see [Proxy Configuration](#proxy-configuration))                 |
+| Cloudflare Workers      | `CF-Connecting-IP`, trusted only when running on Workers (Durable Objects included) |
+| Deno                    | `info.remoteAddr` from `Deno.serve(handler)`                                        |
+| Bun                     | `server.requestIP(request)` from `Bun.serve({ fetch: handler })`                    |
 
 ### Supported IP Formats
 
-| Format           | Example              |
-| ---------------- | -------------------- |
-| IPv4 address     | `192.168.1.1`        |
-| IPv4 CIDR        | `10.0.0.0/8`         |
-| IPv6 address     | `2001:db8::1`        |
-| IPv6 CIDR        | `2001:db8::/32`      |
-| IPv4-mapped IPv6 | `::ffff:192.168.1.1` |
+| Format           | Example                                         |
+| ---------------- | ----------------------------------------------- |
+| IPv4 address     | `192.168.1.1`                                   |
+| IPv4 CIDR        | `10.0.0.0/8`                                    |
+| IPv6 address     | `2001:db8::1`                                   |
+| IPv6 CIDR        | `2001:db8::/32`                                 |
+| IPv4-mapped IPv6 | `::ffff:192.168.1.1` (matched as `192.168.1.1`) |
 
 ### Proxy Configuration
 
@@ -308,7 +329,7 @@ ignored in favour of the socket peer.
 <Note>
   `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not read:
   client-IP extraction happens in the SDK context layer, before guard configuration is
-  reachable. Use the environment variables above.
+  reachable, and setting either logs a startup warning. Use the environment variables above.
 </Note>
 
 <Warning>
@@ -442,10 +463,11 @@ Guard throws specific error classes when limits are exceeded:
 | `ConcurrencyLimitError` | `CONCURRENCY_LIMIT`   | 429         | No concurrency slot available |
 | `QueueTimeoutError`     | `QUEUE_TIMEOUT`       | 429         | Queue wait time exceeded      |
 | `ExecutionTimeoutError` | `EXECUTION_TIMEOUT`   | 408         | Execution exceeded deadline   |
-| `IpBlockedError`        | `IP_BLOCKED`          | 403         | Client IP is on deny list     |
-| `IpNotAllowedError`     | `IP_NOT_ALLOWED`      | 403         | Client IP not on allow list   |
+| `IpBlockedError`        | `IP_BLOCKED`          | 403         | Exported for your own code    |
+| `IpNotAllowedError`     | `IP_NOT_ALLOWED`      | 403         | Exported for your own code    |
 
 A `tools/call` that hits a limit answers with an error result whose `_meta.code` is the code above, in production too.
+The built-in `ipFilter` does not throw: it answers the HTTP request with 403 before any tool runs (see [Filter Precedence](#filter-precedence)).
 
 ---
 
@@ -498,13 +520,13 @@ The agent flow follows the same stage ordering: `acquireQuota` → `acquireSemap
 
 ### `IpFilterConfig`
 
-| Field               | Type                | Default   | Description                         |
-| ------------------- | ------------------- | --------- | ----------------------------------- |
-| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow  |
-| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block  |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy`        | `boolean`           | `false`   | Trust `X-Forwarded-For` header      |
-| `trustedProxyDepth` | `number`            | `1`       | Max proxy hops to trust             |
+| Field               | Type                | Default   | Description                                                        |
+| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                 |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                 |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
+| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning); set `FRONTMCP_TRUST_PROXY`         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning); set `FRONTMCP_TRUSTED_PROXY_DEPTH` |
 
 ### `GuardConfig` (App-Level)
 
