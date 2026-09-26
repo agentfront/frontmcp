@@ -55,6 +55,7 @@ function createGate(options: { input?: Record<string, unknown>; sessionContext?:
         input: options.input,
         tryGetContext: () => ({
           sessionId: 'session-123',
+          verifiedSessionId: 'session-123',
           authInfo: {
             clientId: 'client-456',
             extra: options.sessionContext ? { approvalContext: options.sessionContext } : {},

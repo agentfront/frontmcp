@@ -744,7 +744,10 @@ export class Scope extends ScopeEntry {
       }
     }
 
-    this.toolUIRegistry = new ToolUIRegistry(uiResolver);
+    this.toolUIRegistry = new ToolUIRegistry(uiResolver, {
+      escapeStringResults: this.metadata.ui?.escapeStringResults,
+      logger: this.logger,
+    });
 
     // Register UI resource templates if any tools have UI configs
     // Skipped in CLI mode — UI widgets are not needed for CLI tool execution

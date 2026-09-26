@@ -74,7 +74,7 @@
         },
         {
           "name": "ui-widgets",
-          "description": "@Tool({ ui }) \u2014 template formats, servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
+          "description": "@Tool({ ui }) \u2014 template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec."
         },
         {
           "name": "annotations",
@@ -337,11 +337,12 @@
           "name": "22-tool-with-ui-html-template",
           "level": "intermediate",
           "description": "Tool with an inline HTML function template \u2014 `ui: { template: (ctx) => '<div>\u2026</div>' }` \u2014 for a quick widget that doesn't need a separate `.tsx` file.",
-          "tags": ["ui", "ui-widgets", "html-template", "escapeHtml", "TemplateContext"],
+          "tags": ["ui", "ui-widgets", "html-template", "html-tag", "escapeStringResults", "TemplateContext"],
           "features": [
-            "Adding a `ui:` block with a function template `(ctx: TemplateContext<In, Out>) => string`",
+            "Adding a `ui:` block with a function template that returns markup built with the `ctx.helpers.html` tagged template",
             "Annotating `ctx` explicitly to dodge the TS7006 inference gap on the union `ui.template` type",
-            "Always escaping user-controlled output with `ctx.helpers.escapeHtml(...)` so the widget can't XSS itself",
+            "Letting `ctx.helpers.html` escape every interpolated value so tool output can't inject markup into the widget",
+            "Opting in to `escapeStringResults: true` so a plain string result is escaped \u2014 the default from FrontMCP 1.9",
             "Reading from `ctx.output` and `ctx.helpers` \u2014 the typed runtime context the template renderer hands you"
           ]
         },
@@ -365,7 +366,7 @@
           "features": [
             "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
             "Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs",
-            "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)",
+            "Building the markup with `ctx.helpers.html` and embedding initial data into the inline `<script>` via `trustedHtml(jsonEmbed(...))` (`jsonEmbed` escapes `<`, `>` and `&`)",
             "Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback"
           ]
         },
@@ -1069,6 +1070,7 @@
                 "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
                 "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
                 "Dynamic skills are picked up because the composer runs on every initialize request",
+                "The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)",
                 "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json"
               ]
             },

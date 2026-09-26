@@ -34,3 +34,6 @@ export {
   type BuildManifestResult,
   type BuildManifestOptions,
 } from '@frontmcp/uipack/types';
+
+// Trusted markup returned by `ctx.helpers.html` / `ctx.helpers.trustedHtml`
+export { type TrustedHtml } from '@frontmcp/uipack/shell';

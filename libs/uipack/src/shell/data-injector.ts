@@ -8,6 +8,7 @@
  */
 
 import { escapeHtml, safeJsonForScript } from '../utils';
+import { html, trustedHtml, type TrustedHtml } from './trusted-html';
 import type { WidgetSizing } from './types';
 
 /**
@@ -104,6 +105,10 @@ export interface TemplateHelpers {
   uniqueId: (prefix?: string) => string;
   /** Safely embed JSON data in HTML */
   jsonEmbed: (data: unknown) => string;
+  /** Tagged template building trusted markup; interpolated values are escaped unless trusted */
+  html: (strings: TemplateStringsArray, ...values: unknown[]) => TrustedHtml;
+  /** Mark already-safe markup as trusted so it renders as HTML */
+  trustedHtml: (markup: string) => TrustedHtml;
 }
 
 let _uniqueIdCounter = 0;
@@ -137,5 +142,9 @@ export function createTemplateHelpers(): TemplateHelpers {
     },
 
     jsonEmbed: (data: unknown) => safeJsonForScript(data),
+
+    html,
+
+    trustedHtml,
   };
 }

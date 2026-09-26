@@ -59,6 +59,19 @@ export interface ProviderRegistryOptions {
   providerCaching?: boolean;
 }
 
+interface HierarchyDef {
+  registry: ProviderRegistry;
+  rec: ProviderRecord;
+}
+
+interface SessionProviderStore {
+  /** Instances built without a context source, or for one that overrides nothing in this hierarchy. */
+  providers: Map<Token, unknown>;
+  /** Instances built for a context source whose tokens this hierarchy re-defines, kept apart per source. */
+  bySource: Map<ProviderRegistryInterface, Map<Token, unknown>>;
+  lastAccess: number;
+}
+
 export default class ProviderRegistry
   extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
   implements ProviderRegistryInterface
@@ -74,7 +87,7 @@ export default class ProviderRegistry
   private registries: Map<RegistryKind, Set<RegistryType>> = new Map();
 
   /** Session-scoped provider instance cache by sessionKey */
-  private sessionStores: Map<string, { providers: Map<Token, unknown>; lastAccess: number }> = new Map();
+  private sessionStores: Map<string, SessionProviderStore> = new Map();
 
   /** Locks to prevent concurrent session builds (race condition prevention) */
   private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void }> = new Map();
@@ -881,9 +894,16 @@ export default class ProviderRegistry
    *
    * @param sessionKey - Unique context/session identifier for CONTEXT-scoped providers
    * @param contextProviders - Optional pre-built CONTEXT-scoped providers (e.g., FrontMcpContext)
+   * @param contextSource - The ancestor registry whose views built `contextProviders`. Tokens this registry's
+   *   hierarchy defines below it are resolved from their own nearest definition instead of the pre-built instance,
+   *   so an app's plugin providers are not shadowed by the definition another app merged into the scope.
    * @returns ProviderViews with global and context provider maps (session/request as aliases)
    */
-  async buildViews(sessionKey: string, contextProviders?: Map<Token, unknown>): Promise<ProviderViews> {
+  async buildViews(
+    sessionKey: string,
+    contextProviders?: Map<Token, unknown>,
+    contextSource?: ProviderRegistryInterface,
+  ): Promise<ProviderViews> {
     // Early validation BEFORE any cache operations or lock acquisition
     // This prevents cache pollution with invalid session keys
     validateSessionId(sessionKey);
@@ -899,25 +919,36 @@ export default class ProviderRegistry
     // land on different server instances. CONTEXT providers are stateless facades
     // that delegate to storage, so rebuilding them per-request has minimal cost.
     let sessionProviders: Map<Token, unknown> | undefined;
+    const ownDefs = (contextSource && this.defsBelow(contextSource)) ?? new Map<Token, HierarchyDef>();
 
     if (this.sessionCacheEnabled) {
       // Traditional mode: cache providers per session
       let cached = this.sessionStores.get(sessionKey);
       if (!cached) {
-        cached = { providers: new Map<Token, unknown>(), lastAccess: Date.now() };
+        cached = { providers: new Map<Token, unknown>(), bySource: new Map(), lastAccess: Date.now() };
         this.sessionStores.set(sessionKey, cached);
       } else {
         cached.lastAccess = Date.now();
       }
       sessionProviders = cached.providers;
+      // A source this hierarchy overrides resolves those tokens (and whatever depends on them) differently,
+      // so its instances are cached apart from the ones built without it.
+      if (contextSource && ownDefs.size > 0) {
+        sessionProviders = cached.bySource.get(contextSource);
+        if (!sessionProviders) {
+          sessionProviders = new Map<Token, unknown>();
+          cached.bySource.set(contextSource, sessionProviders);
+        }
+      }
     }
 
-    // Pre-built providers always replace cached ones. Anything built from the request's own
-    // context (FrontMcpContext and the tokens it carries) is rebuilt instead of cached.
+    // Pre-built providers replace cached ones, except for tokens this hierarchy defines below `contextSource`.
+    // Anything built from the request's own context (FrontMcpContext and the tokens it carries) is rebuilt
+    // instead of cached.
     const requestTokens = requestScopedTokens(contextProviders);
     const contextStore = new Map<Token, unknown>(sessionProviders ?? []);
     for (const [token, instance] of contextProviders ?? []) {
-      contextStore.set(token, instance);
+      if (!ownDefs.has(token)) contextStore.set(token, instance);
     }
 
     // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)
@@ -944,6 +975,19 @@ export default class ProviderRegistry
       await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
     }
 
+    for (const [token, { registry, rec }] of ownDefs) {
+      if (registry === this || contextStore.has(token)) continue;
+      if (registry.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      await registry.buildIntoStoreWithViews(
+        token,
+        rec,
+        contextStore,
+        sessionKey,
+        contextStore,
+        registry.getAllSingletons(),
+      );
+    }
+
     if (sessionProviders) {
       for (const [token, instance] of contextStore) {
         if (!sessionProviders.has(token) && !this.dependsOnAny(token, requestTokens)) {
@@ -956,6 +1000,15 @@ export default class ProviderRegistry
       global,
       context: contextStore,
     };
+  }
+
+  /** Nearest definition of each token declared between this registry and `ancestor`; undefined when `ancestor` is not above it. */
+  private defsBelow(ancestor: ProviderRegistryInterface): Map<Token, HierarchyDef> | undefined {
+    if (this === ancestor) return new Map();
+    const owned = this.parentProviders?.defsBelow(ancestor);
+    if (!owned) return undefined;
+    for (const [token, rec] of this.defs) owned.set(token, { registry: this, rec });
+    return owned;
   }
 
   private dependsOnAny(token: Token, targets: ReadonlySet<Token>, visited = new Set<Token>()): boolean {
@@ -1068,6 +1121,15 @@ export default class ProviderRegistry
         if (v !== undefined) return v;
         throw new ProviderNotInstantiatedError(tokenName(token), 'GLOBAL', 'parent');
       }
+      await up.registry.buildIntoStoreWithViews(
+        token,
+        up.rec,
+        contextStore,
+        scopeKey,
+        contextStore,
+        up.registry.getAllSingletons(),
+      );
+      return contextStore.get(token);
     }
 
     throw new ProviderDependencyError(`Cannot resolve dependency ${tokenName(token)} from views`);

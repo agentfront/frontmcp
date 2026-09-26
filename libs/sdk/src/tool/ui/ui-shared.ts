@@ -4,7 +4,12 @@
  * Internal module to avoid circular imports between index.ts and ui-resource.handler.ts.
  */
 
-import { MCP_APPS_MIME_TYPE, renderToolTemplate, detectUIType as uipackDetectUIType } from '@frontmcp/uipack/adapters';
+import {
+  MCP_APPS_MIME_TYPE,
+  renderToolTemplate,
+  detectUIType as uipackDetectUIType,
+  type RenderToolTemplateOptions,
+} from '@frontmcp/uipack/adapters';
 import { type ImportResolver } from '@frontmcp/uipack/resolver';
 import { type WidgetSizing } from '@frontmcp/uipack/shell';
 
@@ -47,6 +52,14 @@ function extractSizing(uiConfig: Record<string, unknown> | undefined): WidgetSiz
 // ToolUIRegistry
 // ============================================
 
+/** Server-wide rendering defaults for {@link ToolUIRegistry}. */
+export interface ToolUIRegistryOptions {
+  /** Default for `ui.escapeStringResults` on tools that leave it unset. */
+  escapeStringResults?: boolean;
+  /** Receives the one-time string-result notice. Defaults to `console`. */
+  logger?: RenderToolTemplateOptions['logger'];
+}
+
 /** Per-tool resource metadata attached to `ui://widget/{tool}.html` content reads. */
 export interface UIResourceMeta {
   /**
@@ -74,9 +87,22 @@ export class ToolUIRegistry {
   private manifests = new Map<string, Record<string, unknown>>();
   private resourceMeta = new Map<string, UIResourceMeta>();
   private resolver?: ImportResolver;
+  private readonly options: ToolUIRegistryOptions;
 
-  constructor(resolver?: ImportResolver) {
+  constructor(resolver?: ImportResolver, options: ToolUIRegistryOptions = {}) {
     this.resolver = resolver;
+    this.options = options;
+  }
+
+  /** Tool-level `ui.escapeStringResults` wins over the server-wide default. */
+  private stringResultOptions(
+    uiConfig: Record<string, unknown> | undefined,
+  ): Pick<RenderToolTemplateOptions, 'escapeStringResults' | 'logger'> {
+    const toolSetting = uiConfig?.['escapeStringResults'];
+    return {
+      escapeStringResults: typeof toolSetting === 'boolean' ? toolSetting : this.options.escapeStringResults,
+      logger: this.options.logger,
+    };
   }
 
   getStaticWidget(name: string): string | undefined {
@@ -133,6 +159,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      ...this.stringResultOptions(uiConfig),
     });
 
     this.widgets.set(toolName, result.html);
@@ -228,6 +255,7 @@ export class ToolUIRegistry {
       resolver: this.resolver,
       resourceMode,
       sizing: extractSizing(uiConfig),
+      ...this.stringResultOptions(uiConfig),
     });
 
     return { meta: result.meta };

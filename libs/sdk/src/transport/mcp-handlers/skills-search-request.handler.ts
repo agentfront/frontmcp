@@ -1,7 +1,6 @@
 import { extractToolNames } from '../../common/metadata/skill.metadata';
 import { PublicMcpError } from '../../errors';
-import { filterSkillMetadataByAuthorities } from '../../skill/skill-authorities.helper';
-import { filterServableSkillResults } from '../../skill/skill-filter.helper';
+import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsSearchRequestSchema,
@@ -46,18 +45,14 @@ export default function skillsSearchRequestHandler({
         return visibility === 'mcp' || visibility === 'both';
       });
 
-      // Entry-level authorities: hide gated skills the caller can't discover
-      // (mirrors `filterByAuthorities` for tools/resources). Evaluated without
-      // request input — role/permission/claims-based authorities only. No-op
-      // when no engine is configured.
+      // Hide skills the caller can't discover: entry-level authorities (mirrors
+      // `filterByAuthorities` for tools/resources; evaluated without request
+      // input, so role/permission/claims-based only), then `skills:filter`.
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
-      const authVisibleResults = await filterSkillMetadataByAuthorities(
-        scope,
-        skillRegistry,
-        mcpVisibleResults,
+      const servableResults = await filterDiscoverableSkillResults(scope, skillRegistry, mcpVisibleResults, {
         authInfo,
-      );
-      const servableResults = await filterServableSkillResults(scope, skillRegistry, authVisibleResults, ctx);
+        ctx,
+      });
 
       // Transform results to response format
       const skills = servableResults.map((r) => {

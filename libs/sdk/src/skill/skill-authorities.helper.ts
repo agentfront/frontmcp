@@ -25,7 +25,6 @@
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 
 import type { ScopeEntry, SkillEntry } from '../common';
-import type { SkillRegistryInterface } from './skill.registry';
 
 /** Minimal duck-typed surface of the scope we rely on for authorities. */
 type AuthoritiesScopeView = Pick<
@@ -154,46 +153,4 @@ export async function filterSkillsByAuthorities<T extends SkillEntry>(
   );
 
   return skills.filter((_, i) => grants[i]);
-}
-
-/**
- * Filter discovery results whose projected metadata only carries an id/name
- * (e.g. `skills/search` / `skills/list` MCP responses, or HTTP search results)
- * down to the skills the caller is authorized to see.
- *
- * Search/list metadata is projected from `SkillContent` and does NOT carry the
- * `authorities` field, so we resolve the live skill entry by id/name to read
- * its declared authorities, then evaluate via the scope's engine. No-op when no
- * authorities engine is configured (results returned unchanged), and items
- * whose backing entry can't be resolved are kept (treated as ungated).
- *
- * Evaluated WITHOUT request input — see {@link filterSkillsByAuthorities}.
- */
-export async function filterSkillMetadataByAuthorities<T extends { metadata: { id?: string; name: string } }>(
-  scope: AuthoritiesScopeView,
-  registry: SkillRegistryInterface,
-  results: readonly T[],
-  authInfo: Record<string, unknown>,
-): Promise<T[]> {
-  const engine = scope.authoritiesEngine;
-  const ctxBuilder = scope.authoritiesContextBuilder;
-  if (!engine || !ctxBuilder) return [...results];
-
-  const normalized = normalizeAuthInfoForAuthorities(authInfo);
-  const grants = await Promise.all(
-    results.map(async (r): Promise<boolean> => {
-      const id = r.metadata.id ?? r.metadata.name;
-      const entry =
-        registry.findByName(id) ??
-        registry.getSkills(true).find((s) => (s.metadata.id ?? s.name) === id || s.metadata.name === id);
-      if (!entry) return true;
-      const authorities = getSkillAuthorities(entry);
-      if (!authorities) return true;
-      const evalCtx = ctxBuilder.build(normalized);
-      const result = await engine.evaluate(authorities, evalCtx);
-      return result.granted;
-    }),
-  );
-
-  return results.filter((_, i) => grants[i]);
 }

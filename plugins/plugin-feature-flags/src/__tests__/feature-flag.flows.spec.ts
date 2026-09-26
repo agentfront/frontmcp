@@ -12,6 +12,7 @@ import 'reflect-metadata';
 import {
   Adapter,
   App,
+  composeCallerInstructions,
   connect,
   createWebFetchHandler,
   FrontMcpInstance,
@@ -542,5 +543,114 @@ describe('FeatureFlagPlugin installed on two apps with their own flags', () => {
     const { contents } = await client.readResource('north://report/1');
 
     expect(contents[0]).toMatchObject({ text: 'content of north://report/1' });
+  });
+});
+
+describe('FeatureFlagPlugin and the skill catalog in the initialize instructions (#603)', () => {
+  async function instructionsFor(config: FrontMcpConfigInput, options: { skillUriHints?: boolean } = {}) {
+    const instance = await FrontMcpInstance.createForGraph(config);
+    const [scope] = instance.getScopes();
+    if (!scope) throw new Error('the config produced no scope');
+    return composeCallerInstructions(scope, { ctx: { authInfo: { sessionId: 'caller-session' } }, ...options });
+  }
+
+  it('lists an enabled skill and leaves a disabled one out of the catalog', async () => {
+    const instructions = await instructionsFor(serverConfig);
+
+    expect(instructions).toContain('**enabled-skill**: Enabled flagged workflow');
+    expect(instructions).not.toContain('disabled-skill');
+    expect(instructions).not.toContain('Disabled flagged workflow');
+  });
+
+  it('leaves a disabled skill out of the SEP-2640 skill:// hints', async () => {
+    const instructions = await instructionsFor(
+      { ...serverConfig, skillsConfig: { enabled: true, sep2640InInstructions: true } },
+      { skillUriHints: true },
+    );
+
+    expect(instructions).toContain('skill://enabled-skill/SKILL.md');
+    expect(instructions).not.toContain('skill://disabled-skill/SKILL.md');
+  });
+});
+
+const SWAPPABLE_PATH = 'swappable-skill';
+
+@Skill({
+  name: SWAPPABLE_PATH,
+  description: 'Swappable flagged workflow',
+  instructions: 'Swappable flagged workflow steps.',
+  featureFlag: 'flag-off',
+})
+class SwappableSkill extends SkillContext {}
+
+// Hot-swaps the skill served at the path: a dynamic registration shadows the app's flag-off skill.
+@Tool({ name: 'shadow_swappable_skill', inputSchema: {} })
+class ShadowSwappableSkillTool extends ToolContext {
+  async execute() {
+    await this.scope.skills.registerSkillContent({
+      id: SWAPPABLE_PATH,
+      name: SWAPPABLE_PATH,
+      description: 'Unflagged replacement workflow',
+      instructions: 'Unflagged replacement steps.',
+      tools: [],
+    });
+    return { shadowed: true };
+  }
+}
+
+@Tool({ name: 'unshadow_swappable_skill', inputSchema: {} })
+class UnshadowSwappableSkillTool extends ToolContext {
+  async execute() {
+    await this.scope.skills.unregisterSkill(SWAPPABLE_PATH);
+    return { shadowed: false };
+  }
+}
+
+@App({
+  id: 'swappable',
+  name: 'Swappable',
+  plugins: [FeatureFlagPlugin.init({ adapter: 'static', flags: FLAGS })],
+  tools: [ShadowSwappableSkillTool, UnshadowSwappableSkillTool],
+  skills: [SwappableSkill],
+})
+class SwappableApp {}
+
+describe('FeatureFlagPlugin and a skill replaced at the same skill:// path (#606)', () => {
+  let client: DirectClient;
+
+  const listsSkillMd = async () => {
+    const { resources } = await client.listResources();
+    return resources.some((resource) => resource.uri === `skill://${SWAPPABLE_PATH}/SKILL.md`);
+  };
+
+  beforeAll(async () => {
+    client = await connect({
+      info: { name: 'feature-flag-swap', version: '1.0.0' },
+      apps: [SwappableApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it('leaves the SKILL.md of the flag-off skill out of resources/list', async () => {
+    expect(await listsSkillMd()).toBe(false);
+  });
+
+  it('lists the SKILL.md once an unflagged skill replaces it at the same path', async () => {
+    await client.callTool('shadow_swappable_skill', {});
+
+    expect(await listsSkillMd()).toBe(true);
+    expect(textOf(await client.readResource(`skill://${SWAPPABLE_PATH}/SKILL.md`))).toContain(
+      'Unflagged replacement steps.',
+    );
+  });
+
+  it('drops the SKILL.md again once the flag-off skill is back at the path', async () => {
+    await client.callTool('unshadow_swappable_skill', {});
+
+    expect(await listsSkillMd()).toBe(false);
   });
 });

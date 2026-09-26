@@ -5,6 +5,7 @@ import FlagReportPrompt from './prompts/flag-report.prompt';
 import FlagStatusResource from './resources/flag-status.resource';
 import HiddenReportByIdResource from './resources/hidden-report-by-id.resource';
 import HiddenReportResource from './resources/hidden-report.resource';
+import { EnabledWorkflowSkill, HiddenWorkflowSkill } from './skills/flagged-workflows.skill';
 import AlwaysEnabledTool from './tools/always-enabled.tool';
 import BetaSearchTool from './tools/beta-search.tool';
 import CheckFlagTool from './tools/check-flag.tool';
@@ -25,11 +26,14 @@ import UnflaggedTool from './tools/unflagged.tool';
         'flag-for-resource': true,
         'flag-for-prompt': false,
         'flag-for-hidden-resource': false,
+        'flag-for-skill': true,
+        'flag-for-hidden-skill': false,
       },
     }),
   ],
   tools: [AlwaysEnabledTool, BetaSearchTool, ExperimentalAgentTool, DefaultTrueTool, UnflaggedTool, CheckFlagTool],
   resources: [FlagStatusResource, HiddenReportResource, HiddenReportByIdResource],
   prompts: [FlagReportPrompt],
+  skills: [EnabledWorkflowSkill, HiddenWorkflowSkill],
 })
 export class FlaggedApp {}

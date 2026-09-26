@@ -888,9 +888,10 @@ Add a `ui` property to attach a visual template:
     location: z.string(),
   },
   ui: {
-    template: (ctx) => `
+    // `html` escapes every interpolated value; see "Trusted markup" in the Tool UI guide.
+    template: (ctx) => ctx.helpers.html`
       <div class="weather-card">
-        <h2>${ctx.helpers.escapeHtml(ctx.output.location)}</h2>
+        <h2>${ctx.output.location}</h2>
         <p>${ctx.output.temperature}°C - ${ctx.output.conditions}</p>
       </div>
     `,
@@ -915,7 +916,7 @@ import { type TemplateContext } from '@frontmcp/sdk';
 ui: {
 // Annotate `ctx` explicitly under strict / noImplicitAny.
 template: (ctx: TemplateContext<MyInput, MyOutput>) =>
-`<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
+ctx.helpers.html`<p>${ctx.output.message}</p>`,
 }
 
 ````
@@ -950,17 +951,22 @@ ui: {
 
 ### UI Configuration Options
 
-| Option               | Description                                                                             |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `template`           | HTML function, React component, or MDX string                                           |
-| `displayMode`        | `'inline'` (default), `'fullscreen'`, or `'pip'`                                        |
-| `widgetDescription`  | Human-readable description shown to users                                               |
-| `widgetAccessible`   | Allow widget to call tools via MCP Bridge                                               |
-| `csp`                | Content Security Policy (allowed domains)                                               |
-| `servingMode`        | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc.     |
-| `htmlResponsePrefix` | Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
-| `mdxComponents`      | Custom components for MDX templates                                                     |
-| `hydrate`            | Enable client-side React hydration for interactivity                                    |
+| Option                | Description                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `template`            | HTML function, React component, or MDX string                                           |
+| `displayMode`         | `'inline'` (default), `'fullscreen'`, or `'pip'`                                        |
+| `widgetDescription`   | Human-readable description shown to users                                               |
+| `widgetAccessible`    | Allow widget to call tools via MCP Bridge                                               |
+| `csp`                 | Content Security Policy (allowed domains)                                               |
+| `servingMode`         | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc.     |
+| `htmlResponsePrefix`  | Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
+| `mdxComponents`       | Custom components for MDX templates                                                     |
+| `hydrate`             | Enable client-side React hydration for interactivity                                    |
+| `escapeStringResults` | Escape plain string results; `html` / `trustedHtml` stay markup (default in 1.9)        |
+
+<Warning>
+**Build template markup with `ctx.helpers.html`.** A plain string a template function returns is rendered as markup when it looks like HTML, so returning unescaped tool output injects tags. The `html` tagged template escapes interpolated values; `ctx.helpers.trustedHtml(markup)` marks markup you already made safe. Set `ui.escapeStringResults: true` (or `@FrontMcp({ ui: { escapeStringResults: true } })`) to escape plain string results now — FrontMCP 1.9 does so by default. See [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup).
+</Warning>
 
 <Info>
 **Widget resources carry no caller data.** `resources/read ui://widget/{toolName}.html` returns the widget compiled at startup (`servingMode: 'static'`, or the `hybrid` shell) or a data-free placeholder that receives the result through the bridge. An `inline` render, which embeds the call's input and output, is returned only in that call's `_meta['ui/html']`. The advertised URI percent-encodes the tool name (`app:tool` becomes `ui://widget/app%3Atool.html`); both forms read back. See [building-tool-ui](/frontmcp/guides/building-tool-ui#ui-configuration-options).

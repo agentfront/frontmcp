@@ -23,6 +23,7 @@ import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
 import { createMcpHandlers } from '../mcp-handlers';
 import { toSdkMcpError } from '../mcp-handlers/mcp-error.utils';
+import { type McpHandlerOptions } from '../mcp-handlers/mcp-handlers.types';
 import { buildDiscoverResult } from './discover';
 import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
@@ -51,8 +52,8 @@ export interface DispatchOptions {
   /** True when the caller is unauthenticated, which makes results publicly cacheable. */
   isAnonymous: boolean;
   signal?: AbortSignal;
-  /** Lazily composed instructions for `server/discover`. */
-  composeInstructions?: () => string | undefined;
+  /** Lazily composed instructions for `server/discover`, for the calling context. */
+  composeInstructions?: McpHandlerOptions['composeInstructions'];
   /** Collects `notifications/message` + `notifications/progress` for this request. */
   notificationSink?: RequestNotificationSink;
   /** OpenTelemetry context echoed back on the result (SEP-414). */
@@ -322,13 +323,15 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
   }
 
   if (method === 'server/discover') {
+    const instructions = await composeInstructions?.({ authInfo });
     return {
       kind: 'result',
-      result: decorate(buildDiscoverResult(scope, composeInstructions?.()) as Record<string, unknown>),
+      result: decorate(buildDiscoverResult(scope, instructions) as Record<string, unknown>),
     };
   }
 
-  const serverOptions = buildScopedServerOptions(scope, composeInstructions?.() ?? '');
+  // `initialize`, the only reader of `serverOptions.instructions`, was removed in this revision.
+  const serverOptions = buildScopedServerOptions(scope);
   const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
 
   const handler = handlers.find((entry) => methodOfSchema(entry.requestSchema) === method);

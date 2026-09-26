@@ -21,6 +21,7 @@ import { type SessionIdPayload } from '../common/types';
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { InvalidInputError } from '../errors/mcp.error';
 import type { AIPlatformType, ClientInfo } from '../notification';
+import { STATELESS_SESSION_ID } from '../transport/transport.types';
 import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
@@ -340,6 +341,13 @@ export class FrontMcpContext {
    */
   updateAuthInfo(authInfo: Partial<AuthInfo>): void {
     this._authInfo = { ...this._authInfo, ...authInfo };
+  }
+
+  /** `sessionId` when the server verified it; undefined for stateless and per-request placeholder ids. */
+  get verifiedSessionId(): string | undefined {
+    if (this.sessionId === STATELESS_SESSION_ID) return undefined;
+    const verified = this._authInfo.sessionId ?? this._authInfo.extra?.['sessionId'];
+    return verified === this.sessionId ? this.sessionId : undefined;
   }
 
   /**

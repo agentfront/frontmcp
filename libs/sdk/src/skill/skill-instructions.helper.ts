@@ -20,9 +20,15 @@
  *   `initialize-request.handler.ts`), so dynamic skill registrations made
  *   after the server boots are reflected in subsequent reconnects without a
  *   restart.
+ * - Transports compose it per caller with {@link composeCallerInstructions}:
+ *   the catalog and the SEP-2640 hints only name skills the skill authorities
+ *   and the `skills:filter` flow let that caller see, like `skills/list`.
  */
 
+import type { ScopeEntry, SkillEntry } from '../common';
 import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
+import { filterSkillsByAuthorities } from './skill-authorities.helper';
+import { filterServableSkills } from './skill-filter.helper';
 import type { SkillRegistryInterface } from './skill.registry';
 
 export type InjectInstructionsPolicy = 'off' | 'append' | 'prepend' | 'replace';
@@ -55,11 +61,15 @@ interface ComposeOptions {
   policy?: InjectInstructionsPolicy;
   /** `skillsConfig.mcpResources`; when false the catalog points at the `skills/*` methods. */
   mcpResources?: boolean;
+  /** The skills the catalog lists; defaults to every MCP-visible skill in `skillRegistry`. */
+  skills?: readonly SkillEntry[];
 }
 
 export interface SkillsCatalogSummaryOptions {
   /** `skillsConfig.mcpResources`; when false no `skill://` resource is served. Defaults to true. */
   mcpResources?: boolean;
+  /** The skills to list, such as those a caller may see; defaults to every MCP-visible skill in the registry. */
+  skills?: readonly SkillEntry[];
 }
 
 interface CatalogPointers {
@@ -157,10 +167,8 @@ export function buildSkillsCatalogSummary(
   skillRegistry: SkillRegistryInterface | undefined,
   options: SkillsCatalogSummaryOptions = {},
 ): string {
-  if (!skillRegistry) return '';
-
   // `visibility: 'mcp'` matches both `'mcp'` and `'both'` (see `getSkills`).
-  const skills = skillRegistry.getSkills({ visibility: 'mcp' });
+  const skills = options.skills ?? skillRegistry?.getSkills({ visibility: 'mcp' }) ?? [];
   if (skills.length === 0) return '';
 
   const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
@@ -233,7 +241,10 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
     return joinSections([user, channel]);
   }
 
-  const catalog = buildSkillsCatalogSummary(options.skillRegistry, { mcpResources: options.mcpResources });
+  const catalog = buildSkillsCatalogSummary(options.skillRegistry, {
+    mcpResources: options.mcpResources,
+    skills: options.skills,
+  });
   if (policy === 'prepend') {
     return joinSections([catalog, channel, user]);
   }
@@ -264,6 +275,110 @@ export function buildChannelInstructions(channels: ChannelRegistryLike | undefin
 interface ChannelRegistryLike {
   hasAny(): boolean;
   getChannelInstances(): Array<{ twoWay?: boolean }>;
+}
+
+/** The scope surface instruction composition reads. */
+export type InstructionsScope = Pick<
+  ScopeEntry,
+  | 'metadata'
+  | 'skills'
+  | 'logger'
+  | 'runFlowForOutput'
+  | 'authoritiesEngine'
+  | 'authoritiesContextBuilder'
+  | 'authoritiesScopeMapping'
+> & { readonly channels?: ChannelRegistryLike };
+
+export interface CallerInstructionsOptions {
+  /** The caller's MCP handler context (`{ authInfo }`); omit inside a request flow, which already carries it. */
+  ctx?: { authInfo?: unknown };
+  /** Append the SEP-2640 `skill://…/SKILL.md` hints when `skillsConfig.sep2640InInstructions` is on. */
+  skillUriHints?: boolean;
+}
+
+/**
+ * Compose the `initialize` instructions for one caller: server instructions, channel hints and the
+ * skill catalog (plus the SEP-2640 hints when asked), per `skillsConfig.injectInstructions`.
+ *
+ * The catalog and hints only name the MCP-visible skills the skill authorities and the hookable
+ * `skills:filter` flow let this caller see, the same skills `skills/list` returns. The filter only
+ * runs when the instructions would list a skill. If it fails, the skills are left out rather than
+ * failing the handshake. With nothing filtering, the result equals {@link composeInitializeInstructions}.
+ */
+export async function composeCallerInstructions(
+  scope: InstructionsScope,
+  options: CallerInstructionsOptions = {},
+): Promise<string> {
+  const skillsConfig = scope.metadata.skillsConfig;
+  const composeOptions: ComposeOptions = {
+    userInstructions: scope.metadata.instructions,
+    channelInstructions: buildChannelInstructions(scope.channels),
+    skillRegistry: scope.skills,
+    policy: skillsConfig?.injectInstructions,
+    mcpResources: skillsConfig?.mcpResources,
+  };
+  const withUriHints = options.skillUriHints === true && skillUriHintsEnabled(scope);
+  const listsSkills = withUriHints || includesSkillCatalog(composeOptions);
+
+  let skills: SkillEntry[] = [];
+  if (listsSkills) {
+    try {
+      skills = await skillsVisibleTo(scope, options.ctx);
+    } catch (error) {
+      scope.logger.warn('initialize instructions: left the skills out, the skills:filter flow failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const composed = composeInitializeInstructions({ ...composeOptions, skills });
+  const uriHints = withUriHints ? buildSkillUriHints(skills, scope.skills?.getSep2640InstructionUris?.() ?? []) : '';
+  return [composed, uriHints].filter((section) => section.length > 0).join('\n\n---\n\n');
+}
+
+/**
+ * SEP-2640 §Discovery — the opt-in `instructions` block listing each given skill's
+ * `skill://<path>/SKILL.md` URI, plus any extra URIs registered on the registry.
+ * Empty when there are no skills.
+ */
+function buildSkillUriHints(skills: readonly SkillEntry[], extraUris: readonly string[] = []): string {
+  if (skills.length === 0) return '';
+  const lines = ['Available skills (load via resources/read):'];
+  for (const skill of skills) {
+    lines.push(`- skill://${skill.getSkillPath()}/SKILL.md — ${skill.metadata.description}`);
+  }
+  for (const extra of extraUris) {
+    lines.push(`- ${extra}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Whether the SEP-2640 URI hints are sent: `skillsConfig.sep2640InInstructions` is on, the
+ * `skill://` resources are served (`mcpResources` is not false), and `injectInstructions: 'replace'`
+ * with non-empty server instructions does not require those to be sent alone.
+ */
+function skillUriHintsEnabled(scope: InstructionsScope): boolean {
+  const skillsConfig = scope.metadata.skillsConfig;
+  if (!skillsConfig?.sep2640InInstructions || skillsConfig.mcpResources === false) return false;
+  const serverInstructions = (scope.metadata.instructions ?? '').trim();
+  return !(skillsConfig.injectInstructions === 'replace' && serverInstructions.length > 0);
+}
+
+/** Whether {@link composeInitializeInstructions} emits the skill catalog under these options. */
+function includesSkillCatalog(options: ComposeOptions): boolean {
+  const policy = options.policy ?? DEFAULT_POLICY;
+  if (policy === 'off') return false;
+  return !(policy === 'replace' && (options.userInstructions ?? '').trim().length > 0);
+}
+
+/** The MCP-visible skills the skill authorities and the `skills:filter` flow let the caller see. */
+async function skillsVisibleTo(scope: InstructionsScope, ctx?: { authInfo?: unknown }): Promise<SkillEntry[]> {
+  const visible = scope.skills?.getSkills({ visibility: 'mcp' }) ?? [];
+  if (visible.length === 0) return [];
+  const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
+  const authorized = await filterSkillsByAuthorities(scope, visible, authInfo);
+  return filterServableSkills(scope, authorized, ctx);
 }
 
 function joinSections(sections: Array<string | undefined>): string {

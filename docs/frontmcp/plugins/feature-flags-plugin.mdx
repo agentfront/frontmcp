@@ -269,7 +269,7 @@ Add `featureFlag` to any tool, resource, resource template, prompt, or skill met
 
 | Capability        | Hidden from                                                                                                                                                                                                                  | Refused on                                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Tool              | `tools/list`                                                                                                                                                                                                                 | `tools/call`                                                                                                                   |
+| Tool              | `tools/list`, and the `toolName` completion of `ui://widget/{toolName}.html`                                                                                                                                                 | `tools/call`                                                                                                                   |
 | Resource          | `resources/list`                                                                                                                                                                                                             | `resources/read`, `completion/complete`                                                                                        |
 | Resource template | `resources/templates/list`                                                                                                                                                                                                   | `resources/read` of any URI it matches, `completion/complete`                                                                  |
 | Prompt            | `prompts/list`                                                                                                                                                                                                               | `prompts/get`, `completion/complete`                                                                                           |
@@ -277,7 +277,13 @@ Add `featureFlag` to any tool, resource, resource template, prompt, or skill met
 
 When the plugin is installed on an app (`@App({ plugins: [FeatureFlagPlugin.init(...)] })`), the gates cover every capability the app provides, including those its adapters (for example an OpenAPI adapter) and its plugins contribute. Its tool, resource, prompt and completion gates do not run for other apps' capabilities; install the plugin on `@FrontMcp({ plugins })` to gate every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, are gated by every installed copy of the plugin.
 
+The `toolName` completion of `ui://widget/{toolName}.html` offers only the UI tools `tools/list` shows the caller: the SDK runs the caller's `tools:list-tools` flow for it, so the list filter hides a flagged-off tool there too ([#596](https://github.com/agentfront/frontmcp/issues/596)).
+
 Skill surfaces evaluate flags for the calling user on every transport, stdio and in-memory clients included, so `userIdResolver` and `attributesResolver` see the caller rather than an anonymous session.
+
+The skill catalog the server embeds in its `initialize` instructions (and the SEP-2640 `skill://` hints, when `skillsConfig.sep2640InInstructions` is on) is filtered the same way, for the client that initializes: a flag-disabled skill's name and description are left out ([#603](https://github.com/agentfront/frontmcp/issues/603)).
+
+A skill's `skill://<path>/SKILL.md` entry in `resources/list` is gated by the skill that path serves now. When a skill is replaced at the same path, for example by a dynamic registration, the entry takes the new skill's flag ([#606](https://github.com/agentfront/frontmcp/issues/606)).
 
 ### String Shorthand
 
