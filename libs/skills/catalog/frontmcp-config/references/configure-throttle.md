@@ -112,14 +112,37 @@ class ExpensiveQueryTool extends ToolContext {
 }
 ```
 
-## `ipFilter` is enforced on every request
+## `ipFilter` is enforced on every HTTP route
 
-`allowList`, `denyList` and `defaultAction` are checked at the start of the request pipeline,
-before the rate-limit check and before authentication. A rejected client gets HTTP 403 with
-JSON-RPC error `-32001`.
+`allowList`, `denyList` and `defaultAction` are checked by the `checkIpFilter` stage that starts
+every HTTP-facing flow, before the rate-limit check and before authentication:
+
+- the MCP endpoint (`<entryPath>`, `/sse`, `/message`) -- rejected with HTTP 403 and JSON-RPC
+  error `-32001`;
+- `/oauth/*`, `/.well-known/*`, `llm.txt` / `llm_full.txt`, the skills HTTP API, and custom
+  `http.routes` (before `auth: true` verification) -- rejected with HTTP 403 and
+  `{ "error": "forbidden", "message": "Client IP rejected by ipFilter" }`.
+
+Health and readiness probes (`/healthz`, `/readyz`, `/health`) and `/metrics` (bearer-token
+protected) are exempt. `IpBlockedError` / `IpNotAllowedError` are not thrown by the built-in
+filter.
+
+A request whose client IP cannot be established matches neither list and gets
+`defaultAction` -- with `'deny'` it is rejected. An IPv4-mapped peer (`::ffff:203.0.113.7`,
+how a dual-stack Node socket reports an IPv4 client) matches IPv4 rules.
 
 An `ipFilter` block works on its own -- you do not need to configure a `global` rate limit
 alongside it for the filter to run.
+
+### Where the client IP comes from
+
+| Runtime                                    | Client IP                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| Node / Express / serverless handler        | Socket peer                                                        |
+| Behind a declared proxy                    | `X-Forwarded-For` (`FRONTMCP_TRUST_PROXY=true`, see below)         |
+| Cloudflare Workers (incl. Durable Objects) | `CF-Connecting-IP` -- trusted only when running on Workers         |
+| Deno                                       | `info.remoteAddr` -- use `Deno.serve(handler)`                     |
+| Bun                                        | `server.requestIP(request)` -- use `Bun.serve({ fetch: handler })` |
 
 ## `partitionBy: 'ip'` needs a declared trusted proxy
 
@@ -155,6 +178,9 @@ so the socket peer is used instead.
 > With depth `1` and no `X-Forwarded-For` at all, `X-Real-IP` is used -- the single-hop nginx
 > convention. It is never consulted alongside a chain, because a caller can send both.
 
+On Cloudflare Workers, Deno and Bun the web-fetch adapter supplies the platform's peer
+address (table above), so edge callers get their own buckets too.
+
 When no IP can be established the request falls back to the authenticated user
 (`user:<userId>`), and to a single `ip:unresolved` partition when there is no user either. It
 never keys on the session id: `mcp-session-id` is caller-supplied and a request without one is
@@ -188,13 +214,13 @@ is what takes callers out of it.
 
 ### IpFilterConfig
 
-| Field               | Type                | Default   | Description                                      |
-| ------------------- | ------------------- | --------- | ------------------------------------------------ |
-| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                       |
-| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                       |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list              |
-| `trustProxy`        | `boolean`           | `false`   | **Not read.** Use `FRONTMCP_TRUST_PROXY`         |
-| `trustedProxyDepth` | `number`            | `1`       | **Not read.** Use `FRONTMCP_TRUSTED_PROXY_DEPTH` |
+| Field               | Type                | Default   | Description                                                        |
+| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
+| `allowList`         | `string[]`          | —         | Allowed IPs or CIDR ranges                                         |
+| `denyList`          | `string[]`          | —         | Blocked IPs or CIDR ranges                                         |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
+| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning). Use `FRONTMCP_TRUST_PROXY`         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning). Use `FRONTMCP_TRUSTED_PROXY_DEPTH` |
 
 ## Partition Strategies
 
@@ -271,13 +297,13 @@ done
 
 ## Troubleshooting
 
-| Problem                                         | Cause                                                                                                                                                                                                     | Solution                                                                                             |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                       |
-| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries                                                                                                                                  | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'`                      |
-| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                           |
-| `X-Forwarded-For` header ignored                | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead |
-| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                       |
+| Problem                                         | Cause                                                                                                                                                                                                     | Solution                                                                                                                                     |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                                                               |
+| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries, or the runtime reports no client IP (a custom fetch wrapper that drops the second handler argument on Deno/Bun)                 | Add the allowed IP ranges to `allowList`, pass the platform's second argument through to the handler, or change `defaultAction` to `'allow'` |
+| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                                                                   |
+| `X-Forwarded-For` header ignored                | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead                                         |
+| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                                                               |
 
 ## Examples
 

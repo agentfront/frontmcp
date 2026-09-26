@@ -6,20 +6,17 @@
  * allowList/denyList/defaultAction policy was accepted, initialised, unit-tested — and had
  * no effect on any request.
  *
- * The `acquireQuota` stage compounded it by returning early on `!manager?.config?.global`,
- * so a deployment configured with `ipFilter` alone performed no guard work whatsoever. The
- * failure was silent: the server started normally and sibling guard features such as rate
- * limiting kept working, so an operator had no signal that their network boundary was
- * inert.
+ * The filter now runs in its own `checkIpFilter` stage, ahead of `acquireQuota` and of
+ * authentication, so it does not depend on a global rate limit being configured.
  */
+import 'reflect-metadata';
+
+import { FlowControl, FrontMcpFlowTokens } from '../../../common';
 import HttpRequestFlow from '../http.request.flow';
 
 type Responded = { status?: number; body?: unknown };
 
-/**
- * Drive the real `acquireQuota` stage with a stubbed scope. The stage is the enforcement
- * point, so the test has to call it rather than re-implement its decision.
- */
+/** Drive the real stages with a stubbed scope, so the test exercises their decision rather than restating it. */
 function createStage(options: {
   ipFilterResult?: { allowed: boolean; reason?: string };
   global?: unknown;
@@ -39,6 +36,7 @@ function createStage(options: {
         checkIpFilter,
         checkGlobalRateLimit,
       },
+      logger: { warn: jest.fn() },
     },
     logger: { debug: jest.fn(), verbose: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
     requestId: 'req-1',
@@ -57,59 +55,52 @@ function createStage(options: {
   return { stage, checkIpFilter, checkGlobalRateLimit, responded };
 }
 
-describe('http:request acquireQuota — ipFilter enforcement (GHSA-hwfp-xv2f-fr8g)', () => {
+async function runStage(run: () => Promise<void>, responded: Responded[]): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    if (!(error instanceof FlowControl) || error.type !== 'respond') throw error;
+    responded.push(error.output as Responded);
+  }
+}
+
+describe('http:request checkIpFilter — ipFilter enforcement (GHSA-hwfp-xv2f-fr8g)', () => {
   it('consults the IP filter even when no global rate limit is configured', async () => {
-    const { stage, checkIpFilter } = createStage({ ipFilterResult: { allowed: true } });
+    const { stage, checkIpFilter, responded } = createStage({ ipFilterResult: { allowed: true } });
 
-    await (stage as any).acquireQuota();
+    await runStage(() => (stage as any).checkIpFilter(), responded);
 
-    // The early return on a missing `global` block used to skip this entirely.
     expect(checkIpFilter).toHaveBeenCalledWith('127.0.0.1');
+    expect(responded).toHaveLength(0);
   });
 
   it('rejects a denied client IP with 403', async () => {
     const { stage, responded } = createStage({
-      ipFilterResult: { allowed: false, reason: 'IP address "127.0.0.1" is blocked' },
+      ipFilterResult: { allowed: false, reason: 'denylisted' },
     });
 
-    await (stage as any).acquireQuota();
+    await runStage(() => (stage as any).checkIpFilter(), responded);
 
     expect(responded).toHaveLength(1);
     expect(responded[0].status).toBe(403);
-    expect(responded[0].body).toMatchObject({ jsonrpc: '2.0', id: 7 });
+    expect(responded[0].body).toMatchObject({ jsonrpc: '2.0', id: 7, error: { code: -32001 } });
   });
 
-  it('does not run the rate-limit check for a rejected IP', async () => {
-    const { stage, checkGlobalRateLimit } = createStage({
-      ipFilterResult: { allowed: false, reason: 'blocked' },
-      global: { maxRequests: 10, windowMs: 60_000 },
-    });
+  it('runs before the rate-limit and authorization stages', () => {
+    const plan = Reflect.getMetadata(FrontMcpFlowTokens.plan, HttpRequestFlow) as { pre: string[] };
 
-    await (stage as any).acquireQuota();
-
-    expect(checkGlobalRateLimit).not.toHaveBeenCalled();
+    expect(plan.pre.slice(0, 4)).toEqual(['traceRequest', 'checkIpFilter', 'acquireQuota', 'acquireSemaphore']);
+    expect(plan.pre.indexOf('checkIpFilter')).toBeLessThan(plan.pre.indexOf('checkAuthorization'));
   });
 
-  it('lets an allowed IP through to the rate-limit check', async () => {
-    const { stage, checkGlobalRateLimit, responded } = createStage({
-      ipFilterResult: { allowed: true },
-      global: { maxRequests: 10, windowMs: 60_000 },
-    });
-
-    await (stage as any).acquireQuota();
-
-    expect(checkGlobalRateLimit).toHaveBeenCalled();
-    expect(responded).toHaveLength(0);
-  });
-
-  it('still enforces the global rate limit', async () => {
+  it('lets the rate-limit stage enforce the global limit', async () => {
     const { stage, responded } = createStage({
       ipFilterResult: { allowed: true },
       global: { maxRequests: 10, windowMs: 60_000 },
       rateLimitAllowed: false,
     });
 
-    await (stage as any).acquireQuota();
+    await runStage(() => (stage as any).acquireQuota(), responded);
 
     expect(responded).toHaveLength(1);
     expect(responded[0].status).toBe(429);
@@ -119,7 +110,8 @@ describe('http:request acquireQuota — ipFilter enforcement (GHSA-hwfp-xv2f-fr8
   it('is a no-op when no filter is configured and no global limit is set', async () => {
     const { stage, checkGlobalRateLimit, responded } = createStage({ ipFilterResult: undefined });
 
-    await (stage as any).acquireQuota();
+    await runStage(() => (stage as any).checkIpFilter(), responded);
+    await runStage(() => (stage as any).acquireQuota(), responded);
 
     expect(checkGlobalRateLimit).not.toHaveBeenCalled();
     expect(responded).toHaveLength(0);

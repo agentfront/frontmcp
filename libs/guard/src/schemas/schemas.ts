@@ -52,15 +52,23 @@ export const ipFilterConfigSchema = z.object({
     .enum(['allow', 'deny'])
     .optional()
     .default('allow')
-    .describe('Default action when IP matches neither list.'),
-  trustProxy: z.boolean().optional().default(false).describe('Trust X-Forwarded-For header.'),
+    .describe('Default action when IP matches neither list, or no client IP could be established.'),
+  trustProxy: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Not read; setting it logs a startup warning. Set the FRONTMCP_TRUST_PROXY environment variable to trust X-Forwarded-For.',
+    ),
   trustedProxyDepth: z
     .number()
     .int()
     .positive()
     .optional()
     .default(1)
-    .describe('Max number of proxies to trust from X-Forwarded-For.'),
+    .describe(
+      'Not read; setting it logs a startup warning. Set the FRONTMCP_TRUSTED_PROXY_DEPTH environment variable instead.',
+    ),
 });
 
 // ============================================

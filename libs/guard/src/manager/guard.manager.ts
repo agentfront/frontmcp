@@ -6,15 +6,16 @@
  */
 
 import type { NamespacedStorage } from '@frontmcp/utils';
-import type { GuardConfig } from './types';
-import type { RateLimitConfig, RateLimitResult } from '../rate-limit/types';
-import type { ConcurrencyConfig, SemaphoreTicket } from '../concurrency/types';
-import type { PartitionKeyContext } from '../partition-key/types';
-import type { IpFilterResult } from '../ip-filter/types';
-import { SlidingWindowRateLimiter } from '../rate-limit/rate-limiter';
+
 import { DistributedSemaphore } from '../concurrency/semaphore';
+import type { ConcurrencyConfig, SemaphoreTicket } from '../concurrency/types';
 import { IpFilter } from '../ip-filter/ip-filter';
-import { resolvePartitionKey, buildStorageKey } from '../partition-key/partition-key.resolver';
+import type { IpFilterResult } from '../ip-filter/types';
+import { buildStorageKey, resolvePartitionKey } from '../partition-key/partition-key.resolver';
+import type { PartitionKeyContext } from '../partition-key/types';
+import { SlidingWindowRateLimiter } from '../rate-limit/rate-limiter';
+import type { RateLimitConfig, RateLimitResult } from '../rate-limit/types';
+import type { GuardConfig } from './types';
 
 const DEFAULT_WINDOW_MS = 60_000;
 
@@ -43,10 +44,10 @@ export class GuardManager {
 
   /**
    * Check if a client IP is allowed by the IP filter.
-   * Returns undefined if no IP filter is configured.
+   * Returns undefined only if no IP filter is configured; a missing IP gets `defaultAction` (GHSA-hwfp-xv2f-fr8g).
    */
   checkIpFilter(clientIp: string | undefined): IpFilterResult | undefined {
-    if (!this.ipFilter || !clientIp) return undefined;
+    if (!this.ipFilter) return undefined;
     return this.ipFilter.check(clientIp);
   }
 
@@ -54,7 +55,7 @@ export class GuardManager {
    * Check if a client IP is on the allow list (bypasses rate limiting).
    */
   isIpAllowListed(clientIp: string | undefined): boolean {
-    if (!this.ipFilter || !clientIp) return false;
+    if (!this.ipFilter) return false;
     return this.ipFilter.isAllowListed(clientIp);
   }
 

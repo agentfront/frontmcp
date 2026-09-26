@@ -1,3 +1,5 @@
+import { createGuardManager } from '../guard.factory';
+import { GuardManager } from '../guard.manager';
 import type { GuardConfig, GuardLogger } from '../types';
 
 const mockConnect = jest.fn().mockResolvedValue(undefined);
@@ -39,9 +41,6 @@ jest.mock('@frontmcp/utils', () => ({
   createStorage: (...args: unknown[]) => mockCreateStorage(...args),
   createMemoryStorage: (...args: unknown[]) => mockCreateMemoryStorage(...args),
 }));
-
-import { createGuardManager } from '../guard.factory';
-import { GuardManager } from '../guard.manager';
 
 describe('createGuardManager', () => {
   beforeEach(() => {
@@ -155,5 +154,36 @@ describe('createGuardManager', () => {
     };
 
     await expect(createGuardManager({ config })).resolves.toBeInstanceOf(GuardManager);
+  });
+});
+
+describe('createGuardManager — ipFilter proxy options are not read (GHSA-p3qf-fcwm-35x4)', () => {
+  const proxyWarning = expect.stringContaining('FRONTMCP_TRUST_PROXY');
+
+  async function warningsFor(ipFilter: GuardConfig['ipFilter']): Promise<jest.Mock> {
+    const logger = { info: jest.fn(), warn: jest.fn() };
+    await createGuardManager({ config: { enabled: true, storage: {} as GuardConfig['storage'], ipFilter }, logger });
+    return logger.warn;
+  }
+
+  it('warns when ipFilter.trustProxy is set, naming the variable that is read instead', async () => {
+    const warn = await warningsFor({ trustProxy: true });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(proxyWarning);
+  });
+
+  it('warns when ipFilter.trustedProxyDepth is set to anything but its default', async () => {
+    expect(await warningsFor({ trustedProxyDepth: 2 })).toHaveBeenCalledWith(proxyWarning);
+  });
+
+  it('stays quiet for the schema defaults, which every parsed config carries', async () => {
+    expect(
+      await warningsFor({ trustProxy: false, trustedProxyDepth: 1, denyList: ['10.0.0.0/8'] }),
+    ).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when no ipFilter is configured', async () => {
+    expect(await warningsFor(undefined)).not.toHaveBeenCalled();
   });
 });

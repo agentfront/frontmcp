@@ -51,9 +51,9 @@ interface TimeoutConfig {
 interface IpFilterConfig {
   allowList?: string[]; // IP addresses or CIDR ranges
   denyList?: string[];
-  defaultAction?: 'allow' | 'deny'; // default: 'allow'
-  trustProxy?: boolean; // default: false
-  trustedProxyDepth?: number; // default: 1
+  defaultAction?: 'allow' | 'deny'; // default: 'allow'; also applies when no client IP is known
+  trustProxy?: boolean; // NOT read (startup warning) -- set FRONTMCP_TRUST_PROXY
+  trustedProxyDepth?: number; // NOT read (startup warning) -- set FRONTMCP_TRUSTED_PROXY_DEPTH
 }
 ```
 
@@ -65,7 +65,7 @@ interface IpFilterConfig {
 
 ## Priority Order
 
-1. IP filter (allow/deny) — checked first
+1. IP filter (allow/deny) — checked first, on every HTTP route except health probes and `/metrics`
 2. Global rate limit — checked second
 3. Global concurrency — checked third
 4. Per-tool rate limit — checked per tool

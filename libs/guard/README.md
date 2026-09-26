@@ -150,9 +150,9 @@ const result = await withTimeout(
 
 ## IP Filtering
 
-The `IpFilter` class checks client IP addresses against allow and deny lists. Supports individual IP addresses and CIDR notation for both IPv4 and IPv6. IPv4-mapped IPv6 addresses (e.g., `::ffff:192.168.1.1`) are also handled.
+The `IpFilter` class checks client IP addresses against allow and deny lists. Supports individual IP addresses and CIDR notation for both IPv4 and IPv6. IPv4-mapped IPv6 addresses (e.g., `::ffff:192.168.1.1`, how a dual-stack socket reports an IPv4 client) are matched as the IPv4 address they map.
 
-**Precedence**: the deny list is always checked first. If an IP matches the deny list, it is blocked regardless of the allow list. If an allow list is configured and the IP does not match any allow rule, the `defaultAction` determines the outcome.
+**Precedence**: the deny list is always checked first. If an IP matches the deny list, it is blocked regardless of the allow list. If an allow list is configured and the IP does not match any allow rule, the `defaultAction` determines the outcome. A missing or unparseable IP matches no rule, so it also gets `defaultAction` -- `checkIpFilter(undefined)` rejects under `defaultAction: 'deny'`.
 
 All matching is performed using bigint arithmetic for correctness across the full IPv6 address space.
 
@@ -225,8 +225,6 @@ const guard = await createGuardManager({
       denyList: ['10.0.0.0/8'],
       allowList: ['10.0.1.0/24'],
       defaultAction: 'allow',
-      trustProxy: true,
-      trustedProxyDepth: 2,
     },
   },
   logger: console,
@@ -281,13 +279,13 @@ await guard.destroy();
 
 ### `IpFilterConfig`
 
-| Field               | Type                | Default   | Description                                 |
-| ------------------- | ------------------- | --------- | ------------------------------------------- |
-| `allowList`         | `string[]`          | --        | IP addresses or CIDR ranges to always allow |
-| `denyList`          | `string[]`          | --        | IP addresses or CIDR ranges to always block |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list         |
-| `trustProxy`        | `boolean`           | `false`   | Trust X-Forwarded-For header                |
-| `trustedProxyDepth` | `number`            | `1`       | Max proxies to trust from X-Forwarded-For   |
+| Field               | Type                | Default   | Description                                                                       |
+| ------------------- | ------------------- | --------- | --------------------------------------------------------------------------------- |
+| `allowList`         | `string[]`          | --        | IP addresses or CIDR ranges to always allow                                       |
+| `denyList`          | `string[]`          | --        | IP addresses or CIDR ranges to always block                                       |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or when no client IP could be established    |
+| `trustProxy`        | `boolean`           | `false`   | **Not read** (logs a startup warning). Set `FRONTMCP_TRUST_PROXY` instead         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read** (logs a startup warning). Set `FRONTMCP_TRUSTED_PROXY_DEPTH` instead |
 
 ## Storage Backends
 
