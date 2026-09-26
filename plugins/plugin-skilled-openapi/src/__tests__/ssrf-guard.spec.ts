@@ -234,6 +234,7 @@ describe('checkOutboundUrl — every IPv6 spelling of an internal address (GHSA-
     ['https://[::a9fe:a9fe]', 'IPv4-compatible (::/96)'],
     ['https://[64:ff9b::a9fe:a9fe]', 'NAT64 well-known prefix (64:ff9b::/96)'],
     ['https://[64:ff9b:1::a9fe:a9fe]', 'NAT64 local-use prefix (64:ff9b:1::/48)'],
+    ['https://[64:ff9b:1:a9fe:a9:fe00:808:808]', 'NAT64 local-use prefix, IPv4 in the /48 layout'],
     ['https://[2002:a9fe:a9fe::]', '6to4 (2002::/16)'],
     ['https://[::ffff:0:0]', 'IPv4-mapped unspecified 0.0.0.0'],
   ] as const;

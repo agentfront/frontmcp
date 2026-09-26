@@ -392,13 +392,15 @@ When `security.blockPrivateIPs` is enabled (default), the following addresses ar
 
 **IPv6 addresses that carry an IPv4 address** are judged by the IPv4 rules above:
 
-| Range                            | Form                            |
-| -------------------------------- | ------------------------------- |
-| `::ffff:0:0/96`                  | IPv4-mapped                     |
-| `::ffff:0:0:0/96`                | IPv4-translated                 |
-| `::/96`                          | IPv4-compatible (deprecated)    |
-| `64:ff9b::/96`, `64:ff9b:1::/48` | NAT64 (IPv4 in the low 32 bits) |
-| `2002::/16`                      | 6to4                            |
+| Range             | Form                            |
+| ----------------- | ------------------------------- |
+| `::ffff:0:0/96`   | IPv4-mapped                     |
+| `::ffff:0:0:0/96` | IPv4-translated                 |
+| `::/96`           | IPv4-compatible (deprecated)    |
+| `64:ff9b::/96`    | NAT64 (IPv4 in the low 32 bits) |
+| `2002::/16`       | 6to4                            |
+
+The local-use NAT64 prefix `64:ff9b:1::/48` is refused outright: where it carries the IPv4 address depends on the operator's prefix length, so it cannot be decoded reliably.
 
 Addresses are parsed before they are checked, so every spelling of a blocked address is refused: `::ffff:127.0.0.1`, `::ffff:7f00:1`, `0:0:0:0:0:ffff:7f00:1` and `[::ffff:7f00:1]` (what `new URL()` produces) are all `127.0.0.1`. A host that looks like an IP literal but does not parse is refused rather than allowed. The same checks run on every address a hostname resolves to, on each redirect hop, and on the JWKS and authorization-server metadata fetches FrontMCP makes when it verifies provider tokens.
 

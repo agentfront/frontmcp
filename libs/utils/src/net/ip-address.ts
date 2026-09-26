@@ -18,6 +18,7 @@ export type SpecialPurposeIpRange =
   | 'benchmarking'
   | 'site-local'
   | 'multicast'
+  | 'local-use-nat64'
   | 'reserved';
 
 export type IpAddressRange = 'public' | SpecialPurposeIpRange;
@@ -40,7 +41,6 @@ interface AddressBlock<Value> {
 
 const IPV4_OCTET_PATTERN = /^(0|[1-9]\d{0,2})$/;
 const IPV6_GROUP_PATTERN = /^[0-9a-f]{1,4}$/;
-const TRAILING_DOTTED_QUAD_PATTERN = /^(.*:)([^:]*\.[^:]*)$/;
 
 const IPV4_BLOCKS = compileBlocks<SpecialPurposeIpRange>(
   [
@@ -68,6 +68,8 @@ const IPV6_BLOCKS = compileBlocks<SpecialPurposeIpRange>(
     ['fc00::/7', 'private'],
     ['fe80::/10', 'link-local'],
     ['fec0::/10', 'site-local'],
+    // RFC 8215 local-use NAT64: where the IPv4 address sits depends on the operator's prefix length.
+    ['64:ff9b:1::/48', 'local-use-nat64'],
     ['ff00::/8', 'multicast'],
   ],
   expandIpv6,
@@ -80,7 +82,6 @@ const IPV4_EMBEDDINGS = compileBlocks<number>(
     ['::ffff:0:0:0/96', 6],
     ['::/96', 6],
     ['64:ff9b::/96', 6],
-    ['64:ff9b:1::/48', 6],
     ['2002::/16', 1],
   ],
   expandIpv6,
@@ -99,13 +100,14 @@ export function expandIpv6(address: string): number[] | undefined {
   const zoneIndex = address.indexOf('%');
   let text = (zoneIndex === -1 ? address : address.slice(0, zoneIndex)).toLowerCase();
 
-  const dottedQuad = TRAILING_DOTTED_QUAD_PATTERN.exec(text);
-  if (dottedQuad) {
-    const octets = parseIpv4(dottedQuad[2]);
+  const lastColonIndex = text.lastIndexOf(':');
+  const trailingSegment = text.slice(lastColonIndex + 1);
+  if (lastColonIndex !== -1 && trailingSegment.includes('.')) {
+    const octets = parseIpv4(trailingSegment);
     if (!octets) return undefined;
     const highGroup = ((octets[0] << 8) | octets[1]).toString(16);
     const lowGroup = ((octets[2] << 8) | octets[3]).toString(16);
-    text = `${dottedQuad[1]}${highGroup}:${lowGroup}`;
+    text = `${text.slice(0, lastColonIndex + 1)}${highGroup}:${lowGroup}`;
   }
 
   const halves = text.split('::');

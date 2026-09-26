@@ -50,6 +50,7 @@ const ALWAYS_FORBIDDEN_RANGES: ReadonlySet<IpAddressRange> = new Set<IpAddressRa
   'cloud-metadata',
   'unspecified',
   'this-network',
+  'local-use-nat64',
 ]);
 
 interface AddressViolation {

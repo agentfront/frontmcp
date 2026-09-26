@@ -268,7 +268,7 @@ export interface ParsedWidgetUri {
  * the tool-name charset: the MCP characters (letters, digits, `_ - . /`) plus the `:` of
  * app-qualified names and `@`. An escape that decodes to anything else is rejected.
  */
-const WIDGET_URI_PATTERN = /^ui:\/\/widget\/([A-Za-z0-9_.:@%-]+)\.(html|js|css)$/;
+const WIDGET_URI_PATTERN = /^ui:\/\/widget\/([A-Za-z0-9_.:@%/-]+)\.(html|js|css)$/;
 const WIDGET_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:@/-]+$/;
 
 export function parseWidgetUri(uri: string): ParsedWidgetUri | null {

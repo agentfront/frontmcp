@@ -84,6 +84,7 @@ describe('checkSsrfProtection — embedded IPv4 forms and special ranges (GHSA-x
     ['[::a9fe:a9fe]', 'IPv4-compatible metadata (::/96)'],
     ['[64:ff9b::a9fe:a9fe]', 'NAT64 well-known prefix metadata (64:ff9b::/96)'],
     ['[64:ff9b:1::a9fe:a9fe]', 'NAT64 local-use prefix metadata (64:ff9b:1::/48)'],
+    ['[64:ff9b:1:a9fe:a9:fe00:808:808]', 'NAT64 local-use prefix, IPv4 in the /48 layout'],
     ['[2002:a9fe:a9fe::]', '6to4 metadata (2002::/16)'],
     ['[2002:7f00:1::1]', '6to4 loopback'],
     ['[::ffff:0:0]', 'IPv4-mapped 0.0.0.0'],

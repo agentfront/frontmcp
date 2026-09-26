@@ -47,27 +47,37 @@ describe('expandIpv6', () => {
   });
 });
 
+describe('expandIpv6 on adversarial input', () => {
+  it('rejects a long run of dots after a colon in linear time', () => {
+    const startedAt = Date.now();
+    expect(expandIpv6(`:.${'.'.repeat(200_000)}`)).toBeUndefined();
+    expect(Date.now() - startedAt).toBeLessThan(200);
+  });
+});
+
 describe('extractEmbeddedIpv4', () => {
   it.each([
     ['::ffff:a9fe:a9fe', '169.254.169.254', 'IPv4-mapped'],
     ['::ffff:0:a9fe:a9fe', '169.254.169.254', 'IPv4-translated'],
     ['::a9fe:a9fe', '169.254.169.254', 'IPv4-compatible'],
     ['64:ff9b::a9fe:a9fe', '169.254.169.254', 'NAT64 well-known prefix'],
-    ['64:ff9b:1::a9fe:a9fe', '169.254.169.254', 'NAT64 local-use prefix'],
-    ['64:ff9b:1:ffff::a9fe:a9fe', '169.254.169.254', 'NAT64 local-use prefix, non-zero subnet'],
     ['2002:a9fe:a9fe::1', '169.254.169.254', '6to4'],
   ])('reads %s as %s (%s)', (address, embedded) => {
     const groups = expandIpv6(address);
     expect(groups && extractEmbeddedIpv4(groups)).toBe(embedded);
   });
 
-  it.each(['2606:4700::1111', 'fe80::1', '64:ff9b:2::a9fe:a9fe', '2001:db8::a9fe:a9fe'])(
-    'finds nothing in %s',
-    (address) => {
-      const groups = expandIpv6(address);
-      expect(groups && extractEmbeddedIpv4(groups)).toBeUndefined();
-    },
-  );
+  it.each([
+    '2606:4700::1111',
+    'fe80::1',
+    '64:ff9b:2::a9fe:a9fe',
+    '2001:db8::a9fe:a9fe',
+    '64:ff9b:1::a9fe:a9fe',
+    '64:ff9b:1:ffff::a9fe:a9fe',
+  ])('finds nothing in %s', (address) => {
+    const groups = expandIpv6(address);
+    expect(groups && extractEmbeddedIpv4(groups)).toBeUndefined();
+  });
 });
 
 describe('classifyIpAddress', () => {
@@ -110,6 +120,8 @@ describe('classifyIpAddress', () => {
     ['febf::1', 'link-local', 'fe80::/10'],
     ['fec0::1', 'site-local', 'fec0::/10'],
     ['ff02::1', 'multicast', 'ff00::/8'],
+    ['64:ff9b:1::a9fe:a9fe', 'local-use-nat64', '64:ff9b:1::/48'],
+    ['64:ff9b:1:a9fe:a9:fe00:808:808', 'local-use-nat64', '64:ff9b:1::/48'],
   ])('classifies IPv6 %s as %s (%s)', (address, range, cidr) => {
     expect(classifyIpAddress(address)).toEqual({ family: 6, range, cidr });
   });
@@ -124,7 +136,6 @@ describe('classifyIpAddress', () => {
     ['::a9fe:a9fe', 'link-local', '169.254.169.254'],
     ['::2', 'this-network', '0.0.0.2'],
     ['64:ff9b::7f00:1', 'loopback', '127.0.0.1'],
-    ['64:ff9b:1::a9fe:a9fe', 'link-local', '169.254.169.254'],
     ['2002:a9fe:a9fe::', 'link-local', '169.254.169.254'],
   ])('classifies IPv6 %s by its embedded IPv4 as %s', (address, range, embeddedIpv4) => {
     expect(classifyIpAddress(address)).toEqual(expect.objectContaining({ family: 6, range, embeddedIpv4 }));
