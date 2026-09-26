@@ -6,6 +6,7 @@ import { ResourceTemplate } from '../../../common';
 import { ResourceContext, type ResourceCompletionResult } from '../../../common/interfaces';
 import { ResourceNotFoundError } from '../../../errors';
 import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
+import { filterServableSkills, isSkillServable } from '../../skill-filter.helper';
 import type { SkillInstance } from '../../skill.instance';
 import {
   findAndLoadSkillByPath,
@@ -38,7 +39,12 @@ type Params = { skillPath: string; filePath: string };
 export class Sep2640SkillFileResource extends ResourceContext<Params> {
   async skillPathCompleter(partial: string): Promise<ResourceCompletionResult> {
     const visible = getSepVisibleSkills(this.scope);
-    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
+    const authorized = await filterSkillsByAuthorities(
+      this.scope,
+      visible,
+      this.getAuthInfo() as Record<string, unknown>,
+    );
+    const skills = await filterServableSkills(this.scope, authorized);
     const paths = skills.map((s) => s.getSkillPath());
     const filtered = partial ? paths.filter((p) => p.toLowerCase().startsWith(partial.toLowerCase())) : paths;
     return { values: filtered, total: filtered.length };
@@ -49,7 +55,12 @@ export class Sep2640SkillFileResource extends ResourceContext<Params> {
     // template variables yet), so collect file paths across all visible
     // skills. Filter by partial to keep the list small.
     const visible = getSepVisibleSkills(this.scope);
-    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
+    const authorized = await filterSkillsByAuthorities(
+      this.scope,
+      visible,
+      this.getAuthInfo() as Record<string, unknown>,
+    );
+    const skills = await filterServableSkills(this.scope, authorized);
     const seen = new Set<string>();
     for (const skill of skills) {
       try {
@@ -83,6 +94,9 @@ export class Sep2640SkillFileResource extends ResourceContext<Params> {
     if (!entry) {
       // Fallback: attempt a load to surface the same error users see for SKILL.md
       await findAndLoadSkillByPath(this.scope, params.skillPath);
+      throw new ResourceNotFoundError(uri);
+    }
+    if (!(await isSkillServable(this.scope, entry))) {
       throw new ResourceNotFoundError(uri);
     }
 

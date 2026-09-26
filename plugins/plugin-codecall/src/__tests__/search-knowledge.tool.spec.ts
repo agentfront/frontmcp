@@ -4,6 +4,8 @@ import type { SearchKnowledgeToolOutput } from '../tools/search-knowledge.schema
 import SearchKnowledgeTool from '../tools/search-knowledge.tool';
 
 jest.mock('@frontmcp/sdk', () => ({
+  // Every skill is servable here; the real `skills:filter` flow is covered by codecall-skill-filter.flow.spec.ts.
+  filterServableSkills: async (_scope: unknown, skills: unknown[]) => skills,
   Tool: () => (target: unknown) => target,
   ToolContext: class MockToolContext {
     private services = new Map<unknown, unknown>();

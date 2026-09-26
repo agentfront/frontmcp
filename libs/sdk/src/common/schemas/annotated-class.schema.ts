@@ -128,6 +128,10 @@ export const annotatedFrontMcpPluginsSchema = z.custom<AnnotatedClass>(
       if (obj['useFactory'] && frontMcpPluginMetadataSchema.passthrough().safeParse(v).success) {
         return true;
       }
+      const provide = obj['provide'];
+      if (obj['useFactory'] && typeof provide === 'function' && hasMetadataCompat(FrontMcpPluginTokens.type, provide)) {
+        return true;
+      }
     }
     return false;
   },

@@ -6,20 +6,21 @@
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import {
-  createStorage,
   createMemoryStorage,
-  type RootStorage,
+  createStorage,
   type NamespacedStorage,
+  type RootStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
-import { normalizeGrantor, approvalRecordSchema } from '../approval';
+
+import { approvalRecordSchema, normalizeGrantor } from '../approval';
+import { ApprovalScope, ApprovalState, type ApprovalContext, type ApprovalRecord } from '../types';
 import type {
-  ApprovalStore,
   ApprovalQuery,
+  ApprovalStore,
   GrantApprovalOptions,
   RevokeApprovalOptions,
 } from './approval-store.interface';
-import { ApprovalScope, ApprovalState, type ApprovalRecord, type ApprovalContext } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility Functions
@@ -156,26 +157,27 @@ export class ApprovalStorageStore implements ApprovalStore {
     return approval.expiresAt !== undefined && Date.now() > approval.expiresAt;
   }
 
+  /**
+   * The session record, else the user record, except that a denial in either scope wins,
+   * so a session approval cannot mask a user-level denial.
+   */
   async getApproval(toolId: string, sessionId: string, userId?: string): Promise<ApprovalRecord | undefined> {
     this.ensureInitialized();
 
-    const sessionKey = this.buildKey(toolId, sessionId);
-    const sessionValue = await this.storage.get(sessionKey);
-    const sessionApproval = this.parseRecord(sessionValue);
-    if (sessionApproval && !this.isExpired(sessionApproval)) {
-      return sessionApproval;
+    const keys = [this.buildKey(toolId, sessionId)];
+    if (userId) {
+      keys.push(this.buildKey(toolId, undefined, userId));
     }
 
-    if (userId) {
-      const userKey = this.buildKey(toolId, undefined, userId);
-      const userValue = await this.storage.get(userKey);
-      const userApproval = this.parseRecord(userValue);
-      if (userApproval && !this.isExpired(userApproval)) {
-        return userApproval;
+    const activeRecords: ApprovalRecord[] = [];
+    for (const key of keys) {
+      const record = this.parseRecord(await this.storage.get(key));
+      if (record && !this.isExpired(record)) {
+        activeRecords.push(record);
       }
     }
 
-    return undefined;
+    return activeRecords.find((record) => record.state === ApprovalState.DENIED) ?? activeRecords[0];
   }
 
   async queryApprovals(query: ApprovalQuery): Promise<ApprovalRecord[]> {

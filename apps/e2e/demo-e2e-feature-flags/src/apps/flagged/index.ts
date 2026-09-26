@@ -1,13 +1,16 @@
-import { App } from '@frontmcp/sdk';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
+import { App } from '@frontmcp/sdk';
+
+import FlagReportPrompt from './prompts/flag-report.prompt';
+import FlagStatusResource from './resources/flag-status.resource';
+import HiddenReportByIdResource from './resources/hidden-report-by-id.resource';
+import HiddenReportResource from './resources/hidden-report.resource';
 import AlwaysEnabledTool from './tools/always-enabled.tool';
 import BetaSearchTool from './tools/beta-search.tool';
-import ExperimentalAgentTool from './tools/experimental-agent.tool';
-import DefaultTrueTool from './tools/default-true.tool';
-import UnflaggedTool from './tools/unflagged.tool';
 import CheckFlagTool from './tools/check-flag.tool';
-import FlagStatusResource from './resources/flag-status.resource';
-import FlagReportPrompt from './prompts/flag-report.prompt';
+import DefaultTrueTool from './tools/default-true.tool';
+import ExperimentalAgentTool from './tools/experimental-agent.tool';
+import UnflaggedTool from './tools/unflagged.tool';
 
 @App({
   name: 'flagged',
@@ -21,11 +24,12 @@ import FlagReportPrompt from './prompts/flag-report.prompt';
         'programmatic-check': true,
         'flag-for-resource': true,
         'flag-for-prompt': false,
+        'flag-for-hidden-resource': false,
       },
     }),
   ],
   tools: [AlwaysEnabledTool, BetaSearchTool, ExperimentalAgentTool, DefaultTrueTool, UnflaggedTool, CheckFlagTool],
-  resources: [FlagStatusResource],
+  resources: [FlagStatusResource, HiddenReportResource, HiddenReportByIdResource],
   prompts: [FlagReportPrompt],
 })
 export class FlaggedApp {}

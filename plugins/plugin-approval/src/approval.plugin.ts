@@ -4,14 +4,22 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, Plugin, ProviderType, ProviderScope, FrontMcpContext, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
-import type { StorageConfig, RootStorage, NamespacedStorage } from '@frontmcp/utils';
+import {
+  DynamicPlugin,
+  FRONTMCP_CONTEXT,
+  Plugin,
+  ProviderScope,
+  type FrontMcpContext,
+  type ProviderType,
+} from '@frontmcp/sdk';
+import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
 
-import { ApprovalStorageStore } from './stores/approval-storage.store';
+import { resolveApprovalIdentity } from './approval.identity';
+import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from './approval.symbols';
+import ApprovalCheckPlugin from './hooks/approval-check.hook';
 import { createApprovalService } from './services/approval.service';
 import { ChallengeService } from './services/challenge.service';
-import { ApprovalStoreToken, ApprovalServiceToken, ChallengeServiceToken } from './approval.symbols';
-import ApprovalCheckPlugin from './hooks/approval-check.hook';
+import { ApprovalStorageStore } from './stores/approval-storage.store';
 import type { ApprovalMode } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,6 +145,7 @@ export interface ApprovalPluginOptions {
 @Plugin({
   name: 'approval',
   description: 'Tool authorization workflow with PKCE webhook security',
+  plugins: [ApprovalCheckPlugin],
   contextExtensions: [
     {
       property: 'approval',
@@ -226,24 +235,13 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       scope: ProviderScope.CONTEXT,
       inject: () => [ApprovalStoreToken, FRONTMCP_CONTEXT] as const,
       useFactory: (store, ctx: FrontMcpContext) => {
-        const userId =
-          (ctx.authInfo?.extra?.['userId'] as string | undefined) ??
-          (ctx.authInfo?.extra?.['sub'] as string | undefined) ??
-          ctx.authInfo?.clientId;
-        return createApprovalService(store, ctx.sessionId, userId);
+        const { sessionId, userId } = resolveApprovalIdentity(ctx);
+        return createApprovalService(store, sessionId, userId);
       },
     });
 
     return providers;
   };
-
-  /**
-   * Get plugin metadata including nested plugins.
-   */
-  static getPluginMetadata(_options: ApprovalPluginOptions): { plugins?: unknown[] } {
-    // Always include approval check hook
-    return { plugins: [ApprovalCheckPlugin] };
-  }
 }
 
 // Also export as named export

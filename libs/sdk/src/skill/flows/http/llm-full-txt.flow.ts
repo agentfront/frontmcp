@@ -25,6 +25,7 @@ import {
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { createSkillHttpAuthValidator } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { filterServableSkills } from '../../skill-filter.helper';
 import { formatSkillsForLlmFull } from '../../skill-http.utils';
 
 const inputSchema = httpInputSchema;
@@ -160,8 +161,11 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check cache first
-    const cache = await getSkillHttpCache(this.scope);
+    // The cached document lists every skill, so it is only served to a caller the
+    // `skills:filter` flow lets see all of them.
+    const allSkills = skillRegistry.getSkills(false);
+    const skills = await filterServableSkills(this.scope, allSkills);
+    const cache = skills.length === allSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {
       const cached = await cache.getLlmFullTxt();
       if (cached) {
@@ -176,7 +180,7 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
     }
 
     // Generate full content with tool schemas
-    const content = await formatSkillsForLlmFull(skillRegistry, toolRegistry, 'http');
+    const content = await formatSkillsForLlmFull(skillRegistry, toolRegistry, 'http', skills);
 
     if (!content || content.trim() === '') {
       this.respond({

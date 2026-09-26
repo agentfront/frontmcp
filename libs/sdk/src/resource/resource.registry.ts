@@ -346,6 +346,11 @@ export default class ResourceRegistry extends RegistryAbstract<
     return this.listAllIndexed().map((r) => r.instance);
   }
 
+  /** Owner lineage (root → leaf) of a resource this registry holds, or undefined when it holds none. */
+  lineageOf(entry: ResourceEntry): EntryLineage | undefined {
+    return this.listAllIndexed().find((row) => row.instance === entry)?.lineage;
+  }
+
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
   listByOwner(ownerPath: string): readonly ResourceEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);

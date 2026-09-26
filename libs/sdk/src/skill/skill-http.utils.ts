@@ -10,8 +10,8 @@
  */
 
 import type { SkillContent, SkillEntry, ToolEntry } from '../common';
+import type { SkillResources, SkillVisibility } from '../common/metadata/skill.metadata';
 import type ToolRegistry from '../tool/tool.registry';
-import type { SkillVisibility, SkillResources } from '../common/metadata/skill.metadata';
 import type { SkillRegistryInterface as SkillRegistryInterfaceType } from './skill.registry';
 
 /**
@@ -88,14 +88,15 @@ export function formatSkillsForLlmCompact(skills: SkillEntry[]): string {
  * @param registry - Skill registry to load skills from
  * @param toolRegistry - Tool registry to get tool schemas
  * @param visibility - Optional visibility filter ('http' or 'both')
+ * @param skills - The skills to format; defaults to every non-hidden skill in the registry
  * @returns Formatted plain text with full skill details
  */
 export async function formatSkillsForLlmFull(
   registry: SkillRegistryInterfaceType,
   toolRegistry: ToolRegistry,
   visibility: SkillVisibility = 'both',
+  skills: readonly SkillEntry[] = registry.getSkills(false),
 ): Promise<string> {
-  const skills = registry.getSkills(false); // Don't include hidden
   const parts: string[] = [];
 
   for (const skill of skills) {

@@ -153,6 +153,28 @@ class MyTool extends ToolContext {
 }
 ```
 
+### Tool Access Policy
+
+One policy decides every CodeCall surface: `codecall:search`, `codecall:describe`, `callTool`/`getTool` and the namespace bindings in `codecall:execute`, and `codecall:invoke`. A withheld tool is not indexed, is reported in describe's `notFound`, and is refused at execution.
+
+```typescript
+CodeCallPlugin.init({
+  mode: 'codecall_only',
+  // `tool` is { name, appId, source, description, tags }; `name` is the tool's own name, never `<appId>:<name>`
+  includeTools: (tool) => !tool.name.startsWith('admin:'),
+  directCalls: {
+    enabled: true,
+    allowedTools: ['users:list', 'crm:users:get'], // bare name, or `<appId>:<name>` to pin one app
+  },
+});
+```
+
+- Always withheld: `enabledInCodeCall: false` tools, hidden tools (`visibility: 'hidden'` / `hideFromDiscovery`), `visibility: 'internal'` tools, `codecall:*`, and any tool whose name, qualified name or requested spelling starts with `system:`, `internal:` or `__`.
+- `tool.appId` names the owning app for the tools its adapters and plugins provide too, so `includeTools: (tool) => tool.appId !== 'admin'` withholds every tool of app `admin`.
+- `codecall:searchSkills` and `codecall:searchKnowledge` run the SDK's `skills:filter` flow, so a skill a plugin withholds there (a flag-disabled skill, for one) is absent from both.
+- `directCalls.allowedTools` and `directCalls.filter` only narrow the base policy; listing a withheld tool does not make it callable. Unlisted tools are refused.
+- Hiding a tool from search is not the control; the refusal at execution is. Do not rely on `visibleInListTools` or search ranking to protect a tool.
+
 ### Power Features
 
 - **TF-IDF Search** -- Term frequency-inverse document frequency scoring indexes tool names, descriptions, and tags. No external embedding service required.
@@ -271,7 +293,9 @@ user. If the data really is shared, use `scope: 'global'`.
 `tool` included, derive their encryption key from that secret plus the scope identity. A
 session id is not a secret -- the client knows it and it travels in the `mcp-session-id`
 header -- so it cannot be the key material on its own. Instances with different secrets cannot
-read each other's entries.
+read each other's entries. With none of `REMEMBER_SECRET`, `MCP_MEMORY_SECRET` or
+`MCP_SESSION_SECRET` set in production, the plugin falls back to a random in-memory secret and
+logs a warning once; its encrypted memory is then lost on restart.
 
 **Upgrading past that change moves existing `session`, `tool` and `user` entries.** The key
 derivation change orphans `session` and `tool` ciphertext, and the namespace now percent-encodes
@@ -353,6 +377,11 @@ class AuditedServer {}
 class WebhookServer {}
 ```
 
+**`ApprovalPlugin.init()` registers the approval check itself.** Do not add `ApprovalCheckPlugin`
+to `plugins`; listing it as well is harmless and the check still runs once per call. Require
+1.8.1 or later: in 1.8.0 and earlier `ApprovalPlugin.init()` registered no check at all, so
+tools marked `approval` ran unapproved.
+
 ### Modes
 
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
@@ -372,6 +401,34 @@ name the context that lets it skip the gate. Set the context when you authentica
 // In your auth layer, not in tool input
 authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectId };
 ```
+
+### How the check decides
+
+1. `skipApproval: true`, or approval not required: the tool runs.
+2. A recorded **denial** for the caller (session or user scope): refused with state `denied`. A
+   denial outranks pre-approved contexts and any session approval.
+3. The session context is one of `preApprovedContexts`: the tool runs.
+4. `alwaysPrompt: true`: refused with state `pending`.
+5. A valid approval for the caller: the tool runs.
+6. Otherwise refused with state `pending` (or `expired`).
+
+A refused call throws `ApprovalRequiredError`; the client receives an error result.
+
+Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pass that name to
+`this.approval` grant and check methods. The owner is the app that declares the tool, or the
+adapter or plugin that provides it (`my-app:file_write` for a tool declared on app `my-app`,
+`github-api:create_issue` for one its `github-api` adapter provides). Session approvals belong to the
+caller's session; on the stateless HTTP transport, where every request shares one session id,
+they are keyed by the authenticated principal (`authInfo.extra.userId`, then `authInfo.extra.sub`,
+then `authInfo.clientId`). A stateless call with no
+principal cannot hold a session approval.
+
+Installed on an app, `ApprovalPlugin` gates only that app's tools (including those its adapters
+and plugins provide) against its own store, so two apps can each install it with separate stores.
+Installed on the server, it gates every tool; a tool both gate must pass each store's check. With
+two apps each installing it, `this.approval` currently resolves the store of the app registered
+last ([#600](https://github.com/agentfront/frontmcp/issues/600)) -- grant through each app's
+store directly, or install `ApprovalPlugin` once on the server.
 
 ### Using `this.approval` in Tools
 
@@ -405,11 +462,13 @@ class DangerousActionTool extends ToolContext {
 ### Per-Tool Approval Metadata
 
 ```typescript
+import { ApprovalScope } from '@frontmcp/plugin-approval';
+
 @Tool({
   name: 'file_write',
   approval: {
     required: true,
-    defaultScope: 'session', // 'session' | 'user' | 'time-limited'
+    defaultScope: ApprovalScope.SESSION, // SESSION | USER | TIME_LIMITED | TOOL_SPECIFIC | CONTEXT_SPECIFIC
     category: 'write',
     riskLevel: 'medium', // 'low' | 'medium' | 'high' | 'critical'
     approvalMessage: 'Allow file writing for this session?',
@@ -435,9 +494,11 @@ asking -- a profile, a balance, a tenant's records, anything filtered by the cal
 permissions -- and a key built only from the tool and its arguments serves the first caller's
 response to everyone else.
 
-The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
-session. A call with no identity at all gets a key of its own rather than one shared with
-every other identity-less caller.
+The identity is the subject your auth layer puts in `authInfo.extra` (`sub` / `userId`), then
+the client id, then the session. For a request the SDK verified, the client id is the token's
+`sub`, or `anon:<id>` for an anonymous session. The session id the stateless HTTP transport
+gives every request is not an identity. A call with no identity at all gets a key of its own
+rather than one shared with every other identity-less caller.
 
 Set `keyByIdentity: false` **only** when every caller would get byte-identical output: public
 reference data, a currency table, a static document.
@@ -688,7 +749,17 @@ class ExperimentalTool extends ToolContext {
 }
 ```
 
-The plugin hooks into listing and execution flows for tools, resources, prompts, and skills. When a flag evaluates to `false`, the corresponding entry is filtered from list results and direct invocation returns an error.
+The plugin hooks into listing and execution flows for tools, resources, resource templates, prompts, and skills. When a flag evaluates to `false`, the corresponding entry is filtered from list results and direct access is refused:
+
+| Capability        | Hidden from                                                                                                                                                                                                    | Refused on                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Tool              | `tools/list`                                                                                                                                                                                                   | `tools/call`                                                                                                    |
+| Resource          | `resources/list`                                                                                                                                                                                               | `resources/read`, `completion/complete`                                                                         |
+| Resource template | `resources/templates/list`                                                                                                                                                                                     | `resources/read` of any URI it matches, `completion/complete`                                                   |
+| Prompt            | `prompts/list`                                                                                                                                                                                                 | `prompts/get`, `completion/complete`                                                                            |
+| Skill             | `skills/search`, `skills/list`, `skill://index.json`, its `skill://<path>/SKILL.md` entry in `resources/list`, `GET /skills`, `/llm.txt`, `/llm_full.txt`, `codecall:searchSkills`, `codecall:searchKnowledge` | `skills/load`, `skill://<path>/SKILL.md` and its files, `GET /skills/{id}` (same answer as a nonexistent skill) |
+
+Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource, prompt and completion gates do not run for other apps' capabilities -- install it in `@FrontMcp({ plugins })` to gate every app. Resources and prompts served outside every app (the SEP-2640 `skill://` resources) are gated by every installed copy. Skills are gated through the `skills:filter` flow, which every skill surface runs -- as the calling user on every transport, stdio and in-memory included; custom plugins can hook `Did('filterSkills')` on it the same way, and reuse `filterServableSkills(scope, skills)` from `@frontmcp/sdk` to serve skills from a surface of their own.
 
 ---
 
