@@ -64,6 +64,14 @@ interface HierarchyDef {
   rec: ProviderRecord;
 }
 
+interface SessionProviderStore {
+  /** Instances built without a context source, or for one that overrides nothing in this hierarchy. */
+  providers: Map<Token, unknown>;
+  /** Instances built for a context source whose tokens this hierarchy re-defines, kept apart per source. */
+  bySource: Map<ProviderRegistryInterface, Map<Token, unknown>>;
+  lastAccess: number;
+}
+
 export default class ProviderRegistry
   extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
   implements ProviderRegistryInterface
@@ -79,7 +87,7 @@ export default class ProviderRegistry
   private registries: Map<RegistryKind, Set<RegistryType>> = new Map();
 
   /** Session-scoped provider instance cache by sessionKey */
-  private sessionStores: Map<string, { providers: Map<Token, unknown>; lastAccess: number }> = new Map();
+  private sessionStores: Map<string, SessionProviderStore> = new Map();
 
   /** Locks to prevent concurrent session builds (race condition prevention) */
   private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void }> = new Map();
@@ -911,24 +919,33 @@ export default class ProviderRegistry
     // land on different server instances. CONTEXT providers are stateless facades
     // that delegate to storage, so rebuilding them per-request has minimal cost.
     let sessionProviders: Map<Token, unknown> | undefined;
+    const ownDefs = (contextSource && this.defsBelow(contextSource)) ?? new Map<Token, HierarchyDef>();
 
     if (this.sessionCacheEnabled) {
       // Traditional mode: cache providers per session
       let cached = this.sessionStores.get(sessionKey);
       if (!cached) {
-        cached = { providers: new Map<Token, unknown>(), lastAccess: Date.now() };
+        cached = { providers: new Map<Token, unknown>(), bySource: new Map(), lastAccess: Date.now() };
         this.sessionStores.set(sessionKey, cached);
       } else {
         cached.lastAccess = Date.now();
       }
       sessionProviders = cached.providers;
+      // A source this hierarchy overrides resolves those tokens (and whatever depends on them) differently,
+      // so its instances are cached apart from the ones built without it.
+      if (contextSource && ownDefs.size > 0) {
+        sessionProviders = cached.bySource.get(contextSource);
+        if (!sessionProviders) {
+          sessionProviders = new Map<Token, unknown>();
+          cached.bySource.set(contextSource, sessionProviders);
+        }
+      }
     }
 
     // Pre-built providers replace cached ones, except for tokens this hierarchy defines below `contextSource`.
     // Anything built from the request's own context (FrontMcpContext and the tokens it carries) is rebuilt
     // instead of cached.
     const requestTokens = requestScopedTokens(contextProviders);
-    const ownDefs = (contextSource && this.defsBelow(contextSource)) ?? new Map<Token, HierarchyDef>();
     const contextStore = new Map<Token, unknown>(sessionProviders ?? []);
     for (const [token, instance] of contextProviders ?? []) {
       if (!ownDefs.has(token)) contextStore.set(token, instance);

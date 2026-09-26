@@ -123,4 +123,57 @@ describe('ProviderRegistry.buildViews with the registry that built the pre-built
 
     expect(appViews.context.get(GREETING)).toBe('hello scope');
   });
+
+  describe('session cache', () => {
+    async function appWithPlugin(): Promise<{ scope: ProviderRegistry; plugin: ProviderRegistry }> {
+      const scope = await scopeWithLabel();
+      const app = await registry([contextProvider(LABEL, () => 'app')], scope);
+      const plugin = await registry([contextProvider(GREETING, (label) => ({ text: `hello ${label}` }), [LABEL])], app);
+      return { scope, plugin };
+    }
+
+    it('resolves the own definition after the same session was built without a source', async () => {
+      const { scope, plugin } = await appWithPlugin();
+      const scopeViews = await scope.buildViews(SESSION_KEY);
+      await plugin.buildViews(SESSION_KEY, scopeViews.context);
+
+      const pluginViews = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      expect(pluginViews.context.get(LABEL)).toBe('app');
+      expect(pluginViews.context.get(GREETING)).toEqual({ text: 'hello app' });
+    });
+
+    it('keeps the pre-built instance after the same session was built with a source', async () => {
+      const { scope, plugin } = await appWithPlugin();
+      const scopeViews = await scope.buildViews(SESSION_KEY);
+      await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      const pluginViews = await plugin.buildViews(SESSION_KEY, scopeViews.context);
+
+      expect(pluginViews.context.get(LABEL)).toBe('scope');
+      expect(pluginViews.context.get(GREETING)).toEqual({ text: 'hello scope' });
+    });
+
+    it('reuses the instances it built for the same source within a session', async () => {
+      const { scope, plugin } = await appWithPlugin();
+      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const first = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      const second = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      expect(second.context.get(GREETING)).toBe(first.context.get(GREETING));
+    });
+
+    it('drops the instances it built for a source when the session is cleaned up', async () => {
+      const { scope, plugin } = await appWithPlugin();
+      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const first = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      plugin.cleanupSession(SESSION_KEY);
+      const second = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
+
+      expect(second.context.get(GREETING)).not.toBe(first.context.get(GREETING));
+      expect(second.context.get(GREETING)).toEqual({ text: 'hello app' });
+    });
+  });
 });
