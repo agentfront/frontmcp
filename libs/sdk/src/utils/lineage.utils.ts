@@ -101,6 +101,24 @@ export function appOwnerIdOf(lineage: EntryLineage, owner?: EntryOwnerRef): stri
   return owners.find((candidate) => candidate.kind === 'app')?.id;
 }
 
+/** Owner lineage per entry instance, rebuilt with a registry's rows so `lineageOf` is O(1). */
+export class EntryLineageIndex<Entry> {
+  private readonly lineages = new Map<Entry, EntryLineage>();
+
+  /** Replace the index with these rows; an entry held by several rows keeps the first row's lineage. */
+  rebuild(rows: Iterable<{ instance: Entry; lineage: EntryLineage }>): void {
+    this.lineages.clear();
+    for (const row of rows) {
+      if (!this.lineages.has(row.instance)) this.lineages.set(row.instance, row.lineage);
+    }
+  }
+
+  /** Owner lineage (root → leaf) of an entry, or undefined when no row holds it. */
+  lineageOf(entry: Entry): EntryLineage | undefined {
+    return this.lineages.get(entry);
+  }
+}
+
 /**
  * Check if lineage `a` is an ancestor of lineage `b`.
  */

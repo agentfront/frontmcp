@@ -11,6 +11,7 @@
 import type { FileSource } from '../component/types';
 import type { CDNDependency } from '../resolver/types';
 import type { CustomShellSource } from '../shell/custom-shell-types';
+import type { TrustedHtml } from '../shell/trusted-html';
 
 /**
  * Configuration options for bundling file-based components.
@@ -192,6 +193,21 @@ export interface TemplateHelpers {
    * Safely embed JSON data in HTML (escapes script-breaking characters).
    */
   jsonEmbed: (data: unknown) => string;
+
+  /**
+   * Tagged template that builds trusted markup. The literal parts stay HTML; each interpolated
+   * value is HTML-escaped unless it is itself `TrustedHtml`. Arrays are joined without a
+   * separator and `null` / `undefined` / `false` render nothing. Don't pre-escape values.
+   *
+   * @example ctx.helpers.html`<h2>${ctx.output.title}</h2>`
+   */
+  html: (strings: TemplateStringsArray, ...values: unknown[]) => TrustedHtml;
+
+  /**
+   * Mark markup you produced or sanitized yourself as trusted, so it renders as HTML even when
+   * `escapeStringResults` is on. Never pass raw tool output or user input.
+   */
+  trustedHtml: (markup: string) => TrustedHtml;
 }
 
 /**
@@ -223,9 +239,10 @@ export interface TemplateContext<In = unknown, Out = unknown> {
 
 /**
  * Template builder function type.
- * Receives context with input/output and returns HTML string.
+ * Receives context with input/output and returns markup: `TrustedHtml` from
+ * `ctx.helpers.html` / `ctx.helpers.trustedHtml`, or a string (see `escapeStringResults`).
  */
-export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateContext<In, Out>) => string;
+export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateContext<In, Out>) => string | TrustedHtml;
 
 // ============================================
 // Widget Serving Mode
@@ -380,6 +397,20 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * ```
    */
   contentSecurity?: UIContentSecurity;
+
+  /**
+   * HTML-escape a plain string returned by a template function.
+   *
+   * - `true`: plain strings are escaped and shown as text; markup built with
+   *   `ctx.helpers.html` or wrapped with `ctx.helpers.trustedHtml` still renders as HTML.
+   * - unset (1.8 default): strings that look like HTML render as markup, and a one-time
+   *   notice per tool recommends `html` because 1.9 will escape string results by default.
+   * - `false`: keep rendering strings as markup without the notice.
+   *
+   * Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default.
+   * Static string templates (`template: '<div>…</div>'`) are author markup and never escaped.
+   */
+  escapeStringResults?: boolean;
 
   /**
    * Whether the widget can invoke tools via the MCP bridge.

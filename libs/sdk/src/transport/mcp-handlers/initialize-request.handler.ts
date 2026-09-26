@@ -190,12 +190,12 @@ export default function initializeRequestHandler({
       // Fall back to defaults if not configured
       const configuredInfo = scope.metadata?.info ?? { name: 'FrontMcpServer', version: '0.0.1' };
 
-      // Recompute instructions on every initialize so dynamic skill
-      // registrations (e.g. registerSkillContent after boot) are reflected
-      // without requiring a server restart. Falls back to the static
-      // serverOptions.instructions when no composer was provided (legacy
-      // callers, tests, or embedders that pre-compose the string).
-      const composed = composeInstructions?.();
+      // Recompute instructions on every initialize, for this caller, so dynamic
+      // skill registrations (e.g. registerSkillContent after boot) are reflected
+      // without a restart and the skill catalog only names skills the caller may
+      // see. Falls back to the static serverOptions.instructions when no composer
+      // was provided (legacy callers, tests, or embedders that pre-compose it).
+      const composed = await composeInstructions?.(ctx);
       const instructions = composed !== undefined ? composed : serverOptions.instructions;
 
       const result: InitializeResult = {

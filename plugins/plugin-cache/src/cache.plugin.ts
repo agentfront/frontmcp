@@ -5,7 +5,6 @@ import {
   getGlobalStoreConfig,
   isVercelKvProvider,
   Plugin,
-  STATELESS_SESSION_ID,
   ToolHook,
   type FlowCtxOf,
   type FrontMcpConfigType,
@@ -290,7 +289,10 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   private resolveCallerIdentity(toolContext: unknown): string {
     const ctx = toolContext as {
       authInfo?: { extra?: Record<string, unknown>; clientId?: string };
-      tryGetContext?: () => { sessionId?: string; authInfo?: { extra?: Record<string, unknown>; clientId?: string } };
+      tryGetContext?: () => {
+        verifiedSessionId?: string;
+        authInfo?: { extra?: Record<string, unknown>; clientId?: string };
+      };
     };
 
     const requestContext = ctx.tryGetContext?.();
@@ -300,9 +302,9 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (typeof subject === 'string' && subject) return `user:${subject}`;
     if (authInfo?.clientId) return `client:${authInfo.clientId}`;
 
-    // The stateless transport gives every request the same session id, so it identifies no one.
-    const sessionId = requestContext?.sessionId;
-    if (sessionId && sessionId !== STATELESS_SESSION_ID) return `session:${sessionId}`;
+    // Stateless, per-request and unaccepted client session ids identify no one; only a verified session does.
+    const sessionId = requestContext?.verifiedSessionId;
+    if (sessionId) return `session:${sessionId}`;
 
     // No identity at all: give this call its own key rather than one shared with every other
     // identity-less caller. A cache miss is the safe failure here.

@@ -220,12 +220,13 @@ The `ui.template` field accepts a builder function, an HTML/MDX string, a React 
   name: 'user_profile',
   inputSchema: { userId: z.string() },
   ui: {
-    template: (ctx) => `<div>User ${ctx.input.userId}</div>`,
+    // `html` escapes interpolated values; plain string results render as markup unless `escapeStringResults: true`
+    template: (ctx) => ctx.helpers.html`<div>User ${ctx.input.userId}</div>`,
   },
 })
 ```
 
-See the [Tool UI guide](/frontmcp/servers/tools#tool-ui) for the full `ToolUIConfig` shape (CSP, sanitization, helpers, etc.).
+See the [Tool UI guide](/frontmcp/servers/tools#tool-ui) for the full `ToolUIConfig` shape (CSP, sanitization, helpers, etc.), and [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup) for `html` / `trustedHtml` and the `escapeStringResults` option (escaping becomes the default in 1.9).
 
 ## Function-Based Alternative
 

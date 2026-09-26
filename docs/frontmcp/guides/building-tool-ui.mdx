@@ -181,7 +181,11 @@ The tool name in the URI is percent-encoded, as `tools/list` advertises it: a na
 </Note>
 
 <ParamField path="ui.template" type="function">
-  A function that receives the execution context and returns an HTML string.
+  A function that receives the execution context and returns markup — preferably built with the `ctx.helpers.html` tagged template (see [Trusted markup](#trusted-markup)), or a string.
+</ParamField>
+
+<ParamField path="ui.escapeStringResults" type="boolean">
+  HTML-escape a plain string returned by the template function; `html` / `trustedHtml` results still render as markup. Unset (the 1.8 default) renders strings that look like HTML as markup and logs a one-time notice per tool; `false` keeps that behaviour without the notice. Overrides the server-wide `@FrontMcp({ ui: { escapeStringResults } })` default. **FrontMCP 1.9 escapes string results by default.** See [Escaping string results](#escaping-string-results).
 </ParamField>
 
 ---
@@ -281,10 +285,10 @@ template: (ctx: TemplateContext<MyInput, MyOutput>) => {
   const { temperature, conditions } = ctx.output;
 
   // Helper functions
-  const { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed } = ctx.helpers;
+  const { html, trustedHtml, escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed } = ctx.helpers;
 
-  // Always escape user-provided strings!
-  return `<p>${escapeHtml(location)}</p>`;
+  // `html` escapes every interpolated value — no manual escapeHtml needed
+  return html`<p>${location}: ${temperature}° ${conditions}</p>`;
 }
 ```
 
@@ -294,20 +298,65 @@ template: (ctx: TemplateContext<MyInput, MyOutput>) => {
 
 ### Available Helpers
 
-| Helper                         | Description                                                       |
-| ------------------------------ | ----------------------------------------------------------------- |
-| `escapeHtml(str)`              | Escape HTML entities to prevent XSS (handles `null`/`undefined`)  |
-| `formatDate(date, format?)`    | Format a date (accepts `Date` or ISO string)                      |
-| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting (defaults to `'USD'`)                |
-| `uniqueId(prefix?)`            | Generate a unique ID for DOM elements                             |
-| `jsonEmbed(data)`              | Safely embed JSON in an inline `<script>` (escapes `<`, `>`, `&`) |
+| Helper                         | Description                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| `` html`…` ``                  | Tagged template that builds trusted markup; interpolated values are escaped unless trusted |
+| `trustedHtml(markup)`          | Mark markup you produced or sanitized yourself as trusted                                  |
+| `escapeHtml(str)`              | Escape HTML entities to prevent XSS (handles `null`/`undefined`)                           |
+| `formatDate(date, format?)`    | Format a date (accepts `Date` or ISO string)                                               |
+| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting (defaults to `'USD'`)                                         |
+| `uniqueId(prefix?)`            | Generate a unique ID for DOM elements                                                      |
+| `jsonEmbed(data)`              | Safely embed JSON in an inline `<script>` (escapes `<`, `>`, `&`)                          |
+
+### Trusted markup
+
+Build the markup a template returns with the `html` tagged template from `ctx.helpers`. Its literal parts are your markup; every value you interpolate is HTML-escaped unless it is itself trusted markup, so tool output can't inject tags:
+
+```typescript
+template: (ctx: TemplateContext<MyInput, MyOutput>) => {
+  const { html } = ctx.helpers;
+
+  return html`
+    <h2>${ctx.output.title}</h2>
+    <ul>
+      ${ctx.output.items.map((item) => html`<li>${item.name}</li>`)}
+    </ul>
+    ${ctx.output.note && html`<p class="note">${ctx.output.note}</p>`}
+  `;
+},
+```
+
+- Nested `html` values are inserted as-is and never escaped twice. Arrays are joined without a separator; `null`, `undefined` and `false` render nothing.
+- Don't pre-escape values with `escapeHtml` inside `html` — they would be escaped twice.
+- Quote attribute values (`title="${value}"`). Escaping keeps a value inside a quoted attribute, but it doesn't validate URLs — check `href` / `src` values yourself.
+- Wrap markup that is already safe — HTML you generated or sanitized yourself — with `ctx.helpers.trustedHtml(markup)`. Never wrap raw tool output or user input.
+- Inside an inline `<script>`, embed data with `${trustedHtml(jsonEmbed(data))}`: `jsonEmbed` output is safe in a script, and `html` would otherwise HTML-escape its quotes.
+
+`html`, `trustedHtml`, `isTrustedHtml` and the `TrustedHtml` type are also exported from `@frontmcp/uipack`; `TrustedHtml` is re-exported from `@frontmcp/sdk`.
+
+### Escaping string results
+
+A template function that returns a plain **string** has it rendered as markup when it looks like HTML, so `template: (ctx) => ctx.output` renders any tags in the output. Opt in to escaping plain string results per tool, or for the whole server:
+
+```typescript
+// Per tool
+ui: { template, escapeStringResults: true }
+
+// Server-wide default — a tool's own setting wins
+@FrontMcp({ info, apps, ui: { escapeStringResults: true } })
+```
+
+| `escapeStringResults` | Plain string result                                          | `html` / `trustedHtml` result |
+| --------------------- | ------------------------------------------------------------ | ----------------------------- |
+| unset (1.8 default)   | Rendered as markup; a one-time notice is logged for the tool | Rendered as markup            |
+| `true`                | Escaped and shown as text                                    | Rendered as markup            |
+| `false`               | Rendered as markup, no notice                                | Rendered as markup            |
 
 <Warning>
-Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.
-
-A string your template returns is inserted as markup when it looks like HTML, so `template: (ctx) => ctx.output` renders any tags in the output. Other results are escaped: plain text is shown as text, an object as JSON inside `<pre>`, and a base64 PDF (`JVBERi…`) is embedded as script data. A value that starts with the PDF signature but is not base64 is shown as text.
-
+**The default changes in FrontMCP 1.9: plain string results will be escaped.** To migrate, return `html` / `trustedHtml` from every template function, then set `escapeStringResults: true` to confirm none still returns a plain markup string. Until then, each tool whose template returns a plain markup string logs a notice once, naming the tool.
 </Warning>
+
+Other results are always escaped: plain text is shown as text, an object as JSON inside `<pre>`, and a chart config or base64 PDF (`JVBERi…`) is embedded as script data. A value that starts with the PDF signature but is not base64 is shown as text. A static string template (`template: '<div>…</div>'`) is your own markup and is never escaped.
 
 ---
 

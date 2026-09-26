@@ -1,6 +1,6 @@
 ---
 name: ui-widgets
-description: @Tool({ ui }) — template formats, servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec.
+description: @Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, widgetAccessible, MCP Apps spec.
 ---
 
 # Tool UI widgets
@@ -42,7 +42,7 @@ That's it. The framework:
 | Format                       | Shape                                     | When                                                                                                      |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | **FileSource (recommended)** | `{ file: widgetPath }`                    | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                    |
-| **Function**                 | `(ctx) => string`                         | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)). |
+| **Function**                 | `` (ctx) => ctx.helpers.html`…` ``        | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)). |
 | **HTML / MDX string**        | `'<div>…</div>'` or `'# Title\n<Card />'` | Static markup; pair with `mdxComponents` for MDX.                                                         |
 | **React component**          | `MyWidget`                                | SSR React. Set `hydrate: false` (default) for Claude/ChatGPT.                                             |
 
@@ -56,8 +56,7 @@ Inline `template: (ctx) => …` under `strict` fails with `Parameter 'ctx' impli
 import { type TemplateContext } from '@frontmcp/sdk';
 
 ui: {
-  template: (ctx: TemplateContext<MyInput, MyOutput>) =>
-    `<div>${ctx.helpers.escapeHtml(ctx.output.label)}</div>`,
+  template: (ctx: TemplateContext<MyInput, MyOutput>) => ctx.helpers.html`<div>${ctx.output.label}</div>`,
 }
 ```
 
@@ -77,6 +76,7 @@ Or use the FileSource form — it sidesteps the issue.
 | `autoResize`                                                                                                    | `true`      | Auto-report content height to the host via a debounced `ResizeObserver` on `#root`. Set `false` to opt out (CSS still applies). |
 | `csp`                                                                                                           | —           | `{ connectDomains?, resourceDomains? }` — emitted on the resource content's `_meta.ui.csp` (#455). Claude honors CSP only here. |
 | `contentSecurity`                                                                                               | strict      | `{ allowUnsafeLinks?, allowInlineScripts?, bypassSanitization? }` — keep defaults.                                              |
+| `escapeStringResults`                                                                                           | unset       | `true` escapes plain string results of a template function; `html` / `trustedHtml` stay markup. Default in 1.9.                 |
 | `widgetAccessible`                                                                                              | `false`     | `true` exposes `window.FrontMcpBridge.callTool` in the widget.                                                                  |
 | `resourceUri`                                                                                                   | auto        | Override the `ui://widget/{toolName}.html` URI.                                                                                 |
 | `uiType`                                                                                                        | `'auto'`    | Force `'html'` / `'react'` / `'mdx'` / `'markdown'`.                                                                            |
@@ -92,11 +92,36 @@ Or use the FileSource form — it sidesteps the issue.
 - Hosts that load the widget via `resources/read` (MCP Apps hosts such as Claude) need `servingMode: 'static'` and a template that reads data from `window.FrontMcpBridge`; set `resourceMode: 'inline'` explicitly for Claude in static mode.
 - The advertised URI percent-encodes the tool name (`app:tool` → `ui://widget/app%3Atool.html`). Encoded and raw forms both read back; a name that decodes to anything outside `A-Z a-z 0-9 _ - . / : @` is rejected.
 
-## Escaping template results
+## Trusted markup and escaping template results
 
-- A string the template returns is inserted as markup when it looks like HTML — `template: (ctx) => ctx.output` renders any tags in the output. Escape untrusted fields with `ctx.helpers.escapeHtml`.
-- Everything else is escaped: plain text as text, objects as JSON inside `<pre>`, chart configs and base64 PDFs (`JVBERi…`) as script data. A value that starts with `JVBERi` but isn't base64 is shown as text.
-- `ctx.helpers.jsonEmbed(data)` writes `<`, `>`, `&`, U+2028 and U+2029 as `\uXXXX`, so it is safe inside an inline `<script>`.
+Build function-template markup with the `ctx.helpers.html` tagged template. Literal parts stay markup; every interpolated value is HTML-escaped unless it is itself trusted markup:
+
+```typescript
+template: (ctx: TemplateContext<In, Out>) => {
+  const { html } = ctx.helpers;
+  return html`
+    <h2>${ctx.output.title}</h2>
+    <ul>${ctx.output.items.map((item) => html`<li>${item.name}</li>`)}</ul>
+  `;
+},
+```
+
+- Nested `html` values are never escaped twice; arrays are joined without a separator; `null` / `undefined` / `false` render nothing. Don't pre-escape with `escapeHtml` inside `html` (double escaping). Quote attribute values; escaping doesn't validate `href` / `src` URLs.
+- `ctx.helpers.trustedHtml(markup)` marks markup you produced or sanitized yourself as trusted. Never wrap raw tool output or user input.
+- In an inline `<script>`, embed data with `${trustedHtml(jsonEmbed(data))}` — `jsonEmbed` writes `<`, `>`, `&`, U+2028 and U+2029 as `\uXXXX`, so it is safe in a script, and `html` would otherwise HTML-escape its quotes.
+- `html`, `trustedHtml`, `isTrustedHtml` and `TrustedHtml` are also exported from `@frontmcp/uipack`; `TrustedHtml` is re-exported from `@frontmcp/sdk`.
+
+A **plain string** a template function returns is rendered as markup when it looks like HTML — `template: (ctx) => ctx.output` renders any tags in the output. `escapeStringResults` opts in to escaping it:
+
+| `escapeStringResults` | Plain string result                                 | `html` / `trustedHtml` result |
+| --------------------- | --------------------------------------------------- | ----------------------------- |
+| unset (1.8 default)   | Rendered as markup; one-time notice logged per tool | Markup                        |
+| `true`                | Escaped, shown as text                              | Markup                        |
+| `false`               | Rendered as markup, no notice                       | Markup                        |
+
+Set it per tool (`ui: { escapeStringResults: true }`) or server-wide (`@FrontMcp({ ui: { escapeStringResults: true } })`; the tool setting wins). **FrontMCP 1.9 escapes plain string results by default** — return `html` / `trustedHtml` from every template function and set `escapeStringResults: true` to migrate now.
+
+Everything else is always escaped: plain text as text, objects as JSON inside `<pre>`, chart configs and base64 PDFs (`JVBERi…`) as script data. A value that starts with `JVBERi` but isn't base64 is shown as text. A static string template (`template: '<div>…</div>'`) is author markup and is never escaped.
 
 ## Path resolution gotcha (#444)
 
@@ -132,7 +157,7 @@ When the widget needs to read tool data or invoke other tools, the bridge IIFE i
 
 ```typescript
 ui: {
-  template: (ctx) => `
+  template: (ctx) => ctx.helpers.html`
     <button id="refresh">Refresh</button>
     <script>
       document.getElementById('refresh').onclick = async () => {

@@ -3,9 +3,11 @@
  *
  * Each app's approval gate must judge only that app's tools against that app's store: one app's
  * gate must not refuse the other app's tools, and one app's pass must not skip the other's check.
+ * `this.approval` inside an app's tools must read and write that app's store (#600).
  */
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
 import {
   App,
   FrontMcpInstance,
@@ -42,6 +44,46 @@ class BetaDeployTool extends ToolContext {
   }
 }
 
+const toolIdInput = { toolId: z.string() };
+
+@Tool({ name: 'alpha_grant', inputSchema: toolIdInput })
+class AlphaGrantTool extends ToolContext {
+  async execute({ toolId }: { toolId: string }) {
+    await this.approval.grantSessionApproval(toolId);
+    return { granted: toolId };
+  }
+}
+
+@Tool({ name: 'alpha_is_approved', inputSchema: toolIdInput })
+class AlphaIsApprovedTool extends ToolContext {
+  async execute({ toolId }: { toolId: string }) {
+    return { approved: await this.approval.isApproved(toolId) };
+  }
+}
+
+@Tool({ name: 'beta_grant', inputSchema: toolIdInput })
+class BetaGrantTool extends ToolContext {
+  async execute({ toolId }: { toolId: string }) {
+    await this.approval.grantSessionApproval(toolId);
+    return { granted: toolId };
+  }
+}
+
+@Tool({ name: 'beta_is_approved', inputSchema: toolIdInput })
+class BetaIsApprovedTool extends ToolContext {
+  async execute({ toolId }: { toolId: string }) {
+    return { approved: await this.approval.isApproved(toolId) };
+  }
+}
+
+@Tool({ name: 'server_grant', inputSchema: toolIdInput })
+class ServerGrantTool extends ToolContext {
+  async execute({ toolId }: { toolId: string }) {
+    await this.approval.grantSessionApproval(toolId);
+    return { granted: toolId };
+  }
+}
+
 const CALLER: DirectAuthContext = { sessionId: SESSION_ID, user: { sub: 'alice' } };
 
 async function callTool(server: DirectMcpServer, name: string): Promise<unknown> {
@@ -52,11 +94,26 @@ async function callTool(server: DirectMcpServer, name: string): Promise<unknown>
   }
 }
 
-// Written to storage, not through `this.approval`, which resolves the last app's store (see #600).
-async function recordApproval(storage: RootStorage, toolId: string, state: ApprovalState): Promise<void> {
+/** Grants through `this.approval` inside a tool, so the grant lands in the store of that tool's plugin. */
+async function grantThrough(server: DirectMcpServer, grantTool: string, toolId: string): Promise<void> {
+  const result = await server.callTool(grantTool, { toolId }, { authContext: CALLER });
+  expect(result.isError).toBeFalsy();
+}
+
+async function isApprovedThrough(server: DirectMcpServer, checkTool: string, toolId: string): Promise<boolean> {
+  const result = await server.callTool(checkTool, { toolId }, { authContext: CALLER });
+  return (result.structuredContent as { approved: boolean }).approved;
+}
+
+async function storedKeys(storage: RootStorage): Promise<string[]> {
+  return storage.keys('*');
+}
+
+// `ApprovalService` has no deny API; a denial is written to the store the way an administrator records one.
+async function recordDenial(storage: RootStorage, toolId: string): Promise<void> {
   const record = {
     toolId,
-    state,
+    state: ApprovalState.DENIED,
     scope: ApprovalScope.SESSION,
     grantedAt: Date.now(),
     sessionId: SESSION_ID,
@@ -80,7 +137,7 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
       id: 'alpha',
       name: 'Alpha',
       plugins: [ApprovalPlugin.init({ storageInstance: alphaStorage })],
-      tools: [AlphaDeployTool],
+      tools: [AlphaDeployTool, AlphaGrantTool, AlphaIsApprovedTool],
     })
     class AlphaApp {}
 
@@ -88,7 +145,7 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
       id: 'beta',
       name: 'Beta',
       plugins: [ApprovalPlugin.init({ storageInstance: betaStorage })],
-      tools: [BetaDeployTool],
+      tools: [BetaDeployTool, BetaGrantTool, BetaIsApprovedTool],
     })
     class BetaApp {}
 
@@ -104,7 +161,7 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
   });
 
   it('runs the second app tool once the second app store approves it', async () => {
-    await recordApproval(betaStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
@@ -113,7 +170,7 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
   });
 
   it('runs the first app tool once the first app store approves it', async () => {
-    await recordApproval(alphaStorage, ALPHA_DEPLOY_ID, ApprovalState.APPROVED);
+    await grantThrough(server, 'alpha_grant', ALPHA_DEPLOY_ID);
 
     const result = await callTool(server, 'alpha_deploy');
 
@@ -122,7 +179,7 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
   });
 
   it('does not let an approval in the first app store admit the second app tool', async () => {
-    await recordApproval(alphaStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
+    await grantThrough(server, 'alpha_grant', BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
@@ -131,14 +188,35 @@ describe('ApprovalPlugin installed on two apps of one server', () => {
   });
 
   it('keeps a denial recorded in the second app store when the first app store approves', async () => {
-    await recordApproval(alphaStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
-    await recordApproval(betaStorage, BETA_DEPLOY_ID, ApprovalState.DENIED);
+    await grantThrough(server, 'alpha_grant', BETA_DEPLOY_ID);
+    await recordDenial(betaStorage, BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
     expect(result).toBeInstanceOf(ApprovalRequiredError);
     expect((result as ApprovalRequiredError).details.state).toBe('denied');
     expect(executedDeployments).toEqual([]);
+  });
+
+  it('writes a grant made through this.approval in the first app tool to the first app store only', async () => {
+    await grantThrough(server, 'alpha_grant', ALPHA_DEPLOY_ID);
+
+    expect(await storedKeys(alphaStorage)).toEqual(expect.arrayContaining([expect.stringContaining(ALPHA_DEPLOY_ID)]));
+    expect(await storedKeys(betaStorage)).toEqual([]);
+  });
+
+  it('writes a grant made through this.approval in the second app tool to the second app store only', async () => {
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
+
+    expect(await storedKeys(betaStorage)).toEqual(expect.arrayContaining([expect.stringContaining(BETA_DEPLOY_ID)]));
+    expect(await storedKeys(alphaStorage)).toEqual([]);
+  });
+
+  it('reads through this.approval only the store of the app the tool belongs to', async () => {
+    await grantThrough(server, 'alpha_grant', BETA_DEPLOY_ID);
+
+    await expect(isApprovedThrough(server, 'alpha_is_approved', BETA_DEPLOY_ID)).resolves.toBe(true);
+    await expect(isApprovedThrough(server, 'beta_is_approved', BETA_DEPLOY_ID)).resolves.toBe(false);
   });
 });
 
@@ -157,11 +235,15 @@ describe('ApprovalPlugin installed on the server and on an app, each with its ow
       id: 'beta',
       name: 'Beta',
       plugins: [ApprovalPlugin.init({ storageInstance: appStorage })],
-      tools: [BetaDeployTool],
+      tools: [BetaDeployTool, BetaGrantTool],
     })
     class BetaApp {}
 
-    @Plugin({ name: 'server-approvals', plugins: [ApprovalPlugin.init({ storageInstance: serverStorage })] })
+    @Plugin({
+      name: 'server-approvals',
+      plugins: [ApprovalPlugin.init({ storageInstance: serverStorage })],
+      tools: [ServerGrantTool],
+    })
     class ServerApprovalsPlugin {}
 
     server = await FrontMcpInstance.createDirect({
@@ -177,8 +259,8 @@ describe('ApprovalPlugin installed on the server and on an app, each with its ow
   });
 
   it('keeps the app store denial when the server store approves', async () => {
-    await recordApproval(serverStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
-    await recordApproval(appStorage, BETA_DEPLOY_ID, ApprovalState.DENIED);
+    await grantThrough(server, 'server_grant', BETA_DEPLOY_ID);
+    await recordDenial(appStorage, BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
@@ -187,8 +269,8 @@ describe('ApprovalPlugin installed on the server and on an app, each with its ow
   });
 
   it('keeps the server store denial when the app store approves', async () => {
-    await recordApproval(serverStorage, BETA_DEPLOY_ID, ApprovalState.DENIED);
-    await recordApproval(appStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
+    await recordDenial(serverStorage, BETA_DEPLOY_ID);
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
@@ -197,12 +279,26 @@ describe('ApprovalPlugin installed on the server and on an app, each with its ow
   });
 
   it('runs the tool when both stores approve it', async () => {
-    await recordApproval(serverStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
-    await recordApproval(appStorage, BETA_DEPLOY_ID, ApprovalState.APPROVED);
+    await grantThrough(server, 'server_grant', BETA_DEPLOY_ID);
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
 
     const result = await callTool(server, 'beta_deploy');
 
     expect(result).not.toBeInstanceOf(Error);
     expect(executedDeployments).toEqual(['beta']);
+  });
+
+  it('writes a grant made through this.approval in a server plugin tool to the server store only', async () => {
+    await grantThrough(server, 'server_grant', BETA_DEPLOY_ID);
+
+    expect(await storedKeys(serverStorage)).toEqual(expect.arrayContaining([expect.stringContaining(BETA_DEPLOY_ID)]));
+    expect(await storedKeys(appStorage)).toEqual([]);
+  });
+
+  it('writes a grant made through this.approval in the app tool to the app store only', async () => {
+    await grantThrough(server, 'beta_grant', BETA_DEPLOY_ID);
+
+    expect(await storedKeys(appStorage)).toEqual(expect.arrayContaining([expect.stringContaining(BETA_DEPLOY_ID)]));
+    expect(await storedKeys(serverStorage)).toEqual([]);
   });
 });

@@ -22,7 +22,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
-import { buildChannelInstructions, composeInitializeInstructions } from '../skill/skill-instructions.helper';
+import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
 import {
   createWebFetchHandler,
@@ -671,20 +671,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // Channel capabilities (experimental extension for Claude Code)
       const channelCapabilities = scope.channels?.getCapabilities() ?? {};
 
-      // Compose `instructions` lazily on every `initialize` so dynamic skill
-      // registrations after boot are reflected without restarting the server.
-      // The static value below seeds the McpServer constructor for SDK
-      // compatibility; the actual response is recomputed inside the handler
-      // via `composeInstructions` (see initialize-request.handler.ts).
-      const composeInstructions = (): string =>
-        composeInitializeInstructions({
-          userInstructions: scope.metadata.instructions,
-          channelInstructions: buildChannelInstructions(scope.channels),
-          skillRegistry: scope.skills,
-          policy: scope.metadata.skillsConfig?.injectInstructions,
-          mcpResources: scope.metadata.skillsConfig?.mcpResources,
-        });
-      const instructions = composeInstructions();
+      // Compose `instructions` on every `initialize`, for that caller (see
+      // initialize-request.handler.ts): dynamic skill registrations after boot
+      // are reflected, and the skill catalog only names skills the caller may
+      // see. No caller exists yet here, so the McpServer seed carries none.
+      const composeInstructions = (caller?: { authInfo?: unknown }): Promise<string> =>
+        composeCallerInstructions(scope, { ctx: caller });
+      const instructions = '';
 
       const serverOptions = {
         instructions,

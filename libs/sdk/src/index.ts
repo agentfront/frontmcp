@@ -228,6 +228,7 @@ export {
   // Initialize-instructions composition
   buildSkillsCatalogSummary,
   composeInitializeInstructions,
+  composeCallerInstructions,
   buildChannelInstructions,
   // Skill audit log helper (Edge-runtime-safe factory injection)
   setSkillAuditFactory,
@@ -253,6 +254,8 @@ export type {
   SkillStorageFactoryOptions,
   SkillStorageFactoryResult,
   InjectInstructionsPolicy,
+  CallerInstructionsOptions,
+  InstructionsScope,
   SkillIndexCache,
   SkillIndexScoring,
 } from './skill';

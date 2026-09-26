@@ -7,6 +7,7 @@ import { InternalMcpError, InvalidInputError } from '../../errors';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { assertSkillAuthorized } from '../skill-authorities.helper';
+import { createSkillEntryResolver } from '../skill-entry.resolver';
 import { isSkillServable } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
@@ -190,6 +191,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
 
     const loadResults: LoadResultWithActivation[] = [];
+    const resolveEntry = createSkillEntryResolver(skillRegistry);
 
     for (const skillId of skillIds) {
       const result = await skillRegistry.loadSkill(skillId);
@@ -202,7 +204,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       // Deny direct load of an authority-gated skill the caller can't access
       // (throws AuthorityDeniedError, MCP code -32003 — same as a denied tool).
       // No-op when the skill has no `authorities` or no engine is configured.
-      const entry = this.findSkillEntry(skillId, result.skill.id);
+      const entry = resolveEntry(skillId, result.skill.id);
       if (entry) {
         if (!(await isSkillServable(this.scope, entry))) {
           warnings.push(`Skill "${skillId}" not found`);
@@ -216,23 +218,6 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
 
     this.state.set({ loadResults, warnings });
     this.logger.verbose('loadSkills:done', { loaded: loadResults.length, notFound: warnings.length });
-  }
-
-  /**
-   * Resolve the registered skill entry that backs a loaded skill, so its
-   * `authorities` metadata can be evaluated. Matches by the requested id, the
-   * resolved content id, and finally by display name — covering id/name/
-   * qualified-name lookups the registry's `loadSkill` accepts.
-   */
-  private findSkillEntry(requestedId: string, resolvedId: string) {
-    const registry = this.scope.skills;
-    if (!registry) return undefined;
-    return (
-      registry.findByName(requestedId) ??
-      registry.findByQualifiedName(requestedId) ??
-      registry.findByName(resolvedId) ??
-      registry.getSkills(true).find((s) => (s.metadata.id ?? s.name) === resolvedId || s.metadata.name === resolvedId)
-    );
   }
 
   /**

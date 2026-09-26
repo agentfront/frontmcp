@@ -1,5 +1,6 @@
 import { PublicMcpError } from '../../errors';
 import { assertSkillAuthorized } from '../../skill/skill-authorities.helper';
+import { createSkillEntryResolver } from '../../skill/skill-entry.resolver';
 import { isSkillServable } from '../../skill/skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
@@ -67,6 +68,8 @@ export default function skillsLoadRequestHandler({
         }
       }
 
+      const resolveEntry = createSkillEntryResolver(skillRegistry);
+
       for (const skillId of skillIds) {
         const loadResult = await skillRegistry.loadSkill(skillId);
         if (!loadResult) {
@@ -74,17 +77,10 @@ export default function skillsLoadRequestHandler({
           continue;
         }
 
-        // Resolve the backing entry to evaluate its authorities and run it
-        // through the `skills:filter` flow. Matches by the requested id, then
-        // the resolved content id, then display name — covering
-        // id/name/qualified-name lookups loadSkill accepts.
-        const entry =
-          skillRegistry.findByName(skillId) ??
-          skillRegistry.findByQualifiedName(skillId) ??
-          skillRegistry.findByName(loadResult.skill.id) ??
-          skillRegistry
-            .getSkills(true)
-            .find((s) => (s.metadata.id ?? s.name) === loadResult.skill.id || s.metadata.name === loadResult.skill.id);
+        // Resolve the backing entry (by the requested id, then the loaded
+        // content id) to evaluate its authorities and run it through the
+        // `skills:filter` flow.
+        const entry = resolveEntry(skillId, loadResult.skill.id);
         if (entry) {
           if (!(await isSkillServable(scope, entry, ctx))) {
             warnings.push(`Skill "${skillId}" not found`);

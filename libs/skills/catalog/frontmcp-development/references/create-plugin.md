@@ -307,6 +307,39 @@ Register with `init()`:
 class MyServer {}
 ```
 
+### Option-derived providers are registered before nested plugins
+
+`dynamicProviders(options)` and `init({ providers })` are registered **before** the plugin's nested `plugins` are built, for both `init(options)` and `init({ inject, useFactory })` (the factory runs first). A nested plugin can inject them:
+
+```typescript
+@Plugin({
+  name: 'my-plugin',
+  plugins: [
+    AuditPlugin.init({
+      inject: () => [MyServiceToken],
+      useFactory: (service: MyService) => ({ channel: service.auditChannel }),
+    }),
+  ],
+})
+export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOptionsInput> {
+  /* dynamicProviders() returns MyServiceToken as above */
+}
+```
+
+The reverse does not work: an option-derived provider cannot inject a provider that a nested plugin exports.
+
+### Installing the same plugin in several apps
+
+Each app that installs a plugin gets its own copy of the plugin's providers, including CONTEXT-scoped ones. Tools, resources and prompts resolve the nearest definition in their own hierarchy (plugin, then app, then server). So `this.myService` in app A uses A's options even when app B installs `MyPlugin.init()` with different options:
+
+```typescript
+@App({ id: 'billing', plugins: [MyPlugin.init({ endpoint: 'https://billing.example.com' })], tools: [RefundTool] })
+class BillingApp {}
+
+@App({ id: 'ops', plugins: [MyPlugin.init({ endpoint: 'https://ops.example.com' })], tools: [DeployTool] })
+class OpsApp {}
+```
+
 ## Step 5: Extend Metadata and Execution Context
 
 FrontMCP provides two extension mechanisms for plugins: **metadata augmentation** (add fields to decorators) and **context extensions** (add properties to `this` in tools/resources/prompts).
@@ -458,13 +491,14 @@ plugins/
 
 ## Common Patterns
 
-| Pattern                        | Correct                                                                                        | Incorrect                                                             | Why                                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Context extension registration | `contextExtensions: [{ property: 'auditLog', token: AuditLoggerToken }]` in metadata           | `Object.defineProperty(ExecutionContextBase.prototype, ...)` manually | SDK handles runtime installation; manual modification causes ordering issues |
-| Type augmentation              | `declare module '@frontmcp/sdk' { interface ExecutionContextBase { ... } }` in a separate file | Skipping the augmentation and casting `this` in tools                 | Without augmentation, TypeScript cannot type-check `this.auditLog`           |
-| Provider types                 | `Token<AuditLogger> = Symbol('AuditLogger')` with typed token                                  | `provide: Symbol('AuditLogger')` without type annotation              | Typed tokens enable compile-time DI resolution checking                      |
-| Plugin scope                   | `scope: 'app'` (default) for app-scoped behavior                                               | `scope: 'server'` when hooks should only apply to one app             | Server scope fires hooks for all apps in a gateway; default to app           |
-| Dynamic options                | Extend `DynamicPlugin<TOptions, TInput>` with `static dynamicProviders()`                      | Constructing providers in the constructor body                        | `dynamicProviders` runs before instantiation, enabling proper DI wiring      |
+| Pattern                        | Correct                                                                                              | Incorrect                                                             | Why                                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Context extension registration | `contextExtensions: [{ property: 'auditLog', token: AuditLoggerToken }]` in metadata                 | `Object.defineProperty(ExecutionContextBase.prototype, ...)` manually | SDK handles runtime installation; manual modification causes ordering issues |
+| Type augmentation              | `declare module '@frontmcp/sdk' { interface ExecutionContextBase { ... } }` in a separate file       | Skipping the augmentation and casting `this` in tools                 | Without augmentation, TypeScript cannot type-check `this.auditLog`           |
+| Provider types                 | `Token<AuditLogger> = Symbol('AuditLogger')` with typed token                                        | `provide: Symbol('AuditLogger')` without type annotation              | Typed tokens enable compile-time DI resolution checking                      |
+| Plugin scope                   | `scope: 'app'` (default) for app-scoped behavior                                                     | `scope: 'server'` when hooks should only apply to one app             | Server scope fires hooks for all apps in a gateway; default to app           |
+| Dynamic options                | Extend `DynamicPlugin<TOptions, TInput>` with `static dynamicProviders()`                            | Constructing providers in the constructor body                        | `dynamicProviders` runs before instantiation, enabling proper DI wiring      |
+| Nested plugin needs options    | Nested `Plugin.init({ inject: () => [HostToken], useFactory })` injecting a `dynamicProviders` token | Resolving the host's option-derived provider by reading global state  | Option-derived providers are registered before nested plugins are built      |
 
 ## Verification Checklist
 

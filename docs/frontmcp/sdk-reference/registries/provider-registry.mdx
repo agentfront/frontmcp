@@ -89,9 +89,18 @@ Build provider views for different scopes. Async — instantiates context-scoped
 ```typescript
 buildViews(
   sessionKey: string,
-  contextProviders?: Map<Token, unknown>
+  contextProviders?: Map<Token, unknown>,
+  contextSource?: ProviderRegistryInterface
 ): Promise<ProviderViews>
 ```
+
+| Parameter          | Description                                                                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionKey`       | Context/session identifier used to cache CONTEXT-scoped instances.                                                                                                                                                         |
+| `contextProviders` | Instances already built for this request (for example the scope's views and `FRONTMCP_CONTEXT`). They are reused instead of being built again.                                                                             |
+| `contextSource`    | The ancestor registry that built `contextProviders`. When given, every token this registry's hierarchy defines **below** that ancestor is resolved from its own nearest definition, and the pre-built instance is ignored. |
+
+The `tools:call-tool`, `resources:read-resource` and `prompts:get-prompt` flows build an entry's views with the scope's views as `contextProviders` and the scope registry as `contextSource`. As a result, a tool resolves the providers of the plugins its own app installed, even when another app on the same server installs the same plugin with different options.
 
 **Example:**
 
@@ -99,6 +108,10 @@ buildViews(
 const views = await registry.buildViews('session-123', new Map([
   [RequestToken, currentRequest],
 ]));
+
+// Entry views on top of the scope's views: the app's own definitions win.
+const scopeViews = await scope.providers.buildViews(sessionKey, requestProviders);
+const appViews = await app.providers.buildViews(sessionKey, scopeViews.context, scope.providers);
 ```
 
 ### addRegistry()
