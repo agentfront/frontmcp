@@ -51,7 +51,8 @@
   "dependencies": {
     "@frontmcp/adapters": "1.5.7",
     "@frontmcp/auth": "1.5.7",
-    "@frontmcp/sdk": "1.5.7"
+    "@frontmcp/sdk": "1.5.7",
+    "@frontmcp/utils": "1.5.7"
   },
   "peerDependencies": {
     "@enclave-vm/ast": "*",

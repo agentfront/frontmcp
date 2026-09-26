@@ -122,6 +122,20 @@ describe('OpenAPI tool execution — redirects (GHSA-qh67-4345-cw2q)', () => {
     expect(JSON.stringify(result ?? '')).toMatch(/redirect/i);
   });
 
+  it('treats an opaque redirect (status 0, browser runtimes) as a redirect', async () => {
+    mockFetch.mockResolvedValue({ type: 'opaqueredirect', ok: false, status: 0, headers: new Headers() });
+
+    const result = await createExecutor()({ id: '123' }, createToolContext());
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(
+      expect.objectContaining({
+        isError: true,
+        _meta: expect.objectContaining({ errorCode: 'OPENAPI_REDIRECT_NOT_FOLLOWED' }),
+      }),
+    );
+  });
+
   it('still returns an ordinary 2xx response', async () => {
     mockFetch.mockResolvedValue({ ok: true, status: 200, headers: new Headers() });
 

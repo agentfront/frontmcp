@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { escapeHtml, escapeScriptClose, safeJsonForScript } from '../utils';
+import { escapeHtml, safeJsonForScript } from '../utils';
 import type { WidgetSizing } from './types';
 
 /**
@@ -136,8 +136,6 @@ export function createTemplateHelpers(): TemplateHelpers {
       return `${prefix}-${++_uniqueIdCounter}`;
     },
 
-    jsonEmbed: (data: unknown) => {
-      return escapeScriptClose(JSON.stringify(data));
-    },
+    jsonEmbed: (data: unknown) => safeJsonForScript(data),
   };
 }
