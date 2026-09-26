@@ -12,7 +12,9 @@ import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
 import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
 import type { WidgetSizing } from '../shell/types';
+import { escapeHtml } from '../utils';
 import { MCP_APPS_MIME_TYPE } from './constants';
+import { detectContentType } from './content-detector';
 import { wrapDetectedContent } from './content-renderers';
 import { detectUIType } from './type-detector';
 
@@ -84,6 +86,19 @@ function buildCspConfig(resolver?: ImportResolver) {
 }
 
 /**
+ * Body markup for a template result no content renderer claimed.
+ *
+ * Only a string detected as HTML is the template's own markup. Text and serialized values
+ * carry tool data, so they are escaped (GHSA-rhr9-vhpf-jqp7).
+ */
+function renderUnwrappedResult(rawResult: unknown): string {
+  if (typeof rawResult !== 'string') {
+    return `<pre>${escapeHtml(JSON.stringify(rawResult, null, 2))}</pre>`;
+  }
+  return detectContentType(rawResult) === 'html' ? rawResult : escapeHtml(rawResult);
+}
+
+/**
  * Render a tool template into HTML.
  *
  * Supported template types:
@@ -151,10 +166,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
       if (wrapped) {
         html = wrapped;
       } else {
-        // Plain text/json/html result — wrap in shell
-        const textContent =
-          typeof rawResult === 'string' ? rawResult : `<pre>${JSON.stringify(rawResult, null, 2)}</pre>`;
-        const shellResult = buildShell(textContent, shellConfig);
+        const shellResult = buildShell(renderUnwrappedResult(rawResult), shellConfig);
         html = shellResult.html;
         hash = shellResult.hash;
         size = shellResult.size;

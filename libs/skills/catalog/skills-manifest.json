@@ -365,7 +365,7 @@
           "features": [
             "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)",
             "Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs",
-            "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `</script>`)",
+            "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)",
             "Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback"
           ]
         },

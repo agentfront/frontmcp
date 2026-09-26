@@ -207,7 +207,7 @@ describe('buildAuthUiPage', () => {
       fullPath: '/mcp',
     });
     expect(page!.html).not.toContain('</script><script>alert(1)</script>');
-    expect(page!.html).toContain('<\\/script>');
+    expect(page!.html).toContain('\\u003c/script\\u003e');
   });
 });
 

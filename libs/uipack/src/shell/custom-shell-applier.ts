@@ -4,21 +4,31 @@
  * Replaces placeholder tokens in a custom shell template with
  * the generated fragment values (CSP, data script, bridge, content, title).
  *
- * Uses sequential `replaceAll` — injected content is NOT re-scanned,
- * so `{{CSP}}` inside user content is safe.
+ * All placeholders are replaced in a single pass over the template, so an
+ * inserted value is never re-scanned for placeholders.
  *
  * @packageDocumentation
  */
 
-import { SHELL_PLACEHOLDERS } from './custom-shell-types';
-import type { ShellPlaceholderValues } from './custom-shell-types';
+import { SHELL_PLACEHOLDER_NAMES, type ShellPlaceholderName, type ShellPlaceholderValues } from './custom-shell-types';
+
+const PLACEHOLDER_PATTERN = new RegExp(`\\{\\{(${SHELL_PLACEHOLDER_NAMES.join('|')})\\}\\}`, 'g');
+
+const VALUE_KEYS: Record<ShellPlaceholderName, keyof ShellPlaceholderValues> = {
+  CSP: 'csp',
+  DATA: 'data',
+  BRIDGE: 'bridge',
+  CONTENT: 'content',
+  TITLE: 'title',
+};
 
 /**
  * Apply placeholder values to a custom shell template.
  *
- * Each `{{PLACEHOLDER}}` token is replaced with the corresponding value.
- * Replacement is single-pass per token — values injected for one placeholder
- * are not re-scanned for other placeholders.
+ * Each `{{PLACEHOLDER}}` token is replaced with the corresponding value, verbatim.
+ * Values carry tool input and output (GHSA-rhr9-vhpf-jqp7), so they are inserted by a
+ * function replacer: a value is never re-scanned for other placeholders, and `$&`, `$'`
+ * or `` $` `` inside it are not expanded.
  *
  * @param template - The shell template with `{{PLACEHOLDER}}` tokens
  * @param values - The values to inject for each placeholder
@@ -33,13 +43,5 @@ import type { ShellPlaceholderValues } from './custom-shell-types';
  * ```
  */
 export function applyShellTemplate(template: string, values: ShellPlaceholderValues): string {
-  let result = template;
-
-  result = result.replaceAll(SHELL_PLACEHOLDERS.CSP, values.csp);
-  result = result.replaceAll(SHELL_PLACEHOLDERS.DATA, values.data);
-  result = result.replaceAll(SHELL_PLACEHOLDERS.BRIDGE, values.bridge);
-  result = result.replaceAll(SHELL_PLACEHOLDERS.CONTENT, values.content);
-  result = result.replaceAll(SHELL_PLACEHOLDERS.TITLE, values.title);
-
-  return result;
+  return template.replace(PLACEHOLDER_PATTERN, (_token, name: ShellPlaceholderName) => values[VALUE_KEYS[name]]);
 }

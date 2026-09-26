@@ -75,6 +75,10 @@ export default createEdgeMcp({
 is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it.
 Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`.
 
+The pull sends `authToken` as a bearer token and never follows a redirect, so
+`endpoint` must serve the bundle directly; a 3xx (or a status-0
+`opaqueredirect`) fails the pull.
+
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
 `wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`
 and a `[triggers] crontabs = [...]` (the `managed.pollIntervalMs` option is

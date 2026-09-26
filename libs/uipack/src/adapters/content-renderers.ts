@@ -7,7 +7,7 @@
  */
 
 import { buildShell } from '../shell/builder';
-import { safeJsonForScript, escapeHtml } from '../utils';
+import { escapeHtml, safeJsonForScript } from '../utils';
 import { detectContentType } from './content-detector';
 
 const CHART_JS_CDN = 'https://esm.sh/chart.js@4/auto';
@@ -74,7 +74,7 @@ export function buildPdfHtml(base64: string): string {
 import * as pdfjsLib from 'https://esm.sh/pdfjs-dist@4/build/pdf.min.mjs';
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4/build/pdf.worker.min.mjs';
 
-const base64 = ${JSON.stringify(base64)};
+const base64 = ${safeJsonForScript(base64)};
 const binaryStr = atob(base64);
 const bytes = new Uint8Array(binaryStr.length);
 for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);

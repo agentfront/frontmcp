@@ -44,6 +44,10 @@ export { sanitizeToJson, inferMimeType, findNonFiniteNumber } from './content';
 export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';
 export type { CookieOptions, SecureDetectionRequest } from './http';
 
+// Network utilities (IP-literal classification for SSRF guards, redirect detection)
+export { classifyIpAddress, expandIpv6, extractEmbeddedIpv4, parseIpv4, isRedirectResponse } from './net';
+export type { IpAddressClassification, IpAddressRange, SpecialPurposeIpRange, RedirectCandidate } from './net';
+
 // File system utilities (Node.js only)
 export {
   readFile,
