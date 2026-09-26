@@ -270,6 +270,7 @@ crontabs = ["*/5 * * * *"]
 - **Boot:** the first request lazily builds the scope and pulls the bundle. If the pull fails, it falls back to the **last-good bundle in KV** (validated against the bundle schema) so a SaaS outage doesn't kill the server.
 - **Refresh:** the Cron Trigger invokes `scheduled()`, which pulls a fresh bundle, persists it to KV, and hot-swaps the live skill/tool registries — emitting `notifications/*/list_changed`.
 - **Single-flight:** boot and Cron refresh are mutually exclusive (no double-pull on cold start).
+- **No redirects:** the pull sends `authToken` as a bearer token and never follows a redirect, so `endpoint` must serve the bundle directly; a 3xx (or a status-0 `opaqueredirect`) fails the pull.
 - **No source attached → loud failure:** if the bundle source can't be constructed, `scheduled()` throws so the Cron run is reported as **failed** rather than silently succeeding with a stale bundle.
 
 <Warning>
@@ -356,7 +357,16 @@ const handler = createWebFetchHandler(scope, { entryPath: '/mcp' });
 
 // Cloudflare Worker / Deno / Bun all speak Web `Request`/`Response`:
 export default { fetch: (request: Request) => handler(request) };
+
+// Deno and Bun: forward the runtime's second argument — it is how the handler learns the client IP.
+Deno.serve((request, info) => handler(request, info));
+Bun.serve({ fetch: (request, server) => handler(request, server) });
 ```
+
+The client IP (used by `throttle.ipFilter` and `partitionBy: 'ip'`) comes from Deno's
+`info.remoteAddr`, Bun's `server.requestIP(request)`, or — only when running on Cloudflare
+Workers — the `CF-Connecting-IP` header. A handler called without the second argument on Deno
+or Bun has no client IP, so `ipFilter.defaultAction` applies to every request.
 
 ### Types
 

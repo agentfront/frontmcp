@@ -34,6 +34,8 @@ const MERMAID_PREFIXES = [
 /** Base64 magic bytes for PDF (%PDF → JVBERi) */
 const PDF_MAGIC = 'JVBERi';
 
+const BASE64_PATTERN = /^[A-Za-z0-9+/=\r\n]+$/;
+
 /**
  * Detect content type from a template result value.
  *
@@ -57,9 +59,9 @@ export function detectContentType(value: unknown): DetectedContentType {
   if (typeof value === 'string') {
     const trimmed = value.trimStart();
 
-    // PDF base64
+    // A value with the PDF signature is document data, never markup: text unless it is all base64.
     if (trimmed.startsWith(PDF_MAGIC)) {
-      return 'pdf';
+      return BASE64_PATTERN.test(trimmed.trimEnd()) ? 'pdf' : 'text';
     }
 
     // Mermaid diagram

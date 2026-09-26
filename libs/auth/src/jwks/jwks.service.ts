@@ -5,6 +5,7 @@ import {
   bytesToHex,
   createKeyPersistence,
   isProduction,
+  isRedirectResponse,
   randomBytes,
   rsaVerify,
   type KeyPersistence,
@@ -481,11 +482,10 @@ export class JwksService {
           redirect: 'manual',
         });
 
-        if (res.status >= 300 && res.status < 400) {
+        if (isRedirectResponse(res)) {
           const location = res.headers.get('location');
-          if (!location || hop >= MAX_JWKS_FETCH_HOPS) {
-            throw new Error('too many redirects');
-          }
+          if (!location) throw new Error('redirect without a readable Location header');
+          if (hop >= MAX_JWKS_FETCH_HOPS) throw new Error('too many redirects');
           currentUrl = new URL(location, currentUrl).toString();
           continue;
         }

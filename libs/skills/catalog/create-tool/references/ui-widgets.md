@@ -33,7 +33,7 @@ class GetWeatherTool extends ToolContext {
 
 That's it. The framework:
 
-- Pre-compiles the widget at startup, registers it at `ui://widget/get_weather.html`.
+- Advertises the widget at `ui://widget/get_weather.html` in `tools/list` and renders it per call into that call's `_meta['ui/html']` (default `servingMode: 'auto'` → `inline`). With `servingMode: 'static'` it pre-compiles the widget at startup and serves it from `resources/read`.
 - Auto-detects the connecting client — `resourceMode: 'inline'` for Claude (React bundled in), `'cdn'` for OpenAI / ChatGPT / Cursor (esm.sh import map, smaller payload).
 - Emits `ui.csp` (if set) on the resource's `_meta.ui.csp` — Claude actually honors it (it ignores CSP declared on the tool).
 
@@ -84,6 +84,19 @@ Or use the FileSource form — it sidesteps the issue.
 | `hydrate`                                                                                                       | `false`     | Enable React hydration after SSR. Off by default — avoids React error #418 in Claude.                                           |
 | `externals`, `dependencies`                                                                                     | —           | CDN externals for FileSource widgets.                                                                                           |
 | `customShell`, `invocationStatus`, `widgetCapabilities`, `prefersBorder`, `sandboxDomain`, `htmlResponsePrefix` | —           | Platform-specific knobs.                                                                                                        |
+
+## Widget resources and per-call renders
+
+- `resources/read ui://widget/{toolName}.html` serves only what was compiled at startup (`static`, the `hybrid` shell), rendered without caller data, or a data-free placeholder that gets the result through the bridge.
+- An `inline` render embeds the call's input and output. It is returned only in that call's `_meta['ui/html']` and is never cached where `resources/read` can serve it, so one caller can't read another caller's widget (GHSA-rhr9-vhpf-jqp7).
+- Hosts that load the widget via `resources/read` (MCP Apps hosts such as Claude) need `servingMode: 'static'` and a template that reads data from `window.FrontMcpBridge`; set `resourceMode: 'inline'` explicitly for Claude in static mode.
+- The advertised URI percent-encodes the tool name (`app:tool` → `ui://widget/app%3Atool.html`). Encoded and raw forms both read back; a name that decodes to anything outside `A-Z a-z 0-9 _ - . / : @` is rejected.
+
+## Escaping template results
+
+- A string the template returns is inserted as markup when it looks like HTML — `template: (ctx) => ctx.output` renders any tags in the output. Escape untrusted fields with `ctx.helpers.escapeHtml`.
+- Everything else is escaped: plain text as text, objects as JSON inside `<pre>`, chart configs and base64 PDFs (`JVBERi…`) as script data. A value that starts with `JVBERi` but isn't base64 is shown as text.
+- `ctx.helpers.jsonEmbed(data)` writes `<`, `>`, `&`, U+2028 and U+2029 as `\uXXXX`, so it is safe inside an inline `<script>`.
 
 ## Path resolution gotcha (#444)
 

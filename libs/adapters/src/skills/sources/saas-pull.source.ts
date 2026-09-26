@@ -4,7 +4,7 @@
 // `#fs` subpath imports + assertNode guards). The build pipeline
 // (`frontmcp build --target <env>`) picks the right resolution per target.
 import type { FrontMcpLogger } from '@frontmcp/sdk';
-import { dirname, ensureDir, pathResolve, readFile, writeFile } from '@frontmcp/utils';
+import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFile } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
@@ -74,6 +74,7 @@ export class SaasPullSource implements SkillBundleSource {
         if (!bundle) {
           throw new Error(
             `[saas-source] initial pull failed and no cached bundle is available at ${this.cachePath()}: ${(e as Error).message}`,
+            { cause: e },
           );
         }
         this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
@@ -164,7 +165,11 @@ export class SaasPullSource implements SkillBundleSource {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DEFAULT_PULL_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+      // Never follow a redirect: the request carries the bearer token, and only the configured endpoint may receive it.
+      const res = await fetch(url, { method: 'GET', headers, signal: controller.signal, redirect: 'manual' });
+      if (isRedirectResponse(res)) {
+        throw new Error(`pull endpoint returned a redirect (${res.status}); not followed to protect the bearer token`);
+      }
       const body = await res.text();
       return { status: res.status, body };
     } finally {

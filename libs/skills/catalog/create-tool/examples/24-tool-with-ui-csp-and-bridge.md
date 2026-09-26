@@ -6,7 +6,7 @@ tags: [ui, csp, widgetAccessible, FrontMcpBridge, interactive-widget]
 features:
   - "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)"
   - 'Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs'
-  - "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `</script>`)"
+  - "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)"
   - 'Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback'
 ---
 
@@ -116,7 +116,7 @@ export class ShowQuoteTool extends ToolContext {
 
 - Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)
 - Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs
-- Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `</script>`)
+- Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)
 - Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback
 
 ## Why these choices
@@ -124,4 +124,4 @@ export class ShowQuoteTool extends ToolContext {
 - **`widgetAccessible: true`** — required for `window.FrontMcpBridge.callTool`. Without it, the bridge is read-only (the widget can read `getToolInput` / `getToolOutput` but can't invoke tools).
 - **`csp.connectDomains`** — limits what the widget can `fetch` to. Without a CSP, the host's default applies (which may block everything in Claude). With `connectDomains: ['https://api.market.example']`, only that origin is reachable.
 - **`window.FrontMcpBridge.callTool` not `window.openai.callTool`** — the bridge handles host detection. `window.openai.*` works on OpenAI Apps SDK but breaks everywhere else.
-- **`jsonEmbed` not `JSON.stringify`** — `JSON.stringify` doesn't escape `</script>` and can break out of the inline script tag. `jsonEmbed` does.
+- **`jsonEmbed` not `JSON.stringify`** — `JSON.stringify` doesn't escape `</script>` or `<!--` and can break out of the inline script tag. `jsonEmbed` writes `<`, `>` and `&` as `\u003c`, `\u003e`, `\u0026`.

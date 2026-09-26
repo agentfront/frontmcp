@@ -5,6 +5,7 @@ import { z } from '@frontmcp/lazy-zod';
 
 import {
   computeResource,
+  enforceIpFilter,
   Flow,
   FlowBase,
   getRequestBaseUrl,
@@ -40,7 +41,7 @@ const outputSchema = HttpJsonSchema.extend({
 });
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['checkIpFilter', 'parseInput'],
   execute: ['collectData'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -73,6 +74,11 @@ const Stage = StageHookOf(name);
 export default class WellKnownPrmFlow extends FlowBase<typeof name> {
   static canActivate(request: ServerRequest, scope: ScopeEntry) {
     return makeWellKnownPaths('oauth-protected-resource', scope.entryPath, scope.routeBase).has(request.path);
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

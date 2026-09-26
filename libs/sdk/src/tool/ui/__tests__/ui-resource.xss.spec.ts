@@ -12,7 +12,7 @@
  * even exist. Anything that renders the returned HTML executes it.
  */
 import { handleUIResourceRead } from '../ui-resource.handler';
-import { parseWidgetUri, type ToolUIRegistry } from '../ui-shared';
+import { buildStaticWidgetUri, parseWidgetUri, type ToolUIRegistry } from '../ui-shared';
 
 function createRegistry(): ToolUIRegistry {
   return {
@@ -56,6 +56,31 @@ describe('UI resource read — reflected XSS via the widget URI (GHSA-xp6r-ggxc-
       toolName: 'weather:get-forecast',
       extension: 'html',
     });
+  });
+
+  it.each(['crm:lookup', 'github.create_issue', 'acme/billing-refunds', '@scope:tool_1'])(
+    'reads back the URI buildStaticWidgetUri advertises for %s',
+    (toolName) => {
+      expect(parseWidgetUri(buildStaticWidgetUri(toolName))).toEqual({ toolName, extension: 'html' });
+    },
+  );
+
+  it('reads a raw slash in a tool name the same as its encoded form', () => {
+    expect(parseWidgetUri('ui://widget/acme/billing-refunds.html')).toEqual({
+      toolName: 'acme/billing-refunds',
+      extension: 'html',
+    });
+  });
+
+  it.each([
+    'ui://widget/%3Cscript%3Ealert(1)%3C%2Fscript%3E.html',
+    'ui://widget/%22%3E%3Csvg%2Fonload%3Dalert(1)%3E.html',
+    'ui://widget/%253Cscript%253E.html',
+    'ui://widget/%E0%A4%A.html',
+    'ui://widget/tool%00.html',
+    'ui://widget/acme/<b>.html',
+  ])('rejects %s, whose decoded name is not a tool name', (uri) => {
+    expect(parseWidgetUri(uri)).toBeNull();
   });
 
   it('still serves a placeholder for an ordinary tool name', () => {

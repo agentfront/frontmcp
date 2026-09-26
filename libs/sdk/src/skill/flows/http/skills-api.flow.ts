@@ -8,6 +8,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   FlowHooksOf,
@@ -54,7 +55,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['checkEnabled', 'parseRequest'],
+  pre: ['checkIpFilter', 'checkEnabled', 'parseRequest'],
   execute: ['handleRequest'],
 } as const satisfies FlowPlan<string>;
 
@@ -118,6 +119,11 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     // Match /skills or /skills/{id}
     return path === apiPath || path.startsWith(`${apiPath}/`) || path === fullPath || path.startsWith(`${fullPath}/`);
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('checkEnabled')

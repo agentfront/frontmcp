@@ -24,6 +24,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   httpInputSchema,
@@ -50,7 +51,7 @@ const extraStateSchema = z.object({
 const extraOutputSchema = HttpJsonSchema;
 
 const extraPlan = {
-  pre: ['parseInput'],
+  pre: ['checkIpFilter', 'parseInput'],
   execute: ['handleExtra'],
 } as const satisfies FlowPlan<string>;
 
@@ -82,6 +83,11 @@ const ExtraStage = StageHookOf(extraName);
 })
 export default class OauthAuthUiExtraFlow extends FlowBase<typeof extraName> {
   private logger = this.scope.logger.child('OauthAuthUiExtraFlow');
+
+  @ExtraStage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
 
   @ExtraStage('parseInput')
   async parseInput() {
