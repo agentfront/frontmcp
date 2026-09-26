@@ -172,8 +172,8 @@ store's check, and a denial in either one refuses the call.
 </Warning>
 
 Session approvals belong to the caller's session. On the stateless HTTP transport every request carries the
-same session id, so there they are keyed by the authenticated principal (`authInfo.clientId`, the token's `sub`)
-instead. A stateless call with no authenticated principal cannot hold a session approval, and a tool that
+same session id, so there they are keyed by the authenticated principal instead: `authInfo.extra.userId`,
+then `authInfo.extra.sub`, then `authInfo.clientId` (the token's `sub`). A stateless call with no authenticated principal cannot hold a session approval, and a tool that
 requires approval stays refused for it.
 
 ---

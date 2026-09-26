@@ -54,9 +54,9 @@ function FrontMcpResourceTemplate(providedMetadata: ResourceTemplateMetadata): C
 
     Reflect.defineMetadata(FrontMcpResourceTemplateTokens.type, true, target);
 
-    const extended: Record<string, unknown> = {};
+    const extended: Record<string, unknown> = Object.create(null);
     for (const property in metadata) {
-      if (FrontMcpResourceTemplateTokens[property]) {
+      if (Object.prototype.hasOwnProperty.call(FrontMcpResourceTemplateTokens, property)) {
         Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property], metadata[property], target);
       } else {
         extended[property] = metadata[property];

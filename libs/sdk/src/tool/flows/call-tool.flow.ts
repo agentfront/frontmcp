@@ -19,6 +19,7 @@ import {
   randomUUID,
 } from '@frontmcp/utils';
 
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import {
@@ -1513,28 +1514,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 function toolNameCandidates(name: string): string[] {
   if (!/[-_]/.test(name)) return [name];
   return [name, name.includes('_') ? name.replace(/_/g, '-') : name.replace(/-/g, '_')];
-}
-
-/** Loads the capabilities of every remote app, including apps of parent scopes, and returns how many there are. */
-async function loadRemoteAppCapabilities(
-  scope: ScopeEntry,
-  onError: (appId: string, error: Error) => void = () => undefined,
-): Promise<number> {
-  const remoteApps = scope.providers
-    .getRegistries('AppRegistry')
-    .flatMap((appRegistry) => appRegistry.getApps())
-    .filter((app) => app.isRemote);
-  await Promise.all(
-    remoteApps.map(async (app) => {
-      if (!('ensureCapabilitiesLoaded' in app) || typeof app.ensureCapabilitiesLoaded !== 'function') return;
-      try {
-        await app.ensureCapabilitiesLoaded();
-      } catch (error) {
-        onError(app.id, error as Error);
-      }
-    }),
-  );
-  return remoteApps.length;
 }
 
 /** Finds a tool by name or alias in the scope, then in remote apps whose tools have not reached the scope yet. */

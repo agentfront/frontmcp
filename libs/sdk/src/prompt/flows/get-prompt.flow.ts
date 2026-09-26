@@ -4,6 +4,7 @@ import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
   FlowBase,
@@ -84,10 +85,15 @@ const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
   access: 'authorized',
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
-  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+  static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const parsed = inputSchema.safeParse(rawInput);
     if (!parsed.success) return undefined;
-    const prompt = scope.prompts.findByName(parsed.data.request.params.name);
+    const findPrompt = () => scope.prompts.findByName(parsed.data.request.params.name);
+    let prompt = findPrompt();
+    if (!prompt) {
+      await loadRemoteAppCapabilities(scope);
+      prompt = findPrompt();
+    }
     return prompt ? appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner) : undefined;
   }
 

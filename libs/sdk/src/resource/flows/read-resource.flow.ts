@@ -5,6 +5,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
 
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
   FlowBase,
@@ -90,10 +91,15 @@ const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
   access: 'authorized',
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
-  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+  static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const parsed = inputSchema.safeParse(rawInput);
     if (!parsed.success) return undefined;
-    const resource = scope.resources.findResourceForUri(parsed.data.request.params.uri)?.instance;
+    const findResource = () => scope.resources.findResourceForUri(parsed.data.request.params.uri)?.instance;
+    let resource = findResource();
+    if (!resource) {
+      await loadRemoteAppCapabilities(scope);
+      resource = findResource();
+    }
     return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
   }
 

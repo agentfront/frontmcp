@@ -419,7 +419,8 @@ Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pa
 adapter or plugin that provides it (`my-app:file_write` for a tool declared on app `my-app`,
 `github-api:create_issue` for one its `github-api` adapter provides). Session approvals belong to the
 caller's session; on the stateless HTTP transport, where every request shares one session id,
-they are keyed by the authenticated principal (`authInfo.clientId`). A stateless call with no
+they are keyed by the authenticated principal (`authInfo.extra.userId`, then `authInfo.extra.sub`,
+then `authInfo.clientId`). A stateless call with no
 principal cannot hold a session approval.
 
 Installed on an app, `ApprovalPlugin` gates only that app's tools (including those its adapters

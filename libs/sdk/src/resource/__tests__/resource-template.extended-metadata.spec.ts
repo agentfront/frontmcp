@@ -20,7 +20,27 @@ class FinanceReportTemplate extends ResourceContext<{ reportId: string }> {
   }
 }
 
+@ResourceTemplate({
+  name: 'inherited-names',
+  uriTemplate: 'reports://inherited/{reportId}',
+  toString: 'extension-value',
+  valueOf: 'another-extension-value',
+} as Parameters<typeof ResourceTemplate>[0])
+class InheritedNameKeysTemplate extends ResourceContext<{ reportId: string }> {
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return { contents: [{ uri, text: 'report' }] };
+  }
+}
+
 describe('@ResourceTemplate metadata contributed by extensions', () => {
+  it('keeps extension keys that share a name with Object.prototype members', () => {
+    const metadata = collectResourceTemplateMetadata(InheritedNameKeysTemplate) as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(metadata, 'toString') && metadata['toString']).toBe('extension-value');
+    expect(Object.prototype.hasOwnProperty.call(metadata, 'valueOf') && metadata['valueOf']).toBe(
+      'another-extension-value',
+    );
+  });
+
   it('keeps the authorities a template declares', () => {
     expect(collectResourceTemplateMetadata(FinanceReportTemplate)).toMatchObject({ authorities: reportAuthorities });
   });

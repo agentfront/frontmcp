@@ -3,6 +3,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema } from '@frontmcp/protocol';
 
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
   FlowBase,
@@ -89,10 +90,15 @@ function findCompletionReference(
   access: 'authorized',
 })
 export default class CompleteFlow extends FlowBase<typeof name> {
-  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+  static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const parsed = inputSchema.safeParse(rawInput);
     if (!parsed.success) return undefined;
-    const { prompt, resource } = findCompletionReference(scope, parsed.data.request.params.ref);
+    const { ref } = parsed.data.request.params;
+    let { prompt, resource } = findCompletionReference(scope, ref);
+    if (!prompt && !resource) {
+      await loadRemoteAppCapabilities(scope);
+      ({ prompt, resource } = findCompletionReference(scope, ref));
+    }
     if (prompt) return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
     return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
   }
