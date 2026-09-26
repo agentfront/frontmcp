@@ -23,7 +23,7 @@ import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
-import { hasUIConfig } from '../ui';
+import { buildStaticWidgetUri, hasUIConfig } from '../ui';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -547,7 +547,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           const isExtApps = platformType === 'ext-apps';
 
           // Use custom resourceUri from config if provided, otherwise auto-generate
-          const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
+          const widgetUri = uiConfig.resourceUri || buildStaticWidgetUri(finalName);
 
           // Copy widget sizing hints (preferredHeight / minHeight / maxHeight /
           // aspectRatio / autoResize) onto the nested _meta.ui object. Read straight

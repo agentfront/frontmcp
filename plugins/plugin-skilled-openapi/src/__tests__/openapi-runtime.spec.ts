@@ -309,4 +309,48 @@ describe('executeOperation', () => {
     expect(result.error).toMatch(/redirect/);
     expect(result.error).toMatch(/not followed/);
   });
+
+  it('refuses an opaque redirect (status 0, browser runtimes) instead of treating it as a response', async () => {
+    const opaqueRedirect = { type: 'opaqueredirect', status: 0, ok: false, headers: new Headers(), body: null };
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({ fetchImpl: (async () => opaqueRedirect) as never }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/redirect/);
+    expect(result.error).toMatch(/not followed/);
+  });
+});
+
+describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)', () => {
+  it.each([
+    ['https://[::ffff:169.254.169.254]', true],
+    ['https://[::ffff:169.254.169.254]', false],
+    ['https://[::ffff:0:a9fe:a9fe]', true],
+    ['https://[64:ff9b::a9fe:a9fe]', true],
+    ['https://[2002:a9fe:a9fe::]', true],
+    ['https://[::ffff:10.0.0.5]', false],
+  ])(
+    'never calls fetch for a bundle service at %s (allowPrivateNetworks=%s)',
+    async (baseUrl, allowPrivateNetworks) => {
+      const entry = buildEntry();
+      entry.service = { id: 'svc', baseUrl };
+      const fetchImpl = jest.fn();
+      const result = await executeOperation({
+        entry,
+        bundleId: 'acme',
+        input: { id: '1' },
+        deps: buildDeps({
+          outbound: baseOutbound({ allowPrivateNetworks }),
+          allowedHosts: new Set([new URL(baseUrl).hostname.toLowerCase()]),
+          fetchImpl: fetchImpl as never,
+        }),
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/ssrf check rejected request/);
+    },
+  );
 });

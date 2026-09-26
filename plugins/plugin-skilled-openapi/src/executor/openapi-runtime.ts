@@ -27,6 +27,7 @@ import {
 } from '@frontmcp/adapters/openapi';
 import type { AuthBinding } from '@frontmcp/adapters/skills';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
+import { isRedirectResponse } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
@@ -266,7 +267,8 @@ export async function executeOperation(args: {
       // A redirect from the upstream is not followed (credential-exfiltration +
       // SSRF-allowlist-bypass guard). REST operations should resolve in one hop;
       // surface the redirect as a failure rather than chasing it with creds.
-      if (response.status >= 300 && response.status < 400) {
+      // Browser runtimes report it as a status-0 `opaqueredirect`.
+      if (isRedirectResponse(response)) {
         return failure(
           response.status,
           `upstream returned a redirect (${response.status}); not followed to protect injected credentials`,

@@ -318,7 +318,8 @@ FrontMCP's secure defaults:
 
 The rules above cover _loading the spec_. **Calling** a generated tool is a different fetch,
 and it never follows redirects either (**GHSA-qh67-4345-cw2q**): the adapter sets
-`redirect: 'manual'` and refuses any 3xx with `OPENAPI_REDIRECT_NOT_FOLLOWED`.
+`redirect: 'manual'` and refuses any 3xx -- and the status-0 `opaqueredirect` response browser
+runtimes return instead -- with `OPENAPI_REDIRECT_NOT_FOLLOWED`.
 
 Following one would send the request to a destination the _upstream_ chose. Only `baseUrl` is
 validated, and only for its scheme, so a 3xx is an unvalidated hop -- including to an internal
