@@ -68,6 +68,8 @@ The catalog summary is built by `composeInitializeInstructions(...)` and `buildS
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically.
 
+> **Per caller:** the summary (and the SEP-2640 `skill://` hints under `sep2640InInstructions`) is composed for the client that initializes, like `skills/list`: it only names skills whose `authorities` that caller satisfies and that the hookable `skills:filter` flow keeps, so a flag-disabled skill's name and description are left out. With nothing gating a skill the instructions are unchanged. Transports use `composeCallerInstructions(scope, { ctx })`, exported from `@frontmcp/sdk` for custom transports.
+
 ## Skills HTTP Authentication
 
 ```typescript

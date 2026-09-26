@@ -9,10 +9,11 @@
 
 import 'reflect-metadata';
 
-import type { ScopeEntry, SkillEntry } from '../../../common';
+import type { FrontMcpLogger, ResourceFunctionRecord, ScopeEntry, SkillEntry } from '../../../common';
 import { ResourceKind } from '../../../common/records/resource.record';
+import type ResourceRegistry from '../../../resource/resource.registry';
 import { SEP_2640_META_NAMESPACE, SKILL_MD_MIME_TYPE, SKILL_MD_PRIORITY } from '../sep-2640.constants';
-import { buildPerSkillResourceRecord } from '../sep-2640.per-skill';
+import { buildPerSkillResourceRecord, registerPerSkillResources } from '../sep-2640.per-skill';
 
 function makeSkill(overrides: Partial<SkillEntry> & { name: string; description: string }): SkillEntry {
   return {
@@ -123,5 +124,73 @@ describe('buildPerSkillResourceRecord', () => {
     const skill = makeSkill({ name: 'public-skill', description: 'Open' });
     const rec = buildPerSkillResourceRecord(fakeScope, skill);
     expect('authorities' in (rec.metadata as object)).toBe(false);
+  });
+});
+
+describe('registerPerSkillResources when a skill is replaced at the same path (#606)', () => {
+  function setup(initial: SkillEntry) {
+    let served: SkillEntry[] = [initial];
+    const listeners: Array<() => void> = [];
+    const records: ResourceFunctionRecord[] = [];
+    const scope = {
+      skills: {
+        hasAny: () => true,
+        getSkills: () => served,
+        subscribe: (_options: unknown, listener: () => void) => {
+          listeners.push(listener);
+          return () => listeners.splice(listeners.indexOf(listener), 1);
+        },
+      },
+    } as unknown as ScopeEntry;
+    const resourceRegistry = {
+      registerDynamicResource: (record: ResourceFunctionRecord) => records.push(record),
+    } as unknown as ResourceRegistry;
+    const logger = { verbose: jest.fn(), warn: jest.fn() } as unknown as FrontMcpLogger;
+
+    return {
+      register: () => registerPerSkillResources({ scope, resourceRegistry, skills: served, logger }),
+      metadata: () => (records[0]?.metadata ?? {}) as unknown as Record<string, unknown>,
+      replaceWith: (skill?: SkillEntry) => {
+        served = skill ? [skill] : [];
+        for (const listener of [...listeners]) listener();
+      },
+    };
+  }
+
+  const plain = makeSkill({ name: 'report', description: 'Open report' });
+  const gated = makeSkill({
+    name: 'report',
+    description: 'Gated report',
+    metadata: { name: 'report', description: 'Gated report', featureFlag: 'reports', authorities: 'admin' },
+  } as never);
+
+  it('takes the policy metadata of a replacement that adds it', async () => {
+    const harness = setup(plain);
+    await harness.register();
+
+    harness.replaceWith(gated);
+
+    expect(harness.metadata()).toMatchObject({ featureFlag: 'reports', authorities: 'admin' });
+    expect(harness.metadata()['description']).toBe('Gated report');
+  });
+
+  it('drops the policy metadata of a skill a replacement no longer carries', async () => {
+    const harness = setup(gated);
+    await harness.register();
+
+    harness.replaceWith(plain);
+
+    expect('featureFlag' in harness.metadata()).toBe(false);
+    expect('authorities' in harness.metadata()).toBe(false);
+    expect(harness.metadata()).toMatchObject({ uri: 'skill://report/SKILL.md', description: 'Open report' });
+  });
+
+  it('keeps the last policy metadata while no skill serves the path', async () => {
+    const harness = setup(gated);
+    await harness.register();
+
+    harness.replaceWith(undefined);
+
+    expect(harness.metadata()).toMatchObject({ featureFlag: 'reports', authorities: 'admin' });
   });
 });

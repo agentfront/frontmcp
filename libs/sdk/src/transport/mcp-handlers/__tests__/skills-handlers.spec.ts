@@ -494,4 +494,63 @@ describe('Skills MCP Handlers', () => {
       expect(result.summary.combinedWarnings).toEqual(['Skill "skill-1" not found']);
     });
   });
+
+  describe('resolving each result to its entry once, for every gate (#599)', () => {
+    const authoritiesEngine = { evaluate: jest.fn() };
+    const authoritiesContextBuilder = { build: jest.fn(() => ({})) };
+
+    const createGatedHandlerOptions = (): McpHandlerOptions => ({
+      serverOptions: {} as any,
+      scope: { ...createMockScope(), authoritiesEngine, authoritiesContextBuilder } as any,
+    });
+
+    const searchResult = (id: string) => ({
+      metadata: { id, name: id, description: id },
+      score: 0.9,
+      availableTools: [],
+      missingTools: [],
+      source: 'external',
+    });
+
+    beforeEach(() => {
+      authoritiesEngine.evaluate.mockResolvedValue({ granted: true });
+      mockRunFlowForOutput.mockImplementation(async (_flow: string, input: { skills: unknown[] }) => ({
+        skills: input.skills,
+      }));
+    });
+
+    afterEach(() => {
+      mockSkillRegistry.findByName.mockReset();
+      mockRunFlowForOutput.mockReset();
+      authoritiesEngine.evaluate.mockReset();
+    });
+
+    it('gives skills:filter the same entry the authorities gate judged, even if the skill is swapped in between', async () => {
+      const judged = { name: 'report', metadata: { id: 'report', name: 'report', authorities: { roles: ['admin'] } } };
+      const swappedIn = { name: 'report', metadata: { id: 'report', name: 'report', featureFlag: 'reports' } };
+      mockSkillRegistry.findByName.mockReturnValueOnce(judged).mockReturnValue(swappedIn);
+      mockSkillRegistry.search.mockResolvedValueOnce([searchResult('report')]);
+
+      const ctx = createContext();
+      await skillsSearchRequestHandler(createGatedHandlerOptions()).handler(
+        { method: 'skills/search' as const, params: { query: 'report' } },
+        ctx as any,
+      );
+
+      expect(authoritiesEngine.evaluate).toHaveBeenCalledWith(judged.metadata.authorities, {});
+      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [judged], ctx });
+    });
+
+    it('does not list the registry again for every result it cannot resolve', async () => {
+      mockSkillRegistry.search.mockResolvedValueOnce([searchResult('a'), searchResult('b'), searchResult('c')]);
+
+      const result = await skillsSearchRequestHandler(createGatedHandlerOptions()).handler(
+        { method: 'skills/search' as const, params: { query: 'external' } },
+        createContext() as any,
+      );
+
+      expect(result.skills.map((skill) => skill.id)).toEqual(['a', 'b', 'c']);
+      expect(mockSkillRegistry.getSkills).toHaveBeenCalledTimes(1);
+    });
+  });
 });

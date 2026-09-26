@@ -255,9 +255,14 @@ export type { SkillsOnlySessionPayload } from './skill-mode.utils';
 export {
   buildSkillsCatalogSummary,
   composeInitializeInstructions,
+  composeCallerInstructions,
   buildChannelInstructions,
 } from './skill-instructions.helper';
-export type { InjectInstructionsPolicy } from './skill-instructions.helper';
+export type {
+  InjectInstructionsPolicy,
+  CallerInstructionsOptions,
+  InstructionsScope,
+} from './skill-instructions.helper';
 
 // HTTP Authentication
 export { SkillHttpAuthValidator, createSkillHttpAuthValidator } from './auth';

@@ -1,6 +1,5 @@
 import { PublicMcpError } from '../../errors';
-import { filterSkillMetadataByAuthorities } from '../../skill/skill-authorities.helper';
-import { filterServableSkillResults } from '../../skill/skill-filter.helper';
+import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsListRequestSchema,
@@ -42,14 +41,13 @@ export default function skillsListRequestHandler({
         includeHidden,
       });
 
-      // Entry-level authorities: hide gated skills the caller can't discover.
-      // listResult.skills are flat SkillMetadata; wrap as { metadata } for the
-      // shared resolver, then unwrap. No-op when no engine is configured, in
-      // which case the page and its `total` are returned exactly as before.
+      // Hide skills the caller can't discover (entry-level authorities, then the
+      // `skills:filter` flow). listResult.skills are flat SkillMetadata; wrap as
+      // { metadata } for the shared resolver, then unwrap. When nothing gates,
+      // the page and its `total` are returned exactly as before.
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
       const wrapped = listResult.skills.map((metadata) => ({ metadata }));
-      const authVisible = await filterSkillMetadataByAuthorities(scope, skillRegistry, wrapped, authInfo);
-      const visible = await filterServableSkillResults(scope, skillRegistry, authVisible, ctx);
+      const visible = await filterDiscoverableSkillResults(scope, skillRegistry, wrapped, { authInfo, ctx });
       const removed = listResult.skills.length - visible.length;
 
       // Transform to response format

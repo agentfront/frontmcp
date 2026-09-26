@@ -25,6 +25,7 @@ import {
   ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
+import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
@@ -83,6 +84,9 @@ declare global {
 const name = 'resources:read-resource' as const;
 const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 
+/** Resources `resolveHookOwnerId` matched, reused by the same run's `findResource`. */
+const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params: Record<string, string> }>();
+
 @Flow({
   name,
   plan,
@@ -92,15 +96,16 @@ const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
-    const parsed = inputSchema.safeParse(rawInput);
-    if (!parsed.success) return undefined;
-    const findResource = () => scope.resources.findResourceForUri(parsed.data.request.params.uri)?.instance;
-    let resource = findResource();
-    if (!resource) {
+    const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
+    if (typeof uri !== 'string') return undefined;
+    let match = scope.resources.findResourceForUri(uri);
+    if (!match) {
       await loadRemoteAppCapabilities(scope);
-      resource = findResource();
+      match = scope.resources.findResourceForUri(uri);
     }
-    return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+    if (!match) return undefined;
+    resolvedResources.remember(rawInput, uri, match);
+    return appOwnerIdOf(scope.resources.lineageOf(match.instance) ?? [], match.instance.owner);
   }
 
   logger = this.scopeLogger.child('ReadResourceFlow');
@@ -230,7 +235,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     // Try to find a resource that matches this URI
     // First try exact URI match, then template matching
-    const match = this.scope.resources.findResourceForUri(uri);
+    const match = resolvedResources.take(this.rawInput, uri) ?? this.scope.resources.findResourceForUri(uri);
 
     if (!match) {
       this.logger.warn(`findResource: resource for URI "${uri}" not found`);
@@ -310,24 +315,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const { resource, input, params } = this.state.required;
 
     try {
-      // Build context-scoped providers from the resource's provider registry (app-level).
-      // This ensures CONTEXT-scoped providers registered at the app level are available,
-      // matching the same resolution chain that tools use.
+      // The resource's own provider hierarchy wins over the scope-level instances in the flow deps.
       const sessionKey =
         this.state.sessionId ??
         ctx.authInfo?.sessionId ??
         `req-${Date.now()}-${Buffer.from(randomBytes(16)).toString('hex')}`;
-      const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps));
-
-      // Merge resource's context providers with flow's context deps
-      const mergedContextDeps = new Map(this.deps);
-      for (const [token, instance] of resourceViews.context) {
-        if (!mergedContextDeps.has(token)) {
-          mergedContextDeps.set(token, instance);
-        }
-      }
-
-      const contextProviders = new FlowContextProviders(resource.providers, mergedContextDeps);
+      const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
+      const contextProviders = new FlowContextProviders(resource.providers, resourceViews.context);
       const context = resource.create(input.uri, params, { ...ctx, contextProviders });
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(resource.record.provide), context));
       context.mark('createResourceContext');

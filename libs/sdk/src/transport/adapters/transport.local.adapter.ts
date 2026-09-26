@@ -20,7 +20,7 @@ import {
 import { ElicitationNotSupportedError, UnauthorizedError } from '../../errors';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
-import { buildChannelInstructions, composeInitializeInstructions } from '../../skill/skill-instructions.helper';
+import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../../task';
 import { createMcpHandlers } from '../mcp-handlers';
 import { type TransportKey, type TransportType } from '../transport.types';
@@ -204,27 +204,16 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // SEP-2640 (Skills Extension) — capability declaration and optional
     // skill-URI hints. `skillsCapabilities` advertises the extension; the
     // SEP-2640 URI hint block (gated by `skillsConfig.sep2640InInstructions`)
-    // is appended to the catalog summary produced by
-    // `composeInitializeInstructions` so both surfaces compose cleanly.
+    // is appended to the skill catalog in the composed instructions.
     const skillsCapabilities = this.scope.skills?.getCapabilities() ?? {};
 
-    // Compose `instructions` lazily on every `initialize` so dynamic skill
-    // registrations after boot are reflected per-session. The static value
-    // below seeds the McpServer constructor for SDK compatibility; the
-    // actual response is recomputed inside the handler via
-    // `composeInstructions` (see initialize-request.handler.ts).
-    const composeInstructions = (): string => {
-      const composed = composeInitializeInstructions({
-        userInstructions: this.scope.metadata.instructions,
-        channelInstructions: buildChannelInstructions(this.scope.channels),
-        skillRegistry: this.scope.skills,
-        policy: this.scope.metadata.skillsConfig?.injectInstructions,
-        mcpResources: this.scope.metadata.skillsConfig?.mcpResources,
-      });
-      const sep2640Hints = this.buildSkillInstructionHints();
-      return [composed, sep2640Hints].filter((s) => s.length > 0).join('\n\n---\n\n');
-    };
-    const instructions = composeInstructions();
+    // Compose `instructions` on every `initialize`, for that caller (see
+    // initialize-request.handler.ts): dynamic skill registrations after boot are
+    // reflected, and the skill catalog and hints only name skills the caller may
+    // see. No caller exists yet here, so the McpServer seed carries none.
+    const composeInstructions = (caller?: { authInfo?: unknown }): Promise<string> =>
+      composeCallerInstructions(this.scope, { ctx: caller, skillUriHints: true });
+    const instructions = '';
 
     const mergedCapabilities = mergeExperimental([
       remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
@@ -543,42 +532,6 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // Remote apps have 'urlType' property indicating they're external MCP servers
     // Standalone apps don't contribute to the main server's capabilities
     return 'urlType' in appObj && appObj['standalone'] !== true;
-  }
-
-  /**
-   * SEP-2640 §Discovery — opt-in `instructions` text listing each
-   * MCP-visible skill's `skill://` URI. Returns an empty string unless
-   * `skillsConfig.sep2640InInstructions` is true and the `skill://`
-   * resources are served (`skillsConfig.mcpResources` is not false). Also
-   * empty under `injectInstructions: 'replace'` with non-empty server
-   * instructions, which must then be sent alone.
-   */
-  private buildSkillInstructionHints(): string {
-    const skillRegistry = this.scope.skills;
-    if (!skillRegistry?.hasAny()) return '';
-
-    const skillsConfig = this.scope.metadata?.skillsConfig;
-    if (!skillsConfig?.sep2640InInstructions || skillsConfig.mcpResources === false) return '';
-
-    const serverInstructions = (this.scope.metadata.instructions ?? '').trim();
-    if (skillsConfig.injectInstructions === 'replace' && serverInstructions.length > 0) return '';
-
-    const visible = skillRegistry.getSkills({ visibility: 'mcp' });
-    if (visible.length === 0) return '';
-
-    const lines = ['Available skills (load via resources/read):'];
-    for (const skill of visible) {
-      const uri = `skill://${skill.getSkillPath()}/SKILL.md`;
-      lines.push(`- ${uri} — ${skill.metadata.description}`);
-    }
-
-    // Include any extra URIs registered programmatically.
-    const extras = skillRegistry.getSep2640InstructionUris?.() ?? [];
-    for (const extra of extras) {
-      lines.push(`- ${extra}`);
-    }
-
-    return lines.join('\n');
   }
 
   /**

@@ -49,17 +49,15 @@ export type McpHandlerOptions = {
   scope: Scope;
   serverOptions: McpServerOptions;
   /**
-   * Lazily compose the `initialize` response's `instructions` field.
+   * Lazily compose the `initialize` response's `instructions` field for the caller.
    *
-   * When provided, the `initialize` handler invokes this on every request so
-   * the catalog reflects skills registered AFTER server boot (e.g. dynamic
-   * `registerSkillContent` calls). When omitted, the handler falls back to
-   * the static `serverOptions.instructions` baked at construction time.
-   *
-   * Must remain synchronous — the MCP `initialize` request must respond
-   * promptly without round-tripping to slow stores.
+   * When provided, the `initialize` handler invokes this on every request with
+   * the request's handler context, so the catalog reflects skills registered
+   * AFTER server boot (e.g. dynamic `registerSkillContent` calls) and only names
+   * skills that caller may see. When omitted, or when it yields `undefined`, the
+   * handler falls back to the static `serverOptions.instructions`.
    */
-  composeInstructions?: () => string | undefined;
+  composeInstructions?: (caller?: { authInfo?: unknown }) => string | undefined | Promise<string | undefined>;
 };
 
 export type McpRequestHandler<

@@ -1,49 +1,48 @@
-/**
- * Session approvals are keyed by caller, never by the shared stateless session id
- * (GHSA-r848-p7wf-96rc follow-up).
- */
+/** Session approvals are keyed by verified session, else by principal (GHSA-r848-p7wf-96rc, #597). */
 import 'reflect-metadata';
-
-import { STATELESS_SESSION_ID } from '@frontmcp/sdk';
 
 import { resolveApprovalIdentity } from '../approval.identity';
 
 describe('resolveApprovalIdentity (GHSA-r848-p7wf-96rc)', () => {
-  it('keys a stateful call by its session', () => {
-    expect(resolveApprovalIdentity({ sessionId: 'session-1', authInfo: { clientId: 'alice' } })).toEqual({
+  it('keys a call in a verified session by its session', () => {
+    expect(resolveApprovalIdentity({ verifiedSessionId: 'session-1', authInfo: { clientId: 'alice' } })).toEqual({
       sessionId: 'session-1',
       userId: 'alice',
     });
   });
 
-  it('keys a stateless call by its authenticated principal', () => {
-    expect(resolveApprovalIdentity({ sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'alice' } })).toEqual({
+  it('keys a call without a verified session by its authenticated principal', () => {
+    expect(resolveApprovalIdentity({ verifiedSessionId: undefined, authInfo: { clientId: 'alice' } })).toEqual({
       sessionId: 'stateless-user:alice',
       userId: 'alice',
     });
   });
 
-  it('gives two stateless principals different keys', () => {
-    const alice = resolveApprovalIdentity({ sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'alice' } });
-    const bob = resolveApprovalIdentity({ sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'bob' } });
+  it('gives two principals without a verified session different keys', () => {
+    const alice = resolveApprovalIdentity({ verifiedSessionId: undefined, authInfo: { clientId: 'alice' } });
+    const bob = resolveApprovalIdentity({ verifiedSessionId: undefined, authInfo: { clientId: 'bob' } });
 
     expect(alice.sessionId).not.toBe(bob.sessionId);
   });
 
   it('prefers the server-set userId and sub over the client id', () => {
     expect(
-      resolveApprovalIdentity({ sessionId: 'session-1', authInfo: { clientId: 'client', extra: { userId: 'user' } } })
-        .userId,
+      resolveApprovalIdentity({
+        verifiedSessionId: 'session-1',
+        authInfo: { clientId: 'client', extra: { userId: 'user' } },
+      }).userId,
     ).toBe('user');
     expect(
-      resolveApprovalIdentity({ sessionId: 'session-1', authInfo: { clientId: 'client', extra: { sub: 'subject' } } })
-        .userId,
+      resolveApprovalIdentity({
+        verifiedSessionId: 'session-1',
+        authInfo: { clientId: 'client', extra: { sub: 'subject' } },
+      }).userId,
     ).toBe('subject');
   });
 
-  it('gives each unidentified stateless call a key no other call shares', () => {
-    const first = resolveApprovalIdentity({ sessionId: STATELESS_SESSION_ID, authInfo: { clientId: '' } });
-    const second = resolveApprovalIdentity({ sessionId: STATELESS_SESSION_ID, authInfo: {} });
+  it('gives each unidentified call without a verified session a key no other call shares', () => {
+    const first = resolveApprovalIdentity({ verifiedSessionId: undefined, authInfo: { clientId: '' } });
+    const second = resolveApprovalIdentity({ verifiedSessionId: undefined, authInfo: {} });
 
     expect(first.userId).toBeUndefined();
     expect(first.sessionId).toMatch(/^unidentified:/);

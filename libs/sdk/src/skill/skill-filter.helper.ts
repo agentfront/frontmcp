@@ -9,9 +9,13 @@
  */
 
 import type { ScopeEntry, SkillEntry } from '../common';
-import type { SkillRegistryInterface } from './skill.registry';
+import { filterSkillsByAuthorities } from './skill-authorities.helper';
+import { createSkillEntryResolver, skillResultId, type SkillEntryLookup } from './skill-entry.resolver';
 
 type SkillFilterScope = Pick<ScopeEntry, 'runFlowForOutput'>;
+
+type SkillDiscoveryScope = SkillFilterScope &
+  Pick<ScopeEntry, 'authoritiesEngine' | 'authoritiesContextBuilder' | 'authoritiesScopeMapping'>;
 
 /**
  * The skills, in their order, that the `skills:filter` flow lets the current caller see.
@@ -36,29 +40,33 @@ export async function isSkillServable(scope: SkillFilterScope, skill: SkillEntry
   return servable.length === 1;
 }
 
+/** The caller a discovery surface filters for. */
+export interface SkillDiscoveryCaller {
+  /** Request AuthInfo the skill authorities are evaluated against. */
+  authInfo?: Record<string, unknown>;
+  /** The MCP handler context, for a surface that runs outside a flow (see {@link filterServableSkills}). */
+  ctx?: unknown;
+}
+
 /**
- * Filter search or list results, whose projected metadata only carries an id and name, through the
- * `skills:filter` flow by resolving each result's registered skill entry. Results without a
- * registered entry (external skills) are kept, as they carry no metadata a hook could gate on.
+ * Filter search or list results, whose projected metadata only carries an id and name, down to the
+ * skills the caller may discover. Each result is resolved to its registered entry once, and the skill
+ * authorities and then the `skills:filter` flow judge that same entry. Results without a registered
+ * entry (external skills) are kept, as they carry no metadata a gate could judge.
  */
-export async function filterServableSkillResults<T extends { metadata: { id?: string; name: string } }>(
-  scope: SkillFilterScope,
-  registry: SkillRegistryInterface,
+export async function filterDiscoverableSkillResults<T extends { metadata: { id?: string; name: string } }>(
+  scope: SkillDiscoveryScope,
+  registry: SkillEntryLookup,
   results: readonly T[],
-  ctx?: unknown,
+  caller: SkillDiscoveryCaller = {},
 ): Promise<T[]> {
-  const entries = results.map((result) => findSkillEntry(registry, result.metadata.id ?? result.metadata.name));
-  const registered = entries.filter((entry): entry is SkillEntry => entry !== undefined);
-  const servable = new Set(await filterServableSkills(scope, registered, ctx));
+  const resolve = createSkillEntryResolver(registry);
+  const entries = results.map((result) => resolve(skillResultId(result)));
+  const registered = [...new Set(entries.filter((entry): entry is SkillEntry => entry !== undefined))];
+  const authorized = await filterSkillsByAuthorities(scope, registered, caller.authInfo ?? {});
+  const servable = new Set<SkillEntry>(await filterServableSkills(scope, authorized, caller.ctx));
   return results.filter((_, index) => {
     const entry = entries[index];
     return entry === undefined || servable.has(entry);
   });
-}
-
-function findSkillEntry(registry: SkillRegistryInterface, id: string): SkillEntry | undefined {
-  return (
-    registry.findByName(id) ??
-    registry.getSkills(true).find((skill) => (skill.metadata.id ?? skill.name) === id || skill.metadata.name === id)
-  );
 }

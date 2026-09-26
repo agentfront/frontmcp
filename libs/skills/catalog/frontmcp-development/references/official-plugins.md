@@ -417,18 +417,23 @@ A refused call throws `ApprovalRequiredError`; the client receives an error resu
 Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pass that name to
 `this.approval` grant and check methods. The owner is the app that declares the tool, or the
 adapter or plugin that provides it (`my-app:file_write` for a tool declared on app `my-app`,
-`github-api:create_issue` for one its `github-api` adapter provides). Session approvals belong to the
-caller's session; on the stateless HTTP transport, where every request shares one session id,
-they are keyed by the authenticated principal (`authInfo.extra.userId`, then `authInfo.extra.sub`,
-then `authInfo.clientId`). A stateless call with no
-principal cannot hold a session approval.
+`github-api:create_issue` for one its `github-api` adapter provides). Session approvals belong to a
+session the server verified (`FrontMcpContext.verifiedSessionId`). A stateless request has none -- it
+carries the shared stateless session id, or sends no `mcp-session-id` and runs under a fresh
+per-request id -- so it is keyed by the authenticated principal (`authInfo.extra.userId`, then
+`authInfo.extra.sub`, then `authInfo.clientId`): a grant made in one stateless request is found by
+the same principal's next request and by no other principal. A stateless call with no principal
+cannot hold a session approval. Releases up to 1.8.1 keyed a request without `mcp-session-id` by
+its per-request id, so the grant was never found again
+([#597](https://github.com/agentfront/frontmcp/issues/597)).
 
 Installed on an app, `ApprovalPlugin` gates only that app's tools (including those its adapters
 and plugins provide) against its own store, so two apps can each install it with separate stores.
-Installed on the server, it gates every tool; a tool both gate must pass each store's check. With
-two apps each installing it, `this.approval` currently resolves the store of the app registered
-last ([#600](https://github.com/agentfront/frontmcp/issues/600)) -- grant through each app's
-store directly, or install `ApprovalPlugin` once on the server.
+Installed on the server, it gates every tool; a tool both gate must pass each store's check.
+`this.approval` resolves the `ApprovalService` of the nearest `ApprovalPlugin` -- the one the
+tool's own app installed, otherwise the server's -- so with two apps each installing it, a grant
+or check in one app's tool uses that app's store. Releases up to 1.8.1 resolved the store of the
+app registered last ([#600](https://github.com/agentfront/frontmcp/issues/600)).
 
 ### Using `this.approval` in Tools
 
@@ -496,9 +501,11 @@ response to everyone else.
 
 The identity is the subject your auth layer puts in `authInfo.extra` (`sub` / `userId`), then
 the client id, then the session. For a request the SDK verified, the client id is the token's
-`sub`, or `anon:<id>` for an anonymous session. The session id the stateless HTTP transport
-gives every request is not an identity. A call with no identity at all gets a key of its own
-rather than one shared with every other identity-less caller.
+`sub`, or `anon:<id>` for an anonymous session. Only a session the server verified
+(`FrontMcpContext.verifiedSessionId`) is an identity: the session id the stateless HTTP transport
+gives every request, the fresh per-request id of a request without `mcp-session-id`, and an
+`mcp-session-id` the server did not accept are not. A call with no identity at all gets a key of
+its own rather than one shared with every other identity-less caller.
 
 Set `keyByIdentity: false` **only** when every caller would get byte-identical output: public
 reference data, a currency table, a static document.
@@ -753,11 +760,15 @@ The plugin hooks into listing and execution flows for tools, resources, resource
 
 | Capability        | Hidden from                                                                                                                                                                                                    | Refused on                                                                                                      |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Tool              | `tools/list`                                                                                                                                                                                                   | `tools/call`                                                                                                    |
+| Tool              | `tools/list`, and the `toolName` completion of `ui://widget/{toolName}.html`                                                                                                                                   | `tools/call`                                                                                                    |
 | Resource          | `resources/list`                                                                                                                                                                                               | `resources/read`, `completion/complete`                                                                         |
 | Resource template | `resources/templates/list`                                                                                                                                                                                     | `resources/read` of any URI it matches, `completion/complete`                                                   |
 | Prompt            | `prompts/list`                                                                                                                                                                                                 | `prompts/get`, `completion/complete`                                                                            |
 | Skill             | `skills/search`, `skills/list`, `skill://index.json`, its `skill://<path>/SKILL.md` entry in `resources/list`, `GET /skills`, `/llm.txt`, `/llm_full.txt`, `codecall:searchSkills`, `codecall:searchKnowledge` | `skills/load`, `skill://<path>/SKILL.md` and its files, `GET /skills/{id}` (same answer as a nonexistent skill) |
+
+The `toolName` completion of `ui://widget/{toolName}.html` runs the caller's `tools:list-tools` flow, so it offers only the UI tools `tools/list` shows that caller -- a flagged-off tool is left out there too ([#596](https://github.com/agentfront/frontmcp/issues/596)).
+
+The skill catalog in the `initialize` instructions (and the SEP-2640 `skill://` hints under `skillsConfig.sep2640InInstructions`) is filtered for the initializing client too, so a flag-disabled skill's name and description never appear there ([#603](https://github.com/agentfront/frontmcp/issues/603)). A skill's `skill://<path>/SKILL.md` entry in `resources/list` is gated by the skill that path serves now -- replace a skill at the same path and the entry takes the new skill's flag ([#606](https://github.com/agentfront/frontmcp/issues/606)).
 
 Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource, prompt and completion gates do not run for other apps' capabilities -- install it in `@FrontMcp({ plugins })` to gate every app. Resources and prompts served outside every app (the SEP-2640 `skill://` resources) are gated by every installed copy. Skills are gated through the `skills:filter` flow, which every skill surface runs -- as the calling user on every transport, stdio and in-memory included; custom plugins can hook `Did('filterSkills')` on it the same way, and reuse `filterServableSkills(scope, skills)` from `@frontmcp/sdk` to serve skills from a surface of their own.
 

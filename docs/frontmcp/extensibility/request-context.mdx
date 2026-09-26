@@ -340,20 +340,21 @@ const logContext = ctx.toLogContext();
 
 ### FrontMcpContext Class
 
-| Property          | Type                             | Description                              |
-| ----------------- | -------------------------------- | ---------------------------------------- |
-| `requestId`       | `string`                         | Unique request identifier (UUID v4)      |
-| `traceContext`    | `TraceContext`                   | W3C Trace Context data                   |
-| `sessionId`       | `string`                         | MCP session identifier                   |
-| `authInfo`        | `Partial<AuthInfo>`              | Authentication information               |
-| `scopeId`         | `string`                         | Current scope identifier                 |
-| `timestamp`       | `number`                         | Request start timestamp (ms since epoch) |
-| `metadata`        | `RequestMetadata`                | HTTP request metadata                    |
-| `config`          | `FrontMcpContextConfig`          | Context configuration                    |
-| `transport`       | `TransportAccessor \| undefined` | Transport for elicit requests            |
-| `flow`            | `FlowBaseRef \| undefined`       | Current flow reference                   |
-| `scope`           | `ScopeRef \| undefined`          | Current scope reference                  |
-| `sessionMetadata` | `SessionIdPayload \| undefined`  | Session metadata (protocol, platform)    |
+| Property            | Type                             | Description                                                                                                                                                                                                                                              |
+| ------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requestId`         | `string`                         | Unique request identifier (UUID v4)                                                                                                                                                                                                                      |
+| `traceContext`      | `TraceContext`                   | W3C Trace Context data                                                                                                                                                                                                                                   |
+| `sessionId`         | `string`                         | MCP session identifier                                                                                                                                                                                                                                   |
+| `verifiedSessionId` | `string \| undefined`            | `sessionId` when the server verified that session; `undefined` for a stateless request (the shared stateless id, or the per-request id of a request without `mcp-session-id`). Key per-session state on it, and fall back to the authenticated principal |
+| `authInfo`          | `Partial<AuthInfo>`              | Authentication information                                                                                                                                                                                                                               |
+| `scopeId`           | `string`                         | Current scope identifier                                                                                                                                                                                                                                 |
+| `timestamp`         | `number`                         | Request start timestamp (ms since epoch)                                                                                                                                                                                                                 |
+| `metadata`          | `RequestMetadata`                | HTTP request metadata                                                                                                                                                                                                                                    |
+| `config`            | `FrontMcpContextConfig`          | Context configuration                                                                                                                                                                                                                                    |
+| `transport`         | `TransportAccessor \| undefined` | Transport for elicit requests                                                                                                                                                                                                                            |
+| `flow`              | `FlowBaseRef \| undefined`       | Current flow reference                                                                                                                                                                                                                                   |
+| `scope`             | `ScopeRef \| undefined`          | Current scope reference                                                                                                                                                                                                                                  |
+| `sessionMetadata`   | `SessionIdPayload \| undefined`  | Session metadata (protocol, platform)                                                                                                                                                                                                                    |
 
 | Method                  | Signature                                                                 | Description                        |
 | ----------------------- | ------------------------------------------------------------------------- | ---------------------------------- |

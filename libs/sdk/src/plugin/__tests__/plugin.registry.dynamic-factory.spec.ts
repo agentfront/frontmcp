@@ -4,7 +4,7 @@ import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/s
 import { FlowHooksOf } from '../../common/decorators/hook.decorator';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
-import { type FlowCtxOf } from '../../common/interfaces';
+import { type FlowCtxOf, type PluginType } from '../../common/interfaces';
 import { annotatedFrontMcpPluginsSchema } from '../../common/schemas/annotated-class.schema';
 import { Scope } from '../../scope';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin.registry';
@@ -35,7 +35,7 @@ class FactoryDynamicPlugin extends DynamicPlugin<LabelOptions> {
   }
 
   static override dynamicProviders(options: LabelOptions) {
-    return [{ provide: LABEL_TOKEN, useValue: options.label }];
+    return [{ name: 'label', provide: LABEL_TOKEN, useValue: options.label }];
   }
 
   @ToolHook.Will('execute')
@@ -110,6 +110,72 @@ describe('DynamicPlugin.init({ inject, useFactory })', () => {
     );
 
     expect(registeredMethods).toContain('gateExecution');
+  });
+});
+
+const injectedLabels: string[] = [];
+
+@FrontMcpPlugin({ name: 'label-consumer' })
+class LabelConsumerPlugin extends DynamicPlugin<LabelOptions> {
+  readonly options: LabelOptions;
+
+  constructor(options: LabelOptions) {
+    super();
+    this.options = options;
+    injectedLabels.push(options.label);
+  }
+}
+
+@FrontMcpPlugin({
+  name: 'label-host',
+  plugins: [LabelConsumerPlugin.init({ inject: () => [LABEL_TOKEN], useFactory: (label: string) => ({ label }) })],
+})
+class LabelHostPlugin extends DynamicPlugin<LabelOptions> {
+  readonly options: LabelOptions;
+
+  constructor(options: LabelOptions) {
+    super();
+    this.options = options;
+  }
+
+  static override dynamicProviders(options: LabelOptions) {
+    return [{ name: 'label', provide: LABEL_TOKEN, useValue: options.label }];
+  }
+}
+
+async function registerHostPlugin(host: PluginType) {
+  const providers = await createProviderRegistryWithScope();
+  const scopeInfo: PluginScopeInfo = { ownScope: providers.get(Scope), isStandaloneApp: true };
+  const registry = new PluginRegistry(providers, [host], undefined, scopeInfo);
+  await registry.ready;
+  return providers;
+}
+
+describe('a nested plugin that injects a provider its host derives from options', () => {
+  beforeEach(() => {
+    injectedLabels.length = 0;
+  });
+
+  it('receives the provider when the host is configured with init(options)', async () => {
+    await registerHostPlugin(LabelHostPlugin.init({ label: 'from-options' }));
+
+    expect(injectedLabels).toEqual(['from-options']);
+  });
+
+  it('receives the provider when the host is configured with init({ inject, useFactory })', async () => {
+    await registerHostPlugin(
+      LabelHostPlugin.init({ inject: () => [], useFactory: () => ({ label: 'from-host-factory' }) }),
+    );
+
+    expect(injectedLabels).toEqual(['from-host-factory']);
+  });
+
+  it('receives the provider when the host factory reads its options from the host registry', async () => {
+    const providers = await registerHostPlugin(
+      LabelHostPlugin.init({ inject: () => [Scope], useFactory: (scope: Scope) => ({ label: `from-${scope.id}` }) }),
+    );
+
+    expect(injectedLabels).toEqual([`from-${providers.get(Scope).id}`]);
   });
 });
 

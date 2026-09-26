@@ -24,6 +24,7 @@ import {
   PromptExecutionError,
   PromptNotFoundError,
 } from '../../errors';
+import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
@@ -77,6 +78,9 @@ declare global {
 const name = 'prompts:get-prompt' as const;
 const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
 
+/** Prompts `resolveHookOwnerId` found, reused by the same run's `findPrompt`. */
+const resolvedPrompts = new ResolvedEntries<PromptEntry>();
+
 @Flow({
   name,
   plan,
@@ -86,15 +90,16 @@ const { Stage } = FlowHooksOf<'prompts:get-prompt'>(name);
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
-    const parsed = inputSchema.safeParse(rawInput);
-    if (!parsed.success) return undefined;
-    const findPrompt = () => scope.prompts.findByName(parsed.data.request.params.name);
-    let prompt = findPrompt();
+    const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
+    if (typeof promptName !== 'string') return undefined;
+    let prompt = scope.prompts.findByName(promptName);
     if (!prompt) {
       await loadRemoteAppCapabilities(scope);
-      prompt = findPrompt();
+      prompt = scope.prompts.findByName(promptName);
     }
-    return prompt ? appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner) : undefined;
+    if (!prompt) return undefined;
+    resolvedPrompts.remember(rawInput, promptName, prompt);
+    return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
   }
 
   logger = this.scopeLogger.child('GetPromptFlow');
@@ -186,7 +191,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.logger.info(`findPrompt: looking for prompt with name "${name}"`);
 
     // Try to find a prompt that matches this name
-    const prompt = this.scope.prompts.findByName(name);
+    const prompt = resolvedPrompts.take(this.rawInput, name) ?? this.scope.prompts.findByName(name);
 
     if (!prompt) {
       this.logger.warn(`findPrompt: prompt "${name}" not found`);
@@ -262,22 +267,10 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       const parsedArgs = prompt.parseArguments(input.arguments);
       this.state.set('parsedArgs', parsedArgs);
 
-      // Build context-scoped providers from the prompt's provider registry (app-level).
-      // This ensures CONTEXT-scoped providers registered at the app level are available.
+      // The prompt's own provider hierarchy wins over the scope-level instances in the flow deps.
       const sessionKey = authInfo?.sessionId ?? 'anonymous';
-      const promptViews = await prompt.providers.buildViews(sessionKey, new Map(this.deps));
-
-      // Merge prompt's context providers with flow's context deps
-      const mergedContextDeps = new Map(this.deps);
-      for (const [token, instance] of promptViews.context) {
-        if (!mergedContextDeps.has(token)) {
-          mergedContextDeps.set(token, instance);
-        }
-      }
-
-      // Create context-aware providers that include scoped providers from both
-      // the scope (via flow deps) and the prompt's app (via promptViews).
-      const contextProviders = new FlowContextProviders(prompt.providers, mergedContextDeps);
+      const promptViews = await prompt.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
+      const contextProviders = new FlowContextProviders(prompt.providers, promptViews.context);
       const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(prompt.record.provide), context));
       context.mark('createPromptContext');

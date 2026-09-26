@@ -11,6 +11,7 @@ import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
 import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
+import { isTrustedHtml } from '../shell/trusted-html';
 import type { WidgetSizing } from '../shell/types';
 import { escapeHtml } from '../utils';
 import { MCP_APPS_MIME_TYPE } from './constants';
@@ -47,6 +48,14 @@ export interface RenderToolTemplateOptions {
    * shell, and is mirrored onto the returned `meta` as `ui/preferredHeight` etc.
    */
   sizing?: WidgetSizing;
+  /**
+   * HTML-escape a plain string returned by a template function; results built with
+   * `html` / `trustedHtml` stay markup. When unset, strings that look like HTML render as
+   * markup and a one-time notice per tool is logged; `false` keeps that without the notice.
+   */
+  escapeStringResults?: boolean;
+  /** Receives the one-time string-result notice. Defaults to `console`. */
+  logger?: { warn: (message: string) => void };
 }
 
 /**
@@ -85,17 +94,43 @@ function buildCspConfig(resolver?: ImportResolver) {
   return { resourceDomains: cspResourceDomains, connectDomains: cspConnectDomains };
 }
 
+const STRING_RESULT_DOCS = 'https://docs.agentfront.dev/frontmcp/guides/building-tool-ui#trusted-markup';
+
+const noticedStringResultTools = new Set<string>();
+
+function noticeStringResult(toolName: string, logger: { warn: (message: string) => void }): void {
+  if (noticedStringResultTools.has(toolName)) return;
+  noticedStringResultTools.add(toolName);
+  logger.warn(
+    `[frontmcp] The UI template of tool "${toolName}" returned a plain string containing markup, which is rendered as HTML. ` +
+      'FrontMCP 1.9 will HTML-escape plain string results by default. Build the markup with ctx.helpers.html`…` ' +
+      '(interpolated values are escaped) or wrap safe markup with ctx.helpers.trustedHtml(), then set ' +
+      'ui.escapeStringResults: true (or escapeStringResults: false to keep the current behaviour without this notice). ' +
+      `See ${STRING_RESULT_DOCS}`,
+  );
+}
+
 /**
  * Body markup for a template result no content renderer claimed.
  *
- * Only a string detected as HTML is the template's own markup. Text and serialized values
- * carry tool data, so they are escaped (GHSA-rhr9-vhpf-jqp7).
+ * `TrustedHtml` is the template's own markup. A plain string detected as HTML is markup unless
+ * `escapeStringResults` is on. Text and serialized values carry tool data, so they are escaped
+ * (GHSA-rhr9-vhpf-jqp7).
  */
-function renderUnwrappedResult(rawResult: unknown): string {
+function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOptions): string {
+  if (isTrustedHtml(rawResult)) {
+    return String(rawResult);
+  }
   if (typeof rawResult !== 'string') {
     return `<pre>${escapeHtml(JSON.stringify(rawResult, null, 2))}</pre>`;
   }
-  return detectContentType(rawResult) === 'html' ? rawResult : escapeHtml(rawResult);
+  if (detectContentType(rawResult) !== 'html' || options.escapeStringResults === true) {
+    return escapeHtml(rawResult);
+  }
+  if (options.escapeStringResults === undefined) {
+    noticeStringResult(options.toolName, options.logger ?? console);
+  }
+  return rawResult;
 }
 
 /**
@@ -103,7 +138,7 @@ function renderUnwrappedResult(rawResult: unknown): string {
  *
  * Supported template types:
  * - FileSource object `{ file: './widget.tsx' }` — bundled with esbuild, React loaded from esm.sh
- * - HTML template builder function `(ctx) => string`
+ * - HTML template builder function `(ctx) => string | TrustedHtml`
  * - Static HTML/MDX string
  *
  * React function references (`template: MyComponent`) are NOT supported for bundling.
@@ -161,12 +196,12 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
       const ctx = { input, output, helpers };
       const rawResult = (template as (ctx: unknown) => unknown)(ctx);
 
-      // Auto-detect the result type and wrap accordingly
-      const wrapped = wrapDetectedContent(rawResult);
+      // Auto-detect the result type and wrap accordingly; trusted markup is always an HTML body
+      const wrapped = isTrustedHtml(rawResult) ? undefined : wrapDetectedContent(rawResult);
       if (wrapped) {
         html = wrapped;
       } else {
-        const shellResult = buildShell(renderUnwrappedResult(rawResult), shellConfig);
+        const shellResult = buildShell(renderUnwrappedResult(rawResult, options), shellConfig);
         html = shellResult.html;
         hash = shellResult.hash;
         size = shellResult.size;

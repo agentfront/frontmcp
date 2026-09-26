@@ -1,13 +1,30 @@
 import 'reflect-metadata';
 
-import { type ReadResourceResult } from '@frontmcp/protocol';
+import { Client, InMemoryTransport, type ReadResourceResult } from '@frontmcp/protocol';
 
-import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, FlowHooksOf, LogLevel, Plugin, Skill, SkillContext, type FlowCtxOf } from '../../common';
+import {
+  createTestFetchServer,
+  rpc20260728,
+  type TestFetchServer,
+} from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import {
+  App,
+  FlowHooksOf,
+  LogLevel,
+  Plugin,
+  Skill,
+  SkillContext,
+  type FlowCtxOf,
+  type FrontMcpConfigInput,
+  type ServerResponse,
+} from '../../common';
 import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
 import { FrontMcpContextStorage } from '../../context';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import type { Scope } from '../../scope/scope.instance';
+import { LocalTransportAdapter, type SupportedTransport } from '../../transport/adapters/transport.local.adapter';
 
 const FilterSkillsHook = FlowHooksOf('skills:filter');
 
@@ -73,6 +90,55 @@ class CallerRecorderPlugin extends DynamicPlugin<Record<string, never>> {
 
 @App({ id: 'recorded-guides', name: 'Recorded Guides', plugins: [CallerRecorderPlugin], skills: [PublicGuideSkill] })
 class RecordedGuidesApp {}
+
+let serverSideTransport: InMemoryTransport | undefined;
+
+// The Streamable HTTP / SSE adapter's MCP server, reached over an in-memory transport instead of a socket.
+class InMemoryLocalAdapter extends LocalTransportAdapter<SupportedTransport> {
+  createTransport(): SupportedTransport {
+    if (!serverSideTransport) throw new Error('no server-side transport');
+    return serverSideTransport as unknown as SupportedTransport;
+  }
+
+  async initialize(): Promise<void> {
+    throw new Error('not used over the in-memory transport');
+  }
+
+  async sendElicitRequest(): Promise<never> {
+    throw new Error('not used over the in-memory transport');
+  }
+
+  async handleRequest(): Promise<void> {
+    throw new Error('not used over the in-memory transport');
+  }
+}
+
+async function scopeOf(config: FrontMcpConfigInput): Promise<Scope> {
+  const instance = await FrontMcpInstance.createForGraph(config);
+  const [scope] = instance.getScopes();
+  if (!scope) throw new Error('the config produced no scope');
+  return scope as Scope;
+}
+
+let adapterSessions = 0;
+
+async function initializeInstructions(scope: Scope): Promise<string | undefined> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  serverSideTransport = serverTransport;
+  const sessionId = `local-adapter-${++adapterSessions}`;
+  const adapter = new InMemoryLocalAdapter(
+    scope,
+    { type: 'streamable-http', token: 'token', tokenHash: 'token-hash', sessionId },
+    () => undefined,
+    {} as ServerResponse,
+  );
+  await adapter.ready;
+  const client = new Client({ name: 'spec-client', version: '1.0.0' });
+  await client.connect(clientTransport);
+  const instructions = client.getInstructions();
+  await client.close();
+  return instructions;
+}
 
 describe('skills:filter flow', () => {
   describe('caller context over the in-memory transport', () => {
@@ -220,6 +286,61 @@ describe('skills:filter flow', () => {
       expect(compact.body).not.toContain('restricted-guide');
       expect(full.body).toContain('Public guide steps.');
       expect(full.body).not.toContain('Restricted guide steps.');
+    });
+  });
+
+  describe('in the initialize instructions (#603)', () => {
+    it('leaves a skill the flow drops out of the skill catalog, and keeps the rest', async () => {
+      const instructions = await initializeInstructions(await scopeOf(serverConfig));
+
+      expect(instructions).toContain('**public-guide**: Public onboarding guide');
+      expect(instructions).not.toContain('restricted-guide');
+    });
+
+    it('leaves a skill the flow drops out of the SEP-2640 skill:// hints', async () => {
+      const scope = await scopeOf({ ...serverConfig, skillsConfig: { enabled: true, sep2640InInstructions: true } });
+      const instructions = await initializeInstructions(scope);
+
+      expect(instructions).toContain('skill://public-guide/SKILL.md');
+      expect(instructions).not.toContain('skill://restricted-guide/SKILL.md');
+    });
+
+    it('filters for each initialize, not once when the transport is built', async () => {
+      const scope = await scopeOf({
+        info: { name: 'skills-filter-instructions-caller', version: '1.0.0' },
+        apps: [RecordedGuidesApp],
+        logging: { level: LogLevel.Off },
+      });
+      callersSeen.length = 0;
+
+      await initializeInstructions(scope);
+      await initializeInstructions(scope);
+
+      expect(callersSeen).toHaveLength(2);
+    });
+
+    it('keeps the catalog unchanged when nothing filters', async () => {
+      const scope = await scopeOf({
+        info: { name: 'skills-unfiltered-instructions', version: '1.0.0' },
+        apps: [RecordedGuidesApp],
+        logging: { level: LogLevel.Off },
+        instructions: 'Guides server.',
+      });
+
+      expect(await initializeInstructions(scope)).toBe(
+        [
+          'Guides server.',
+          "Available skills (read the `skill://index.json` resource for each skill's `SKILL.md` URI):\n\n- **public-guide**: Public onboarding guide",
+        ].join('\n\n---\n\n'),
+      );
+    });
+
+    it('never names a skill the flow drops in the 2026-07-28 server/discover instructions', async () => {
+      const server = await createTestFetchServer({ ...serverConfig, instructions: 'Guides server.' });
+      const { message } = await rpc20260728(server.handler, 'server/discover');
+
+      expect(JSON.stringify(message.result)).not.toContain('restricted-guide');
+      expect(message.result?.['instructions']).toBe('Guides server.');
     });
   });
 });
