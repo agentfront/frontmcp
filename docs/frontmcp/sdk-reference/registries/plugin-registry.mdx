@@ -125,7 +125,7 @@ class AuditPlugin { }
 
 Hooks are registered with scope-aware targeting:
 
-- **App-scoped**: Hook applies only to the app's tools
+- **App-scoped**: Hook applies only to the app's tools, resources, prompts and completions, including those its adapters and plugins provide. Hooks of a plugin nested inside another plugin belong to the app that installed the outer plugin.
 - **Server-scoped**: Hook applies to all tools in the server
 
 ## Context Extensions

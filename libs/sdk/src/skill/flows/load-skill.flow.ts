@@ -7,6 +7,7 @@ import { InternalMcpError, InvalidInputError } from '../../errors';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { assertSkillAuthorized } from '../skill-authorities.helper';
+import { isSkillServable } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
@@ -203,6 +204,10 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       // No-op when the skill has no `authorities` or no engine is configured.
       const entry = this.findSkillEntry(skillId, result.skill.id);
       if (entry) {
+        if (!(await isSkillServable(this.scope, entry))) {
+          warnings.push(`Skill "${skillId}" not found`);
+          continue;
+        }
         await assertSkillAuthorized(this.scope, entry, authInfo);
       }
 

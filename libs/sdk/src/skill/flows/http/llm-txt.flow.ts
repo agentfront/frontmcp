@@ -24,6 +24,7 @@ import {
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { createSkillHttpAuthValidator } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { filterServableSkills } from '../../skill-filter.helper';
 import { formatSkillsForLlmCompact } from '../../skill-http.utils';
 
 const inputSchema = httpInputSchema;
@@ -160,8 +161,11 @@ export default class LlmTxtFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check cache first
-    const cache = await getSkillHttpCache(this.scope);
+    // Get skills visible via HTTP. The cached document lists every one of them, so it is only
+    // served to a caller the `skills:filter` flow lets see all of them.
+    const httpSkills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
+    const skills = await filterServableSkills(this.scope, httpSkills);
+    const cache = skills.length === httpSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {
       const cached = await cache.getLlmTxt();
       if (cached) {
@@ -174,9 +178,6 @@ export default class LlmTxtFlow extends FlowBase<typeof name> {
         return;
       }
     }
-
-    // Get skills visible via HTTP
-    const skills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
 
     if (skills.length === 0) {
       this.respond({

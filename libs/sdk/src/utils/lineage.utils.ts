@@ -1,7 +1,7 @@
 // file: libs/sdk/src/utils/lineage.utils.ts
 // Owner lineage and qualified name utilities
 
-import { type EntryLineage } from '../common';
+import { type EntryLineage, type EntryOwnerRef } from '../common';
 
 /**
  * Convert an entry lineage to a string key.
@@ -69,6 +69,36 @@ export function lineageDepth(lineage: EntryLineage): number {
 export function lineagesEqual(a: EntryLineage, b: EntryLineage): boolean {
   if (a.length !== b.length) return false;
   return a.every((owner, i) => owner.kind === b[i].kind && owner.id === b[i].id);
+}
+
+/**
+ * The owner id that app-scoped hooks match for an entry.
+ *
+ * Returns the app anywhere in the entry's lineage, so an app's hooks also run for the entries
+ * its adapters and plugins provide. Entries outside every app fall back to their own owner.
+ *
+ * @example
+ * hookOwnerIdOf([{ kind: 'scope', id: 'gw' }, { kind: 'app', id: 'orders' }, { kind: 'adapter', id: 'api' }])
+ * => "orders"
+ */
+export function hookOwnerIdOf(lineage: EntryLineage, owner?: EntryOwnerRef): string | undefined {
+  const owners = owner ? [...lineage, owner] : lineage;
+  return appOwnerIdOf(owners) ?? owners[owners.length - 1]?.id;
+}
+
+/**
+ * The app anywhere in an entry's lineage, or undefined for an entry outside every app.
+ *
+ * Resource, prompt and completion flows resolve their hook owner with it, so every hook still runs
+ * for the entries the server itself serves, such as the SEP-2640 `skill://` resources.
+ *
+ * @example
+ * appOwnerIdOf([{ kind: 'scope', id: 'gw' }, { kind: 'plugin', id: 'notes' }])
+ * => undefined
+ */
+export function appOwnerIdOf(lineage: EntryLineage, owner?: EntryOwnerRef): string | undefined {
+  const owners = owner ? [...lineage, owner] : lineage;
+  return owners.find((candidate) => candidate.kind === 'app')?.id;
 }
 
 /**

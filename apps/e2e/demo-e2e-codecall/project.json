@@ -35,6 +35,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
+      "dependsOn": ["^build"],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-codecall"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-codecall/jest.e2e.config.ts",
@@ -43,6 +44,7 @@
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
+      "dependsOn": ["^build"],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-codecall-e2e"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-codecall/jest.e2e.config.ts",

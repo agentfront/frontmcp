@@ -5,6 +5,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 import { ResourceTemplate } from '../../../common';
 import { ResourceContext, type ResourceCompletionResult } from '../../../common/interfaces';
 import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
+import { filterServableSkills } from '../../skill-filter.helper';
 import { serializeSkillMd } from '../sep-2640.builders';
 import { SKILL_MD_MIME_TYPE } from '../sep-2640.constants';
 import { findAndLoadSkillByPath, getSepVisibleSkills } from '../sep-2640.resource-helpers';
@@ -34,7 +35,12 @@ type Params = { skillPath: string };
 export class Sep2640SkillMdResource extends ResourceContext<Params> {
   async skillPathCompleter(partial: string): Promise<ResourceCompletionResult> {
     const visible = getSepVisibleSkills(this.scope);
-    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
+    const authorized = await filterSkillsByAuthorities(
+      this.scope,
+      visible,
+      this.getAuthInfo() as Record<string, unknown>,
+    );
+    const skills = await filterServableSkills(this.scope, authorized);
     const paths = skills.map((s) => s.getSkillPath());
     const filtered = partial ? paths.filter((p) => p.toLowerCase().startsWith(partial.toLowerCase())) : paths;
     return { values: filtered, total: filtered.length };

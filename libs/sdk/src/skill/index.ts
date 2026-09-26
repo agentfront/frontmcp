@@ -161,7 +161,8 @@ export {
 export type { CompactSkillSummary } from './skill-http.utils';
 
 // Flows
-export { SearchSkillsFlow, LoadSkillFlow } from './flows';
+export { SearchSkillsFlow, LoadSkillFlow, FilterSkillsFlow } from './flows';
+export { filterServableSkills } from './skill-filter.helper';
 
 // Skill resources are served exclusively under the SEP-2640 `skill://`
 // URI scheme. The legacy plural `skills://` scheme has been removed.

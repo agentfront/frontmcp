@@ -13,7 +13,7 @@
  */
 import 'reflect-metadata';
 
-import type { FlowCtxOf } from '@frontmcp/sdk';
+import { STATELESS_SESSION_ID, type FlowCtxOf } from '@frontmcp/sdk';
 
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
@@ -148,6 +148,28 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
 
     await plugin.willWriteCache(first);
     await plugin.willWriteCache(second);
+
+    expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
+  });
+
+  it('keys by the client id the SDK sets from the verified subject', async () => {
+    const { plugin, store } = createHarness();
+    const alice = { token: 'token-a', clientId: 'alice', user: { sub: 'alice' }, extra: { user: { sub: 'alice' } } };
+    const bob = { token: 'token-b', clientId: 'bob', user: { sub: 'bob' }, extra: { user: { sub: 'bob' } } };
+
+    await plugin.willWriteCache(createFlowCtx(alice, STATELESS_SESSION_ID));
+    await plugin.willWriteCache(createFlowCtx(bob, STATELESS_SESSION_ID));
+    await plugin.willWriteCache(createFlowCtx(alice, 'session-2'));
+
+    expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
+    expect(store.setValue.mock.calls[0][0]).toBe(store.setValue.mock.calls[2][0]);
+  });
+
+  it('does not treat the shared stateless session id as an identity', async () => {
+    const { plugin, store } = createHarness();
+
+    await plugin.willWriteCache(createFlowCtx({ clientId: '' }, STATELESS_SESSION_ID));
+    await plugin.willWriteCache(createFlowCtx({ clientId: '' }, STATELESS_SESSION_ID));
 
     expect(store.setValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[1][0]);
   });

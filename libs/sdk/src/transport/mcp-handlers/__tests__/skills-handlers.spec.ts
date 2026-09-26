@@ -3,10 +3,10 @@
  *
  * Tests for the skills/search, skills/load, and skills/list MCP handlers.
  */
-import { McpHandlerOptions } from '../mcp-handlers.types';
-import skillsSearchRequestHandler from '../skills-search-request.handler';
-import skillsLoadRequestHandler from '../skills-load-request.handler';
+import { type McpHandlerOptions } from '../mcp-handlers.types';
 import skillsListRequestHandler from '../skills-list-request.handler';
+import skillsLoadRequestHandler from '../skills-load-request.handler';
+import skillsSearchRequestHandler from '../skills-search-request.handler';
 
 describe('Skills MCP Handlers', () => {
   // Mock logger
@@ -25,7 +25,13 @@ describe('Skills MCP Handlers', () => {
     loadSkill: jest.fn(),
     listSkills: jest.fn(),
     hasAny: jest.fn().mockReturnValue(true),
+    findByName: jest.fn(),
+    findByQualifiedName: jest.fn(),
+    getSkills: jest.fn().mockReturnValue([]),
   };
+
+  // The `skills:filter` flow, which every handler runs registered skills through
+  const mockRunFlowForOutput = jest.fn();
 
   // Mock tool registry
   const mockToolRegistry = {
@@ -39,6 +45,7 @@ describe('Skills MCP Handlers', () => {
     logger: mockLogger,
     skills: mockSkillRegistry,
     tools: mockToolRegistry,
+    runFlowForOutput: mockRunFlowForOutput,
   });
 
   // Create handler options
@@ -406,6 +413,85 @@ describe('Skills MCP Handlers', () => {
       const ctx = createContext();
 
       await expect(handler.handler(request, ctx as any)).rejects.toThrow(/Skills capability not available/);
+    });
+  });
+
+  // ============================================
+  // skills:filter flow (GHSA-gf7p-j3hr-h5h4)
+  // ============================================
+
+  describe('skills the skills:filter flow drops (GHSA-gf7p-j3hr-h5h4)', () => {
+    const droppedSkill = { name: 'skill-1', metadata: { id: 'skill-1', name: 'skill-1' } };
+
+    beforeEach(() => {
+      mockSkillRegistry.findByName.mockImplementation((id: string) => (id === 'skill-1' ? droppedSkill : undefined));
+      mockRunFlowForOutput.mockResolvedValue({ skills: [] });
+    });
+
+    afterEach(() => {
+      mockSkillRegistry.findByName.mockReset();
+      mockRunFlowForOutput.mockReset();
+    });
+
+    it('leaves them out of skills/search', async () => {
+      mockSkillRegistry.search.mockResolvedValueOnce([
+        {
+          metadata: { id: 'skill-1', name: 'skill-1', description: 'Dropped' },
+          score: 0.9,
+          availableTools: [],
+          missingTools: [],
+          source: 'local',
+        },
+        {
+          metadata: { id: 'external-skill', name: 'external-skill', description: 'Not registered here' },
+          score: 0.5,
+          availableTools: [],
+          missingTools: [],
+          source: 'external',
+        },
+      ]);
+
+      const handler = skillsSearchRequestHandler(createHandlerOptions());
+      const ctx = createContext();
+      const result = await handler.handler(
+        { method: 'skills/search' as const, params: { query: 'skill' } },
+        ctx as any,
+      );
+
+      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [droppedSkill], ctx });
+      expect(result.skills.map((skill) => skill.id)).toEqual(['external-skill']);
+    });
+
+    it('leaves them out of skills/list and its total', async () => {
+      mockSkillRegistry.listSkills.mockResolvedValueOnce({
+        skills: [{ id: 'skill-1', name: 'skill-1', description: 'Dropped' }],
+        total: 1,
+        hasMore: false,
+      });
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const result = await handler.handler({ method: 'skills/list' as const, params: {} }, createContext() as any);
+
+      expect(result.skills).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('reports them as not found from skills/load', async () => {
+      mockSkillRegistry.loadSkill.mockResolvedValueOnce({
+        skill: { id: 'skill-1', name: 'skill-1', description: 'Dropped', instructions: 'Secret steps', tools: [] },
+        availableTools: [],
+        missingTools: [],
+        isComplete: true,
+      });
+
+      const handler = skillsLoadRequestHandler(createHandlerOptions());
+      const result = await handler.handler(
+        { method: 'skills/load' as const, params: { skillIds: ['skill-1'] } },
+        createContext() as any,
+      );
+
+      expect(result.skills).toEqual([]);
+      expect(result.summary.combinedWarnings).toEqual(['Skill "skill-1" not found']);
     });
   });
 });

@@ -5,6 +5,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { Flow, FlowBase, FlowHooksOf, normalizeToolRef, type FlowPlan, type FlowRunOptions } from '../../common';
 import { DependencyNotFoundError, InvalidInputError } from '../../errors';
 import { filterSkillMetadataByAuthorities } from '../skill-authorities.helper';
+import { filterServableSkillResults } from '../skill-filter.helper';
 import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
 
 /**
@@ -229,9 +230,12 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     // input — role/permission/claims-based authorities only; `fromInput`
     // policies can't be evaluated at search time.
     const authVisibleResults = await this.filterResultsByAuthorities(mcpVisibleResults);
+    const servableResults = this.scope.skills
+      ? await filterServableSkillResults(this.scope, this.scope.skills, authVisibleResults)
+      : authVisibleResults;
 
     // Transform results to output format
-    const skills = authVisibleResults.map((result) => ({
+    const skills = servableResults.map((result) => ({
       id: result.metadata.id ?? result.metadata.name,
       name: result.metadata.name,
       description: result.metadata.description,

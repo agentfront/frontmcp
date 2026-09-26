@@ -104,6 +104,12 @@ class CrmStore {
     return this.users.delete(id);
   }
 
+  purgeUsers(): number {
+    const purgedCount = this.users.size;
+    this.users.clear();
+    return purgedCount;
+  }
+
   // Activity methods
   listActivities(userId?: string): Activity[] {
     if (userId) {

@@ -426,7 +426,10 @@ openssl rand -base64 32
 export REMEMBER_SECRET="your-generated-secret"
 ```
 
-File-based persistence is disabled in production by default for security.
+File-based persistence is disabled in production by default for security. If none of
+`REMEMBER_SECRET`, `MCP_MEMORY_SECRET` or `MCP_SESSION_SECRET` is set there, the plugin falls back
+to a random in-memory secret and logs a warning once: encrypted memory is then unreadable after a
+restart and by any other instance that shares the store.
 
 </Warning>
 

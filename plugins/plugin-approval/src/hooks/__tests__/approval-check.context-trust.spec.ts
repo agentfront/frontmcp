@@ -17,6 +17,7 @@ import 'reflect-metadata';
 import { ApprovalRequiredError } from '../../approval';
 import { ApprovalStoreToken } from '../../approval.symbols';
 import type { ApprovalStore } from '../../stores';
+import { ApprovalScope, ApprovalState } from '../../types';
 import ApprovalCheckPlugin from '../approval-check.hook';
 
 jest.mock('@frontmcp/sdk', () => ({
@@ -90,10 +91,23 @@ describe('ApprovalCheckPlugin — context trust (GHSA-r848-p7wf-96rc)', () => {
   });
 
   it('honours a pre-approved context established by the session', async () => {
-    const { plugin, store, flowCtx } = createGate({ sessionContext: PRE_APPROVED });
+    const { plugin, flowCtx } = createGate({ sessionContext: PRE_APPROVED });
 
     await expect(plugin.checkApproval(flowCtx as never)).resolves.toBeUndefined();
-    expect(store.getApproval).not.toHaveBeenCalled();
+  });
+
+  it('still consults the store for a denial before honouring a pre-approved context', async () => {
+    const { plugin, store, flowCtx } = createGate({ sessionContext: PRE_APPROVED });
+    store.getApproval.mockResolvedValue({
+      toolId: 'billing:refund',
+      state: ApprovalState.DENIED,
+      scope: ApprovalScope.USER,
+      grantedAt: Date.now(),
+      grantedBy: { source: 'admin' },
+    });
+
+    await expect(plugin.checkApproval(flowCtx as never)).rejects.toMatchObject({ details: { state: 'denied' } });
+    expect(store.getApproval).toHaveBeenCalledWith('billing:refund', 'session-123', 'client-456');
   });
 
   it('honours the session context even when caller input names a different one', async () => {

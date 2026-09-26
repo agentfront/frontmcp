@@ -45,7 +45,7 @@ Goals:
      - `appId`
      - input schema (`inputSchema`)
      - optional output schema (`outputSchema`)
-   - An optional `includeTools` predicate can drop tools from the index entirely.
+   - An optional `includeTools` predicate can drop tools from CodeCall entirely: they are left out of the index and refused by describe, execute and invoke.
 
 2. **Modes + metadata**
    - CodeCall has a `mode` that controls:
@@ -307,8 +307,8 @@ export interface CodeCallOptions {
     enabled: boolean;
 
     /**
-     * Optional allowlist of tool names that can be called directly.
-     * If omitted, a reasonable default is "any tool that is enabledInCodeCall".
+     * Optional allowlist of tool names (bare `name` or `<appId>:<name>`) that can be called directly.
+     * If omitted, any tool the base policy allows can be invoked.
      */
     allowedTools?: string[];
 

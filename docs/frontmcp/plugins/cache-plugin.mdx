@@ -194,9 +194,11 @@ profile, a balance, a tenant's records, anything filtered by the caller's own pe
 and a key built only from the tool and its arguments serves the first caller's response to
 everyone else.
 
-The identity is the authenticated subject (`sub` / `userId`), then the client id, then the
-session. A call with no identity at all gets a key of its own rather than one shared with
-every other identity-less caller.
+The identity is the subject your auth layer puts in `authInfo.extra` (`sub` / `userId`), then
+the client id, then the session. For a request the SDK verified, the client id is the token's
+`sub`, or `anon:<id>` for an anonymous session. The session id the stateless HTTP transport
+gives every request is not an identity. A call with no identity at all gets a key of its own
+rather than one shared with every other identity-less caller.
 
   <Warning>
     Set this to `false` **only** when every caller would get byte-identical output: public
