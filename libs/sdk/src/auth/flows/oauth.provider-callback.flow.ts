@@ -35,6 +35,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   FlowControl,
@@ -79,7 +80,7 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
-  pre: ['parseInput', 'handleConsentSubmission', 'loadFederatedSession', 'validateProviderCallback'],
+  pre: ['checkIpFilter', 'parseInput', 'handleConsentSubmission', 'loadFederatedSession', 'validateProviderCallback'],
   execute: ['exchangeProviderCode', 'storeProviderTokens', 'handleNextProviderOrComplete'],
 } as const satisfies FlowPlan<string>;
 
@@ -122,6 +123,11 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       throw new InternalMcpError('OauthProviderCallbackFlow requires LocalPrimaryAuth', 'AUTH_CONFIG_ERROR');
     }
     return auth;
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

@@ -29,6 +29,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   HttpHtmlSchema,
@@ -110,7 +111,7 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
-  pre: ['parseInput', 'validatePendingAuth'],
+  pre: ['checkIpFilter', 'parseInput', 'validatePendingAuth'],
   execute: ['handleIncrementalAuth', 'handleFederatedAuth', 'createAuthorizationCode', 'redirectToClient'],
 } as const satisfies FlowPlan<string>;
 
@@ -153,6 +154,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   private resolveIssuer(): string | undefined {
     const issuer = (this.scope.auth as { issuer?: unknown } | undefined)?.issuer;
     return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

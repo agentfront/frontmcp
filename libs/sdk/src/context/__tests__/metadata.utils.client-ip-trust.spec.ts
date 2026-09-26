@@ -168,6 +168,38 @@ describe('extractClientIp — proxy trust (GHSA-p3qf-fcwm-35x4)', () => {
     });
   });
 
+  describe('IPv6 zone ids and trailing colons', () => {
+    // An unchecked zone id could carry `:` into a storage key; a trailing `:` was silently dropped.
+    it.each([
+      'fe80::1%eth0:rl',
+      'fe80::1%',
+      'fe80::1%eth 0',
+      'fe80::1%a/b',
+      'fe80::1%%',
+      '1:2:3:4:5:6:7:8:',
+      '1:2::3:',
+      '1::2:',
+      '::1:',
+    ])('rejects %s', (value) => {
+      expect(extractClientIp({}, { peerAddress: value })).toBeUndefined();
+      expect(extractClientIp({ 'x-forwarded-for': value }, { trustProxy: true })).toBeUndefined();
+    });
+
+    it.each([
+      'fe80::1%eth0',
+      'fe80::1%en0.100',
+      'fe80::1%25',
+      'fe80::1%lo_1-a~b',
+      '1:2:3:4:5:6:7::',
+      '1::',
+      '::1.2.3.4',
+      '1::1.2.3.4',
+      '1:2:3:4:5:6:1.2.3.4',
+    ])('still accepts the well-formed %s', (value) => {
+      expect(extractClientIp({}, { peerAddress: value })).toBe(value);
+    });
+  });
+
   it('threads the peer address through extractMetadata', () => {
     delete process.env['FRONTMCP_TRUST_PROXY'];
 
