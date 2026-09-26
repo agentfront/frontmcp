@@ -39,9 +39,9 @@ export function resolvePartitionKey(
       //
       // With no identity of either kind the remaining callers share one bounded bucket. That
       // is a deliberate trade: a shared budget still caps total load, where a per-request key
-      // caps nothing. It only applies where no peer address exists at all (some edge
-      // runtimes) — behind a proxy, set FRONTMCP_TRUST_PROXY so a real client IP is
-      // available and this path is not reached.
+      // caps nothing. It only applies where no peer address exists at all — the web-fetch
+      // adapter supplies one on Cloudflare Workers, Deno and Bun, and behind a proxy
+      // FRONTMCP_TRUST_PROXY makes the forwarded client IP available.
       return ctx.clientIp ?? (ctx.userId ? `user:${ctx.userId}` : UNRESOLVED_IP_PARTITION);
     case 'session':
       return ctx.sessionId;

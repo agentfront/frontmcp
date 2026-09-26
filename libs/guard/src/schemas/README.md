@@ -4,14 +4,14 @@ Zod validation schemas for all `@frontmcp/guard` configuration objects. These sc
 
 ## Exported Schemas
 
-| Schema                    | Validates                                                                                     | Key Defaults                                                          |
-| ------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `partitionKeySchema`      | `PartitionKey` -- a union of `'ip' \| 'session' \| 'userId' \| 'global'` or a custom function | --                                                                    |
-| `rateLimitConfigSchema`   | `RateLimitConfig`                                                                             | `windowMs: 60000`, `partitionBy: 'global'`                            |
-| `concurrencyConfigSchema` | `ConcurrencyConfig`                                                                           | `queueTimeoutMs: 0`, `partitionBy: 'global'`                          |
-| `timeoutConfigSchema`     | `TimeoutConfig`                                                                               | --                                                                    |
-| `ipFilterConfigSchema`    | `IpFilterConfig`                                                                              | `defaultAction: 'allow'`, `trustProxy: false`, `trustedProxyDepth: 1` |
-| `guardConfigSchema`       | `GuardConfig` (top-level)                                                                     | `keyPrefix: 'mcp:guard:'`                                             |
+| Schema                    | Validates                                                                                     | Key Defaults                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `partitionKeySchema`      | `PartitionKey` -- a union of `'ip' \| 'session' \| 'userId' \| 'global'` or a custom function | --                                                                                          |
+| `rateLimitConfigSchema`   | `RateLimitConfig`                                                                             | `windowMs: 60000`, `partitionBy: 'global'`                                                  |
+| `concurrencyConfigSchema` | `ConcurrencyConfig`                                                                           | `queueTimeoutMs: 0`, `partitionBy: 'global'`                                                |
+| `timeoutConfigSchema`     | `TimeoutConfig`                                                                               | --                                                                                          |
+| `ipFilterConfigSchema`    | `IpFilterConfig`                                                                              | `defaultAction: 'allow'`, `trustProxy: false` (not read), `trustedProxyDepth: 1` (not read) |
+| `guardConfigSchema`       | `GuardConfig` (top-level)                                                                     | `keyPrefix: 'mcp:guard:'`                                                                   |
 
 ## Peer Dependency
 

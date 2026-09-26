@@ -198,6 +198,10 @@ Set `FRONTMCP_TRUSTED_PROXY_DEPTH` to the number of proxies you run in front of 
 (default `1`). The client is read from that many hops back along the chain, because callers
 can prepend entries but only your own proxies append to it.
 
+On Cloudflare Workers, Deno and Bun the web-fetch adapter supplies the platform's own peer
+address (see [Where the client IP comes from](#where-the-client-ip-comes-from)), so edge
+callers are partitioned per client too.
+
 When no IP can be established the request falls back to the authenticated user, and to a
 single `ip:unresolved` partition when there is no user either. It never keys on the session
 id: `mcp-session-id` is caller-supplied and a request without one is given a fresh UUID, so
@@ -255,9 +259,22 @@ callers out of it.
 
 Block malicious IPs and restrict access to known networks.
 
-The filter runs at the start of the request pipeline, before the rate-limit check and before
-authentication. A rejected client gets HTTP 403 with JSON-RPC error `-32001`. An `ipFilter`
-block is enforced on its own -- it does not need a `global` rate limit configured alongside it.
+The filter is the first guard stage (`checkIpFilter`) of every HTTP-facing flow, so it runs
+before the rate-limit check and before authentication, on every route the server answers:
+
+| Route                                                                                       | Rejection                                                                              |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| MCP endpoint (`<entryPath>`, `/sse`, `/message`)                                            | HTTP 403, JSON-RPC error `-32001`                                                      |
+| `/oauth/*` (authorize, token, register, callback, provider callback, connect, userinfo, UI) | HTTP 403, JSON `{ "error": "forbidden", "message": "Client IP rejected by ipFilter" }` |
+| `/.well-known/*` (protected resource, authorization server, JWKS)                           | same JSON 403                                                                          |
+| `llm.txt`, `llm_full.txt` and the skills HTTP API                                           | same JSON 403                                                                          |
+| Custom `http.routes` (checked before `auth: true` verification)                             | same JSON 403                                                                          |
+
+Health and readiness probes (`/healthz`, `/readyz`, `/health`) are **not** filtered, so an
+orchestrator can always reach them; neither is `/metrics`, which has its own bearer token. An
+`ipFilter` block is enforced on its own -- it does not need a `global` rate limit configured
+alongside it. Because each stage is a flow stage, a plugin can hook `checkIpFilter` on any of
+these flows.
 
 <Warning>
   The client IP comes from the socket peer unless a trusted proxy is declared. Behind a load
@@ -267,9 +284,24 @@ block is enforced on its own -- it does not need a `global` rate limit configure
 
 Note that `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` are accepted by the schema
 but are **not** read: client-IP extraction happens in the SDK context layer, before guard
-configuration is reachable. Use the environment variables.
+configuration is reachable, and setting either one logs a startup warning. Use the
+environment variables.
 
 </Warning>
+
+### Where the client IP comes from
+
+| Runtime                                    | Client IP                                                                                                                                                |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node (Express, serverless handler)         | The socket peer. A dual-stack socket reports IPv4 clients as `::ffff:a.b.c.d`; the filter matches that against IPv4 rules.                               |
+| Behind a proxy you declare                 | `X-Forwarded-For`, counted `FRONTMCP_TRUSTED_PROXY_DEPTH` hops from the end, when `FRONTMCP_TRUST_PROXY=true`.                                           |
+| Cloudflare Workers (incl. Durable Objects) | `CF-Connecting-IP`, which Cloudflare's edge sets on every request. Trusted only when the runtime is Workers; on any other runtime the header is ignored. |
+| Deno                                       | `info.remoteAddr.hostname` — pass the handler to `Deno.serve(handler)` or forward `info` as its second argument.                                         |
+| Bun                                        | `server.requestIP(request)` — use `Bun.serve({ fetch: handler })` or forward `server` as its second argument.                                            |
+
+A request whose client IP cannot be established matches neither list, so it gets
+`defaultAction`: with `'deny'` it is rejected, with `'allow'` it proceeds. (Before 1.8.1 such a
+request was always let through.)
 
 <Steps>
   <Step title="Configure IP filtering">
@@ -300,11 +332,13 @@ configuration is reachable. Use the environment variables.
   <Step title="Understand filter precedence">
     The deny list is always checked first:
 
-    1. IP on deny list → **blocked** (403, `IpBlockedError`)
+    1. IP on deny list → **blocked** (HTTP 403 -- a JSON-RPC `-32001` error on the MCP endpoint, the JSON body above elsewhere)
     2. IP on allow list → **allowed**
-    3. IP on neither list → `defaultAction` applies (`'allow'` or `'deny'`)
+    3. IP on neither list, or no client IP at all → `defaultAction` applies (`'allow'` or `'deny'`)
 
     With `defaultAction: 'deny'`, only IPs explicitly on the allow list can access your server.
+    `IpBlockedError` and `IpNotAllowedError` are exported by `@frontmcp/guard` for your own code;
+    the built-in filter answers the HTTP 403 directly rather than throwing them.
 
   </Step>
 
@@ -325,7 +359,8 @@ configuration is reachable. Use the environment variables.
     <Note>
       `ipFilter.trustProxy` and `ipFilter.trustedProxyDepth` exist in the schema but are not
       read — client-IP extraction happens in the SDK context layer, before guard
-      configuration is reachable. Use the environment variables above.
+      configuration is reachable — and setting either logs a startup warning. Use the
+      environment variables above.
     </Note>
 
     <Warning>

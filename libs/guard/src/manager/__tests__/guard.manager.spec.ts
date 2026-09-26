@@ -1,7 +1,7 @@
-import { GuardManager } from '../index';
 import type { NamespacedStorage, StorageAdapter } from '@frontmcp/utils';
-import type { GuardConfig } from '../index';
+
 import type { PartitionKeyContext } from '../../partition-key/index';
+import { GuardManager, type GuardConfig } from '../index';
 
 function createMockNamespacedStorage(): jest.Mocked<NamespacedStorage> {
   const data = new Map<string, string>();
@@ -258,14 +258,14 @@ describe('GuardManager', () => {
       expect(result).toBeUndefined();
     });
 
-    it('should return undefined when clientIp is undefined', () => {
+    it('should apply the default action when clientIp is undefined', () => {
       const config: GuardConfig = {
         ...baseConfig,
         ipFilter: { denyList: ['10.0.0.0/8'] },
       };
       const manager = new GuardManager(storage, config);
       const result = manager.checkIpFilter(undefined);
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ allowed: true, reason: 'default' });
     });
 
     it('should return allowed=false when IP is on deny list', () => {

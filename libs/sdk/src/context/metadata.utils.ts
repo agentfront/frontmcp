@@ -18,6 +18,7 @@ export interface ClientIpOptions {
 }
 
 const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const IPV6_ZONE_ID_PATTERN = /^[A-Za-z0-9_.~-]+$/;
 
 function isIpv4(value: string): boolean {
   const match = IPV4_PATTERN.exec(value);
@@ -37,7 +38,10 @@ function isIpv4(value: string): boolean {
  * IP-filter identity — so a malformed one is a key an attacker chose.
  */
 function isIpv6(value: string): boolean {
-  const text = value.includes('%') ? value.slice(0, value.indexOf('%')) : value;
+  const zoneStart = value.indexOf('%');
+  // A zone id names a local interface (RFC 6874). It is kept, so it must not smuggle a delimiter.
+  if (zoneStart !== -1 && !IPV6_ZONE_ID_PATTERN.test(value.slice(zoneStart + 1))) return false;
+  const text = zoneStart === -1 ? value : value.slice(0, zoneStart);
   if (text.length === 0) return false;
 
   let head = text;
@@ -48,7 +52,8 @@ function isIpv6(value: string): boolean {
   const tail = lastColon === -1 ? '' : head.slice(lastColon + 1);
   if (tail.includes('.')) {
     if (!isIpv4(tail)) return false;
-    head = head.slice(0, lastColon + 1);
+    const groupsBeforeQuad = head.slice(0, lastColon + 1);
+    head = groupsBeforeQuad.endsWith('::') ? groupsBeforeQuad : groupsBeforeQuad.slice(0, -1);
     embedded = 2;
   }
 
@@ -57,7 +62,7 @@ function isIpv6(value: string): boolean {
 
   const countGroups = (part: string): number | null => {
     if (part === '') return 0;
-    const groups = part.split(':').filter((group, index, all) => !(group === '' && index === all.length - 1));
+    const groups = part.split(':');
     for (const group of groups) {
       if (!/^[0-9A-Fa-f]{1,4}$/.test(group)) return null;
     }

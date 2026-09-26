@@ -10,7 +10,7 @@ flow is hookable**: `FlowHooksOf(name)` exposes `Stage` / `Will` / `Did` /
 stage.
 
 **The hookability IS the product.** Because auth, rate-limiting, routing,
-transports, audit, and metrics are all *flow stages*, every one of them is an
+transports, audit, and metrics are all _flow stages_, every one of them is an
 extension point. The moment you handle a request outside the flow pipeline, you
 silently delete all of those extension points for that path.
 
@@ -25,7 +25,7 @@ silently delete all of those extension points for that path.
    response (`express req/res`, Web `Request`/`Response`, stdio frames) to/from
    the flow's normalized `ServerRequest` + `httpRespond` output. It MUST then run
    the same flows every other adapter runs. Two adapters must never diverge in
-   *behavior* (e.g. express enforcing auth while the worker doesn't).
+   _behavior_ (e.g. express enforcing auth while the worker doesn't).
 
 3. **Runtime gaps are fixed in the flow, not routed around.** If a flow stage
    can't run in a target runtime (e.g. `handle:streamable-http` needs a Node
@@ -51,8 +51,14 @@ silently delete all of those extension points for that path.
   run that flow.
 - ❌ A transport handler that constructs the MCP server + calls it directly,
   skipping the `http:request` flow stages (auth, quota, audit, routing). The
-  current web-fetch/worker handler does this — it is **known debt to be fixed**
-  by making the flow runtime-agnostic, NOT a pattern to copy or extend.
+  web-fetch/worker handler used to do this; it now translates the Web `Request`
+  (including the platform's peer address) and runs `http:request` and the
+  matching OAuth / well-known / skills flows like every other adapter — keep it
+  that way.
+- ❌ Enforcing `throttle.ipFilter` (or any other guard) inside an adapter or a
+  route handler. Every HTTP-facing flow starts with a `checkIpFilter` stage that
+  calls `enforceIpFilter`; plain routes (`http.routes`) run the `http:ip-filter`
+  flow. A new HTTP flow must add the same stage.
 - ❌ "It only works on the worker if I bypass X" → fix X to be runtime-agnostic.
 
 ## How to apply

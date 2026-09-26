@@ -356,7 +356,16 @@ const handler = createWebFetchHandler(scope, { entryPath: '/mcp' });
 
 // Cloudflare Worker / Deno / Bun all speak Web `Request`/`Response`:
 export default { fetch: (request: Request) => handler(request) };
+
+// Deno and Bun: forward the runtime's second argument — it is how the handler learns the client IP.
+Deno.serve((request, info) => handler(request, info));
+Bun.serve({ fetch: (request, server) => handler(request, server) });
 ```
+
+The client IP (used by `throttle.ipFilter` and `partitionBy: 'ip'`) comes from Deno's
+`info.remoteAddr`, Bun's `server.requestIP(request)`, or — only when running on Cloudflare
+Workers — the `CF-Connecting-IP` header. A handler called without the second argument on Deno
+or Bun has no client IP, so `ipFilter.defaultAction` applies to every request.
 
 ### Types
 

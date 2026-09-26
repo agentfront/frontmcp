@@ -22,6 +22,7 @@ import {
   ServerRequestTokens,
   type FrontMcpLogger,
   type FrontMcpServer,
+  type HttpOutput,
   type HttpRouteConfig,
   type ServerRequest,
   type ServerRequestHandler,
@@ -42,6 +43,9 @@ export type VerifyResult =
  */
 export type VerifySessionFn = (request: ServerRequest) => Promise<VerifyResult | undefined>;
 
+/** Dispatch the `http:ip-filter` flow; it answers with the rejection, or nothing when the caller may proceed. */
+export type CheckClientIpFn = (request: ServerRequest, response: ServerResponse) => Promise<HttpOutput | undefined>;
+
 export interface RegisterCustomHttpRoutesArgs {
   /** Custom routes from `http.routes`. */
   routes: HttpRouteConfig[] | undefined;
@@ -49,6 +53,8 @@ export interface RegisterCustomHttpRoutesArgs {
   server: FrontMcpServer;
   /** Runs `session:verify` for `auth: true` routes. */
   verifySession: VerifySessionFn;
+  /** Runs `http:ip-filter` before every route (GHSA-hwfp-xv2f-fr8g). */
+  checkClientIp: CheckClientIpFn;
   /** Resolved gateway entry path (e.g. `''` or `'/mcp'`). */
   entryPath: string;
   /** Per-app / per-scope route base (e.g. `''` or `'/billing'`). */
@@ -183,6 +189,15 @@ export function wrapWithAuth(
   };
 }
 
+/** Answer a route with the `throttle.ipFilter` rejection before its handler, or its auth, runs. */
+export function wrapWithIpFilter(handler: ServerRequestHandler, checkClientIp: CheckClientIpFn): ServerRequestHandler {
+  return async (req: ServerRequest, res: ServerResponse, next) => {
+    const rejection = await checkClientIp(req, res);
+    if (rejection) return writeHttpResponse(res, rejection);
+    return handler(req, res, next);
+  };
+}
+
 /**
  * Register all configured custom HTTP routes on the active server.
  *
@@ -191,7 +206,7 @@ export function wrapWithAuth(
  * misconfiguration aborts boot instead of silently mis-mounting.
  */
 export function registerCustomHttpRoutes(args: RegisterCustomHttpRoutesArgs): void {
-  const { routes, server, verifySession, entryPath, routeBase, logger } = args;
+  const { routes, server, verifySession, checkClientIp, entryPath, routeBase, logger } = args;
   if (!routes || routes.length === 0) return;
 
   const reserved = computeReservedPaths(entryPath, routeBase);
@@ -200,7 +215,7 @@ export function registerCustomHttpRoutes(args: RegisterCustomHttpRoutesArgs): vo
     assertNotReserved(route.method, route.path, reserved);
 
     const handler = route.auth === true ? wrapWithAuth(route.handler, verifySession, logger) : route.handler;
-    server.registerRoute(route.method, route.path, handler);
+    server.registerRoute(route.method, route.path, wrapWithIpFilter(handler, checkClientIp));
     logger.info(`Registered custom http route: ${route.method} ${route.path}${route.auth ? ' (auth)' : ''}`);
   }
 }

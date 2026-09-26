@@ -86,6 +86,7 @@ import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
+import HttpIpFilterFlow from './flows/http.ip-filter.flow';
 import HttpRequestFlow from './flows/http.request.flow';
 import { probeOptionalDependency } from './optional-dependency.util';
 
@@ -221,7 +222,7 @@ export class Scope extends ScopeEntry {
     // ═══ BATCH 1: Independent registries (parallel) ═══
     // These only depend on scopeProviders — no cross-registry dependencies.
     this.scopeHooks = new HookRegistry(scopeProviders, []);
-    this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow]);
+    this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow, HttpIpFilterFlow]);
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     this.logger.info(`Initializing ${this.metadata.apps.length} app(s)...`);
@@ -949,6 +950,11 @@ export class Scope extends ScopeEntry {
       // ServerRequest class instance satisfies it at runtime.
       verifySession: (request) =>
         this.runFlow('session:verify', { request: request as unknown as Record<string, unknown> }),
+      checkClientIp: (request, response) =>
+        this.runFlow('http:ip-filter', {
+          request: request as unknown as Record<string, unknown>,
+          response: response as unknown as Record<string, unknown>,
+        }),
       entryPath: this.entryPath,
       routeBase: this.routeBase,
       logger: this.logger,

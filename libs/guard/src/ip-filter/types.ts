@@ -10,11 +10,11 @@ export interface IpFilterConfig {
   allowList?: string[];
   /** IP addresses or CIDR ranges to always block. */
   denyList?: string[];
-  /** Default action when IP matches neither list. @default 'allow' */
+  /** Default action when IP matches neither list, or no client IP could be established. @default 'allow' */
   defaultAction?: 'allow' | 'deny';
-  /** Trust X-Forwarded-For header. @default false */
+  /** Not read; setting it logs a startup warning. Set `FRONTMCP_TRUST_PROXY` to trust X-Forwarded-For. @default false */
   trustProxy?: boolean;
-  /** Max number of proxies to trust from X-Forwarded-For. @default 1 */
+  /** Not read; setting it logs a startup warning. Set `FRONTMCP_TRUSTED_PROXY_DEPTH` instead. @default 1 */
   trustedProxyDepth?: number;
 }
 

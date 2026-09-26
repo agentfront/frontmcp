@@ -62,6 +62,7 @@ import { randomUUID } from '@frontmcp/utils';
 import {
   allowsPublicAccess,
   computeResource,
+  enforceIpFilter,
   Flow,
   FlowBase,
   httpInputSchema,
@@ -221,7 +222,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['parseInput', 'validateInput'],
+  pre: ['checkIpFilter', 'parseInput', 'validateInput'],
   execute: ['handleAuthorizationCodeGrant', 'handleRefreshTokenGrant', 'handleAnonymousGrant', 'buildTokenResponse'],
   post: ['validateOutput'],
 } as const satisfies FlowPlan<string>;
@@ -254,6 +255,11 @@ const Stage = StageHookOf(name);
 })
 export default class OauthTokenFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthTokenFlow');
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
 
   @Stage('parseInput')
   async parseInput() {
