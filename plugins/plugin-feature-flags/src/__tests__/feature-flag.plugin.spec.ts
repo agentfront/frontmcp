@@ -232,9 +232,9 @@ describe('FeatureFlagPlugin', () => {
       });
     });
 
-    describe('filterSearchSkills', () => {
+    describe('filterSkills', () => {
       it('should filter skills by feature flags', async () => {
-        const results = [
+        const skills = [
           { metadata: { name: 'skill-a', featureFlag: 'flag-a' } },
           { metadata: { name: 'skill-b' } },
           { metadata: { name: 'skill-c', featureFlag: 'flag-c' } },
@@ -246,16 +246,50 @@ describe('FeatureFlagPlugin', () => {
           ]),
         );
 
-        const flowCtx = { state: { results, set: jest.fn() } } as any;
-        await plugin.filterSearchSkills(flowCtx);
+        const flowCtx = { state: { skills, set: jest.fn() } } as any;
+        await plugin.filterSkills(flowCtx);
 
-        expect(flowCtx.state.set).toHaveBeenCalledWith('results', [results[1], results[2]]);
+        expect(flowCtx.state.set).toHaveBeenCalledWith('skills', [skills[1], skills[2]]);
       });
 
       it('should skip filtering when no skills have flags', async () => {
-        const results = [{ metadata: { name: 'skill-a' } }];
-        const flowCtx = { state: { results, set: jest.fn() } } as any;
-        await plugin.filterSearchSkills(flowCtx);
+        const skills = [{ metadata: { name: 'skill-a' } }];
+        const flowCtx = { state: { skills, set: jest.fn() } } as any;
+        await plugin.filterSkills(flowCtx);
+        expect(flowCtx.state.set).not.toHaveBeenCalled();
+      });
+
+      it('should handle an empty skill list', async () => {
+        const flowCtx = { state: { skills: [], set: jest.fn() } } as any;
+        await plugin.filterSkills(flowCtx);
+        expect(flowCtx.state.set).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('filterListResourceTemplates', () => {
+      it('should filter resource templates by feature flags', async () => {
+        const templates = [
+          { ownerName: 'app', template: { metadata: { name: 'tpl-a', featureFlag: 'flag-a' } } },
+          { ownerName: 'app', template: { metadata: { name: 'tpl-b' } } },
+        ];
+        (mockAdapter.evaluateFlags as jest.Mock).mockResolvedValue(new Map([['flag-a', false]]));
+
+        const flowCtx = { state: { templates, set: jest.fn() } } as any;
+        await plugin.filterListResourceTemplates(flowCtx);
+
+        expect(flowCtx.state.set).toHaveBeenCalledWith('templates', [templates[1]]);
+      });
+
+      it('should skip filtering when no templates have flags', async () => {
+        const templates = [{ ownerName: 'app', template: { metadata: { name: 'tpl-a' } } }];
+        const flowCtx = { state: { templates, set: jest.fn() } } as any;
+        await plugin.filterListResourceTemplates(flowCtx);
+        expect(flowCtx.state.set).not.toHaveBeenCalled();
+      });
+
+      it('should handle undefined templates', async () => {
+        const flowCtx = { state: { set: jest.fn() } } as any;
+        await plugin.filterListResourceTemplates(flowCtx);
         expect(flowCtx.state.set).not.toHaveBeenCalled();
       });
     });

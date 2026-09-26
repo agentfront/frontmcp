@@ -2,7 +2,8 @@
 import { toJSONSchema, z, ZodType, type JSONSchema } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
-import { isBlockedSelfReference } from '../security';
+import CodeCallConfig from '../providers/code-call.config';
+import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import { generateSmartExample } from '../utils';
 import {
@@ -44,11 +45,7 @@ export default class DescribeTool extends ToolContext {
 
     const tools: DescribeToolOutput['tools'] = [];
     const notFound: string[] = [];
-
-    // Get all available tools from the registry
-    const allTools = this.scope.tools.getTools(true);
-    const toolMap = new Map(allTools.map((t) => [t.name, t]));
-    const fullNameMap = new Map(allTools.map((t) => [t.fullName, t]));
+    const config = this.get(CodeCallConfig);
 
     for (const toolName of toolNames) {
       // Security: Don't allow describing CodeCall tools themselves
@@ -57,13 +54,16 @@ export default class DescribeTool extends ToolContext {
         continue;
       }
 
-      // Find the tool by name or fullName
-      const tool = toolMap.get(toolName) || fullNameMap.get(toolName);
-
-      if (!tool) {
+      // Describe is a discovery surface: a tool the policy withholds is reported exactly like
+      // one that does not exist, so its schema and its existence both stay hidden
+      // (GHSA-6w3j-82v5-6qrr).
+      const access = checkCodeCallToolAccess<ToolEntry>(this.scope, config, toolName);
+      if (!access.allowed) {
+        audit?.logSecurityAccessDenied(executionId, toolName, access.reason);
         notFound.push(toolName);
         continue;
       }
+      const tool = access.entry;
 
       // Extract app ID from tool owner or metadata
       const appId = this.extractAppId(tool);

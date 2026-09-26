@@ -57,7 +57,7 @@ export class FlowControl extends Error {
 export abstract class FlowBase<N extends FlowName = FlowName> {
   /**
    * The id of the app that owns the entry a run targets, read from the raw input before hooks load.
-   * App-scoped hooks run only when it matches their app.
+   * Entries an app's adapters and plugins provide belong to that app. App-scoped hooks run only when it matches their app.
    */
   static resolveHookOwnerId?: (
     rawInput: unknown,

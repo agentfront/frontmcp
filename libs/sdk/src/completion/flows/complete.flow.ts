@@ -3,9 +3,20 @@
 import { z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema } from '@frontmcp/protocol';
 
-import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import {
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type PromptEntry,
+  type ResourceEntry,
+  type ScopeEntry,
+} from '../../common';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { hasUIConfig } from '../../tool/ui';
+import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
   request: CompleteRequestSchema,
@@ -33,11 +44,14 @@ const stateSchema = z.object({
     name: z.string(),
     value: z.string(),
   }),
+  // z.any() used because PromptEntry and ResourceEntry are complex abstract class types
+  prompt: z.any().optional() as z.ZodType<PromptEntry | undefined>,
+  resource: z.any().optional() as z.ZodType<ResourceEntry | undefined>,
   output: outputSchema,
 });
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'findReference'],
   execute: ['complete'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -57,6 +71,17 @@ declare global {
 const name = 'completion:complete' as const;
 const { Stage } = FlowHooksOf<'completion:complete'>(name);
 
+type CompletionRef = z.infer<typeof CompleteRequestSchema>['params']['ref'];
+
+/** The prompt or resource a completion refers to, when the scope serves one. */
+function findCompletionReference(
+  scope: ScopeEntry,
+  ref: CompletionRef,
+): { prompt?: PromptEntry; resource?: ResourceEntry } {
+  if (ref.type === 'ref/prompt') return { prompt: scope.prompts.findByName(ref.name) };
+  return { resource: scope.resources.findResourceForUri(ref.uri)?.instance };
+}
+
 @Flow({
   name,
   plan,
@@ -65,6 +90,19 @@ const { Stage } = FlowHooksOf<'completion:complete'>(name);
   access: 'authorized',
 })
 export default class CompleteFlow extends FlowBase<typeof name> {
+  static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
+    const parsed = inputSchema.safeParse(rawInput);
+    if (!parsed.success) return undefined;
+    const { ref } = parsed.data.request.params;
+    let { prompt, resource } = findCompletionReference(scope, ref);
+    if (!prompt && !resource) {
+      await loadRemoteAppCapabilities(scope);
+      ({ prompt, resource } = findCompletionReference(scope, ref));
+    }
+    if (prompt) return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
+    return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+  }
+
   logger = this.scopeLogger.child('CompleteFlow');
 
   @Stage('parseInput')
@@ -109,10 +147,23 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:done');
   }
 
+  /**
+   * Resolve the prompt or resource the completion refers to, before any completer runs.
+   * Hookable: gate the referenced entry with Will/Did/Around on 'findReference' or 'complete'.
+   */
+  @Stage('findReference')
+  async findReference() {
+    this.logger.verbose('findReference:start');
+    const { prompt, resource } = findCompletionReference(this.scope, this.state.required.ref);
+    this.state.set({ prompt, resource });
+    this.logger.verbose('findReference:done');
+  }
+
   @Stage('complete')
   async complete() {
     this.logger.verbose('complete:start');
     const { ref, argument } = this.state.required;
+    const { prompt, resource } = this.state;
 
     let values: string[] = [];
     let total: number | undefined;
@@ -126,9 +177,6 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       this.logger.debug(
         `complete: prompt completion for "${promptName}" argument "${argName}" with value "${argValue}"`,
       );
-
-      // Look up the prompt in the registry
-      const prompt = this.scope.prompts.findByName(promptName);
 
       if (prompt) {
         // Check if the prompt instance has a completer for this argument
@@ -170,27 +218,22 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         total = values.length;
 
         this.logger.debug(`complete: found ${values.length} tools with UI config matching "${argValue}"`);
-      } else {
-        // Look up the resource template in the registry by URI
-        const resourceMatch = this.scope.resources.findResourceForUri(uri);
-
-        if (resourceMatch) {
-          // Check if the resource has a completer for this argument
-          // Completion support is optional — resources override getArgumentCompleter to provide suggestions
-          const completer = resourceMatch.instance.getArgumentCompleter(argName);
-          if (completer) {
-            try {
-              const result = await completer(argValue);
-              values = result.values || [];
-              total = result.total;
-              hasMore = result.hasMore;
-            } catch (e) {
-              this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
-            }
+      } else if (resource) {
+        // Check if the resource has a completer for this argument
+        // Completion support is optional — resources override getArgumentCompleter to provide suggestions
+        const completer = resource.getArgumentCompleter(argName);
+        if (completer) {
+          try {
+            const result = await completer(argValue);
+            values = result.values || [];
+            total = result.total;
+            hasMore = result.hasMore;
+          } catch (e) {
+            this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
           }
-        } else {
-          this.logger.debug(`complete: resource "${uri}" not found`);
         }
+      } else {
+        this.logger.debug(`complete: resource "${uri}" not found`);
       }
     }
 

@@ -17,7 +17,7 @@
  * The same shape appears for `user` scope with no authenticated user: everyone pooled under
  * `user:anonymous`.
  */
-import type { FrontMcpContext } from '@frontmcp/sdk';
+import { STATELESS_SESSION_ID, type FrontMcpContext } from '@frontmcp/sdk';
 
 import { RememberAccessor } from '../providers/remember-accessor.provider';
 import type { RememberStoreInterface } from '../providers/remember-store.interface';
@@ -88,6 +88,31 @@ describe('Remember — stateless isolation (GHSA-225p-f8jh-f3rh, GHSA-h6f4-jg8x-
 
       await expect(reader.accessor.get('card', { scope: 'session' })).resolves.toBeUndefined();
       await expect(writer.accessor.get('card', { scope: 'session' })).resolves.toBe('4242');
+    });
+
+    it('isolates stateless clients by the auth info shape the SDK actually produces', async () => {
+      const shared = createStore();
+      const alice = createAccessor(
+        STATELESS_SESSION_ID,
+        { clientId: 'alice', user: { sub: 'alice' }, extra: { user: { sub: 'alice' } } },
+        shared,
+      );
+      const bob = createAccessor(
+        STATELESS_SESSION_ID,
+        { clientId: 'bob', user: { sub: 'bob' }, extra: { user: { sub: 'bob' } } },
+        shared,
+      );
+
+      await alice.accessor.set('card', '4242', { scope: 'session' });
+
+      await expect(bob.accessor.get('card', { scope: 'session' })).resolves.toBeUndefined();
+      await expect(alice.accessor.get('card', { scope: 'session' })).resolves.toBe('4242');
+    });
+
+    it('refuses session scope for a stateless request whose client id is empty', async () => {
+      const { accessor } = createAccessor(STATELESS_SESSION_ID, { clientId: '' });
+
+      await expect(accessor.set('card', '4242', { scope: 'session' })).rejects.toThrow(/stateless/i);
     });
 
     it('keeps a colon in an identity from colliding with a colon in a key', async () => {

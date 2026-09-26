@@ -1,15 +1,16 @@
 import {
   DynamicPlugin,
-  FlowCtxOf,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
   FrontMcpContextStorage,
   ListResourcesHook,
+  ListResourceTemplatesHook,
   ListToolsHook,
   Plugin,
   ProviderScope,
-  ProviderType,
   ToolHook,
+  type FlowCtxOf,
+  type ProviderType,
 } from '@frontmcp/sdk';
 
 import type { FeatureFlagAdapter } from './adapters/feature-flag-adapter.interface';
@@ -24,13 +25,15 @@ import type {
 } from './feature-flag.types';
 import { createFeatureFlagAccessor } from './providers/feature-flag-accessor.provider';
 
-// Local hook references for prompts and skills flows.
+// Local hook references for prompts, resource reads and completion flows.
 // These flows register their ExtendFlows types in their own modules, which are not
 // re-exported from the SDK barrel. We cast to bypass the type constraint at compile time.
 const ListPromptsHook = (FlowHooksOf as any)('prompts:list-prompts');
-const SearchSkillsHook = (FlowHooksOf as any)('skills:search');
 const ReadResourceHook = (FlowHooksOf as any)('resources:read-resource');
 const GetPromptHook = (FlowHooksOf as any)('prompts:get-prompt');
+const CompleteHook = (FlowHooksOf as any)('completion:complete');
+
+const FilterSkillsHook = FlowHooksOf('skills:filter');
 
 /**
  * FeatureFlagPlugin - Dynamic capability gating for FrontMCP.
@@ -218,6 +221,31 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   }
 
   /**
+   * Filter resource templates from resources/templates/list based on feature flags.
+   *
+   * GHSA-gf7p-j3hr-h5h4: templates were listed even when their flag was off.
+   */
+  @ListResourceTemplatesHook.Did('findTemplates', { priority: 50 })
+  async filterListResourceTemplates(flowCtx: FlowCtxOf<'resources:list-resource-templates'>) {
+    const { templates } = flowCtx.state;
+    if (!templates || templates.length === 0) return;
+
+    const flaggedTemplates = this.collectFlagRefs(templates, (item) => item.template.metadata.featureFlag);
+    if (flaggedTemplates.size === 0) return;
+
+    const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
+    const flagResults = await this.batchEvaluateRefs(adapter, flaggedTemplates);
+
+    const filtered = templates.filter((item) => {
+      const ref = item.template.metadata.featureFlag;
+      if (!ref) return true;
+      return this.isRefEnabled(ref, flagResults);
+    });
+
+    flowCtx.state.set('templates', filtered);
+  }
+
+  /**
    * Filter prompts from list_prompts based on feature flags.
    */
   @ListPromptsHook.Did('findPrompts', { priority: 50 })
@@ -241,27 +269,32 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   }
 
   /**
-   * Filter skills from skills:search based on feature flags.
-   * Hooks after search stage, before finalize converts to output.
+   * Filter skills in the `skills:filter` flow, which every skill surface runs: MCP
+   * `skills/search`, `skills/list` and `skills/load`, SEP-2640 `skill://` resources, and the HTTP
+   * `/skills`, `/llm.txt` and `/llm_full.txt` endpoints. A skill removed here is absent from
+   * listings and not found when named.
+   *
+   * GHSA-gf7p-j3hr-h5h4: the only skill hook sat on `skills:search`, which the `skills/search`
+   * handler never ran and whose results carry no `featureFlag`, so no skill surface was gated.
    */
-  @SearchSkillsHook.Did('search', { priority: 50 })
-  async filterSearchSkills(flowCtx: any) {
-    const { results } = flowCtx.state;
-    if (!results || results.length === 0) return;
+  @FilterSkillsHook.Did('filterSkills', { priority: 50 })
+  async filterSkills(flowCtx: FlowCtxOf<'skills:filter'>) {
+    const { skills } = flowCtx.state;
+    if (!skills || skills.length === 0) return;
 
-    const flaggedSkills = this.collectFlagRefs(results, (item: any) => item.metadata?.featureFlag);
+    const flaggedSkills = this.collectFlagRefs(skills, (skill) => skill.metadata.featureFlag);
     if (flaggedSkills.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
     const flagResults = await this.batchEvaluateRefs(adapter, flaggedSkills);
 
-    const filtered = results.filter((item: any) => {
-      const ref = item.metadata?.featureFlag as FeatureFlagRef | undefined;
+    const filtered = skills.filter((skill) => {
+      const ref = skill.metadata.featureFlag;
       if (!ref) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
-    flowCtx.state.set('results', filtered);
+    flowCtx.state.set('skills', filtered);
   }
 
   /**
@@ -294,6 +327,19 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   @GetPromptHook.Will('execute', { priority: 50 })
   async gatePromptGet(flowCtx: any) {
     await this.gateEntryExecution('Prompt', flowCtx.state.prompt);
+  }
+
+  /**
+   * Execution gate: block completion/complete for a prompt or resource whose feature flag is off.
+   *
+   * GHSA-gf7p-j3hr-h5h4: completion looked the entry up and ran its argument completers without
+   * a gate, so a disabled resource template still suggested its values.
+   */
+  @CompleteHook.Will('complete', { priority: 50 })
+  async gateCompletion(flowCtx: any) {
+    const { prompt, resource } = flowCtx.state;
+    if (prompt) await this.gateEntryExecution('Prompt', prompt);
+    if (resource) await this.gateEntryExecution('Resource', resource);
   }
 
   /**

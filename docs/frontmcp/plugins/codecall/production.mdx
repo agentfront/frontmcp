@@ -442,8 +442,8 @@ CodeCallPlugin.init({
     if (tool.name.startsWith('admin:')) return false;
 
     // Filter by app ownership
-    if (tool.metadata?.codecall?.appId) {
-      return ['user-service', 'billing'].includes(tool.metadata.codecall.appId);
+    if (tool.appId) {
+      return ['user-service', 'billing'].includes(tool.appId);
     }
 
     return true;

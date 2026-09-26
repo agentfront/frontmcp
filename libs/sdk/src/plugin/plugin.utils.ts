@@ -1,6 +1,13 @@
 import { depsOfClass, getMetadata, isClass, tokenName, type Token } from '@frontmcp/di';
 
-import { FrontMcpPluginTokens, PluginKind, type PluginMetadata, type PluginRecord, type PluginType } from '../common';
+import {
+  FrontMcpPluginTokens,
+  PluginKind,
+  type PluginMetadata,
+  type PluginRecord,
+  type PluginType,
+  type ProviderType,
+} from '../common';
 import {
   InvalidEntityError,
   InvalidUseClassError,
@@ -56,12 +63,24 @@ export function normalizePlugin(item: PluginType): PluginRecord {
         throw new InvalidUseFactoryError('plugin', tokenName(provide));
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
+      if (!isClass(provide)) {
+        return {
+          kind: PluginKind.FACTORY,
+          provide,
+          inject: inj,
+          useFactory,
+          metadata,
+        };
+      }
+      const decoratorMetadata = collectPluginMetadata(provide as PluginType);
+      const { providers: dynamicProviders, ...inlineMetadata } = metadata as Record<string, unknown>;
       return {
         kind: PluginKind.FACTORY,
         provide,
         inject: inj,
         useFactory,
-        metadata,
+        metadata: { ...decoratorMetadata, ...inlineMetadata },
+        providers: (dynamicProviders ?? []) as ProviderType[],
       };
     }
 

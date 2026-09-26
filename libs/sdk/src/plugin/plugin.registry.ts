@@ -6,6 +6,7 @@ import { tokenName, type Ctor, type Token } from '@frontmcp/di';
 import AdapterRegistry from '../adapter/adapter.registry';
 import {
   FrontMcpLogger,
+  isDynamicPluginClass,
   PluginKind,
   type EntryOwnerRef,
   type PluginEntry,
@@ -13,8 +14,10 @@ import {
   type PluginRegistryInterface,
   type PluginType,
   type ProviderEntry,
+  type ProviderType,
   type ScopeEntry,
 } from '../common';
+import { collectDynamicProviders, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
 import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
 import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
@@ -161,9 +164,9 @@ export default class PluginRegistry
         ref: token,
       };
 
-      // Pass scopeInfo to nested plugins to ensure scope validation is consistent
-      // throughout the plugin hierarchy
-      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], pluginOwner, this.scopeInfo);
+      // Nested plugins' hooks belong to the app or scope that installed this plugin, not to the plugin.
+      const nestedHookOwner = this.owner?.kind === 'app' || this.owner?.kind === 'scope' ? this.owner : pluginOwner;
+      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], nestedHookOwner, this.scopeInfo);
       await plugins.ready;
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
@@ -205,6 +208,7 @@ export default class PluginRegistry
       const depsInstances = await Promise.all(depsTokens.map((t) => this.providers.resolveBootstrapDep(t)));
 
       let pluginInstance: PluginEntry;
+      let optionDerivedProviders: ProviderType[] = [];
 
       if (rec.kind === PluginKind.CLASS) {
         const klass = rec.useClass as any;
@@ -216,7 +220,14 @@ export default class PluginRegistry
         const factoryDeps = [...rec.inject()];
         const args: unknown[] = [];
         for (const d of factoryDeps) args.push(await this.providers.resolveBootstrapDep(d));
-        pluginInstance = rec.useFactory(...args);
+        const produced = rec.useFactory(...args);
+        // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
+        if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
+          pluginInstance = new rec.provide(produced) as PluginEntry;
+          optionDerivedProviders = collectDynamicProviders(rec.provide, produced);
+        } else {
+          pluginInstance = produced;
+        }
       } else if (rec.kind === PluginKind.VALUE) {
         pluginInstance = (rec as any).useValue;
       } else {
@@ -277,7 +288,10 @@ export default class PluginRegistry
         installContextExtensions(rec.metadata.name, contextExtensions);
       }
 
-      const dynamicProviders = rec.providers;
+      const dynamicProviders =
+        optionDerivedProviders.length > 0
+          ? dedupePluginProviders([...optionDerivedProviders, ...(rec.providers ?? [])])
+          : rec.providers;
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
 

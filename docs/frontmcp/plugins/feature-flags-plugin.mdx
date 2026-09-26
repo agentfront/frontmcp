@@ -22,7 +22,7 @@ The Feature Flags Plugin gates tools, resources, prompts, and skills based on fe
   </Card>
 
   <Card title="Execution Gate" icon="shield">
-    Blocks direct `tools/call`, `resources/read` and `prompts/get` that bypass the list filter — no sneaking past disabled flags
+    Blocks direct `tools/call`, `resources/read`, `prompts/get`, `completion/complete` and skill loads that bypass the list filter — no sneaking past disabled flags
   </Card>
 </CardGroup>
 
@@ -36,7 +36,7 @@ npm install @frontmcp/plugin-feature-flags
 
 <Steps>
   <Step title="Hook Registration">
-    The plugin registers hooks on list flows for tools, resources, prompts, and skills
+    The plugin registers hooks on the list flows for tools, resources, resource templates and prompts, and on the `skills:filter` flow that every skill surface runs
   </Step>
   <Step title="Metadata Collection">
     When capabilities are listed, the plugin collects `featureFlag` refs from each entry's metadata
@@ -47,7 +47,7 @@ npm install @frontmcp/plugin-feature-flags
   </Step>
 
   <Step title="Capability Filtering">
-    Capabilities with disabled flags are filtered out before reaching the client. Execution gates also block direct `tools/call`, `resources/read` and `prompts/get` for disabled flags, so a flag withholds the capability rather than merely hiding it from the menu.
+    Capabilities with disabled flags are filtered out before reaching the client. Execution gates also block direct `tools/call`, `resources/read`, `prompts/get` and `completion/complete` for disabled flags, and a disabled skill is not found when loaded or read, so a flag withholds the capability rather than merely hiding it from the menu.
   </Step>
 </Steps>
 
@@ -265,13 +265,26 @@ interface FeatureFlagAdapter {
 
 ## Annotating Capabilities
 
-Add `featureFlag` to any tool, resource, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses **and** refused on direct access -- `tools/call`, `resources/read` and `prompts/get` all check the flag before executing. A client that cached an earlier listing, or holds a URI from a previous session, gets an error rather than the capability.
+Add `featureFlag` to any tool, resource, resource template, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses **and** refused on direct access. A client that cached an earlier listing, or holds a URI from a previous session, gets an error rather than the capability.
+
+| Capability        | Hidden from                                                                                                                                                                                                                  | Refused on                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Tool              | `tools/list`                                                                                                                                                                                                                 | `tools/call`                                                                                                                   |
+| Resource          | `resources/list`                                                                                                                                                                                                             | `resources/read`, `completion/complete`                                                                                        |
+| Resource template | `resources/templates/list`                                                                                                                                                                                                   | `resources/read` of any URI it matches, `completion/complete`                                                                  |
+| Prompt            | `prompts/list`                                                                                                                                                                                                               | `prompts/get`, `completion/complete`                                                                                           |
+| Skill             | `skills/search`, `skills/list`, `skill://index.json`, its `skill://<path>/SKILL.md` entry in `resources/list`, `GET /skills`, `/llm.txt`, `/llm_full.txt`, CodeCall's `codecall:searchSkills` and `codecall:searchKnowledge` | `skills/load`, `skill://<path>/SKILL.md` and its files, `GET /skills/{id}` (answered exactly like a skill that does not exist) |
+
+When the plugin is installed on an app (`@App({ plugins: [FeatureFlagPlugin.init(...)] })`), the gates cover every capability the app provides, including those its adapters (for example an OpenAPI adapter) and its plugins contribute. Its tool, resource, prompt and completion gates do not run for other apps' capabilities; install the plugin on `@FrontMcp({ plugins })` to gate every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, are gated by every installed copy of the plugin.
+
+Skill surfaces evaluate flags for the calling user on every transport, stdio and in-memory clients included, so `userIdResolver` and `attributesResolver` see the caller rather than an anonymous session.
 
 ### String Shorthand
 
 ```ts
 @Tool({ name: 'beta-search', featureFlag: 'beta-search' })
 @Resource({ uri: 'data://beta', featureFlag: 'beta-data' })
+@ResourceTemplate({ name: 'beta-reports', uriTemplate: 'reports://beta/{id}', featureFlag: 'beta-reports' })
 @Prompt({ name: 'beta-prompt', featureFlag: 'beta-prompt' })
 @Skill({ name: 'beta-skill', featureFlag: 'beta-skill' })
 ```

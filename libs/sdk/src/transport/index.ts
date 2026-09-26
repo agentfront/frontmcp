@@ -31,6 +31,7 @@ export type { SSEServerTransportOptions } from '#sse-transport';
 export type { SupportedTransport } from './adapters/transport.local.adapter';
 // Type-only exports for TransportType and TransportKey (interfaces/type aliases)
 export type { TransportType, TransportKey } from './transport.types';
+export { STATELESS_SESSION_ID } from './transport.types';
 
 // EventStore exports for SSE resumability support
 export { createEventStore, MemoryEventStore, RedisEventStore } from './event-stores';

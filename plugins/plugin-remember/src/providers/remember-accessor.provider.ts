@@ -1,4 +1,10 @@
-import { FrontMcpContext, Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
+import {
+  Provider,
+  ProviderScope,
+  STATELESS_SESSION_ID,
+  type FrontMcpContext,
+  type FrontMcpLogger,
+} from '@frontmcp/sdk';
 
 import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
 import { RememberIdentityError } from '../remember.errors';
@@ -14,9 +20,6 @@ import type {
   RememberSetOptions,
 } from '../remember.types';
 import type { RememberStoreInterface } from './remember-store.interface';
-
-/** Session id the stateless HTTP transport injects into every request. */
-const STATELESS_SESSION_ID = '__stateless__';
 
 /**
  * Layout version for the scopes whose storage location changed in the GHSA-h6f4-jg8x-38gj and
@@ -314,7 +317,7 @@ export class RememberAccessor {
 
     throw new RememberIdentityError(
       'Remember cannot use session or tool scope for an unauthenticated stateless request: ' +
-        'every such request shares the session id "__stateless__", so the data would be shared ' +
+        `every such request shares the session id "${STATELESS_SESSION_ID}", so the data would be shared ` +
         'across all clients. Authenticate the request, use a stateful transport, or choose ' +
         "the 'global' scope if the data really is shared.",
     );

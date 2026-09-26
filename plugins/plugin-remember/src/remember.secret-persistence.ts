@@ -291,9 +291,14 @@ export async function getOrCreatePersistedSecret(options?: SecretPersistenceOpti
         version: 1,
       };
 
-      // Persist if enabled
       if (isSecretPersistenceEnabled(options)) {
         await saveRememberSecret(secretData, options);
+      } else {
+        console.warn(
+          '[RememberSecretPersistence] No REMEMBER_SECRET (or MCP_MEMORY_SECRET / MCP_SESSION_SECRET) is set in ' +
+            'production, so a random in-memory secret is used. Encrypted memory will be unreadable after a restart ' +
+            'and by other instances sharing the store. Set REMEMBER_SECRET to the same value on every instance.',
+        );
       }
 
       cachedSecret = newSecret;

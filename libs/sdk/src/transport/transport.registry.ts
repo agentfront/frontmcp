@@ -14,14 +14,15 @@ import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import { LocalTransporter } from './transport.local';
 import { RemoteTransporter } from './transport.remote';
-import type {
-  TransportBus,
-  Transporter,
-  TransportKey,
-  TransportRegistryBucket,
-  TransportTokenBucket,
-  TransportType,
-  TransportTypeBucket,
+import {
+  STATELESS_SESSION_ID,
+  type TransportBus,
+  type Transporter,
+  type TransportKey,
+  type TransportRegistryBucket,
+  type TransportTokenBucket,
+  type TransportType,
+  type TransportTypeBucket,
 } from './transport.types';
 
 export class TransportService {
@@ -644,7 +645,7 @@ export class TransportService {
    * All anonymous requests share the same transport instance.
    */
   async getOrCreateAnonymousStatelessTransport(type: TransportType, res: ServerResponse): Promise<Transporter> {
-    const key = this.keyOf(type, '__anonymous__', '__stateless__');
+    const key = this.keyOf(type, '__anonymous__', STATELESS_SESSION_ID);
     const existing = this.lookupLocal(key);
     if (existing) return existing;
 
@@ -675,7 +676,7 @@ export class TransportService {
     token: string,
     res: ServerResponse,
   ): Promise<Transporter> {
-    const key = this.keyOf(type, token, '__stateless__');
+    const key = this.keyOf(type, token, STATELESS_SESSION_ID);
     const existing = this.lookupLocal(key);
     if (existing) return existing;
 

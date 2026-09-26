@@ -169,7 +169,7 @@ Get detailed schemas and documentation for specific tools.
       ]
     }
   ],
-  "notFound": ["string (optional) - Tool names that weren't found"]
+  "notFound": ["string (optional) - Tool names that weren't found, or that the access policy withholds"]
 }
 ```
 
@@ -483,16 +483,16 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 
 ### Script Execution Errors
 
-| Code                     | Status           | Description                    | Recovery                         |
-| ------------------------ | ---------------- | ------------------------------ | -------------------------------- |
-| `SYNTAX_ERROR`           | `syntax_error`   | JavaScript syntax error        | Fix syntax at indicated location |
-| `VALIDATION_ERROR`       | `illegal_access` | AST validation failed          | Remove blocked construct         |
-| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:\* tool | Use regular tools only           |
-| `TOOL_NOT_FOUND`         | `tool_error`     | Tool doesn't exist             | Check tool name spelling         |
-| `ACCESS_DENIED`          | `tool_error`     | Tool not in allowedTools       | Add to allowlist                 |
-| `EXECUTION_ERROR`        | `runtime_error`  | Runtime error in script        | Debug script logic               |
-| `TIMEOUT`                | `timeout`        | Exceeded time limit            | Optimize or increase timeout     |
-| `TOOL_EXECUTION_ERROR`   | `tool_error`     | Tool threw an error            | Check tool input                 |
+| Code                     | Status           | Description                                                               | Recovery                             |
+| ------------------------ | ---------------- | ------------------------------------------------------------------------- | ------------------------------------ |
+| `SYNTAX_ERROR`           | `syntax_error`   | JavaScript syntax error                                                   | Fix syntax at indicated location     |
+| `VALIDATION_ERROR`       | `illegal_access` | AST validation failed                                                     | Remove blocked construct             |
+| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:\* tool                                            | Use regular tools only               |
+| `TOOL_NOT_FOUND`         | `tool_error`     | Tool doesn't exist                                                        | Check tool name spelling             |
+| `ACCESS_DENIED`          | `tool_error`     | Tool withheld by the access policy, or not in the script's `allowedTools` | Use a tool `codecall:search` returns |
+| `EXECUTION_ERROR`        | `runtime_error`  | Runtime error in script                                                   | Debug script logic                   |
+| `TIMEOUT`                | `timeout`        | Exceeded time limit                                                       | Optimize or increase timeout         |
+| `TOOL_EXECUTION_ERROR`   | `tool_error`     | Tool threw an error                                                       | Check tool input                     |
 
 ---
 

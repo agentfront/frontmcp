@@ -1,3 +1,5 @@
+import type { ToolApprovalRequirement } from '../approval';
+
 /**
  * Approval types for the plugin.
  * Re-exports core types from the local approval module and defines plugin-specific types.
@@ -21,6 +23,13 @@ export {
   type ApprovalCategory,
   type RiskLevel,
 } from '../approval';
+
+declare global {
+  interface ExtendFrontMcpToolMetadata {
+    /** Require approval before the tool runs; `true` uses session-scoped approval. */
+    approval?: ToolApprovalRequirement | boolean;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plugin-Specific Types
