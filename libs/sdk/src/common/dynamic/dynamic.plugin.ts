@@ -29,6 +29,10 @@ type PluginReturn<T> = (ValueMcpPlugin<T> | FactoryMcpPlugin<T>) &
     providers?: readonly ProviderType[];
   };
 
+export function isDynamicPluginClass(value: unknown): value is new (options: unknown) => object {
+  return typeof value === 'function' && value.prototype instanceof DynamicPlugin;
+}
+
 /**
  * Base class for plugins that support dynamic configuration.
  *

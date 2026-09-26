@@ -19,7 +19,7 @@ import type { SkillsConfigOptions } from '../common/types/options/skills-http';
 import type FlowRegistry from '../flows/flow.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import type ResourceRegistry from '../resource/resource.registry';
-import { LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } from './flows';
+import { FilterSkillsFlow, LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } from './flows';
 import { getSep2640Resources } from './sep-2640/resources';
 import { resolveLastModifiedForSkill } from './sep-2640/sep-2640.last-modified';
 import { registerPerSkillResources } from './sep-2640/sep-2640.per-skill';
@@ -48,7 +48,8 @@ export interface SkillScopeRegistrationOptions {
  * Register skill-related flows and resources in the scope.
  *
  * Handles:
- * - MCP flows for skill discovery/loading (SearchSkillsFlow, LoadSkillFlow)
+ * - MCP flows for skill discovery/loading (SearchSkillsFlow, LoadSkillFlow) and the
+ *   `skills:filter` flow every skill surface runs (FilterSkillsFlow)
  * - SEP-2640 conformant `skill://` resources unless disabled via
  *   `skillsConfig.mcpResources: false`
  * - HTTP flows (`/llm.txt`, `/llm_full.txt`, `/skills`) when
@@ -77,6 +78,9 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   // boot) still need the writer wired up; gating on `hasAny()` would silently
   // disable audit logging in that scenario.
   registerSkillAuditWriter({ providers, audit: skillsConfig?.audit, logger });
+
+  // Every skill surface runs this flow, including for skills a plugin registers after boot.
+  await flowRegistry.registryFlows([FilterSkillsFlow]);
 
   // Early exit if no skills registered
   if (!skillRegistry.hasAny()) {

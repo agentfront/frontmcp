@@ -1,5 +1,6 @@
 // auth/flows/well-known.jwks.flow.ts
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   httpInputSchema,
@@ -32,7 +33,7 @@ const stateSchema = z.object({
 const outputSchema = z.union([HttpJsonSchema, HttpTextSchema, HttpRedirectSchema]);
 
 const plan = {
-  pre: ['parseInput', 'validateInput'],
+  pre: ['checkIpFilter', 'parseInput', 'validateInput'],
   execute: ['collectData'],
 } as const satisfies FlowPlan<string>;
 
@@ -64,6 +65,11 @@ const Stage = StageHookOf(name);
 export default class WellKnownJwksFlow extends FlowBase<typeof name> {
   static canActivate(request: ServerRequest, scope: ScopeEntry) {
     return makeWellKnownPaths('jwks.json', scope.entryPath, scope.routeBase).has(request.path);
+  }
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
   }
 
   @Stage('parseInput')

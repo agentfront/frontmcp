@@ -300,6 +300,8 @@ CIMD is **enabled by default** when using orchestrated auth mode. The framework 
 | `redirectPolicy`       | `'deny'`       | How to handle redirects when fetching the CIMD document: `'deny'` (reject any redirect), `'same-origin'` (only same-origin), or `'allow'` (follow up to `maxRedirects`) |
 | `maxRedirects`         | `5`            | Maximum redirects to follow (only relevant when `redirectPolicy` allows redirects)                                                                                      |
 
+Every redirect hop is re-validated against the SSRF rules below before it is fetched. A redirect whose target cannot be read — the status-0 `opaqueredirect` response that browser runtimes return for `redirect: 'manual'` — is refused under every `redirectPolicy`.
+
 ## Client Metadata Document Format
 
 The metadata document is a JSON file hosted at the client's URL:
@@ -362,26 +364,43 @@ When `security.blockPrivateIPs` is enabled (default), the following addresses ar
 
 **IPv4 Blocked Ranges:**
 
-| Range             | Description                               |
-| ----------------- | ----------------------------------------- |
-| `127.0.0.0/8`     | Loopback addresses                        |
-| `10.0.0.0/8`      | Private Class A                           |
-| `172.16.0.0/12`   | Private Class B (172.16.x.x - 172.31.x.x) |
-| `192.168.0.0/16`  | Private Class C                           |
-| `169.254.0.0/16`  | Link-local addresses                      |
-| `0.0.0.0/8`       | Current network                           |
-| `224.0.0.0/4`     | Multicast (224.x.x.x - 239.x.x.x)         |
-| `255.255.255.255` | Broadcast                                 |
+| Range             | Description                                 |
+| ----------------- | ------------------------------------------- |
+| `127.0.0.0/8`     | Loopback addresses                          |
+| `10.0.0.0/8`      | Private Class A                             |
+| `172.16.0.0/12`   | Private Class B (172.16.x.x - 172.31.x.x)   |
+| `192.168.0.0/16`  | Private Class C                             |
+| `169.254.0.0/16`  | Link-local addresses (incl. cloud metadata) |
+| `100.64.0.0/10`   | Carrier-grade NAT                           |
+| `0.0.0.0/8`       | Current network                             |
+| `192.0.0.0/24`    | IETF protocol assignments                   |
+| `198.18.0.0/15`   | Benchmarking                                |
+| `224.0.0.0/4`     | Multicast (224.x.x.x - 239.x.x.x)           |
+| `240.0.0.0/4`     | Reserved                                    |
+| `255.255.255.255` | Broadcast                                   |
 
 **IPv6 Blocked Ranges:**
 
-| Range            | Description                              |
-| ---------------- | ---------------------------------------- |
-| `::1`            | Loopback                                 |
-| `::`             | Unspecified                              |
-| `fe80::/10`      | Link-local                               |
-| `fc00::/7`       | Unique local (ULA)                       |
-| `::ffff:x.x.x.x` | IPv4-mapped (checked against IPv4 rules) |
+| Range       | Description                                        |
+| ----------- | -------------------------------------------------- |
+| `::1`       | Loopback                                           |
+| `::`        | Unspecified                                        |
+| `fe80::/10` | Link-local                                         |
+| `fc00::/7`  | Unique local (ULA), incl. AWS IMDS `fd00:ec2::254` |
+| `fec0::/10` | Site-local (deprecated)                            |
+| `ff00::/8`  | Multicast                                          |
+
+**IPv6 addresses that carry an IPv4 address** are judged by the IPv4 rules above:
+
+| Range                            | Form                            |
+| -------------------------------- | ------------------------------- |
+| `::ffff:0:0/96`                  | IPv4-mapped                     |
+| `::ffff:0:0:0/96`                | IPv4-translated                 |
+| `::/96`                          | IPv4-compatible (deprecated)    |
+| `64:ff9b::/96`, `64:ff9b:1::/48` | NAT64 (IPv4 in the low 32 bits) |
+| `2002::/16`                      | 6to4                            |
+
+Addresses are parsed before they are checked, so every spelling of a blocked address is refused: `::ffff:127.0.0.1`, `::ffff:7f00:1`, `0:0:0:0:0:ffff:7f00:1` and `[::ffff:7f00:1]` (what `new URL()` produces) are all `127.0.0.1`. A host that looks like an IP literal but does not parse is refused rather than allowed. The same checks run on every address a hostname resolves to, on each redirect hop, and on the JWKS and authorization-server metadata fetches FrontMCP makes when it verifies provider tokens.
 
 **Hostname Blocking:**
 

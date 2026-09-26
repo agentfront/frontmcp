@@ -70,16 +70,16 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 
 This is the load-bearing invariant behind every hook above: in FrontMCP **every
 request runs through a flow**, and because flows are made of `@Stage` steps that
-`FlowHooksOf` exposes for interception, hooks work *everywhere* automatically.
+`FlowHooksOf` exposes for interception, hooks work _everywhere_ automatically.
 The hookability is only guaranteed because nothing handles a request outside a
 flow.
 
 Therefore:
 
 - **Never bypass the flow pipeline to make something work.** Add or extend a flow
-  + its stages; do not hand-roll request logic (auth, transport, routing) in a
-  transport/adapter that skips the flow. A bypass silently deletes every hook on
-  that path.
+  - its stages; do not hand-roll request logic (auth, transport, routing) in a
+    transport/adapter that skips the flow. A bypass silently deletes every hook on
+    that path.
 - **Adapters only translate.** A transport adapter (Express, the Web-fetch/worker
   handler, stdio) converts its native request/response to the flow's normalized
   `ServerRequest` + `httpRespond` output and then runs the **same** flows. Two
@@ -308,7 +308,7 @@ export class MyApp {}
 
 Plugins are initialized in array order. Hook priority determines execution order within the same stage.
 
-Hooks declared on an app's providers, on its plugins, and on those plugins' providers run only for that app's tools. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
+Hooks declared on an app's providers, on its plugins, and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
 
 ## Using Hooks Inside a @Tool Class
 

@@ -2,6 +2,11 @@
 
 import 'reflect-metadata';
 
+import { createMemoryStorage, createStorage } from '@frontmcp/utils';
+
+import { ApprovalStorageStore, createApprovalMemoryStore } from '../stores/approval-storage.store';
+import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
+
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => {
   const actual = jest.requireActual('@frontmcp/utils');
@@ -33,10 +38,6 @@ jest.mock('@frontmcp/utils', () => {
     }),
   };
 });
-
-import { ApprovalStorageStore, createApprovalMemoryStore } from '../stores/approval-storage.store';
-import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
-import { createStorage, createMemoryStorage } from '@frontmcp/utils';
 
 describe('ApprovalStorageStore', () => {
   let store: ApprovalStorageStore;
@@ -283,6 +284,32 @@ describe('ApprovalStorageStore', () => {
       const result = await store.getApproval('tool-1', 'session-1', 'user-1');
 
       expect(result?.scope).toBe(ApprovalScope.USER);
+    });
+
+    it('should return a user-level denial over a session approval (GHSA-r848-p7wf-96rc)', async () => {
+      const sessionApproval = {
+        toolId: 'tool-1',
+        scope: ApprovalScope.SESSION,
+        state: ApprovalState.APPROVED,
+        sessionId: 'session-1',
+        grantedAt: Date.now(),
+        grantedBy: { source: 'user' },
+      };
+      const userDenial = {
+        toolId: 'tool-1',
+        scope: ApprovalScope.USER,
+        state: ApprovalState.DENIED,
+        userId: 'user-1',
+        grantedAt: Date.now(),
+        grantedBy: { source: 'admin' },
+      };
+      mockStorage.get
+        .mockResolvedValueOnce(JSON.stringify(sessionApproval))
+        .mockResolvedValueOnce(JSON.stringify(userDenial));
+
+      const result = await store.getApproval('tool-1', 'session-1', 'user-1');
+
+      expect(result?.state).toBe(ApprovalState.DENIED);
     });
 
     it('should return undefined if not found', async () => {

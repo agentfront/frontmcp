@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -14,8 +14,11 @@ import CodeCallConfig from '../providers/code-call.config';
 import {
   assertNotSelfReference,
   checkCodeCallToolAccess,
+  checkCodeCallToolPolicy,
   isBlockedSelfReference,
-  type CodeCallPolicyDecision,
+  readCodeCallPolicyConfig,
+  toCodeCallPolicyTool,
+  type CodeCallToolAccess,
 } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
@@ -76,8 +79,8 @@ export default class ExecuteTool extends ToolContext {
    * otherwise it would skip every metadata-driven check and reach `tools:call-tool`
    * unexamined.
    */
-  private checkToolPolicy(name: string): CodeCallPolicyDecision {
-    return checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), name);
+  private checkToolPolicy(name: string): CodeCallToolAccess<ToolEntry> {
+    return checkCodeCallToolAccess<ToolEntry>(this.scope, this.get(CodeCallConfig), name);
   }
 
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
@@ -236,17 +239,15 @@ export default class ExecuteTool extends ToolContext {
           // (GHSA-6w3j-82v5-6qrr) — describe is a discovery surface like search.
           // Denials are audited here too: a script sweeping getTool across many names is
           // reconnaissance, and it is the one place that pattern is visible.
-          const introspectionDecision = this.checkToolPolicy(name);
-          if (!introspectionDecision.allowed) {
-            audit?.logSecurityAccessDenied(executionId, name, introspectionDecision.reason);
+          const introspectionAccess = this.checkToolPolicy(name);
+          if (!introspectionAccess.allowed) {
+            audit?.logSecurityAccessDenied(executionId, name, introspectionAccess.reason);
             return undefined;
           }
           if (allowedToolSet && !allowedToolSet.has(name)) return undefined;
 
-          const tools = this.scope.tools.getTools(true);
-          const tool = tools.find((t) => t.name === name || t.fullName === name);
-
-          if (!tool) return undefined;
+          // Describe the entry the policy judged, resolved as `callTool` would resolve it.
+          const tool = introspectionAccess.entry;
 
           return toPlainJson<CodeCallToolDescription>({
             name: tool.name,
@@ -276,10 +277,14 @@ export default class ExecuteTool extends ToolContext {
     // `${ns}.${method}` become `await ns.method(args)` instead of
     // `await callTool('ns.method', args)`. Each binding delegates to the
     // same `callTool` closure above so all security checks (self-reference,
-    // whitelist, sanitization, flow execution) apply uniformly.
+    // whitelist, sanitization, flow execution) apply uniformly. Only tools the policy
+    // allows get a binding, so the globals do not enumerate withheld tool names.
     try {
-      const registeredTools = this.scope.tools.getTools(true) as Array<{ name: string }>;
-      const { namespaces, skipped } = buildToolNamespaces(registeredTools, environment.callTool);
+      const policyConfig = readCodeCallPolicyConfig(this.get(CodeCallConfig));
+      const callableTools = this.scope.tools
+        .getTools(true)
+        .filter((tool) => checkCodeCallToolPolicy(toCodeCallPolicyTool(tool), policyConfig).allowed);
+      const { namespaces, skipped } = buildToolNamespaces(callableTools, environment.callTool);
       environment.namespaces = namespaces;
       if (skipped.length > 0) {
         this.logger?.debug?.('codecall: tools skipped during namespace generation', {

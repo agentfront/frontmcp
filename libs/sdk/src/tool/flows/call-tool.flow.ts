@@ -64,6 +64,7 @@ import { type Scope } from '../../scope';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
+import { hookOwnerIdOf } from '../../utils/lineage.utils';
 import { hasUIConfig } from '../ui';
 import { evaluateToolCredentialGate } from './tool-credentials.gate';
 
@@ -204,10 +205,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const toolName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof toolName !== 'string') return undefined;
-    const tool = lookupTool(scope, toolName);
-    if (tool) return tool.owner?.id;
-    await loadRemoteAppCapabilities(scope);
-    return lookupTool(scope, toolName)?.owner?.id;
+    let tool = lookupTool(scope, toolName);
+    if (!tool) {
+      await loadRemoteAppCapabilities(scope);
+      tool = lookupTool(scope, toolName);
+    }
+    return tool ? hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner) : undefined;
   }
 
   logger = this.scopeLogger.child('CallToolFlow');

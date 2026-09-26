@@ -39,7 +39,8 @@ npm install @frontmcp/plugin-approval
     Mark tools requiring approval with `approval: { required: true }` in metadata
   </Step>
   <Step title="Approval Check Hook">
-    Before tool execution, the plugin checks if approval exists
+    Before tool execution, the plugin checks if approval exists. `ApprovalPlugin.init()` registers this
+    check itself; you do not list `ApprovalCheckPlugin` separately
   </Step>
 
   <Step title="Approval Request">
@@ -78,9 +79,16 @@ class MyApp {}
 export default class Server {}
 ```
 
+<Warning>
+  Upgrade to 1.8.1 or later. In 1.8.0 and earlier, `ApprovalPlugin.init()` did not register the check hook, so
+  tools marked `approval` ran without any approval. Listing `ApprovalCheckPlugin` next to it is no longer needed;
+  if you already do, the check still runs once per call.
+</Warning>
+
 ### Require Approval on Tools
 
 ```ts
+import { ApprovalScope } from '@frontmcp/plugin-approval';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
 
@@ -90,7 +98,7 @@ import { z } from '@frontmcp/sdk';
   inputSchema: { path: z.string(), content: z.string() },
   approval: {
     required: true,
-    defaultScope: 'session',
+    defaultScope: ApprovalScope.SESSION,
     category: 'write',
     riskLevel: 'medium',
     approvalMessage: 'Allow writing to file system for this session?',
@@ -125,6 +133,32 @@ class DangerousTool extends ToolContext {
   }
 }
 ```
+
+---
+
+## How a Call Is Decided
+
+For a tool with `approval` set, the check runs before the tool executes and decides in this order:
+
+1. `skipApproval: true` (or `approval` not required): the tool runs.
+2. A recorded **denial** for the caller, in session or user scope: the call is refused with state `denied`.
+   A denial outranks everything below, including pre-approved contexts and a session approval.
+3. The call runs in one of the tool's `preApprovedContexts`: the tool runs.
+4. `alwaysPrompt: true`: the call is refused with state `pending`.
+5. A valid (unexpired) approval for the caller: the tool runs.
+6. Otherwise the call is refused with state `pending`, or `expired` when the approval has lapsed.
+
+A refused call throws `ApprovalRequiredError`, which the client receives as an error result.
+
+### Whose Approval It Is
+
+Approvals are looked up by the tool's full name, `<app id>:<tool name>` (for example `my-app:file_write`), so
+pass that name to the `this.approval` grant and check methods.
+
+Session approvals belong to the caller's session. On the stateless HTTP transport every request carries the
+same session id, so there they are keyed by the authenticated principal (`authInfo.clientId`, the token's `sub`)
+instead. A stateless call with no authenticated principal cannot hold a session approval, and a tool that
+requires approval stays refused for it.
 
 ---
 
@@ -244,7 +278,8 @@ ApprovalPlugin.init({
 The context a call runs in is read **only** from the session, at
 `authInfo.extra.approvalContext`, which your authentication layer sets. A `context`
 field in the tool's own arguments is ignored: the caller of a gated tool must not be
-able to name the context that lets it skip the gate.
+able to name the context that lets it skip the gate. A recorded denial for the caller
+still wins over a pre-approved context.
 
 </ParamField>
 

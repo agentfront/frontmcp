@@ -8,6 +8,26 @@ import {
   type SemaphoreTicket,
 } from '@frontmcp/guard';
 
+import type { ScopeEntry } from '../entries/scope.entry';
+import { FlowControl } from '../interfaces/flow.interface';
+import { httpRespond, type HttpOutput } from '../schemas/http-output.schema';
+
+/** The body a non-JSON-RPC route answers when `throttle.ipFilter` rejects the caller. */
+export const IP_FILTER_REJECTION_BODY = { error: 'forbidden', message: 'Client IP rejected by ipFilter' } as const;
+
+/** Answer 403 from the `checkIpFilter` stage every HTTP-facing flow starts with (GHSA-hwfp-xv2f-fr8g). */
+export function enforceIpFilter(
+  scope: Pick<ScopeEntry, 'rateLimitManager' | 'logger'>,
+  clientIp: string | undefined,
+  buildRejection: () => HttpOutput = () => httpRespond.forbidden({ body: { ...IP_FILTER_REJECTION_BODY } }),
+): void {
+  const result = scope.rateLimitManager?.checkIpFilter(clientIp);
+  if (!result || result.allowed) return;
+
+  scope.logger.warn('request rejected by ipFilter', { reason: result.reason, hasClientIp: clientIp !== undefined });
+  FlowControl.respond(buildRejection());
+}
+
 /**
  * Context-store key the `http:request` flow sets once it has checked `throttle.global`
  * for a request, so the tool and agent flows don't count the same request again.

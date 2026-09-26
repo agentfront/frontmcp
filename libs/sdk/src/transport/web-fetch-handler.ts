@@ -9,7 +9,8 @@
  * flow's web-mode MCP execute stage (`handleWebFetch`) produces the MCP response
  * via the SDK's `WebStandardStreamableHTTPServerTransport`. The adapter itself
  * only handles transport-level concerns — CORS, liveness probes, and entry-path
- * routing, Host validation — which are not flow stages.
+ * routing, Host validation — which are not flow stages, and it supplies the
+ * platform's peer address, which the flows' `checkIpFilter` stage decides on.
  */
 import { FlowControl } from '../common';
 import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
@@ -27,9 +28,31 @@ import { type WebStandardMcpPair } from './web-standard-mcp';
  * The host execution context — its `waitUntil` keeps the worker alive past the
  * `fetch` return so a streaming (SSE) response body can finish. Optional: in
  * Node there's no isolate teardown, so it's only needed on V8 isolates.
+ * Deno's `info` and Bun's `server` arrive here too, carrying the client address.
  */
 export interface FetchHandlerCtx {
   waitUntil?(promise: Promise<unknown>): void;
+  /** Deno `ServeHandlerInfo.remoteAddr`. */
+  remoteAddr?: { hostname?: string };
+  /** Bun `Server.requestIP`. */
+  requestIP?(request: Request): { address?: string } | null;
+}
+
+const CLOUDFLARE_WORKERS_USER_AGENT = 'Cloudflare-Workers';
+
+function isCloudflareWorkersRuntime(request: Request): boolean {
+  if (typeof navigator !== 'undefined' && navigator.userAgent === CLOUDFLARE_WORKERS_USER_AGENT) return true;
+  const cloudflareProperties = (request as Request & { cf?: unknown }).cf;
+  return typeof cloudflareProperties === 'object' && cloudflareProperties !== null;
+}
+
+/** The platform's peer address, the web-fetch analog of `req.socket.remoteAddress` (GHSA-p3qf-fcwm-35x4). */
+function resolvePeerAddress(request: Request, ctx: FetchHandlerCtx | undefined): string | undefined {
+  if (typeof ctx?.requestIP === 'function') return ctx.requestIP(request)?.address;
+  if (typeof ctx?.remoteAddr?.hostname === 'string') return ctx.remoteAddr.hostname;
+  // Cloudflare's edge overwrites this header on every request into a Worker; elsewhere a caller wrote it.
+  if (isCloudflareWorkersRuntime(request)) return request.headers.get('cf-connecting-ip') ?? undefined;
+  return undefined;
 }
 
 /** A Web-standard fetch handler: `(request, ctx?, env?) => Promise<Response>`. */
@@ -397,6 +420,7 @@ async function toServerRequest(
     headers,
     query,
     body,
+    socket: { remoteAddress: resolvePeerAddress(request, ctx) },
   } as unknown as ServerRequest;
 
   const tokenized = serverRequest as unknown as Record<PropertyKey, unknown>;

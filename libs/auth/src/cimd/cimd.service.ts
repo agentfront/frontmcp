@@ -5,6 +5,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
+import { isRedirectResponse } from '@frontmcp/utils';
+
 import { InMemoryCimdCache, type CimdCacheBackend } from './cimd.cache';
 import {
   CimdClientIdMismatchError,
@@ -260,8 +262,8 @@ export class CimdService {
           });
         }
 
-        // Handle redirects based on policy
-        if (response.status >= 300 && response.status < 400) {
+        // Handle redirects based on policy (an opaque redirect has no readable Location and is refused)
+        if (isRedirectResponse(response)) {
           const location = response.headers.get('location');
           if (!location) {
             throw new CimdFetchError(clientId, 'Redirect response missing Location header', {

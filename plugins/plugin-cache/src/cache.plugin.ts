@@ -1,19 +1,20 @@
 import {
   DynamicPlugin,
-  FlowCtxOf,
   FrontMcpConfig,
-  FrontMcpConfigType,
   FrontMcpContextStorage,
   getGlobalStoreConfig,
   isVercelKvProvider,
   Plugin,
-  ProviderType,
+  STATELESS_SESSION_ID,
   ToolHook,
+  type FlowCtxOf,
+  type FrontMcpConfigType,
+  type ProviderType,
 } from '@frontmcp/sdk';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { CacheStoreToken } from './cache.symbol';
-import { CachePluginOptions, GlobalStoreCachePluginOptions } from './cache.types';
+import { type CachePluginOptions, type GlobalStoreCachePluginOptions } from './cache.types';
 import CacheMemoryProvider from './providers/cache-memory.provider';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
@@ -299,8 +300,9 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (typeof subject === 'string' && subject) return `user:${subject}`;
     if (authInfo?.clientId) return `client:${authInfo.clientId}`;
 
+    // The stateless transport gives every request the same session id, so it identifies no one.
     const sessionId = requestContext?.sessionId;
-    if (sessionId) return `session:${sessionId}`;
+    if (sessionId && sessionId !== STATELESS_SESSION_ID) return `session:${sessionId}`;
 
     // No identity at all: give this call its own key rather than one shared with every other
     // identity-less caller. A cache miss is the safe failure here.

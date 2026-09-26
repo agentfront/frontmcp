@@ -8,6 +8,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   FlowHooksOf,
@@ -24,6 +25,7 @@ import {
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { createSkillHttpAuthValidator } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { filterServableSkills } from '../../skill-filter.helper';
 import { formatSkillsForLlmCompact } from '../../skill-http.utils';
 
 const inputSchema = httpInputSchema;
@@ -35,7 +37,7 @@ const stateSchema = z.object({
 const outputSchema = HttpTextSchema;
 
 const plan = {
-  pre: ['checkEnabled'],
+  pre: ['checkIpFilter', 'checkEnabled'],
   execute: ['generateContent'],
 } as const satisfies FlowPlan<string>;
 
@@ -110,6 +112,11 @@ export default class LlmTxtFlow extends FlowBase<typeof name> {
     return paths.has(request.path);
   }
 
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
+
   @Stage('checkEnabled')
   async checkEnabled() {
     const skillsConfig = this.scope.metadata.skillsConfig;
@@ -160,8 +167,11 @@ export default class LlmTxtFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check cache first
-    const cache = await getSkillHttpCache(this.scope);
+    // Get skills visible via HTTP. The cached document lists every one of them, so it is only
+    // served to a caller the `skills:filter` flow lets see all of them.
+    const httpSkills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
+    const skills = await filterServableSkills(this.scope, httpSkills);
+    const cache = skills.length === httpSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {
       const cached = await cache.getLlmTxt();
       if (cached) {
@@ -174,9 +184,6 @@ export default class LlmTxtFlow extends FlowBase<typeof name> {
         return;
       }
     }
-
-    // Get skills visible via HTTP
-    const skills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
 
     if (skills.length === 0) {
       this.respond({

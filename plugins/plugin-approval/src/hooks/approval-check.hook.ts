@@ -4,9 +4,10 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
+import { resolveApprovalIdentity } from '../approval.identity';
 import { ApprovalStoreToken } from '../approval.symbols';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import {
@@ -17,9 +18,15 @@ import {
   type ToolApprovalRequirement,
 } from '../types';
 
+type CallToolState = FlowCtxOf<'tools:call-tool'>['state'];
+
+/** Calls that already passed the gate, so it runs once when this plugin is also listed explicitly. */
+const approvedToolContexts = new WeakSet<object>();
+
 /**
  * Hook plugin that checks tool approval before execution.
  *
+ * `ApprovalPlugin` registers it, so it never needs to be listed on its own.
  * Priority 100 ensures this runs early (before cache at 1000).
  */
 @Plugin({
@@ -33,8 +40,17 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
   @ToolHook.Will('execute', { priority: 100 })
   async checkApproval(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool, toolContext } = flowCtx.state;
-    if (!tool || !toolContext) return;
+    if (!tool || !toolContext || approvedToolContexts.has(toolContext)) return;
 
+    await this.enforceApproval(flowCtx, tool, toolContext);
+    approvedToolContexts.add(toolContext);
+  }
+
+  private async enforceApproval(
+    flowCtx: FlowCtxOf<'tools:call-tool'>,
+    tool: NonNullable<CallToolState['tool']>,
+    toolContext: NonNullable<CallToolState['toolContext']>,
+  ): Promise<void> {
     // Get approval config from tool metadata (if it exists)
     const metadata = tool.metadata as unknown as Record<string, unknown>;
     const approvalConfig = this.resolveApprovalConfig(
@@ -49,21 +65,22 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       return;
     }
 
-    const ctx = toolContext.tryGetContext?.();
-    const sessionId = ctx?.sessionId ?? 'unknown';
-    const userId =
-      this.getStringExtra(ctx?.authInfo?.extra, 'userId') ??
-      this.getStringExtra(ctx?.authInfo?.extra, 'sub') ??
-      ctx?.authInfo?.clientId;
-
-    const currentContext = this.getCurrentContext(flowCtx);
-
-    if (this.isPreApprovedContext(approvalConfig, currentContext)) {
-      return;
-    }
-
+    const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
     const approvalStore = this.get(ApprovalStoreToken) as ApprovalStore;
     const approval = await approvalStore.getApproval(tool.fullName, sessionId, userId);
+
+    // A recorded denial outranks every way of skipping the prompt, pre-approved contexts included.
+    if (approval?.state === ApprovalState.DENIED) {
+      throw new ApprovalRequiredError({
+        toolId: tool.fullName,
+        state: 'denied',
+        message: `Tool "${tool.fullName}" execution denied.`,
+      });
+    }
+
+    if (this.isPreApprovedContext(approvalConfig, this.getCurrentContext(flowCtx))) {
+      return;
+    }
 
     if (approvalConfig.alwaysPrompt) {
       await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
@@ -74,14 +91,6 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       if (!this.isExpired(approval)) {
         return;
       }
-    }
-
-    if (approval?.state === ApprovalState.DENIED) {
-      throw new ApprovalRequiredError({
-        toolId: tool.fullName,
-        state: 'denied',
-        message: `Tool "${tool.fullName}" execution denied.`,
-      });
     }
 
     await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
@@ -131,12 +140,6 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       typeof (value as ApprovalContext).type === 'string' &&
       typeof (value as ApprovalContext).identifier === 'string'
     );
-  }
-
-  private getStringExtra(extra: Record<string, unknown> | undefined, key: string): string | undefined {
-    if (!extra) return undefined;
-    const value = extra[key];
-    return typeof value === 'string' ? value : undefined;
   }
 
   private isPreApprovedContext(config: ToolApprovalRequirement, currentContext: ApprovalContext | undefined): boolean {

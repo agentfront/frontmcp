@@ -84,10 +84,10 @@ Move to a `.tsx` FileSource widget the moment you reach for React, useState, eve
 
 ## What `ctx.helpers` includes
 
-| Helper                         | Purpose                                                     |
-| ------------------------------ | ----------------------------------------------------------- |
-| `escapeHtml(str)`              | Escape HTML entities; returns `''` for null/undefined       |
-| `formatDate(date, format?)`    | Locale-formatted date                                       |
-| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting                                |
-| `uniqueId(prefix?)`            | Deterministic unique ID for DOM elements                    |
-| `jsonEmbed(data)`              | Safely embed JSON in a `<script>` tag (escapes `</script>`) |
+| Helper                         | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| `escapeHtml(str)`              | Escape HTML entities; returns `''` for null/undefined         |
+| `formatDate(date, format?)`    | Locale-formatted date                                         |
+| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting                                  |
+| `uniqueId(prefix?)`            | Deterministic unique ID for DOM elements                      |
+| `jsonEmbed(data)`              | Safely embed JSON in a `<script>` tag (escapes `<`, `>`, `&`) |

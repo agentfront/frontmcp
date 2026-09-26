@@ -24,7 +24,7 @@ Demonstrates a production-ready server configuration combining CodeCall, Remembe
 
 ```typescript
 // src/server.ts
-import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+import { ApprovalPlugin, ApprovalScope } from '@frontmcp/plugin-approval';
 import CachePlugin from '@frontmcp/plugin-cache';
 import CodeCallPlugin from '@frontmcp/plugin-codecall';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
@@ -100,7 +100,7 @@ import { Tool, ToolContext, z } from '@frontmcp/sdk';
   },
   approval: {
     required: true,
-    defaultScope: 'session',
+    defaultScope: ApprovalScope.SESSION,
     category: 'write',
     riskLevel: 'high',
     approvalMessage: 'Allow data deletion for this session?',

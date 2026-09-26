@@ -16,7 +16,12 @@ import {
   type ResourceTemplateMetadata,
 } from '../metadata';
 import { ResourceKind, type ResourceEsmTargetRecord, type ResourceRemoteRecord } from '../records/resource.record';
-import { extendedResourceMetadata, FrontMcpResourceTemplateTokens, FrontMcpResourceTokens } from '../tokens';
+import {
+  extendedResourceMetadata,
+  extendedResourceTemplateMetadata,
+  FrontMcpResourceTemplateTokens,
+  FrontMcpResourceTokens,
+} from '../tokens';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
@@ -49,9 +54,15 @@ function FrontMcpResourceTemplate(providedMetadata: ResourceTemplateMetadata): C
 
     Reflect.defineMetadata(FrontMcpResourceTemplateTokens.type, true, target);
 
+    const extended: Record<string, unknown> = {};
     for (const property in metadata) {
-      Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property] ?? property, metadata[property], target);
+      if (FrontMcpResourceTemplateTokens[property]) {
+        Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property], metadata[property], target);
+      } else {
+        extended[property] = metadata[property];
+      }
     }
+    Reflect.defineMetadata(extendedResourceTemplateMetadata, extended, target);
   };
 }
 

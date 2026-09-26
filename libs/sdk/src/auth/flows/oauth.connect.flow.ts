@@ -32,6 +32,7 @@ import {
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   HttpHtmlSchema,
@@ -58,7 +59,7 @@ const stateSchema = z.object({
 const outputSchema = HttpHtmlSchema;
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['checkIpFilter', 'parseInput'],
   execute: ['handleConnect'],
 } as const satisfies FlowPlan<string>;
 
@@ -93,6 +94,11 @@ const RESERVED_CONNECT_PARAMS = new Set<string>(['token', 'csrf', 'action']);
 })
 export default class OauthConnectFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthConnectFlow');
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
 
   @Stage('parseInput')
   async parseInput() {

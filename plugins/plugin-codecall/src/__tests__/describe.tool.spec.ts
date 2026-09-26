@@ -17,6 +17,7 @@ jest.mock('@frontmcp/sdk', () => ({
     <T>(target: T) =>
       target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
+  BaseConfig: class MockBaseConfig {},
   ToolContext: class MockToolContext {
     scope = {
       tools: {
@@ -26,6 +27,11 @@ jest.mock('@frontmcp/sdk', () => ({
 
     constructor(_args?: unknown) {
       // Mock constructor accepts optional args
+    }
+
+    // The only token DescribeTool resolves with `get` is CodeCallConfig, read for the access policy.
+    get(_token: unknown) {
+      return { get: (key: string) => (key === 'mode' ? 'codecall_only' : undefined) };
     }
 
     // Matches the real ToolContext contract: unresolved tokens yield undefined rather than throwing.

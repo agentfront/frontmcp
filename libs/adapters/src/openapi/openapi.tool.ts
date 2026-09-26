@@ -2,6 +2,7 @@ import { type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
 import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
+import { isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
 import { resolveToolSecurity } from './openapi.security';
@@ -159,7 +160,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        throw new Error(`headersMapper failed for tool '${openapiTool.name}': ${errorMessage}`);
+        throw new Error(`headersMapper failed for tool '${openapiTool.name}': ${errorMessage}`, { cause: err });
       }
     }
 
@@ -170,7 +171,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         finalBody = options.bodyMapper(ctx, requestBody);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        throw new Error(`bodyMapper failed for tool '${openapiTool.name}': ${errorMessage}`);
+        throw new Error(`bodyMapper failed for tool '${openapiTool.name}': ${errorMessage}`, { cause: err });
       }
     }
 
@@ -189,6 +190,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         throw new Error(
           `Failed to serialize request body for tool '${openapiTool.name}': ${errorMessage}. ` +
             `Body may contain circular references, BigInt, or non-serializable values.`,
+          { cause: err },
         );
       }
       // Check request body size limit (10MB default)
@@ -222,9 +224,9 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         redirect: 'manual',
       });
 
-      // A redirect is not followed. REST operations resolve in one hop; surface the 3xx as
-      // a failure rather than chasing it with injected credentials.
-      if (response.status >= 300 && response.status < 400) {
+      // A redirect is not followed. REST operations resolve in one hop; surface the 3xx (or a
+      // browser runtime's status-0 `opaqueredirect`) as a failure rather than chasing it.
+      if (isRedirectResponse(response)) {
         logger.warn(`[${openapiTool.name}] upstream returned a redirect; not followed`, {
           status: response.status,
         });
@@ -365,7 +367,7 @@ async function safeInject(
     return result;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    throw new Error(`Input transform for '${transform.inputKey}' failed: ${errorMessage}`);
+    throw new Error(`Input transform for '${transform.inputKey}' failed: ${errorMessage}`, { cause: err });
   } finally {
     // Always clear the timeout to prevent memory leaks
     if (timeoutId !== undefined) {

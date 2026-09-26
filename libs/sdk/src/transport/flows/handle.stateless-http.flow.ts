@@ -14,6 +14,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { TransportServiceNotAvailableError } from '../../errors';
+import { STATELESS_SESSION_ID } from '../transport.types';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -117,8 +118,8 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     // For stateless mode, inject the well-known session ID
     // This satisfies the MCP SDK's session header requirement while keeping requests stateless
     if (!request.headers['mcp-session-id']) {
-      request.headers['mcp-session-id'] = '__stateless__';
-      logger.verbose('handleRequest: injected __stateless__ session ID');
+      request.headers['mcp-session-id'] = STATELESS_SESSION_ID;
+      logger.verbose(`handleRequest: injected ${STATELESS_SESSION_ID} session ID`);
     }
 
     logger.verbose(`handleRequest: requestType=${requestType}, forwarding to transport`);

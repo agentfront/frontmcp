@@ -7,7 +7,7 @@ import { ElicitationTimeoutError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
 import { createSessionScopedEventStore } from '../event-stores/session-scoped.event-store';
 import { rpcRequest } from '../transport.error';
-import { type TransportType } from '../transport.types';
+import { STATELESS_SESSION_ID, type TransportType } from '../transport.types';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
 
@@ -23,7 +23,7 @@ export const resolveSessionIdGenerator = (
   transportType: TransportType,
   sessionId: string,
 ): (() => string) | undefined => {
-  return transportType === 'stateless-http' ? () => '__stateless__' : () => sessionId;
+  return transportType === 'stateless-http' ? () => STATELESS_SESSION_ID : () => sessionId;
 };
 
 export class TransportStreamableHttpAdapter extends LocalTransportAdapter<RecreateableStreamableHTTPServerTransport> {

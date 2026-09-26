@@ -447,6 +447,7 @@ export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport';
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
+export { STATELESS_SESSION_ID } from './transport';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MCP Apps (ext-apps) Support

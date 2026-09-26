@@ -216,7 +216,7 @@ class GetTicketTool extends ToolContext {
 }
 ```
 
-Hooks from an app's providers, and from the plugins and plugin providers it lists, run only for that app's tools. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
+Hooks from an app's providers, and from the plugins and plugin providers it lists, run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
 
 ## Hook Context
 

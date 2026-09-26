@@ -1,8 +1,11 @@
 // file: plugins/plugin-approval/src/__tests__/approval.plugin.spec.ts
 
 import 'reflect-metadata';
+
+import { STATELESS_SESSION_ID } from '@frontmcp/sdk';
+
 import ApprovalPlugin from '../approval.plugin';
-import { ApprovalStoreToken, ApprovalServiceToken, ChallengeServiceToken } from '../approval.symbols';
+import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from '../approval.symbols';
 import { createApprovalService } from '../services/approval.service';
 
 jest.mock('../services/approval.service', () => ({
@@ -225,14 +228,13 @@ describe('ApprovalPlugin', () => {
       factory({}, ctx);
       expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-4', undefined);
     });
-  });
 
-  describe('getPluginMetadata', () => {
-    it('should return approval check plugin', () => {
-      const metadata = ApprovalPlugin.getPluginMetadata({});
+    it('should key a stateless caller by its principal, not the shared stateless session id', () => {
+      const factory = getServiceFactory();
+      const ctx = { sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'alice' } };
 
-      expect(metadata.plugins).toBeDefined();
-      expect(metadata.plugins?.length).toBe(1);
+      factory({}, ctx);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'stateless-user:alice', 'alice');
     });
   });
 

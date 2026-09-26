@@ -5,6 +5,7 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 import { Resource } from '../../../common';
 import { ResourceContext } from '../../../common/interfaces';
 import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
+import { filterServableSkills } from '../../skill-filter.helper';
 import { buildResourceTemplateIndexEntry, buildSkillIndex, buildSkillMdIndexEntry } from '../sep-2640.builders';
 import { SKILL_INDEX_MIME_TYPE, SKILL_INDEX_URI } from '../sep-2640.constants';
 import { getSepVisibleSkills } from '../sep-2640.resource-helpers';
@@ -48,7 +49,12 @@ export class Sep2640SkillIndexResource extends ResourceContext {
     // always pass; when no authorities engine is configured the list is
     // returned unchanged.
     const visible = getSepVisibleSkills(this.scope);
-    const skills = await filterSkillsByAuthorities(this.scope, visible, this.getAuthInfo() as Record<string, unknown>);
+    const authorized = await filterSkillsByAuthorities(
+      this.scope,
+      visible,
+      this.getAuthInfo() as Record<string, unknown>,
+    );
+    const skills = await filterServableSkills(this.scope, authorized);
 
     const entries = skills.map((skill) =>
       buildSkillMdIndexEntry({

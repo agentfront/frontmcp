@@ -1,3 +1,5 @@
+import * as dns from 'node:dns';
+
 import {
   checkOutboundUrl,
   isAlwaysForbiddenIPv4,
@@ -216,5 +218,104 @@ describe('always-forbidden IP helpers (B2/B4)', () => {
     expect(isPrivateIPv4('100.127.255.255')).toBe(true);
     expect(isPrivateIPv4('100.128.0.0')).toBe(false);
     expect(isPrivateIPv4('100.63.255.255')).toBe(false);
+  });
+});
+
+describe('checkOutboundUrl — every IPv6 spelling of an internal address (GHSA-4r57-gvgj-5crm)', () => {
+  // The runtime derives the allowlist from the bundle's baseUrl exactly like this, so a bundle that
+  // declares an IPv6-literal service host allowlists the WHATWG-canonical (hex) form of that host.
+  const checkBaseUrl = (baseUrl: string, outbound: OutboundOptions) =>
+    checkOutboundUrl(`${baseUrl}/latest/meta-data/`, new Set([new URL(baseUrl).hostname.toLowerCase()]), outbound);
+
+  const METADATA_FORMS = [
+    ['https://[::ffff:169.254.169.254]', 'IPv4-mapped, dotted (canonicalised to ::ffff:a9fe:a9fe)'],
+    ['https://[0:0:0:0:0:ffff:a9fe:a9fe]', 'IPv4-mapped, fully expanded'],
+    ['https://[::ffff:0:a9fe:a9fe]', 'IPv4-translated (::ffff:0:0:0/96)'],
+    ['https://[::a9fe:a9fe]', 'IPv4-compatible (::/96)'],
+    ['https://[64:ff9b::a9fe:a9fe]', 'NAT64 well-known prefix (64:ff9b::/96)'],
+    ['https://[64:ff9b:1::a9fe:a9fe]', 'NAT64 local-use prefix (64:ff9b:1::/48)'],
+    ['https://[2002:a9fe:a9fe::]', '6to4 (2002::/16)'],
+    ['https://[::ffff:0:0]', 'IPv4-mapped unspecified 0.0.0.0'],
+  ] as const;
+
+  const PRIVATE_FORMS = [
+    ['https://[::ffff:10.0.0.5]', 'IPv4-mapped RFC 1918 10.0.0.5'],
+    ['https://[::ffff:127.0.0.1]', 'IPv4-mapped loopback 127.0.0.1'],
+  ] as const;
+
+  it.each(METADATA_FORMS)('blocks %s (%s) with the default config', async (baseUrl) => {
+    const result = await checkBaseUrl(baseUrl, baseOutbound());
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/metadata\/link-local/);
+  });
+
+  it.each(METADATA_FORMS)('blocks %s (%s) even when allowPrivateNetworks=true', async (baseUrl) => {
+    const result = await checkBaseUrl(baseUrl, baseOutbound({ allowPrivateNetworks: true }));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/metadata\/link-local/);
+  });
+
+  it.each(PRIVATE_FORMS)('blocks %s (%s) with the default config', async (baseUrl) => {
+    const result = await checkBaseUrl(baseUrl, baseOutbound());
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/private/);
+  });
+
+  it.each(PRIVATE_FORMS)('allows %s (%s) when allowPrivateNetworks=true', async (baseUrl) => {
+    expect((await checkBaseUrl(baseUrl, baseOutbound({ allowPrivateNetworks: true }))).ok).toBe(true);
+  });
+
+  it('blocks a DNS answer that is an IPv4-translated metadata address', async () => {
+    const lookup = jest
+      .spyOn(dns.promises, 'lookup')
+      .mockResolvedValue([{ address: '::ffff:0:a9fe:a9fe', family: 6 }] as never);
+    try {
+      const result = await checkBaseUrl(
+        'https://rebind.attacker.example',
+        baseOutbound({ allowPrivateNetworks: true }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.reason).toMatch(/resolved to metadata\/link-local/);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('refuses a DNS answer it cannot parse rather than letting it through', async () => {
+    const lookup = jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: 'fe80::g', family: 6 }] as never);
+    try {
+      const result = await checkBaseUrl('https://odd.attacker.example', baseOutbound({ allowPrivateNetworks: true }));
+      expect(result.ok).toBe(false);
+      expect(result.reason).toMatch(/malformed IP address/);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('allows a name it cannot resolve only when allowPrivateNetworks=true (IP literals stay checked)', async () => {
+    const lookup = jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('ENOTFOUND'));
+    try {
+      expect(
+        (await checkBaseUrl('https://api.internal.example', baseOutbound({ allowPrivateNetworks: true }))).ok,
+      ).toBe(true);
+      expect((await checkBaseUrl('https://api.internal.example', baseOutbound())).ok).toBe(false);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('still allows a public host name', async () => {
+    const lookup = jest
+      .spyOn(dns.promises, 'lookup')
+      .mockResolvedValue([{ address: '54.187.174.169', family: 4 }] as never);
+    try {
+      expect((await checkBaseUrl('https://api.stripe.com', baseOutbound())).ok).toBe(true);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('still allows a public IPv6 literal', async () => {
+    expect((await checkBaseUrl('https://[2606:4700::1111]', baseOutbound())).ok).toBe(true);
   });
 });

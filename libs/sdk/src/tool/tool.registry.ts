@@ -377,6 +377,11 @@ export default class ToolRegistry extends RegistryAbstract<
     return this.listAllIndexed().map((r) => r.instance);
   }
 
+  /** Owner lineage (root → leaf) of a tool this registry holds, or undefined when it holds none. */
+  lineageOf(entry: ToolEntry): EntryLineage | undefined {
+    return this.listAllIndexed().find((row) => row.instance === entry)?.lineage;
+  }
+
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
   listByOwner(ownerPath: string): readonly ToolEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);

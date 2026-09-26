@@ -78,11 +78,35 @@ const CONTROL_DIRS = [
  * scanner can infer, and the cost of keeping it current is the point: adding an enforcement
  * method means saying so here.
  */
+const HTTP_FACING_FLOWS = [
+  'libs/sdk/src/scope/flows/http.request.flow.ts',
+  'libs/sdk/src/scope/flows/http.ip-filter.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.auth-ui.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.authorize.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.callback.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.connect.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.provider-callback.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.register.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.token.flow.ts',
+  'libs/sdk/src/auth/flows/oauth.userinfo.flow.ts',
+  'libs/sdk/src/auth/flows/well-known.jwks.flow.ts',
+  'libs/sdk/src/auth/flows/well-known.oauth-authorization-server.flow.ts',
+  'libs/sdk/src/auth/flows/well-known.prm.flow.ts',
+  'libs/sdk/src/skill/flows/http/llm-full-txt.flow.ts',
+  'libs/sdk/src/skill/flows/http/llm-txt.flow.ts',
+  'libs/sdk/src/skill/flows/http/skills-api.flow.ts',
+];
+
 const CONTROL_METHODS = [
   {
     method: 'checkIpFilter',
     declaredIn: 'libs/guard/src/manager/guard.manager.ts',
-    calledFrom: ['libs/sdk/src/scope/flows/http.request.flow.ts'],
+    calledFrom: ['libs/sdk/src/common/utils/guard.utils.ts'],
+  },
+  {
+    method: 'enforceIpFilter',
+    declaredIn: 'libs/sdk/src/common/utils/guard.utils.ts',
+    calledFrom: HTTP_FACING_FLOWS,
   },
   {
     method: 'checkCodeCallToolAccess',
@@ -129,8 +153,14 @@ function isExempt(name: string, file: string): boolean {
   return name.endsWith('Error') || file.endsWith('.flow.ts');
 }
 
+/** Tracked files and new ones not yet added, so a control wired from a new file counts before it is committed. */
 function gitFiles(): string[] {
-  return execFileSync('git', ['ls-files', '*.ts'], { cwd: REPO_ROOT, encoding: 'utf-8' }).split('\n').filter(Boolean);
+  return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '*.ts'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf-8',
+  })
+    .split('\n')
+    .filter(Boolean);
 }
 
 /** Every identifier token in a file, which is the whole file minus its comments and strings. */

@@ -419,12 +419,15 @@ CodeCallPlugin.init({
   includeTools: (tool) => {
     // Block admin tools
     if (tool.name.startsWith('admin:')) return false;
-    // Block destructive tools
-    if (tool.metadata?.annotations?.destructiveHint) return false;
+    // Block tools tagged as destructive
+    if (tool.tags?.includes('destructive')) return false;
     return true;
   },
 });
 ```
+
+`tool.name` is the tool's own name (`admin:deleteUser`), never the app-qualified `crm:admin:deleteUser`,
+and the filter receives the same object wherever CodeCall evaluates it. Filter by app with `tool.appId`.
 
 ### Direct Invoke Allowlist
 
@@ -438,6 +441,10 @@ CodeCallPlugin.init({
   },
 });
 ```
+
+An entry matches a tool's own name or its qualified `<appId>:<name>`; everything else is refused. The
+allowlist narrows the base policy and never widens it, so listing a tool that `includeTools` or
+`enabledInCodeCall: false` withholds does not make it callable.
 
 ### Per-Tool Metadata
 
@@ -462,13 +469,26 @@ Individual tools opt in or out via the `codecall` metadata field:
 - `__*` - Internal implementation tools
 - `codecall:*` - Self-reference (via the Self-Reference Guard)
 
-The patterns are matched against **every name a tool answers to** — both its bare `name` and its
-qualified `fullName` — so a tool reachable as either `wipeConfig` or `system:wipeConfig` is blocked
-under both spellings.
+The patterns are matched against **every name a tool answers to** — its bare `name`, its
+qualified `fullName` and the spelling the caller used — so a tool reachable as either `wipeConfig` or
+`system:wipeConfig` is blocked under both spellings. Tools hidden from discovery
+(`visibility: 'hidden'` or `hideFromDiscovery: true`) are withheld too.
 
-The same policy decides discovery and execution. A tool it denies is absent from CodeCall search
-results _and_ rejected at `callTool`; hiding a tool from search is not authorization on its own
-(GHSA-6w3j-82v5-6qrr).
+### One Policy for Every Surface
+
+The same policy, evaluated on the same tool object, decides every CodeCall surface
+(GHSA-6w3j-82v5-6qrr):
+
+| Surface                          | A tool the policy withholds is…                            |
+| -------------------------------- | ---------------------------------------------------------- |
+| `codecall:search`                | not indexed                                                |
+| `codecall:describe`              | reported in `notFound`, exactly like an unknown name       |
+| `getTool()` in a script          | `undefined`                                                |
+| Namespace bindings (`ns.method`) | not bound                                                  |
+| `callTool()` in a script         | refused with `ACCESS_DENIED` before `tools:call-tool` runs |
+| `codecall:invoke`                | refused; `directCalls` can refuse more, never less         |
+
+Hiding a tool from search is not authorization on its own; the refusal at execution is what enforces it.
 
 ---
 

@@ -1,5 +1,6 @@
 import { PublicMcpError } from '../../errors';
 import { assertSkillAuthorized } from '../../skill/skill-authorities.helper';
+import { isSkillServable } from '../../skill/skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
 import { toSdkMcpError } from './mcp-error.utils';
@@ -73,30 +74,29 @@ export default function skillsLoadRequestHandler({
           continue;
         }
 
-        // Resolve the backing entry to evaluate its authorities (only when an
-        // authorities engine is configured — otherwise behaviour is unchanged).
-        // Matches by the requested id, then the resolved content id, then
-        // display name — covering id/name/qualified-name lookups loadSkill
-        // accepts.
-        if (scope.authoritiesEngine) {
-          const entry =
-            skillRegistry.findByName(skillId) ??
-            skillRegistry.findByQualifiedName(skillId) ??
-            skillRegistry.findByName(loadResult.skill.id) ??
-            skillRegistry
-              .getSkills(true)
-              .find(
-                (s) => (s.metadata.id ?? s.name) === loadResult.skill.id || s.metadata.name === loadResult.skill.id,
-              );
-          if (entry) {
-            try {
-              await assertSkillAuthorized(scope, entry, authInfo);
-            } catch (err) {
-              // Surface AuthorityDeniedError as the MCP FORBIDDEN code (-32003)
-              // via its toJsonRpcError(), matching a denied tools/call. Without
-              // this the generic dispatch would flatten it to -32603.
-              throw toSdkMcpError(err);
-            }
+        // Resolve the backing entry to evaluate its authorities and run it
+        // through the `skills:filter` flow. Matches by the requested id, then
+        // the resolved content id, then display name — covering
+        // id/name/qualified-name lookups loadSkill accepts.
+        const entry =
+          skillRegistry.findByName(skillId) ??
+          skillRegistry.findByQualifiedName(skillId) ??
+          skillRegistry.findByName(loadResult.skill.id) ??
+          skillRegistry
+            .getSkills(true)
+            .find((s) => (s.metadata.id ?? s.name) === loadResult.skill.id || s.metadata.name === loadResult.skill.id);
+        if (entry) {
+          if (!(await isSkillServable(scope, entry))) {
+            warnings.push(`Skill "${skillId}" not found`);
+            continue;
+          }
+          try {
+            await assertSkillAuthorized(scope, entry, authInfo);
+          } catch (err) {
+            // Surface AuthorityDeniedError as the MCP FORBIDDEN code (-32003)
+            // via its toJsonRpcError(), matching a denied tools/call. Without
+            // this the generic dispatch would flatten it to -32603.
+            throw toSdkMcpError(err);
           }
         }
 

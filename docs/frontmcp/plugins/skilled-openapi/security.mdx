@@ -116,14 +116,14 @@ A hostname allowlist alone is insufficient (DNS rebinding bypasses it). The plug
 1. **URL string check** before DNS resolution: reject `file:`, `data:`, `gopher:`, `ftp:`; require `https:` (allow `http:` only via explicit `allowHttp: true`).
 2. **Hostname allowlist**: only declared `services[].baseUrl` hosts.
 3. **Cloud-metadata hostname blocklist**: `metadata.google.internal`, `metadata.azure.com`, `metadata.aws.com` blocked even if technically allowlisted.
-4. **DNS resolve once** at request start; reject if any resolved IP falls in deny ranges:
-   - RFC 1918 private (10/8, 172.16/12, 192.168/16)
-   - Link-local (169.254/16) — blocks AWS/GCP/Azure metadata services (169.254.169.254)
-   - Loopback (127/8, ::1)
-   - IPv6 ULA (fc00::/7) and link-local (fe80::/10)
-5. **Per-host concurrency cap** (`maxConcurrencyPerHost`, default 10).
+4. **IP check on every address**: an IP-literal host is checked directly (no DNS needed, so it also applies on Workers); a host name is **DNS-resolved once** at request start and rejected if any resolved address falls in a deny range:
+   - **Always blocked**, even with `allowPrivateNetworks: true`: link-local (169.254/16, fe80::/10) — the AWS/GCP/Azure metadata services at 169.254.169.254 — the AWS IMDSv6 address `fd00:ec2::254`, and the unspecified / "this network" addresses (0/8, `::`)
+   - **Blocked unless `allowPrivateNetworks: true`**: loopback (127/8, ::1), RFC 1918 private (10/8, 172.16/12, 192.168/16), CGNAT (100.64/10), IETF protocol assignments (192.0.0/24), benchmarking (198.18/15), multicast (224/4, ff00::/8), reserved (240/4, incl. broadcast), IPv6 ULA (fc00::/7) and site-local (fec0::/10)
+   - **IPv6 forms that carry an IPv4 address** are judged by that IPv4 address: IPv4-mapped (`::ffff:0:0/96`), IPv4-translated (`::ffff:0:0:0/96`), IPv4-compatible (`::/96`), NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`) and 6to4 (`2002::/16`). Addresses are parsed before they are checked, so `https://[::ffff:169.254.169.254]` — which `new URL()` rewrites to `[::ffff:a9fe:a9fe]` — is refused in every spelling. An address that does not parse is refused.
+5. **Redirects are never followed**: requests go out with `redirect: 'manual'`, and any 3xx (or a browser runtime's status-0 `opaqueredirect`) fails the call instead of re-sending the vault-injected credential to a destination the upstream chose.
+6. **Per-host concurrency cap** (`maxConcurrencyPerHost`, default 10).
 
-`allowPrivateNetworks: true` bypasses the IP blocklist for self-hosted scenarios where the customer's REST API legitimately lives on a private network. Loud startup warning when set. Default is fail-closed.
+`allowPrivateNetworks: true` lifts the private-network part of the IP blocklist for self-hosted scenarios where the customer's REST API legitimately lives on a private network; the metadata / link-local block stays on. Loud startup warning when set. Default is fail-closed.
 
 ## ABAC integration
 

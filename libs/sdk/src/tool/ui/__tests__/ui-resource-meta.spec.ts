@@ -150,14 +150,14 @@ describe('ToolUIRegistry — widget sizing round-trip', () => {
 
   it('renderAndRegisterAsync injects sizing CSS + __mcpWidgetSizing into the widget HTML', async () => {
     const registry = new ToolUIRegistry();
-    await registry.renderAndRegisterAsync({
+    const { meta } = await registry.renderAndRegisterAsync({
       toolName: 'sized2',
       input: {},
       output: {},
       uiConfig: { template: '<div>Hi</div>', preferredHeight: 300, autoResize: false },
     });
 
-    const html = registry.getStaticWidget('sized2');
+    const html = meta['ui/html'];
     expect(html).toBeDefined();
     expect(html).toContain('window.__mcpWidgetSizing =');
     expect(html).toContain('height: 300px;');
@@ -188,7 +188,7 @@ describe('ToolUIRegistry — widget sizing round-trip', () => {
     });
 
     expect(meta).not.toHaveProperty('ui/preferredHeight');
-    const html = registry.getStaticWidget('plain_sized');
+    const html = meta['ui/html'];
     // The bridge IIFE always references window.__mcpWidgetSizing to read it;
     // with no sizing configured, the data-injection script must not assign it.
     expect(html).not.toContain('window.__mcpWidgetSizing =');

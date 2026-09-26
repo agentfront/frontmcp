@@ -268,9 +268,32 @@ describe('ApprovalCheckPlugin', () => {
         sessionId: 'session-123',
         authInfo: { clientId: 'client-456', extra: { approvalContext } },
       });
+      mockStore.getApproval.mockResolvedValue(undefined);
 
-      await plugin.checkApproval(mockFlowCtx as never);
-      expect(mockStore.getApproval).not.toHaveBeenCalled();
+      await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
+    });
+
+    it('should refuse a pre-approved session context when the caller has a recorded denial', async () => {
+      const approvalContext = { type: 'project', identifier: 'trusted-project' };
+      mockFlowCtx.state.tool!.metadata['approval'] = {
+        required: true,
+        preApprovedContexts: [approvalContext],
+      };
+      mockFlowCtx.state.toolContext!.tryGetContext = () => ({
+        sessionId: 'session-123',
+        authInfo: { clientId: 'client-456', extra: { approvalContext } },
+      });
+      mockStore.getApproval.mockResolvedValue({
+        toolId: 'test-tool',
+        state: ApprovalState.DENIED,
+        scope: ApprovalScope.USER,
+        grantedAt: Date.now(),
+        grantedBy: { source: 'admin' },
+      });
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toMatchObject({
+        details: { state: 'denied' },
+      });
     });
 
     it('should get context from session authInfo extra', async () => {
@@ -286,9 +309,10 @@ describe('ApprovalCheckPlugin', () => {
           extra: { approvalContext },
         },
       });
+      mockStore.getApproval.mockResolvedValue(undefined);
 
-      await plugin.checkApproval(mockFlowCtx as never);
-      expect(mockStore.getApproval).not.toHaveBeenCalled();
+      await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
     });
 
     it('should include approval options in error', async () => {
@@ -334,7 +358,11 @@ describe('ApprovalCheckPlugin', () => {
         // Expected to throw
       }
 
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'unknown', undefined);
+      expect(mockStore.getApproval).toHaveBeenCalledWith(
+        'test-tool',
+        expect.stringMatching(/^unidentified:/),
+        undefined,
+      );
     });
 
     it('should not match pre-approved context with different type', async () => {

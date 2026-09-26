@@ -1,7 +1,22 @@
 // file: plugins/plugin-remember/src/__tests__/remember-secret-persistence.spec.ts
 
 import 'reflect-metadata';
+
 import * as path from 'path';
+
+// Import the mocked functions
+import { base64urlEncode, mkdir, randomBytes, readFile, rename, unlink, writeFile } from '@frontmcp/utils';
+
+import {
+  clearCachedSecret,
+  deleteRememberSecret,
+  getOrCreatePersistedSecret,
+  isSecretPersistenceEnabled,
+  loadRememberSecret,
+  resolveSecretPath,
+  saveRememberSecret,
+  type RememberSecretData,
+} from '../remember.secret-persistence';
 
 // Define mock functions inside jest.mock factory to avoid hoisting issues
 jest.mock('@frontmcp/utils', () => {
@@ -17,20 +32,6 @@ jest.mock('@frontmcp/utils', () => {
     base64urlEncode: jest.fn().mockReturnValue('YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE'),
   };
 });
-
-// Import the mocked functions
-import { readFile, writeFile, mkdir, rename, unlink, randomBytes, base64urlEncode } from '@frontmcp/utils';
-
-import {
-  isSecretPersistenceEnabled,
-  resolveSecretPath,
-  loadRememberSecret,
-  saveRememberSecret,
-  deleteRememberSecret,
-  getOrCreatePersistedSecret,
-  clearCachedSecret,
-  type RememberSecretData,
-} from '../remember.secret-persistence';
 
 describe('remember.secret-persistence', () => {
   const originalEnv = process.env;
@@ -383,6 +384,36 @@ describe('remember.secret-persistence', () => {
       expect(result1).toBe(result2);
       // Should only call readFile once due to promise guard
       expect(readFile).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('ephemeral production secret warning (GHSA-225p-f8jh-f3rh)', () => {
+    it('warns once when production falls back to a random in-memory secret', async () => {
+      process.env['NODE_ENV'] = 'production';
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+
+      await getOrCreatePersistedSecret();
+      await getOrCreatePersistedSecret();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('REMEMBER_SECRET'));
+      warn.mockRestore();
+    });
+
+    it('does not warn when the generated secret is persisted for reuse', async () => {
+      process.env['NODE_ENV'] = 'development';
+      const enoentError = new Error('File not found') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      (readFile as jest.Mock).mockRejectedValue(enoentError);
+      (mkdir as jest.Mock).mockResolvedValue(undefined);
+      (writeFile as jest.Mock).mockResolvedValue(undefined);
+      (rename as jest.Mock).mockResolvedValue(undefined);
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+
+      await getOrCreatePersistedSecret();
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 

@@ -106,6 +106,9 @@ declare global {
   interface ExtendFrontMcpResourceMetadata {
     featureFlag?: FeatureFlagRef;
   }
+  interface ExtendFrontMcpResourceTemplateMetadata {
+    featureFlag?: FeatureFlagRef;
+  }
   interface ExtendFrontMcpPromptMetadata {
     featureFlag?: FeatureFlagRef;
   }

@@ -75,7 +75,13 @@ It accepts the same config as `@FrontMcp()`. The instance is built on the first 
 // worker entry
 const handler = await FrontMcpInstance.createFetchHandler(config);
 export default { fetch: (request: Request) => handler(request) };
+
+// Deno / Bun: forward the runtime's second argument so the handler sees the client IP
+Deno.serve((request, info) => handler(request, info));
+Bun.serve({ fetch: (request, server) => handler(request, server) });
 ```
+
+The client IP comes from Deno's `info.remoteAddr`, Bun's `server.requestIP(request)`, or, only on Cloudflare Workers, the `CF-Connecting-IP` header.
 
 The handler is stateless: session-based (2025-06-18) clients get no `Mcp-Session-Id` and every request stands alone. See [Cloudflare Worker](/frontmcp/deployment/cloudflare-worker) for stateful sessions with Durable Objects.
 

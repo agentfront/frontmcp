@@ -21,6 +21,7 @@ import { extractBearerToken } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  enforceIpFilter,
   Flow,
   FlowBase,
   getRequestBaseUrl,
@@ -43,7 +44,7 @@ const stateSchema = z.object({
 const outputSchema = HttpJsonSchema;
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['checkIpFilter', 'parseInput'],
   execute: ['verifyAndRespond'],
 } as const satisfies FlowPlan<string>;
 
@@ -75,6 +76,11 @@ const Stage = StageHookOf(name);
 })
 export default class OauthUserInfoFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthUserInfoFlow');
+
+  @Stage('checkIpFilter')
+  async checkIpFilter() {
+    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+  }
 
   @Stage('parseInput')
   async parseInput() {

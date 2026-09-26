@@ -37,7 +37,13 @@
  * });
  * ```
  */
-import { FrontMcpInstance, createWebFetchHandler, type SkillIndexCache, type WebFetchHandler } from '@frontmcp/sdk';
+import {
+  createWebFetchHandler,
+  FrontMcpInstance,
+  type FetchHandlerCtx,
+  type SkillIndexCache,
+  type WebFetchHandler,
+} from '@frontmcp/sdk';
 
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
@@ -208,8 +214,9 @@ function resolveSkillIndexCache(config: EdgeMcpConfig, env: unknown): SkillIndex
 async function wireSkillIndexCache(scope: Scope, config: EdgeMcpConfig, env: unknown): Promise<void> {
   const cache = resolveSkillIndexCache(config, env);
   if (!cache) return;
-  const skills = (scope as { skills?: { setIndexCache?: (c: SkillIndexCache) => void; warmIndex?: () => Promise<void> } })
-    .skills;
+  const skills = (
+    scope as { skills?: { setIndexCache?: (c: SkillIndexCache) => void; warmIndex?: () => Promise<void> } }
+  ).skills;
   if (typeof skills?.setIndexCache !== 'function' || typeof skills.warmIndex !== 'function') return;
   skills.setIndexCache(cache);
   try {
@@ -353,7 +360,8 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       const handler = await ensureHandler(env);
       // Forward the Worker ExecutionContext (for `waitUntil` on SSE bodies) and
       // `env` (so the session router can resolve its Durable Object binding).
-      return handler(request, ctx as { waitUntil?(p: Promise<unknown>): void } | undefined, env);
+      // Deno and Bun call `fetch(request, info | server)`: that second argument is where the handler reads the peer IP.
+      return handler(request, (ctx ?? env) as FetchHandlerCtx | undefined, env);
     },
     // The DO builds its own session-local scope (in its isolate) via buildScope,
     // and bridges `env`→`process.env` the same way the worker does.

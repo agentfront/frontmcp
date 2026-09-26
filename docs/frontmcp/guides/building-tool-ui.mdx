@@ -173,6 +173,13 @@ export default class GetWeatherTool extends ToolContext {
   - `custom-url` - Served from an external URL (`customWidgetUrl`, supports a `{token}` placeholder)
 </ParamField>
 
+<Note>
+**`resources/read` never returns another call's render.** `ui://widget/{toolName}.html` serves only HTML compiled at startup (`static`, and the `hybrid` shell), rendered without any caller's data; for other modes it serves a data-free placeholder that receives the result through the bridge. A per-call `inline` render embeds that call's input and output, so it is returned only in that call's `_meta['ui/html']` and is never stored where `resources/read` can reach it. Hosts that load the widget with `resources/read` (MCP Apps hosts such as Claude) should use `servingMode: 'static'` with a template that reads its data from `window.FrontMcpBridge`.
+
+The tool name in the URI is percent-encoded, as `tools/list` advertises it: a namespaced `app:tool` is `ui://widget/app%3Atool.html`. Both the encoded and the raw form read back; a name that decodes to anything other than tool-name characters (letters, digits, `_ - . / : @`) is rejected.
+
+</Note>
+
 <ParamField path="ui.template" type="function">
   A function that receives the execution context and returns an HTML string.
 </ParamField>
@@ -287,16 +294,19 @@ template: (ctx: TemplateContext<MyInput, MyOutput>) => {
 
 ### Available Helpers
 
-| Helper                         | Description                                                      |
-| ------------------------------ | ---------------------------------------------------------------- |
-| `escapeHtml(str)`              | Escape HTML entities to prevent XSS (handles `null`/`undefined`) |
-| `formatDate(date, format?)`    | Format a date (accepts `Date` or ISO string)                     |
-| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting (defaults to `'USD'`)               |
-| `uniqueId(prefix?)`            | Generate a unique ID for DOM elements                            |
-| `jsonEmbed(data)`              | Safely embed JSON in an inline `<script>` (escapes `</script>`)  |
+| Helper                         | Description                                                       |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `escapeHtml(str)`              | Escape HTML entities to prevent XSS (handles `null`/`undefined`)  |
+| `formatDate(date, format?)`    | Format a date (accepts `Date` or ISO string)                      |
+| `formatCurrency(amount, ccy?)` | ISO-4217 currency formatting (defaults to `'USD'`)                |
+| `uniqueId(prefix?)`            | Generate a unique ID for DOM elements                             |
+| `jsonEmbed(data)`              | Safely embed JSON in an inline `<script>` (escapes `<`, `>`, `&`) |
 
 <Warning>
 Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.
+
+A string your template returns is inserted as markup when it looks like HTML, so `template: (ctx) => ctx.output` renders any tags in the output. Other results are escaped: plain text is shown as text, an object as JSON inside `<pre>`, and a base64 PDF (`JVBERi…`) is embedded as script data. A value that starts with the PDF signature but is not base64 is shown as text.
+
 </Warning>
 
 ---

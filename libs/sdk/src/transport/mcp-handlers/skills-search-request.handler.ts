@@ -1,6 +1,7 @@
 import { extractToolNames } from '../../common/metadata/skill.metadata';
 import { PublicMcpError } from '../../errors';
 import { filterSkillMetadataByAuthorities } from '../../skill/skill-authorities.helper';
+import { filterServableSkillResults } from '../../skill/skill-filter.helper';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsSearchRequestSchema,
@@ -56,9 +57,10 @@ export default function skillsSearchRequestHandler({
         mcpVisibleResults,
         authInfo,
       );
+      const servableResults = await filterServableSkillResults(scope, skillRegistry, authVisibleResults);
 
       // Transform results to response format
-      const skills = authVisibleResults.map((r) => {
+      const skills = servableResults.map((r) => {
         const toolNames = extractToolNames(r.metadata);
         return {
           id: r.metadata.id ?? r.metadata.name,

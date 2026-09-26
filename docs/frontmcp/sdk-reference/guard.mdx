@@ -68,13 +68,13 @@ Configuration for execution timeout.
 
 Configuration for IP-based access control.
 
-| Field               | Type                | Default   | Description                         |
-| ------------------- | ------------------- | --------- | ----------------------------------- |
-| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow  |
-| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block  |
-| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
-| `trustProxy`        | `boolean`           | `false`   | Trust `X-Forwarded-For` header      |
-| `trustedProxyDepth` | `number`            | `1`       | Max proxy hops to trust             |
+| Field               | Type                | Default   | Description                                                        |
+| ------------------- | ------------------- | --------- | ------------------------------------------------------------------ |
+| `allowList`         | `string[]`          | `[]`      | IPs or CIDR ranges to always allow                                 |
+| `denyList`          | `string[]`          | `[]`      | IPs or CIDR ranges to always block                                 |
+| `defaultAction`     | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list, or no client IP is known      |
+| `trustProxy`        | `boolean`           | `false`   | **Not read** (startup warning); set `FRONTMCP_TRUST_PROXY`         |
+| `trustedProxyDepth` | `number`            | `1`       | **Not read** (startup warning); set `FRONTMCP_TRUSTED_PROXY_DEPTH` |
 
 ### `PartitionKey`
 
@@ -184,7 +184,7 @@ Check if a client IP is allowed.
 checkIpFilter(clientIp?: string): IpFilterResult | undefined
 ```
 
-Returns `undefined` if no IP filter configured or `clientIp` is falsy. Otherwise returns `IpFilterResult`.
+Returns `undefined` only when no IP filter is configured. A missing or unparseable `clientIp` matches no rule and gets the configured `defaultAction`, so with `defaultAction: 'deny'` it is rejected.
 
 #### `isIpAllowListed()`
 
@@ -328,14 +328,16 @@ Parses all CIDR rules at construction time using BigInt bitmask representation.
 Check if a client IP is allowed.
 
 ```typescript
-check(clientIp: string): IpFilterResult
+check(clientIp: string | undefined): IpFilterResult
 ```
 
 **Evaluation order:**
 
 1. Deny list (takes precedence)
 2. Allow list
-3. Default action
+3. Default action — also for a missing or unparseable IP
+
+An IPv4-mapped address (`::ffff:203.0.113.7`, `::ffff:cb00:7107`) is matched as the IPv4 address it maps, and a rule written in mapped form (`::ffff:10.0.0.0/104`) as the IPv4 rule (`10.0.0.0/8`). A `%zone` suffix is ignored.
 
 **`IpFilterResult`:**
 
@@ -518,7 +520,7 @@ Thrown when a queued request exceeds its wait time.
 
 ### `IpBlockedError`
 
-Thrown when a client IP matches the deny list.
+For your own code to throw when a client IP matches a deny list. The SDK's built-in `throttle.ipFilter` does not throw it; it answers the HTTP request with 403 from each flow's `checkIpFilter` stage.
 
 | Property     | Type     | Value                  |
 | ------------ | -------- | ---------------------- |
@@ -528,7 +530,7 @@ Thrown when a client IP matches the deny list.
 
 ### `IpNotAllowedError`
 
-Thrown when a client IP is not on the allow list and `defaultAction` is `'deny'`.
+For your own code to throw when a client IP is not on an allow list and `defaultAction` is `'deny'`. Not thrown by the built-in filter.
 
 | Property     | Type     | Value                   |
 | ------------ | -------- | ----------------------- |
