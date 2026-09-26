@@ -97,20 +97,42 @@ describe('createEdgeMcp', () => {
     expect((await res.json()).status).toBe('ok');
   });
 
-  it("reads the client IP from Deno's and Bun's second fetch argument (GHSA-p3qf-fcwm-35x4)", async () => {
-    const filtered = createEdgeMcp({
-      info: { name: 'worker-ip-filter', version: '1.0.0' },
-      apps: [WorkerApp],
-      tasks: { enabled: false },
-      throttle: { enabled: true, ipFilter: { denyList: ['203.0.113.0/24'] } },
-    });
+  describe('client IP from the second fetch argument (GHSA-p3qf-fcwm-35x4)', () => {
     const discovery = () => new Request('https://worker.example.com/.well-known/oauth-protected-resource');
+    const createFiltered = (ipFilter: {
+      allowList?: string[];
+      denyList?: string[];
+      defaultAction?: 'allow' | 'deny';
+    }) =>
+      createEdgeMcp({
+        info: { name: 'worker-ip-filter', version: '1.0.0' },
+        apps: [WorkerApp],
+        tasks: { enabled: false },
+        throttle: { enabled: true, ipFilter },
+      });
 
-    const denoDenied = await filtered.fetch(discovery(), { remoteAddr: { hostname: '203.0.113.9' } });
-    const bunDenied = await filtered.fetch(discovery(), { requestIP: () => ({ address: '203.0.113.9' }) });
-    const denoAllowed = await filtered.fetch(discovery(), { remoteAddr: { hostname: '198.51.100.7' } });
+    it.each(['Deno', 'Bun'])('reads it on %s', async (runtimeGlobal) => {
+      Object.defineProperty(globalThis, runtimeGlobal, { value: {}, configurable: true });
+      try {
+        const filtered = createFiltered({ denyList: ['203.0.113.0/24'] });
 
-    expect([denoDenied.status, bunDenied.status, denoAllowed.status]).toEqual([403, 403, 200]);
+        const denoDenied = await filtered.fetch(discovery(), { remoteAddr: { hostname: '203.0.113.9' } });
+        const bunDenied = await filtered.fetch(discovery(), { requestIP: () => ({ address: '203.0.113.9' }) });
+        const denoAllowed = await filtered.fetch(discovery(), { remoteAddr: { hostname: '198.51.100.7' } });
+
+        expect([denoDenied.status, bunDenied.status, denoAllowed.status]).toEqual([403, 403, 200]);
+      } finally {
+        Reflect.deleteProperty(globalThis, runtimeGlobal);
+      }
+    });
+
+    it('does not read a Worker env object as the peer when no ExecutionContext is passed', async () => {
+      const filtered = createFiltered({ allowList: ['198.51.100.0/24'], defaultAction: 'deny' });
+
+      const response = await filtered.fetch(discovery(), { remoteAddr: { hostname: '198.51.100.7' } });
+
+      expect(response.status).toBe(403);
+    });
   });
 
   it('exposes a Cron `scheduled` handler only in managed mode', () => {

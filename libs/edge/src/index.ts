@@ -50,6 +50,11 @@ import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './man
 import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
 import { kvSkillIndexCacheFromEnv, type EdgeSkillIndexCacheFactory } from './skill-index-cache';
 
+/** On Deno and Bun the second `fetch` argument is `info` / `server`; on Workers it is `env`, never a peer source. */
+function isDenoOrBunRuntime(): boolean {
+  return 'Deno' in globalThis || 'Bun' in globalThis;
+}
+
 export type { ManagedEdgeOptions } from './managed';
 export { buildManagedOpenApiPluginOptions } from './managed';
 export {
@@ -361,7 +366,8 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       // Forward the Worker ExecutionContext (for `waitUntil` on SSE bodies) and
       // `env` (so the session router can resolve its Durable Object binding).
       // Deno and Bun call `fetch(request, info | server)`: that second argument is where the handler reads the peer IP.
-      return handler(request, (ctx ?? env) as FetchHandlerCtx | undefined, env);
+      const platformCtx = ctx ?? (isDenoOrBunRuntime() ? env : undefined);
+      return handler(request, platformCtx as FetchHandlerCtx | undefined, env);
     },
     // The DO builds its own session-local scope (in its isolate) via buildScope,
     // and bridges `env`→`process.env` the same way the worker does.
