@@ -51,6 +51,16 @@ PluginRegistry
 └── pSkills       → Map<Token, SkillRegistry>
 ```
 
+For each plugin, the registry works in this order:
+
+1. Build the plugin's own provider registry from `providers`.
+2. Create the plugin instance. For `init({ inject, useFactory })`, the factory runs here with dependencies resolved from the host registry.
+3. Register the providers derived from the options (`dynamicProviders(options)` and `init({ providers })`).
+4. Build the nested `plugins`, adapters, tools, resources, prompts and skills. Nested plugins can inject the providers registered in step 3.
+5. Merge `exports` into the host registry, register hooks and context extensions, then merge the option-derived providers into the host registry and the scope registry.
+
+The scope registry keeps only the copy of an option-derived provider from the app that merged last. Tools, resources and prompts resolve their own hierarchy's definition first (see [`buildViews()`](/frontmcp/sdk-reference/registries/provider-registry#buildviews)), so each app still gets its own.
+
 ## Plugin Registration
 
 Plugins are registered via the `@FrontMcp` decorator:

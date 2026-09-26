@@ -6,7 +6,7 @@ tags: [ui, csp, widgetAccessible, FrontMcpBridge, interactive-widget]
 features:
   - "Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)"
   - 'Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs'
-  - "Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)"
+  - 'Building the markup with `ctx.helpers.html` and embedding initial data into the inline `<script>` via `trustedHtml(jsonEmbed(...))` (`jsonEmbed` escapes `<`, `>` and `&`)'
   - 'Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback'
 ---
 
@@ -67,12 +67,14 @@ type Out = { symbol: string; priceUsd: number; asOf: string };
       connectDomains: ['https://api.market.example'],
     },
     template: (ctx: TemplateContext<In, Out>) => {
-      const initial = ctx.helpers.jsonEmbed(ctx.output);
-      return `
+      const { html, trustedHtml, jsonEmbed } = ctx.helpers;
+      // jsonEmbed output is script-safe; trustedHtml keeps `html` from HTML-escaping its quotes
+      const initial = trustedHtml(jsonEmbed(ctx.output));
+      return html`
         <div style="padding:16px;font-family:system-ui">
-          <h2 style="margin:0">${ctx.helpers.escapeHtml(ctx.output.symbol)}</h2>
+          <h2 style="margin:0">${ctx.output.symbol}</h2>
           <p id="price" style="font-size:36px;margin:8px 0">$${ctx.output.priceUsd.toFixed(2)}</p>
-          <p id="asof" style="color:#666;margin:0">As of ${ctx.helpers.escapeHtml(ctx.output.asOf)}</p>
+          <p id="asof" style="color:#666;margin:0">As of ${ctx.output.asOf}</p>
           <button id="refresh" style="margin-top:12px;padding:8px 16px">Refresh</button>
           <script>
             (function () {
@@ -116,7 +118,7 @@ export class ShowQuoteTool extends ToolContext {
 
 - Restricting the widget's outbound `fetch` via `ui.csp.connectDomains` (emitted on the resource per #455)
 - Opting the widget into cross-tool calls with `widgetAccessible: true` and using `window.FrontMcpBridge.callTool(name, args)` instead of host-specific APIs
-- Embedding initial data into the widget's inline `<script>` safely via `ctx.helpers.jsonEmbed(...)` (escapes `<`, `>` and `&`)
+- Building the markup with `ctx.helpers.html` and embedding initial data into the inline `<script>` via `trustedHtml(jsonEmbed(...))` (`jsonEmbed` escapes `<`, `>` and `&`)
 - Surfacing in-flight status via `invocationStatus.invoking` / `invoked` so the host UI shows feedback
 
 ## Why these choices
@@ -125,3 +127,4 @@ export class ShowQuoteTool extends ToolContext {
 - **`csp.connectDomains`** — limits what the widget can `fetch` to. Without a CSP, the host's default applies (which may block everything in Claude). With `connectDomains: ['https://api.market.example']`, only that origin is reachable.
 - **`window.FrontMcpBridge.callTool` not `window.openai.callTool`** — the bridge handles host detection. `window.openai.*` works on OpenAI Apps SDK but breaks everywhere else.
 - **`jsonEmbed` not `JSON.stringify`** — `JSON.stringify` doesn't escape `</script>` or `<!--` and can break out of the inline script tag. `jsonEmbed` writes `<`, `>` and `&` as `\u003c`, `\u003e`, `\u0026`.
+- **`html` with `trustedHtml(jsonEmbed(...))`** — `ctx.helpers.html` escapes the symbol and timestamp for you, so tool output can't inject markup. Inside the `<script>` the JSON must stay as-is: `html` would HTML-escape its quotes, so the script-safe `jsonEmbed` output is wrapped with `trustedHtml`. The result renders the same with `escapeStringResults: true`, which FrontMCP 1.9 makes the default.

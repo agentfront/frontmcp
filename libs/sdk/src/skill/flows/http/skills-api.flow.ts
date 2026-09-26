@@ -26,13 +26,9 @@ import { extractToolNames } from '../../../common/metadata/skill.metadata';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import type ToolRegistry from '../../../tool/tool.registry';
 import { createSkillHttpAuthValidator } from '../../auth';
-import {
-  assertSkillAuthorized,
-  filterSkillMetadataByAuthorities,
-  filterSkillsByAuthorities,
-  getSkillAuthorities,
-} from '../../skill-authorities.helper';
-import { filterServableSkillResults, filterServableSkills, isSkillServable } from '../../skill-filter.helper';
+import { assertSkillAuthorized, filterSkillsByAuthorities, getSkillAuthorities } from '../../skill-authorities.helper';
+import { createSkillEntryResolver } from '../../skill-entry.resolver';
+import { filterDiscoverableSkillResults, filterServableSkills, isSkillServable } from '../../skill-filter.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
 import { formatSkillForLLM } from '../../skill.utils';
@@ -321,10 +317,8 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
 
-    // Check visibility - look up by skill ID only for accurate matching
-    const skillEntry = skillRegistry
-      .getSkills(true)
-      .find((s) => s.metadata.id === skill.id || (s.metadata.id === undefined && s.name === skill.id));
+    // Resolve the backing entry the same way every skill surface does (requested id, then loaded content id)
+    const skillEntry = createSkillEntryResolver(skillRegistry)(skillId, skill.id);
     if (skillEntry) {
       // A skill the `skills:filter` flow drops gets the nonexistent-skill answer, so its existence does not leak.
       if (!(await isSkillServable(this.scope, skillEntry))) {
@@ -468,10 +462,11 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     });
 
     // Hide authority-gated skills from HTTP discovery (fail-closed — see
-    // handleGetSkill). Search-result metadata does not carry `authorities`, so
-    // resolve the live entry to read it. No-op when no engine is configured.
-    filteredResults = await this.filterHttpResultsByAuthorities(filteredResults, skillRegistry);
-    filteredResults = await filterServableSkillResults(this.scope, skillRegistry, filteredResults);
+    // handleGetSkill), then those the `skills:filter` flow drops. Search-result
+    // metadata does not carry `authorities`, so each result's live entry is judged.
+    filteredResults = await filterDiscoverableSkillResults(this.scope, skillRegistry, filteredResults, {
+      authInfo: this.httpAuthInfo(),
+    });
 
     // Optional new filters — additive, no-op when absent.
     if (options.category) {
@@ -560,18 +555,6 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     const request = (this.rawInput as { request?: { authSession?: { user?: unknown } } }).request;
     const user = request?.authSession?.user;
     return user ? { user } : {};
-  }
-
-  /**
-   * Filter search results (whose projected metadata lacks `authorities`) down
-   * to skills the caller can discover, by resolving the live skill entry to
-   * read its declared authorities. No-op when no engine is configured.
-   */
-  private async filterHttpResultsByAuthorities<T extends { metadata: { id?: string; name: string } }>(
-    results: T[],
-    skillRegistry: SkillRegistryInterface,
-  ): Promise<T[]> {
-    return filterSkillMetadataByAuthorities(this.scope, skillRegistry, results, this.httpAuthInfo());
   }
 
   private async handleListSkills(

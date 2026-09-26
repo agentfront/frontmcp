@@ -164,17 +164,28 @@ provide, against its own store. It never judges another app's tools, so two apps
 stores. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate must pass each
 store's check, and a denial in either one refuses the call.
 
-<Warning>
-  With two apps that each install `ApprovalPlugin` with its own store, `this.approval` currently resolves the store
-  of the app registered last, whichever app the tool belongs to
-  ([#600](https://github.com/agentfront/frontmcp/issues/600)). Until that is fixed, grant approvals through each
-  app's store directly, or install `ApprovalPlugin` once on the server.
-</Warning>
+`this.approval` resolves the `ApprovalService` of the `ApprovalPlugin` nearest to the tool: the one its own app
+installed, otherwise the one on the server. With two apps that each install `ApprovalPlugin` with its own store, a
+grant or check made through `this.approval` in one app's tool uses that app's store.
 
-Session approvals belong to the caller's session. On the stateless HTTP transport every request carries the
-same session id, so there they are keyed by the authenticated principal instead: `authInfo.extra.userId`,
-then `authInfo.extra.sub`, then `authInfo.clientId` (the token's `sub`). A stateless call with no authenticated principal cannot hold a session approval, and a tool that
-requires approval stays refused for it.
+<Note>
+  Releases up to 1.8.1 resolved `this.approval` to the store of the app registered last, whichever app the tool
+  belonged to ([#600](https://github.com/agentfront/frontmcp/issues/600)).
+</Note>
+
+Session approvals belong to the caller's session, and only to a session the server verified
+(`FrontMcpContext.verifiedSessionId`). A stateless request has no such session: it carries the shared stateless
+session id, or no `mcp-session-id` at all and runs under a fresh per-request id. Such a request is keyed by the
+authenticated principal instead: `authInfo.extra.userId`, then `authInfo.extra.sub`, then `authInfo.clientId`
+(the token's `sub`), so an approval granted in one stateless request is found by the next request of the same
+principal and by no other principal. A stateless call with no authenticated principal cannot hold a session
+approval, and a tool that requires approval stays refused for it.
+
+<Note>
+  Releases up to 1.8.1 keyed a stateless request that sent no `mcp-session-id` by its per-request id, so a session
+  approval granted in one request was never found by the next and the tool stayed refused
+  ([#597](https://github.com/agentfront/frontmcp/issues/597)).
+</Note>
 
 ---
 

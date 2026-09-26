@@ -156,6 +156,12 @@ export default class PluginRegistry
       // Collected before nested plugins copy their exports in, since those register their own hooks.
       const providerHooks = normalizeHooksFromProviders(providers);
 
+      // Registered before nested plugins so they can inject the providers this plugin derives from its options.
+      const { pluginInstance, dynamicProviders } = await this.instantiatePlugin(rec, deps);
+      if (dynamicProviders) {
+        await providers.addDynamicProviders(dynamicProviders);
+      }
+
       // Create a plugin-specific owner (NOT the parent's owner)
       // This ensures plugin tools have kind='plugin' for proper filtering in adoption
       const pluginOwner = {
@@ -203,36 +209,6 @@ export default class PluginRegistry
         return providers.getProviderInfo(token.provide);
       });
       this.providers.mergeFromRegistry(providers, exported);
-
-      const depsTokens = [...deps];
-      const depsInstances = await Promise.all(depsTokens.map((t) => this.providers.resolveBootstrapDep(t)));
-
-      let pluginInstance: PluginEntry;
-      let optionDerivedProviders: ProviderType[] = [];
-
-      if (rec.kind === PluginKind.CLASS) {
-        const klass = rec.useClass as any;
-        pluginInstance = new klass(...depsInstances);
-      } else if (rec.kind === PluginKind.CLASS_TOKEN) {
-        const klass = rec.provide as any;
-        pluginInstance = new (klass as Ctor<any>)(...depsInstances);
-      } else if (rec.kind === PluginKind.FACTORY) {
-        const factoryDeps = [...rec.inject()];
-        const args: unknown[] = [];
-        for (const d of factoryDeps) args.push(await this.providers.resolveBootstrapDep(d));
-        const produced = rec.useFactory(...args);
-        // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
-        if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
-          pluginInstance = new rec.provide(produced) as PluginEntry;
-          optionDerivedProviders = collectDynamicProviders(rec.provide, produced);
-        } else {
-          pluginInstance = produced;
-        }
-      } else if (rec.kind === PluginKind.VALUE) {
-        pluginInstance = (rec as any).useValue;
-      } else {
-        throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);
-      }
 
       // Determine the plugin's scope setting (defaults to 'app')
       const pluginScope = rec.metadata.scope ?? 'app';
@@ -288,13 +264,7 @@ export default class PluginRegistry
         installContextExtensions(rec.metadata.name, contextExtensions);
       }
 
-      const dynamicProviders =
-        optionDerivedProviders.length > 0
-          ? dedupePluginProviders([...optionDerivedProviders, ...(rec.providers ?? [])])
-          : rec.providers;
       if (dynamicProviders) {
-        await providers.addDynamicProviders(dynamicProviders);
-
         // Register dynamic provider DEFINITIONS in both:
         // 1. The parent registry (this.providers) - for tool/resource/prompt creation
         // 2. The scope's registry (this.scope.providers) - for flow buildViews() resolution
@@ -304,6 +274,7 @@ export default class PluginRegistry
         // - Flows use scope.providers.buildViews() to build context-scoped providers
         // - App providers (this.providers) are a CHILD of scope providers, not a parent
         // - So we need to merge to both to ensure providers are found in both paths
+        // The scope copy is whichever app merged last; entries build their own hierarchy's definition instead.
         const normalized = dynamicProviders.map((p) => normalizeProvider(p));
         const singletons = providers.getAllSingletons();
         const exported = normalized.map((def) => ({
@@ -335,6 +306,48 @@ export default class PluginRegistry
       this.logger?.verbose(
         `PluginRegistry: registered plugin '${rec.metadata.name}' (${hooks.length} hook(s), ${contextExtensions?.length ?? 0} context extension(s))`,
       );
+    }
+  }
+
+  /** Builds the plugin instance and the providers it contributes; a factory's options exist only once it has run. */
+  private async instantiatePlugin(
+    rec: PluginRecord,
+    deps: Set<Token>,
+  ): Promise<{ pluginInstance: PluginEntry; dynamicProviders: ProviderType[] | undefined }> {
+    const depsInstances = await Promise.all([...deps].map((t) => this.providers.resolveBootstrapDep(t)));
+
+    switch (rec.kind) {
+      case PluginKind.CLASS:
+        return {
+          pluginInstance: new (rec.useClass as Ctor<PluginEntry>)(...depsInstances),
+          dynamicProviders: rec.providers,
+        };
+      case PluginKind.CLASS_TOKEN:
+        return {
+          pluginInstance: new (rec.provide as Ctor<PluginEntry>)(...depsInstances),
+          dynamicProviders: rec.providers,
+        };
+      case PluginKind.VALUE:
+        return { pluginInstance: rec.useValue as PluginEntry, dynamicProviders: rec.providers };
+      case PluginKind.FACTORY: {
+        const args: unknown[] = [];
+        for (const d of rec.inject()) args.push(await this.providers.resolveBootstrapDep(d));
+        const produced: unknown = rec.useFactory(...args);
+        // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
+        if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
+          const optionDerived = collectDynamicProviders(rec.provide, produced);
+          return {
+            pluginInstance: new rec.provide(produced) as PluginEntry,
+            dynamicProviders:
+              optionDerived.length > 0
+                ? dedupePluginProviders([...optionDerived, ...(rec.providers ?? [])])
+                : rec.providers,
+          };
+        }
+        return { pluginInstance: produced as PluginEntry, dynamicProviders: rec.providers };
+      }
+      default:
+        throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);
     }
   }
 }

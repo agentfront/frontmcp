@@ -266,6 +266,12 @@ export interface FrontMcpBaseMetadata {
    */
   ui?: {
     cdnOverrides?: Record<string, string>;
+    /**
+     * Default for each tool's `ui.escapeStringResults`: HTML-escape plain strings returned by
+     * template functions, while `ctx.helpers.html` / `trustedHtml` results stay markup.
+     * Unset keeps the 1.8 behaviour (strings render as markup, with a one-time notice per tool).
+     */
+    escapeStringResults?: boolean;
   };
 
   /**
@@ -570,6 +576,7 @@ export const frontMcpBaseSchema = z.object({
   ui: z
     .object({
       cdnOverrides: z.record(z.string(), z.string()).optional(),
+      escapeStringResults: z.boolean().optional(),
     })
     .optional(),
   /**

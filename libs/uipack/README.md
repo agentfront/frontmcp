@@ -125,17 +125,18 @@ const result = await fetcher.fetchBatch({
 
 ### Shell
 
-| Export                                                | Type     | Purpose                                                               |
-| ----------------------------------------------------- | -------- | --------------------------------------------------------------------- |
-| `buildShell(content, config)`                         | function | Main entry point -> `ShellResult`                                     |
-| `buildCSPMetaTag(config?)`                            | function | Generate `<meta>` CSP tag                                             |
-| `buildCSPDirectives(config?)`                         | function | Merge custom domains with defaults                                    |
-| `buildDataInjectionScript(toolName, input?, output?)` | function | `<script>` setting `window.__mcp*` globals                            |
-| `createTemplateHelpers(toolName)`                     | function | `escapeHtml`, `formatDate`, `formatCurrency`, `uniqueId`, `jsonEmbed` |
-| `resolveShellTemplate(opts)`                          | function | Resolve custom shell from npm/URL/inline                              |
-| `applyShellTemplate(template, values)`                | function | Apply values to resolved template                                     |
-| `validateShellTemplate(template)`                     | function | Validate a custom shell template                                      |
-| `DEFAULT_CDN_DOMAINS`                                 | constant | jsDelivr, Cloudflare, Google Fonts                                    |
+| Export                                                       | Type     | Purpose                                                                                         |
+| ------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
+| `buildShell(content, config)`                                | function | Main entry point -> `ShellResult`                                                               |
+| `buildCSPMetaTag(config?)`                                   | function | Generate `<meta>` CSP tag                                                                       |
+| `buildCSPDirectives(config?)`                                | function | Merge custom domains with defaults                                                              |
+| `buildDataInjectionScript(toolName, input?, output?)`        | function | `<script>` setting `window.__mcp*` globals                                                      |
+| `createTemplateHelpers(toolName)`                            | function | `html`, `trustedHtml`, `escapeHtml`, `formatDate`, `formatCurrency`, `uniqueId`, `jsonEmbed`    |
+| `` html`…` ``, `trustedHtml(markup)`, `isTrustedHtml(value)` | function | Build / mark / detect `TrustedHtml` template markup (interpolated values in `html` are escaped) |
+| `resolveShellTemplate(opts)`                                 | function | Resolve custom shell from npm/URL/inline                                                        |
+| `applyShellTemplate(template, values)`                       | function | Apply values to resolved template                                                               |
+| `validateShellTemplate(template)`                            | function | Validate a custom shell template                                                                |
+| `DEFAULT_CDN_DOMAINS`                                        | constant | jsDelivr, Cloudflare, Google Fonts                                                              |
 
 ### Component
 

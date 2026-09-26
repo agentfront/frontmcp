@@ -43,6 +43,9 @@ export {
   type TemplateHelpers,
 } from './data-injector';
 
+// Trusted Markup
+export { html, trustedHtml, isTrustedHtml, type TrustedHtml } from './trusted-html';
+
 // Custom Shell Types
 export type {
   ShellPlaceholderName,

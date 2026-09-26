@@ -23,7 +23,7 @@ import {
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { PromptEmitter, type PromptChangeEvent } from './prompt.events';
@@ -56,6 +56,7 @@ export default class PromptRegistry extends RegistryAbstract<
   private byName = new Map<string, IndexedPrompt[]>(); // baseName -> rows
   private byOwnerAndName = new Map<string, IndexedPrompt>(); // "ownerKey:name" -> row
   private byOwner = new Map<string, IndexedPrompt[]>(); // ownerKey -> rows
+  private readonly lineages = new EntryLineageIndex<PromptEntry>(); // instance -> first row's lineage
 
   // version + emitter
   private version = 0;
@@ -304,7 +305,7 @@ export default class PromptRegistry extends RegistryAbstract<
 
   /** Owner lineage (root → leaf) of a prompt this registry holds, or undefined when it holds none. */
   lineageOf(entry: PromptEntry): EntryLineage | undefined {
-    return this.listAllIndexed().find((row) => row.instance === entry)?.lineage;
+    return this.lineages.lineageOf(entry);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
@@ -321,6 +322,7 @@ export default class PromptRegistry extends RegistryAbstract<
     this.byName.clear();
     this.byOwnerAndName.clear();
     this.byOwner.clear();
+    this.lineages.rebuild(effective);
 
     for (const r of effective) {
       this.byQualifiedId.set(r.qualifiedId, r);

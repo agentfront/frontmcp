@@ -192,6 +192,7 @@ describe('ApprovalPlugin', () => {
       const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-1',
+        verifiedSessionId: 'sess-1',
         authInfo: { extra: { userId: 'user-from-extra' }, clientId: 'client-1' },
       };
 
@@ -203,6 +204,7 @@ describe('ApprovalPlugin', () => {
       const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-2',
+        verifiedSessionId: 'sess-2',
         authInfo: { extra: { sub: 'sub-user' }, clientId: 'client-2' },
       };
 
@@ -214,6 +216,7 @@ describe('ApprovalPlugin', () => {
       const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-3',
+        verifiedSessionId: 'sess-3',
         authInfo: { extra: {}, clientId: 'fallback-client' },
       };
 
@@ -223,7 +226,7 @@ describe('ApprovalPlugin', () => {
 
     it('should handle missing authInfo gracefully', () => {
       const factory = getServiceFactory();
-      const ctx = { sessionId: 'sess-4' };
+      const ctx = { sessionId: 'sess-4', verifiedSessionId: 'sess-4' };
 
       factory({}, ctx);
       expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-4', undefined);

@@ -181,6 +181,8 @@ Plugins can include other plugins:
 class AnalyticsPlugin {}
 ```
 
+The providers a `DynamicPlugin` derives from its options (`dynamicProviders(options)` and `init({ providers })`) are registered before its nested plugins are built. A nested plugin can inject them, for example with `NestedPlugin.init({ inject: () => [ConfigToken], useFactory })`. This holds for both `init(options)` and `init({ inject, useFactory })`.
+
 ## Using Plugins
 
 ### In Apps

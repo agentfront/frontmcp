@@ -199,7 +199,7 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
 
 11. Should the result render as a widget in the host UI?
     YES → ui: { template, … }
-          ├── Quick HTML            → ui: { template: (ctx) => '<div>…</div>' }
+          ├── Quick HTML            → ui: { template: (ctx) => ctx.helpers.html`<div>…</div>` }
           │                            See: examples/22-tool-with-ui-html-template.md
           ├── React widget (file)   → ui: { template: { file: widgetPath } }
           │                            See: examples/23-tool-with-ui-filesource-tsx.md

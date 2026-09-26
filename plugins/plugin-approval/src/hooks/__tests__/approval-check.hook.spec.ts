@@ -31,6 +31,7 @@ describe('ApprovalCheckPlugin', () => {
       toolContext?: {
         tryGetContext?: () => {
           sessionId?: string;
+          verifiedSessionId?: string;
           authInfo?: {
             clientId?: string;
             extra?: Record<string, unknown>;
@@ -68,6 +69,7 @@ describe('ApprovalCheckPlugin', () => {
         toolContext: {
           tryGetContext: () => ({
             sessionId: 'session-123',
+            verifiedSessionId: 'session-123',
             authInfo: {
               clientId: 'client-456',
               extra: {},
@@ -184,6 +186,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.tool!.metadata['approval'] = true;
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { userId: 'user-789' },
@@ -204,6 +207,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.tool!.metadata['approval'] = true;
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { sub: 'sub-user' },
@@ -224,6 +228,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.tool!.metadata['approval'] = true;
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: {},
@@ -266,6 +271,7 @@ describe('ApprovalCheckPlugin', () => {
       // arguments of the call being gated.
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: { clientId: 'client-456', extra: { approvalContext } },
       });
       mockStore.getApproval.mockResolvedValue(undefined);
@@ -281,6 +287,7 @@ describe('ApprovalCheckPlugin', () => {
       };
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: { clientId: 'client-456', extra: { approvalContext } },
       });
       mockStore.getApproval.mockResolvedValue({
@@ -304,6 +311,7 @@ describe('ApprovalCheckPlugin', () => {
       };
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { approvalContext },
@@ -372,6 +380,7 @@ describe('ApprovalCheckPlugin', () => {
       };
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { approvalContext: { type: 'different', identifier: 'trusted-project' } },
@@ -389,6 +398,7 @@ describe('ApprovalCheckPlugin', () => {
       };
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { approvalContext: { type: 'project', identifier: 'different-project' } },
@@ -487,6 +497,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.tool!.metadata['approval'] = true;
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: undefined,
@@ -513,6 +524,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.toolContext!.input = { context: inputContext };
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { approvalContext: sessionContext },
@@ -542,6 +554,7 @@ describe('ApprovalCheckPlugin', () => {
       mockFlowCtx.state.tool!.metadata['approval'] = true;
       mockFlowCtx.state.toolContext!.tryGetContext = () => ({
         sessionId: 'session-123',
+        verifiedSessionId: 'session-123',
         authInfo: {
           clientId: 'client-456',
           extra: { userId: 123 }, // Non-string

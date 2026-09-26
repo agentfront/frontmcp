@@ -164,6 +164,48 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOpt
 }
 ```
 
+### Option-Derived Providers and Nested Plugins
+
+The providers a plugin derives from its options (`dynamicProviders(options)` and `init({ providers })`) are registered **before** the plugin's nested `plugins` are built. A nested plugin can therefore inject them, for example through `init({ inject, useFactory })`:
+
+```ts
+@Plugin({
+  name: 'my-plugin',
+  plugins: [
+    AuditPlugin.init({
+      inject: () => [MyPluginConfig],
+      useFactory: (config: MyPluginConfig) => ({ channel: config.auditChannel }),
+    }),
+  ],
+})
+export default class MyPlugin extends DynamicPlugin<MyPluginOptions> {
+  static override dynamicProviders(options: MyPluginOptions): ProviderType[] {
+    return [{ name: 'my-plugin:config', provide: MyPluginConfig, useValue: new MyPluginConfig(options) }];
+  }
+}
+```
+
+This works for both `MyPlugin.init(options)` and `MyPlugin.init({ inject, useFactory })`. In the factory form, the factory runs first, and the providers derived from the options it returns are registered before the nested plugins.
+
+<Note>
+  Because option-derived providers are registered first, they cannot inject a provider that a nested plugin exports.
+  Keep those dependencies in the nested plugin, or read them at runtime with `this.get(...)`.
+</Note>
+
+### Installing a Plugin in Several Apps
+
+Each app that installs a plugin gets its own copy of the plugin's providers, CONTEXT-scoped ones included. Tools, resources and prompts resolve the providers of the plugins **their own app** installed, so `this.approval`, `this.featureFlags` or `this.remember` in one app never resolve to another app's configuration:
+
+```ts
+@App({ id: 'billing', plugins: [ApprovalPlugin.init({ storageInstance: billingStorage })], tools: [RefundTool] })
+class BillingApp {}
+
+@App({ id: 'ops', plugins: [ApprovalPlugin.init({ storageInstance: opsStorage })], tools: [DeployTool] })
+class OpsApp {}
+```
+
+A grant made through `this.approval` inside `RefundTool` is written to `billingStorage`, and one made inside `DeployTool` is written to `opsStorage`.
+
 ## Adding Hooks
 
 Plugins can intercept flow stages using hooks. Use `this.get(Token)` to access providers:

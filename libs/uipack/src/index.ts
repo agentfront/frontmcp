@@ -93,6 +93,11 @@ export {
   buildDataInjectionScript,
   buildCustomDataInjectionScript,
   createTemplateHelpers,
+  // Trusted Markup
+  html,
+  trustedHtml,
+  isTrustedHtml,
+  type TrustedHtml,
   // Custom Shell
   type ShellPlaceholderName,
   type InlineShellSource,

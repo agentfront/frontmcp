@@ -59,6 +59,7 @@ import {
   ToolNotConsentedError,
   ToolNotFoundError,
 } from '../../errors';
+import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
@@ -195,6 +196,9 @@ declare global {
 const name = 'tools:call-tool' as const;
 const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 
+/** Tools `resolveHookOwnerId` found, reused by the same run's `findTool`. */
+const resolvedTools = new ResolvedEntries<ToolEntry>();
+
 @Flow({
   name,
   plan,
@@ -211,7 +215,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       tool = lookupTool(scope, toolName);
     }
-    return tool ? hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner) : undefined;
+    if (!tool) return undefined;
+    resolvedTools.remember(rawInput, toolName, tool);
+    return hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
@@ -281,7 +287,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     // Agent invocations (use-agent:*) are routed to agents:call-agent flow
     // by the call-tool-request handler, so they won't reach here
-    const tool = lookupTool(this.scope, name);
+    const tool = resolvedTools.take(this.rawInput, name) ?? lookupTool(this.scope, name);
 
     // When the resolution came through the alias rather than the original
     // request name, log a one-time deprecation hint so callers can migrate
@@ -791,22 +797,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const progressToken = this.state.progressToken;
 
     try {
-      // Build context-scoped providers from the tool's provider registry (app-level).
-      // This ensures CONTEXT-scoped providers registered at the app level are available.
+      // The tool's own provider hierarchy wins over the scope-level instances in the flow deps.
       const sessionKey = authInfo?.sessionId ?? 'anonymous';
-      const toolViews = await tool.providers.buildViews(sessionKey, new Map(this.deps));
-
-      // Merge tool's context providers with flow's context deps
-      const mergedContextDeps = new Map(this.deps);
-      for (const [token, instance] of toolViews.context) {
-        if (!mergedContextDeps.has(token)) {
-          mergedContextDeps.set(token, instance);
-        }
-      }
-
-      // Create context-aware providers that include scoped providers from both
-      // the scope (via flow deps) and the tool's app (via toolViews).
-      const contextProviders = new FlowContextProviders(tool.providers, mergedContextDeps);
+      const toolViews = await tool.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
+      const contextProviders = new FlowContextProviders(tool.providers, toolViews.context);
       const executionAbort = linkedAbortController((ctx as { signal?: AbortSignal }).signal);
       this.state.set('executionAbort', executionAbort);
       const context = tool.create(input.arguments, {

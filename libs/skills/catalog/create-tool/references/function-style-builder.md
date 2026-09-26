@@ -104,7 +104,7 @@ const ShowCard = tool({
   inputSchema: { text: z.string() },
   outputSchema: { text: z.string() },
   ui: {
-    template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.text)}</div>`,
+    template: (ctx) => ctx.helpers.html`<div>${ctx.output.text}</div>`,
   },
 })((input) => ({ text: input.text }));
 ```

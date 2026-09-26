@@ -19,7 +19,7 @@ import { ResourceTemplateKind } from '../common/records/resource.record';
 import { EntryValidationError, NameDisambiguationError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
@@ -60,6 +60,7 @@ export default class ResourceRegistry extends RegistryAbstract<
   private byUriTemplate = new Map<string, IndexedResource>(); // uriTemplate -> row (templates)
   private byOwnerAndName = new Map<string, IndexedResource>(); // "ownerKey:name" -> row
   private byOwner = new Map<string, IndexedResource[]>(); // ownerKey -> rows
+  private readonly lineages = new EntryLineageIndex<ResourceEntry>(); // instance -> first row's lineage
 
   // version + emitter
   private version = 0;
@@ -348,7 +349,7 @@ export default class ResourceRegistry extends RegistryAbstract<
 
   /** Owner lineage (root → leaf) of a resource this registry holds, or undefined when it holds none. */
   lineageOf(entry: ResourceEntry): EntryLineage | undefined {
-    return this.listAllIndexed().find((row) => row.instance === entry)?.lineage;
+    return this.lineages.lineageOf(entry);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
@@ -367,6 +368,7 @@ export default class ResourceRegistry extends RegistryAbstract<
     this.byUriTemplate.clear();
     this.byOwnerAndName.clear();
     this.byOwner.clear();
+    this.lineages.rebuild(effective);
 
     for (const r of effective) {
       this.byQualifiedId.set(r.qualifiedId, r);

@@ -8,6 +8,7 @@ import {
   Flow,
   FlowBase,
   FlowHooksOf,
+  ToolEntry,
   type FlowPlan,
   type FlowRunOptions,
   type PromptEntry,
@@ -15,6 +16,7 @@ import {
   type ScopeEntry,
 } from '../../common';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hasUIConfig } from '../../tool/ui';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -38,8 +40,10 @@ const ResourceRefSchema = z.object({
   uri: z.string(),
 });
 
+const CompletionRefSchema = z.discriminatedUnion('type', [PromptRefSchema, ResourceRefSchema]);
+
 const stateSchema = z.object({
-  ref: z.discriminatedUnion('type', [PromptRefSchema, ResourceRefSchema]),
+  ref: CompletionRefSchema,
   argument: z.object({
     name: z.string(),
     value: z.string(),
@@ -47,11 +51,12 @@ const stateSchema = z.object({
   // z.any() used because PromptEntry and ResourceEntry are complex abstract class types
   prompt: z.any().optional() as z.ZodType<PromptEntry | undefined>,
   resource: z.any().optional() as z.ZodType<ResourceEntry | undefined>,
+  widgetTools: z.array(z.instanceof(ToolEntry)).optional(),
   output: outputSchema,
 });
 
 const plan = {
-  pre: ['parseInput', 'findReference'],
+  pre: ['parseInput', 'findReference', 'findWidgetTools'],
   execute: ['complete'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -73,13 +78,36 @@ const { Stage } = FlowHooksOf<'completion:complete'>(name);
 
 type CompletionRef = z.infer<typeof CompleteRequestSchema>['params']['ref'];
 
+interface CompletionReference {
+  prompt?: PromptEntry;
+  resource?: ResourceEntry;
+}
+
+/** References `resolveHookOwnerId` found, reused by the same run's `findReference`. */
+const resolvedReferences = new ResolvedEntries<CompletionReference>();
+
 /** The prompt or resource a completion refers to, when the scope serves one. */
-function findCompletionReference(
-  scope: ScopeEntry,
-  ref: CompletionRef,
-): { prompt?: PromptEntry; resource?: ResourceEntry } {
+function findCompletionReference(scope: ScopeEntry, ref: CompletionRef): CompletionReference {
   if (ref.type === 'ref/prompt') return { prompt: scope.prompts.findByName(ref.name) };
   return { resource: scope.resources.findResourceForUri(ref.uri)?.instance };
+}
+
+function referenceKeyOf(ref: CompletionRef): string {
+  return ref.type === 'ref/prompt' ? `prompt:${ref.name}` : `resource:${ref.uri}`;
+}
+
+/** Upper bound on the `tools/list` pages one widget completion walks. */
+const MAX_TOOL_LIST_PAGES = 1000;
+
+/** Whether a completion asks for the `toolName` of a `ui://widget/` URI. */
+function isWidgetToolNameCompletion(ref: CompletionRef, argumentName: string): boolean {
+  return ref.type === 'ref/resource' && ref.uri.startsWith('ui://widget/') && argumentName === 'toolName';
+}
+
+/** Whether `tools/list` listed the tool, under its own name or the app-prefixed name a name conflict gives it. */
+function isListedTool(tool: ToolEntry, listedNames: ReadonlySet<string>): boolean {
+  const baseName = tool.metadata.id ?? tool.metadata.name;
+  return listedNames.has(baseName) || listedNames.has(`${tool.owner.id}:${baseName}`);
 }
 
 @Flow({
@@ -91,14 +119,19 @@ function findCompletionReference(
 })
 export default class CompleteFlow extends FlowBase<typeof name> {
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
-    const parsed = inputSchema.safeParse(rawInput);
+    const parsed = CompletionRefSchema.safeParse(
+      (rawInput as { request?: { params?: { ref?: unknown } } } | undefined)?.request?.params?.ref,
+    );
     if (!parsed.success) return undefined;
-    const { ref } = parsed.data.request.params;
-    let { prompt, resource } = findCompletionReference(scope, ref);
-    if (!prompt && !resource) {
+    const ref = parsed.data;
+    let reference = findCompletionReference(scope, ref);
+    if (!reference.prompt && !reference.resource) {
       await loadRemoteAppCapabilities(scope);
-      ({ prompt, resource } = findCompletionReference(scope, ref));
+      reference = findCompletionReference(scope, ref);
     }
+    const { prompt, resource } = reference;
+    if (!prompt && !resource) return undefined;
+    resolvedReferences.remember(rawInput, referenceKeyOf(ref), reference);
     if (prompt) return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
     return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
   }
@@ -154,9 +187,48 @@ export default class CompleteFlow extends FlowBase<typeof name> {
   @Stage('findReference')
   async findReference() {
     this.logger.verbose('findReference:start');
-    const { prompt, resource } = findCompletionReference(this.scope, this.state.required.ref);
+    const { ref } = this.state.required;
+    const { prompt, resource } =
+      resolvedReferences.take(this.rawInput, referenceKeyOf(ref)) ?? findCompletionReference(this.scope, ref);
     this.state.set({ prompt, resource });
     this.logger.verbose('findReference:done');
+  }
+
+  /** For a `ui://widget/` `toolName` completion, the UI tools the caller's `tools:list-tools` flow lists. */
+  @Stage('findWidgetTools')
+  async findWidgetTools() {
+    const { ref, argument } = this.state.required;
+    if (!isWidgetToolNameCompletion(ref, argument.name)) return;
+    this.logger.verbose('findWidgetTools:start');
+
+    const uiTools = this.scope.tools.getTools().filter((tool) => hasUIConfig(tool.metadata));
+    const listedNames = uiTools.length > 0 ? await this.listToolNames() : new Set<string>();
+    this.state.set(
+      'widgetTools',
+      uiTools.filter((tool) => isListedTool(tool, listedNames)),
+    );
+    this.logger.verbose('findWidgetTools:done');
+  }
+
+  /** Every tool name `tools/list` returns this caller, across all pages; none when listing fails. */
+  private async listToolNames(): Promise<Set<string>> {
+    const names = new Set<string>();
+    let cursor: string | undefined;
+    try {
+      for (let page = 0; page < MAX_TOOL_LIST_PAGES; page++) {
+        const { tools, nextCursor } = await this.scope.runFlowForOutput('tools:list-tools', {
+          request: { method: 'tools/list', params: cursor ? { cursor } : {} },
+          ctx: this.input.ctx,
+        });
+        for (const tool of tools) names.add(tool.name);
+        if (!nextCursor) break;
+        cursor = nextCursor;
+      }
+    } catch (e) {
+      this.logger.warn(`findWidgetTools: tools/list failed, offering no tool names: ${e}`);
+      names.clear();
+    }
+    return names;
   }
 
   @Stage('complete')
@@ -207,10 +279,9 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         `complete: resource completion for URI "${uri}" argument "${argName}" with value "${argValue}"`,
       );
 
-      // Special handling for ui:// widget URIs - complete with tool names that have UI config
-      if (uri.startsWith('ui://widget/') && argName === 'toolName') {
-        const toolsWithUI = this.scope.tools.getTools().filter((t) => hasUIConfig(t.metadata));
-        const toolNames = toolsWithUI.map((t) => t.metadata.id ?? t.metadata.name);
+      // ui:// widget URIs complete with the UI tools findWidgetTools kept for this caller
+      if (isWidgetToolNameCompletion(ref, argName)) {
+        const toolNames = (this.state.widgetTools ?? []).map((t) => t.metadata.id ?? t.metadata.name);
 
         // Filter by prefix if value is provided
         const prefix = argValue.toLowerCase();

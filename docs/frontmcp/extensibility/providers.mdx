@@ -117,6 +117,20 @@ FrontMCP resolves providers for your executors and hooks. Keep your tool logic p
   and let the framework resolve them for tools and hooks at execution time.
 </Info>
 
+### Resolution order
+
+A tool, resource or prompt resolves each provider from the **nearest** definition in its own hierarchy: first the plugin that contributed the entry, then its app (including the providers the app's plugins contribute), then the server. The same rule applies to CONTEXT-scoped providers. If two apps on one server each install the same plugin with their own options, each app's entries get the provider built from that app's options. The definition the other app registered on the server never shadows it.
+
+```ts
+@App({ id: 'billing', plugins: [ApprovalPlugin.init({ storageInstance: billingStorage })], tools: [RefundTool] })
+class BillingApp {}
+
+@App({ id: 'ops', plugins: [ApprovalPlugin.init({ storageInstance: opsStorage })], tools: [DeployTool] })
+class OpsApp {}
+
+// Inside RefundTool, `this.approval` writes to billingStorage; inside DeployTool, to opsStorage.
+```
+
 ---
 
 ## FrontMcpContext
