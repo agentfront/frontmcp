@@ -308,7 +308,7 @@ export class MyApp {}
 
 Plugins are initialized in array order. Hook priority determines execution order within the same stage.
 
-Hooks declared on an app's providers, on its plugins, and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app.
+Hooks declared on an app's providers, on its plugins (including plugins nested inside them), and on those plugins' providers run only for that app's tools, resources and prompts (`tools:call-tool`, `resources:read-resource`, `prompts:get-prompt`, `completion:complete`), including the ones its adapters and plugins provide, such as the tools an OpenAPI adapter generates. Plugins registered on the server (`@FrontMcp({ plugins })`) apply to every app. Resources and prompts the server serves outside every app, such as the SEP-2640 `skill://` resources, run every app's hooks.
 
 ## Using Hooks Inside a @Tool Class
 

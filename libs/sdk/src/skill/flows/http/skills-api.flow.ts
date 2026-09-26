@@ -303,11 +303,13 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     toolRegistry: ToolRegistry | null,
   ) {
     const loadResult = await skillRegistry.loadSkill(skillId);
-
-    if (!loadResult) {
+    const respondNotFound = () =>
       this.respond(
         httpRespond.json({ error: 'Skill not found', message: `Skill "${skillId}" not found` }, { status: 404 }),
       );
+
+    if (!loadResult) {
+      respondNotFound();
       return;
     }
 
@@ -318,8 +320,14 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       .getSkills(true)
       .find((s) => s.metadata.id === skill.id || (s.metadata.id === undefined && s.name === skill.id));
     if (skillEntry) {
+      // A skill the `skills:filter` flow drops gets the nonexistent-skill answer, so its existence does not leak.
+      if (!(await isSkillServable(this.scope, skillEntry))) {
+        respondNotFound();
+        return;
+      }
+
       const visibility = skillEntry.metadata.visibility ?? 'both';
-      if (visibility === 'mcp' || !(await isSkillServable(this.scope, skillEntry))) {
+      if (visibility === 'mcp') {
         this.respond(
           httpRespond.json(
             { error: 'Skill not found', message: `Skill "${skillId}" not available via HTTP` },

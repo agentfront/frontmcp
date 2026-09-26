@@ -427,7 +427,8 @@ CodeCallPlugin.init({
 ```
 
 `tool.name` is the tool's own name (`admin:deleteUser`), never the app-qualified `crm:admin:deleteUser`,
-and the filter receives the same object wherever CodeCall evaluates it. Filter by app with `tool.appId`.
+and the filter receives the same object wherever CodeCall evaluates it. Filter by app with `tool.appId`, which
+names the owning app for the tools its adapters and plugins provide as well as for the tools it declares.
 
 ### Direct Invoke Allowlist
 
@@ -472,7 +473,8 @@ Individual tools opt in or out via the `codecall` metadata field:
 The patterns are matched against **every name a tool answers to** — its bare `name`, its
 qualified `fullName` and the spelling the caller used — so a tool reachable as either `wipeConfig` or
 `system:wipeConfig` is blocked under both spellings. Tools hidden from discovery
-(`visibility: 'hidden'` or `hideFromDiscovery: true`) are withheld too.
+(`visibility: 'hidden'` or `hideFromDiscovery: true`) are withheld too, and so are `visibility: 'internal'`
+tools, which refuse every external `tools/call` and so are never searchable, describable or bound in a script.
 
 ### One Policy for Every Surface
 

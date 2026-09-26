@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/search-knowledge.tool.ts
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { filterServableSkills, Tool, ToolContext } from '@frontmcp/sdk';
 
 import {
   searchKnowledgeToolDescription,
@@ -43,7 +43,8 @@ export default class SearchKnowledgeTool extends ToolContext {
 
     const skillRegistry = this.scope.skills;
 
-    const knowledgeSkills = skillRegistry.getKnowledgeOnlySkills();
+    // The `skills:filter` flow (feature flags, for one) drops what the caller may not see, like every skill surface.
+    const knowledgeSkills = await filterServableSkills(this.scope, skillRegistry.getKnowledgeOnlySkills());
     const knowledgeSet = new Set(knowledgeSkills.map((s) => s.name));
     const totalKnowledgeSkills = knowledgeSkills.length;
 

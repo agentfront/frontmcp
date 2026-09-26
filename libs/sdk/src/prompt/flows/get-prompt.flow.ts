@@ -25,7 +25,7 @@ import {
 } from '../../errors';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
-import { hookOwnerIdOf } from '../../utils/lineage.utils';
+import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
   request: GetPromptRequestSchema,
@@ -88,7 +88,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     const parsed = inputSchema.safeParse(rawInput);
     if (!parsed.success) return undefined;
     const prompt = scope.prompts.findByName(parsed.data.request.params.name);
-    return prompt ? hookOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner) : undefined;
+    return prompt ? appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner) : undefined;
   }
 
   logger = this.scopeLogger.child('GetPromptFlow');

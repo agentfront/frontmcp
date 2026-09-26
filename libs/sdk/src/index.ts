@@ -232,6 +232,8 @@ export {
   // Skill audit log helper (Edge-runtime-safe factory injection)
   setSkillAuditFactory,
   hasSkillAuditFactory,
+  // Runs skills through the hookable `skills:filter` flow before a surface serves them
+  filterServableSkills,
 } from './skill';
 export type { SkillAuditFactory, AuditModuleShape } from './skill';
 export type {

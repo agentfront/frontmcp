@@ -11,9 +11,11 @@ import {
   type FlowRunOptions,
   type PromptEntry,
   type ResourceEntry,
+  type ScopeEntry,
 } from '../../common';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { hasUIConfig } from '../../tool/ui';
+import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
   request: CompleteRequestSchema,
@@ -68,6 +70,17 @@ declare global {
 const name = 'completion:complete' as const;
 const { Stage } = FlowHooksOf<'completion:complete'>(name);
 
+type CompletionRef = z.infer<typeof CompleteRequestSchema>['params']['ref'];
+
+/** The prompt or resource a completion refers to, when the scope serves one. */
+function findCompletionReference(
+  scope: ScopeEntry,
+  ref: CompletionRef,
+): { prompt?: PromptEntry; resource?: ResourceEntry } {
+  if (ref.type === 'ref/prompt') return { prompt: scope.prompts.findByName(ref.name) };
+  return { resource: scope.resources.findResourceForUri(ref.uri)?.instance };
+}
+
 @Flow({
   name,
   plan,
@@ -76,6 +89,14 @@ const { Stage } = FlowHooksOf<'completion:complete'>(name);
   access: 'authorized',
 })
 export default class CompleteFlow extends FlowBase<typeof name> {
+  static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
+    const parsed = inputSchema.safeParse(rawInput);
+    if (!parsed.success) return undefined;
+    const { prompt, resource } = findCompletionReference(scope, parsed.data.request.params.ref);
+    if (prompt) return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
+    return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+  }
+
   logger = this.scopeLogger.child('CompleteFlow');
 
   @Stage('parseInput')
@@ -127,13 +148,8 @@ export default class CompleteFlow extends FlowBase<typeof name> {
   @Stage('findReference')
   async findReference() {
     this.logger.verbose('findReference:start');
-    const { ref } = this.state.required;
-
-    if (ref.type === 'ref/prompt') {
-      this.state.set('prompt', this.scope.prompts.findByName(ref.name));
-    } else {
-      this.state.set('resource', this.scope.resources.findResourceForUri(ref.uri)?.instance);
-    }
+    const { prompt, resource } = findCompletionReference(this.scope, this.state.required.ref);
+    this.state.set({ prompt, resource });
     this.logger.verbose('findReference:done');
   }
 

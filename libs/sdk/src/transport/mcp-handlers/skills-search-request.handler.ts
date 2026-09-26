@@ -57,7 +57,7 @@ export default function skillsSearchRequestHandler({
         mcpVisibleResults,
         authInfo,
       );
-      const servableResults = await filterServableSkillResults(scope, skillRegistry, authVisibleResults);
+      const servableResults = await filterServableSkillResults(scope, skillRegistry, authVisibleResults, ctx);
 
       // Transform results to response format
       const skills = servableResults.map((r) => {

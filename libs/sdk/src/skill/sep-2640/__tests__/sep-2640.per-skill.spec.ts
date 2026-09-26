@@ -84,6 +84,41 @@ describe('buildPerSkillResourceRecord', () => {
     });
   });
 
+  it('carries metadata a plugin adds to the skill, so the plugin gates the resource like the skill', () => {
+    const skill = makeSkill({
+      name: 'beta-skill',
+      description: 'Behind a flag',
+      metadata: { name: 'beta-skill', description: 'Behind a flag', featureFlag: 'beta-skills' },
+    } as never);
+    const rec = buildPerSkillResourceRecord(fakeScope, skill);
+
+    expect((rec.metadata as unknown as Record<string, unknown>)['featureFlag']).toBe('beta-skills');
+  });
+
+  it('copies neither core skill fields nor keys the resource sets itself', () => {
+    const skill = makeSkill({
+      name: 'core-skill',
+      description: 'Core fields only',
+      metadata: {
+        name: 'core-skill',
+        description: 'Core fields only',
+        instructions: 'Secret steps',
+        tags: ['internal'],
+        visibility: 'mcp',
+        mimeType: 'text/plain',
+        title: 'Overridden',
+      },
+    } as never);
+    const rec = buildPerSkillResourceRecord(fakeScope, skill);
+    const metadata = rec.metadata as unknown as Record<string, unknown>;
+
+    expect(metadata['instructions']).toBeUndefined();
+    expect(metadata['tags']).toBeUndefined();
+    expect(metadata['visibility']).toBeUndefined();
+    expect(metadata['title']).toBeUndefined();
+    expect(metadata['mimeType']).toBe(SKILL_MD_MIME_TYPE);
+  });
+
   it('does not add an authorities key for a skill without authorities (default preserved)', () => {
     const skill = makeSkill({ name: 'public-skill', description: 'Open' });
     const rec = buildPerSkillResourceRecord(fakeScope, skill);

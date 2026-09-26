@@ -49,7 +49,7 @@ export default function skillsListRequestHandler({
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
       const wrapped = listResult.skills.map((metadata) => ({ metadata }));
       const authVisible = await filterSkillMetadataByAuthorities(scope, skillRegistry, wrapped, authInfo);
-      const visible = await filterServableSkillResults(scope, skillRegistry, authVisible);
+      const visible = await filterServableSkillResults(scope, skillRegistry, authVisible, ctx);
       const removed = listResult.skills.length - visible.length;
 
       // Transform to response format

@@ -208,7 +208,7 @@ The filter receives an `IncludeToolsFilterToolInfo`:
 ```ts
 interface IncludeToolsFilterToolInfo {
   name: string;          // the tool's own name, e.g. 'admin:deleteUser' — never prefixed with the app id
-  appId?: string;        // the owning app's id, when an app owns the tool
+  appId?: string;        // the owning app's id, also for tools the app's adapters and plugins provide
   source?: string;       // codecall.source
   description?: string;
   tags?: string[];       // codecall.tags, falling back to the tool's tags

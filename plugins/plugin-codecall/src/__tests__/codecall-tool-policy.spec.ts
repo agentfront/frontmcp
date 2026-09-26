@@ -9,7 +9,12 @@
 import type { ScopeEntry, ToolEntry } from '@frontmcp/sdk';
 
 import type { CodeCallToolMetadata, IncludeToolsFilterToolInfo } from '../codecall.types';
-import { checkCodeCallToolAccess, checkDirectCallPolicy, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
+import {
+  checkCodeCallToolAccess,
+  checkDirectCallPolicy,
+  codeCallAppIdOf,
+  toCodeCallPolicyTool,
+} from '../security/codecall-tool-policy';
 import { ToolSearchService } from '../services/tool-search.service';
 
 interface EntryOptions {
@@ -128,11 +133,36 @@ describe('CodeCall tool policy subject (GHSA-6w3j-82v5-6qrr)', () => {
     });
   });
 
-  it('treats visibility "hidden" like hideFromDiscovery, in search and in execution', async () => {
-    const entries = [appEntry('users:purge', { visibility: 'hidden' }), appEntry('users:list')];
+  it.each(['hidden', 'internal'] as const)(
+    'treats visibility "%s" like hideFromDiscovery, in search and in execution',
+    async (visibility) => {
+      const entries = [appEntry('users:purge', { visibility }), appEntry('users:list')];
 
-    expect(await indexedToolNames(entries)).toEqual(['users:list']);
-    expect(checkCodeCallToolAccess(scopeWith(entries), configReader({}), 'users:purge').allowed).toBe(false);
+      expect(await indexedToolNames(entries)).toEqual(['users:list']);
+      expect(checkCodeCallToolAccess(scopeWith(entries), configReader({}), 'users:purge').allowed).toBe(false);
+    },
+  );
+
+  it('names the app in the tool lineage when an adapter of the app owns the tool', () => {
+    const entry = { ...appEntry('purge_accounts'), owner: { kind: 'adapter', id: 'admin-api' } };
+    const scope = {
+      tools: {
+        lineageOf: () => [
+          { kind: 'scope', id: 'gateway' },
+          { kind: 'app', id: 'admin' },
+        ],
+      },
+    };
+
+    expect(codeCallAppIdOf(scope, entry)).toBe('admin');
+    expect(toCodeCallPolicyTool(entry, undefined, scope).appId).toBe('admin');
+  });
+
+  it('reports no app for a tool outside every app', () => {
+    const entry = { ...appEntry('notes'), owner: { kind: 'plugin', id: 'server-notes' } };
+    const scope = { tools: { lineageOf: () => [{ kind: 'scope', id: 'gateway' }] } };
+
+    expect(codeCallAppIdOf(scope, entry)).toBeUndefined();
   });
 
   it('returns the resolved entry with an allow decision', () => {

@@ -452,12 +452,13 @@ describe('Skills MCP Handlers', () => {
       ]);
 
       const handler = skillsSearchRequestHandler(createHandlerOptions());
+      const ctx = createContext();
       const result = await handler.handler(
         { method: 'skills/search' as const, params: { query: 'skill' } },
-        createContext() as any,
+        ctx as any,
       );
 
-      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [droppedSkill] });
+      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [droppedSkill], ctx });
       expect(result.skills.map((skill) => skill.id)).toEqual(['external-skill']);
     });
 

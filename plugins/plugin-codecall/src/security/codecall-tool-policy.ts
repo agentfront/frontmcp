@@ -26,11 +26,17 @@ import type {
 /** Namespaces CodeCall never calls, whatever the configuration says. */
 const BLOCKED_NAMESPACE_PATTERNS: readonly RegExp[] = Object.freeze([/^system:/, /^internal:/, /^__/]);
 
+/** An owner in a registry entry's lineage: an app, adapter, plugin or the scope. */
+interface CodeCallPolicyOwner {
+  kind?: string;
+  id?: string;
+}
+
 /** A registry entry as the policy reads it: a `ToolEntry`, or anything shaped like one. */
 export interface CodeCallPolicyEntry {
   name: string;
   fullName: string;
-  owner?: { kind?: string; id?: string };
+  owner?: CodeCallPolicyOwner;
   metadata?: {
     description?: string;
     tags?: string[];
@@ -83,22 +89,45 @@ function deny(reason: string): { allowed: false; reason: string } {
   return { allowed: false, reason };
 }
 
+interface ToolLineageScope {
+  tools?: { lineageOf?(entry: unknown): readonly CodeCallPolicyOwner[] | undefined };
+}
+
+/**
+ * The app a tool belongs to, found anywhere in its lineage in the scope's tool registry.
+ *
+ * A tool an app's adapter or plugin provides is owned by that adapter or plugin, so reading only
+ * `owner` gave it no app, and an `includeTools: (t) => t.appId !== 'admin'` filter let it through.
+ */
+export function codeCallAppIdOf(scope: unknown, entry: CodeCallPolicyEntry): string | undefined {
+  const lineage = (scope as ToolLineageScope | undefined)?.tools?.lineageOf?.(entry) ?? [];
+  const owners = entry.owner ? [...lineage, entry.owner] : lineage;
+  return owners.find((owner) => owner.kind === 'app')?.id;
+}
+
 /**
  * Build the policy subject for a registry entry.
  *
  * Search indexing, `describe` and execution all build their subject here, so none of them can
- * judge a different name than the others.
+ * judge a different name than the others. Pass the scope so `appId` names the app of a tool its
+ * adapters or plugins provide.
  */
-export function toCodeCallPolicyTool(entry: CodeCallPolicyEntry, requestedName?: string): CodeCallPolicyTool {
+export function toCodeCallPolicyTool(
+  entry: CodeCallPolicyEntry,
+  requestedName?: string,
+  scope?: unknown,
+): CodeCallPolicyTool {
   const { metadata } = entry;
   return {
     name: entry.name || entry.fullName,
     fullName: entry.fullName,
     aliases: requestedName ? [requestedName] : undefined,
-    appId: entry.owner?.kind === 'app' ? entry.owner.id : undefined,
+    appId: codeCallAppIdOf(scope, entry),
     description: metadata?.description,
     tags: metadata?.tags,
-    hidden: metadata?.hideFromDiscovery === true || metadata?.visibility === 'hidden',
+    // `internal` tools refuse every external tools/call, CodeCall's included, so no surface may offer them.
+    hidden:
+      metadata?.hideFromDiscovery === true || metadata?.visibility === 'hidden' || metadata?.visibility === 'internal',
     codecall: metadata?.codecall,
   };
 }
@@ -300,7 +329,7 @@ export function checkCodeCallToolAccess<T extends CodeCallPolicyEntry = CodeCall
   const entry = resolveCodeCallTool<T>(scope, name);
   if (!entry) return denyUnknownTool(name);
 
-  const policyTool = toCodeCallPolicyTool(entry, name);
+  const policyTool = toCodeCallPolicyTool(entry, name, scope);
 
   const baseDecision = checkCodeCallToolPolicy(policyTool, readCodeCallPolicyConfig(config));
   if (!baseDecision.allowed) return baseDecision;

@@ -164,9 +164,9 @@ export default class PluginRegistry
         ref: token,
       };
 
-      // Pass scopeInfo to nested plugins to ensure scope validation is consistent
-      // throughout the plugin hierarchy
-      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], pluginOwner, this.scopeInfo);
+      // Nested plugins' hooks belong to the app or scope that installed this plugin, not to the plugin.
+      const nestedHookOwner = this.owner?.kind === 'app' || this.owner?.kind === 'scope' ? this.owner : pluginOwner;
+      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], nestedHookOwner, this.scopeInfo);
       await plugins.ready;
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
@@ -221,8 +221,8 @@ export default class PluginRegistry
         const args: unknown[] = [];
         for (const d of factoryDeps) args.push(await this.providers.resolveBootstrapDep(d));
         const produced = rec.useFactory(...args);
-        // DynamicPlugin.init({ useFactory }) factories return options, not the plugin instance.
-        if (isDynamicPluginClass(rec.provide)) {
+        // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
+        if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
           pluginInstance = new rec.provide(produced) as PluginEntry;
           optionDerivedProviders = collectDynamicProviders(rec.provide, produced);
         } else {

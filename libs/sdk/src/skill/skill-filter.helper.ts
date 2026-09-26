@@ -13,20 +13,26 @@ import type { SkillRegistryInterface } from './skill.registry';
 
 type SkillFilterScope = Pick<ScopeEntry, 'runFlowForOutput'>;
 
-/** The skills, in their order, that the `skills:filter` flow lets the current caller see. */
+/**
+ * The skills, in their order, that the `skills:filter` flow lets the current caller see.
+ *
+ * `ctx` is the MCP handler context (`{ authInfo }`) of a surface that runs outside a flow, so the
+ * filter judges that caller. Surfaces already inside a flow (resource reads, tool calls, HTTP) omit it.
+ */
 export async function filterServableSkills<T extends SkillEntry>(
   scope: SkillFilterScope,
   skills: readonly T[],
+  ctx?: unknown,
 ): Promise<T[]> {
   if (skills.length === 0) return [];
-  const { skills: servable } = await scope.runFlowForOutput('skills:filter', { skills: [...skills] });
+  const { skills: servable } = await scope.runFlowForOutput('skills:filter', { skills: [...skills], ctx });
   const servableSkills = new Set<SkillEntry>(servable);
   return skills.filter((skill) => servableSkills.has(skill));
 }
 
 /** Whether the `skills:filter` flow lets the current caller see or load this skill. */
-export async function isSkillServable(scope: SkillFilterScope, skill: SkillEntry): Promise<boolean> {
-  const servable = await filterServableSkills(scope, [skill]);
+export async function isSkillServable(scope: SkillFilterScope, skill: SkillEntry, ctx?: unknown): Promise<boolean> {
+  const servable = await filterServableSkills(scope, [skill], ctx);
   return servable.length === 1;
 }
 
@@ -39,10 +45,11 @@ export async function filterServableSkillResults<T extends { metadata: { id?: st
   scope: SkillFilterScope,
   registry: SkillRegistryInterface,
   results: readonly T[],
+  ctx?: unknown,
 ): Promise<T[]> {
   const entries = results.map((result) => findSkillEntry(registry, result.metadata.id ?? result.metadata.name));
   const registered = entries.filter((entry): entry is SkillEntry => entry !== undefined);
-  const servable = new Set(await filterServableSkills(scope, registered));
+  const servable = new Set(await filterServableSkills(scope, registered, ctx));
   return results.filter((_, index) => {
     const entry = entries[index];
     return entry === undefined || servable.has(entry);

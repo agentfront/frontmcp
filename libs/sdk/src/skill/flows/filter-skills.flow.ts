@@ -10,6 +10,8 @@ const skillsSchema = z.array(z.any() as z.ZodType<SkillEntry>);
 
 const inputSchema = z.object({
   skills: skillsSchema,
+  // The MCP handler context; the flow runs as that caller when no request context is active.
+  ctx: z.unknown().optional(),
 });
 
 const outputSchema = z.object({

@@ -9,15 +9,25 @@
 import 'reflect-metadata';
 
 import { Client, type CallToolResult } from '@frontmcp/protocol';
-import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
+import {
+  Adapter,
+  App,
+  createInMemoryServer,
+  FrontMcpInstance,
+  LogLevel,
+  Tool,
+  ToolContext,
+  type AdapterInterface,
+  type FrontMcpAdapterResponse,
+} from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptionsInput, CodeCallToolMetadata } from '../codecall.types';
 
 const executedTools: string[] = [];
 
-function recordingTool(name: string, codecall?: CodeCallToolMetadata) {
-  @Tool({ name, description: `Runs ${name} for the access-control spec`, inputSchema: {}, codecall })
+function recordingTool(name: string, codecall?: CodeCallToolMetadata, visibility?: 'hidden' | 'internal') {
+  @Tool({ name, description: `Runs ${name} for the access-control spec`, inputSchema: {}, codecall, visibility })
   class RecordingTool extends ToolContext {
     async execute() {
       executedTools.push(name);
@@ -34,6 +44,8 @@ function buildCrmTools() {
     recordingTool('get_report'),
     recordingTool('billing.getInvoice'),
     recordingTool('billing.refundAll', { enabledInCodeCall: false }),
+    recordingTool('billing.voidLedger', undefined, 'internal'),
+    recordingTool('billing.purgeCache', undefined, 'hidden'),
     recordingTool('admin:deleteUser'),
     recordingTool('users:export', { enabledInCodeCall: false }),
     recordingTool('system:wipeConfig'),
@@ -43,6 +55,8 @@ function buildCrmTools() {
 }
 
 const DENIED_TOOLS = [
+  'billing.voidLedger',
+  'billing.purgeCache',
   'admin:deleteUser',
   'crm:admin:deleteUser',
   'users:export',
@@ -71,7 +85,22 @@ interface CodeCallServer {
   close(): Promise<void>;
 }
 
-async function startCodeCallServer(codecallOptions: CodeCallPluginOptionsInput): Promise<CodeCallServer> {
+@Adapter({ name: 'admin-api' })
+class AdminApiAdapter implements AdapterInterface {
+  options = { name: 'admin-api' };
+
+  fetch(): FrontMcpAdapterResponse {
+    return { tools: [recordingTool('purge_accounts')] };
+  }
+}
+
+@App({ id: 'admin', name: 'Admin', tools: [recordingTool('reset_admin_password')], adapters: [AdminApiAdapter] })
+class AdminApp {}
+
+async function startCodeCallServer(
+  codecallOptions: CodeCallPluginOptionsInput,
+  otherApps: Array<typeof AdminApp> = [],
+): Promise<CodeCallServer> {
   @App({
     id: 'crm',
     name: 'CRM',
@@ -82,7 +111,7 @@ async function startCodeCallServer(codecallOptions: CodeCallPluginOptionsInput):
 
   const instance = await FrontMcpInstance.createForGraph({
     info: { name: 'codecall-access-control', version: '1.0.0' },
-    apps: [CrmApp],
+    apps: [CrmApp, ...otherApps],
     logging: { level: LogLevel.Off },
   });
   const scope = instance.getScopes()[0];
@@ -122,11 +151,14 @@ async function invoke(server: CodeCallServer, tool: string): Promise<CallToolRes
 
 const EXCLUDE_ADMIN_TOOLS: CodeCallPluginOptionsInput['includeTools'] = (tool) => !tool.name.startsWith('admin:');
 
-function useCodeCallServer(codecallOptions: CodeCallPluginOptionsInput): () => CodeCallServer {
+function useCodeCallServer(
+  codecallOptions: CodeCallPluginOptionsInput,
+  otherApps: Array<typeof AdminApp> = [],
+): () => CodeCallServer {
   let server: CodeCallServer | undefined;
 
   beforeAll(async () => {
-    server = await startCodeCallServer(codecallOptions);
+    server = await startCodeCallServer(codecallOptions, otherApps);
   });
 
   afterAll(async () => {
@@ -187,10 +219,18 @@ describe('CodeCall tool access through the real tools:call-tool flow (GHSA-6w3j-
     it('binds namespace methods only for allowed tools', async () => {
       const outcome = await runScript(
         server(),
-        `return { getInvoice: typeof billing.getInvoice, refundAll: typeof billing.refundAll };`,
+        `return {
+           getInvoice: typeof billing.getInvoice,
+           refundAll: typeof billing.refundAll,
+           voidLedger: typeof billing.voidLedger,
+           purgeCache: typeof billing.purgeCache,
+         };`,
       );
 
-      expect(outcome).toEqual({ status: 'ok', result: { getInvoice: 'function', refundAll: 'undefined' } });
+      expect(outcome).toEqual({
+        status: 'ok',
+        result: { getInvoice: 'function', refundAll: 'undefined', voidLedger: 'undefined', purgeCache: 'undefined' },
+      });
     });
   });
 
@@ -239,7 +279,16 @@ describe('CodeCall tool access through the real tools:call-tool flow (GHSA-6w3j-
     it('indexes exactly the tools execution allows', async () => {
       const outcome = readStructured<SearchOutcome>(
         await callCodeCall(server(), 'codecall:search', {
-          queries: ['delete user', 'export users', 'wipe config', 'dump state', 'debug dump', 'refund all'],
+          queries: [
+            'delete user',
+            'export users',
+            'wipe config',
+            'dump state',
+            'debug dump',
+            'refund all',
+            'void ledger',
+            'purge cache',
+          ],
           topK: 50,
           minRelevanceScore: 0,
         }),
@@ -301,6 +350,64 @@ describe('CodeCall with directCalls disabled (GHSA-6w3j-82v5-6qrr)', () => {
   });
 
   it('keeps codecall:execute available for allowed tools', async () => {
+    const outcome = await runScript(server(), `return await callTool('users:list', {});`);
+
+    expect(outcome.status).toBe('ok');
+    expect(executedTools).toEqual(['users:list']);
+  });
+});
+
+describe('CodeCall includeTools filtering by appId (GHSA-6w3j-82v5-6qrr)', () => {
+  const EXCLUDE_ADMIN_APP: CodeCallPluginOptionsInput['includeTools'] = (tool) => tool.appId !== 'admin';
+  const ADMIN_TOOLS = ['reset_admin_password', 'purge_accounts'];
+  const server = useCodeCallServer(
+    {
+      mode: 'codecall_only',
+      includeTools: EXCLUDE_ADMIN_APP,
+      directCalls: { enabled: true, filter: EXCLUDE_ADMIN_APP },
+    },
+    [AdminApp],
+  );
+
+  it.each(ADMIN_TOOLS)('refuses callTool("%s") of the excluded app', async (name) => {
+    const outcome = await runScript(server(), `return await callTool('${name}', {});`);
+
+    expect(outcome.status).not.toBe('ok');
+    expect(executedTools).toEqual([]);
+  });
+
+  it.each(ADMIN_TOOLS)('refuses codecall:invoke of "%s" from the excluded app', async (name) => {
+    const result = await invoke(server(), name);
+
+    expect(result.isError).toBe(true);
+    expect(executedTools).toEqual([]);
+  });
+
+  it('reports the excluded app tools as not found from codecall:describe', async () => {
+    const outcome = readStructured<DescribeOutcome>(
+      await callCodeCall(server(), 'codecall:describe', { toolNames: ADMIN_TOOLS }),
+    );
+
+    expect(outcome.tools).toEqual([]);
+    expect(outcome.notFound).toEqual(ADMIN_TOOLS);
+  });
+
+  it('leaves the excluded app tools out of codecall:search', async () => {
+    const outcome = readStructured<SearchOutcome>(
+      await callCodeCall(server(), 'codecall:search', {
+        queries: ['reset admin password', 'purge accounts'],
+        topK: 50,
+        minRelevanceScore: 0,
+      }),
+    );
+
+    const foundNames = outcome.tools.map((tool) => tool.name);
+    for (const adminTool of ADMIN_TOOLS) {
+      expect(foundNames).not.toContain(adminTool);
+    }
+  });
+
+  it('still runs a tool of another app', async () => {
     const outcome = await runScript(server(), `return await callTool('users:list', {});`);
 
     expect(outcome.status).toBe('ok');

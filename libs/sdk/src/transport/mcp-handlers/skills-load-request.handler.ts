@@ -86,7 +86,7 @@ export default function skillsLoadRequestHandler({
             .getSkills(true)
             .find((s) => (s.metadata.id ?? s.name) === loadResult.skill.id || s.metadata.name === loadResult.skill.id);
         if (entry) {
-          if (!(await isSkillServable(scope, entry))) {
+          if (!(await isSkillServable(scope, entry, ctx))) {
             warnings.push(`Skill "${skillId}" not found`);
             continue;
           }

@@ -4,6 +4,8 @@ import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, FlowHooksOf, LogLevel, Plugin, Skill, SkillContext, type FlowCtxOf } from '../../common';
+import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
+import { FrontMcpContextStorage } from '../../context';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
 
@@ -58,7 +60,75 @@ function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
   );
 }
 
+const callersSeen: Array<{ sessionId?: string; authInfo?: unknown }> = [];
+
+@Plugin({ name: 'skill-filter-caller-recorder' })
+class CallerRecorderPlugin extends DynamicPlugin<Record<string, never>> {
+  @FilterSkillsHook.Will('filterSkills')
+  recordCaller() {
+    const context = this.get(FrontMcpContextStorage).getStore();
+    callersSeen.push({ sessionId: context?.sessionId, authInfo: context?.authInfo });
+  }
+}
+
+@App({ id: 'recorded-guides', name: 'Recorded Guides', plugins: [CallerRecorderPlugin], skills: [PublicGuideSkill] })
+class RecordedGuidesApp {}
+
 describe('skills:filter flow', () => {
+  describe('caller context over the in-memory transport', () => {
+    let client: DirectClient;
+
+    beforeAll(async () => {
+      client = await connect(
+        {
+          info: { name: 'skills-filter-caller', version: '1.0.0' },
+          apps: [RecordedGuidesApp],
+          logging: { level: LogLevel.Off },
+        },
+        { session: { id: 'session-alice', user: { sub: 'alice' } } },
+      );
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    beforeEach(() => {
+      callersSeen.length = 0;
+    });
+
+    const expectCallerSeen = () => {
+      expect(callersSeen.length).toBeGreaterThan(0);
+      for (const caller of callersSeen) {
+        expect(caller).toMatchObject({ sessionId: 'session-alice', authInfo: { user: { sub: 'alice' } } });
+      }
+    };
+
+    it('runs for skills/list with the caller session and auth info', async () => {
+      await client.listSkills();
+
+      expectCallerSeen();
+    });
+
+    it('runs for skills/search with the caller session and auth info', async () => {
+      await client.searchSkills('onboarding guide');
+
+      expectCallerSeen();
+    });
+
+    it('runs for skills/load with the caller session and auth info', async () => {
+      await client.loadSkills(['public-guide']);
+
+      expectCallerSeen();
+    });
+
+    it('runs for skill://index.json with the caller session and auth info', async () => {
+      await client.readResource('skill://index.json');
+
+      expectCallerSeen();
+    });
+  });
+
   describe('over MCP', () => {
     let client: DirectClient;
 

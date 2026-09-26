@@ -83,7 +83,22 @@ export function lineagesEqual(a: EntryLineage, b: EntryLineage): boolean {
  */
 export function hookOwnerIdOf(lineage: EntryLineage, owner?: EntryOwnerRef): string | undefined {
   const owners = owner ? [...lineage, owner] : lineage;
-  return owners.find((candidate) => candidate.kind === 'app')?.id ?? owners[owners.length - 1]?.id;
+  return appOwnerIdOf(owners) ?? owners[owners.length - 1]?.id;
+}
+
+/**
+ * The app anywhere in an entry's lineage, or undefined for an entry outside every app.
+ *
+ * Resource, prompt and completion flows resolve their hook owner with it, so every hook still runs
+ * for the entries the server itself serves, such as the SEP-2640 `skill://` resources.
+ *
+ * @example
+ * appOwnerIdOf([{ kind: 'scope', id: 'gw' }, { kind: 'plugin', id: 'notes' }])
+ * => undefined
+ */
+export function appOwnerIdOf(lineage: EntryLineage, owner?: EntryOwnerRef): string | undefined {
+  const owners = owner ? [...lineage, owner] : lineage;
+  return owners.find((candidate) => candidate.kind === 'app')?.id;
 }
 
 /**

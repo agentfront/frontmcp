@@ -20,8 +20,8 @@ import {
 
 type CallToolState = FlowCtxOf<'tools:call-tool'>['state'];
 
-/** Calls that already passed the gate, so it runs once when this plugin is also listed explicitly. */
-const approvedToolContexts = new WeakSet<object>();
+/** The stores each call already passed, so a store is checked once even when this plugin is also listed explicitly. */
+const passedApprovalStores = new WeakMap<object, WeakSet<ApprovalStore>>();
 
 /**
  * Hook plugin that checks tool approval before execution.
@@ -40,17 +40,8 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
   @ToolHook.Will('execute', { priority: 100 })
   async checkApproval(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool, toolContext } = flowCtx.state;
-    if (!tool || !toolContext || approvedToolContexts.has(toolContext)) return;
+    if (!tool || !toolContext) return;
 
-    await this.enforceApproval(flowCtx, tool, toolContext);
-    approvedToolContexts.add(toolContext);
-  }
-
-  private async enforceApproval(
-    flowCtx: FlowCtxOf<'tools:call-tool'>,
-    tool: NonNullable<CallToolState['tool']>,
-    toolContext: NonNullable<CallToolState['toolContext']>,
-  ): Promise<void> {
     // Get approval config from tool metadata (if it exists)
     const metadata = tool.metadata as unknown as Record<string, unknown>;
     const approvalConfig = this.resolveApprovalConfig(
@@ -65,8 +56,23 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       return;
     }
 
-    const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
     const approvalStore = this.get(ApprovalStoreToken) as ApprovalStore;
+    const passedStores = passedApprovalStores.get(toolContext) ?? new WeakSet<ApprovalStore>();
+    if (passedStores.has(approvalStore)) return;
+
+    await this.enforceApproval(flowCtx, tool, toolContext, approvalConfig, approvalStore);
+    passedStores.add(approvalStore);
+    passedApprovalStores.set(toolContext, passedStores);
+  }
+
+  private async enforceApproval(
+    flowCtx: FlowCtxOf<'tools:call-tool'>,
+    tool: NonNullable<CallToolState['tool']>,
+    toolContext: NonNullable<CallToolState['toolContext']>,
+    approvalConfig: ToolApprovalRequirement,
+    approvalStore: ApprovalStore,
+  ): Promise<void> {
+    const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
     const approval = await approvalStore.getApproval(tool.fullName, sessionId, userId);
 
     // A recorded denial outranks every way of skipping the prompt, pre-approved contexts included.

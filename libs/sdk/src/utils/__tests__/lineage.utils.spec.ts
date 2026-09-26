@@ -1,5 +1,5 @@
 import { type EntryOwnerRef } from '../../common';
-import { hookOwnerIdOf } from '../lineage.utils';
+import { appOwnerIdOf, hookOwnerIdOf } from '../lineage.utils';
 
 const scopeOwner: EntryOwnerRef = { kind: 'scope', id: 'gateway', ref: Symbol('gateway') };
 const appOwner: EntryOwnerRef = { kind: 'app', id: 'orders', ref: Symbol('orders') };
@@ -25,5 +25,19 @@ describe('hookOwnerIdOf', () => {
 
   it('returns undefined for an empty lineage and no owner', () => {
     expect(hookOwnerIdOf([])).toBeUndefined();
+  });
+});
+
+describe('appOwnerIdOf', () => {
+  it('returns the app anywhere in the lineage', () => {
+    expect(appOwnerIdOf([scopeOwner, appOwner, pluginOwner, adapterOwner])).toBe('orders');
+  });
+
+  it('finds the app in the entry owner when the lineage does not carry it', () => {
+    expect(appOwnerIdOf([scopeOwner], appOwner)).toBe('orders');
+  });
+
+  it('returns undefined for an entry outside every app', () => {
+    expect(appOwnerIdOf([scopeOwner], pluginOwner)).toBeUndefined();
   });
 });

@@ -365,6 +365,14 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
   });
 
   describe('skills over SEP-2640 skill:// resources', () => {
+    it('leaves the SKILL.md resource of a disabled skill out of resources/list', async () => {
+      const { resources } = await client.listResources();
+      const uris = resources.map((resource) => resource.uri);
+
+      expect(uris).toContain('skill://enabled-skill/SKILL.md');
+      expect(uris).not.toContain('skill://disabled-skill/SKILL.md');
+    });
+
     it('leaves a disabled skill out of skill://index.json', async () => {
       const index = JSON.parse(textOf(await client.readResource('skill://index.json'))) as {
         skills: Array<{ name: string }>;
@@ -431,6 +439,14 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
       expect(body).not.toContain('Disabled flagged workflow steps.');
     });
 
+    it('answers GET /skills/{id} for a disabled skill exactly like a skill that does not exist', async () => {
+      const disabled = await fetchSkills('/skills/disabled-skill');
+      const missing = await fetchSkills('/skills/no-such-skill');
+
+      expect(disabled.status).toBe(missing.status);
+      expect(disabled.body).toBe(missing.body.replace('no-such-skill', 'disabled-skill'));
+    });
+
     it('leaves a disabled skill out of GET /skills', async () => {
       const { status, body } = await fetchSkills('/skills');
 
@@ -453,5 +469,78 @@ describe('FeatureFlagPlugin through real flows (GHSA-gf7p-j3hr-h5h4)', () => {
       expect(status).toBe(200);
       expect(body).toContain('Enabled flagged workflow steps.');
     });
+  });
+});
+
+@ResourceTemplate({ name: 'north-report', uriTemplate: 'north://report/{reportId}', featureFlag: 'north-reports' })
+class NorthReportTemplate extends ResourceContext<{ reportId: string }> {
+  async reportIdCompleter(): Promise<ResourceCompletionResult> {
+    return { values: ['north-report-1'] };
+  }
+
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return textResource(uri);
+  }
+}
+
+@Prompt({ name: 'north-prompt', arguments: [{ name: 'topic' }], featureFlag: 'north-reports' })
+class NorthPrompt extends PromptContext {
+  async execute(): Promise<GetPromptResult> {
+    return textPrompt('north prompt');
+  }
+}
+
+@App({
+  id: 'north',
+  name: 'North',
+  plugins: [FeatureFlagPlugin.init({ adapter: 'static', flags: { 'north-reports': true } })],
+  resources: [NorthReportTemplate],
+  prompts: [NorthPrompt],
+})
+class NorthApp {}
+
+@App({
+  id: 'south',
+  name: 'South',
+  plugins: [FeatureFlagPlugin.init({ adapter: 'static', flags: { 'north-reports': false } })],
+})
+class SouthApp {}
+
+describe('FeatureFlagPlugin installed on two apps with their own flags', () => {
+  let client: DirectClient;
+
+  beforeAll(async () => {
+    client = await connect({
+      info: { name: 'feature-flag-two-apps', version: '1.0.0' },
+      apps: [NorthApp, SouthApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it('completes an argument of a resource template its own app enables', async () => {
+    const { completion } = await client.complete({
+      ref: { type: 'ref/resource', uri: 'north://report/{reportId}' },
+      argument: { name: 'reportId', value: '' },
+    });
+
+    expect(completion.values).toEqual(['north-report-1']);
+  });
+
+  it('completes an argument of a prompt its own app enables', async () => {
+    const completion = errorMessageOf(
+      client.complete({ ref: { type: 'ref/prompt', name: 'north-prompt' }, argument: { name: 'topic', value: '' } }),
+    );
+
+    expect(await completion).toBe('resolved');
+  });
+
+  it('reads a resource its own app enables', async () => {
+    const { contents } = await client.readResource('north://report/1');
+
+    expect(contents[0]).toMatchObject({ text: 'content of north://report/1' });
   });
 });

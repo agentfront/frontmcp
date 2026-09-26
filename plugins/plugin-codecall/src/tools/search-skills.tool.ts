@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/search-skills.tool.ts
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { filterServableSkills, Tool, ToolContext } from '@frontmcp/sdk';
 
 import {
   searchSkillsToolDescription,
@@ -57,7 +57,8 @@ export default class SearchSkillsTool extends ToolContext {
     // checks against `executableSet`, which also drops hidden-executable
     // skills that the underlying `registry.search()` might still surface.
     // To search hidden skills, callers should use the SDK directly.
-    const executableSkills = skillRegistry.getExecutableSkills();
+    // The `skills:filter` flow (feature flags, for one) drops what the caller may not see, like every skill surface.
+    const executableSkills = await filterServableSkills(this.scope, skillRegistry.getExecutableSkills());
     const executableSet = new Set(executableSkills.map((s) => s.name));
     const totalExecutableSkills = executableSkills.length;
 

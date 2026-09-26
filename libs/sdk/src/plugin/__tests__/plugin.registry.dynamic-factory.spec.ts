@@ -112,3 +112,22 @@ describe('DynamicPlugin.init({ inject, useFactory })', () => {
     expect(registeredMethods).toContain('gateExecution');
   });
 });
+
+describe('a hand-written factory whose provide is a DynamicPlugin class', () => {
+  it('uses the instance the factory returns instead of wrapping it in a second plugin', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const scopeInfo: PluginScopeInfo = { ownScope: providers.get(Scope), isStandaloneApp: true };
+    const produced = new FactoryDynamicPlugin({ label: 'hand-written' });
+    const registry = new PluginRegistry(
+      providers,
+      [{ provide: FactoryDynamicPlugin, name: 'factory-dynamic', inject: () => [], useFactory: () => produced }],
+      undefined,
+      scopeInfo,
+    );
+    await registry.ready;
+    const [plugin] = registry.getPlugins();
+
+    expect(plugin).toBe(produced);
+    expect(produced.options).toEqual({ label: 'hand-written' });
+  });
+});

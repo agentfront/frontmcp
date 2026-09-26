@@ -283,7 +283,9 @@ export default class ExecuteTool extends ToolContext {
       const policyConfig = readCodeCallPolicyConfig(this.get(CodeCallConfig));
       const callableTools = this.scope.tools
         .getTools(true)
-        .filter((tool) => checkCodeCallToolPolicy(toCodeCallPolicyTool(tool), policyConfig).allowed);
+        .filter(
+          (tool) => checkCodeCallToolPolicy(toCodeCallPolicyTool(tool, undefined, this.scope), policyConfig).allowed,
+        );
       const { namespaces, skipped } = buildToolNamespaces(callableTools, environment.callTool);
       environment.namespaces = namespaces;
       if (skipped.length > 0) {

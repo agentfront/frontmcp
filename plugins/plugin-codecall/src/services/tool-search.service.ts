@@ -10,7 +10,7 @@ import type {
   ToolSearch,
 } from '../codecall.symbol';
 import type { CodeCallEmbeddingOptions, CodeCallMode, EmbeddingStrategy } from '../codecall.types';
-import { checkCodeCallToolPolicy, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
+import { checkCodeCallToolPolicy, codeCallAppIdOf, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
 import { SynonymExpansionService, type SynonymExpansionConfig } from './synonym-expansion.service';
 
 /**
@@ -517,7 +517,7 @@ export class ToolSearchService implements ToolSearch {
    * or hide one it runs (GHSA-6w3j-82v5-6qrr).
    */
   private shouldIndexTool(tool: ToolEntry<any, any>): boolean {
-    return checkCodeCallToolPolicy(toCodeCallPolicyTool(tool), this.config).allowed;
+    return checkCodeCallToolPolicy(toCodeCallPolicyTool(tool, undefined, this.scope), this.config).allowed;
   }
 
   /**
@@ -644,16 +644,8 @@ export class ToolSearchService implements ToolSearch {
    * Extracts app ID from tool's owner lineage
    */
   private extractAppId(tool: ToolEntry<any, any>): string | undefined {
-    if (!tool.owner) return undefined;
-
-    // The owner structure has kind and id
-    if (tool.owner.kind === 'app') {
-      return tool.owner.id;
-    }
-
-    // If the tool is owned by a plugin, we need to look at its parent scope
-    // For now, we'll return undefined and rely on the lineage if needed
-    return undefined;
+    // The same app the policy's `includeTools` filter sees, including for adapter and plugin tools.
+    return codeCallAppIdOf(this.scope, tool);
   }
 
   /**

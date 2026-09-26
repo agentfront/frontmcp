@@ -18,6 +18,8 @@
 import { type ReadResourceResult } from '@frontmcp/protocol';
 
 import {
+  FrontMcpResourceTokens,
+  FrontMcpSkillTokens,
   type FrontMcpLogger,
   type ResourceFunctionRecord,
   type ResourceMetadata,
@@ -30,6 +32,22 @@ import { serializeSkillMd } from './sep-2640.builders';
 import { SEP_2640_META_NAMESPACE, SKILL_MD_MIME_TYPE, SKILL_MD_PRIORITY } from './sep-2640.constants';
 import { findAndLoadSkillByPath } from './sep-2640.resource-helpers';
 import { buildSkillUri } from './sep-2640.uri';
+
+/**
+ * The metadata extensions contributed to the skill (`authorities`, a plugin's `featureFlag`, ...).
+ *
+ * The per-skill resource carries them so the resource flows gate it exactly like its skill:
+ * `checkEntryAuthorities` and `filterByAuthorities`, and every plugin hook that reads the key from
+ * resource metadata. Core skill fields and keys the resource sets itself are never copied.
+ */
+function skillExtensionMetadata(skill: SkillEntry): Record<string, unknown> {
+  const extensions: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(skill.metadata)) {
+    if (value === undefined || key in FrontMcpSkillTokens || key in FrontMcpResourceTokens) continue;
+    extensions[key] = value;
+  }
+  return extensions;
+}
 
 /**
  * Build a `ResourceFunctionRecord` for a single skill. The function reads
@@ -69,6 +87,7 @@ export function buildPerSkillResourceRecord(
   };
 
   const metadata: ResourceMetadata = {
+    ...skillExtensionMetadata(skill),
     uri,
     name: skill.metadata.name,
     description: skill.metadata.description,
@@ -76,18 +95,6 @@ export function buildPerSkillResourceRecord(
     annotations,
     _meta: meta,
   };
-
-  // Propagate the skill's `authorities` onto the concrete per-skill resource
-  // so the existing resource enforcement (`checkEntryAuthorities` on read,
-  // `filterByAuthorities` on `resources/list`) gates it exactly like a
-  // resource that declared `authorities` directly. Skills without authorities
-  // stay ungated. The per-skill resource handler closes over `scope` and has
-  // no request `authInfo`, so reusing the resource flow is the only uniform
-  // enforcement point for this surface.
-  const skillAuthorities = (skill.metadata as unknown as Record<string, unknown>)['authorities'];
-  if (skillAuthorities !== undefined) {
-    (metadata as unknown as Record<string, unknown>)['authorities'] = skillAuthorities;
-  }
 
   // The handler signature matches what the resource registry expects: a
   // function that returns a `ReadResourceResult`. We close over `scope` so

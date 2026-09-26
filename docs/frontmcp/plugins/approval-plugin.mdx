@@ -152,8 +152,24 @@ A refused call throws `ApprovalRequiredError`, which the client receives as an e
 
 ### Whose Approval It Is
 
-Approvals are looked up by the tool's full name, `<app id>:<tool name>` (for example `my-app:file_write`), so
-pass that name to the `this.approval` grant and check methods.
+Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pass that name to the `this.approval`
+grant and check methods. The owner is the app that declares the tool, or the adapter or plugin that provides it: a
+tool declared on app `my-app` is `my-app:file_write`, and one the app's `github-api` adapter provides is
+`github-api:create_issue`.
+
+### Which Tools a Plugin Gates
+
+Installed on an app, `ApprovalPlugin` gates that app's tools, including those the app's adapters and plugins
+provide, against its own store. It never judges another app's tools, so two apps can each install it with separate
+stores. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate must pass each
+store's check, and a denial in either one refuses the call.
+
+<Warning>
+  With two apps that each install `ApprovalPlugin` with its own store, `this.approval` currently resolves the store
+  of the app registered last, whichever app the tool belongs to
+  ([#600](https://github.com/agentfront/frontmcp/issues/600)). Until that is fixed, grant approvals through each
+  app's store directly, or install `ApprovalPlugin` once on the server.
+</Warning>
 
 Session approvals belong to the caller's session. On the stateless HTTP transport every request carries the
 same session id, so there they are keyed by the authenticated principal (`authInfo.clientId`, the token's `sub`)

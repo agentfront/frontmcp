@@ -27,7 +27,7 @@ import {
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
-import { hookOwnerIdOf } from '../../utils/lineage.utils';
+import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -94,7 +94,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const parsed = inputSchema.safeParse(rawInput);
     if (!parsed.success) return undefined;
     const resource = scope.resources.findResourceForUri(parsed.data.request.params.uri)?.instance;
-    return resource ? hookOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+    return resource ? appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner) : undefined;
   }
 
   logger = this.scopeLogger.child('ReadResourceFlow');

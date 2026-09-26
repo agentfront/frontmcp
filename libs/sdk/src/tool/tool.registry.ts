@@ -57,6 +57,7 @@ export default class ToolRegistry extends RegistryAbstract<
   private byOwnerAndName = new Map<string, IndexedTool>(); // "ownerKey:name" -> row
   private byProviderAndName = new Map<string, IndexedTool>(); // "providerId:name" -> row (best-effort)
   private byOwner = new Map<string, IndexedTool[]>(); // ownerKey -> rows
+  private byInstance = new Map<ToolEntry, IndexedTool>(); // instance -> first row
 
   // version + emitter
   private version = 0;
@@ -349,9 +350,11 @@ export default class ToolRegistry extends RegistryAbstract<
     this.byOwnerAndName.clear();
     this.byProviderAndName.clear();
     this.byOwner.clear();
+    this.byInstance.clear();
 
     for (const r of effective) {
       this.byQualifiedId.set(r.qualifiedId, r);
+      if (!this.byInstance.has(r.instance)) this.byInstance.set(r.instance, r);
 
       const listByName = this.byName.get(r.baseName) ?? [];
       listByName.push(r);
@@ -379,7 +382,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
   /** Owner lineage (root → leaf) of a tool this registry holds, or undefined when it holds none. */
   lineageOf(entry: ToolEntry): EntryLineage | undefined {
-    return this.listAllIndexed().find((row) => row.instance === entry)?.lineage;
+    return this.byInstance.get(entry)?.lineage;
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */

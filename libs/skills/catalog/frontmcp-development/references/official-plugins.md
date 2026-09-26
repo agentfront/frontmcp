@@ -169,7 +169,9 @@ CodeCallPlugin.init({
 });
 ```
 
-- Always withheld: `enabledInCodeCall: false` tools, hidden tools (`visibility: 'hidden'` / `hideFromDiscovery`), `codecall:*`, and any tool whose name, qualified name or requested spelling starts with `system:`, `internal:` or `__`.
+- Always withheld: `enabledInCodeCall: false` tools, hidden tools (`visibility: 'hidden'` / `hideFromDiscovery`), `visibility: 'internal'` tools, `codecall:*`, and any tool whose name, qualified name or requested spelling starts with `system:`, `internal:` or `__`.
+- `tool.appId` names the owning app for the tools its adapters and plugins provide too, so `includeTools: (tool) => tool.appId !== 'admin'` withholds every tool of app `admin`.
+- `codecall:searchSkills` and `codecall:searchKnowledge` run the SDK's `skills:filter` flow, so a skill a plugin withholds there (a flag-disabled skill, for one) is absent from both.
 - `directCalls.allowedTools` and `directCalls.filter` only narrow the base policy; listing a withheld tool does not make it callable. Unlisted tools are refused.
 - Hiding a tool from search is not the control; the refusal at execution is. Do not rely on `visibleInListTools` or search ranking to protect a tool.
 
@@ -412,11 +414,20 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result.
 
-Approvals are looked up by the tool's full name, `<app id>:<tool name>` (e.g. `my-app:file_write`),
-so pass that name to `this.approval` grant and check methods. Session approvals belong to the
+Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pass that name to
+`this.approval` grant and check methods. The owner is the app that declares the tool, or the
+adapter or plugin that provides it (`my-app:file_write` for a tool declared on app `my-app`,
+`github-api:create_issue` for one its `github-api` adapter provides). Session approvals belong to the
 caller's session; on the stateless HTTP transport, where every request shares one session id,
 they are keyed by the authenticated principal (`authInfo.clientId`). A stateless call with no
 principal cannot hold a session approval.
+
+Installed on an app, `ApprovalPlugin` gates only that app's tools (including those its adapters
+and plugins provide) against its own store, so two apps can each install it with separate stores.
+Installed on the server, it gates every tool; a tool both gate must pass each store's check. With
+two apps each installing it, `this.approval` currently resolves the store of the app registered
+last ([#600](https://github.com/agentfront/frontmcp/issues/600)) -- grant through each app's
+store directly, or install `ApprovalPlugin` once on the server.
 
 ### Using `this.approval` in Tools
 
@@ -739,15 +750,15 @@ class ExperimentalTool extends ToolContext {
 
 The plugin hooks into listing and execution flows for tools, resources, resource templates, prompts, and skills. When a flag evaluates to `false`, the corresponding entry is filtered from list results and direct access is refused:
 
-| Capability        | Hidden from                                                                                      | Refused on                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Tool              | `tools/list`                                                                                     | `tools/call`                                                                           |
-| Resource          | `resources/list`                                                                                 | `resources/read`, `completion/complete`                                                |
-| Resource template | `resources/templates/list`                                                                       | `resources/read` of any URI it matches, `completion/complete`                          |
-| Prompt            | `prompts/list`                                                                                   | `prompts/get`, `completion/complete`                                                   |
-| Skill             | `skills/search`, `skills/list`, `skill://index.json`, `GET /skills`, `/llm.txt`, `/llm_full.txt` | `skills/load`, `skill://<path>/SKILL.md` and its files, `GET /skills/{id}` (not found) |
+| Capability        | Hidden from                                                                                                                                                                                                    | Refused on                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Tool              | `tools/list`                                                                                                                                                                                                   | `tools/call`                                                                                                    |
+| Resource          | `resources/list`                                                                                                                                                                                               | `resources/read`, `completion/complete`                                                                         |
+| Resource template | `resources/templates/list`                                                                                                                                                                                     | `resources/read` of any URI it matches, `completion/complete`                                                   |
+| Prompt            | `prompts/list`                                                                                                                                                                                                 | `prompts/get`, `completion/complete`                                                                            |
+| Skill             | `skills/search`, `skills/list`, `skill://index.json`, its `skill://<path>/SKILL.md` entry in `resources/list`, `GET /skills`, `/llm.txt`, `/llm_full.txt`, `codecall:searchSkills`, `codecall:searchKnowledge` | `skills/load`, `skill://<path>/SKILL.md` and its files, `GET /skills/{id}` (same answer as a nonexistent skill) |
 
-Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource and prompt gates do not run for other apps' capabilities -- install it in `@FrontMcp({ plugins })` to gate every app. Skills are gated through the `skills:filter` flow, which every skill surface runs; custom plugins can hook `Did('filterSkills')` on it the same way.
+Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource, prompt and completion gates do not run for other apps' capabilities -- install it in `@FrontMcp({ plugins })` to gate every app. Resources and prompts served outside every app (the SEP-2640 `skill://` resources) are gated by every installed copy. Skills are gated through the `skills:filter` flow, which every skill surface runs -- as the calling user on every transport, stdio and in-memory included; custom plugins can hook `Did('filterSkills')` on it the same way, and reuse `filterServableSkills(scope, skills)` from `@frontmcp/sdk` to serve skills from a surface of their own.
 
 ---
 

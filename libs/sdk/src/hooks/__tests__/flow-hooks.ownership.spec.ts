@@ -17,6 +17,8 @@ import {
   Resource,
   ResourceContext,
   ResourceTemplate,
+  Skill,
+  SkillContext,
   Tool,
   ToolContext,
   type AdapterInterface,
@@ -27,6 +29,7 @@ import {
 const ToolHook = FlowHooksOf('tools:call-tool');
 const ReadResourceHook = FlowHooksOf('resources:read-resource');
 const GetPromptHook = FlowHooksOf('prompts:get-prompt');
+const CompleteHook = FlowHooksOf('completion:complete');
 
 const hookRuns: string[] = [];
 
@@ -53,6 +56,11 @@ class EntryAuditPlugin {
   @GetPromptHook.Will('execute')
   onPromptGet(ctx: FlowCtxOf<'prompts:get-prompt'>) {
     hookRuns.push(`prompt:${ctx.state.prompt?.name}`);
+  }
+
+  @CompleteHook.Will('complete')
+  onComplete(ctx: FlowCtxOf<'completion:complete'>) {
+    hookRuns.push(`complete:${ctx.state.prompt?.name ?? ctx.state.resource?.name}`);
   }
 }
 
@@ -139,8 +147,21 @@ class ArchiveOrdersTool extends ToolContext {
 @Plugin({ name: 'order-archive', tools: [ArchiveOrdersTool] })
 class OrderArchivePlugin {}
 
-@Plugin({ name: 'order-maintenance', plugins: [OrderArchivePlugin] })
+const nestedHookRuns: string[] = [];
+
+@Plugin({ name: 'order-maintenance-audit' })
+class OrderMaintenanceAuditPlugin {
+  @ToolHook.Will('execute')
+  onToolCall(ctx: FlowCtxOf<'tools:call-tool'>) {
+    nestedHookRuns.push(`tool:${ctx.state.tool?.name}`);
+  }
+}
+
+@Plugin({ name: 'order-maintenance', plugins: [OrderArchivePlugin, OrderMaintenanceAuditPlugin] })
 class OrderMaintenancePlugin {}
+
+@Skill({ name: 'order-playbook', description: 'How to handle an order', instructions: 'Look the order up first.' })
+class OrderPlaybookSkill extends SkillContext {}
 
 @App({
   id: 'orders',
@@ -148,6 +169,7 @@ class OrderMaintenancePlugin {}
   tools: [ListOrdersTool],
   adapters: [OrdersApiAdapter],
   plugins: [EntryAuditPlugin, OrderExportsPlugin, OrderMaintenancePlugin],
+  skills: [OrderPlaybookSkill],
 })
 class OrdersApp {}
 
@@ -172,14 +194,31 @@ class InvoiceSummaryPrompt extends PromptContext {
   }
 }
 
+@ResourceTemplate({ name: 'invoice-by-id', uriTemplate: 'invoices://invoice/{id}' })
+class InvoiceByIdResource extends ResourceContext<{ id: string }> {
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return textResource(uri);
+  }
+}
+
 @App({
   id: 'billing',
   name: 'Billing',
   tools: [GetInvoiceTool],
-  resources: [InvoiceFeedResource],
+  resources: [InvoiceFeedResource, InvoiceByIdResource],
   prompts: [InvoiceSummaryPrompt],
 })
 class BillingApp {}
+
+@Prompt({ name: 'server-notes', arguments: [] })
+class ServerNotesPrompt extends PromptContext {
+  async execute(): Promise<GetPromptResult> {
+    return textPrompt();
+  }
+}
+
+@Plugin({ name: 'server-notes', prompts: [ServerNotesPrompt] })
+class ServerNotesPlugin {}
 
 describe('app plugin hooks run for every entry the app provides', () => {
   let server: TestFetchServer;
@@ -195,6 +234,7 @@ describe('app plugin hooks run for every entry the app provides', () => {
     server = await createTestFetchServer({
       info: { name: 'flow-hooks-ownership', version: '1.0.0' },
       apps: [OrdersApp, BillingApp],
+      plugins: [ServerNotesPlugin],
     });
   });
 
@@ -244,5 +284,69 @@ describe('app plugin hooks run for every entry the app provides', () => {
 
   it('does not run for a prompt of another app', async () => {
     expect(await hooksFor('prompts/get', { name: 'invoice-summary', arguments: {} })).toEqual([]);
+  });
+
+  it('runs for a completion of a prompt provided by an adapter of the app', async () => {
+    const params = { ref: { type: 'ref/prompt', name: 'order-summary' }, argument: { name: 'topic', value: '' } };
+
+    expect(await hooksFor('completion/complete', params)).toEqual(['complete:order-summary']);
+  });
+
+  it('runs for a completion of a resource template provided by an adapter of the app', async () => {
+    const params = { ref: { type: 'ref/resource', uri: 'orders://order/{id}' }, argument: { name: 'id', value: '' } };
+
+    expect(await hooksFor('completion/complete', params)).toEqual(['complete:order-by-id']);
+  });
+
+  it('does not run for a completion of a prompt of another app', async () => {
+    const params = { ref: { type: 'ref/prompt', name: 'invoice-summary' }, argument: { name: 'topic', value: '' } };
+
+    expect(await hooksFor('completion/complete', params)).toEqual([]);
+  });
+
+  it('does not run for a completion of a resource template of another app', async () => {
+    const params = {
+      ref: { type: 'ref/resource', uri: 'invoices://invoice/{id}' },
+      argument: { name: 'id', value: '' },
+    };
+
+    expect(await hooksFor('completion/complete', params)).toEqual([]);
+  });
+
+  it('runs for the skill:// index the server serves outside every app', async () => {
+    expect(await hooksFor('resources/read', { uri: 'skill://index.json' })).toEqual(['resource:sep2640-skill-index']);
+  });
+
+  it('runs for a skill:// SKILL.md resource the server serves outside every app', async () => {
+    expect(await hooksFor('resources/read', { uri: 'skill://order-playbook/SKILL.md' })).toEqual([
+      'resource:order-playbook',
+    ]);
+  });
+
+  it('runs for a completion of a skill:// template the server serves outside every app', async () => {
+    const params = {
+      ref: { type: 'ref/resource', uri: 'skill://{+skillPath}/SKILL.md' },
+      argument: { name: 'skillPath', value: '' },
+    };
+
+    expect(await hooksFor('completion/complete', params)).toEqual(['complete:sep2640-skill-md']);
+  });
+
+  it('runs for a prompt a server-level plugin provides outside every app', async () => {
+    expect(await hooksFor('prompts/get', { name: 'server-notes', arguments: {} })).toEqual(['prompt:server-notes']);
+  });
+
+  it('runs a hook of a plugin nested in a plugin of the app for the app tools', async () => {
+    nestedHookRuns.length = 0;
+    await hooksFor('tools/call', { name: 'list_orders', arguments: {} });
+
+    expect(nestedHookRuns).toEqual(['tool:list_orders']);
+  });
+
+  it('does not run a hook of a plugin nested in a plugin of the app for a tool of another app', async () => {
+    nestedHookRuns.length = 0;
+    await hooksFor('tools/call', { name: 'get_invoice', arguments: {} });
+
+    expect(nestedHookRuns).toEqual([]);
   });
 });
