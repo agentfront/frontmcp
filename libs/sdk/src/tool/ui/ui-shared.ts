@@ -62,7 +62,13 @@ export interface UIResourceMeta {
   permissions?: unknown;
 }
 
-/** Tool UI Registry — manages compiled widgets and rendering. */
+/**
+ * Tool UI Registry — manages compiled widgets and rendering.
+ *
+ * `widgets` holds only HTML compiled at startup, without any caller's data, because
+ * `resources/read ui://widget/{tool}.html` serves it to every caller. Per-call renders embed
+ * that caller's input and output, so they are returned to the caller and never stored here.
+ */
 export class ToolUIRegistry {
   private widgets = new Map<string, string>();
   private manifests = new Map<string, Record<string, unknown>>();
@@ -188,6 +194,13 @@ export class ToolUIRegistry {
     };
   }
 
+  /**
+   * Render a tool call's widget for the caller that made the call.
+   *
+   * The HTML is returned in `meta['ui/html']` only. It is not added to `widgets`: that map
+   * backs `resources/read`, which any caller can issue, so storing a render there handed one
+   * caller's data to the next reader (GHSA-rhr9-vhpf-jqp7).
+   */
   async renderAndRegisterAsync(options: Record<string, unknown>): Promise<{ meta: Record<string, unknown> }> {
     const toolName = options['toolName'] as string;
     const uiConfig = options['uiConfig'] as Record<string, unknown> | undefined;
@@ -216,9 +229,6 @@ export class ToolUIRegistry {
       resourceMode,
       sizing: extractSizing(uiConfig),
     });
-
-    // Cache the rendered HTML
-    this.widgets.set(toolName, result.html);
 
     return { meta: result.meta };
   }
@@ -251,19 +261,34 @@ export interface ParsedWidgetUri {
  * generated placeholder widget, so a crafted `resources/read` URI reflected arbitrary markup
  * into the returned document. The template escapes its input now, which is the fix that
  * actually closes it; this narrower pattern is the second line, keeping HTML metacharacters
- * out of the value in the first place. The charset covers the tool-name forms FrontMCP
- * produces (`namespace:tool`, hyphens, underscores, app-qualified names).
+ * out of the value in the first place.
+ *
+ * `tools/list` advertises the name percent-encoded (`app:tool` becomes `app%3Atool`), so the
+ * segment may carry `%` escapes. They are decoded first and the decoded name is checked against
+ * the tool-name charset: the MCP characters (letters, digits, `_ - . /`) plus the `:` of
+ * app-qualified names and `@`. An escape that decodes to anything else is rejected.
  */
-const WIDGET_URI_PATTERN = /^ui:\/\/widget\/([A-Za-z0-9_:@-]+)\.(html|js|css)$/;
+const WIDGET_URI_PATTERN = /^ui:\/\/widget\/([A-Za-z0-9_.:@%-]+)\.(html|js|css)$/;
+const WIDGET_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:@/-]+$/;
 
 export function parseWidgetUri(uri: string): ParsedWidgetUri | null {
   const match = uri.match(WIDGET_URI_PATTERN);
   if (!match) return null;
-  return { toolName: match[1], extension: match[2] };
+  const toolName = decodeWidgetToolName(match[1]);
+  if (toolName === null || !WIDGET_TOOL_NAME_PATTERN.test(toolName)) return null;
+  return { toolName, extension: match[2] };
+}
+
+function decodeWidgetToolName(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
 }
 
 export function buildStaticWidgetUri(toolName: string): string {
-  return `ui://widget/${toolName}.html`;
+  return `ui://widget/${encodeURIComponent(toolName)}.html`;
 }
 
 export function getUIResourceMimeType(_platformOrUri?: string): string {

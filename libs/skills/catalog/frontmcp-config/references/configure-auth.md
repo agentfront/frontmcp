@@ -71,6 +71,7 @@ class MyApp {}
 ```
 
 - `provider` -- the authorization server URL. FrontMCP fetches JWKS from `{provider}/.well-known/jwks.json`.
+- JWKS, discovery and CIMD client-id fetches are SSRF-guarded: a host that is, or resolves to, a loopback, private, link-local or cloud-metadata address is refused in any IPv4 or IPv6 spelling (IPv4-mapped, -translated, -compatible, NAT64 and 6to4 forms included), every redirect hop is re-checked, and an opaque (status-0) redirect is refused. A `localhost` IdP is allowed outside production.
 - `expectedAudience` -- the `aud` claim value that tokens must contain. Supported in **transparent, local, AND remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens — not transparent-only.
 - `allowAnonymous` (default `false`) -- when `true`, requests without a token get an anonymous session (scoped by `anonymousScopes`, default `['anonymous']`) instead of a 401.
 

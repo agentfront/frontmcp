@@ -8,22 +8,31 @@
 //   3. ALWAYS-ON metadata/link-local denylist (independent of
 //      `allowPrivateNetworks`): cloud metadata hostnames, the 169.254.0.0/16
 //      link-local range (incl. 169.254.169.254 IMDS), IPv6 link-local
-//      (fe80::/10), and the AWS IMDSv6 literal fd00:ec2::254 are blocked even
-//      for self-hosted deployments — there is no legitimate upstream there, and
-//      it is the prime SSRF target (SECURITY-REVIEW B2/B4).
-//   4. Private-network blocklist (RFC 1918, loopback, CGNAT 100.64.0.0/10, IPv6
-//      ULA): applied to both IP-literal hosts and resolved names UNLESS
-//      `allowPrivateNetworks: true`.
+//      (fe80::/10), the AWS IMDSv6 literal fd00:ec2::254 and the unspecified
+//      addresses are blocked even for self-hosted deployments — there is no
+//      legitimate upstream there, and it is the prime SSRF target
+//      (SECURITY-REVIEW B2/B4).
+//   4. Non-public blocklist (RFC 1918, loopback, CGNAT 100.64.0.0/10, IPv6
+//      ULA/site-local, multicast, reserved, benchmarking): applied to both
+//      IP-literal hosts and resolved names UNLESS `allowPrivateNetworks: true`.
 //
 // IP-literal hosts (e.g. `http://169.254.169.254/`, `http://[fd00:ec2::254]/`)
 // are validated DIRECTLY without DNS — so the metadata/private checks apply on
 // every runtime, including V8 isolates where `node:dns` is absent.
+//
+// SECURITY (GHSA-4r57-gvgj-5crm): addresses are classified by `@frontmcp/utils`
+// on their parsed value, never their spelling. WHATWG URL canonicalises
+// `[::ffff:169.254.169.254]` to `[::ffff:a9fe:a9fe]`, and IPv6 has further
+// forms that carry an IPv4 address (translated, compatible, NAT64, 6to4); each
+// is judged by the IPv4 address it reaches.
 //
 // The IP is checked but NOT pinned into the actual fetch in v1.2 OSS — under
 // undici this requires a custom Dispatcher and is left for v1.2.x. The
 // OS-level resolver typically reuses the same IP for the immediately-following
 // fetch, so in practice this catches direct attacks; targeted DNS-rebinding
 // against a tight time window is the documented residual risk (B5).
+
+import { classifyIpAddress, parseIpv4, type IpAddressClassification, type IpAddressRange } from '@frontmcp/utils';
 
 import type { OutboundOptions } from '../skilled-openapi.types';
 
@@ -32,96 +41,67 @@ export interface SsrfCheckResult {
   reason?: string;
 }
 
-const PRIVATE_IPV4_BLOCKS: { net: number; mask: number }[] = [
-  // RFC 1918
-  { net: ipv4ToInt('10.0.0.0'), mask: 0xff000000 },
-  { net: ipv4ToInt('172.16.0.0'), mask: 0xfff00000 },
-  { net: ipv4ToInt('192.168.0.0'), mask: 0xffff0000 },
-  // Loopback
-  { net: ipv4ToInt('127.0.0.0'), mask: 0xff000000 },
-  // Carrier-grade NAT (RFC 6598) — routable-looking but private; a common
-  // SSRF blind spot (SECURITY-REVIEW B4).
-  { net: ipv4ToInt('100.64.0.0'), mask: 0xffc00000 },
-];
-
 // ALWAYS forbidden, regardless of `allowPrivateNetworks`. These ranges host
 // cloud instance-metadata services (IMDS) and link-local addresses that no
 // legitimate upstream API uses — allowing them would re-open the prime SSRF
 // target even on self-hosted deployments that legitimately reach RFC 1918.
-const ALWAYS_FORBIDDEN_IPV4_BLOCKS: { net: number; mask: number }[] = [
-  // Link-local incl. AWS/GCP/Azure metadata 169.254.169.254
-  { net: ipv4ToInt('169.254.0.0'), mask: 0xffff0000 },
-  // "this host on this network" / unspecified
-  { net: ipv4ToInt('0.0.0.0'), mask: 0xff000000 },
-];
+const ALWAYS_FORBIDDEN_RANGES: ReadonlySet<IpAddressRange> = new Set<IpAddressRange>([
+  'link-local',
+  'cloud-metadata',
+  'unspecified',
+  'this-network',
+]);
 
-function ipv4ToInt(ip: string): number {
-  // Avoid `parts[0] << 24` because JS shifts coerce to int32 first, flipping
-  // the sign bit for any first octet ≥ 128. Multiply for the high byte and
-  // shift safely for the lower three; coerce to unsigned at the end.
-  const parts = ip.split('.').map((n) => parseInt(n, 10));
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return 0;
-  const [a, b, c, d] = parts as [number, number, number, number];
-  return (a * 0x01000000 + ((b << 16) >>> 0) + ((c << 8) >>> 0) + d) >>> 0;
+interface AddressViolation {
+  description: string;
+  alwaysForbidden: boolean;
 }
 
-function isValidIPv4(ip: string): boolean {
-  if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) return false;
-  return ip.split('.').every((p) => {
-    const n = Number(p);
-    return n >= 0 && n <= 255;
-  });
-}
-
-function matchesBlock(ip: string, blocks: { net: number; mask: number }[]): boolean {
-  const v = ipv4ToInt(ip);
-  // `&` truncates to int32 (signed); `>>> 0` reinterprets as unsigned so the
-  // comparison against `b.net` (always unsigned) is correct.
-  return blocks.some((b) => (v & b.mask) >>> 0 === b.net);
+function classifyFamily(ip: string, family: 4 | 6): IpAddressClassification | undefined {
+  const classification = classifyIpAddress(ip);
+  return classification?.family === family ? classification : undefined;
 }
 
 export function isPrivateIPv4(ip: string): boolean {
-  if (!isValidIPv4(ip)) return false;
-  // "Private" is the superset of non-public ranges: RFC 1918 / loopback / CGNAT
-  // PLUS the always-forbidden link-local + unspecified ranges. The two sets are
-  // distinguished only for the `allowPrivateNetworks` bypass — the always set is
-  // checked first and blocks even when private networks are permitted.
-  return matchesBlock(ip, PRIVATE_IPV4_BLOCKS) || matchesBlock(ip, ALWAYS_FORBIDDEN_IPV4_BLOCKS);
+  // "Private" is every non-public range, the always-forbidden ones included.
+  const classification = classifyFamily(ip, 4);
+  return classification !== undefined && classification.range !== 'public';
 }
 
 /** Metadata / link-local IPv4 — blocked even when `allowPrivateNetworks` is on. */
 export function isAlwaysForbiddenIPv4(ip: string): boolean {
-  if (!isValidIPv4(ip)) return false;
-  return matchesBlock(ip, ALWAYS_FORBIDDEN_IPV4_BLOCKS);
+  const classification = classifyFamily(ip, 4);
+  return classification !== undefined && ALWAYS_FORBIDDEN_RANGES.has(classification.range);
 }
 
 export function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (lower === '::1' || lower === '::') return true;
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
-  if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true; // link-local
-  if (lower.startsWith('::ffff:')) {
-    // IPv4-mapped IPv6
-    const v4 = lower.slice('::ffff:'.length);
-    return isPrivateIPv4(v4);
-  }
-  return false;
+  const classification = classifyFamily(ip, 6);
+  return classification !== undefined && classification.range !== 'public';
 }
 
-/** Metadata / link-local IPv6 — blocked even when `allowPrivateNetworks` is on. */
+/** Metadata / link-local IPv6 (including IPv4-carrying forms) — blocked even when `allowPrivateNetworks` is on. */
 export function isAlwaysForbiddenIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  // IPv6 link-local fe80::/10
-  if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true;
-  // AWS IMDSv6 endpoint.
-  if (lower === 'fd00:ec2::254') return true;
-  // Unspecified address.
-  if (lower === '::') return true;
-  // IPv4-mapped metadata/link-local (e.g. ::ffff:169.254.169.254).
-  if (lower.startsWith('::ffff:')) {
-    return isAlwaysForbiddenIPv4(lower.slice('::ffff:'.length));
+  const classification = classifyFamily(ip, 6);
+  return classification !== undefined && ALWAYS_FORBIDDEN_RANGES.has(classification.range);
+}
+
+/** Why an IP address may not be contacted, or undefined when it may. Unparseable addresses are refused. */
+function findAddressViolation(address: string, outbound: OutboundOptions): AddressViolation | undefined {
+  const classification = classifyIpAddress(address);
+  if (!classification) {
+    return { description: `malformed IP address ${address}`, alwaysForbidden: true };
   }
-  return false;
+  if (classification.range === 'public') return undefined;
+
+  const alwaysForbidden = ALWAYS_FORBIDDEN_RANGES.has(classification.range);
+  if (!alwaysForbidden && outbound.allowPrivateNetworks) return undefined;
+
+  const category = alwaysForbidden ? 'metadata/link-local' : 'private/loopback';
+  const embedded = classification.embeddedIpv4 ? `embeds ${classification.embeddedIpv4}, ` : '';
+  return {
+    description: `${category} IPv${classification.family} ${address} (${embedded}in ${classification.cidr})`,
+    alwaysForbidden,
+  };
 }
 
 const FORBIDDEN_METADATA_HOSTS = new Set([
@@ -138,13 +118,10 @@ const FORBIDDEN_METADATA_HOSTS = new Set([
  * `new URL('http://[::1]/').hostname` yields `[::1]` on most runtimes; this
  * normalizes so the IP checks see the bare address.
  */
-function classifyHostLiteral(hostname: string): { kind: 'v4' | 'v6' | 'name'; ip: string } {
-  let h = hostname;
-  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1);
-  if (isValidIPv4(h)) return { kind: 'v4', ip: h };
+function classifyHostLiteral(hostname: string): { isIpLiteral: boolean; address: string } {
+  const address = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
   // An IPv6 literal contains a colon; a DNS name never does.
-  if (h.includes(':')) return { kind: 'v6', ip: h };
-  return { kind: 'name', ip: h };
+  return { isIpLiteral: parseIpv4(address) !== undefined || address.includes(':'), address };
 }
 
 /**
@@ -182,21 +159,10 @@ export async function checkOutboundUrl(
 
   // IP-LITERAL host: validate directly, no DNS needed. The always-forbidden
   // (metadata/link-local) checks apply even when allowPrivateNetworks is on.
-  if (literal.kind === 'v4') {
-    if (isAlwaysForbiddenIPv4(literal.ip)) {
-      return { ok: false, reason: `metadata/link-local IPv4 ${literal.ip} is always blocked` };
-    }
-    if (!outbound.allowPrivateNetworks && isPrivateIPv4(literal.ip)) {
-      return { ok: false, reason: `private/loopback IPv4 ${literal.ip} is blocked` };
-    }
-    return { ok: true };
-  }
-  if (literal.kind === 'v6') {
-    if (isAlwaysForbiddenIPv6(literal.ip)) {
-      return { ok: false, reason: `metadata/link-local IPv6 ${literal.ip} is always blocked` };
-    }
-    if (!outbound.allowPrivateNetworks && isPrivateIPv6(literal.ip)) {
-      return { ok: false, reason: `private IPv6 ${literal.ip} is blocked` };
+  if (literal.isIpLiteral) {
+    const violation = findAddressViolation(literal.address, outbound);
+    if (violation) {
+      return { ok: false, reason: `${violation.description} is ${violation.alwaysForbidden ? 'always ' : ''}blocked` };
     }
     return { ok: true };
   }
@@ -208,7 +174,7 @@ export async function checkOutboundUrl(
   let addresses: Array<{ address: string; family: number }>;
   try {
     const { promises: dns } = await import('node:dns');
-    addresses = await dns.lookup(literal.ip, { all: true });
+    addresses = await dns.lookup(literal.address, { all: true });
   } catch (e) {
     if (!outbound.allowPrivateNetworks) {
       // Fail closed: we cannot prove the host doesn't resolve into a blocked range.
@@ -220,22 +186,10 @@ export async function checkOutboundUrl(
     return { ok: true };
   }
 
-  for (const a of addresses) {
-    if (a.family === 4) {
-      if (isAlwaysForbiddenIPv4(a.address)) {
-        return { ok: false, reason: `host "${hostname}" resolved to metadata/link-local IPv4 ${a.address}` };
-      }
-      if (!outbound.allowPrivateNetworks && isPrivateIPv4(a.address)) {
-        return { ok: false, reason: `host "${hostname}" resolved to private/loopback IPv4 ${a.address}` };
-      }
-    }
-    if (a.family === 6) {
-      if (isAlwaysForbiddenIPv6(a.address)) {
-        return { ok: false, reason: `host "${hostname}" resolved to metadata/link-local IPv6 ${a.address}` };
-      }
-      if (!outbound.allowPrivateNetworks && isPrivateIPv6(a.address)) {
-        return { ok: false, reason: `host "${hostname}" resolved to private IPv6 ${a.address}` };
-      }
+  for (const { address } of addresses) {
+    const violation = findAddressViolation(address, outbound);
+    if (violation) {
+      return { ok: false, reason: `host "${hostname}" resolved to ${violation.description}` };
     }
   }
 

@@ -399,7 +399,8 @@ OpenapiAdapter.init({
 
 <AccordionGroup>
   <Accordion title="Upstream returns a redirect and the call fails">
-    **This is deliberate.** The adapter sets `redirect: 'manual'` and refuses any 3xx with
+    **This is deliberate.** The adapter sets `redirect: 'manual'` and refuses any 3xx -- and the
+    status-0 `opaqueredirect` response browser runtimes return instead -- with
     `OPENAPI_REDIRECT_NOT_FOLLOWED` rather than following it.
 
     Following a redirect would send the request to a destination the *upstream* chose, not

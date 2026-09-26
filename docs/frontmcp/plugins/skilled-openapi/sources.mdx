@@ -81,6 +81,10 @@ SkilledOpenApiPlugin.init({
 
 This prevents a SaaS outage at boot from killing every customer's MCP server. The trade-off is that a long-broken SaaS will leave the server serving an old bundle indefinitely; monitor your SaaS-side metrics to catch a stalled pipeline.
 
+### Redirects
+
+The pull carries `authToken` as a bearer token, so it never follows a redirect: `endpoint` must serve the bundle directly. A 3xx (or a browser runtime's status-0 `opaqueredirect`) fails the pull like any other pull error, with the boot fallback described above.
+
 ### Polling
 
 Default `pollIntervalMs: 300_000` (5 min). Overlapping polls are skipped via a single-flight gate — if a previous poll is still in flight when the next interval fires, the new poll is dropped (not queued).
