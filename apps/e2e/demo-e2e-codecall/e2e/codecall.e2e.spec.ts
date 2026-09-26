@@ -89,7 +89,8 @@ test.describe('CodeCall Plugin E2E', () => {
       // Verify search result structure
       expect(searchResult.tools).toBeDefined();
       expect(searchResult.tools.length).toBeGreaterThan(0);
-      expect(searchResult.totalAvailableTools).toBe(9); // 9 CRM tools (including crm-reset)
+      // 9 CRM tools (including crm-reset); the three the access policy withholds are not indexed.
+      expect(searchResult.totalAvailableTools).toBe(9);
 
       // Verify users-list is found with relevance score
       const usersList = searchResult.tools.find((t) => t.name === 'users-list');

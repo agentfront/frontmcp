@@ -31,6 +31,7 @@ import {
   filterSkillsByAuthorities,
   getSkillAuthorities,
 } from '../../skill-authorities.helper';
+import { filterServableSkillResults, filterServableSkills, isSkillServable } from '../../skill-filter.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
 import { formatSkillForLLM } from '../../skill.utils';
@@ -318,7 +319,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       .find((s) => s.metadata.id === skill.id || (s.metadata.id === undefined && s.name === skill.id));
     if (skillEntry) {
       const visibility = skillEntry.metadata.visibility ?? 'both';
-      if (visibility === 'mcp') {
+      if (visibility === 'mcp' || !(await isSkillServable(this.scope, skillEntry))) {
         this.respond(
           httpRespond.json(
             { error: 'Skill not found', message: `Skill "${skillId}" not available via HTTP` },
@@ -394,7 +395,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
         category?: string;
       };
       score: number;
-    }> = [];
+    }>;
 
     // Semantic search opt-in: when `semanticQuery` is set, look up the
     // optional provider via the DI container. Absent provider → fall back to
@@ -456,6 +457,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     // handleGetSkill). Search-result metadata does not carry `authorities`, so
     // resolve the live entry to read it. No-op when no engine is configured.
     filteredResults = await this.filterHttpResultsByAuthorities(filteredResults, skillRegistry);
+    filteredResults = await filterServableSkillResults(this.scope, skillRegistry, filteredResults);
 
     // Optional new filters — additive, no-op when absent.
     if (options.category) {
@@ -574,7 +576,10 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     // Hide authority-gated skills from HTTP discovery (fail-closed — see
     // handleGetSkill). No-op when no authorities engine is configured.
-    let filteredSkills = await filterSkillsByAuthorities(this.scope, allSkills, this.httpAuthInfo());
+    let filteredSkills = await filterServableSkills(
+      this.scope,
+      await filterSkillsByAuthorities(this.scope, allSkills, this.httpAuthInfo()),
+    );
     if (options.tags && options.tags.length > 0) {
       filteredSkills = filteredSkills.filter((s) => {
         const skillTags = s.metadata.tags ?? [];

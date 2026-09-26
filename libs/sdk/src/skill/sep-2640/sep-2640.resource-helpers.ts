@@ -13,6 +13,7 @@ import { isAbsolute, joinPath, pathResolve, readFileBuffer } from '@frontmcp/uti
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
 import { PublicMcpError, ResourceNotFoundError } from '../../errors';
+import { isSkillServable } from '../skill-filter.helper';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
 import type { SkillInstance } from '../skill.instance';
 
@@ -51,7 +52,8 @@ export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntr
 }
 
 /**
- * Load a skill addressed by its `<skill-path>`, asserting MCP visibility.
+ * Load a skill addressed by its `<skill-path>`, asserting MCP visibility and that the
+ * `skills:filter` flow lets the caller see it.
  */
 export async function findAndLoadSkillByPath(
   scope: ScopeEntry,
@@ -63,7 +65,7 @@ export async function findAndLoadSkillByPath(
   }
 
   const entry = findSkillByPath(scope, skillPath);
-  if (!entry) {
+  if (!entry || !(await isSkillServable(scope, entry))) {
     throw new ResourceNotFoundError(`skill://${skillPath}/SKILL.md`);
   }
 

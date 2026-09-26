@@ -194,8 +194,8 @@ CodeCallPlugin.init({
     // Exclude admin tools
     if (tool.name.startsWith('admin:')) return false;
 
-    // Exclude destructive tools
-    if (tool.metadata?.annotations?.destructiveHint) return false;
+    // Exclude tools tagged as destructive
+    if (tool.tags?.includes('destructive')) return false;
 
     // Include everything else
     return true;
@@ -203,28 +203,25 @@ CodeCallPlugin.init({
 });
 ```
 
-The filter receives a `ToolEntry` with:
+The filter receives an `IncludeToolsFilterToolInfo`:
 
 ```ts
-interface ToolEntry {
-  name: string;
-  fullName: string;
-  metadata?: {
-    description?: string;
-    annotations?: {
-      destructiveHint?: boolean;
-      idempotentHint?: boolean;
-      readOnlyHint?: boolean;
-    };
-    codecall?: {
-      enabledInCodeCall?: boolean;
-      visibleInListTools?: boolean;
-      appId?: string;
-    };
-  };
-  owner?: { id: string };
+interface IncludeToolsFilterToolInfo {
+  name: string;          // the tool's own name, e.g. 'admin:deleteUser' — never prefixed with the app id
+  appId?: string;        // the owning app's id, when an app owns the tool
+  source?: string;       // codecall.source
+  description?: string;
+  tags?: string[];       // codecall.tags, falling back to the tool's tags
 }
 ```
+
+`name` is the name the tool was declared with. A tool `admin:deleteUser` in app `crm` is also reachable
+as `crm:admin:deleteUser`, but the filter always sees `admin:deleteUser`; use `appId` to filter by app.
+
+The filter is an access control, not only a search setting. CodeCall runs the same decision, with the
+same `tool` object, for `codecall:search`, `codecall:describe`, `callTool` and `getTool` in
+`codecall:execute`, the namespace bindings a script receives, and `codecall:invoke`. A tool the filter
+excludes is absent from search, reported as not found by describe, and refused at execution.
 
 ---
 
@@ -458,6 +455,13 @@ CodeCallPlugin.init({
 });
 ```
 
+Each `allowedTools` entry matches a tool's own name (`users:getById`) or its qualified
+`<appId>:<name>` (`my-app:users:getById`). List the qualified name to allow the tool from one app
+only; a bare name allows that tool in every app that declares it. Anything not listed is refused.
+`allowedTools` and `filter` only narrow what the base policy (`enabledInCodeCall`, `includeTools`,
+the blocked namespaces) already allows; listing a tool the base policy withholds does not make it
+callable. `filter` receives the same object as `includeTools`.
+
 ### When to Use Direct Invoke
 
 | Use `codecall:invoke`          | Use `codecall:execute`   |
@@ -487,15 +491,15 @@ codecall:execute (VM)
 
 ### Error Response Format
 
+A refused call returns a standard `CallToolResult`. The message is the same whether the tool is
+withheld or does not exist, so `codecall:invoke` does not reveal which tools the policy hides:
+
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "TOOL_NOT_FOUND",
-    "message": "Tool 'users:delete' is not in the allowed list",
-    "tool": "users:delete",
-    "allowedTools": ["users:getById", "billing:getInvoice"]
-  }
+  "content": [
+    { "type": "text", "text": "Tool \"users:delete\" is not available. Use codecall:search to discover available tools." }
+  ],
+  "isError": true
 }
 ```
 
@@ -507,7 +511,7 @@ codecall:execute (VM)
 
 - **allowedTools**: Always specify an explicit allowlist in production
 - **No script execution**: Direct calls cannot run arbitrary code
-- **Same tool access rules**: Tool Access Control (whitelist/blacklist) still applies
+- **Same tool access rules**: `codecall:invoke` first applies the policy `codecall:execute` uses (`enabledInCodeCall`, `includeTools`, blocked namespaces); `directCalls` only narrows it
 - **Audit logging**: Direct calls are logged the same as scripted calls
 
 ---
@@ -528,7 +532,7 @@ import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
       // Filter out admin and destructive tools
       includeTools: (tool) => {
         if (tool.name.startsWith('admin:')) return false;
-        if (tool.metadata?.annotations?.destructiveHint) return false;
+        if (tool.tags?.includes('destructive')) return false;
         return true;
       },
 

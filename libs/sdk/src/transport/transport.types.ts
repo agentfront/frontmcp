@@ -3,6 +3,9 @@ import { type AuthenticatedServerRequest } from '../server/server.types';
 
 export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http' | 'in-memory' | 'stdio';
 
+/** Session id the stateless HTTP transport gives every request; it identifies no client. */
+export const STATELESS_SESSION_ID = '__stateless__';
+
 export interface TransportKey {
   type: TransportType;
   token: string;

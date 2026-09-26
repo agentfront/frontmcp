@@ -9,28 +9,54 @@
 // path honoured none of them, so an excluded tool stayed callable by name. Keeping the
 // decision here, with both callers delegating to it, is what stops the two drifting apart
 // again.
+//
+// The two callers must also build the same subject. Execution once judged `fullName`
+// (`crm:admin:deleteUser`) while search judged `name` (`admin:deleteUser`), so a name-based
+// `includeTools` filter hid a tool from search and let `callTool` run it. Both now go through
+// `toCodeCallPolicyTool`, and `includeTools` receives one object from `toToolFilterInfo`.
 
-import type { CodeCallMode, CodeCallToolMetadata, DirectCallsFilterFn, IncludeToolsFilterFn } from '../codecall.types';
+import type {
+  CodeCallMode,
+  CodeCallToolMetadata,
+  DirectCallsFilterFn,
+  IncludeToolsFilterFn,
+  IncludeToolsFilterToolInfo,
+} from '../codecall.types';
 
 /** Namespaces CodeCall never calls, whatever the configuration says. */
 const BLOCKED_NAMESPACE_PATTERNS: readonly RegExp[] = Object.freeze([/^system:/, /^internal:/, /^__/]);
 
-/** The subset of a ToolEntry this decision needs, so callers need not pass the whole entry. */
-export interface CodeCallPolicyTool {
-  /** Canonical, most-qualified name — `fullName` where the entry has one. */
+/** A registry entry as the policy reads it: a `ToolEntry`, or anything shaped like one. */
+export interface CodeCallPolicyEntry {
   name: string;
+  fullName: string;
+  owner?: { kind?: string; id?: string };
+  metadata?: {
+    description?: string;
+    tags?: string[];
+    hideFromDiscovery?: boolean;
+    visibility?: string;
+    codecall?: CodeCallToolMetadata;
+  };
+}
+
+/** The policy's view of one tool. Build it with `toCodeCallPolicyTool`. */
+export interface CodeCallPolicyTool {
+  /** The tool's own name: the `name` search indexes and `includeTools` receives. */
+  name: string;
+  /** The qualified `<owner>:<name>` spelling, which the flow dispatches as well. */
+  fullName?: string;
   /**
-   * Every other name this tool answers to, including the name the caller asked for.
+   * Further spellings, such as the name the caller asked for.
    *
-   * The namespace rules run over all of them. A tool can carry a bare `name` and a qualified
-   * `fullName` (`wipeConfig` / `system:wipeConfig`), and the flow dispatches the qualified
-   * one — so judging a single spelling lets the other one through.
+   * The namespace rules deny under every spelling, because judging one lets another through.
+   * No allow decision ever reads an alias.
    */
   aliases?: string[];
   appId?: string;
   description?: string;
   tags?: string[];
-  hideFromDiscovery?: boolean;
+  hidden?: boolean;
   codecall?: CodeCallToolMetadata;
 }
 
@@ -48,10 +74,48 @@ export interface CodeCallDirectCallsConfig {
 
 export type CodeCallPolicyDecision = { allowed: true } | { allowed: false; reason: string };
 
+/** A decision that also carries the entry it was made for, so callers use that exact entry. */
+export type CodeCallToolAccess<T> = { allowed: true; entry: T } | { allowed: false; reason: string };
+
 const ALLOWED: CodeCallPolicyDecision = { allowed: true };
 
-function deny(reason: string): CodeCallPolicyDecision {
+function deny(reason: string): { allowed: false; reason: string } {
   return { allowed: false, reason };
+}
+
+/**
+ * Build the policy subject for a registry entry.
+ *
+ * Search indexing, `describe` and execution all build their subject here, so none of them can
+ * judge a different name than the others.
+ */
+export function toCodeCallPolicyTool(entry: CodeCallPolicyEntry, requestedName?: string): CodeCallPolicyTool {
+  const { metadata } = entry;
+  return {
+    name: entry.name || entry.fullName,
+    fullName: entry.fullName,
+    aliases: requestedName ? [requestedName] : undefined,
+    appId: entry.owner?.kind === 'app' ? entry.owner.id : undefined,
+    description: metadata?.description,
+    tags: metadata?.tags,
+    hidden: metadata?.hideFromDiscovery === true || metadata?.visibility === 'hidden',
+    codecall: metadata?.codecall,
+  };
+}
+
+/** The object `includeTools` and `directCalls.filter` receive, wherever the policy runs. */
+export function toToolFilterInfo(tool: CodeCallPolicyTool): IncludeToolsFilterToolInfo {
+  return {
+    name: tool.name,
+    appId: tool.appId,
+    source: tool.codecall?.source,
+    description: tool.description,
+    tags: tool.codecall?.tags ?? tool.tags,
+  };
+}
+
+function ownNamesOf(tool: CodeCallPolicyTool): string[] {
+  return [tool.name, tool.fullName].filter((candidate): candidate is string => !!candidate);
 }
 
 /**
@@ -65,22 +129,19 @@ export function checkCodeCallToolPolicy(
   config: CodeCallPolicyConfig,
 ): CodeCallPolicyDecision {
   const { name } = tool;
+  const spellings = [...ownNamesOf(tool), ...(tool.aliases ?? [])];
 
-  // Every spelling of the tool, so a blocked namespace cannot be dodged by resolving through
-  // a different one.
-  const names = [name, ...(tool.aliases ?? [])].filter((candidate): candidate is string => !!candidate);
-
-  if (names.some((candidate) => candidate.startsWith('codecall:'))) {
+  if (spellings.some((candidate) => candidate.startsWith('codecall:'))) {
     return deny('CodeCall meta-tools are not callable from CodeCall');
   }
 
-  for (const candidate of names) {
+  for (const candidate of spellings) {
     if (BLOCKED_NAMESPACE_PATTERNS.some((pattern) => pattern.test(candidate))) {
       return deny(`Tool "${candidate}" is in a namespace CodeCall never calls`);
     }
   }
 
-  if (tool.hideFromDiscovery === true) {
+  if (tool.hidden === true) {
     return deny(`Tool "${name}" is hidden from discovery`);
   }
 
@@ -105,17 +166,8 @@ export function checkCodeCallToolPolicy(
       return deny(`Unknown CodeCall mode: ${String(config.mode)}`);
   }
 
-  if (config.includeTools) {
-    const included = config.includeTools({
-      name,
-      appId: tool.appId,
-      source: tool.codecall?.source,
-      description: tool.description,
-      tags: tool.codecall?.tags ?? tool.tags,
-    });
-    if (!included) {
-      return deny(`Tool "${name}" is excluded by the includeTools filter`);
-    }
+  if (config.includeTools && !config.includeTools(toToolFilterInfo(tool))) {
+    return deny(`Tool "${name}" is excluded by the includeTools filter`);
   }
 
   return ALLOWED;
@@ -127,7 +179,7 @@ export function checkCodeCallToolPolicy(
  * `callTool` receives a bare string, so a name matching no resolvable tool would otherwise
  * skip every metadata-driven check above and fall straight through to `tools:call-tool`.
  */
-export function denyUnknownTool(name: string): CodeCallPolicyDecision {
+export function denyUnknownTool(name: string): { allowed: false; reason: string } {
   return deny(`Tool "${name}" is not available through CodeCall`);
 }
 
@@ -200,20 +252,14 @@ export function checkDirectCallPolicy(
     return deny('Direct tool invocation is disabled');
   }
 
-  if (directCalls.allowedTools && !directCalls.allowedTools.includes(tool.name)) {
+  // A bare name or a qualified one both list the tool; the caller's own spelling never does.
+  const { allowedTools } = directCalls;
+  if (allowedTools && !ownNamesOf(tool).some((ownName) => allowedTools.includes(ownName))) {
     return deny(`Tool "${tool.name}" is not in the direct-call allowlist`);
   }
 
-  if (directCalls.filter) {
-    const permitted = directCalls.filter({
-      name: tool.name,
-      appId: tool.appId,
-      source: tool.codecall?.source,
-      tags: tool.codecall?.tags ?? tool.tags,
-    });
-    if (!permitted) {
-      return deny(`Tool "${tool.name}" is excluded by the directCalls filter`);
-    }
+  if (directCalls.filter && !directCalls.filter(toToolFilterInfo(tool))) {
+    return deny(`Tool "${tool.name}" is excluded by the directCalls filter`);
   }
 
   return ALLOWED;
@@ -223,52 +269,49 @@ interface PolicyConfigReader {
   get(key: string): unknown;
 }
 
-/**
- * Resolve a tool name and decide whether CodeCall may reach it.
- *
- * The one entry point for both meta-tools: `codecall:execute` calls it for every `callTool`
- * and `getTool`, `codecall:invoke` for its single target with `directCall: true`. Sharing it
- * is the point — the advisory existed because execution and discovery each had their own
- * answer.
- */
-export function checkCodeCallToolAccess(
-  scope: unknown,
-  config: PolicyConfigReader,
-  name: string,
-  options: { directCall?: boolean } = {},
-): CodeCallPolicyDecision {
-  // `name` is what the caller asked for; the entry may answer to other spellings too.
-  const entry = resolveCodeCallTool<{ name: string; fullName: string; metadata?: unknown }>(scope, name);
-
-  if (!entry) return denyUnknownTool(name);
-
-  const metadata = entry.metadata as
-    | { description?: string; tags?: string[]; hideFromDiscovery?: boolean; codecall?: CodeCallToolMetadata }
-    | undefined;
-  const owner = (entry as { owner?: { kind?: string; id?: string } }).owner;
-
-  const policyTool: CodeCallPolicyTool = {
-    // The qualified name is the subject: `call-tool.flow.ts` dispatches `fullName`, so the
-    // policy has to judge the same string the flow will run.
-    name: entry.fullName || entry.name,
-    aliases: [entry.name, name],
-    appId: owner?.kind === 'app' ? owner.id : undefined,
-    description: metadata?.description,
-    tags: metadata?.tags,
-    hideFromDiscovery: metadata?.hideFromDiscovery,
-    codecall: metadata?.codecall,
-  };
-
-  const baseDecision = checkCodeCallToolPolicy(policyTool, {
+/** Read the base policy options from the plugin config. */
+export function readCodeCallPolicyConfig(config: PolicyConfigReader): CodeCallPolicyConfig {
+  return {
     // An absent mode means an unparsed/partial config, not a hostile one: fall back to the
     // schema's own documented default rather than denying every call. An unrecognised mode
     // still fails closed inside the policy's switch.
     mode: (config.get('mode') ?? 'codecall_only') as CodeCallMode,
     includeTools: config.get('includeTools') as IncludeToolsFilterFn | undefined,
-  });
+  };
+}
+
+/**
+ * Resolve a tool name and decide whether CodeCall may reach it.
+ *
+ * The one entry point for the meta-tools: `codecall:execute` calls it for every `callTool`
+ * and `getTool`, `codecall:describe` for every name it is asked about, and `codecall:invoke`
+ * for its single target with `directCall: true`. Sharing it is the point — the advisory
+ * existed because execution and discovery each had their own answer.
+ *
+ * An allow decision carries the resolved entry. Callers describe or run that entry rather than
+ * looking the name up again, which could land on a different tool than the one judged.
+ */
+export function checkCodeCallToolAccess<T extends CodeCallPolicyEntry = CodeCallPolicyEntry>(
+  scope: unknown,
+  config: PolicyConfigReader,
+  name: string,
+  options: { directCall?: boolean } = {},
+): CodeCallToolAccess<T> {
+  const entry = resolveCodeCallTool<T>(scope, name);
+  if (!entry) return denyUnknownTool(name);
+
+  const policyTool = toCodeCallPolicyTool(entry, name);
+
+  const baseDecision = checkCodeCallToolPolicy(policyTool, readCodeCallPolicyConfig(config));
   if (!baseDecision.allowed) return baseDecision;
 
-  if (!options.directCall) return ALLOWED;
+  if (options.directCall) {
+    const directDecision = checkDirectCallPolicy(
+      policyTool,
+      config.get('directCalls') as CodeCallDirectCallsConfig | undefined,
+    );
+    if (!directDecision.allowed) return directDecision;
+  }
 
-  return checkDirectCallPolicy(policyTool, config.get('directCalls') as CodeCallDirectCallsConfig | undefined);
+  return { allowed: true, entry };
 }

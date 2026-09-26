@@ -4,7 +4,7 @@ Tool authorization workflow with PKCE webhook security for FrontMCP.
 
 ## Features
 
-- **Tool Approval Checking**: Automatic approval check before tool execution via hook
+- **Tool Approval Checking**: Automatic approval check before tool execution via hook, registered by `ApprovalPlugin.init()` (no need to list `ApprovalCheckPlugin`)
 - **Multiple Approval Scopes**: SESSION, USER, TIME_LIMITED, TOOL_SPECIFIC, CONTEXT_SPECIFIC
 - **PKCE Webhook Security**: RFC 7636 compliant PKCE for secure external approval systems
 - **Recheck Mode**: Poll external API for approval status
@@ -47,13 +47,14 @@ const plugin = ApprovalPlugin.init({
 ### Using in Tools
 
 ```typescript
+import { ApprovalScope } from '@frontmcp/plugin-approval';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'dangerous_operation',
   approval: {
     required: true,
-    defaultScope: 'session',
+    defaultScope: ApprovalScope.SESSION,
     category: 'write',
     riskLevel: 'high',
     approvalMessage: 'Allow dangerous operation?',

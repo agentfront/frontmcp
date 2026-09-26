@@ -1,19 +1,17 @@
 // file: libs/plugins/src/codecall/services/tool-search.service.ts
 
-import { ToolEntry, ScopeEntry } from '@frontmcp/sdk';
-import { TFIDFVectoria, VectoriaDB, DocumentMetadata } from 'vectoriadb';
+import { TFIDFVectoria, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
+
+import { type ScopeEntry, type ToolEntry } from '@frontmcp/sdk';
+
 import type {
-  EmbeddingStrategy,
-  CodeCallEmbeddingOptions,
-  CodeCallMode,
-  CodeCallToolMetadata,
-} from '../codecall.types';
-import type {
-  ToolSearch,
-  ToolSearchResult as SymbolToolSearchResult,
   ToolSearchOptions as SymbolToolSearchOptions,
+  ToolSearchResult as SymbolToolSearchResult,
+  ToolSearch,
 } from '../codecall.symbol';
-import { SynonymExpansionService, SynonymExpansionConfig } from './synonym-expansion.service';
+import type { CodeCallEmbeddingOptions, CodeCallMode, EmbeddingStrategy } from '../codecall.types';
+import { checkCodeCallToolPolicy, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
+import { SynonymExpansionService, type SynonymExpansionConfig } from './synonym-expansion.service';
 
 /**
  * Universal Intent Mapping & Query Normalization
@@ -514,85 +512,12 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Determines if a tool should be indexed in the search database.
-   * Filters based on:
-   * - Excludes codecall:* meta-tools (they should not be searchable)
-   * - Excludes tools with hideFromDiscovery: true (system tools like sendElicitationResult)
-   * - Mode-based filtering (codecall_only, codecall_opt_in, metadata_driven)
-   * - Per-tool metadata.codecall.enabledInCodeCall
-   * - Custom includeTools filter function
+   * Whether a tool belongs in the search index: exactly when CodeCall may execute it.
+   * The decision is `codecall:execute`'s own, so search cannot show a tool execution refuses
+   * or hide one it runs (GHSA-6w3j-82v5-6qrr).
    */
   private shouldIndexTool(tool: ToolEntry<any, any>): boolean {
-    const toolName = tool.name || tool.fullName;
-
-    // Never index codecall:* meta-tools - they are for orchestration, not for search
-    if (toolName.startsWith('codecall:')) {
-      return false;
-    }
-
-    // Never index tools hidden from discovery (e.g., sendElicitationResult system tool)
-    if (tool.metadata.hideFromDiscovery === true) {
-      return false;
-    }
-
-    // Get CodeCall-specific metadata from the tool
-    const codecallMeta = this.getCodeCallMetadata(tool);
-
-    // Apply mode-based filtering
-    switch (this.config.mode) {
-      case 'codecall_only':
-        // In codecall_only mode, all non-codecall tools are searchable
-        // unless explicitly disabled via metadata
-        if (codecallMeta?.enabledInCodeCall === false) {
-          return false;
-        }
-        break;
-
-      case 'codecall_opt_in':
-        // In opt_in mode, tools must explicitly opt-in via metadata
-        if (codecallMeta?.enabledInCodeCall !== true) {
-          return false;
-        }
-        break;
-
-      case 'metadata_driven':
-        // In metadata_driven mode, default to enabled unless explicitly disabled
-        if (codecallMeta?.enabledInCodeCall === false) {
-          return false;
-        }
-        break;
-
-      default:
-        // This should never happen due to constructor validation
-        // but provides defense-in-depth and satisfies exhaustive checking
-        throw new Error(`Unknown CodeCall mode: ${this.config.mode}`);
-    }
-
-    // Apply custom includeTools filter if provided
-    if (this.config.includeTools) {
-      const appId = this.extractAppId(tool);
-      const filterInfo = {
-        name: toolName,
-        appId,
-        source: codecallMeta?.source,
-        description: tool.metadata.description,
-        tags: codecallMeta?.tags || tool.metadata.tags,
-      };
-
-      if (!this.config.includeTools(filterInfo)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Extract CodeCall-specific metadata from a tool.
-   */
-  private getCodeCallMetadata(tool: ToolEntry<any, any>): CodeCallToolMetadata | undefined {
-    // NOTE: `any` cast is intentional - ToolMetadata has constrained generics
-    return (tool.metadata as any)?.codecall as CodeCallToolMetadata | undefined;
+    return checkCodeCallToolPolicy(toCodeCallPolicyTool(tool), this.config).allowed;
   }
 
   /**
