@@ -216,10 +216,10 @@ describe.each(configurations)('approval gate through tools:call-tool with %s (GH
   });
 
   it('checks approval once per call', async () => {
-    const getApproval = jest.spyOn(ApprovalStorageStore.prototype, 'getApproval');
+    const getApprovals = jest.spyOn(ApprovalStorageStore.prototype, 'getApprovals');
 
     await callTool(server, 'deploy_service', { service: 'api' }, statelessCaller('alice'));
 
-    expect(getApproval).toHaveBeenCalledTimes(1);
+    expect(getApprovals).toHaveBeenCalledTimes(1);
   });
 });

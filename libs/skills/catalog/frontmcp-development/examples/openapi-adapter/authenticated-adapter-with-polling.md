@@ -20,8 +20,11 @@ Demonstrates configuring authentication (API key and bearer token) and automatic
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
+// Your code: returns a token issued for the upstream API (secrets manager, token exchange, ...)
+declare function getEvolvingApiToken(ctx: unknown): Promise<string>;
 
 @App({
   name: 'integrations',
@@ -51,8 +54,9 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       name: 'evolving-api',
       url: 'https://api.example.com/openapi.json',
       baseUrl: 'https://api.example.com',
-      securityResolver: (tool, ctx) => {
-        return { jwt: ctx.authInfo?.token };
+      securityResolver: async (tool, ctx) => {
+        // A credential issued for this API (never the caller's own ctx.authInfo.token)
+        return { jwt: await getEvolvingApiToken(ctx) };
       },
       polling: {
         intervalMs: 300000, // Re-fetch spec every 5 minutes

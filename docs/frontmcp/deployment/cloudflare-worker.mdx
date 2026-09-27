@@ -222,6 +222,7 @@ The `@frontmcp/edge` package runs FrontMCP from a plain config object — no dec
 
 ```ts
 // worker.ts
+import { env } from 'cloudflare:workers';
 import { createEdgeMcp, kvBundleCacheFromEnv } from '@frontmcp/edge';
 
 export default createEdgeMcp({
@@ -230,7 +231,10 @@ export default createEdgeMcp({
   tasks: { enabled: false },
   managed: {
     endpoint: 'https://cloud.example.com/v1/bundles/acme',
-    authToken: 'pinned-pull-token',
+    // The pull JWT the SaaS issued for this server (iss = expectedIssuer, aud includes
+    // expectedAudience, with exp), kept in a Worker secret:
+    //   npx wrangler secret put FRONTMCP_PULL_TOKEN
+    authToken: env.FRONTMCP_PULL_TOKEN,
     expectedAudience: 'acme-mcp',
     jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
     expectedIssuer: 'https://cloud.example.com',

@@ -15,6 +15,8 @@
  */
 import 'reflect-metadata';
 
+import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
+
 import { BundleStore } from '@frontmcp/adapters/skills';
 
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
@@ -65,14 +67,36 @@ function scopeWith(controller: SkilledOpenApiRuntimeDeps) {
   };
 }
 
+const JWKS_URL = 'https://cloud.example.dev/.well-known/jwks.json';
+
+// The saas source verifies its pull token against the SaaS's JWKS before every pull.
+let jwks: { keys: JWK[] };
+let pullToken: string;
+beforeAll(async () => {
+  const { publicKey, privateKey } = await generateKeyPair('RS256');
+  jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'saas-1', alg: 'RS256', use: 'sig' }] };
+  pullToken = await new SignJWT({})
+    .setProtectedHeader({ alg: 'RS256', kid: 'saas-1' })
+    .setIssuer('https://cloud.example.dev')
+    .setAudience('acme:prod')
+    .setExpirationTime('1h')
+    .sign(privateKey);
+});
+
+/** A fetch that serves the SaaS's JWKS, and `body` for the bundle endpoint. */
+const saasServing = (body: unknown) => async (url: unknown) => ({
+  status: 200,
+  text: async () => JSON.stringify(String(url) === JWKS_URL ? jwks : body),
+});
+
 function getSyncFactory() {
   const providers = SkilledOpenApiPlugin.dynamicProviders({
     source: {
       type: 'saas',
       endpoint: 'https://cloud.example.dev/v1/bundles/acme',
-      authToken: 'tok',
+      authToken: pullToken,
       expectedAudience: 'acme:prod',
-      jwksUrl: 'https://cloud.example.dev/.well-known/jwks.json',
+      jwksUrl: JWKS_URL,
       expectedIssuer: 'https://cloud.example.dev',
       pollIntervalMs: 20,
     },
@@ -155,7 +179,7 @@ describe('skilled-openapi runtime-deps injection', () => {
 
     // Cron Trigger fires → fresh bundle now available from the endpoint.
     const fresh = bundle({ bundleId: 'plugin:fresh', version: '2' });
-    fetchMock.mockResolvedValue({ status: 200, text: async () => JSON.stringify(fresh) } as never);
+    fetchMock.mockImplementation(saasServing(fresh) as never);
     await captured?.refresh?.();
 
     await waitFor(() => store.current()?.bundleId === 'plugin:fresh');
@@ -165,10 +189,7 @@ describe('skilled-openapi runtime-deps injection', () => {
   });
 
   it('works without a controller (standard Node path): no attach, fs cache', async () => {
-    fetchMock.mockResolvedValue({
-      status: 200,
-      text: async () => JSON.stringify(bundle({ bundleId: 'plugin:node' })),
-    } as never);
+    fetchMock.mockImplementation(saasServing(bundle({ bundleId: 'plugin:node' })) as never);
 
     // No `providers` resolving the token → resolveRuntimeDeps returns undefined.
     const scope = {

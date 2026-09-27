@@ -9,6 +9,15 @@ import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { SaasSourceOptions } from '../source-options';
 import { SaasPullSource } from '../sources/saas-pull.source';
 import type { BundleCacheStore, BundleSourceDeps } from '../sources/skill-bundle-source.interface';
+import { createSaasTokenIssuer, withSaasJwks, type SaasTokenIssuer } from './saas-token.fixture';
+
+// The pull token is verified against the SaaS's JWKS before every pull.
+let issuer: SaasTokenIssuer;
+let pullToken: string;
+beforeAll(async () => {
+  issuer = await createSaasTokenIssuer();
+  pullToken = await issuer.token();
+});
 
 const baseBundle: ResolvedBundle = {
   schemaVersion: 1,
@@ -35,7 +44,7 @@ const options = (overrides: Partial<SaasSourceOptions> = {}): SaasSourceOptions 
   ({
     type: 'saas',
     endpoint: 'https://cloud.example.dev/v1/bundles/acme',
-    authToken: 'tok',
+    authToken: pullToken,
     expectedAudience: 'acme:prod',
     pollIntervalMs: 30,
     enableWebhook: false,
@@ -69,7 +78,7 @@ class EdgeFakeSource extends SaasPullSource {
     super(opts, undefined, fakeLogger, deps);
   }
   protected override async httpGet(url: string, headers: Record<string, string>) {
-    return this.stub(url, headers);
+    return withSaasJwks(issuer, this.stub)(url, headers);
   }
 }
 

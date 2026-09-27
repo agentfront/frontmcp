@@ -197,7 +197,7 @@ describe('ApprovalPlugin', () => {
       };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-1', 'user-from-extra');
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-1', 'user-from-extra', expect.any(Function));
     });
 
     it('should fall back to extra.sub when userId is missing', () => {
@@ -209,7 +209,7 @@ describe('ApprovalPlugin', () => {
       };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-2', 'sub-user');
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-2', 'sub-user', expect.any(Function));
     });
 
     it('should fall back to clientId when extra has no userId or sub', () => {
@@ -221,7 +221,7 @@ describe('ApprovalPlugin', () => {
       };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-3', 'fallback-client');
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-3', 'fallback-client', expect.any(Function));
     });
 
     it('should handle missing authInfo gracefully', () => {
@@ -229,7 +229,7 @@ describe('ApprovalPlugin', () => {
       const ctx = { sessionId: 'sess-4', verifiedSessionId: 'sess-4' };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-4', undefined);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-4', undefined, expect.any(Function));
     });
 
     it('should key a stateless caller by its principal, not the shared stateless session id', () => {
@@ -237,7 +237,38 @@ describe('ApprovalPlugin', () => {
       const ctx = { sessionId: STATELESS_SESSION_ID, authInfo: { clientId: 'alice' } };
 
       factory({}, ctx);
-      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'stateless-user:alice', 'alice');
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'stateless-user:alice', 'alice', expect.any(Function));
+    });
+  });
+
+  describe('service factory tool policy lookup', () => {
+    it("looks a tool's approval policy up by its full name in the scope", () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+      const serviceProvider = providers.find((p) => 'provide' in p && p.provide === ApprovalServiceToken);
+      if (!serviceProvider || !('useFactory' in serviceProvider)) throw new Error('Missing useFactory');
+      const factory = serviceProvider.useFactory as (...args: unknown[]) => unknown;
+      const scope = {
+        tools: {
+          getTools: () => [
+            { fullName: 'ops:deploy', metadata: { approval: { allowedScopes: ['session'], maxTtlMs: 1000 } } },
+            { fullName: 'ops:read', metadata: {} },
+          ],
+        },
+      };
+      mockedCreateService.mockClear();
+
+      factory({}, { sessionId: 'sess', verifiedSessionId: 'sess' }, scope);
+      const lookup = mockedCreateService.mock.calls[0]?.[3];
+      if (!lookup) throw new Error('no lookup passed');
+
+      expect(lookup('ops:deploy')).toEqual({
+        allowedScopes: ['session'],
+        maxTtlMs: 1000,
+        required: true,
+        defaultScope: 'session',
+      });
+      expect(lookup('ops:read')).toEqual({ required: false });
+      expect(lookup('ops:missing')).toBeUndefined();
     });
   });
 

@@ -1,6 +1,6 @@
 import { ToolSearchService, IncludeToolsFilter } from '../services/tool-search.service';
 import { ToolEntry, ScopeEntry } from '@frontmcp/sdk';
-import type { CodeCallMode, CodeCallToolMetadata } from '../codecall.types';
+import type { CodeCallToolMetadata } from '../codecall.types';
 
 /**
  * Creates a mock ScopeEntry with tools that support subscription.
@@ -284,13 +284,17 @@ describe('ToolSearchService', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(includeToolsFn).toHaveBeenCalledWith({
-          name: 'users:list',
-          appId: 'users',
-          source: 'openapi',
-          description: 'List users',
-          tags: ['auth'],
-        });
+        expect(includeToolsFn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'users:list',
+            fullName: 'users:list',
+            appId: 'users',
+            source: 'openapi',
+            description: 'List users',
+            tags: ['auth'],
+            metadata: expect.objectContaining({ name: 'users:list', codecall: { source: 'openapi', tags: ['auth'] } }),
+          }),
+        );
       });
 
       it('should combine mode filtering with includeTools filter', async () => {

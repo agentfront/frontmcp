@@ -1942,18 +1942,14 @@ describe('EnclaveService', () => {
     });
   });
 
-  // ── Reserved-global protection ──────────────────────────────────────────
+  // ── Tool namespaces ──────────────────────────────────────────────────────
   //
-  // A tool namespace whose key collides with `getTool` / `mcpLog` /
-  // `mcpNotify` must NOT override the runtime helper — a malicious bundle
-  // declaring `namespaces.getTool = ...` would otherwise neutralise the
-  // call-tool gateway and let arbitrary code bypass it. Pin the filter.
+  // Namespaces are written into the script as AgentScript over `callTool()`, never injected
+  // as host globals: a host function would reach the tool pipeline without the enclave's
+  // tool-call cap, rate limit and suspicious-sequence checks.
 
-  describe('reserved globals protection', () => {
-    it('discards a namespace that shadows the reserved getTool global', async () => {
-      // A hostile namespace tries to replace `getTool` with a no-op. The
-      // filter strips it before the spread; the real `getTool` from the
-      // environment stays callable from inside the enclave.
+  describe('tool namespaces', () => {
+    it('never lets a namespace shadow the reserved getTool global', async () => {
       const realGetTool = jest.fn().mockReturnValue({
         name: 'echo',
         description: 'echo',
@@ -1963,38 +1959,69 @@ describe('EnclaveService', () => {
       const hostileEnv: CodeCallVmEnvironment = {
         ...mockEnvironment,
         getTool: realGetTool,
-        namespaces: {
-          // The collision: a namespace key that matches a reserved global.
-          getTool: () => undefined,
-        } as unknown as CodeCallVmEnvironment['namespaces'],
+        // The collision: a namespace key that matches a reserved global.
+        toolNamespaces: { getTool: { x: 'getTool.x' } },
       };
 
-      // Inside the enclave, `getTool` must still be the real one — not
-      // the hostile no-op. We assert by calling getTool from inside the
-      // script and checking the returned descriptor.
       const result = await service.execute(`return getTool('echo')?.name;`, hostileEnv);
       expect(result.success).toBe(true);
       expect(result.result).toBe('echo');
       expect(realGetTool).toHaveBeenCalledWith('echo');
     });
 
-    it('preserves legitimate namespaces alongside reserved globals', async () => {
-      // A non-colliding namespace flows through normally. The script can
-      // reach both `getTool` (reserved) AND `acme.echo` (namespace) in
-      // the same execution.
-      const namespaces = {
-        acme: {
-          echo: jest.fn((s: string) => `echo:${s}`),
-        },
-      };
+    it('routes a namespace call through callTool with the full tool name', async () => {
       const env: CodeCallVmEnvironment = {
         ...mockEnvironment,
-        namespaces: namespaces as unknown as CodeCallVmEnvironment['namespaces'],
+        callTool: jest.fn().mockResolvedValue('echo:hello'),
+        toolNamespaces: { acme: { echo: 'acme.echo' } },
       };
 
-      const result = await service.execute(`return acme.echo('hello');`, env);
+      const result = await service.execute(`return await acme.echo({ text: 'hello' });`, env);
       expect(result.success).toBe(true);
       expect(result.result).toBe('echo:hello');
+      expect(env.callTool).toHaveBeenCalledWith('acme.echo', { text: 'hello' });
+      expect(result.stats?.toolCallCount).toBe(1);
+    });
+
+    it('reports a failed namespace call with { throwOnError: false } as { message, toolName }', async () => {
+      // The enclave hands a script only the name and message of a tool error, so the sanitized
+      // error's `code` never reaches the namespace helper; a direct `callTool()` sees the same.
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockRejectedValue(
+          Object.freeze({
+            code: 'ACCESS_DENIED',
+            message: 'Access denied for tool "acme.echo"',
+            toolName: 'acme.echo',
+          }),
+        ),
+        toolNamespaces: { acme: { echo: 'acme.echo' } },
+      };
+
+      const viaNamespace = await service.execute(`return await acme.echo({}, { throwOnError: false });`, env);
+      expect(viaNamespace.result).toEqual({
+        success: false,
+        error: { message: 'Access denied for tool "acme.echo"', toolName: 'acme.echo' },
+      });
+
+      const direct = await service.execute(
+        `try { await callTool('acme.echo', {}); } catch (e) { return { code: e.code, message: e.message }; }`,
+        env,
+      );
+      expect(direct.result).toEqual({ message: 'Access denied for tool "acme.echo"' });
+    });
+
+    it('counts namespace calls against maxToolCalls like callTool', async () => {
+      const limited = new EnclaveService(new CodeCallConfig({ vm: { preset: 'secure', maxSteps: 1 } }));
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockResolvedValue({ ok: true }),
+        toolNamespaces: { acme: { ping: 'acme.ping' } },
+      };
+
+      const result = await limited.execute(`await acme.ping({});\nawait acme.ping({});\nreturn 2;`, env);
+      expect(result.success).toBe(false);
+      expect(env.callTool).toHaveBeenCalledTimes(1);
     });
   });
 });

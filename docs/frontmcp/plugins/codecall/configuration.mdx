@@ -208,12 +208,18 @@ The filter receives an `IncludeToolsFilterToolInfo`:
 ```ts
 interface IncludeToolsFilterToolInfo {
   name: string;          // the tool's own name, e.g. 'admin:deleteUser' — never prefixed with the app id
+  fullName?: string;     // the qualified name, e.g. 'crm:admin:deleteUser'
   appId?: string;        // the owning app's id, also for tools the app's adapters and plugins provide
   source?: string;       // codecall.source
   description?: string;
   tags?: string[];       // codecall.tags, falling back to the tool's tags
+  annotations?: Readonly<{ readOnlyHint?: boolean; destructiveHint?: boolean; /* ... */ }>;
+  metadata?: Readonly<Record<string, unknown>>; // the tool's declared metadata (annotations, tags, codecall, ...)
 }
 ```
+
+So a filter can decide from the tool's annotations, e.g. `includeTools: (tool) => !tool.annotations?.destructiveHint`
+(`tool.metadata?.annotations` is the same object). `directCalls.filter` receives the same object.
 
 `name` is the name the tool was declared with. A tool `admin:deleteUser` in app `crm` is also reachable
 as `crm:admin:deleteUser`, but the filter always sees `admin:deleteUser`; use `appId` to filter by app.

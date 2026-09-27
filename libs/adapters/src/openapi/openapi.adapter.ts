@@ -138,7 +138,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
             .join('\n') +
           `\n   }\n\n` +
           `2. securityResolver:\n` +
-          `   securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })\n\n` +
+          `   securityResolver: async (tool, ctx) => ({ jwt: await getApiToken(ctx) })\n\n` +
           `3. staticAuth:\n` +
           `   staticAuth: { jwt: process.env.API_TOKEN }\n\n` +
           `4. Include security in input (NOT recommended for production):\n` +

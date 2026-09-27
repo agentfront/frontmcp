@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
+import { assertDashboardToolAccess } from '../auth/dashboard-access';
 import { GraphDataProvider } from '../providers';
 import type { GraphData } from '../shared/types';
 
@@ -28,6 +29,8 @@ export type GraphToolInput = z.infer<z.ZodObject<typeof graphToolInputSchema>>;
 })
 export default class GraphTool extends ToolContext {
   async execute(input: GraphToolInput): Promise<GraphData> {
+    assertDashboardToolAccess(this);
+
     const graphProvider = this.get(GraphDataProvider);
 
     // Force refresh if requested

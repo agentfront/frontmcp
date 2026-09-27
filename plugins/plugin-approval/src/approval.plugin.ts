@@ -9,11 +9,14 @@ import {
   FRONTMCP_CONTEXT,
   Plugin,
   ProviderScope,
+  ScopeEntry,
   type FrontMcpContext,
   type ProviderType,
 } from '@frontmcp/sdk';
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
 
+import type { ToolApprovalRequirement } from './approval';
+import { resolveApprovalRequirement } from './approval/policy';
 import { resolveApprovalIdentity } from './approval.identity';
 import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from './approval.symbols';
 import ApprovalCheckPlugin from './hooks/approval-check.hook';
@@ -233,10 +236,17 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       name: 'approval:service',
       provide: ApprovalServiceToken,
       scope: ProviderScope.CONTEXT,
-      inject: () => [ApprovalStoreToken, FRONTMCP_CONTEXT] as const,
-      useFactory: (store, ctx: FrontMcpContext) => {
+      inject: () => [ApprovalStoreToken, FRONTMCP_CONTEXT, ScopeEntry] as const,
+      useFactory: (store, ctx: FrontMcpContext, scope: ScopeEntry) => {
         const { sessionId, userId } = resolveApprovalIdentity(ctx);
-        return createApprovalService(store, sessionId, userId);
+        // Grants are checked against the tool's `allowedScopes` and `maxTtlMs`.
+        const requirementOf = (toolId: string) => {
+          const tool = scope.tools.getTools(true).find((entry) => entry.fullName === toolId);
+          if (!tool) return undefined;
+          const approval = (tool.metadata as { approval?: ToolApprovalRequirement | boolean }).approval;
+          return resolveApprovalRequirement(approval);
+        };
+        return createApprovalService(store, sessionId, userId, requirementOf);
       },
     });
 
