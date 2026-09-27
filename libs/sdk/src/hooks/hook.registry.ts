@@ -29,7 +29,9 @@ function appliesToOwner(hook: HookEntry, ownerId: string): boolean {
       // Scope/plugin-level hooks apply globally to all tools
       return true;
     case 'app':
-      // App-level hooks only apply to matching owner
+    case 'agent':
+      // App-level hooks only apply to matching owner; so do the hooks of a plugin installed on an
+      // `@Agent`, which run in the agent's private scope for the agent's own tools
       return hookOwner.id === ownerId;
     default:
       // Fail fast on unknown owner kinds to catch misconfigurations
@@ -38,7 +40,7 @@ function appliesToOwner(hook: HookEntry, ownerId: string): boolean {
 }
 
 /** The class that declared a hook: instances of one plugin class installed in several places share it. */
-function hookClassOf(hook: HookEntry): unknown {
+export function hookClassOf(hook: HookEntry): unknown {
   const { target } = hook.metadata;
   if (target === null || target === undefined) return undefined;
   if (hook.metadata.static || typeof target !== 'object') return target;
@@ -198,7 +200,7 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     // Filter hooks to include:
     // 1. Global hooks (no owner)
     // 2. Scope/plugin-level hooks (apply globally to all tools)
-    // 3. App-level hooks that match the tool's owner
+    // 3. App-level (or agent-level) hooks that match the tool's owner
     // 4. Another app's hooks marked `appliesTo: 'uncovered-apps'`, when no instance of the same
     //    hook applies to this owner by 1-3 (so a gate an entry asks for is never skipped just
     //    because the plugin sits on a different app)

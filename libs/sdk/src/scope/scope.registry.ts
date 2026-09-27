@@ -123,4 +123,17 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
   getScopes(): ScopeEntry[] {
     return [...this.instances.values()];
   }
+
+  /**
+   * The scope the server's own entry point serves: the one holding every app not marked
+   * `standalone`. A standalone app (such as `DashboardApp`) gets a scope of its own, created before
+   * that one, so the first scope is a standalone app's whenever one is listed. When that scope holds
+   * no app (every app is standalone) or does not exist (`splitByApp`), it is the first scope.
+   */
+  getPrimaryScope(): ScopeEntry | undefined {
+    const scopes = this.getScopes();
+    const multiApp = scopes.find((scope) => scope.record.kind === ScopeKind.MULTI_APP);
+    if (multiApp && multiApp.apps.getApps().length > 0) return multiApp;
+    return scopes[0];
+  }
 }

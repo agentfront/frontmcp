@@ -49,13 +49,14 @@ async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Pro
           mode === 'cli'
             ? await FrontMcpInstance.createForCli(resolvedConfig)
             : await FrontMcpInstance.createForGraph(resolvedConfig);
-        const scopes = instance.getScopes();
+        // The scope holding the server's own apps, not a standalone app's (such as DashboardApp's)
+        const scope = instance.getPrimaryScope();
 
-        if (scopes.length === 0) {
+        if (!scope) {
           throw new PublicMcpError('No scopes initialized. Ensure at least one app is configured.', 'NO_SCOPES', 500);
         }
 
-        return scopes[0] as Scope;
+        return scope as Scope;
       } catch (error) {
         // Remove from cache on failure to allow retry
         scopeCache.delete(cacheKey);

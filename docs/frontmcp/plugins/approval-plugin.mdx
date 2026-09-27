@@ -171,6 +171,15 @@ each store's check, and a denial in either one refuses the call.
   installed on another app.
 </Note>
 
+`@Agent({ approval })` gates the agent's `invoke_<agent>` tool the same way. A server where a tool or agent declares
+`approval` and no `ApprovalPlugin` reaches it refuses to start with `UnenforcedMetadataError`, naming the entries. This
+includes a server with no `ApprovalPlugin` at all, a `splitByApp` app whose own scope has none, and a tool declared
+inside an `@Agent`, which only a plugin installed on that agent gates.
+
+<Note>
+  Up to 1.8.2 such a server started, and those tools ran without approval. `@Agent({ approval })` was never gated.
+</Note>
+
 `this.approval` resolves the `ApprovalService` of the `ApprovalPlugin` nearest to the tool: the one its own app
 installed, otherwise the one on the server. With two apps that each install `ApprovalPlugin` with its own store, a
 grant or check made through `this.approval` in one app's tool uses that app's store.

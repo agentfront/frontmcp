@@ -74,9 +74,10 @@ function Plugin(providedMetadata: PluginMetadata): ClassDecorator
 
 ### Extensions
 
-| Property            | Type                 | Description                       |
-| ------------------- | -------------------- | --------------------------------- |
-| `contextExtensions` | `ContextExtension[]` | Add properties to context classes |
+| Property            | Type                 | Description                                                                                                                                                      |
+| ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contextExtensions` | `ContextExtension[]` | Add properties to context classes                                                                                                                                |
+| `enforcesMetadata`  | `string[]`           | Entry metadata keys this plugin's hooks enforce. A server where an entry declares one and no such plugin reaches it refuses to start (`UnenforcedMetadataError`) |
 
 ## Context Extensions
 
