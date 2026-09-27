@@ -182,9 +182,10 @@ export class ApprovalStorageStore implements ApprovalStore {
   /**
    * The keys a caller's approvals of a tool can be stored under: its session, its user, both
    * (time-limited and context grants made through `ApprovalService`), the time-limited keys of its
-   * session and its user, and, for a call in a server-established context, that context.
-   * Records written by 1.8.2 sit under the same keys (a time-limited grant without a user under
-   * the session key), so they are still read.
+   * session and its user, and, for a call in a server-established context, that context (granted
+   * to the session and the user, or to the session before it had a user, the way a session approval
+   * stays in force once the caller's user is known). Records written by 1.8.2 sit under the same
+   * keys (a time-limited grant without a user under the session key), so they are still read.
    */
   private callerKeys(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): string[] {
     const keys = [this.buildKey(toolId, sessionId), this.timeLimitedKey(toolId, sessionId)];
@@ -196,7 +197,8 @@ export class ApprovalStorageStore implements ApprovalStore {
       );
     }
     if (context) {
-      keys.push(this.buildKey(toolId, sessionId, userId, context));
+      keys.push(this.buildKey(toolId, sessionId, undefined, context));
+      if (userId) keys.push(this.buildKey(toolId, sessionId, userId, context));
     }
     return [...new Set(keys)];
   }
@@ -331,11 +333,13 @@ export class ApprovalStorageStore implements ApprovalStore {
       const record = this.parseRecord(values[i]);
       if (!record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
       if (context) {
+        const sameSession = sessionId !== undefined && record.sessionId === sessionId;
         if (
           record.context?.type === context.type &&
           record.context.identifier === context.identifier &&
-          (!sessionId || record.sessionId === sessionId) &&
-          (!userId || record.userId === userId)
+          (!sessionId || sameSession) &&
+          // A context approval granted to the session before it had a user applies to that user too.
+          (!userId || record.userId === userId || (sameSession && record.userId === undefined))
         ) {
           keysToDelete.push(keys[i]);
         }

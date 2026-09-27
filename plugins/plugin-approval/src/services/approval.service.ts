@@ -7,17 +7,18 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 import { checkGrantAgainstPolicy, isApprovalUsable } from '../approval/policy';
-import type { ApprovalStore, ApprovalQuery } from '../stores/approval-store.interface';
-import type {
-  ApprovalRecord,
-  ApprovalContext,
-  ApprovalGrantor,
-  ApprovalRevoker,
-  ApprovalSourceType,
-  RevocationSourceType,
-  ToolApprovalRequirement,
+import type { ApprovalQuery, ApprovalStore } from '../stores/approval-store.interface';
+import {
+  ApprovalScope,
+  ApprovalState,
+  type ApprovalContext,
+  type ApprovalGrantor,
+  type ApprovalRecord,
+  type ApprovalRevoker,
+  type ApprovalSourceType,
+  type RevocationSourceType,
+  type ToolApprovalRequirement,
 } from '../types';
-import { ApprovalScope, ApprovalState } from '../types';
 
 /**
  * Looks up the approval policy (`approval` metadata, normalized) of the tool with this full name,
@@ -119,13 +120,11 @@ export class ApprovalService {
   }
 
   /**
-   * Query approvals with custom filters. Without a `sessionId` or `userId`, returns the current
-   * caller's approvals: those of its session and those of its user.
+   * Query the current caller's approvals (those of its session and those of its user) with custom
+   * filters. A `sessionId` or `userId` in the query narrows the result further; it never reaches
+   * another caller's records. Read the store directly for administrative queries.
    */
   async queryApprovals(query: Partial<ApprovalQuery>): Promise<ApprovalRecord[]> {
-    if (query.sessionId !== undefined || query.userId !== undefined) {
-      return this.store.queryApprovals(query);
-    }
     const records = await this.store.queryApprovals(query);
     return records.filter(
       (record) => record.sessionId === this.sessionId || (this.userId !== undefined && record.userId === this.userId),

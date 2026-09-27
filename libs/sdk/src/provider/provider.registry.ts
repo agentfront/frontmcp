@@ -912,36 +912,31 @@ export default class ProviderRegistry
     // 1. Global providers - return existing singletons
     const global = this.getAllSingletons();
 
-    // 2. Context providers - use session cache for per-session instances
-    // CONTEXT-scoped providers persist within the same session.
-    // Multiple calls with the same sessionKey share the same provider instances.
+    // 2. Context providers - one set of instances per request, or per verified session.
+    // A verified session keeps its instances across requests when the session cache is enabled.
     //
-    // In distributed/serverless mode, caching is disabled because sessions may
+    // In distributed/serverless mode, the session cache is disabled because sessions may
     // land on different server instances. CONTEXT providers are stateless facades
     // that delegate to storage, so rebuilding them per-request has minimal cost.
-    let sessionProviders: Map<Token, unknown> | undefined;
     const ownDefs = (contextSource && this.defsBelow(contextSource)) ?? new Map<Token, HierarchyDef>();
-
-    if (this.sessionCacheEnabled) {
-      // Traditional mode: cache providers per session
-      const cached = this.providerStoreFor(sessionKey, contextProviders?.get(FRONTMCP_CONTEXT));
-      sessionProviders = cached.providers;
-      // A source this hierarchy overrides resolves those tokens (and whatever depends on them) differently,
-      // so its instances are cached apart from the ones built without it.
-      if (contextSource && ownDefs.size > 0) {
-        sessionProviders = cached.bySource.get(contextSource);
-        if (!sessionProviders) {
-          sessionProviders = new Map<Token, unknown>();
-          cached.bySource.set(contextSource, sessionProviders);
-        }
+    const cached = this.providerStoreFor(sessionKey, contextProviders?.get(FRONTMCP_CONTEXT));
+    let sessionProviders = cached.providers;
+    // A source this hierarchy overrides resolves those tokens (and whatever depends on them) differently,
+    // so its instances are cached apart from the ones built without it.
+    if (contextSource && ownDefs.size > 0) {
+      let bySource = cached.bySource.get(contextSource);
+      if (!bySource) {
+        bySource = new Map<Token, unknown>();
+        cached.bySource.set(contextSource, bySource);
       }
+      sessionProviders = bySource;
     }
 
     // Pre-built providers replace cached ones, except for tokens this hierarchy defines below `contextSource`.
     // Anything built from the request's own context (FrontMcpContext and the tokens it carries) is rebuilt
     // instead of cached.
     const requestTokens = requestScopedTokens(contextProviders);
-    const contextStore = new Map<Token, unknown>(sessionProviders ?? []);
+    const contextStore = new Map<Token, unknown>(sessionProviders);
     for (const [token, instance] of contextProviders ?? []) {
       if (!ownDefs.has(token)) contextStore.set(token, instance);
     }
@@ -983,11 +978,11 @@ export default class ProviderRegistry
       );
     }
 
-    if (sessionProviders) {
-      for (const [token, instance] of contextStore) {
-        if (!sessionProviders.has(token) && !this.dependsOnAny(token, requestTokens)) {
-          sessionProviders.set(token, instance);
-        }
+    // Instances built from the request context are rebuilt by every flow: `http:request` builds the views
+    // before it verifies the caller, and a later flow of the same request must see the verified caller.
+    for (const [token, instance] of contextStore) {
+      if (!sessionProviders.has(token) && !this.dependsOnAny(token, requestTokens)) {
+        sessionProviders.set(token, instance);
       }
     }
 
@@ -1001,18 +996,18 @@ export default class ProviderRegistry
    * The store that keeps the CONTEXT instances built for `sessionKey`.
    *
    * Only a session id the server verified for the current request identifies one caller across
-   * requests, so only that key gets the long-lived session cache. Any other key (a caller with no
-   * session, like a token under MCP 2026-07-28, or an `mcp-session-id` the client merely sent) gets
-   * a store that lives on the request context, so its instances are built once per request and never
-   * reach another caller. Without a request context nothing vouches for the key, so the instances are
-   * built for this call only.
+   * requests, so only that key gets the long-lived session cache, and only while the session cache is
+   * enabled. Any other key (a caller with no session, like a token under MCP 2026-07-28, or an
+   * `mcp-session-id` the client merely sent) gets a store that lives on the request context, so its
+   * instances are built once per request and never reach another caller. Without a request context
+   * nothing vouches for the key, so the instances are built for this call only.
    */
   private providerStoreFor(sessionKey: string, requestContext: unknown): SessionProviderStore {
     if (!(requestContext instanceof FrontMcpContext)) {
       return newProviderStore();
     }
 
-    if (verifiedSessionOf(requestContext) !== sessionKey) {
+    if (!this.sessionCacheEnabled || verifiedSessionOf(requestContext) !== sessionKey) {
       let stores = requestContext.get<WeakMap<ProviderRegistry, SessionProviderStore>>(REQUEST_PROVIDER_STORES);
       if (!stores) {
         stores = new WeakMap();

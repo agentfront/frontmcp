@@ -96,27 +96,9 @@ interface SkillHttpAuthResult {
 }
 ```
 
-## Factory Function
+## Authorizing a Request
 
-Use `createSkillHttpAuthValidator()` to create a validator from skill config:
-
-```typescript
-import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
-
-const validator = createSkillHttpAuthValidator(skillsConfig, logger);
-// Returns null only for `auth: 'public'`. `inherit` (the default) is the server's own auth,
-// which the skills endpoints apply themselves; a validator for it refuses every request.
-
-if (validator) {
-  const result = await validator.validate({ headers: request.headers });
-  if (!result.authorized) {
-    return new Response(result.error, { status: result.statusCode });
-  }
-}
-```
-
-<Warning>
-**Migrating from the `null` validator.** `createSkillHttpAuthValidator()` used to return `null` for `auth: 'inherit'` and for an unset `auth`, so code that skipped validation on `null` served those requests with no auth at all. A validator only sees headers and can't run the server's auth, so for `inherit` it now refuses every request (500). Use `authorizeSkillHttpRequest()` instead: it covers every mode, runs the server's `session:verify` flow for `inherit`, and returns the verified caller for skill `authorities`.
+Use `authorizeSkillHttpRequest()` to apply `skillsConfig.auth` to a request. It covers every mode, including `inherit` (the default), for which it runs the server's `session:verify` flow, and it returns the verified caller that skill `authorities` are evaluated against:
 
 ```typescript
 import { authorizeSkillHttpRequest } from '@frontmcp/sdk';
@@ -128,6 +110,26 @@ if (!access.allowed) {
 // access.authInfo: the verified caller (empty for public, api-key and bearer)
 ```
 
+## Header-Only Validator (`api-key`, `bearer`)
+
+`createSkillHttpAuthValidator()` builds a validator that checks the request headers for an explicit `auth: 'api-key'` or `auth: 'bearer'`. It returns `null` only for `auth: 'public'`. It can't run the server's auth, so for `inherit` or an unset `auth` it refuses every request (500); use `authorizeSkillHttpRequest()` there.
+
+```typescript
+import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
+
+// skillsConfig.auth is 'api-key' or 'bearer'
+const validator = createSkillHttpAuthValidator(skillsConfig, logger);
+
+if (validator) {
+  const result = await validator.validate({ headers: request.headers });
+  if (!result.authorized) {
+    return new Response(result.error, { status: result.statusCode });
+  }
+}
+```
+
+<Warning>
+**Migrating from the `null` validator.** `createSkillHttpAuthValidator()` used to return `null` for `auth: 'inherit'` and for an unset `auth`, so code that skipped validation on `null` served those requests with no auth at all. For those modes it now refuses every request (500). Switch that code to `authorizeSkillHttpRequest()`, shown above.
 </Warning>
 
 ---

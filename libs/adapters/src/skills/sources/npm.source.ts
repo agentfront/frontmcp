@@ -23,8 +23,11 @@ let npmDynamicImport: ((specifier: string) => Promise<unknown>) | undefined;
  * implemented. `verifyProvenance: true` (the default) therefore refuses the
  * package before it is imported: a setting that promises a supply-chain check
  * must not load code it could not check. Set `verifyProvenance: false` to load
- * the package without one, and rely on bundle signing (`requireSignature` +
- * `trustedKeys`) and a pinned package version instead.
+ * the package without one. The package is then imported, and its code runs,
+ * before the bundle is parsed, so bundle signing (`requireSignature` +
+ * `trustedKeys`) protects the bundle's content but not the import: trust comes
+ * from the package itself (an exact pinned version installed from a lockfile
+ * with integrity hashes).
  */
 export class NpmSource implements SkillBundleSource {
   readonly id: string;
@@ -70,7 +73,8 @@ export class NpmSource implements SkillBundleSource {
       throw new Error(
         `npm source "${this.options.packageName}": verifyProvenance is true, but npm provenance verification is not ` +
           `implemented, so the package was not loaded. Set verifyProvenance: false to load it without a provenance ` +
-          `check, and sign the bundle (requireSignature + trustedKeys).`,
+          `check, only for a package you trust: importing it runs its code before any bundle signature is checked, ` +
+          `so pin its exact version and install it from a lockfile with integrity hashes.`,
       );
     }
 

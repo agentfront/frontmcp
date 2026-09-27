@@ -290,7 +290,20 @@ describe('ApprovalStorageStore', () => {
         'tool-1:user:user-1',
         'tool-1:user:user-1:scope:time_limited',
         'tool-1:session:session-1:user:user-1',
+        'tool-1:session:session-1:ctx:repo:acme',
         'tool-1:session:session-1:user:user-1:ctx:repo:acme',
+      ]);
+    });
+
+    it('should read only the session context key for a caller without a user', async () => {
+      mockStorage.get.mockResolvedValue(null);
+
+      await store.getApprovals('tool-1', 'session-1', undefined, { type: 'repo', identifier: 'acme' });
+
+      expect(mockStorage.get.mock.calls.map(([key]) => key)).toEqual([
+        'tool-1:session:session-1',
+        'tool-1:session:session-1:scope:time_limited',
+        'tool-1:session:session-1:ctx:repo:acme',
       ]);
     });
 

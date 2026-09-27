@@ -253,7 +253,7 @@ The authorities system does not only enforce on execution. The built-in `filterB
 - `tools/list` only returns tools the current user is authorized to call
 - `resources/list` only returns resources the current user can read
 - `prompts/list` only returns prompts the current user can get
-- Skills are filtered on every discovery surface: `skills/search` / `skills/list`, the SEP-2640 `skill://index.json` index + skill-path autocomplete, and `GET /skills`. Loading a gated skill the caller can't access (via `skills/load`, a `skill://…` read, or `GET /skills/{id}`) is denied with `AuthorityDeniedError` (`-32003`).
+- Skills are filtered on every discovery surface: `skills/search` / `skills/list`, the SEP-2640 `skill://index.json` index + skill-path autocomplete, and `GET /skills`. Loading a gated skill the caller can't access via `skills/load` or a `skill://…` read is denied with `AuthorityDeniedError` (`-32003`); over HTTP, `GET /skills/{id}` answers 404, as for an unknown skill.
 
 This filtering happens automatically. No additional configuration is needed. Entries without an `authorities` field are always visible.
 

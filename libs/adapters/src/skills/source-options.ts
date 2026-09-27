@@ -39,8 +39,12 @@ export const npmSourceSchema = z.object({
   /**
    * Verify GitHub artifact attestation / npm provenance for the package before loading.
    * Defaults to true. Provenance verification is not implemented yet, so `true` refuses
-   * to load the package; set `false` to load it without a provenance check (sign the
-   * bundle instead).
+   * to load the package; set `false` to load it without a provenance check.
+   *
+   * With `false`, the package is imported (its code runs) before the bundle is parsed, so
+   * bundle signing (`requireSignature` + `trustedKeys`) cannot protect the import itself.
+   * Only use it for a package you trust: pin its exact version in `package.json` and
+   * install from a lockfile with integrity hashes.
    */
   verifyProvenance: z.boolean().default(true),
 });

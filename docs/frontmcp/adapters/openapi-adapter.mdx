@@ -1119,11 +1119,8 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
           headers.set('x-tenant-id', ctx.authInfo.user.tenantId);
         }
 
-        // Add user authorization
-        if (ctx.authInfo?.token) {
-          headers.set('authorization', `Bearer ${ctx.authInfo.token}`);
-        }
-
+        // Credentials for the API come from authProviderMapper / securityResolver / staticAuth,
+        // never from the caller's own ctx.authInfo.token
         return headers;
       },
       bodyMapper: (ctx, body) => {
@@ -1155,13 +1152,9 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       name: 'backend:api',
       url: process.env.OPENAPI_SPEC_URL!,
       baseUrl: process.env.API_BASE_URL!,
-      headersMapper: (ctx, headers) => {
-        const token = ctx.authInfo?.token;
-        if (token) {
-          headers.set('authorization', `Bearer ${token}`);
-        }
-        return headers;
-      },
+      // The expense backend accepts tokens issued for this MCP server (same issuer and audience),
+      // so the caller's token is forwarded explicitly. Security risk: HIGH.
+      passthroughCallerToken: true,
     }),
   ],
 })
@@ -1200,7 +1193,9 @@ The adapter automatically validates your security configuration and assigns a ri
 | **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
 | **HIGH** 🚨   | `passthroughCallerToken: true`                 | The MCP client's own token is sent to the API           |
 
-`passthroughCallerToken: true` scores HIGH whenever the caller's token can reach the API: on its own, and alongside an `authProviderMapper` (the token is sent when no mapper function returns a credential). Only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
+`passthroughCallerToken: true` scores HIGH whenever the caller's token can reach the API: on its own, and alongside an `authProviderMapper` (the token is sent when no mapper function returns a credential). A `securityResolver` or a non-empty `staticAuth` leaves it unused: `staticAuth` answers for every credential the mapper returns nothing for.
+
+Credential sources are tried in this order: `securityResolver`, then `authProviderMapper`, then `staticAuth` (which fills every credential no mapper function returned; a mapped value wins), then `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` or `passthroughCallerToken` covers it; with `passthroughCallerToken` it gets the caller's token, and a `SECURITY WARNING` names it.
 
 ## Built-in Security Protections
 

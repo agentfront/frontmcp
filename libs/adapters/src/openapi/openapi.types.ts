@@ -739,6 +739,9 @@ interface BaseOptions {
    * Static authentication configuration when not using dynamic auth from context.
    * Useful for server-to-server APIs with static credentials.
    *
+   * With an `authProviderMapper`, it fills every credential no mapper function returned (a mapped
+   * value wins), so the caller's token (`passthroughCallerToken`) is never used alongside it.
+   *
    * @example
    * ```typescript
    * staticAuth: {
@@ -757,6 +760,8 @@ interface BaseOptions {
    * service is token passthrough, which the MCP specification forbids. Without this option an
    * operation that requires authentication fails when the adapter has no credential for it.
    * Enable it only when the API is meant to accept the same token (same issuer and audience).
+   * It also covers a security scheme with no `authProviderMapper` entry, which is otherwise refused
+   * at startup.
    *
    * @default false
    */

@@ -95,6 +95,7 @@ class ApprovalsTool extends ToolContext {
 }
 
 const ALICE: DirectAuthContext = { sessionId: 'session-alice', user: { sub: 'alice' } };
+const CALLER_IDS = { sessionId: 'session-alice', userId: 'alice' };
 
 describe('this.approval revocation and the tool approval policy', () => {
   let storage: RootStorage;
@@ -244,6 +245,31 @@ describe('this.approval revocation and the tool approval policy', () => {
         await run('deploy', { ...ALICE, extra: { approvalContext: { type: 'repository', identifier: 'acme/api' } } }),
       ).toBe('refused');
     });
+
+    it('keeps a context approval granted before the session had a user once the user is known', async () => {
+      const store = new ApprovalStorageStore({ storageInstance: storage, cleanupIntervalSeconds: 0 });
+      await store.initialize();
+      await createApprovalService(store, 'session-alice').grantContextApproval(DEPLOY_ID, REPO_CONTEXT);
+
+      expect(await run('deploy', { ...ALICE, extra: { approvalContext: REPO_CONTEXT } })).toBe('ran');
+
+      expect(await store.revokeApproval({ toolId: DEPLOY_ID, ...CALLER_IDS, context: REPO_CONTEXT })).toBe(true);
+      expect(await run('deploy', { ...ALICE, extra: { approvalContext: REPO_CONTEXT } })).toBe('refused');
+      await store.close();
+    });
+
+    it('lets a denial recorded for the context before the session had a user win', async () => {
+      await approvals('context', DEPLOY_ID);
+      await storeRecord(`${DEPLOY_ID}:session:session-alice:ctx:${REPO_CONTEXT.type}:${REPO_CONTEXT.identifier}`, {
+        toolId: DEPLOY_ID,
+        scope: ApprovalScope.CONTEXT_SPECIFIC,
+        sessionId: 'session-alice',
+        context: REPO_CONTEXT,
+        state: ApprovalState.DENIED,
+      });
+
+      expect(await run('deploy', { ...ALICE, extra: { approvalContext: REPO_CONTEXT } })).toBe('refused');
+    });
   });
 
   describe('allowedScopes', () => {
@@ -310,6 +336,22 @@ describe('this.approval revocation and the tool approval policy', () => {
       await approvals('session', DEPLOY_ID, { sessionId: 'session-bob', user: { sub: 'bob' } });
 
       expect((await approvals('query', DEPLOY_ID)).result).toEqual([]);
+    });
+
+    it("does not return another caller's approvals when the query names them", async () => {
+      await approvals('session', DEPLOY_ID, { sessionId: 'session-bob', user: { sub: 'bob' } });
+      await approvals('user', DEPLOY_ID, { sessionId: 'session-bob', user: { sub: 'bob' } });
+      await approvals('user', DEPLOY_ID);
+
+      const store = new ApprovalStorageStore({ storageInstance: storage, cleanupIntervalSeconds: 0 });
+      await store.initialize();
+      const alice = createApprovalService(store, CALLER_IDS.sessionId, CALLER_IDS.userId);
+
+      expect(await alice.queryApprovals({ userId: 'bob' })).toEqual([]);
+      expect(await alice.queryApprovals({ sessionId: 'session-bob' })).toEqual([]);
+      expect(await alice.queryApprovals({ sessionId: 'session-bob', userId: 'bob' })).toEqual([]);
+      expect((await alice.queryApprovals({ userId: 'alice' })).map((record) => record.userId)).toEqual(['alice']);
+      await store.close();
     });
   });
 

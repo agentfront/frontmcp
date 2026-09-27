@@ -129,6 +129,86 @@ describe('ProviderRegistry.buildViews request-scoped context providers', () => {
       expect(second).not.toBe(first);
       expect(scratchRegistry.getSessionCacheStats().size).toBe(0);
     });
+
+    it('rebuilds a provider that reads the request context once the caller is verified', async () => {
+      // `http:request` builds the scope's views before `checkAuthorization` fills in the auth info, and the
+      // later flows of the same request build them again. A provider that reads the request context must
+      // see the verified caller there, not the instance built before verification.
+      const Caller = Symbol('Caller');
+      const callerRegistry = new ProviderRegistry([
+        // Stands in for the scope's FrontMcpContextProvider; the request supplies the instance.
+        {
+          provide: FRONTMCP_CONTEXT,
+          name: 'FrontMcpContext',
+          scope: ProviderScope.CONTEXT,
+          inject: () => [] as const,
+          useFactory: () => {
+            throw new Error('supplied by the request');
+          },
+        },
+        {
+          provide: Caller,
+          name: 'Caller',
+          scope: ProviderScope.CONTEXT,
+          inject: () => [FRONTMCP_CONTEXT] as const,
+          useFactory: (ctx: FrontMcpContext) => ({ sub: ctx.authInfo.user?.sub }),
+        },
+      ]);
+      await callerRegistry.ready;
+      const requestContext = new FrontMcpContext({
+        requestId: 'request-1',
+        sessionId: 'anonymous',
+        scopeId: 'request-context-scope',
+      });
+
+      const beforeAuth = await callerRegistry.buildViews('anonymous', new Map([[FRONTMCP_CONTEXT, requestContext]]));
+      requestContext.updateAuthInfo({ token: 'token-of-nour', user: { iss: 'spec-issuer', sub: 'nour' } });
+      const afterAuth = await callerRegistry.buildViews('anonymous', new Map([[FRONTMCP_CONTEXT, requestContext]]));
+
+      expect(beforeAuth.context.get(Caller)).toEqual({ sub: undefined });
+      expect(afterAuth.context.get(Caller)).toEqual({ sub: 'nour' });
+      callerRegistry.dispose();
+    });
+  });
+
+  describe('with providerCaching: false', () => {
+    class RequestScratchpad {}
+    let uncachedRegistry: ProviderRegistry;
+
+    beforeEach(async () => {
+      uncachedRegistry = new ProviderRegistry(
+        [createClassProvider(RequestScratchpad, { name: 'RequestScratchpad', scope: ProviderScope.CONTEXT })],
+        undefined,
+        { providerCaching: false },
+      );
+      await uncachedRegistry.ready;
+    });
+
+    afterEach(() => {
+      uncachedRegistry.dispose();
+    });
+
+    async function scratchpadFor(requestContext: FrontMcpContext): Promise<unknown> {
+      const views = await uncachedRegistry.buildViews(sharedSessionKey, new Map([[FRONTMCP_CONTEXT, requestContext]]));
+      return views.context.get(RequestScratchpad);
+    }
+
+    it('builds the instances once per request', async () => {
+      const requestContext = createRequestContext('request-1', 'alice', sharedSessionKey);
+
+      const first = await scratchpadFor(requestContext);
+      const second = await scratchpadFor(requestContext);
+
+      expect(second).toBe(first);
+    });
+
+    it('does not keep them for the next request of a verified session', async () => {
+      const first = await scratchpadFor(createRequestContext('request-1', 'alice', sharedSessionKey));
+      const second = await scratchpadFor(createRequestContext('request-2', 'alice', sharedSessionKey));
+
+      expect(second).not.toBe(first);
+      expect(uncachedRegistry.getSessionCacheStats().size).toBe(0);
+    });
   });
 
   it('reuses the instances of a session verified in the auth info when the request context has its own id', async () => {

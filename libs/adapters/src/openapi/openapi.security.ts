@@ -48,7 +48,7 @@ export async function createSecurityContextFromAuth(
 
   // 2. Use auth provider mapper if provided
   if (options.authProviderMapper) {
-    const context = createSecurityContext({});
+    const context: Partial<SecurityContext> = {};
 
     // Find all security schemes used by this tool
     const securitySchemes = new Set<string>();
@@ -122,6 +122,11 @@ export async function createSecurityContextFromAuth(
       }
     }
 
+    // 3. staticAuth answers for every credential no mapper function returned (a mapped value wins).
+    if (hasStaticAuth(options)) {
+      return createSecurityContext({ ...options.staticAuth, ...context });
+    }
+
     // If no provider returned a credential, send nothing: the caller's own token is forwarded
     // only when the server opted in with `passthroughCallerToken` (never implicitly).
     const hasAnyAuth = context.jwt || context.apiKey || context.basic || context.oauth2Token;
@@ -132,11 +137,11 @@ export async function createSecurityContextFromAuth(
       }
     }
 
-    return context;
+    return createSecurityContext(context);
   }
 
   // 3. Use static auth if provided
-  if (options.staticAuth) {
+  if (hasStaticAuth(options)) {
     return createSecurityContext(options.staticAuth);
   }
 
@@ -146,6 +151,13 @@ export async function createSecurityContextFromAuth(
     return createSecurityContext({ jwt: getCallerToken(ctx) });
   }
   return createSecurityContext({});
+}
+
+/** Whether `staticAuth` holds any credential entry (an empty object is treated as absent). */
+function hasStaticAuth(
+  options: Pick<OpenApiAdapterOptions, 'staticAuth'>,
+): options is { staticAuth: Partial<SecurityContext> } {
+  return !!options.staticAuth && Object.keys(options.staticAuth).length > 0;
 }
 
 /**
@@ -234,7 +246,7 @@ export function validateSecurityConfiguration(
   }
 
   // Check if we have static auth (medium risk - static credentials)
-  if (options.staticAuth && Object.keys(options.staticAuth).length > 0) {
+  if (hasStaticAuth(options)) {
     result.securityRiskScore = 'medium';
     result.warnings.push(
       'SECURITY INFO: Using staticAuth with hardcoded credentials. Ensure credentials are stored securely (environment variables, secrets manager).',
@@ -257,7 +269,9 @@ export function validateSecurityConfiguration(
       );
     }
 
-    // Validate that all schemes have mappings (except those in input)
+    // Validate that all schemes have mappings (except those in input). A scheme without one is
+    // covered only when passthroughCallerToken is the declared fallback, as it is at call time.
+    const passthroughFallback: string[] = [];
     for (const scheme of securitySchemes) {
       // Skip schemes that will be provided via input
       if (schemesInInput.has(scheme)) {
@@ -265,8 +279,12 @@ export function validateSecurityConfiguration(
       }
       // Check if there's a mapping for this scheme
       if (!options.authProviderMapper?.[scheme]) {
-        result.valid = false;
-        result.missingMappings.push(scheme);
+        if (options.passthroughCallerToken === true) {
+          passthroughFallback.push(scheme);
+        } else {
+          result.valid = false;
+          result.missingMappings.push(scheme);
+        }
       }
     }
 
@@ -276,7 +294,13 @@ export function validateSecurityConfiguration(
       );
     }
 
-    return withPassthroughRisk(result, securitySchemes, options);
+    withPassthroughRisk(result, securitySchemes, options);
+    if (passthroughFallback.length > 0) {
+      result.warnings.push(
+        `SECURITY WARNING: Security schemes with no authProviderMapper entry (${passthroughFallback.join(', ')}) get the MCP client's own token, because passthroughCallerToken is enabled.`,
+      );
+    }
+    return result;
   }
 
   // No auth configuration provided
@@ -296,17 +320,12 @@ export function validateSecurityConfiguration(
 /**
  * Whether `createSecurityContextFromAuth` can forward the caller's token: `passthroughCallerToken`
  * is set and nothing ahead of it always answers. A `securityResolver` always does, and so does
- * `staticAuth` unless an `authProviderMapper` (which takes precedence and falls back to the
- * caller's token when every mapper returns nothing) is also configured.
+ * `staticAuth`, which also answers for every scheme an `authProviderMapper` returns nothing for.
  */
 function canPassThroughCallerToken(
-  options: Pick<
-    OpenApiAdapterOptions,
-    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'
-  >,
+  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'staticAuth' | 'passthroughCallerToken'>,
 ): boolean {
-  if (options.passthroughCallerToken !== true || options.securityResolver) return false;
-  return !!options.authProviderMapper || !options.staticAuth;
+  return options.passthroughCallerToken === true && !options.securityResolver && !hasStaticAuth(options);
 }
 
 /** Scores the configuration HIGH, with a warning, when the caller's token can reach the API. */

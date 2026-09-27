@@ -178,6 +178,43 @@ describe('SaasPullSource verifies the SaaS with jwksUrl, expectedIssuer and expe
     expect(bundles.map((b) => b.bundleId)).toEqual(['saas:test']);
   });
 
+  // A JWKS with no key that could verify a token is an unusable JWKS (like an unreachable one),
+  // not a verdict on the token: the pull fails and the cached bundle is still the fallback.
+  it.each([
+    ['an empty key object', { keys: [{}] }],
+    ['an RSA key without its modulus', { keys: [{ kty: 'RSA', kid: 'saas-2026', e: 'AQAB' }] }],
+    ['only a symmetric key', { keys: [{ kty: 'oct', kid: 'saas-2026', k: 'c2VjcmV0' }] }],
+    ['only an encryption key', { keys: [{ kty: 'EC', use: 'enc', crv: 'P-256', x: 'eA', y: 'eQ' }] }],
+    ['keys that are not objects', { keys: ['saas-2026', null] }],
+    ['a key type named after an Object.prototype member', { keys: [{ kty: 'constructor', n: 'x', e: 'AQAB' }] }],
+  ])('falls back to the cached bundle when the JWKS has %s', async (_label, jwks) => {
+    await fs.writeFile(path.join(cacheDir, 'acme_prod.json'), JSON.stringify(bundle), 'utf8');
+    const requests: string[] = [];
+    const source = new StubbedSaasSource(options(await issuer.token()), cacheDir, saas(jwks, requests));
+
+    const { bundles, error } = await startAndCollect(source);
+
+    expect(error).toBeUndefined();
+    expect(bundles.map((b) => b.bundleId)).toEqual(['saas:test']);
+    expect(requests).not.toContain(ENDPOINT);
+  });
+
+  it('still refuses a token signed by a key a usable JWKS does not publish, with a cached bundle present', async () => {
+    await fs.writeFile(path.join(cacheDir, 'acme_prod.json'), JSON.stringify(bundle), 'utf8');
+    const other = await createSaasTokenIssuer('saas-2026');
+    const source = new StubbedSaasSource(
+      options(await other.token()),
+      cacheDir,
+      // A usable key next to an unusable one: the JWKS is usable, so this is a verdict on the token.
+      saas({ keys: [{}, ...issuer.jwks.keys] }),
+    );
+
+    const { bundles, error } = await startAndCollect(source);
+
+    expect(bundles).toEqual([]);
+    expect(error?.message).toMatch(/pull token rejected/);
+  });
+
   it('refuses a refresh() whose pull token was rejected', async () => {
     const source = new StubbedSaasSource(
       options(await issuer.token({ aud: 'other-customer:prod' })),
