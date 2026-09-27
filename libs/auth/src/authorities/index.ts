@@ -53,6 +53,9 @@ export {
 // Evaluation engine
 export { AuthoritiesEngine } from './authorities.engine';
 
+// Rule validation
+export { findAuthoritiesRuleProblems, findAuthoritiesProfileProblems } from './authorities.validation';
+
 // Context builder
 export { AuthoritiesContextBuilder, isAnonymousSubject } from './authorities.context';
 export type { ClaimsResolverFn } from './authorities.context';

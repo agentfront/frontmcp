@@ -104,6 +104,13 @@ export const databaseProvider = AsyncProvider({
 });
 ```
 
+`scope` is `ProviderScope.GLOBAL` (the default: one instance per process/worker, right for
+pools and clients) or `ProviderScope.CONTEXT` (one instance per request). A client that opens a
+session (MCP before 2026-07-28) keeps one CONTEXT instance for the session the server verified;
+any other caller, such as one with a token under 2026-07-28, gets new instances on every request,
+never another caller's. State that must outlive a request belongs in a GLOBAL provider or in
+storage keyed by the caller's identity.
+
 ## Step 3: Register in @App or @FrontMcp
 
 ```typescript

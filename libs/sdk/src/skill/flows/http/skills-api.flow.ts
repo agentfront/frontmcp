@@ -25,8 +25,8 @@ import {
 import { extractToolNames } from '../../../common/metadata/skill.metadata';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import type ToolRegistry from '../../../tool/tool.registry';
-import { createSkillHttpAuthValidator } from '../../auth';
-import { assertSkillAuthorized, filterSkillsByAuthorities, getSkillAuthorities } from '../../skill-authorities.helper';
+import { authorizeSkillHttpRequest } from '../../auth';
+import { filterSkillsByAuthorities, getSkillAuthorities } from '../../skill-authorities.helper';
 import { createSkillEntryResolver } from '../../skill-entry.resolver';
 import { filterDiscoverableSkillResults, filterServableSkills, isSkillServable } from '../../skill-filter.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
@@ -140,24 +140,17 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Validate auth if configured
-    const authValidator = createSkillHttpAuthValidator(skillsConfig, this.logger);
-    if (authValidator) {
-      const { request } = this.rawInput;
-      const authResult = await authValidator.validate({
-        headers: request.headers as Record<string, string | string[] | undefined>,
-      });
-
-      if (!authResult.authorized) {
-        this.respond(
-          httpRespond.json(
-            { error: 'Unauthorized', message: authResult.error ?? 'Authentication required' },
-            { status: authResult.statusCode ?? 401 },
-          ),
-        );
-        return;
-      }
+    const access = await authorizeSkillHttpRequest(this.scope, skillsConfig, this.rawInput.request, this.logger);
+    if (!access.allowed) {
+      this.respond(
+        httpRespond.json(
+          { error: 'Unauthorized', message: access.error },
+          { status: access.status, ...(access.headers ? { headers: access.headers } : {}) },
+        ),
+      );
+      return;
     }
+    this.callerAuthInfo = access.authInfo;
   }
 
   @Stage('parseRequest')
@@ -337,13 +330,15 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
         return;
       }
 
-      // Deny direct HTTP loads of authority-gated skills. The skills HTTP auth
-      // validator (api-key / bearer) is a binary gate and surfaces no claims,
-      // so authorities are evaluated fail-closed: a gated skill cannot be
-      // loaded via HTTP. Skills without `authorities` (or servers with no
-      // engine) are unaffected. Use MCP transports for claims-based access.
+      // Authority-gated skills are evaluated against the caller the server's auth verified
+      // (`auth: 'inherit'`); the api-key / bearer / public gates surface no claims, so there they
+      // are refused. A refused skill gets the nonexistent-skill answer, like one the listing hides.
       if (this.scope.authoritiesEngine && getSkillAuthorities(skillEntry)) {
-        await assertSkillAuthorized(this.scope, skillEntry, this.httpAuthInfo());
+        const [admitted] = await filterSkillsByAuthorities(this.scope, [skillEntry], this.httpAuthInfo());
+        if (!admitted) {
+          respondNotFound();
+          return;
+        }
       }
     }
 
@@ -541,20 +536,16 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** The caller `checkEnabled` let in (empty, so anonymous, until it has). */
+  private callerAuthInfo: Record<string, unknown> = {};
+
   /**
-   * Best-effort AuthInfo for HTTP authorities evaluation.
-   *
-   * The skills HTTP auth validator (api-key / bearer) is a binary gate and does
-   * not surface claims, so authority-gated skills are evaluated fail-closed on
-   * the HTTP surface. When the server runs in transparent/auth mode the request
-   * MAY carry a verified `authSession` with `user` claims; we forward those so a
-   * JWT bearer with roles/permissions still evaluates correctly. Otherwise an
-   * empty AuthInfo is returned, which denies any role/permission-gated skill.
+   * AuthInfo for HTTP authorities evaluation: the caller the server's auth verified under
+   * `auth: 'inherit'`. The api-key / bearer / public gates surface no claims, so there it is
+   * empty, which denies any role/permission-gated skill.
    */
   private httpAuthInfo(): Record<string, unknown> {
-    const request = (this.rawInput as { request?: { authSession?: { user?: unknown } } }).request;
-    const user = request?.authSession?.user;
-    return user ? { user } : {};
+    return this.callerAuthInfo;
   }
 
   private async handleListSkills(
