@@ -14,6 +14,7 @@
  */
 import { MCP_20260728_META, type Implementation } from '@frontmcp/protocol';
 
+import { type FlowName, type ScopeEntry } from '../../common';
 import { CACHEABLE_METHODS, DEFAULT_CACHE_TTL_MS } from './protocol-20260728.constants';
 
 export interface DecorateResultOptions {
@@ -105,12 +106,41 @@ export function orderListResult(method: string, result: Record<string, unknown>)
 }
 
 /**
+ * The flows whose hooks can change each cacheable result for the caller that asked: the list flows,
+ * and `skills:filter` for the `skill://` resources and the skill catalog in `server/discover`'s
+ * instructions.
+ */
+const RESULT_SHAPING_FLOWS: Record<string, readonly FlowName[]> = {
+  'tools/list': ['tools:list-tools'],
+  'resources/list': ['resources:list-resources', 'skills:filter'],
+  'resources/templates/list': ['resources:list-resource-templates'],
+  'prompts/list': ['prompts:list-prompts'],
+  'resources/read': ['resources:read-resource', 'skills:filter'],
+  'server/discover': ['skills:filter'],
+};
+
+/**
+ * Whether a cacheable result may differ from one caller to another, even between anonymous callers.
+ *
+ * It may when the scope evaluates `authorities` rules, which filter lists and gate reads for the
+ * caller, or when any hook runs in a flow that builds the result: feature flags, skill visibility
+ * and custom filters all decide there, for the caller. Methods not listed count as per-caller.
+ */
+export function isShapedPerCaller(scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine'>, method: string): boolean {
+  if (scope.authoritiesEngine) return true;
+  const flows = RESULT_SHAPING_FLOWS[method];
+  if (!flows) return true;
+  return flows.some((flow) => scope.hooks.getFlowHooks(flow).length > 0);
+}
+
+/**
  * Choose a cache scope for a request.
  *
- * Anonymous/public traffic carries no per-user variation and is safe to share;
- * anything tied to a token is `private` so intermediaries cannot cross
- * authorization contexts.
+ * `public` lets a shared cache serve the result to every caller, so it is used only for an anonymous
+ * request whose result nothing shaped per caller (see {@link isShapedPerCaller}). Anything tied to a
+ * token, or filtered for the caller, is `private` so intermediaries cannot cross authorization
+ * contexts. Without `shapedPerCaller`, the result is treated as shaped per caller.
  */
-export function resolveCacheScope(isAnonymous: boolean): 'public' | 'private' {
-  return isAnonymous ? 'public' : 'private';
+export function resolveCacheScope(isAnonymous: boolean, shapedPerCaller = true): 'public' | 'private' {
+  return isAnonymous && !shapedPerCaller ? 'public' : 'private';
 }

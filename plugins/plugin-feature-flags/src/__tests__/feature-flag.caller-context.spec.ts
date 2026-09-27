@@ -6,7 +6,7 @@
  * is a different question from "is it on for THIS caller", and a targeted adapter can answer
  * them differently -- so an empty context could open a gate the caller's own context closes.
  */
-import { FrontMcpContextStorage, type FrontMcpContext } from '@frontmcp/sdk';
+import { FrontMcpContextStorage, STATELESS_SESSION_ID, type FrontMcpContext } from '@frontmcp/sdk';
 
 import type { FeatureFlagAdapter } from '../adapters/feature-flag-adapter.interface';
 import { buildFeatureFlagContext } from '../feature-flag.context';
@@ -26,7 +26,7 @@ function createAdapter(): FeatureFlagAdapter {
 
 const caller = {
   sessionId: 'session-1',
-  authInfo: { clientId: 'client-1', extra: { sub: 'user-1' } },
+  authInfo: { clientId: 'client-1', sessionId: 'session-1', extra: { sub: 'user-1' } },
 } as unknown as FrontMcpContext;
 
 function createPlugin(
@@ -112,13 +112,29 @@ describe('FeatureFlagPlugin — caller context (GHSA-gf7p-j3hr-h5h4)', () => {
     });
 
     it('leaves userId undefined for an unauthenticated caller', () => {
-      const anonymous = { sessionId: 's' } as unknown as FrontMcpContext;
+      const anonymous = { sessionId: 's', authInfo: { sessionId: 's' } } as unknown as FrontMcpContext;
 
       expect(buildFeatureFlagContext(anonymous, {})).toEqual({
         userId: undefined,
         sessionId: 's',
         attributes: {},
       });
+    });
+
+    it('passes only the session id the server verified', () => {
+      const named = { sessionId: 'named-by-caller', authInfo: {} } as unknown as FrontMcpContext;
+      const fromExtra = {
+        sessionId: 'x',
+        authInfo: { extra: { sessionId: 'verified-in-extra' } },
+      } as unknown as FrontMcpContext;
+      const stateless = {
+        sessionId: 'named-by-caller',
+        authInfo: { sessionId: STATELESS_SESSION_ID },
+      } as unknown as FrontMcpContext;
+
+      expect(buildFeatureFlagContext(named, {}).sessionId).toBeUndefined();
+      expect(buildFeatureFlagContext(fromExtra, {}).sessionId).toBe('verified-in-extra');
+      expect(buildFeatureFlagContext(stateless, {}).sessionId).toBeUndefined();
     });
   });
 });

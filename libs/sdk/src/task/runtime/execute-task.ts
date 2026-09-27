@@ -52,7 +52,7 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
   const instance = new FrontMcpInstance(parsedConfig);
   await instance.ready;
 
-  const [scope] = instance.getScopes() as Scope[];
+  const scope = instance.getPrimaryScope() as Scope | undefined;
   if (!scope) return fatal('no scope initialized in task worker', instance);
   const logger = scope.logger.child('task-worker');
 

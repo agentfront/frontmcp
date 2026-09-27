@@ -41,6 +41,7 @@ import { toLegacyProtocolFlags } from '../../common/types/options/transport/sche
 import { SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
 import { type Scope } from '../scope.instance';
+import { headersForLog } from './request-log.redaction';
 
 const plan = {
   pre: [
@@ -170,21 +171,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       bodyMethod: body?.['method'],
     });
 
-    // Log sanitized headers for debugging connection issues
-    const sanitizedHeaders = Object.fromEntries(
-      Object.entries(headers).map(([key, value]) => {
-        // Redact clearly sensitive headers
-        if (/^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$/i.test(key)) {
-          return [key, '[REDACTED]'];
-        }
-        // Truncate session identifiers instead of logging full values
-        if (key === 'mcp-session-id') {
-          return [key, String(value).slice(0, 8) + '...'];
-        }
-        return [key, value];
-      }),
-    );
-    this.logger.debug(`[${this.requestId}] HEADERS`, { headers: sanitizedHeaders });
+    // Log sanitized headers for debugging connection issues: credentials redacted, session ids truncated
+    this.logger.debug(`[${this.requestId}] HEADERS`, { headers: headersForLog(headers) });
   }
 
   @Stage('checkIpFilter')

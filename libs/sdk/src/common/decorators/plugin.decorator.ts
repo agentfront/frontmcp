@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { frontMcpPluginMetadataSchema, type PluginMetadata } from '../metadata';
 import { FrontMcpPluginTokens } from '../tokens';
+import { registerEnforcedMetadataKeys } from '../utils/enforced-metadata.utils';
 
 /**
  * Decorator that marks a class as a McpPlugin and provides metadata
@@ -33,6 +34,11 @@ function FrontMcpPlugin(providedMetadata: PluginMetadata): ClassDecorator {
     Reflect.defineMetadata(FrontMcpPluginTokens.type, true, target);
     for (const property in metadata) {
       Reflect.defineMetadata(FrontMcpPluginTokens[property] ?? property, metadata[property], target);
+    }
+    // Known from the moment the plugin is defined, so an entry declaring one of these keys on a
+    // server that never installs the plugin is refused at startup.
+    if (metadata.enforcesMetadata?.length) {
+      registerEnforcedMetadataKeys(metadata.enforcesMetadata, `plugin "${metadata.name}"`);
     }
   };
 }

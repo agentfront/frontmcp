@@ -1,6 +1,22 @@
-import type { FrontMcpContext } from '@frontmcp/sdk';
+import { STATELESS_SESSION_ID, type FrontMcpContext } from '@frontmcp/sdk';
 
 import type { FeatureFlagContext, FeatureFlagPluginOptions } from './feature-flag.types';
+
+/**
+ * The session id the server verified for this request, or `undefined` for a caller without one.
+ *
+ * Not `ctx.sessionId`: under MCP 2026-07-28 that is whatever `mcp-session-id` the caller sent (or
+ * a per-request placeholder), and adapters target by session id (LaunchDarkly and Split.io use it
+ * as the key when there is no user), so a caller could name the session a rollout targets. The
+ * verified id is the one the server's session check put in `authInfo`, the same rule the SDK uses
+ * to share `CONTEXT` providers across a session's requests.
+ */
+function verifiedSessionId(ctx: FrontMcpContext): string | undefined {
+  const verified = ctx.authInfo?.sessionId ?? ctx.authInfo?.extra?.['sessionId'];
+  return typeof verified === 'string' && verified.length > 0 && verified !== STATELESS_SESSION_ID
+    ? verified
+    : undefined;
+}
 
 /**
  * Build the adapter evaluation context for the current caller.
@@ -24,7 +40,7 @@ export function buildFeatureFlagContext(
 
   return {
     userId: userId ?? undefined,
-    sessionId: ctx.sessionId,
+    sessionId: verifiedSessionId(ctx),
     attributes: config.attributesResolver ? config.attributesResolver(ctx) : {},
   };
 }

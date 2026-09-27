@@ -191,6 +191,24 @@ scopes.forEach(scope => {
 });
 ```
 
+### getPrimaryScope()
+
+Get the scope that holds the server's own apps. `createDirect`, `createFetchHandler`, `runStdio` and `connect()` serve
+this scope.
+
+```typescript
+getPrimaryScope(): ScopeEntry | undefined
+```
+
+A `standalone` app, such as `DashboardApp`, gets a scope of its own that comes first in `getScopes()`, so the first
+scope is not always the server's. When no app shares the server's scope (every app is standalone, or `splitByApp`),
+this is the first scope.
+
+<Note>
+  Up to 1.8.2, those entry points served the first scope: with `DashboardApp` in `apps` they served the dashboard's
+  tools instead of the server's.
+</Note>
+
 ### start()
 
 Start the HTTP server (called internally by bootstrap).

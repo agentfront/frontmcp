@@ -64,8 +64,13 @@ function makeScope(skills?: Partial<FakeSkills>): { skills?: FakeSkills } {
   };
 }
 
+/** A built instance whose only scope, and so its primary scope, is `scope`. */
+function builtInstance(scope?: unknown): { getScopes: () => unknown[]; getPrimaryScope: () => unknown } {
+  return { getScopes: () => (scope ? [scope] : []), getPrimaryScope: () => scope };
+}
+
 function mockScopeBuild(scope: unknown): void {
-  createForGraph.mockResolvedValue({ getScopes: () => [scope] });
+  createForGraph.mockResolvedValue(builtInstance(scope));
 }
 
 const BASE: EdgeMcpConfig = {
@@ -155,7 +160,7 @@ describe('createEdgeMcp — lazy build & memoization', () => {
 
   it('clears the memo on a failed build so the next request retries', async () => {
     const boom = new Error('build failed');
-    createForGraph.mockRejectedValueOnce(boom).mockResolvedValueOnce({ getScopes: () => [makeScope()] });
+    createForGraph.mockRejectedValueOnce(boom).mockResolvedValueOnce(builtInstance(makeScope()));
     const edge = createEdgeMcp(BASE);
 
     await expect(edge.fetch(new Request('https://w/'))).rejects.toBe(boom);
@@ -167,7 +172,7 @@ describe('createEdgeMcp — lazy build & memoization', () => {
   });
 
   it('throws a descriptive error when the config produces no scope', async () => {
-    createForGraph.mockResolvedValue({ getScopes: () => [] });
+    createForGraph.mockResolvedValue(builtInstance());
     const edge = createEdgeMcp(BASE);
     await expect(edge.fetch(new Request('https://w/'))).rejects.toBeInstanceOf(Error);
     await expect(edge.fetch(new Request('https://w/'))).rejects.toThrow(/produced no scope/);
@@ -361,7 +366,7 @@ describe('createEdgeMcp — managed mode', () => {
       const controller = provider?.useValue as { attach: (s: { refresh: jest.Mock }) => void };
       attachedRefresh = jest.fn(async () => ({ refreshed: true }));
       controller.attach({ refresh: attachedRefresh });
-      return { getScopes: () => [makeScope()] };
+      return builtInstance(makeScope());
     });
 
     const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
@@ -389,7 +394,7 @@ describe('createEdgeMcp — managed mode', () => {
     createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
       const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
       controllerCache = (provider?.useValue as { cache?: unknown }).cache;
-      return { getScopes: () => [makeScope()] };
+      return builtInstance(makeScope());
     });
 
     const edge = createEdgeMcp({
@@ -408,7 +413,7 @@ describe('createEdgeMcp — managed mode', () => {
     createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
       const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
       controllerCache = (provider?.useValue as { cache?: unknown }).cache;
-      return { getScopes: () => [makeScope()] };
+      return builtInstance(makeScope());
     });
 
     const edge = createEdgeMcp({

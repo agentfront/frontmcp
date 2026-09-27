@@ -29,6 +29,7 @@ import {
   type ToolOutputType,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
+import { getEnforcedMetadataKeys } from '../common/utils/enforced-metadata.utils';
 import {
   AgentConfigKeyNotFoundError,
   AgentNotConfiguredError,
@@ -416,6 +417,14 @@ export class AgentInstance<
     const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry', 'authorities'] as const;
     for (const key of pluginExtensionKeys) {
       if (key in extendedMeta && extendedMeta[key] !== undefined) {
+        mutableToolMeta[key] = extendedMeta[key];
+      }
+    }
+
+    // Metadata a plugin enforces (`approval`, `featureFlag`, ...): the plugin gates this tool, so an
+    // agent that declares it must pass it on, or the field would do nothing.
+    for (const key of getEnforcedMetadataKeys()) {
+      if (extendedMeta[key] !== undefined) {
         mutableToolMeta[key] = extendedMeta[key];
       }
     }

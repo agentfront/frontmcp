@@ -453,6 +453,8 @@ By default, agents execute tools through the full `call-tool` flow, which includ
 - Authorization checks
 - Tool middleware and transformations
 
+The plugin hooks are those of the plugins installed on the agent (`@Agent({ plugins })`), which apply to the agent's own tools the way an app's plugins apply to the app's tools. Plugins on the server or the app don't reach them. Up to 1.8.2, a plugin on an agent with a hook of its own (such as `FeatureFlagPlugin`) made every tool call of that agent fail with `Unsupported hook owner kind: "agent"`.
+
 For performance-critical scenarios, you can disable flow execution:
 
 ```ts
