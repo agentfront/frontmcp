@@ -14,6 +14,7 @@ import { generatePkceChallenge } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
+import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
@@ -42,7 +43,7 @@ async function seedPendingAuth(scope: ReturnType<typeof createMockScopeEntry>): 
     pkce,
     state: 'xyz',
   });
-  await store.storePendingAuthorization(pending);
+  await store.storePendingAuthorization(bindSignin(pending, pending.id));
   return pending.id;
 }
 
@@ -53,7 +54,7 @@ async function runCallback(headers: Record<string, string>) {
     method: 'GET',
     path: '/oauth/callback',
     query: { pending_auth_id: pendingAuthId, email: 'user@example.com' },
-    headers,
+    headers: { cookie: signinCookie(pendingAuthId), ...headers },
   });
   const flow = new OauthCallbackFlow(createCallbackMetadata(), input as never, scope, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'validatePendingAuth']);

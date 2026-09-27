@@ -12,6 +12,7 @@ import { generatePkceChallenge } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
+import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
@@ -44,7 +45,7 @@ async function seedPendingAuth(scope: any): Promise<string> {
     pkce,
     state: 'xyz',
   });
-  await store.storePendingAuthorization(pending);
+  await store.storePendingAuthorization(bindSignin(pending, pending.id));
   return pending.id;
 }
 
@@ -54,6 +55,7 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId }, // no email
@@ -75,6 +77,7 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId }, // no email
@@ -99,6 +102,7 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
       });
       const pendingAuthId = await seedPendingAuth(scope);
       const input = createMockHttpRequest({
+        headers: { cookie: signinCookie(pendingAuthId) },
         method: 'GET',
         path: '/oauth/callback',
         query: { pending_auth_id: pendingAuthId },
@@ -118,6 +122,7 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
     });
     const pendingAuthId = await seedPendingAuth(scope);
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId },
@@ -133,6 +138,7 @@ describe('OAuth Callback Flow — email opt-out (#468)', () => {
     });
     const pendingAuthId = await seedPendingAuth(scope);
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId, email: 'user@example.com' },
@@ -157,6 +163,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       // No email — authenticate() bypasses the email requirement.
@@ -181,6 +188,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: {
@@ -221,6 +229,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId, account: 'acme', apiKey: 'wrong' },
@@ -251,6 +260,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
       });
       const pendingAuthId = await seedPendingAuth(scope);
       const input = createMockHttpRequest({
+        headers: { cookie: signinCookie(pendingAuthId) },
         method: 'GET',
         path: '/oauth/callback',
         query: { pending_auth_id: pendingAuthId, account: 'acct-42' },
@@ -281,6 +291,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const pendingAuthId = await seedPendingAuth(scope);
 
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId, apiKey: 'k' },
@@ -297,6 +308,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate } as any });
     const pendingAuthId = await seedPendingAuth(scope);
     const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
       method: 'GET',
       path: '/oauth/callback',
       query: { pending_auth_id: pendingAuthId, apiKey: 'k' },

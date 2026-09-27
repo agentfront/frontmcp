@@ -14,6 +14,7 @@ import { InMemoryFederatedAuthSessionStore, type FederatedAuthSession } from '@f
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
+import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
 import { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthProviderCallbackFlow from '../oauth.provider-callback.flow';
@@ -52,7 +53,7 @@ async function seedSession(store: InMemoryFederatedAuthSessionStore): Promise<vo
     createdAt: Date.now(),
     expiresAt: Date.now() + 60_000,
   };
-  await store.store(session);
+  await store.store(bindSignin(session, session.pendingAuthId));
 }
 
 /**
@@ -85,6 +86,8 @@ function run(scope: unknown, providerState: string) {
     method: 'GET',
     path: '/oauth/provider/google/callback',
     query: { state: providerState },
+    // The browser that started the sign-in of 'sess-1'.
+    headers: { cookie: signinCookie('pending-1') },
   });
   const flow = new OauthProviderCallbackFlow(createMeta(), input as never, scope as never, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'loadFederatedSession']);

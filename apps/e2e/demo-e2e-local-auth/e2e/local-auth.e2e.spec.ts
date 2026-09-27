@@ -27,6 +27,8 @@ import { join } from 'node:path';
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.ts';
 
 // A fixed loopback redirect URI used by all flows in this suite.
@@ -61,7 +63,7 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string, opts?: { scope?: 
  * The simple login page embeds `<input type="hidden" name="pending_auth_id" ...>`.
  */
 async function startAuthorization(baseUrl: string, challenge: string, opts?: { scope?: string; state?: string }) {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge, opts), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge, opts), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   // The simple login page embeds a hidden pending_auth_id input.
@@ -85,7 +87,7 @@ async function completeLogin(
   if (opts?.email) url.searchParams.set('email', opts.email);
   if (opts?.name) url.searchParams.set('name', opts.name);
 
-  const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
   // A successful login is a 302/303 redirect back to the client redirect_uri.
   expect([302, 303]).toContain(res.status);
   // A successful login redirects back to the client redirect_uri (not an error page).
@@ -116,7 +118,7 @@ async function exchangeToken(
     client_id: CLIENT_ID,
     code_verifier: params.verifier,
   });
-  return fetch(`${baseUrl}/oauth/token`, {
+  return browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': opts?.contentType ?? 'application/x-www-form-urlencoded' },
     body: form.toString(),
@@ -251,7 +253,7 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
   // ===========================================================
   describe('#467 discovery documents', () => {
     it('oauth-authorization-server advertises host-derived endpoints at root', async () => {
-      const res = await fetch(`${baseUrl}/.well-known/oauth-authorization-server`, {
+      const res = await browserFetch(`${baseUrl}/.well-known/oauth-authorization-server`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         redirect: 'manual',
@@ -276,11 +278,13 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
 
     it('the advertised authorization_endpoint and jwks_uri are actually reachable', async () => {
       const meta = (await (
-        await fetch(`${baseUrl}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' } })
+        await browserFetch(`${baseUrl}/.well-known/oauth-authorization-server`, {
+          headers: { Accept: 'application/json' },
+        })
       ).json()) as Record<string, string>;
 
       // jwks_uri returns a JWKS document.
-      const jwksRes = await fetch(meta['jwks_uri'], { headers: { Accept: 'application/json' } });
+      const jwksRes = await browserFetch(meta['jwks_uri'], { headers: { Accept: 'application/json' } });
       expect(jwksRes.status).toBe(200);
       const jwks = (await jwksRes.json()) as { keys: unknown[] };
       expect(Array.isArray(jwks.keys)).toBe(true);
@@ -293,12 +297,12 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
       authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
       authUrl.searchParams.set('code_challenge', challenge);
       authUrl.searchParams.set('code_challenge_method', 'S256');
-      const authRes = await fetch(authUrl.toString(), { redirect: 'manual' });
+      const authRes = await browserFetch(authUrl.toString(), { redirect: 'manual' });
       expect(authRes.status).toBe(200);
     });
 
     it('oauth-protected-resource advertises this origin as its authorization server', async () => {
-      const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`, {
+      const res = await browserFetch(`${baseUrl}/.well-known/oauth-protected-resource`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         redirect: 'manual',
@@ -334,13 +338,15 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
 
     it('is advertised by the discovery document and returns the sub for a valid token', async () => {
       const meta = (await (
-        await fetch(`${baseUrl}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' } })
+        await browserFetch(`${baseUrl}/.well-known/oauth-authorization-server`, {
+          headers: { Accept: 'application/json' },
+        })
       ).json()) as Record<string, string>;
       // The discovery document advertises the userinfo endpoint at root.
       expect(meta['userinfo_endpoint']).toBe(`${baseUrl}/oauth/userinfo`);
 
       const token = await mintAccessToken({ email: 'userinfo@example.com' });
-      const res = await fetch(meta['userinfo_endpoint'], {
+      const res = await browserFetch(meta['userinfo_endpoint'], {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
@@ -353,7 +359,7 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
     });
 
     it('rejects a request with NO bearer token with 401', async () => {
-      const res = await fetch(`${baseUrl}/oauth/userinfo`, {
+      const res = await browserFetch(`${baseUrl}/oauth/userinfo`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -365,7 +371,7 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
       // Replace the HS256 signature so the MAC no longer matches the secret.
       const [h, p] = valid.split('.');
       const tampered = `${h}.${p}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
-      const res = await fetch(`${baseUrl}/oauth/userinfo`, {
+      const res = await browserFetch(`${baseUrl}/oauth/userinfo`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${tampered}`, Accept: 'application/json' },
       });
@@ -413,7 +419,7 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
     });
 
     it('returns a precise 400 (not 500) for a malformed token body', async () => {
-      const res = await fetch(`${baseUrl}/oauth/token`, {
+      const res = await browserFetch(`${baseUrl}/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'grant_type=authorization_code', // missing code / redirect_uri / client_id / verifier
@@ -534,7 +540,7 @@ describe('#472/#458 sqlite tokenStorage restart persistence', () => {
         refresh_token: refreshToken,
         client_id: CLIENT_ID,
       });
-      const res = await fetch(`${base2}/oauth/token`, {
+      const res = await browserFetch(`${base2}/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: form.toString(),
@@ -592,7 +598,7 @@ describe('#471 verified token with gone session is handled cleanly (no 500)', ()
     //     per the MCP Spec 2025-11-25 / repo convention, an invalid or missing
     //     session id maps to HTTP 404 ("session not found" → re-initialize);
     //     a rejected token would be 401. Either is acceptable; a 5xx is not.
-    const res = await fetch(`${baseUrl}/`, {
+    const res = await browserFetch(`${baseUrl}/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -633,7 +639,7 @@ describe('#471 verified token with gone session is handled cleanly (no 500)', ()
   });
 
   it('unauthenticated request is rejected with 401 + WWW-Authenticate (allowDefaultPublic: false)', async () => {
-    const res = await fetch(`${baseUrl}/`, {
+    const res = await browserFetch(`${baseUrl}/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -688,7 +694,7 @@ describe('SECURITY: forged/tampered Bearer token is rejected with 401', () => {
 
   /** POST an MCP initialize with the given bearer token; return the HTTP response. */
   async function callWithToken(token: string): Promise<Response> {
-    return fetch(`${baseUrl}/`, {
+    return browserFetch(`${baseUrl}/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

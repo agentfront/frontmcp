@@ -9,6 +9,8 @@
  */
 import { expect, MockOAuthServer, test, TestTokenFactory } from '@frontmcp/testing';
 
+import { browserFetch } from './browser-fetch';
+
 // Create separate token factories for each mock provider
 let githubTokenFactory: TestTokenFactory;
 let slackTokenFactory: TestTokenFactory;
@@ -84,7 +86,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
 
   test.describe('OAuth Metadata', () => {
     test('should expose JWKS endpoint', async ({ server }) => {
-      const response = await fetch(`${server.info.baseUrl}/.well-known/jwks.json`, {
+      const response = await browserFetch(`${server.info.baseUrl}/.well-known/jwks.json`, {
         headers: { Accept: 'application/json' },
       });
 
@@ -96,7 +98,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
     });
 
     test('should expose authorization server metadata', async ({ server }) => {
-      const response = await fetch(`${server.info.baseUrl}/.well-known/oauth-authorization-server`, {
+      const response = await browserFetch(`${server.info.baseUrl}/.well-known/oauth-authorization-server`, {
         headers: { Accept: 'application/json' },
         redirect: 'manual',
       });
@@ -124,7 +126,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       authorizeUrl.searchParams.set('scope', 'openid');
       authorizeUrl.searchParams.set('state', 'e2e-state');
 
-      const res = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
+      const res = await browserFetch(authorizeUrl.toString(), { redirect: 'manual' });
       const html = await res.text();
       const match = html.match(/name="pending_auth_id" value="([^"]+)"/);
       return { status: res.status, html, pendingAuthId: match?.[1] };
@@ -158,7 +160,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       callbackUrl.searchParams.set('federated', 'true');
       callbackUrl.searchParams.set('email', 'user@example.com');
 
-      const res = await fetch(callbackUrl.toString(), { redirect: 'manual' });
+      const res = await browserFetch(callbackUrl.toString(), { redirect: 'manual' });
       const body = await res.text();
 
       // No authorization code is issued; the gate rejects with a 400.
@@ -195,7 +197,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       // linked the provider-callback renders the tool-consent screen (200 HTML)
       // which POSTs back to /oauth/provider/_consent/callback with the selection.
       for (let hop = 0; hop < 10; hop++) {
-        const res = await fetch(
+        const res = await browserFetch(
           current,
           consentForm
             ? {
@@ -240,7 +242,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       expect(clientCode).toBeDefined();
 
       // 2) Exchange the FrontMCP authorization code for a JWT.
-      const tokenRes = await fetch(`${server.info.baseUrl}/oauth/token`, {
+      const tokenRes = await browserFetch(`${server.info.baseUrl}/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -400,7 +402,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
 
   test.describe('Authorization Endpoints', () => {
     test('should return 401 for unauthenticated requests', async ({ server }) => {
-      const response = await fetch(`${server.info.baseUrl}/`, {
+      const response = await browserFetch(`${server.info.baseUrl}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -429,7 +431,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       authorizeUrl.searchParams.set('code_challenge', 'test-challenge');
       authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
-      const response = await fetch(authorizeUrl.toString(), {
+      const response = await browserFetch(authorizeUrl.toString(), {
         redirect: 'manual',
       });
 
@@ -446,7 +448,7 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
 // with HTTP 401.
 test.describe('Mock OAuth Server Integration', () => {
   it('mock github server should serve JWKS', async () => {
-    const response = await fetch(`${githubServer.info.baseUrl}/.well-known/jwks.json`);
+    const response = await browserFetch(`${githubServer.info.baseUrl}/.well-known/jwks.json`);
     expect(response.ok).toBe(true);
 
     const jwks = await response.json();
@@ -461,7 +463,7 @@ test.describe('Mock OAuth Server Integration', () => {
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('state', 'test-state');
 
-    const response = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
+    const response = await browserFetch(authorizeUrl.toString(), { redirect: 'manual' });
 
     expect(response.status).toBe(302);
     const location = response.headers.get('location');
@@ -475,7 +477,7 @@ test.describe('Mock OAuth Server Integration', () => {
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('state', 'test-state');
 
-    const response = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
+    const response = await browserFetch(authorizeUrl.toString(), { redirect: 'manual' });
 
     expect(response.status).toBe(302);
     const location = response.headers.get('location');

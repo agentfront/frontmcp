@@ -62,6 +62,32 @@ export function authUiExtraPath(fullPath: string): string {
   return `${fullPath.replace(/\/+$/, '')}/oauth/ui/extra`;
 }
 
+/** Schemes a page's form is never allowed to reach, whatever a redirect_uri names. */
+const UNSAFE_FORM_TARGET_SCHEMES = new Set(['javascript:', 'data:', 'blob:', 'filesystem:', 'about:', 'file:']);
+
+/**
+ * The CSP source expression that lets a form submission end at `target`, or
+ * `undefined` when none can name it exactly:
+ * - an `http(s)` URL: its origin (`https://app.example.com:8443`);
+ * - a native app's private-use scheme (RFC 8252 §7.1, `com.example.app:/cb`),
+ *   which has no origin: that scheme;
+ * - anything else (unparseable, an IPv6 host a CSP source can't express, a
+ *   script or local scheme): nothing, so the redirect stays blocked.
+ */
+export function formActionSource(target: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(target);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol === 'http:' || url.protocol === 'https:') {
+    return url.hostname.startsWith('[') ? undefined : url.origin;
+  }
+  if (!/^[a-z][a-z0-9+.-]*:$/.test(url.protocol) || UNSAFE_FORM_TARGET_SCHEMES.has(url.protocol)) return undefined;
+  return url.protocol;
+}
+
 /**
  * The Content-Security-Policy for an auth-UI page.
  *
@@ -71,20 +97,43 @@ export function authUiExtraPath(fullPath: string): string {
  * user input). It does NOT include `'unsafe-eval'` — the TSX→JS transform is
  * done server-side, so the browser never evals source. Framing is denied to
  * prevent clickjacking of the login / consent form.
+ *
+ * `form-action` allows this server plus the origin of each of `formTargets`:
+ * the URLs the server may redirect a submission of the page's form to (the
+ * client's validated `redirect_uri`, an upstream provider's authorization
+ * endpoint). Browsers apply `form-action` to those redirects, so with `'self'`
+ * alone the sign-in would stop at the callback.
+ *
+ * @param formTargets - Where a submission of the page's form may be redirected
  */
-export const AUTH_UI_CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://esm.sh",
-  "connect-src 'self' https://esm.sh",
-  "style-src 'self' 'unsafe-inline' https://esm.sh",
-  "img-src 'self' data: https:",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+export function authUiCsp(formTargets: readonly string[] = []): string {
+  const formAction = new Set(["'self'"]);
+  for (const target of formTargets) {
+    const source = formActionSource(target);
+    if (source) formAction.add(source);
+  }
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://esm.sh",
+    "connect-src 'self' https://esm.sh",
+    "style-src 'self' 'unsafe-inline' https://esm.sh",
+    "img-src 'self' data: https:",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    `form-action ${[...formAction].join(' ')}`,
+  ].join('; ');
+}
+
+/** The auth-UI CSP for a page whose form can only reach this server (see {@link authUiCsp}). */
+export const AUTH_UI_CSP = authUiCsp();
 
 /**
  * Build the auth security headers for an auth-UI page (CSP + anti-clickjacking).
+ *
+ * `Referrer-Policy: same-origin`, as on the built-in pages: the page's URL
+ * stays away from esm.sh, while a POST of its form still carries its `Origin`,
+ * which `/oauth/callback` checks (`no-referrer` would send `Origin: null`, and
+ * the callback would refuse every sign-in as cross-origin).
  *
  * @param csp - Override the CSP value (defaults to {@link AUTH_UI_CSP}).
  */
@@ -93,7 +142,8 @@ export function authUiPageHeaders(csp: string = AUTH_UI_CSP): Record<string, str
     'Content-Security-Policy': csp,
     'X-Frame-Options': 'DENY',
     'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'no-referrer',
+    'Referrer-Policy': 'same-origin',
+    'Cache-Control': 'no-store',
   };
 }
 
@@ -132,6 +182,12 @@ export function buildAuthUiPage(options: {
   fullPath: string;
   /** Page <title> (defaults to a slot-appropriate label). */
   title?: string;
+  /**
+   * Where the server may redirect a submission of the page's form (the
+   * validated `redirect_uri`, upstream authorization endpoints); their origins
+   * are allowed in the CSP `form-action` (see {@link authUiCsp}).
+   */
+  formTargets?: readonly string[];
 }): { html: string; headers: Record<string, string> } | undefined {
   const { registry, slot, state } = options;
   const source = registry.getSlotSource(slot);
@@ -167,7 +223,7 @@ export function buildAuthUiPage(options: {
       shellConfig,
     );
 
-    return { html: result.html, headers: authUiPageHeaders() };
+    return { html: result.html, headers: authUiPageHeaders(authUiCsp(options.formTargets)) };
   } catch (err) {
     registry.recordSlotError(slot, err instanceof Error ? err.message : String(err));
     return undefined;

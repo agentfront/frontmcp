@@ -6,6 +6,7 @@ import {
   FlowBase,
   getRequestBaseUrl,
   httpRequestInputSchema,
+  isOrchestratedMode,
   isPublicMode,
   isPublicUrlPinned,
   isStaticMode,
@@ -602,8 +603,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // it was issued by this instance for THIS resource (#269): another server
       // with the same JWT_SECRET holds the same key. Verification lives in
       // LocalPrimaryAuth.verifyGatewayToken rather than in JwksService.
+      // In local and remote mode, `auth.expectedAudience` lists the audiences
+      // this server accepts in place of the request's resource URL, as in
+      // transparent mode (so the check doesn't depend on the Host header).
+      const configuredAudience = isOrchestratedMode(authOptions) ? authOptions.expectedAudience : undefined;
       const resource = computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
-      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, resource);
+      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, configuredAudience ?? resource);
     }
 
     const result = await verify;

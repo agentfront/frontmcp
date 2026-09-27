@@ -186,6 +186,13 @@ export interface PendingAuthorizationRecord {
    * `authenticate()` again with credentials round-tripped through the browser.
    */
   verifiedLogin?: string;
+
+  /**
+   * SHA-256 of the sign-in binding cookie given to the browser that started
+   * this authorization (see `createSigninBinding`). The callbacks refuse a
+   * request that doesn't carry the matching cookie.
+   */
+  signinBinding?: string;
 }
 
 /**
@@ -324,6 +331,8 @@ export interface CreatePendingRecordParams {
   // SSR time and assigned onto an existing record, but accepted here so a caller
   // can seed it at creation time without losing it.
   authUiCsrf?: string;
+  /** SHA-256 of the sign-in binding cookie (see `PendingAuthorizationRecord.signinBinding`). */
+  signinBinding?: string;
 }
 
 /**
@@ -423,6 +432,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     federatedLogin: params.federatedLogin,
     consent: params.consent,
     authUiCsrf: params.authUiCsrf,
+    signinBinding: params.signinBinding,
   };
 }
 
