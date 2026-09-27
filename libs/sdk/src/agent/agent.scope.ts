@@ -271,15 +271,17 @@ export class AgentScope {
     return this.parentScope.metadata;
   }
 
-  // The agent's tools answer to the server's `authorities` rules like every other tool.
+  /** The server's authorities engine: the agent's tools answer to its rules like every other tool. */
   get authoritiesEngine() {
     return this.parentScope.authoritiesEngine;
   }
 
+  /** The server's builder for the context `authorities` rules are evaluated against (claims mapping included). */
   get authoritiesContextBuilder() {
     return this.parentScope.authoritiesContextBuilder;
   }
 
+  /** The server's mapping from authority denials to OAuth scope challenges. */
   get authoritiesScopeMapping() {
     return this.parentScope.authoritiesScopeMapping;
   }
@@ -397,14 +399,17 @@ class AgentScopeEntry {
     return this.agentScope.scopeMetadata;
   }
 
+  /** See {@link AgentScope.authoritiesEngine}. */
   get authoritiesEngine() {
     return this.agentScope.authoritiesEngine;
   }
 
+  /** See {@link AgentScope.authoritiesContextBuilder}. */
   get authoritiesContextBuilder() {
     return this.agentScope.authoritiesContextBuilder;
   }
 
+  /** See {@link AgentScope.authoritiesScopeMapping}. */
   get authoritiesScopeMapping() {
     return this.agentScope.authoritiesScopeMapping;
   }

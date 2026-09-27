@@ -1004,10 +1004,15 @@ export default class ProviderRegistry
    * requests, so only that key gets the long-lived session cache. Any other key (a caller with no
    * session, like a token under MCP 2026-07-28, or an `mcp-session-id` the client merely sent) gets
    * a store that lives on the request context, so its instances are built once per request and never
-   * reach another caller. Without a request context the caller's key is trusted as before.
+   * reach another caller. Without a request context nothing vouches for the key, so the instances are
+   * built for this call only.
    */
   private providerStoreFor(sessionKey: string, requestContext: unknown): SessionProviderStore {
-    if (requestContext instanceof FrontMcpContext && verifiedSessionOf(requestContext) !== sessionKey) {
+    if (!(requestContext instanceof FrontMcpContext)) {
+      return newProviderStore();
+    }
+
+    if (verifiedSessionOf(requestContext) !== sessionKey) {
       let stores = requestContext.get<WeakMap<ProviderRegistry, SessionProviderStore>>(REQUEST_PROVIDER_STORES);
       if (!stores) {
         stores = new WeakMap();
@@ -1015,7 +1020,7 @@ export default class ProviderRegistry
       }
       let store = stores.get(this);
       if (!store) {
-        store = { providers: new Map<Token, unknown>(), bySource: new Map(), lastAccess: Date.now() };
+        store = newProviderStore();
         stores.set(this, store);
       }
       return store;
@@ -1023,7 +1028,7 @@ export default class ProviderRegistry
 
     let cached = this.sessionStores.get(sessionKey);
     if (!cached) {
-      cached = { providers: new Map<Token, unknown>(), bySource: new Map(), lastAccess: Date.now() };
+      cached = newProviderStore();
       this.sessionStores.set(sessionKey, cached);
     } else {
       cached.lastAccess = Date.now();
@@ -1187,7 +1192,13 @@ export default class ProviderRegistry
 /** Where a request context keeps the CONTEXT instances built for a caller that has no verified session. */
 const REQUEST_PROVIDER_STORES = Symbol('frontmcp:request-provider-stores');
 
-/** The session id the server verified for this request, if any (the stateless placeholder is not one). */
+/**
+ * The session id the server verified for this request, if any (the stateless placeholder is not one).
+ *
+ * Read from the verified auth info rather than `FrontMcpContext.verifiedSessionId`, which also requires
+ * the context's own `sessionId` to match: a legacy SSE request carries its session in `?sessionId=`, so
+ * its context gets a per-request id while its entry flows key their providers by the verified session.
+ */
 function verifiedSessionOf(requestContext: FrontMcpContext): string | undefined {
   const { authInfo } = requestContext;
   const verified = authInfo.sessionId ?? authInfo.extra?.['sessionId'];
@@ -1200,4 +1211,9 @@ function requestScopedTokens(contextProviders: Map<Token, unknown> | undefined):
   const requestContext = contextProviders?.get(FRONTMCP_CONTEXT);
   const carriedTokens = requestContext instanceof FrontMcpContext ? requestContext.getContextTokens().keys() : [];
   return new Set<Token>([FRONTMCP_CONTEXT, ...(carriedTokens as Iterable<Token>)]);
+}
+
+/** An empty store for the CONTEXT instances of one caller. */
+function newProviderStore(): SessionProviderStore {
+  return { providers: new Map<Token, unknown>(), bySource: new Map(), lastAccess: Date.now() };
 }

@@ -114,6 +114,93 @@ describe('authorities rules that check nothing (#266)', () => {
   });
 });
 
+/** ABAC conditions whose expected value is missing or of a type the operator can never compare against. */
+const malformedConditions: Array<[string, Record<string, unknown>]> = [
+  ['exists with no value', { path: 'user.sub', op: 'exists' }],
+  ['exists with value undefined', { path: 'user.sub', op: 'exists', value: undefined }],
+  ['exists with a non-boolean value', { path: 'user.sub', op: 'exists', value: 'yes' }],
+  ['exists with a reference', { path: 'user.sub', op: 'exists', value: { fromInput: 'present' } }],
+  ['neq with no value', { path: 'user.sub', op: 'neq' }],
+  ['eq with no value', { path: 'user.sub', op: 'eq' }],
+  ['notIn with no value', { path: 'user.sub', op: 'notIn' }],
+  ['notIn with an empty list', { path: 'user.sub', op: 'notIn', value: [] }],
+  ['in with a string', { path: 'user.sub', op: 'in', value: 'ada' }],
+  ['gt with a string', { path: 'claims.level', op: 'gt', value: '3' }],
+  ['startsWith with a number', { path: 'user.sub', op: 'startsWith', value: 1 }],
+  ['matches with no value', { path: 'user.sub', op: 'matches' }],
+  ['a reference with an empty name', { path: 'user.sub', op: 'eq', value: { fromInput: '' } }],
+  ['a reference with two sources', { path: 'user.sub', op: 'eq', value: { fromInput: 'a', fromClaims: 'b' } }],
+];
+
+describe('ABAC conditions without a usable value', () => {
+  it.each(malformedConditions)('denies %s at evaluation time', async (_label, condition) => {
+    const result = await engineWith().evaluate(
+      { attributes: { conditions: [condition] } } as unknown as AuthoritiesMetadata,
+      anonymous,
+    );
+
+    expect(result.granted).toBe(false);
+    expect(result.deniedBy).toMatch(/^invalid authorities rule: /);
+  });
+
+  it.each(malformedConditions)('reports %s as a problem', (_label, condition) => {
+    expect(findAuthoritiesRuleProblems({ attributes: { conditions: [condition] } })).not.toEqual([]);
+  });
+
+  it('denies exists with no value, which admitted every caller without the attribute', async () => {
+    const result = await engineWith().evaluate(
+      { attributes: { conditions: [{ path: 'user.sub', op: 'exists' }] } } as unknown as AuthoritiesMetadata,
+      anonymous,
+    );
+
+    expect(result.granted).toBe(false);
+  });
+
+  it('denies a condition with no value under not, which turned its failure into a grant', async () => {
+    const result = await engineWith().evaluate(
+      { not: { attributes: { conditions: [{ path: 'user.sub', op: 'eq' }] } } } as unknown as AuthoritiesMetadata,
+      anonymous,
+    );
+
+    expect(result.granted).toBe(false);
+  });
+
+  it('names the condition and what its value needs', () => {
+    expect(
+      findAuthoritiesRuleProblems({
+        attributes: {
+          conditions: [
+            { path: 'user.sub', op: 'exists' },
+            { path: 'user.sub', op: 'in', value: 'ada' },
+          ],
+        },
+      }),
+    ).toEqual([
+      '.attributes.conditions[0].value is missing',
+      '.attributes.conditions[1].value must be a list for "in"',
+    ]);
+  });
+
+  it('reports a match entry with no value', () => {
+    expect(findAuthoritiesRuleProblems({ attributes: { match: { 'user.sub': undefined } } })).toEqual([
+      '.attributes.match["user.sub"] has no value',
+    ]);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['exists: false', { path: 'user.sub', op: 'exists', value: false }],
+    ['eq: null', { path: 'claims.org', op: 'eq', value: null }],
+    ['neq with a reference', { path: 'claims.org', op: 'neq', value: { fromClaims: 'home_org' } }],
+    ['in with a list', { path: 'env.NODE_ENV', op: 'in', value: ['staging', 'production'] }],
+    ['in with a reference', { path: 'user.sub', op: 'in', value: { fromInput: 'allowed' } }],
+    ['gte with a number', { path: 'claims.level', op: 'gte', value: 3 }],
+    ['contains with a string', { path: 'claims.groups', op: 'contains', value: 'ops' }],
+    ['matches with a pattern', { path: 'user.sub', op: 'matches', value: '^svc-' }],
+  ])('accepts a condition with %s', (_label, condition) => {
+    expect(findAuthoritiesRuleProblems({ attributes: { conditions: [condition] } })).toEqual([]);
+  });
+});
+
 describe('guards (#267)', () => {
   it.each<[string, unknown]>([
     ['undefined', undefined],

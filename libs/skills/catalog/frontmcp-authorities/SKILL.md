@@ -208,8 +208,9 @@ export default class SensitiveActionTool extends ToolContext { ... }
 
 For dynamic, async authorization that does not warrant a reusable custom evaluator, use the
 `guards` field. Each guard receives the same `AuthoritiesEvaluationContext` and returns
-`true` on grant, or `false`/a denial string on deny. Guards run in sequence and combine with
-other policy fields via `operator` (default AND).
+`true` on grant, or `false`/a denial string on deny. Only `true` grants: anything else
+(`undefined` from a guard that forgot to `return`, `null`, `0`, an object) denies. Guards run
+in sequence and combine with other policy fields via `operator` (default AND).
 
 ```typescript
 import type { AuthorityGuardFn } from '@frontmcp/auth';
@@ -312,14 +313,34 @@ Two limitations to design around:
   filtering and will hide the skill from discovery. Use role/permission/claims
   authorities for discoverable skills; input-dependent policies still enforce at
   load time. (Same limitation applies to tools/resources/prompts.)
-- **HTTP skills discovery is fail-closed.** The Skills HTTP API uses a binary
-  api-key/bearer gate with no claims, so gated skills are hidden from `GET /skills`
-  and denied on `GET /skills/{id}` regardless of the bearer. Serve gated skills over
-  an MCP transport for claims-based access. Ungated skills are unaffected.
+- **HTTP skills discovery follows `skillsConfig.auth`.** With `'inherit'` (the default),
+  `GET /skills`, `/llm.txt` and `/llm_full.txt` run the server's own auth, and gated
+  skills are evaluated against the caller it verified. `'api-key'`, `'bearer'` and
+  `'public'` surface no claims, so there gated skills are left out of every listing and
+  `GET /skills/{id}` answers 404 for them. Ungated skills are unaffected.
 
 Boot-time fail-fast covers skills too: a `@Skill` with `authorities` but no configured
 authorities engine fails server startup with `AuthConfigurationError`, exactly like a
-tool/resource/prompt/agent.
+tool, resource, resource template, prompt, agent, or a tool declared inside an agent
+(hidden entries included).
+
+### Rules that check nothing are refused
+
+Startup fails with `AuthConfigurationError: Invalid authorities rule: …` when an entry's or a
+profile's rule checks nothing or isn't what it looks like, and `AuthoritiesEngine.evaluate()`
+denies such a rule if it runs anyway (even under `not`):
+
+- `{}`, `{ roles: {} }`, `{ roles: { all: [] } }`, `allOf: []`, `guards: []`
+- a misspelled field (`role:`), a profile name inside `allOf`/`anyOf`, an `operator` other than `'AND'`/`'OR'`
+- an ABAC condition with no `value`, or one the operator can't use: `exists` needs `true`/`false`;
+  `in`/`notIn` a non-empty list; `gt`/`gte`/`lt`/`lte` a number; `startsWith`/`endsWith`/`matches`
+  a string (a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`)
+
+To leave an entry open, remove its `authorities`. There is no opt-out.
+
+`@Agent({ authorities })` gates the agent's `invoke_<id>` tool like any tool (hidden from
+`tools/list`, refused on `tools/call`), and tools declared inside an agent are checked against
+the caller the agent runs for, also with `execution.useToolFlow: false`.
 
 ## Scenario Routing Table
 

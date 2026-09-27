@@ -48,6 +48,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+/** A problem for each key of `value` that isn't one of `known`. */
 function unknownFields(value: Record<string, unknown>, known: ReadonlySet<string>, path: string): string[] {
   const prefix = path ? `${path} has` : 'has';
   return Object.keys(value)
@@ -55,6 +56,7 @@ function unknownFields(value: Record<string, unknown>, known: ReadonlySet<string
     .map((key) => `${prefix} an unknown field "${key}"`);
 }
 
+/** A non-empty list of non-empty names (`roles.all`, `permissions.any`...). */
 function checkStringList(value: unknown, path: string): string[] {
   if (!Array.isArray(value)) return [`${path} must be a list of names`];
   if (value.length === 0) return [`${path} is empty`];
@@ -63,6 +65,7 @@ function checkStringList(value: unknown, path: string): string[] {
 
 const ALL_OR_ANY: ReadonlySet<string> = new Set(['all', 'any']);
 
+/** `{ all?, any? }` for roles and permissions: at least one of them, each a non-empty list of names. */
 function checkAllOrAny(value: unknown, path: string): string[] {
   if (!isPlainObject(value)) return [`${path} must be an object with "all" or "any"`];
   const problems = unknownFields(value, ALL_OR_ANY, path);
@@ -77,6 +80,52 @@ function checkAllOrAny(value: unknown, path: string): string[] {
 const ATTRIBUTE_FIELDS: ReadonlySet<string> = new Set(['match', 'conditions']);
 const CONDITION_FIELDS: ReadonlySet<string> = new Set(['path', 'op', 'value']);
 
+/** An object naming `fromInput` or `fromClaims`, which the evaluator resolves at run time. */
+function isValueReference(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value) && ('fromInput' in value || 'fromClaims' in value);
+}
+
+/** A `{ fromInput }` / `{ fromClaims }` reference names exactly one non-empty source. */
+function checkValueReference(value: Record<string, unknown>, path: string): string[] {
+  const ref = value['fromInput'] ?? value['fromClaims'];
+  return Object.keys(value).length === 1 && isNonEmptyString(ref)
+    ? []
+    : [`${path} must be { fromInput: "<name>" } or { fromClaims: "<path>" }`];
+}
+
+/** What each operator's literal `value` must be for the comparison to mean anything. */
+const OPERATOR_VALUES: Partial<Record<AbacOperator, { accepts: (value: unknown) => boolean; needs: string }>> = {
+  in: { accepts: Array.isArray, needs: 'a list' },
+  notIn: { accepts: Array.isArray, needs: 'a list' },
+  gt: { accepts: (value) => typeof value === 'number', needs: 'a number' },
+  gte: { accepts: (value) => typeof value === 'number', needs: 'a number' },
+  lt: { accepts: (value) => typeof value === 'number', needs: 'a number' },
+  lte: { accepts: (value) => typeof value === 'number', needs: 'a number' },
+  startsWith: { accepts: (value) => typeof value === 'string', needs: 'a string' },
+  endsWith: { accepts: (value) => typeof value === 'string', needs: 'a string' },
+  matches: { accepts: (value) => typeof value === 'string', needs: 'a string' },
+};
+
+/**
+ * A condition's `value` is what the evaluator compares against, and a missing or unusable one
+ * does not simply fail: `exists` with no value admits every caller without the attribute, `neq`
+ * with no value or `notIn: []` admit nearly everyone, and under `not` any failing condition grants.
+ * So every condition needs one the operator can use.
+ */
+function checkConditionValue(op: AbacOperator, condition: Record<string, unknown>, path: string): string[] {
+  const value = condition['value'];
+  if (value === undefined) return [`${path} is missing`];
+  if (op === 'exists') {
+    return typeof value === 'boolean' ? [] : [`${path} must be true or false for "exists"`];
+  }
+  if (isValueReference(value)) return checkValueReference(value, path);
+  const expected = OPERATOR_VALUES[op];
+  if (expected && !expected.accepts(value)) return [`${path} must be ${expected.needs} for "${op}"`];
+  if (Array.isArray(value) && value.length === 0 && (op === 'in' || op === 'notIn')) return [`${path} is empty`];
+  return [];
+}
+
+/** An ABAC policy: a non-empty `match` and/or a non-empty `conditions` list of well-formed conditions. */
 function checkAttributes(value: unknown, path: string): string[] {
   if (!isPlainObject(value)) return [`${path} must be an object with "match" or "conditions"`];
   const problems = unknownFields(value, ATTRIBUTE_FIELDS, path);
@@ -87,6 +136,13 @@ function checkAttributes(value: unknown, path: string): string[] {
   if (match !== undefined) {
     if (!isPlainObject(match)) problems.push(`${path}.match must be an object`);
     else if (Object.keys(match).length === 0) problems.push(`${path}.match is empty`);
+    else {
+      for (const [attribute, expected] of Object.entries(match)) {
+        const at = `${path}.match[${JSON.stringify(attribute)}]`;
+        if (expected === undefined) problems.push(`${at} has no value`);
+        else if (isValueReference(expected)) problems.push(...checkValueReference(expected, at));
+      }
+    }
   }
   if (conditions !== undefined) {
     if (!Array.isArray(conditions)) problems.push(`${path}.conditions must be a list`);
@@ -100,8 +156,11 @@ function checkAttributes(value: unknown, path: string): string[] {
         }
         problems.push(...unknownFields(condition, CONDITION_FIELDS, at));
         if (!isNonEmptyString(condition['path'])) problems.push(`${at}.path must be a non-empty string`);
-        if (!ABAC_OPERATORS.has(condition['op'] as AbacOperator)) {
+        const op = condition['op'] as AbacOperator;
+        if (!ABAC_OPERATORS.has(op)) {
           problems.push(`${at}.op "${String(condition['op'])}" is not an operator`);
+        } else {
+          problems.push(...checkConditionValue(op, condition, `${at}.value`));
         }
       });
     }
@@ -111,6 +170,7 @@ function checkAttributes(value: unknown, path: string): string[] {
 
 const RELATIONSHIP_FIELDS: ReadonlySet<string> = new Set(['type', 'resource', 'resourceId']);
 
+/** A ReBAC resource id: a literal string or a `{ fromInput }` / `{ fromClaims }` reference. */
 function checkResourceId(value: unknown, path: string): string[] {
   if (isNonEmptyString(value)) return [];
   if (isPlainObject(value) && Object.keys(value).length === 1) {
@@ -120,6 +180,7 @@ function checkResourceId(value: unknown, path: string): string[] {
   return [`${path} must be a string, { fromInput } or { fromClaims }`];
 }
 
+/** One ReBAC relationship: `type`, `resource` and `resourceId`, and nothing else. */
 function checkRelationship(value: unknown, path: string): string[] {
   if (!isPlainObject(value)) return [`${path} must be an object with "type", "resource" and "resourceId"`];
   const problems = unknownFields(value, RELATIONSHIP_FIELDS, path);
@@ -129,12 +190,14 @@ function checkRelationship(value: unknown, path: string): string[] {
   return problems;
 }
 
+/** One relationship, or a non-empty list of them (all must hold). */
 function checkRelationships(value: unknown, path: string): string[] {
   if (!Array.isArray(value)) return checkRelationship(value, path);
   if (value.length === 0) return [`${path} is empty`];
   return value.flatMap((relationship, index) => checkRelationship(relationship, `${path}[${index}]`));
 }
 
+/** The rules of an `allOf` / `anyOf`: a non-empty list of rule objects (not profile names). */
 function checkRuleList(value: unknown, path: string): string[] {
   if (!Array.isArray(value)) return [`${path} must be a list of rules`];
   if (value.length === 0) return [`${path} is empty`];

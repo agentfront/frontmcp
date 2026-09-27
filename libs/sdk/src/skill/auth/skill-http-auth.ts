@@ -278,6 +278,12 @@ export type SkillHttpAccess =
  *   asks for, and the verified caller's claims are what skill `authorities` are evaluated against.
  * - `'public'`: everyone, anonymously.
  * - `'api-key'` / `'bearer'`: the endpoint's own credential; skill `authorities` see an anonymous caller.
+ *
+ * @param scope - The scope serving the request; its auth options and `session:verify` flow apply for `'inherit'`
+ * @param skillsConfig - The server's `skillsConfig`
+ * @param request - The incoming HTTP request
+ * @param logger - Optional logger
+ * @returns Whether the request may proceed, with the caller's auth info, or the HTTP denial to send
  */
 export async function authorizeSkillHttpRequest(
   scope: ScopeEntry,
@@ -318,6 +324,18 @@ export async function authorizeSkillHttpRequest(
  * Returns null only for `auth: 'public'`. `'inherit'` (the default, also when `auth` is unset)
  * applies the server's own auth, which needs the whole request: use {@link authorizeSkillHttpRequest};
  * the validator returned for it refuses every request.
+ *
+ * Code that read a `null` validator as "no auth needed" (which `inherit` and an unset `auth` used to
+ * return) must switch to {@link authorizeSkillHttpRequest}, which covers every mode:
+ *
+ * @example
+ * ```typescript
+ * const access = await authorizeSkillHttpRequest(scope, skillsConfig, request, logger);
+ * if (!access.allowed) {
+ *   return new Response(access.error, { status: access.status, headers: access.headers });
+ * }
+ * // access.authInfo is the verified caller, for evaluating skill `authorities`
+ * ```
  *
  * @param skillsConfig - Skills configuration
  * @param logger - Optional logger

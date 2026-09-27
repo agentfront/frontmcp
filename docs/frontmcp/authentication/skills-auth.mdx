@@ -115,6 +115,21 @@ if (validator) {
 }
 ```
 
+<Warning>
+**Migrating from the `null` validator.** `createSkillHttpAuthValidator()` used to return `null` for `auth: 'inherit'` and for an unset `auth`, so code that skipped validation on `null` served those requests with no auth at all. A validator only sees headers and can't run the server's auth, so for `inherit` it now refuses every request (500). Use `authorizeSkillHttpRequest()` instead: it covers every mode, runs the server's `session:verify` flow for `inherit`, and returns the verified caller for skill `authorities`.
+
+```typescript
+import { authorizeSkillHttpRequest } from '@frontmcp/sdk';
+
+const access = await authorizeSkillHttpRequest(scope, skillsConfig, request, logger);
+if (!access.allowed) {
+  return new Response(access.error, { status: access.status, headers: access.headers });
+}
+// access.authInfo: the verified caller (empty for public, api-key and bearer)
+```
+
+</Warning>
+
 ---
 
 ## Tool Authorization Guard

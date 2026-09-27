@@ -121,5 +121,36 @@ describe('ProviderRegistry.buildViews request-scoped context providers', () => {
 
       expect(intruder).not.toBe(owner);
     });
+
+    it('does not keep instances across calls made without a request context', async () => {
+      const first = (await scratchRegistry.buildViews(sharedSessionKey)).context.get(CallerScratchpad);
+      const second = (await scratchRegistry.buildViews(sharedSessionKey)).context.get(CallerScratchpad);
+
+      expect(second).not.toBe(first);
+      expect(scratchRegistry.getSessionCacheStats().size).toBe(0);
+    });
+  });
+
+  it('reuses the instances of a session verified in the auth info when the request context has its own id', async () => {
+    // A legacy SSE request carries its session in `?sessionId=`, so its request context gets a
+    // per-request id while the entry flows key their providers by the session the server verified.
+    class SessionScratchpad {}
+    const sseRegistry = new ProviderRegistry([
+      createClassProvider(SessionScratchpad, { name: 'SessionScratchpad', scope: ProviderScope.CONTEXT }),
+    ]);
+    await sseRegistry.ready;
+    const sseRequest = (requestId: string) =>
+      new FrontMcpContext({
+        requestId,
+        sessionId: `anon-${requestId}`,
+        scopeId: 'request-context-scope',
+        authInfo: { token: 'token-of-alice', extra: { sessionId: 'sse-session' } },
+      });
+
+    const first = await sseRegistry.buildViews('sse-session', new Map([[FRONTMCP_CONTEXT, sseRequest('request-1')]]));
+    const second = await sseRegistry.buildViews('sse-session', new Map([[FRONTMCP_CONTEXT, sseRequest('request-2')]]));
+
+    expect(second.context.get(SessionScratchpad)).toBe(first.context.get(SessionScratchpad));
+    sseRegistry.dispose();
   });
 });
