@@ -118,11 +118,13 @@ class OnceAgent extends AgentContext {
 }
 
 /**
- * Plugin extensions (`approval` from the approval plugin, `featureFlag` from the feature-flags
- * plugin, ...) are declared on agents through `ExtendFrontMcpAgentMetadata`. The SDK specs don't
- * load those plugins' type augmentations, so they are spread in untyped.
+ * Plugin extensions are declared on agents through `ExtendFrontMcpAgentMetadata`. These are
+ * fields no plugin in this spec enforces, so the server starts; `approval` and `featureFlag`
+ * would need their plugins (the startup check refuses them otherwise) and are covered by
+ * `approval.agent.spec.ts` and `feature-flag.agent.spec.ts` with the plugins installed.
+ * They are spread in untyped because no plugin augments the metadata type here.
  */
-const pluginExtensions: object = { approval: true, featureFlag: 'beta-flag' };
+const pluginExtensions: object = { auditTag: 'finance', rolloutGroup: 'beta' };
 
 @Agent({
   name: 'flagged',
@@ -232,9 +234,9 @@ describe('gates an @Agent declares apply to its invoke_<agent> tool', () => {
       const agentTool = scope.tools.getTools(true).find((tool) => tool.name === 'invoke_flagged');
       const metadata = agentTool?.metadata as unknown as Record<string, unknown> | undefined;
 
-      expect({ approval: metadata?.['approval'], featureFlag: metadata?.['featureFlag'] }).toEqual({
-        approval: true,
-        featureFlag: 'beta-flag',
+      expect({ auditTag: metadata?.['auditTag'], rolloutGroup: metadata?.['rolloutGroup'] }).toEqual({
+        auditTag: 'finance',
+        rolloutGroup: 'beta',
       });
     });
   });
