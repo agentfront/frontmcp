@@ -2,6 +2,8 @@ import 'reflect-metadata';
 
 import { type ProviderType } from '../../common/interfaces';
 import { ProviderScope } from '../../common/metadata';
+import { FrontMcpContext } from '../../context/frontmcp-context';
+import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
 import ProviderRegistry from '../provider.registry';
 
 const LABEL = Symbol('label');
@@ -21,6 +23,17 @@ function contextProvider(
     inject: () => inject,
     useFactory,
   } as ProviderType;
+}
+
+/** A request whose session the server verified, so CONTEXT instances are cached for it across calls. */
+function verifiedSession(): Map<symbol, unknown> {
+  const context = new FrontMcpContext({
+    requestId: 'context-source-request',
+    sessionId: SESSION_KEY,
+    scopeId: 'context-source-scope',
+    authInfo: { sessionId: SESSION_KEY },
+  });
+  return new Map([[FRONTMCP_CONTEXT, context]]);
 }
 
 describe('ProviderRegistry.buildViews with the registry that built the pre-built providers', () => {
@@ -134,7 +147,7 @@ describe('ProviderRegistry.buildViews with the registry that built the pre-built
 
     it('resolves the own definition after the same session was built without a source', async () => {
       const { scope, plugin } = await appWithPlugin();
-      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const scopeViews = await scope.buildViews(SESSION_KEY, verifiedSession());
       await plugin.buildViews(SESSION_KEY, scopeViews.context);
 
       const pluginViews = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
@@ -145,7 +158,7 @@ describe('ProviderRegistry.buildViews with the registry that built the pre-built
 
     it('keeps the pre-built instance after the same session was built with a source', async () => {
       const { scope, plugin } = await appWithPlugin();
-      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const scopeViews = await scope.buildViews(SESSION_KEY, verifiedSession());
       await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
 
       const pluginViews = await plugin.buildViews(SESSION_KEY, scopeViews.context);
@@ -156,7 +169,7 @@ describe('ProviderRegistry.buildViews with the registry that built the pre-built
 
     it('reuses the instances it built for the same source within a session', async () => {
       const { scope, plugin } = await appWithPlugin();
-      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const scopeViews = await scope.buildViews(SESSION_KEY, verifiedSession());
       const first = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
 
       const second = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
@@ -166,7 +179,7 @@ describe('ProviderRegistry.buildViews with the registry that built the pre-built
 
     it('drops the instances it built for a source when the session is cleaned up', async () => {
       const { scope, plugin } = await appWithPlugin();
-      const scopeViews = await scope.buildViews(SESSION_KEY);
+      const scopeViews = await scope.buildViews(SESSION_KEY, verifiedSession());
       const first = await plugin.buildViews(SESSION_KEY, scopeViews.context, scope);
 
       plugin.cleanupSession(SESSION_KEY);

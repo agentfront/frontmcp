@@ -1,5 +1,6 @@
 // file: libs/sdk/src/agent/agent.instance.ts
 
+import { AuthorityDeniedError, type AuthoritiesMetadata } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
 import { toJSONSchema, z } from '@frontmcp/lazy-zod';
 import { type CallToolRequest, type CallToolResult, type TextContent, type Tool } from '@frontmcp/protocol';
@@ -410,8 +411,9 @@ export class AgentInstance<
     const extendedMeta = agentMeta as unknown as Record<string, unknown>;
     const mutableToolMeta = toolMeta as unknown as Record<string, unknown>;
 
-    // Known plugin extension keys - copy all that are present
-    const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry'] as const;
+    // Known plugin extension keys - copy all that are present. `authorities` must come along: the
+    // tools:call-tool and tools:list-tools flows enforce it on this tool, and nothing else gates the agent.
+    const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry', 'authorities'] as const;
     for (const key of pluginExtensionKeys) {
       if (key in extendedMeta && extendedMeta[key] !== undefined) {
         mutableToolMeta[key] = extendedMeta[key];
@@ -615,10 +617,47 @@ export class AgentInstance<
         return this.extractToolResult(result);
       }
 
-      // Direct execution - faster but bypasses plugins/hooks
+      // Direct execution - faster but bypasses plugins/hooks, never the tool's `authorities`
+      await this.assertToolAuthorized(tool, ctx.authInfo, args);
       const toolContext = tool.create(args, ctx);
       return toolContext.execute(args);
     };
+  }
+
+  /**
+   * The `checkEntryAuthorities` stage of tools:call-tool, for a tool this agent runs directly
+   * (`execution.useToolFlow: false`): the caller the agent runs for must satisfy the tool's `authorities`.
+   */
+  private async assertToolAuthorized(
+    tool: ToolEntry,
+    authInfo: AgentCallExtra['authInfo'] | undefined,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    const authorities = (tool.metadata as unknown as Record<string, unknown>)['authorities'] as
+      | AuthoritiesMetadata
+      | undefined;
+    if (!authorities) return;
+
+    const entryName = tool.fullName || tool.name;
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    // Unreachable once the server has started (it refuses to start this way); fail closed regardless.
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({ entryType: 'Tool', entryName, deniedBy: 'authorities are not configured' });
+    }
+
+    const result = await engine.evaluate(
+      authorities,
+      ctxBuilder.build((authInfo ?? {}) as Record<string, unknown>, args),
+    );
+    if (!result.granted) {
+      throw new AuthorityDeniedError({
+        entryType: 'Tool',
+        entryName,
+        deniedBy: result.deniedBy ?? 'policy denied',
+        denial: result.denial,
+      });
+    }
   }
 
   /**

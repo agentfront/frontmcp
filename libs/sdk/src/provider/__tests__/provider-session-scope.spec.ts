@@ -13,13 +13,27 @@
  */
 
 import 'reflect-metadata';
-import ProviderRegistry from '../provider.registry';
+
+import { createClassProvider, createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { ProviderScope } from '../../common/metadata';
-import { createValueProvider, createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
+import { FrontMcpContext } from '../../context/frontmcp-context';
+import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
+import ProviderRegistry from '../provider.registry';
 
 // Test fixtures
 const TEST_TOKEN = Symbol('TEST_TOKEN');
 const SESSION_TOKEN = Symbol('SESSION_TOKEN');
+
+/** A request whose session the server verified, so CONTEXT instances are cached for it across calls. */
+function verifiedSession(sessionKey: string): Map<symbol, unknown> {
+  const context = new FrontMcpContext({
+    requestId: `request-for-${sessionKey}`,
+    sessionId: sessionKey,
+    scopeId: 'session-scope-spec',
+    authInfo: { sessionId: sessionKey },
+  });
+  return new Map([[FRONTMCP_CONTEXT, context]]);
+}
 
 function Injectable() {
   return function (target: any) {};
@@ -76,15 +90,15 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // First call should build
-      await registry.buildViews('session-1');
+      await registry.buildViews('session-1', verifiedSession('session-1'));
       expect(callCount.count).toBe(1);
 
       // Second call for same session should return cached instance (no rebuild)
-      await registry.buildViews('session-1');
+      await registry.buildViews('session-1', verifiedSession('session-1'));
       expect(callCount.count).toBe(1); // Still 1, cached
 
       // Different session should build a new instance
-      await registry.buildViews('session-2');
+      await registry.buildViews('session-2', verifiedSession('session-2'));
       expect(callCount.count).toBe(2); // Now 2 for different session
     });
 
@@ -107,7 +121,7 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Should build provider (normalized to CONTEXT)
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
       expect(callCount.count).toBe(1);
       expect(views.context.has(OldSessionService)).toBe(true);
     });
@@ -131,7 +145,7 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Should build provider (normalized to CONTEXT)
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
       expect(callCount.count).toBe(1);
       expect(views.context.has(OldRequestService)).toBe(true);
     });
@@ -140,7 +154,7 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'global-value' })]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
 
       expect(views.global.has(TEST_TOKEN)).toBe(true);
       expect(views.global.get(TEST_TOKEN)).toEqual({ name: 'global-value' });
@@ -163,8 +177,8 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Same session - should share instances (CONTEXT = per-session)
-      const views1 = await registry.buildViews('session-1');
-      const views2 = await registry.buildViews('session-1');
+      const views1 = await registry.buildViews('session-1', verifiedSession('session-1'));
+      const views2 = await registry.buildViews('session-1', verifiedSession('session-1'));
 
       const service1 = views1.context.get(ContextStateService) as ContextStateService;
       const service2 = views2.context.get(ContextStateService) as ContextStateService;
@@ -173,7 +187,7 @@ describe('ProviderRegistry - Context Scope', () => {
       expect(service1).toBe(service2);
 
       // Different session - should have separate instances
-      const views3 = await registry.buildViews('session-2');
+      const views3 = await registry.buildViews('session-2', verifiedSession('session-2'));
       const service3 = views3.context.get(ContextStateService) as ContextStateService;
 
       // Different session = different instance
@@ -189,8 +203,8 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([GlobalServiceAnnotated]);
       await registry.ready;
 
-      const views1 = await registry.buildViews('session-1');
-      const views2 = await registry.buildViews('session-2');
+      const views1 = await registry.buildViews('session-1', verifiedSession('session-1'));
+      const views2 = await registry.buildViews('session-2', verifiedSession('session-2'));
 
       const global1 = views1.global.get(GlobalService);
       const global2 = views2.global.get(GlobalService);
@@ -217,7 +231,9 @@ describe('ProviderRegistry - Context Scope', () => {
       ]);
       await registry.ready;
 
-      await expect(registry.buildViews('session-1')).rejects.toThrow('Construction failed');
+      await expect(registry.buildViews('session-1', verifiedSession('session-1'))).rejects.toThrow(
+        'Construction failed',
+      );
     });
 
     it('should re-throw original error message', async () => {
@@ -238,7 +254,7 @@ describe('ProviderRegistry - Context Scope', () => {
       ]);
       await registry.ready;
 
-      await expect(registry.buildViews('session-1')).rejects.toThrow(originalError);
+      await expect(registry.buildViews('session-1', verifiedSession('session-1'))).rejects.toThrow(originalError);
     });
   });
 
@@ -247,7 +263,7 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'global' })]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
 
       // Manually add to context store
       const CONTEXT_VALUE = { name: 'context-specific' };
@@ -261,7 +277,7 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'global' })]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
 
       const result = registry.getScoped(TEST_TOKEN, views);
       expect(result).toEqual({ name: 'global' });
@@ -271,7 +287,7 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'global' })]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
       const UNKNOWN_TOKEN = Symbol('UNKNOWN');
 
       expect(() => registry.getScoped(UNKNOWN_TOKEN, views)).toThrow('not found in views');
@@ -304,7 +320,7 @@ describe('ProviderRegistry - Context Scope', () => {
       ]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
       const consumer = views.context.get(ConsumerService) as ConsumerService;
 
       expect(consumer).toBeDefined();
@@ -336,7 +352,7 @@ describe('ProviderRegistry - Context Scope', () => {
       ]);
       await registry.ready;
 
-      const views = await registry.buildViews('session-1');
+      const views = await registry.buildViews('session-1', verifiedSession('session-1'));
       const sessionService = views.context.get(OldSessionService) as OldSessionService;
 
       expect(sessionService).toBeDefined();
@@ -366,9 +382,9 @@ describe('ProviderRegistry - Context Scope', () => {
 
       // Build 3 different contexts concurrently
       const [views1, views2, views3] = await Promise.all([
-        registry.buildViews('session-1'),
-        registry.buildViews('session-2'),
-        registry.buildViews('session-3'),
+        registry.buildViews('session-1', verifiedSession('session-1')),
+        registry.buildViews('session-2', verifiedSession('session-2')),
+        registry.buildViews('session-3', verifiedSession('session-3')),
       ]);
 
       // All 3 should have built unique instances
@@ -409,8 +425,8 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
-      await registry.buildViews('session-1');
-      await registry.buildViews('session-2');
+      await registry.buildViews('session-1', verifiedSession('session-1'));
+      await registry.buildViews('session-2', verifiedSession('session-2'));
 
       const stats = registry.getSessionCacheStats();
 
@@ -463,13 +479,13 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Build views to populate session cache
-      await registry.buildViews('session-to-clean');
+      await registry.buildViews('session-to-clean', verifiedSession('session-to-clean'));
       expect(constructCount.value).toBe(1);
 
       // Cleanup the session
       registry.cleanupSession('session-to-clean');
 
-      await registry.buildViews('session-to-clean');
+      await registry.buildViews('session-to-clean', verifiedSession('session-to-clean'));
       expect(constructCount.value).toBe(2);
     });
 
@@ -486,14 +502,14 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Build views for two sessions
-      await registry.buildViews('session-keep');
-      await registry.buildViews('session-remove');
+      await registry.buildViews('session-keep', verifiedSession('session-keep'));
+      await registry.buildViews('session-remove', verifiedSession('session-remove'));
 
       // Cleanup only one session
       registry.cleanupSession('session-remove');
 
       // The other session should still work fine
-      const views = await registry.buildViews('session-keep');
+      const views = await registry.buildViews('session-keep', verifiedSession('session-keep'));
       expect(views).toBeDefined();
     });
 
@@ -501,11 +517,11 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(SESSION_TOKEN, { name: 'rebuilt' })]);
       await registry.ready;
 
-      await registry.buildViews('session-rebuild');
+      await registry.buildViews('session-rebuild', verifiedSession('session-rebuild'));
       registry.cleanupSession('session-rebuild');
 
       // Should be able to rebuild after cleanup
-      const views = await registry.buildViews('session-rebuild');
+      const views = await registry.buildViews('session-rebuild', verifiedSession('session-rebuild'));
       expect(views).toBeDefined();
     });
   });
@@ -516,7 +532,7 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.ready;
 
       // Build a session (marks it as recently accessed)
-      await registry.buildViews('recent-session');
+      await registry.buildViews('recent-session', verifiedSession('recent-session'));
 
       // Cleanup expired should not remove it
       const cleaned = registry.cleanupExpiredSessions();

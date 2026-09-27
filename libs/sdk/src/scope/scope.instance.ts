@@ -1571,60 +1571,64 @@ export class Scope extends ScopeEntry {
   }
 
   /**
-   * Fail-fast: if any registered entry has 'authorities' metadata but no
-   * AuthoritiesEngine is configured, throw at startup instead of silently
-   * allowing unrestricted access.
+   * Every entry that declares `authorities`, labelled for startup errors: tools, resources and
+   * resource templates, prompts, agents and the tools of each agent, and skills, hidden ones included.
+   * @internal
+   */
+  private collectEntriesWithAuthorities(): Array<{ label: string; authorities: unknown }> {
+    const entries: Array<{ label: string; authorities: unknown }> = [];
+    const add = (label: string, metadata: unknown) => {
+      const authorities = (metadata as Record<string, unknown> | undefined)?.['authorities'];
+      if (authorities !== undefined && authorities !== null && authorities !== false) {
+        entries.push({ label, authorities });
+      }
+    };
+
+    for (const tool of this.scopeTools.getTools(true)) {
+      add(`Tool "${tool.name}"`, tool.metadata);
+    }
+    for (const resource of this.scopeResources.getResources(true)) {
+      add(`Resource "${resource.name}"`, resource.metadata);
+    }
+    for (const template of this.scopeResources.getResourceTemplates()) {
+      add(`Resource template "${template.name}"`, template.metadata);
+    }
+    for (const prompt of this.scopePrompts.getPrompts(true)) {
+      add(`Prompt "${prompt.name}"`, prompt.metadata);
+    }
+    for (const agent of this.scopeAgents.getAgents(true)) {
+      add(`Agent "${agent.name}"`, agent.metadata);
+      // An agent's own tools are called for the caller the agent runs for, through the same flow.
+      for (const toolType of agent.metadata.tools ?? []) {
+        const { metadata } = normalizeTool(toolType);
+        add(`Tool "${agent.name}:${metadata.name}"`, metadata);
+      }
+    }
+    // Hidden skills included: a hidden skill with authorities is still enforced on direct load/read.
+    for (const skill of this.scopeSkills.getSkills(true)) {
+      add(`Skill "${skill.name}"`, skill.metadata);
+    }
+    return entries;
+  }
+
+  /**
+   * Fail-fast at startup, so an entry never looks protected while anyone can use it:
+   * - an entry declares `authorities` but no AuthoritiesEngine is configured to enforce them, or
+   * - a rule (on an entry or in a profile) is malformed or checks nothing (`{}`, `{ roles: {} }`,
+   *   `allOf: []`, a misspelled field...).
    * @internal
    */
   private validateAuthoritiesConfig(): void {
-    if (this._authoritiesEngine && this._authoritiesContextBuilder) return; // Enforcement fully configured
+    const entries = this.collectEntriesWithAuthorities();
+    const engine = this._authoritiesEngine;
 
-    const entriesWithAuthorities: string[] = [];
-
-    // Check tools
-    for (const tool of this.scopeTools.getTools(true)) {
-      const metadata = tool.metadata as unknown as Record<string, unknown>;
-      if (metadata['authorities']) {
-        entriesWithAuthorities.push(`Tool "${tool.name}"`);
-      }
-    }
-
-    // Check resources
-    for (const resource of this.scopeResources.getResources()) {
-      const metadata = resource.metadata as unknown as Record<string, unknown>;
-      if (metadata['authorities']) {
-        entriesWithAuthorities.push(`Resource "${resource.name}"`);
-      }
-    }
-
-    // Check prompts
-    for (const prompt of this.scopePrompts.getPrompts()) {
-      const metadata = prompt.metadata as unknown as Record<string, unknown>;
-      if (metadata['authorities']) {
-        entriesWithAuthorities.push(`Prompt "${prompt.name}"`);
-      }
-    }
-
-    // Check agents
-    for (const agent of this.scopeAgents.getAgents()) {
-      const metadata = (agent as unknown as Record<string, unknown>)['metadata'] as Record<string, unknown> | undefined;
-      if (metadata?.['authorities']) {
-        entriesWithAuthorities.push(`Agent "${(agent as unknown as Record<string, unknown>)['name'] ?? 'unknown'}"`);
-      }
-    }
-
-    // Check skills (include hidden — a hidden skill with authorities still
-    // requires an engine to enforce its policy on direct load/read).
-    for (const skill of this.scopeSkills.getSkills(true)) {
-      const metadata = skill.metadata as unknown as Record<string, unknown>;
-      if (metadata['authorities']) {
-        entriesWithAuthorities.push(`Skill "${skill.name}"`);
-      }
-    }
-
-    if (entriesWithAuthorities.length > 0) {
-      const names = entriesWithAuthorities.slice(0, 5).join(', ');
-      const suffix = entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';
+    if (!engine || !this._authoritiesContextBuilder) {
+      if (entries.length === 0) return;
+      const names = entries
+        .slice(0, 5)
+        .map((entry) => entry.label)
+        .join(', ');
+      const suffix = entries.length > 5 ? ` and ${entries.length - 5} more` : '';
       throw new AuthConfigurationError(
         `Authorities configuration required: ${names}${suffix} declare 'authorities' metadata ` +
           `but authorities enforcement is not fully configured (engine/context builder missing). ` +
@@ -1632,6 +1636,24 @@ export class Scope extends ScopeEntry {
           `to your @FrontMcp() decorator to enable enforcement, or remove 'authorities' from entry metadata.`,
         { suggestion: 'Add authorities config to @FrontMcp() or remove authorities from entry metadata' },
       );
+    }
+
+    const problems = [
+      ...engine.findProfileProblems(),
+      ...entries.flatMap(({ label, authorities }) =>
+        engine
+          .findRuleProblems(authorities)
+          .map((problem) => `${label}: authorities${problem.startsWith('.') ? '' : ' '}${problem}`),
+      ),
+    ];
+    if (problems.length > 0) {
+      const suffix = problems.length > 5 ? `; and ${problems.length - 5} more` : '';
+      throw new AuthConfigurationError(`Invalid authorities rule: ${problems.slice(0, 5).join('; ')}${suffix}`, {
+        errors: problems,
+        suggestion:
+          'Every rule must check something (roles, permissions, attributes, relationships, custom, guards, ' +
+          'allOf, anyOf or not) with known fields and no empty lists. To leave an entry open, remove its authorities.',
+      });
     }
   }
 

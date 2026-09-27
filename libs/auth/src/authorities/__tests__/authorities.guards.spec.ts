@@ -80,10 +80,11 @@ describe('Authority Guards', () => {
     expect(secondGuardCalled).toBe(false);
   });
 
-  it('should grant with empty guards array', async () => {
+  it('should deny with empty guards array (a rule that checks nothing)', async () => {
     const engine = createEngine();
     const result = await engine.evaluate({ guards: [] }, createCtx());
-    expect(result.granted).toBe(true);
+    expect(result.granted).toBe(false);
+    expect(result.deniedBy).toBe('invalid authorities rule: .guards is empty');
   });
 
   it('should combine guards with RBAC (AND semantics)', async () => {

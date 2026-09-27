@@ -98,6 +98,19 @@ explicitly to opt out of authentication; use `'api-key'` or `'bearer'` to
 override the inherited policy with a Skills-specific one. **In production,
 set `auth` explicitly so the policy is visible at the call site.**
 
+With `'inherit'`, `/skills`, `/llm.txt` and `/llm_full.txt` need the same credential
+as the MCP endpoint (401/403 otherwise; only a public-mode server lets everyone in),
+and skills with `authorities` are listed only for a caller whose verified claims
+satisfy them. The other modes surface no claims, so gated skills are never served
+over HTTP there, and `GET /skills/<gated id>` answers 404.
+
+Custom routes that guard skills content should call `authorizeSkillHttpRequest(scope,
+skillsConfig, request)` from `@frontmcp/sdk`, which covers every mode.
+`createSkillHttpAuthValidator()` is only for an explicit `'api-key'` or `'bearer'`
+(it returns `null` only for `'public'`); its validator only sees headers, so it
+refuses every request under `'inherit'` or an unset `auth`, and code that treated
+`null` as "no auth needed" must switch to `authorizeSkillHttpRequest`.
+
 ## Skills HTTP Caching
 
 ```typescript
