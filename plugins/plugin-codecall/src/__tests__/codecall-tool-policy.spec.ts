@@ -23,6 +23,7 @@ interface EntryOptions {
   tags?: string[];
   codecall?: CodeCallToolMetadata;
   visibility?: 'public' | 'hidden' | 'internal';
+  annotations?: Record<string, boolean>;
 }
 
 function appEntry(name: string, options: EntryOptions = {}) {
@@ -37,6 +38,7 @@ function appEntry(name: string, options: EntryOptions = {}) {
       tags: options.tags,
       codecall: options.codecall,
       visibility: options.visibility,
+      ...(options.annotations ? { annotations: options.annotations } : {}),
     },
   };
 }
@@ -83,11 +85,28 @@ describe('CodeCall tool policy subject (GHSA-6w3j-82v5-6qrr)', () => {
     expect(executionInfo).toEqual(searchInfo);
     expect(searchInfo).toEqual({
       name: 'admin:deleteUser',
+      fullName: 'crm:admin:deleteUser',
       appId: 'crm',
       source: 'inline',
       description: 'Runs admin:deleteUser',
       tags: ['users'],
+      annotations: undefined,
+      metadata: expect.objectContaining({ name: 'admin:deleteUser', tags: ['users'], codecall: { source: 'inline' } }),
     });
+  });
+
+  it('hands includeTools the tool annotations, top level and under metadata, read-only', () => {
+    const entry = appEntry('admin:deleteUser', { annotations: { destructiveHint: true } });
+    const includeTools = jest.fn((info: IncludeToolsFilterToolInfo) => !info.metadata?.annotations?.destructiveHint);
+
+    const access = checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools }), 'admin:deleteUser');
+
+    expect(access.allowed).toBe(false);
+    const [info] = includeTools.mock.calls[0];
+    expect(info.annotations).toEqual({ destructiveHint: true });
+    expect(info.metadata?.annotations).toEqual({ destructiveHint: true });
+    expect(Object.isFrozen(info.metadata)).toBe(true);
+    expect(Object.isFrozen(info.annotations)).toBe(true);
   });
 
   it.each(['admin:deleteUser', 'crm:admin:deleteUser'])(

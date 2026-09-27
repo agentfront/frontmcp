@@ -750,6 +750,19 @@ interface BaseOptions {
   staticAuth?: Partial<SecurityContext>;
 
   /**
+   * Forward the MCP client's own bearer token (`ctx.authInfo.token`) to the API when no other
+   * credential source (`authProviderMapper`, `staticAuth`) supplied a credential.
+   *
+   * Off by default: the caller's token was issued for this MCP server, and sending it to another
+   * service is token passthrough, which the MCP specification forbids. Without this option an
+   * operation that requires authentication fails when the adapter has no credential for it.
+   * Enable it only when the API is meant to accept the same token (same issuer and audience).
+   *
+   * @default false
+   */
+  passthroughCallerToken?: boolean;
+
+  /**
    * Options for loading the OpenAPI specification.
    *
    * SSRF protection for the spec URL (and external `$ref` resolution) is

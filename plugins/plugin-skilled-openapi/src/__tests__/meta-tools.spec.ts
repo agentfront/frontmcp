@@ -35,7 +35,9 @@ const fakeLogger = {
 
 const fakeScopeEntry = (skills: { search: jest.Mock; loadSkill: jest.Mock; hasAny: jest.Mock }): unknown => ({
   logger: fakeLogger,
-  skills,
+  // No registered entries: search/load results are judged by the bundle's rules alone.
+  skills: { ...skills, findByName: () => undefined, findByQualifiedName: () => undefined, getSkills: () => [] },
+  runFlowForOutput: async (_flow: string, input: { skills: unknown[] }) => ({ skills: input.skills }),
 });
 
 const buildEntry = (
@@ -162,7 +164,8 @@ describe('search_skill', () => {
     const ctx = makeToolThis({ scopeSkills: { search, hasAny: jest.fn(() => true) } });
     const result = await SearchSkillTool.prototype.execute.call(ctx, { query: 'do thing', limit: 5 });
     expect(result.skills[0]).toMatchObject({ skillId: 's1', score: 0.9, bundleVersion: 'v3' });
-    expect(search).toHaveBeenCalledWith('do thing', expect.objectContaining({ topK: 5 }));
+    // Over-fetches, since skills the caller may not see are removed before `limit` applies.
+    expect(search).toHaveBeenCalledWith('do thing', expect.objectContaining({ topK: 20 }));
   });
 
   it('forwards tags filter to registry.search', async () => {
@@ -197,7 +200,9 @@ describe('load_skill', () => {
       missingTools: [],
       isComplete: true,
     }));
-    const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) } });
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('s1', 'a1'));
+    const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) }, hiddenOps });
     const result = await LoadSkillTool.prototype.execute.call(ctx, { skillId: 's1' });
     expect(result.skill.actions?.[0]?.actionId).toBe('a1');
     expect(result.skill.bundleVersion).toBe('v9');

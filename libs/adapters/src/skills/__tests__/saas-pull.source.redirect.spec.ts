@@ -8,6 +8,7 @@
  */
 import type { SaasSourceOptions } from '../source-options';
 import { SaasPullSource } from '../sources/saas-pull.source';
+import { createSaasTokenIssuer, SAAS_JWKS_URL, type SaasTokenIssuer } from './saas-token.fixture';
 
 const ENDPOINT = 'https://cloud.example.dev/v1/bundles/acme';
 const REDIRECT_TARGET = 'https://collector.attacker.example/bundles';
@@ -21,19 +22,27 @@ const fakeLogger = {
   child: jest.fn().mockReturnThis(),
 } as unknown as never;
 
-const options: SaasSourceOptions = {
+// The pull token is verified against the SaaS's JWKS before every pull.
+let issuer: SaasTokenIssuer;
+let pullToken: string;
+beforeAll(async () => {
+  issuer = await createSaasTokenIssuer();
+  pullToken = await issuer.token();
+});
+
+const options = (): SaasSourceOptions => ({
   type: 'saas',
   endpoint: ENDPOINT,
-  authToken: 'tok',
+  authToken: pullToken,
   expectedAudience: 'acme:prod',
   pollIntervalMs: 60_000,
   enableWebhook: false,
   jwksUrl: 'https://cloud.example.dev/.well-known/jwks.json',
   expectedIssuer: 'https://cloud.example.dev',
-};
+});
 
 const createSource = () =>
-  new SaasPullSource(options, undefined, fakeLogger, {
+  new SaasPullSource(options(), undefined, fakeLogger, {
     disablePolling: true,
     cache: { read: async () => undefined, write: async () => undefined },
   });
@@ -41,6 +50,9 @@ const createSource = () =>
 /** Behaves like a real fetch: follows a 3xx unless the caller asked for `redirect: 'manual'`. */
 function createRedirectingFetch() {
   const fetchMock = jest.fn(async (url: string | URL, init?: RequestInit): Promise<Response> => {
+    if (String(url) === SAAS_JWKS_URL) {
+      return new Response(JSON.stringify(issuer.jwks), { status: 200 });
+    }
     if (String(url) !== ENDPOINT) {
       return new Response('{}', { status: 200 });
     }
@@ -72,7 +84,7 @@ describe('SaasPullSource — redirects are not followed with the bearer token', 
 
     await expect(createSource().refresh()).rejects.toThrow(/redirect/);
 
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([ENDPOINT]);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([SAAS_JWKS_URL, ENDPOINT]);
   });
 
   it('refuses an opaque redirect (status 0, browser runtimes)', async () => {
@@ -83,7 +95,9 @@ describe('SaasPullSource — redirects are not followed with the bearer token', 
       headers: new Headers(),
       text: async () => '',
     };
-    global.fetch = jest.fn(async () => opaqueRedirect) as unknown as typeof fetch;
+    global.fetch = jest.fn(async (url: string | URL) =>
+      String(url) === SAAS_JWKS_URL ? new Response(JSON.stringify(issuer.jwks), { status: 200 }) : opaqueRedirect,
+    ) as unknown as typeof fetch;
 
     await expect(createSource().refresh()).rejects.toThrow(/redirect/);
   });

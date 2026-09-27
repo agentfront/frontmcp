@@ -38,7 +38,9 @@ export const npmSourceSchema = z.object({
   exportName: z.string().optional(),
   /**
    * Verify GitHub artifact attestation / npm provenance for the package before loading.
-   * Defaults to true. Set false (with warning) only for local development packages.
+   * Defaults to true. Provenance verification is not implemented yet, so `true` refuses
+   * to load the package; set `false` to load it without a provenance check (sign the
+   * bundle instead).
    */
   verifyProvenance: z.boolean().default(true),
 });
@@ -47,11 +49,15 @@ export const saasSourceSchema = z.object({
   type: z.literal('saas'),
   /** SaaS pull endpoint, e.g. `https://cloud.frontmcp.dev/v1/bundles/<bundleId>`. */
   endpoint: httpsUrl,
-  /** Pinned JWT issued by the SaaS for the customer's FrontMCP server. */
+  /**
+   * Pinned JWT issued by the SaaS for the customer's FrontMCP server. Verified
+   * before every pull: signed by a key in `jwksUrl`, `iss` = `expectedIssuer`,
+   * `aud` includes `expectedAudience`, not expired. A rejected token stops the pull.
+   */
   authToken: z.string().min(1),
   /**
-   * RFC 8707 resource indicator the JWT must encode. The plugin verifies
-   * `resource` AND `aud` claims match this on every push/pull.
+   * RFC 8707 resource indicator the JWT must encode: its `aud` claim must include
+   * this value (and its `resource` claim too, when it has one).
    */
   expectedAudience: z.string().min(1),
   /** Polling interval in ms (boot pull is always immediate). Default 300000 (5 min). */
@@ -61,9 +67,9 @@ export const saasSourceSchema = z.object({
    * updates synchronously. Default false in v1.2 (interval polling only).
    */
   enableWebhook: z.boolean().default(false),
-  /** JWKS URL for verifying SaaS-issued tokens. */
+  /** JWKS URL for verifying SaaS-issued tokens (fetched without credentials, redirects refused). */
   jwksUrl: httpsUrl,
-  /** Expected issuer (`iss`) claim. */
+  /** Expected issuer (`iss`) claim of `authToken`. */
   expectedIssuer: z.string().min(1),
 });
 

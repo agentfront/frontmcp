@@ -217,21 +217,28 @@ describe('OpenAPI Security Integration (Real SecurityResolver)', () => {
     });
   });
 
-  describe('default ctx.authInfo.token', () => {
-    it('should use ctx.authInfo.token when no auth config provided', async () => {
+  describe('caller ctx.authInfo.token', () => {
+    it('should not forward ctx.authInfo.token when no auth config provided', async () => {
       const tool = createBearerAuthTool();
       const ctx = createMockContext({ token: 'default-token-from-context' });
 
-      const security = await resolveToolSecurity(tool, ctx, {});
+      await expect(resolveToolSecurity(tool, ctx, {})).rejects.toThrow(/Authentication required/);
+    });
+
+    it('should use ctx.authInfo.token with passthroughCallerToken: true', async () => {
+      const tool = createBearerAuthTool();
+      const ctx = createMockContext({ token: 'default-token-from-context' });
+
+      const security = await resolveToolSecurity(tool, ctx, { passthroughCallerToken: true });
 
       expect(security.headers['Authorization']).toBe('Bearer default-token-from-context');
     });
 
-    it('should include default token in buildRequest headers', async () => {
+    it('should include the passed-through token in buildRequest headers', async () => {
       const tool = createBearerAuthTool();
       const ctx = createMockContext({ token: 'default-token-from-context' });
 
-      const security = await resolveToolSecurity(tool, ctx, {});
+      const security = await resolveToolSecurity(tool, ctx, { passthroughCallerToken: true });
       const { headers } = buildRequest(tool, {}, security, 'https://api.example.com');
 
       expect(headers.get('Authorization')).toBe('Bearer default-token-from-context');

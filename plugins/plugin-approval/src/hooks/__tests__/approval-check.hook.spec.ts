@@ -200,7 +200,7 @@ describe('ApprovalCheckPlugin', () => {
         // Expected to throw
       }
 
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'user-789');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'user-789', undefined);
     });
 
     it('should use userId from extra.sub if userId not available', async () => {
@@ -221,7 +221,7 @@ describe('ApprovalCheckPlugin', () => {
         // Expected to throw
       }
 
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'sub-user');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'sub-user', undefined);
     });
 
     it('should use clientId as fallback for userId', async () => {
@@ -242,7 +242,7 @@ describe('ApprovalCheckPlugin', () => {
         // Expected to throw
       }
 
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456', undefined);
     });
 
     it('should handle alwaysPrompt option', async () => {
@@ -320,7 +320,7 @@ describe('ApprovalCheckPlugin', () => {
       mockStore.getApproval.mockResolvedValue(undefined);
 
       await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456', approvalContext);
     });
 
     it('should include approval options in error', async () => {
@@ -369,6 +369,7 @@ describe('ApprovalCheckPlugin', () => {
       expect(mockStore.getApproval).toHaveBeenCalledWith(
         'test-tool',
         expect.stringMatching(/^unidentified:/),
+        undefined,
         undefined,
       );
     });
@@ -511,7 +512,7 @@ describe('ApprovalCheckPlugin', () => {
         // Expected to throw
       }
 
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456', undefined);
     });
 
     it('should ignore input context in favour of session context', async () => {
@@ -569,7 +570,7 @@ describe('ApprovalCheckPlugin', () => {
       }
 
       // Should fall through to clientId since userId is not a string
-      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456');
+      expect(mockStore.getApproval).toHaveBeenCalledWith('test-tool', 'session-123', 'client-456', undefined);
     });
 
     it('should generate default approval message', async () => {

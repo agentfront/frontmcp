@@ -293,11 +293,20 @@ describe('OpenapiAdapter - Validation', () => {
         expect(result.warnings.some((w) => w.includes('Using staticAuth'))).toBe(true);
       });
 
-      it('should provide recommendation for default behavior', () => {
+      it('should warn that no credentials are sent by default', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {});
 
+        expect(result.securityRiskScore).toBe('medium');
         expect(result.warnings.some((w) => w.includes('No auth configuration provided'))).toBe(true);
-        expect(result.warnings.some((w) => w.includes('RECOMMENDATION'))).toBe(true);
+        expect(result.warnings.some((w) => w.includes('passthroughCallerToken: true'))).toBe(true);
+      });
+
+      it('should flag passthroughCallerToken as high risk', () => {
+        const result = validateSecurityConfiguration([mockToolWithAuth], { passthroughCallerToken: true });
+
+        expect(result.valid).toBe(true);
+        expect(result.securityRiskScore).toBe('high');
+        expect(result.warnings.some((w) => w.includes('passthroughCallerToken is enabled'))).toBe(true);
       });
 
       it('should warn about security risk with includeSecurityInInput', () => {

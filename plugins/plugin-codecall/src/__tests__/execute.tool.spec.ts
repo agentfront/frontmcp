@@ -372,6 +372,40 @@ describe('ExecuteTool', () => {
       expect(result.error.source).toBe('script');
       expect(result.error.message).toContain('Something unexpected');
     });
+
+    it('should return runtime_error without a stack or server paths', async () => {
+      const { tool } = createExecuteTool({
+        enclaveResult: {
+          success: false,
+          timedOut: false,
+          logs: [],
+          error: {
+            name: 'Error',
+            message:
+              "Cannot find module '/srv/app/node_modules/pkg/index.js'\n    at load (/srv/app/dist/main.js:10:5)",
+            stack: 'Error: boom\n    at run (/srv/app/node_modules/@enclave-vm/core/index.js:1:2)',
+          },
+        },
+      });
+
+      const result = await tool.execute({ script: 'return 1;' });
+
+      expect(result.status).toBe('runtime_error');
+      expect(result.error).not.toHaveProperty('stack');
+      expect(result.error.message).toBe("Cannot find module '[path]'");
+    });
+
+    it('should strip stacks and server paths from errors the enclave throws', async () => {
+      const { tool, mockEnclave } = createExecuteTool();
+
+      mockEnclave.execute.mockRejectedValue(new Error('failed reading C:\\srv\\app\\secret.json'));
+
+      const result = await tool.execute({ script: 'return 1;' });
+
+      expect(result.status).toBe('runtime_error');
+      expect(result.error).not.toHaveProperty('stack');
+      expect(result.error.message).toBe('failed reading [path]');
+    });
   });
 
   describe('allowedTools Whitelist', () => {

@@ -492,6 +492,11 @@ The same policy, evaluated on the same tool object, decides every CodeCall surfa
 
 Hiding a tool from search is not authorization on its own; the refusal at execution is what enforces it.
 
+Namespace bindings are AgentScript wrappers over `callTool()` inside the sandbox, so a call such as
+`mail.send({...})` counts toward the script's tool-call limit (`vm.maxSteps`) and passes the sandbox's
+rate limit and suspicious-sequence checks (for example list-then-send exfiltration) exactly like
+`callTool('mail.send', {...})`.
+
 ---
 
 ## Layer 4: Output Sanitization
@@ -621,13 +626,17 @@ password=xxx       → password=[REDACTED]
 
 // After sanitization (SAFE)
 {
+  "status": "runtime_error",
   "error": {
+    "source": "script",
     "message": "Cannot read property 'foo' of undefined",
-    "stack": "TypeError: Cannot read property 'foo'\n    at processUser (...)\n    at (...)",
-    "code": "RUNTIME_ERROR"
+    "name": "TypeError"
   }
 }
 ```
+
+`codecall:execute` results never include a `stack`, in any environment, and absolute file paths in
+error messages are replaced with `[path]`.
 
 ---
 

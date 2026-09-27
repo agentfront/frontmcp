@@ -160,9 +160,16 @@ tool declared on app `my-app` is `my-app:file_write`, and one the app's `github-
 ### Which Tools a Plugin Gates
 
 Installed on an app, `ApprovalPlugin` gates that app's tools, including those the app's adapters and plugins
-provide, against its own store. It never judges another app's tools, so two apps can each install it with separate
-stores. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate must pass each
-store's check, and a denial in either one refuses the call.
+provide, against its own store. It never judges the tools of another app that has its own `ApprovalPlugin`, so two
+apps can each install it with separate stores. It does gate, against its store, the `approval` tools of apps with no
+approval plugin of their own, so a tool that asks for approval never runs ungated because the plugin sits on a
+different app. Installed on the server (`@FrontMcp({ plugins })`), it gates every tool. A tool both gate must pass
+each store's check, and a denial in either one refuses the call.
+
+<Note>
+  Releases up to 1.8.2 let the `approval` tools of an app without the plugin run for anyone when the plugin was
+  installed on another app.
+</Note>
 
 `this.approval` resolves the `ApprovalService` of the `ApprovalPlugin` nearest to the tool: the one its own app
 installed, otherwise the one on the server. With two apps that each install `ApprovalPlugin` with its own store, a
@@ -198,6 +205,9 @@ approval, and a tool that requires approval stays refused for it.
 | `time_limited`     | Expires after specified TTL           | Temporary elevated access |
 | `tool_specific`    | Tied to specific tool instance        | Fine-grained control      |
 | `context_specific` | Tied to context (e.g., specific repo) | Context-aware approvals   |
+
+A context-specific approval opens the gate only for calls whose session carries that context
+(`authInfo.extra.approvalContext`, set by the server while authenticating), never from a context the caller names.
 
 ---
 
@@ -272,11 +282,14 @@ ApprovalPlugin.init({
 </ParamField>
 
 <ParamField path="approval.allowedScopes" type="ApprovalScope[]">
-  Restrict which scopes are allowed for this tool
+  Restrict which scopes are allowed for this tool. Granting another scope through `this.approval` throws
+  `ApprovalScopeNotAllowedError`, and an approval of another scope, however it was stored, does not open the gate.
 </ParamField>
 
 <ParamField path="approval.maxTtlMs" type="number">
-  Maximum TTL for time-limited approvals (milliseconds)
+  Maximum lifetime of an approval of this tool (milliseconds). A longer `grantTimeLimitedApproval()` throws
+  `ApprovalOperationError`, grants without a TTL get `maxTtlMs`, and no approval counts for longer than `maxTtlMs`
+  after it was granted.
 </ParamField>
 
 <ParamField path="approval.category" type="string">
@@ -348,7 +361,7 @@ await this.approval.grantUserApproval('api_access', {
 </ParamField>
 
 <ParamField path="grantTimeLimitedApproval(toolId, ttlMs, options?)" type="Promise<void>">
-  Grant time-limited approval
+  Grant time-limited approval to the caller. `ttlMs` must be a positive number.
 
 ```ts
 await this.approval.grantTimeLimitedApproval('elevated_access', 3600000, {
@@ -358,8 +371,9 @@ await this.approval.grantTimeLimitedApproval('elevated_access', 3600000, {
 
 </ParamField>
 
-<ParamField path="revokeApproval(toolId, options?)" type="Promise<void>">
-  Revoke an existing approval
+<ParamField path="revokeApproval(toolId, options?)" type="Promise<boolean>">
+  Revoke the caller's approvals of the tool: session, user, time-limited and context approvals. Returns whether
+  anything was revoked. Recorded denials are kept.
 
 ```ts
 await this.approval.revokeApproval('file_write', {

@@ -1,6 +1,7 @@
 // file: plugins/plugin-approval/src/__tests__/approval.service.spec.ts
 
 import 'reflect-metadata';
+import { ApprovalOperationError, ApprovalScopeNotAllowedError } from '../approval';
 import { ApprovalService, createApprovalService } from '../services/approval.service';
 import { ApprovalScope, ApprovalState } from '../types';
 import type { ApprovalStore } from '../stores/approval-store.interface';
@@ -131,21 +132,30 @@ describe('ApprovalService', () => {
   });
 
   describe('queryApprovals', () => {
-    it('should query approvals with custom filters', async () => {
-      mockStore.queryApprovals.mockResolvedValue([mockApprovalRecord]);
+    it("should query approvals with custom filters and keep the caller's session and user records", async () => {
+      const userRecord = { ...mockApprovalRecord, scope: ApprovalScope.USER, sessionId: undefined, userId };
+      const otherRecord = { ...mockApprovalRecord, sessionId: 'other-session', userId: 'other-user' };
+      mockStore.queryApprovals.mockResolvedValue([mockApprovalRecord, userRecord, otherRecord]);
 
       const result = await service.queryApprovals({
         toolId: 'specific-tool',
         states: [ApprovalState.APPROVED, ApprovalState.PENDING],
       });
 
-      expect(result).toEqual([mockApprovalRecord]);
+      // 1.8.2 filtered on sessionId AND userId, so session and user approvals never matched.
+      expect(result).toEqual([mockApprovalRecord, userRecord]);
       expect(mockStore.queryApprovals).toHaveBeenCalledWith({
         toolId: 'specific-tool',
         states: [ApprovalState.APPROVED, ApprovalState.PENDING],
-        sessionId,
-        userId,
       });
+    });
+
+    it('should not match user records for a caller without a userId', async () => {
+      const anonymous = new ApprovalService(mockStore, sessionId);
+      const userRecord = { ...mockApprovalRecord, sessionId: undefined, userId: undefined };
+      mockStore.queryApprovals.mockResolvedValue([userRecord]);
+
+      expect(await anonymous.queryApprovals({})).toEqual([]);
     });
 
     it('should allow overriding sessionId and userId', async () => {
@@ -303,6 +313,81 @@ describe('ApprovalService', () => {
         revokedBy: 'admin',
         reason: 'Security concern',
       });
+    });
+  });
+
+  describe("the tool's approval policy", () => {
+    const policy = { required: true, allowedScopes: [ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED], maxTtlMs: 60_000 };
+    let governed: ApprovalService;
+
+    beforeEach(() => {
+      governed = new ApprovalService(mockStore, sessionId, userId, (toolId) =>
+        toolId === 'app:governed' ? policy : undefined,
+      );
+      mockStore.grantApproval.mockResolvedValue(mockApprovalRecord);
+    });
+
+    it('rejects a grant of a scope the tool does not allow', async () => {
+      await expect(governed.grantUserApproval('app:governed')).rejects.toBeInstanceOf(ApprovalScopeNotAllowedError);
+      await expect(governed.grantContextApproval('app:governed', { type: 'repo', identifier: 'x' })).rejects.toBeInstanceOf(
+        ApprovalScopeNotAllowedError,
+      );
+      expect(mockStore.grantApproval).not.toHaveBeenCalled();
+    });
+
+    it('rejects a time-limited grant longer than maxTtlMs', async () => {
+      await expect(governed.grantTimeLimitedApproval('app:governed', 120_000)).rejects.toBeInstanceOf(
+        ApprovalOperationError,
+      );
+      expect(mockStore.grantApproval).not.toHaveBeenCalled();
+    });
+
+    it('gives a grant without a ttl the maxTtlMs', async () => {
+      await governed.grantSessionApproval('app:governed');
+
+      expect(mockStore.grantApproval).toHaveBeenCalledWith(expect.objectContaining({ ttlMs: 60_000 }));
+    });
+
+    it('keeps a time-limited grant within maxTtlMs', async () => {
+      await governed.grantTimeLimitedApproval('app:governed', 30_000);
+
+      expect(mockStore.grantApproval).toHaveBeenCalledWith(expect.objectContaining({ ttlMs: 30_000 }));
+    });
+
+    it('rejects a ttl that is not a positive number, for any tool', async () => {
+      await expect(governed.grantTimeLimitedApproval('app:other', 0)).rejects.toBeInstanceOf(ApprovalOperationError);
+      await expect(governed.grantTimeLimitedApproval('app:other', Number.NaN)).rejects.toBeInstanceOf(
+        ApprovalOperationError,
+      );
+    });
+
+    it('answers isApproved() the way the gate does', async () => {
+      const now = Date.now();
+      const approval = (record: Partial<ApprovalRecord>): ApprovalRecord => ({
+        toolId: 'app:governed',
+        state: ApprovalState.APPROVED,
+        scope: ApprovalScope.SESSION,
+        grantedAt: now,
+        grantedBy: { source: 'user' },
+        ...record,
+      });
+      const getApprovals = jest.fn();
+      const store = { ...mockStore, getApprovals } as unknown as jest.Mocked<ApprovalStore>;
+      const svc = new ApprovalService(store, sessionId, userId, (toolId) =>
+        toolId === 'app:governed' ? policy : undefined,
+      );
+
+      getApprovals.mockResolvedValueOnce([approval({})]);
+      expect(await svc.isApproved('app:governed')).toBe(true);
+
+      getApprovals.mockResolvedValueOnce([approval({ scope: ApprovalScope.USER })]);
+      expect(await svc.isApproved('app:governed')).toBe(false);
+
+      getApprovals.mockResolvedValueOnce([approval({ grantedAt: now - 120_000 })]);
+      expect(await svc.isApproved('app:governed')).toBe(false);
+
+      getApprovals.mockResolvedValueOnce([approval({}), approval({ scope: ApprovalScope.USER, state: ApprovalState.DENIED })]);
+      expect(await svc.isApproved('app:governed')).toBe(false);
     });
   });
 

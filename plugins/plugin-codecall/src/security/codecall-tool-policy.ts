@@ -16,6 +16,8 @@
 // `toCodeCallPolicyTool`, and `includeTools` receives one object from `toToolFilterInfo`.
 
 import type {
+  CodeCallFilterToolAnnotations,
+  CodeCallFilterToolMetadata,
   CodeCallMode,
   CodeCallToolMetadata,
   DirectCallsFilterFn,
@@ -43,6 +45,7 @@ export interface CodeCallPolicyEntry {
     hideFromDiscovery?: boolean;
     visibility?: string;
     codecall?: CodeCallToolMetadata;
+    annotations?: CodeCallFilterToolAnnotations;
   };
 }
 
@@ -64,6 +67,10 @@ export interface CodeCallPolicyTool {
   tags?: string[];
   hidden?: boolean;
   codecall?: CodeCallToolMetadata;
+  /** The tool's MCP annotations, for `includeTools` and `directCalls.filter`. */
+  annotations?: CodeCallFilterToolAnnotations;
+  /** The tool's declared metadata, for `includeTools` and `directCalls.filter`. */
+  metadata?: CodeCallFilterToolMetadata;
 }
 
 export interface CodeCallPolicyConfig {
@@ -129,17 +136,37 @@ export function toCodeCallPolicyTool(
     hidden:
       metadata?.hideFromDiscovery === true || metadata?.visibility === 'hidden' || metadata?.visibility === 'internal',
     codecall: metadata?.codecall,
+    annotations: metadata?.annotations,
+    metadata: metadata as CodeCallFilterToolMetadata | undefined,
   };
 }
 
-/** The object `includeTools` and `directCalls.filter` receive, wherever the policy runs. */
+/** A frozen shallow copy, so a filter cannot change what the next decision reads. */
+function frozenCopy<T extends object>(value: T | undefined): Readonly<T> | undefined {
+  return value ? Object.freeze({ ...value }) : undefined;
+}
+
+/**
+ * The object `includeTools` and `directCalls.filter` receive, wherever the policy runs.
+ *
+ * It carries the tool's annotations and metadata as well as its name, app and tags: a filter
+ * written against `tool.metadata.annotations.destructiveHint` (or `tool.annotations`) must see
+ * the value, or it silently excludes nothing.
+ */
 export function toToolFilterInfo(tool: CodeCallPolicyTool): IncludeToolsFilterToolInfo {
+  const annotations = frozenCopy(tool.annotations);
+  const metadata = tool.metadata
+    ? Object.freeze({ ...tool.metadata, ...(annotations ? { annotations } : {}) })
+    : undefined;
   return {
     name: tool.name,
+    fullName: tool.fullName,
     appId: tool.appId,
     source: tool.codecall?.source,
     description: tool.description,
     tags: tool.codecall?.tags ?? tool.tags,
+    annotations,
+    metadata,
   };
 }
 

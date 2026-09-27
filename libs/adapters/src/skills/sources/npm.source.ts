@@ -19,10 +19,12 @@ let npmDynamicImport: ((specifier: string) => Promise<unknown>) | undefined;
  * `package.json` and only updates after a server redeploy. This is the
  * intentional, lower-blast-radius distribution mode.
  *
- * Provenance verification (GitHub artifact attestations / Sigstore) is in the
- * v1.2 SHOULD-HAVE list but not yet implemented in OSS — when
- * `verifyProvenance: true` (the default), this source emits a startup warning
- * if no attestation is present so customers know what they're trading off.
+ * Provenance verification (GitHub artifact attestations / Sigstore) is not
+ * implemented. `verifyProvenance: true` (the default) therefore refuses the
+ * package before it is imported: a setting that promises a supply-chain check
+ * must not load code it could not check. Set `verifyProvenance: false` to load
+ * the package without one, and rely on bundle signing (`requireSignature` +
+ * `trustedKeys`) and a pinned package version instead.
  */
 export class NpmSource implements SkillBundleSource {
   readonly id: string;
@@ -64,10 +66,11 @@ export class NpmSource implements SkillBundleSource {
 
   private async loadBundleFromPackage(): Promise<ResolvedBundle> {
     if (this.options.verifyProvenance) {
-      // TODO(v1.2.x): wire Sigstore / GitHub artifact attestation verification.
-      // For v1.2.0 OSS, log a warning so operators know provenance was not enforced.
-      this.logger.warn(
-        `[npm-source] verifyProvenance=true requested but provenance verification is not yet implemented in OSS (planned v1.2.x). Loading "${this.options.packageName}" without provenance check.`,
+      // Fail closed: provenance can't be verified yet, so don't import (and run) the package.
+      throw new Error(
+        `npm source "${this.options.packageName}": verifyProvenance is true, but npm provenance verification is not ` +
+          `implemented, so the package was not loaded. Set verifyProvenance: false to load it without a provenance ` +
+          `check, and sign the bundle (requireSignature + trustedKeys).`,
       );
     }
 

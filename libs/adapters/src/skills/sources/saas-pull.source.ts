@@ -3,6 +3,7 @@
 // All Node APIs route through `@frontmcp/utils` (env-aware via `#path` and
 // `#fs` subpath imports + assertNode guards). The build pipeline
 // (`frontmcp build --target <env>`) picks the right resolution per target.
+import { JwksService, type JSONWebKeySet } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFile } from '@frontmcp/utils';
 
@@ -13,6 +14,25 @@ import type { BundleSourceDeps, BundleSourceListener, SkillBundleSource } from '
 
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';
 const DEFAULT_PULL_TIMEOUT_MS = 30_000;
+const USER_AGENT = 'frontmcp-skilled-openapi';
+
+/**
+ * The pinned pull token failed verification against `jwksUrl`, `expectedIssuer`
+ * or `expectedAudience`. Unlike an outage, this never falls back to a cached
+ * bundle: the configured SaaS is not the one the server was set up to trust.
+ */
+export class SaasPullTokenRejectedError extends Error {
+  constructor(reason: string) {
+    super(`[saas-source] pull token rejected: ${reason}`);
+    this.name = 'SaasPullTokenRejectedError';
+  }
+}
+
+/** Claim values as a list: RFC 7519 allows a single string or an array. */
+function claimValues(claim: unknown): unknown[] {
+  if (Array.isArray(claim)) return claim;
+  return claim === undefined ? [] : [claim];
+}
 
 /**
  * Pulls bundles from a configured SaaS endpoint via authenticated HTTPS.
@@ -29,8 +49,15 @@ const DEFAULT_PULL_TIMEOUT_MS = 30_000;
  * `enableWebhook` and deferred to v1.2.x (route mounting requires plugin HTTP
  * infrastructure not yet in scope).
  *
- * NOTE: This source ONLY parses + caches bundles. Signature verification is
- * applied by the bundle-sync service before the bundle becomes active.
+ * Before every pull the pinned `authToken` is verified: it must be a JWT signed
+ * by a key in the issuer's JWKS (`jwksUrl`), with `iss` equal to
+ * `expectedIssuer` and `aud` including `expectedAudience` (and `resource` too,
+ * when the token carries one), and not expired. A rejected token stops the pull
+ * and is never answered with the cached bundle ({@link SaasPullTokenRejectedError});
+ * an unreachable JWKS is treated like any other pull failure.
+ *
+ * NOTE: Bundle signature verification is applied by the bundle-sync service
+ * before the bundle becomes active.
  */
 export class SaasPullSource implements SkillBundleSource {
   readonly id: string;
@@ -39,6 +66,7 @@ export class SaasPullSource implements SkillBundleSource {
   private pollHandle: NodeJS.Timeout | undefined;
   private inFlight = false;
   private stopped = false;
+  private readonly jwksService = new JwksService({});
 
   constructor(
     private readonly options: SaasSourceOptions,
@@ -67,6 +95,9 @@ export class SaasPullSource implements SkillBundleSource {
         bundle = await this.fetchOnce();
         await this.persistCache(bundle);
       } catch (e) {
+        // A rejected pull token means the SaaS is not the one this server trusts:
+        // serving the cached bundle would hide that, so fail instead.
+        if (e instanceof SaasPullTokenRejectedError) throw e;
         this.logger.warn(
           `[saas-source] initial pull failed (${(e as Error).message}); attempting cached bundle fallback`,
         );
@@ -149,7 +180,11 @@ export class SaasPullSource implements SkillBundleSource {
       await this.persistCache(bundle);
       this.notify(bundle);
     } catch (e) {
-      this.logger.warn(`[saas-source] poll failed: ${(e as Error).message}`);
+      if (e instanceof SaasPullTokenRejectedError) {
+        this.logger.error(`[saas-source] poll refused: ${e.message}; keeping the current bundle`);
+      } else {
+        this.logger.warn(`[saas-source] poll failed: ${(e as Error).message}`);
+      }
     } finally {
       this.inFlight = false;
       this.schedulePoll();
@@ -177,11 +212,53 @@ export class SaasPullSource implements SkillBundleSource {
     }
   }
 
+  /**
+   * Verify the pinned pull token against the issuer's JWKS, issuer and audience.
+   * Throws {@link SaasPullTokenRejectedError} when the token is refused, and a
+   * plain Error when the JWKS can't be fetched (an outage).
+   */
+  private async verifyPullToken(): Promise<void> {
+    const { jwksUrl, expectedIssuer, expectedAudience, authToken } = this.options;
+    // The JWKS is public: never send the pull token with it.
+    const { status, body } = await this.httpGet(jwksUrl, { Accept: 'application/json', 'User-Agent': USER_AGENT });
+    if (status < 200 || status >= 300) {
+      throw new Error(`JWKS ${jwksUrl} responded ${status}`);
+    }
+    let jwks: JSONWebKeySet;
+    try {
+      jwks = JSON.parse(body) as JSONWebKeySet;
+    } catch {
+      throw new Error(`JWKS ${jwksUrl} is not valid JSON`);
+    }
+    if (!jwks || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+      throw new Error(`JWKS ${jwksUrl} has no keys`);
+    }
+
+    const verified = await this.jwksService.verifyTransparentToken(authToken, [
+      { id: 'skilled-openapi-saas', issuerUrl: expectedIssuer, jwks },
+    ]);
+    if (!verified.ok || !verified.payload) {
+      throw new SaasPullTokenRejectedError(
+        `not a valid token from issuer "${expectedIssuer}" signed by a key in ${jwksUrl} (${verified.error ?? 'verification failed'})`,
+      );
+    }
+    const payload = verified.payload;
+    if (!claimValues(payload['aud']).includes(expectedAudience)) {
+      throw new SaasPullTokenRejectedError(`its "aud" claim does not include "${expectedAudience}"`);
+    }
+    // RFC 8707: a token that names its resource must name this audience too.
+    const resource = claimValues(payload['resource']);
+    if (resource.length > 0 && !resource.includes(expectedAudience)) {
+      throw new SaasPullTokenRejectedError(`its "resource" claim does not include "${expectedAudience}"`);
+    }
+  }
+
   private async fetchOnce(): Promise<ResolvedBundle> {
+    await this.verifyPullToken();
     const { status, body } = await this.httpGet(this.options.endpoint, {
       Authorization: `Bearer ${this.options.authToken}`,
       Accept: 'application/json, application/yaml',
-      'User-Agent': 'frontmcp-skilled-openapi',
+      'User-Agent': USER_AGENT,
     });
     if (status < 200 || status >= 300) {
       throw new Error(`pull responded ${status}`);

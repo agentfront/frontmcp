@@ -5,6 +5,8 @@
  */
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+
+import { checkGrantAgainstPolicy, isApprovalUsable } from '../approval/policy';
 import type { ApprovalStore, ApprovalQuery } from '../stores/approval-store.interface';
 import type {
   ApprovalRecord,
@@ -13,8 +15,15 @@ import type {
   ApprovalRevoker,
   ApprovalSourceType,
   RevocationSourceType,
+  ToolApprovalRequirement,
 } from '../types';
 import { ApprovalScope, ApprovalState } from '../types';
+
+/**
+ * Looks up the approval policy (`approval` metadata, normalized) of the tool with this full name,
+ * or `undefined` when no such tool is registered.
+ */
+export type ApprovalRequirementLookup = (toolId: string) => ToolApprovalRequirement | undefined;
 
 /**
  * Options for granting approvals via the service.
@@ -51,7 +60,13 @@ export class ApprovalService {
     private readonly store: ApprovalStore,
     private readonly sessionId: string,
     private readonly userId?: string,
+    private readonly requirementOf: ApprovalRequirementLookup = () => undefined,
   ) {}
+
+  /** Checks a grant against the tool's `allowedScopes` and `maxTtlMs`; returns the ttl to store. */
+  private checkGrant(toolId: string, scope: ApprovalScope, ttlMs?: number): number | undefined {
+    return checkGrantAgainstPolicy(toolId, scope, ttlMs, this.requirementOf(toolId));
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Query Methods
@@ -61,7 +76,15 @@ export class ApprovalService {
    * Check if a tool is approved for current session/user.
    */
   async isApproved(toolId: string, context?: ApprovalContext): Promise<boolean> {
-    return this.store.isApproved(toolId, this.sessionId, this.userId, context);
+    const requirement = this.requirementOf(toolId);
+    if (!requirement || !this.store.getApprovals) {
+      return this.store.isApproved(toolId, this.sessionId, this.userId, context);
+    }
+    // The same answer the approval gate gives: no denial, and an approval the tool's policy accepts.
+    const records = await this.store.getApprovals(toolId, this.sessionId, this.userId, context);
+    if (records.some((record) => record.state === ApprovalState.DENIED)) return false;
+    const now = Date.now();
+    return records.some((record) => isApprovalUsable(record, requirement, now));
   }
 
   /**
@@ -96,14 +119,17 @@ export class ApprovalService {
   }
 
   /**
-   * Query approvals with custom filters.
+   * Query approvals with custom filters. Without a `sessionId` or `userId`, returns the current
+   * caller's approvals: those of its session and those of its user.
    */
   async queryApprovals(query: Partial<ApprovalQuery>): Promise<ApprovalRecord[]> {
-    return this.store.queryApprovals({
-      ...query,
-      sessionId: query.sessionId ?? this.sessionId,
-      userId: query.userId ?? this.userId,
-    });
+    if (query.sessionId !== undefined || query.userId !== undefined) {
+      return this.store.queryApprovals(query);
+    }
+    const records = await this.store.queryApprovals(query);
+    return records.filter(
+      (record) => record.sessionId === this.sessionId || (this.userId !== undefined && record.userId === this.userId),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -114,9 +140,11 @@ export class ApprovalService {
    * Grant session-scoped approval for a tool.
    */
   async grantSessionApproval(toolId: string, options: GrantOptions = {}): Promise<ApprovalRecord> {
+    const ttlMs = this.checkGrant(toolId, ApprovalScope.SESSION);
     return this.store.grantApproval({
       toolId,
       scope: ApprovalScope.SESSION,
+      ttlMs,
       sessionId: this.sessionId,
       grantedBy: options.grantedBy ?? 'policy',
       reason: options.reason,
@@ -131,9 +159,11 @@ export class ApprovalService {
     if (!this.userId) {
       throw new Error('Cannot grant user approval without userId');
     }
+    const ttlMs = this.checkGrant(toolId, ApprovalScope.USER);
     return this.store.grantApproval({
       toolId,
       scope: ApprovalScope.USER,
+      ttlMs,
       userId: this.userId,
       grantedBy: options.grantedBy ?? 'policy',
       reason: options.reason,
@@ -145,6 +175,7 @@ export class ApprovalService {
    * Grant time-limited approval for a tool.
    */
   async grantTimeLimitedApproval(toolId: string, ttlMs: number, options: GrantOptions = {}): Promise<ApprovalRecord> {
+    this.checkGrant(toolId, ApprovalScope.TIME_LIMITED, ttlMs);
     return this.store.grantApproval({
       toolId,
       scope: ApprovalScope.TIME_LIMITED,
@@ -165,9 +196,11 @@ export class ApprovalService {
     context: ApprovalContext,
     options: GrantOptions = {},
   ): Promise<ApprovalRecord> {
+    const ttlMs = this.checkGrant(toolId, ApprovalScope.CONTEXT_SPECIFIC);
     return this.store.grantApproval({
       toolId,
       scope: ApprovalScope.CONTEXT_SPECIFIC,
+      ttlMs,
       context,
       sessionId: this.sessionId,
       userId: this.userId,
@@ -182,7 +215,8 @@ export class ApprovalService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Revoke approval for a tool.
+   * Revoke the caller's approvals of a tool: its session, user, time-limited and context
+   * approvals. Returns whether anything was revoked. Recorded denials are kept.
    */
   async revokeApproval(toolId: string, options: RevokeOptions = {}): Promise<boolean> {
     return this.store.revokeApproval({
@@ -205,6 +239,11 @@ export class ApprovalService {
 /**
  * Factory function for creating ApprovalService instances.
  */
-export function createApprovalService(store: ApprovalStore, sessionId: string, userId?: string): ApprovalService {
-  return new ApprovalService(store, sessionId, userId);
+export function createApprovalService(
+  store: ApprovalStore,
+  sessionId: string,
+  userId?: string,
+  requirementOf?: ApprovalRequirementLookup,
+): ApprovalService {
+  return new ApprovalService(store, sessionId, userId, requirementOf);
 }

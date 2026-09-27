@@ -12,6 +12,8 @@ import {
 import {
   buildSkillsCatalogSummary,
   DynamicPlugin,
+  FlowHooksOf,
+  FrontMcpContextStorage,
   FrontMcpLogger,
   ListToolsHook,
   Plugin,
@@ -24,6 +26,7 @@ import {
 import { MemoryCredentialResolver } from './executor/credential-resolver';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
+import { bundleSkillPolicies, SkillVisibility } from './security/skill-visibility';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';
 import {
   skilledOpenApiPluginOptionsSchema,
@@ -47,6 +50,9 @@ import SearchSkillTool from './tools/search-skill.tool';
  * without taking a hard dependency on the optional observability peer.
  */
 const TELEMETRY_FACTORY_TOKEN = Symbol.for('frontmcp:observability:telemetry-factory');
+
+/** The `skills:filter` flow every SDK skill surface runs (skills/list, skills/load, skill:// resources, /skills). */
+const FilterSkillsHook = FlowHooksOf('skills:filter');
 
 /**
  * Well-known DI token a host can use to inject runtime dependencies into the
@@ -195,13 +201,72 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     }
 
     const scope = this.get(ScopeEntry);
+    // Only the skills this caller may see, so the catalog names no skill it can't use.
+    const visible = await this.skillVisibility(scope, flowCtx.state.authInfo).filterVisibleEntries(
+      scope.skills?.getSkills({ visibility: 'mcp' }) ?? [],
+    );
     const catalog = buildSkillsCatalogSummary(scope.skills, {
       mcpResources: scope.metadata?.skillsConfig?.mcpResources,
+      skills: visible,
     });
     const description = catalog ? `${searchSkillDescription}\n\n---\n\n${catalog}` : searchSkillDescription;
-    // `metadata` is readonly at the type level only; rebuild (not append) from
-    // the static base so repeated lists stay idempotent.
-    (target.tool.metadata as { description?: string }).description = description;
+    // The catalog is per caller: answer this list with a per-request view of the tool
+    // instead of writing the description onto the shared tool metadata, where a
+    // concurrent list for another caller could read it.
+    const perRequestTool = Object.create(target.tool, {
+      metadata: { value: { ...target.tool.metadata, description }, enumerable: true },
+    }) as typeof target.tool;
+    flowCtx.state.set(
+      'tools',
+      tools.map((item) => (item === target ? { ...item, tool: perRequestTool } : item)),
+    );
+  }
+
+  /**
+   * Hide a bundle skill from a caller who doesn't satisfy its `requiredAuthorities`
+   * on every SDK skill surface (skills/list, skills/search, skills/load, the
+   * `skill://` resources, the HTTP /skills API): a skill this flow drops is absent
+   * there and not found when named. The plugin's own meta-tools apply the same rule.
+   */
+  @FilterSkillsHook.Did('filterSkills', { priority: 50 })
+  async hideBundleSkillsFromCaller(flowCtx: FlowCtxOf<'skills:filter'>): Promise<void> {
+    const { skills } = flowCtx.state;
+    if (!skills || skills.length === 0) return;
+    const bundle = this.get(BundleStore).current();
+    const policies = bundleSkillPolicies(bundle);
+    if (policies.size === 0) return;
+
+    const visibility = new SkillVisibility({
+      scope: this.get(ScopeEntry),
+      guard: this.get(AuthorityGuard),
+      bundle,
+      unprotectedOps: this.options.unprotectedOps,
+      authInfo: this.currentAuthInfo(),
+    });
+    const kept: typeof skills = [];
+    for (const skill of skills) {
+      if (await visibility.passesBundleSkillRule(skill.metadata.id ?? skill.name)) kept.push(skill);
+    }
+    if (kept.length !== skills.length) flowCtx.state.set('skills', kept);
+  }
+
+  private skillVisibility(scope: ScopeEntry, authInfo: unknown): SkillVisibility {
+    return new SkillVisibility({
+      scope,
+      guard: this.get(AuthorityGuard),
+      bundle: this.get(BundleStore).current(),
+      unprotectedOps: this.options.unprotectedOps,
+      authInfo,
+    });
+  }
+
+  /** The AuthInfo of the request being served; an anonymous caller when there is none. */
+  private currentAuthInfo(): unknown {
+    try {
+      return this.get(FrontMcpContextStorage)?.getStore()?.authInfo ?? {};
+    } catch {
+      return {};
+    }
   }
 
   private warnIfInsecureConfig(): void {
@@ -246,7 +311,17 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
         provide: AuthorityGuard,
         inject: () => [ScopeEntry],
         useFactory: (scope: ScopeEntry) =>
-          new AuthorityGuard({ logger: scope.logger.child('skilled-openapi:authority') }),
+          new AuthorityGuard({
+            logger: scope.logger.child('skilled-openapi:authority'),
+            // Bundle rules follow the server's authorities settings (claimsMapping,
+            // claimsResolver, relationshipResolver, evaluators) when it has them. Read per check:
+            // the server may register its engine after this provider is built.
+            serverAuthorities: () => {
+              const engine = scope.authoritiesEngine;
+              const contextBuilder = scope.authoritiesContextBuilder;
+              return engine && contextBuilder ? { engine, contextBuilder } : undefined;
+            },
+          }),
       },
       {
         name: 'skilled-openapi:bundle-sync',

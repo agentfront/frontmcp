@@ -13,7 +13,8 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { approvalRecordSchema, normalizeGrantor } from '../approval';
+import { approvalRecordSchema, ApprovalOperationError, normalizeGrantor } from '../approval';
+import { assertValidTtl } from '../approval/policy';
 import { ApprovalScope, ApprovalState, type ApprovalContext, type ApprovalRecord } from '../types';
 import type {
   ApprovalQuery,
@@ -158,33 +159,62 @@ export class ApprovalStorageStore implements ApprovalStore {
   }
 
   /**
-   * The session record, else the user record, except that a denial in either scope wins,
-   * so a session approval cannot mask a user-level denial.
+   * The keys a caller's approvals of a tool can be stored under: its session, its user, both
+   * (time-limited and context grants made through `ApprovalService`), and, for a call in a
+   * server-established context, that context.
    */
-  async getApproval(toolId: string, sessionId: string, userId?: string): Promise<ApprovalRecord | undefined> {
-    this.ensureInitialized();
-
+  private callerKeys(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): string[] {
     const keys = [this.buildKey(toolId, sessionId)];
     if (userId) {
-      keys.push(this.buildKey(toolId, undefined, userId));
+      keys.push(this.buildKey(toolId, undefined, userId), this.buildKey(toolId, sessionId, userId));
     }
+    if (context) {
+      keys.push(this.buildKey(toolId, sessionId, userId, context));
+    }
+    return [...new Set(keys)];
+  }
 
-    const activeRecords: ApprovalRecord[] = [];
-    for (const key of keys) {
+  /**
+   * Every unexpired record that applies to this caller: session, user, time-limited and, when
+   * `context` is given, context-specific approvals and denials.
+   */
+  async getApprovals(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord[]> {
+    this.ensureInitialized();
+
+    const records: ApprovalRecord[] = [];
+    for (const key of this.callerKeys(toolId, sessionId, userId, context)) {
       const record = this.parseRecord(await this.storage.get(key));
-      if (record && !this.isExpired(record)) {
-        activeRecords.push(record);
+      if (record && record.toolId === toolId && !this.isExpired(record)) {
+        records.push(record);
       }
     }
+    return records;
+  }
 
-    return activeRecords.find((record) => record.state === ApprovalState.DENIED) ?? activeRecords[0];
+  /**
+   * The caller's record for a tool; a denial in any of its scopes wins, so an approval in one
+   * scope cannot mask a denial in another.
+   */
+  async getApproval(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord | undefined> {
+    const records = await this.getApprovals(toolId, sessionId, userId, context);
+    return records.find((record) => record.state === ApprovalState.DENIED) ?? records[0];
   }
 
   async queryApprovals(query: ApprovalQuery): Promise<ApprovalRecord[]> {
     this.ensureInitialized();
 
     const results: ApprovalRecord[] = [];
-    const pattern = query.toolId ? `${query.toolId}:*` : '*';
+    const pattern = query.toolId ? `${escapePattern(query.toolId)}:*` : '*';
     const keys = await this.storage.keys(pattern);
     const values = await this.storage.mget(keys);
 
@@ -223,8 +253,13 @@ export class ApprovalStorageStore implements ApprovalStore {
   async grantApproval(options: GrantApprovalOptions): Promise<ApprovalRecord> {
     this.ensureInitialized();
 
+    assertValidTtl(options.ttlMs);
+    if (options.scope === ApprovalScope.TIME_LIMITED && options.ttlMs === undefined) {
+      throw new ApprovalOperationError('grant', 'a time-limited approval needs ttlMs');
+    }
+
     const now = Date.now();
-    const expiresAt = options.ttlMs ? now + options.ttlMs : undefined;
+    const expiresAt = options.ttlMs !== undefined ? now + options.ttlMs : undefined;
     const grantedBy = normalizeGrantor(options.grantedBy);
 
     const record: ApprovalRecord = {
@@ -243,63 +278,71 @@ export class ApprovalStorageStore implements ApprovalStore {
     };
 
     const key = this.buildKey(options.toolId, options.sessionId, options.userId, options.context);
-    const ttlSeconds = options.ttlMs ? Math.ceil(options.ttlMs / 1000) : undefined;
+    const ttlSeconds = options.ttlMs !== undefined ? Math.ceil(options.ttlMs / 1000) : undefined;
     await this.storage.set(key, JSON.stringify(record), { ttlSeconds });
 
     return record;
   }
 
+  /**
+   * Deletes the approvals of a tool that belong to the given session or user: with a context, only
+   * that context's approval; otherwise every approval of the tool stored for that session or user
+   * (session, user, time-limited and context approvals alike). Recorded denials are kept.
+   */
   async revokeApproval(options: RevokeApprovalOptions): Promise<boolean> {
     this.ensureInitialized();
 
-    const key = this.buildKey(options.toolId, options.sessionId, options.userId, options.context);
-    const exists = await this.storage.exists(key);
-    if (exists) {
-      await this.storage.delete(key);
-      return true;
+    const { toolId, sessionId, userId, context } = options;
+    if (!sessionId && !userId && !context) {
+      return false;
     }
 
-    return false;
+    const keys = await this.storage.keys(`${escapePattern(toolId)}:*`);
+    const values = await this.storage.mget(keys);
+    const keysToDelete: string[] = [];
+    for (let i = 0; i < keys.length; i++) {
+      const record = this.parseRecord(values[i]);
+      if (!record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
+      if (context) {
+        if (
+          record.context?.type === context.type &&
+          record.context.identifier === context.identifier &&
+          (!sessionId || record.sessionId === sessionId) &&
+          (!userId || record.userId === userId)
+        ) {
+          keysToDelete.push(keys[i]);
+        }
+        continue;
+      }
+      if ((sessionId && record.sessionId === sessionId) || (userId && record.userId === userId)) {
+        keysToDelete.push(keys[i]);
+      }
+    }
+
+    if (keysToDelete.length === 0) {
+      return false;
+    }
+    await this.storage.mdelete(keysToDelete);
+    return true;
   }
 
   async isApproved(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): Promise<boolean> {
-    this.ensureInitialized();
-
-    if (context) {
-      const contextKey = this.buildKey(toolId, sessionId, userId, context);
-      const contextValue = await this.storage.get(contextKey);
-      const contextApproval = this.parseRecord(contextValue);
-      if (contextApproval && contextApproval.state === ApprovalState.APPROVED && !this.isExpired(contextApproval)) {
-        return true;
-      }
-    }
-
-    const sessionKey = this.buildKey(toolId, sessionId);
-    const sessionValue = await this.storage.get(sessionKey);
-    const sessionApproval = this.parseRecord(sessionValue);
-    if (sessionApproval && sessionApproval.state === ApprovalState.APPROVED && !this.isExpired(sessionApproval)) {
-      return true;
-    }
-
-    if (userId) {
-      const userKey = this.buildKey(toolId, undefined, userId);
-      const userValue = await this.storage.get(userKey);
-      const userApproval = this.parseRecord(userValue);
-      if (userApproval && userApproval.state === ApprovalState.APPROVED && !this.isExpired(userApproval)) {
-        return true;
-      }
-    }
-
-    return false;
+    const approval = await this.getApproval(toolId, sessionId, userId, context);
+    return approval?.state === ApprovalState.APPROVED;
   }
 
   async clearSessionApprovals(sessionId: string): Promise<number> {
     this.ensureInitialized();
 
-    // Escape sessionId to prevent glob metacharacters from matching unintended keys
+    // Escape sessionId to prevent glob metacharacters from matching unintended keys, and match the
+    // id exactly: `session:${id}` at the end of the key or followed by `:`, never a longer id.
     const escapedSessionId = escapePattern(sessionId);
-    const pattern = `*:session:${escapedSessionId}*`;
-    const keys = await this.storage.keys(pattern);
+    const keys = [
+      ...new Set([
+        ...(await this.storage.keys(`*:session:${escapedSessionId}`)),
+        ...(await this.storage.keys(`*:session:${escapedSessionId}:*`)),
+      ]),
+    ];
 
     if (keys.length === 0) {
       return 0;
