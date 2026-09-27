@@ -123,8 +123,9 @@ export {
   parseTraceContext,
   generateTraceContext,
   createChildSpanContext,
-  // The tool whose execute() the calling code runs in
+  // The tool whose execute() the calling code runs in, and the surface of the call it serves
   getRunningTool,
+  getCallSurface,
 } from './context';
 export type {
   FrontMcpContextArgs,
@@ -134,6 +135,7 @@ export type {
   TransportAccessor,
   TraceContext,
 } from './context';
+export type { CallSurface } from './common/availability';
 
 // Tool change events for subscription
 export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';

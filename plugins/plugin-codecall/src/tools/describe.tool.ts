@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/describe.tool.ts
 import { toJSONSchema, z, ZodType, type JSONSchema } from '@frontmcp/lazy-zod';
-import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
+import { getCallSurface, Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
 import CodeCallConfig from '../providers/code-call.config';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
@@ -46,6 +46,8 @@ export default class DescribeTool extends ToolContext {
     const tools: DescribeToolOutput['tools'] = [];
     const notFound: string[] = [];
     const config = this.get(CodeCallConfig);
+    // Describe what the caller of this tool could reach, for that call's surface.
+    const surface = getCallSurface();
 
     for (const toolName of toolNames) {
       // Security: Don't allow describing CodeCall tools themselves
@@ -57,7 +59,7 @@ export default class DescribeTool extends ToolContext {
       // Describe is a discovery surface: a tool the policy withholds is reported exactly like
       // one that does not exist, so its schema and its existence both stay hidden
       // (GHSA-6w3j-82v5-6qrr).
-      const access = checkCodeCallToolAccess<ToolEntry>(this.scope, config, toolName);
+      const access = checkCodeCallToolAccess<ToolEntry>(this.scope, config, toolName, { surface });
       if (!access.allowed) {
         audit?.logSecurityAccessDenied(executionId, toolName, access.reason);
         notFound.push(toolName);

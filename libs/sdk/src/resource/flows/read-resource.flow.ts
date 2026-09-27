@@ -18,6 +18,7 @@ import {
   type ScopeEntry,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
+import { runOnSurface } from '../../context/call-surface';
 import {
   InvalidInputError,
   InvalidMethodError,
@@ -374,7 +375,10 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     resourceContext.mark('execute');
 
     try {
-      resourceContext.output = await resourceContext.execute(input.uri, params);
+      // What the resource does for the caller (a skill:// listing, say) is judged for this call's surface.
+      resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
+        resourceContext.execute(input.uri, params),
+      );
       this.logger.verbose('execute:done');
     } catch (error) {
       if (error instanceof FlowControl || isClientFacingError(error)) throw error;

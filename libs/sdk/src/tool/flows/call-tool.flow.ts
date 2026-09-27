@@ -39,6 +39,7 @@ import {
 } from '../../common';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
+import { runOnSurface } from '../../context/call-surface';
 import { runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { resolveElicitationOwner } from '../../elicitation/helpers/fallback.helper';
@@ -1041,10 +1042,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       tool.metadata.timeout?.executeMs ?? this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
     // Code in the tool (and whatever it awaits) sees this tool as `getRunningTool()`, including after
-    // it calls other tools, which run as themselves.
-    const running = runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
-      toolContext.output = await toolContext.execute(toolContext.input);
-    });
+    // it calls other tools, which run as themselves; and the surface of this call as
+    // `getCallSurface()`, so what it does for the caller (CodeCall, the skill tools) is judged for it.
+    const running = runOnSurface(callSurfaceOf(this.input.ctx), () =>
+      runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
+        toolContext.output = await toolContext.execute(toolContext.input);
+      }),
+    );
 
     try {
       await (timeoutMs ? withTimeout(() => running, timeoutMs, tool.metadata.name) : running);

@@ -9,8 +9,27 @@
  */
 
 import type { ScopeEntry, SkillEntry } from '../common';
+import { callSurfaceOf, isOfferedOnSurface, type CallSurface } from '../common/availability';
+import { getCallSurface } from '../context/call-surface';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
 import { createSkillEntryResolver, skillResultId, type SkillEntryLookup } from './skill-entry.resolver';
+
+/**
+ * The surface the skills HTTP endpoints (`/skills`, `/llm.txt`, `/llm_full.txt`) count as.
+ *
+ * They serve the clients the MCP endpoint serves (with its auth under `auth: 'inherit'`), to an
+ * external reader, so a skill not offered to MCP clients (an agent-only one, say) is not published
+ * there either.
+ */
+export const SKILLS_HTTP_SURFACE: CallSurface = 'mcp';
+
+/**
+ * The surface a skill surface serves: the one its MCP handler context carries, else the surface of
+ * the call the code runs in (a tool call, a resource read, a completion).
+ */
+function callerSurface(ctx: unknown, surface: CallSurface | undefined): CallSurface | undefined {
+  return surface ?? callSurfaceOf(ctx) ?? getCallSurface();
+}
 
 type SkillFilterScope = Pick<ScopeEntry, 'runFlowForOutput'>;
 
@@ -18,25 +37,35 @@ type SkillDiscoveryScope = SkillFilterScope &
   Pick<ScopeEntry, 'authoritiesEngine' | 'authoritiesContextBuilder' | 'authoritiesScopeMapping'>;
 
 /**
- * The skills, in their order, that the `skills:filter` flow lets the current caller see.
+ * The skills, in their order, that the current caller may see: those `availableWhen.surface` offers
+ * on the caller's surface, less any the `skills:filter` flow drops.
  *
  * `ctx` is the MCP handler context (`{ authInfo }`) of a surface that runs outside a flow, so the
  * filter judges that caller. Surfaces already inside a flow (resource reads, tool calls, HTTP) omit it.
+ * `surface` overrides the caller's surface (the HTTP endpoints pass {@link SKILLS_HTTP_SURFACE}).
  */
 export async function filterServableSkills<T extends SkillEntry>(
   scope: SkillFilterScope,
   skills: readonly T[],
   ctx?: unknown,
+  surface?: CallSurface,
 ): Promise<T[]> {
-  if (skills.length === 0) return [];
-  const { skills: servable } = await scope.runFlowForOutput('skills:filter', { skills: [...skills], ctx });
+  const caller = callerSurface(ctx, surface);
+  const offered = skills.filter((skill) => isOfferedOnSurface(skill.metadata.availableWhen, caller));
+  if (offered.length === 0) return [];
+  const { skills: servable } = await scope.runFlowForOutput('skills:filter', { skills: [...offered], ctx });
   const servableSkills = new Set<SkillEntry>(servable);
-  return skills.filter((skill) => servableSkills.has(skill));
+  return offered.filter((skill) => servableSkills.has(skill));
 }
 
-/** Whether the `skills:filter` flow lets the current caller see or load this skill. */
-export async function isSkillServable(scope: SkillFilterScope, skill: SkillEntry, ctx?: unknown): Promise<boolean> {
-  const servable = await filterServableSkills(scope, [skill], ctx);
+/** Whether the current caller may see or load this skill (see {@link filterServableSkills}). */
+export async function isSkillServable(
+  scope: SkillFilterScope,
+  skill: SkillEntry,
+  ctx?: unknown,
+  surface?: CallSurface,
+): Promise<boolean> {
+  const servable = await filterServableSkills(scope, [skill], ctx, surface);
   return servable.length === 1;
 }
 
@@ -46,6 +75,8 @@ export interface SkillDiscoveryCaller {
   authInfo?: Record<string, unknown>;
   /** The MCP handler context, for a surface that runs outside a flow (see {@link filterServableSkills}). */
   ctx?: unknown;
+  /** The caller's surface, when neither `ctx` nor the call being served carries it (the HTTP endpoints). */
+  surface?: CallSurface;
 }
 
 /**
@@ -64,7 +95,7 @@ export async function filterDiscoverableSkillResults<T extends { metadata: { id?
   const entries = results.map((result) => resolve(skillResultId(result)));
   const registered = [...new Set(entries.filter((entry): entry is SkillEntry => entry !== undefined))];
   const authorized = await filterSkillsByAuthorities(scope, registered, caller.authInfo ?? {});
-  const servable = new Set<SkillEntry>(await filterServableSkills(scope, authorized, caller.ctx));
+  const servable = new Set<SkillEntry>(await filterServableSkills(scope, authorized, caller.ctx, caller.surface));
   return results.filter((_, index) => {
     const entry = entries[index];
     return entry === undefined || servable.has(entry);

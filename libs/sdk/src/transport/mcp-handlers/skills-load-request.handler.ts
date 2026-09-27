@@ -6,6 +6,7 @@ import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
 import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 import {
   SkillsLoadRequestSchema,
   SkillsLoadResultSchema,
@@ -82,7 +83,7 @@ export default function skillsLoadRequestHandler({
         // `skills:filter` flow.
         const entry = resolveEntry(skillId, loadResult.skill.id);
         if (entry) {
-          if (!(await isSkillServable(scope, entry, ctx))) {
+          if (!(await isSkillServable(scope, entry, withMcpSurface(scope, ctx)))) {
             warnings.push(`Skill "${skillId}" not found`);
             continue;
           }

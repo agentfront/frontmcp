@@ -16,6 +16,7 @@ import {
   type ScopeEntry,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf } from '../../common/availability';
+import { runOnSurface } from '../../context/call-surface';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hasUIConfig } from '../../tool/ui';
@@ -267,7 +268,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
           const completer = instance.getArgumentCompleter(argName);
           if (completer) {
             try {
-              const result = await completer(argValue);
+              const result = await runOnSurface(callSurfaceOf(this.input.ctx), async () => completer(argValue));
               values = result.values || [];
               total = result.total;
               hasMore = result.hasMore;
@@ -304,7 +305,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         const completer = resource.getArgumentCompleter(argName);
         if (completer) {
           try {
-            const result = await completer(argValue);
+            const result = await runOnSurface(callSurfaceOf(this.input.ctx), async () => completer(argValue));
             values = result.values || [];
             total = result.total;
             hasMore = result.hasMore;

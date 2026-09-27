@@ -15,7 +15,12 @@ import type {
   EmbeddingStrategy,
   IncludeToolsFilterToolInfo,
 } from '../codecall.types';
-import { checkCodeCallToolPolicy, codeCallAppIdOf, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
+import {
+  checkCodeCallToolPolicy,
+  codeCallAppIdOf,
+  isOfferedToCaller,
+  toCodeCallPolicyTool,
+} from '../security/codecall-tool-policy';
 import { SynonymExpansionService, type SynonymExpansionConfig } from './synonym-expansion.service';
 
 /**
@@ -318,6 +323,8 @@ export class ToolSearchService implements ToolSearch {
   private subscriptionReject: ((reason?: Error) => void) | null = null;
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
+  /** `availableWhen` of each indexed tool, by indexed name, for per-caller surface filtering. */
+  private availabilityByTool = new Map<string, { surface?: readonly string[] } | undefined>();
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -460,6 +467,7 @@ export class ToolSearchService implements ToolSearch {
   private async handleToolChange(tools: ToolEntry<any, any>[]): Promise<void> {
     // Clear and rebuild index
     this.vectorDB.clear();
+    this.availabilityByTool = new Map();
 
     if (tools.length === 0) {
       this.initialized = true;
@@ -482,6 +490,7 @@ export class ToolSearchService implements ToolSearch {
     }
 
     const documents = filteredTools.map((tool) => {
+      this.availabilityByTool.set(tool.name, tool.metadata.availableWhen);
       const searchableText = this.extractSearchableText(tool);
       const appId = this.extractAppId(tool);
       const toolName = tool.name;
@@ -655,13 +664,18 @@ export class ToolSearchService implements ToolSearch {
     // Ensure we're subscribed to tool changes before searching
     await this.ensureSubscribed();
 
-    const { topK = this.config.defaultTopK, appIds, excludeToolNames = [] } = options;
+    const { topK = this.config.defaultTopK, appIds, excludeToolNames = [], surface } = options;
     const minScore = this.config.defaultSimilarityThreshold;
 
     // Build filter function
     const filter = (metadata: ToolMetadata): boolean => {
       // Exclude tools
       if (excludeToolNames.includes(metadata.toolName)) {
+        return false;
+      }
+
+      // Leave out tools the caller's surface isn't offered (`availableWhen.surface`)
+      if (!isOfferedToCaller(metadata.toolInstance.metadata.availableWhen, surface)) {
         return false;
       }
 
@@ -707,9 +721,12 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Gets the total number of indexed tools
+   * Gets the total number of indexed tools, or of those a caller on `surface` may reach
    */
-  getTotalCount(): number {
+  getTotalCount(surface?: string): number {
+    if (surface !== undefined) {
+      return this.getAllToolNames().filter((toolName) => this.hasTool(toolName, surface)).length;
+    }
     if (this.vectorDB instanceof VectoriaDB) {
       return this.vectorDB.size();
     } else {
@@ -718,14 +735,12 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Checks if a tool exists in the index
+   * Checks if a tool exists in the index, for a caller on `surface` when given
    */
-  hasTool(toolName: string): boolean {
-    if (this.vectorDB instanceof VectoriaDB) {
-      return this.vectorDB.has(toolName);
-    } else {
-      return this.vectorDB.hasDocument(toolName);
-    }
+  hasTool(toolName: string, surface?: string): boolean {
+    const indexed =
+      this.vectorDB instanceof VectoriaDB ? this.vectorDB.has(toolName) : this.vectorDB.hasDocument(toolName);
+    return indexed && isOfferedToCaller(this.availabilityByTool.get(toolName), surface);
   }
 
   /**
@@ -733,6 +748,7 @@ export class ToolSearchService implements ToolSearch {
    */
   clear(): void {
     this.vectorDB.clear();
+    this.availabilityByTool = new Map();
     this.initialized = false;
   }
 
