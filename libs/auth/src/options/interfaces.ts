@@ -401,6 +401,15 @@ export interface UpstreamProviderOptions {
   userInfoEndpoint?: string;
   /** JWKS URI for upstream id_token validation (optional). */
   jwksUri?: string;
+  /**
+   * The provider's issuer identifier (its OIDC `iss`). When set, an RFC 9207
+   * `iss` on the provider's callback and the `iss` of its `id_token` must name
+   * it (or one of {@link additionalIssuers}). Without it the provider's
+   * `id_token` is not used for identity; `userInfoEndpoint` is asked instead.
+   */
+  issuer?: string;
+  /** Other issuer values this provider legitimately uses. */
+  additionalIssuers?: string[];
 }
 
 /**
@@ -613,7 +622,8 @@ export interface LoginRenderContext {
   error?: string;
   /**
    * Submitted field values to pre-fill on re-render (set when the page is
-   * re-rendered after a failed authenticate()). Keyed by field name.
+   * re-rendered after a failed authenticate()). Keyed by field name. Values of
+   * fields declared `type: 'password'` are left out.
    */
   values?: Record<string, string>;
 }
@@ -887,12 +897,25 @@ export interface LocalAuthOptionsInterface {
   /**
    * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD
    * client-id URL before an authorization request is accepted, so its
-   * redirect_uri can be validated (OAuth 2.1). Defaults to `false` for
-   * backward compatibility; recommended `true` in production to prevent
-   * auth-code interception via an unregistered client's attacker-chosen
-   * redirect_uri.
+   * redirect_uri can be validated (OAuth 2.1).
+   *
+   * @default true
+   *
+   * SECURITY: an unregistered client id has no redirect_uris to check, so
+   * `false` lets anyone start a sign-in whose authorization code is delivered to
+   * a redirect_uri of their choosing. Set `false` only for local development;
+   * a `dcr.allowedRedirectUris` allowlist still applies to such clients.
    */
   requireRegisteredClients?: boolean;
+  /**
+   * Scopes this server may grant. A client that asks for any other scope at
+   * `/oauth/authorize` gets a token without it (the token response's `scope`
+   * says what was granted). Entries match exactly, or as a simple glob where
+   * `*` matches any run of characters (`'tickets:*'`).
+   *
+   * @default ['openid', 'profile', 'email', 'offline_access']
+   */
+  allowedScopes?: string[];
   cimd?: CimdConfigInput;
   /**
    * Require an email at the `/oauth/callback` login step.
@@ -1015,10 +1038,16 @@ export interface RemoteAuthOptionsInterface {
   /**
    * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD
    * client-id URL before an authorization request is accepted (OAuth 2.1
-   * exact redirect-uri matching). Defaults to `false`; recommended `true` in
-   * production. See {@link LocalAuthOptionsInterface.requireRegisteredClients}.
+   * exact redirect-uri matching). Defaults to `true`.
+   * See {@link LocalAuthOptionsInterface.requireRegisteredClients}.
    */
   requireRegisteredClients?: boolean;
+  /**
+   * Scopes this server may grant in the tokens it issues. See
+   * {@link LocalAuthOptionsInterface.allowedScopes}. Unrelated to `scopes`, which
+   * are the scopes requested from the upstream provider.
+   */
+  allowedScopes?: string[];
   cimd?: CimdConfigInput;
   /**
    * Custom authorization-UI slots (#469), scoped to this auth config.

@@ -86,7 +86,7 @@ Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `
 
 Local mode also accepts `allowDefaultPublic` (default `false` — set `true` to admit tokenless requests as anonymous instead of returning 401), `anonymousScopes` (default `['anonymous']` — scopes for those anonymous sessions), and `expectedAudience` (reject tokens minted for a different `aud`).
 
-> **Client registration (security):** by default an unregistered `client_id` is accepted with whatever `redirect_uri` it presents. Set `requireRegisteredClients: true` (local/remote) to require every client to be registered (DCR / `dcr.clients`) or a CIMD client-id URL, so `redirect_uri` is exact-matched (OAuth 2.1) — this prevents auth-code interception via an attacker-chosen redirect. Confidential clients (`token_endpoint_auth_method: client_secret_basic`/`client_secret_post`) are authenticated with a constant-time `client_secret` check on both the code-exchange and refresh grants (Basic header or body param).
+> **Client registration (security):** `requireRegisteredClients` defaults to `true` (local/remote): every client must be registered (DCR / `dcr.clients`) or a CIMD client-id URL, so `redirect_uri` is exact-matched (OAuth 2.1) — this prevents auth-code interception via an attacker-chosen redirect. Set it to `false` only for local development. The server grants only the scopes in `allowedScopes` (default: the OpenID scopes). Confidential clients (`token_endpoint_auth_method: client_secret_basic`/`client_secret_post`) are authenticated with a constant-time `client_secret` check on both the code-exchange and refresh grants (Basic header or body param).
 
 > **Public origin (security):** pin `FRONTMCP_PUBLIC_URL` in production. The issuer / resource / OAuth-discovery URLs and the transparent expected audience derive from it rather than from request headers; `X-Forwarded-Host`/`X-Forwarded-Proto` are ignored unless `FRONTMCP_TRUST_PROXY=1` (a trusted proxy that strips client-supplied forwarded headers).
 
@@ -140,6 +140,8 @@ Endpoints are derived from `provider` using standard OIDC paths
 (`/authorize`, `/token`, `/userinfo`, `/.well-known/jwks.json`). For
 non-standard IdPs, override them with
 `providerConfig.{authEndpoint,tokenEndpoint,userInfoEndpoint,jwksUri}`.
+
+> **MCP client registration (upgrade note):** `requireRegisteredClients` defaults to `true` in remote mode too (it was `false` in 1.8.2 and earlier). Remote mode has no `dcr` block (no pre-registered clients) and FrontMCP's own `/oauth/register` is off in production, so a production remote server with the defaults admits only MCP clients that use a CIMD client-id URL; an unregistered plain `client_id` gets a 400 `Unknown client_id` page. Migrate clients to CIMD, or set `requireRegisteredClients: false` for local development only (an unregistered client's `redirect_uri` can't be checked). FrontMCP grants only the scopes in `allowedScopes` (default: the OpenID scopes), unrelated to `scopes` (what it asks the IdP for).
 
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered

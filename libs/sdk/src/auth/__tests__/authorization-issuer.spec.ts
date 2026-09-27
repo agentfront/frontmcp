@@ -38,4 +38,16 @@ describe('validateAuthorizationIssuer (RFC 9207 / SEP-2468)', () => {
     const result = validateAuthorizationIssuer('', 'https://idp.example.com');
     expect(result.ok).toBe(false);
   });
+
+  it('accepts one of the configured additional issuers, and nothing else', () => {
+    expect(
+      validateAuthorizationIssuer('https://login.example.com/', 'https://idp.example.com', [
+        'https://login.example.com',
+      ]),
+    ).toEqual({ ok: true });
+    expect(
+      validateAuthorizationIssuer('https://evil.example.com', 'https://idp.example.com', ['https://login.example.com'])
+        .ok,
+    ).toBe(false);
+  });
 });

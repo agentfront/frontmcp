@@ -77,8 +77,11 @@ describe('LocalPrimaryAuth.verifyGatewayToken', () => {
     const result = await auth.verifyGatewayToken(token, BASE_URL);
 
     expect(result.ok).toBe(true);
-    expect(typeof result.sub).toBe('string');
+    // An anonymous-grant token names an anonymous subject and no role (#270).
+    expect(result.sub).toMatch(/^anon:/);
     expect(result.payload?.['anonymous']).toBe(true);
+    expect(result.payload?.['scope']).toBe('anonymous');
+    expect(result.payload?.['role']).toBeUndefined();
   });
 
   it('REJECTS a token signed with the WRONG secret', async () => {
@@ -169,21 +172,44 @@ describe('LocalPrimaryAuth.verifyGatewayToken', () => {
     expect(result.error).toBeDefined();
   });
 
-  it('falls back to expectedIssuer when the token omits iss', async () => {
+  it('REJECTS a token without iss, or issued by another server with the same secret (#269)', async () => {
     const auth = await makeAuth();
     const secret = (auth as unknown as { secret: Uint8Array }).secret;
-    // Sign with the right secret but NO issuer claim.
-    const noIss = await new SignJWT({ sub: 'user-no-iss', scope: 'read' })
+    const sign = (issuer?: string) => {
+      const jwt = new SignJWT({ sub: 'user-x', scope: 'read' })
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+        .setIssuedAt()
+        .setExpirationTime('1h');
+      return (issuer ? jwt.setIssuer(issuer) : jwt).sign(secret);
+    };
+
+    expect((await auth.verifyGatewayToken(await sign(), BASE_URL)).ok).toBe(false);
+    expect((await auth.verifyGatewayToken(await sign('https://billing.example.com'), BASE_URL)).ok).toBe(false);
+    expect((await auth.verifyGatewayToken(await sign(auth.issuer), BASE_URL)).ok).toBe(true);
+  });
+
+  it('checks the audience against the resource it is asked about (#269)', async () => {
+    const auth = await makeAuth();
+    const forDesk = await auth.signAccessToken({ sub: 'user-1' }, ['read'], 'https://desk.example.com/mcp/');
+    const noAud = await auth.signAccessToken({ sub: 'user-1' }, ['read']);
+
+    expect((await auth.verifyGatewayToken(forDesk, BASE_URL, 'https://desk.example.com/mcp')).ok).toBe(true);
+    expect((await auth.verifyGatewayToken(forDesk, BASE_URL, 'https://billing.example.com/mcp')).ok).toBe(false);
+    expect((await auth.verifyGatewayToken(noAud, BASE_URL, 'https://desk.example.com/mcp')).ok).toBe(false);
+    // Without an expected audience (e.g. /oauth/userinfo) only the issuer binds it.
+    expect((await auth.verifyGatewayToken(noAud, BASE_URL)).ok).toBe(true);
+  });
+
+  it('REJECTS a token without exp (#272)', async () => {
+    const auth = await makeAuth();
+    const secret = (auth as unknown as { secret: Uint8Array }).secret;
+    const noExp = await new SignJWT({ sub: 'user-forever', scope: 'read' })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
-      .setExpirationTime('1h')
+      .setIssuer(auth.issuer)
       .sign(secret);
 
-    const result = await auth.verifyGatewayToken(noIss, BASE_URL);
-
-    expect(result.ok).toBe(true);
-    // Issuer equality is NOT enforced; expectedIssuer is used for context only.
-    expect(result.issuer).toBe(BASE_URL);
+    expect((await auth.verifyGatewayToken(noExp, BASE_URL)).ok).toBe(false);
   });
 });
 

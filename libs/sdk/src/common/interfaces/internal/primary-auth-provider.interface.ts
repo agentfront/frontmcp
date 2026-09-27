@@ -86,13 +86,14 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
    * with a real signature + expiration check. Transparent mode never calls this
    * — it verifies against the upstream provider's JWKS instead.
    *
-   * @param _token          The raw bearer token (already confirmed to be a JWT).
-   * @param _expectedIssuer The request-derived base URL. Provided for context /
-   *                        logging; issuer equality is intentionally NOT enforced
-   *                        (proxy/tunnel setups legitimately present `iss` ≠
-   *                        baseUrl). Signature + expiration are the security core.
+   * @param _token            The raw bearer token (already confirmed to be a JWT).
+   * @param _requestBaseUrl    The request-derived base URL, for context / logging.
+   *                           The token's `iss` must be this instance's own
+   *                           issuer, not this request-derived value.
+   * @param _expectedAudience  The protected resource the token must be for
+   *                           (`aud`), when the caller is a resource endpoint.
    */
-  verifyGatewayToken(_token: string, _expectedIssuer: string): Promise<VerifyResult> {
+  verifyGatewayToken(_token: string, _requestBaseUrl: string, _expectedAudience?: string): Promise<VerifyResult> {
     return Promise.resolve({
       ok: false,
       error: 'gateway token verification is not supported by this auth mode',

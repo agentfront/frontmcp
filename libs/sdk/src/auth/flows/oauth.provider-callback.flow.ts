@@ -20,6 +20,7 @@
 
 import {
   buildToolConsentPage,
+  builtInAuthPageHeaders,
   completeCurrentProvider,
   escapeHtml,
   getNextProvider,
@@ -32,7 +33,15 @@ import {
   type ProviderUserInfo,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
+import {
+  base64urlEncode,
+  generateCodeVerifier,
+  randomBytes,
+  randomUUID,
+  sha256,
+  sha256Base64url,
+  timingSafeEqual,
+} from '@frontmcp/utils';
 
 import {
   enforceIpFilter,
@@ -51,6 +60,7 @@ import {
 import { InternalMcpError } from '../../errors';
 import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
+import { parseFormBody } from './form-body.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -70,9 +80,11 @@ const stateSchema = z.object({
   // Provider tokens
   providerTokens: z.unknown().optional(), // ProviderTokens
   providerUserInfo: z.unknown().optional(), // ProviderUserInfo
-  // Consent round-trip (the consent screen GETs back here after all providers
-  // are linked): the federated session id + the submitted tool selection.
+  // Consent round-trip (the consent screen POSTs back here after all providers
+  // are linked): the federated session id, the screen's CSRF token and the
+  // submitted tool selection.
   consentSessionId: z.string().optional(),
+  consentCsrf: z.string().optional(),
   consentSubmitted: z.boolean().default(false),
   selectedTools: z.array(z.string()).optional(),
 });
@@ -106,7 +118,8 @@ const Stage = StageHookOf(name);
   outputSchema,
   access: 'public',
   middleware: {
-    method: 'GET',
+    // No `method`: the provider redirects here with a GET, and the federated
+    // consent screen POSTs its selection back here.
     path: '/oauth/provider/:providerId/callback',
   },
 })
@@ -146,13 +159,31 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // can detect a mix-up before redeeming the code.
     const responseIssuer = request.query['iss'] as string | undefined;
 
-    // Consent round-trip params (set when the consent screen GETs back here
+    // Consent round-trip params (set when the consent screen POSTs back here
     // after all providers are linked). `consent_session` identifies the still
-    // alive federated session; `tools` is the submitted selection.
-    const consentSessionId = request.query['consent_session'] as string | undefined;
-    const consentSubmitted = request.query['consent_submitted'] === '1';
-    const toolsParam = request.query['tools'];
-    const selectedTools = toolsParam ? (Array.isArray(toolsParam) ? toolsParam : [toolsParam]) : undefined;
+    // alive federated session, `csrf` is the screen's token and `tools` the
+    // submitted selection. They are read from a POSTed form body only: a
+    // consent that arrives in a URL (a link, an image, a redirect) is refused.
+    if (request.query['consent_session'] !== undefined) {
+      this.logger.warn('Federated consent submitted in the query string; refused');
+      this.respond(
+        this.htmlPage(this.renderErrorPage('invalid_request', 'Consent must be submitted from the consent page.'), 400),
+      );
+      return;
+    }
+    const body = String(request.method).toUpperCase() === 'POST' ? parseFormBody(request.body) : {};
+    const firstString = (value: unknown): string | undefined =>
+      typeof value === 'string' ? value : Array.isArray(value) && typeof value[0] === 'string' ? value[0] : undefined;
+    const consentSessionId = firstString(body['consent_session']);
+    const consentCsrf = firstString(body['csrf']);
+    const consentSubmitted = firstString(body['consent_submitted']) === '1';
+    const toolsParam = body['tools'];
+    const selectedTools =
+      typeof toolsParam === 'string'
+        ? [toolsParam]
+        : Array.isArray(toolsParam)
+          ? toolsParam.filter((t): t is string => typeof t === 'string')
+          : undefined;
 
     this.state.set({
       providerId,
@@ -162,6 +193,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       providerState,
       responseIssuer,
       consentSessionId,
+      consentCsrf,
       consentSubmitted,
       selectedTools,
     });
@@ -176,14 +208,15 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    *
    * Federated logins complete (mint the code) here, AFTER all providers are
    * linked. When consent mode is enabled, {@link completeFederatedAuth} first
-   * renders the consent screen, which GETs back to this endpoint with
-   * `consent_session=<sessionId>` + `tools=`. This stage loads that still alive
-   * session, applies the selection (validating + `requireSelection`), and
-   * completes the mint — short-circuiting the provider-code path entirely.
+   * renders the consent screen, which POSTs back to this endpoint with
+   * `consent_session=<sessionId>`, the screen's `csrf` token and `tools=`. This
+   * stage loads that still alive session, checks the token, applies the
+   * selection (validating + `requireSelection`), and completes the mint —
+   * short-circuiting the provider-code path entirely.
    */
   @Stage('handleConsentSubmission')
   async handleConsentSubmission() {
-    const { consentSessionId, consentSubmitted, selectedTools } = this.state;
+    const { consentSessionId, consentCsrf, consentSubmitted, selectedTools } = this.state;
     if (!consentSessionId) {
       return; // Not a consent round-trip — fall through to the provider-callback path.
     }
@@ -191,20 +224,27 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const localAuth = this.getLocalAuth();
     const sessionStore = localAuth.federatedSessionStore;
     if (!sessionStore) {
-      this.respond(
-        httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),
-      );
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500));
       return;
     }
 
     const session = await sessionStore.get(consentSessionId);
     if (!session) {
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('invalid_request', 'Authentication session expired. Please try again.'),
           400,
         ),
       );
+      return;
+    }
+
+    // The session id is no secret (it travels in every upstream `state`), so a
+    // submission counts only with the token of the consent screen this server
+    // showed for the session. No token on the session means no screen was shown.
+    if (!session.consentCsrf || !consentCsrf || !timingSafeEqualStr(session.consentCsrf, consentCsrf)) {
+      this.logger.warn('Federated consent CSRF token mismatch');
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Invalid or missing CSRF token'), 400));
       return;
     }
 
@@ -213,9 +253,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // providers still queued/in-flight must NOT short-circuit to completion —
     // otherwise a token could be minted before the upstream exchanges finish.
     if (!isSessionComplete(session)) {
-      this.respond(
-        httpRespond.html(this.renderErrorPage('invalid_request', 'Authentication is still in progress.'), 400),
-      );
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Authentication is still in progress.'), 400));
       return;
     }
 
@@ -228,7 +266,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
     if (!providerState) {
       this.logger.warn('Missing state parameter in provider callback');
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Missing state parameter'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Missing state parameter'), 400));
       return;
     }
 
@@ -237,7 +275,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const stateParts = providerState.split(':');
     if (stateParts.length < 3 || stateParts[0] !== 'federated') {
       this.logger.warn(`Invalid state format: ${providerState?.slice(0, 20)}...`);
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid state parameter'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Invalid state parameter'), 400));
       return;
     }
 
@@ -250,9 +288,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
     if (!sessionStore) {
       this.logger.error('Federated session store not configured');
-      this.respond(
-        httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),
-      );
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500));
       return;
     }
 
@@ -262,7 +298,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       const maskedId = federatedSessionId ? `${federatedSessionId.slice(0, 6)}...` : 'unknown';
       this.logger.warn(`Federated session not found or expired: ${maskedId}`);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('invalid_request', 'Authentication session expired. Please try again.'),
           400,
         ),
@@ -288,7 +324,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       }
       this.logger.warn('State mismatch for provider callback');
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('invalid_request', 'Invalid state parameter. Please restart authentication.'),
           400,
         ),
@@ -312,15 +348,22 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (error) {
       this.logger.warn(`Provider ${providerId} returned error: ${error} - ${errorDescription}`);
 
-      // For certain errors, allow user to skip this provider
-      if (error === 'access_denied') {
-        // User declined - skip this provider and continue
+      // A declined sign-in may SKIP an optional provider of a local-mode
+      // federated login (the user signed in on the login page). Remote mode's
+      // provider is the sign-in itself (#259): a decline there, like any other
+      // provider error, ends the attempt without a code.
+      const localAuth = this.getLocalAuth();
+      const mandatory = localAuth.remoteProviderId !== undefined && localAuth.remoteProviderId === providerId;
+      if (error === 'access_denied' && !mandatory) {
         this.logger.info(`User declined authorization for provider: ${providerId}`);
         // Fall through to complete current provider as skipped
       } else {
+        await this.abandon(session);
         this.respond(
-          httpRespond.html(
-            this.renderErrorPage('provider_error', `Authentication provider error: ${errorDescription || error}`),
+          this.htmlPage(
+            error === 'access_denied'
+              ? this.renderErrorPage('access_denied', 'Sign-in was declined at the identity provider.')
+              : this.renderErrorPage('provider_error', `Authentication provider error: ${errorDescription || error}`),
             400,
           ),
         );
@@ -332,7 +375,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (session.currentProviderId !== providerId) {
       this.logger.warn(`Provider ID mismatch: expected ${session.currentProviderId}, got ${providerId}`);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('invalid_request', 'Provider ID mismatch. Please restart authentication.'),
           400,
         ),
@@ -344,7 +387,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (!code && error !== 'access_denied') {
       this.logger.warn('Missing authorization code in provider callback');
       this.respond(
-        httpRespond.html(this.renderErrorPage('invalid_request', 'Missing authorization code from provider'), 400),
+        this.htmlPage(this.renderErrorPage('invalid_request', 'Missing authorization code from provider'), 400),
       );
       return;
     }
@@ -357,12 +400,17 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // a different, attacker-controlled AS and we would redeem it against the
     // real one.
     if (code) {
-      const expectedIssuer = this.getLocalAuth().getProviderConfig(providerId as string)?.issuer;
-      const check = validateAuthorizationIssuer(this.state.responseIssuer, expectedIssuer);
+      const providerConfig = this.getLocalAuth().getProviderConfig(providerId as string);
+      const expectedIssuer = providerConfig?.verifyIssuer === false ? undefined : providerConfig?.issuer;
+      const check = validateAuthorizationIssuer(
+        this.state.responseIssuer,
+        expectedIssuer,
+        providerConfig?.additionalIssuers,
+      );
       if (!check.ok) {
         this.logger.error(`Provider ${providerId} callback rejected: ${check.reason}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage('invalid_request', 'Authorization response came from an unexpected issuer.'),
             400,
           ),
@@ -402,7 +450,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       if ('error' in result) {
         this.logger.error(`Provider token exchange failed: ${result.error} - ${result.error_description}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage(
               'provider_error',
               `Failed to exchange code with provider: ${result.error_description}`,
@@ -437,7 +485,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
           const errMsg = err instanceof Error ? err.message : 'Unknown error';
           this.logger.warn(`Failed to resolve user identity from provider ${providerId}: ${errMsg}`);
           this.respond(
-            httpRespond.html(
+            this.htmlPage(
               this.renderErrorPage('access_denied', 'Could not determine your identity from the provider'),
               400,
             ),
@@ -455,7 +503,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error(`Provider token exchange error: ${errMsg}`);
       this.respond(
-        httpRespond.html(this.renderErrorPage('server_error', 'Failed to complete authentication with provider'), 500),
+        this.htmlPage(this.renderErrorPage('server_error', 'Failed to complete authentication with provider'), 500),
       );
     }
   }
@@ -583,7 +631,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (!redirectUrl) {
       this.logger.error(`Failed to build authorize URL for provider: ${nextProviderId}`);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('server_error', `Failed to initiate auth with provider: ${nextProviderId}`),
           500,
         ),
@@ -600,8 +648,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    *
    * When consent mode is enabled this runs in two passes:
    *  1. First reach (no `consent.consentSubmitted`): render the consent screen,
-   *     which GETs back to this endpoint with `consent_session` + `tools=`. The
-   *     federated session is kept ALIVE for the round-trip.
+   *     which POSTs back to this endpoint with `consent_session`, the CSRF token
+   *     kept on the session and `tools=`. The federated session is kept ALIVE
+   *     for the round-trip.
    *  2. Resubmit (`consent.consentSubmitted` true): validate the selection
    *     (honoring `requireSelection`) and mint the code with the consented set.
    *
@@ -617,6 +666,45 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const selectedProviderIds = Array.from(session.completedProviders.keys());
     const skippedProviderIds = session.skippedProviders;
 
+    // #259 — a code is minted only for a sign-in that happened. The providers
+    // actually LINKED (not the ones selected, some may have been declined)
+    // must meet `federatedAuth.minProviders` (default 1) and include every
+    // `requiredProviders` entry, and there must be an identity: the login page's
+    // or the provider's. Never an `anon:` stand-in.
+    const federatedConfig = (
+      localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
+    ).federatedAuth;
+    const minProviders = federatedConfig?.minProviders ?? 1;
+    const missingRequired = (federatedConfig?.requiredProviders ?? []).filter(
+      (id) => !session.completedProviders.has(id),
+    );
+    if (selectedProviderIds.length < minProviders || missingRequired.length > 0) {
+      this.logger.warn(
+        `Federated auth refused: ${selectedProviderIds.length} provider(s) linked (minimum ${minProviders})` +
+          (missingRequired.length > 0 ? `; required provider(s) not linked: ${missingRequired.join(', ')}` : ''),
+      );
+      await this.abandon(session);
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage('access_denied', 'Sign-in did not complete: a required provider was not linked.'),
+          400,
+        ),
+      );
+      return;
+    }
+    if (!session.userInfo.sub && !session.userInfo.email) {
+      this.logger.warn('Federated auth refused: no identity from the login page or any provider');
+      await this.abandon(session);
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage('access_denied', 'Could not determine your identity from the provider'),
+          400,
+        ),
+      );
+      return;
+    }
+    const userSub = session.userInfo.sub || this.generateUserSub(session.userInfo.email ?? '');
+
     // ----- Consent gate (federated) -----
     const metadataAuth = this.scope.metadata.auth;
     const consentConfig =
@@ -625,16 +713,11 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         : undefined;
     const consentEnabled = consentConfig?.enabled === true;
 
-    // Stable subject for rememberConsent — derived identically to the minted
-    // token's `userSub` below so the remembered key matches the issued identity.
-    // Federated sessions only carry a stable sub when the initial login form (or
-    // a provider) supplied one; when only an email is present we derive from it.
-    // If neither is available there is no stable identity, so rememberConsent is
-    // skipped for that session (documented limitation).
+    // Stable subject for rememberConsent — the minted token's `userSub`, so the
+    // remembered key matches the issued identity.
     const rememberConsent = consentConfig?.rememberConsent ?? true;
-    const consentUserSub =
-      session.userInfo.sub || (session.userInfo.email ? this.generateUserSub(session.userInfo.email) : undefined);
-    const canRemember = consentEnabled && rememberConsent && !!consentUserSub;
+    const consentUserSub = userSub;
+    const canRemember = consentEnabled && rememberConsent;
 
     let selectedToolIds: string[] | undefined;
     if (consentEnabled) {
@@ -644,7 +727,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       // either SKIP the screen (no new tools) or re-render PRE-FILLED with it
       // (new tool appeared); otherwise render the screen fresh (keep the session).
       if (!consent?.consentSubmitted) {
-        if (canRemember && consentUserSub) {
+        if (canRemember) {
           const remembered = await localAuth.consentStore.get(consentUserSub, session.clientId);
           if (remembered) {
             const seen = new Set(remembered.seenToolIds);
@@ -658,10 +741,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
               this.logger.info(
                 'rememberConsent (federated): new tool detected — re-prompting pre-filled with prior selection',
               );
+              await this.keepConsentCsrf(session);
               this.respond(
-                httpRespond.html(
-                  this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds),
-                ),
+                this.htmlPage(this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds)),
               );
               return;
             }
@@ -670,7 +752,8 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
         if (selectedToolIds === undefined) {
           this.logger.info('Federated auth: all providers linked, rendering consent screen');
-          this.respond(httpRespond.html(this.renderConsentScreen(session, consentConfig)));
+          await this.keepConsentCsrf(session);
+          this.respond(this.htmlPage(this.renderConsentScreen(session, consentConfig)));
           return;
         }
       }
@@ -683,7 +766,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         if (invalid.length > 0) {
           this.logger.warn(`Federated consent: invalid tool selection: ${invalid.join(', ')}`);
           this.respond(
-            httpRespond.html(
+            this.htmlPage(
               this.renderErrorPage(
                 'invalid_request',
                 'Invalid tool selection. Please restart authorization and choose from the available tools.',
@@ -698,7 +781,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         if (requireSelection && submitted.length === 0) {
           this.logger.info('Federated consent: empty submit with requireSelection — re-rendering');
           this.respond(
-            httpRespond.html(
+            this.htmlPage(
               this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
             ),
           );
@@ -708,7 +791,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         // Persist the selection so a later federated login for the same
         // (user, client) can reuse it. Best-effort: a store failure must not
         // block minting. No PII — opaque subject, client id, and tool ids only.
-        if (canRemember && consentUserSub) {
+        if (canRemember) {
           try {
             await localAuth.consentStore.set({
               userSub: consentUserSub,
@@ -734,7 +817,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       redirectUri: session.redirectUri,
       scopes: session.scopes,
       codeChallenge: session.frontmcpPkce.challenge,
-      userSub: session.userInfo.sub || this.generateUserSub(session.userInfo.email),
+      userSub,
       userEmail: session.userInfo.email,
       userName: session.userInfo.name,
       state: session.state,
@@ -774,10 +857,37 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Render the federated consent screen. The form GETs back to this provider
-   * callback endpoint with `consent_session=<sessionId>` + the chosen `tools=`
-   * (and `consent_submitted=1`), so {@link handleConsentSubmission} completes
-   * the mint. Honors the same `auth.consent` flags as the non-federated path.
+   * Give the federated session the consent screen's CSRF token and persist it
+   * before the screen is shown. Fails closed: when the session can't be
+   * written, no consent screen goes out (its submission could not be checked).
+   */
+  private async keepConsentCsrf(session: FederatedAuthSession): Promise<void> {
+    if (session.consentCsrf) return;
+    const sessionStore = this.getLocalAuth().federatedSessionStore;
+    try {
+      if (!sessionStore) throw new Error('no federated session store');
+      session.consentCsrf = base64urlEncode(randomBytes(32));
+      await sessionStore.update(session);
+    } catch (err) {
+      session.consentCsrf = undefined;
+      this.logger.error(
+        `Failed to keep the federated consent CSRF token: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
+          500,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Render the federated consent screen. The form POSTs back to this provider
+   * callback endpoint with `consent_session=<sessionId>`, the session's `csrf`
+   * token and the chosen `tools=` (and `consent_submitted=1`), so
+   * {@link handleConsentSubmission} completes the mint. Honors the same
+   * `auth.consent` flags as the non-federated path.
    */
   private renderConsentScreen(
     session: FederatedAuthSession,
@@ -799,7 +909,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       // The pending_auth_id input is unused on the federated round-trip (we key
       // off `consent_session`), but the builder requires it; reuse the session id.
       pendingAuthId: session.id,
-      csrfToken: '',
+      csrfToken: session.consentCsrf ?? '',
       callbackPath,
       userName: session.userInfo.name,
       userEmail: session.userInfo.email,
@@ -820,12 +930,22 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   /**
    * Generate a deterministic user sub from email
    */
-  private generateUserSub(email?: string): string {
-    if (!email) {
-      return `anon:${randomUUID()}`;
-    }
+  private generateUserSub(email: string): string {
     const hash = sha256Base64url(email.toLowerCase());
     return `user:${hash.substring(0, 16)}`;
+  }
+
+  /** End a federated sign-in that won't complete: drop its session and pending authorization. */
+  private async abandon(session: FederatedAuthSession): Promise<void> {
+    const localAuth = this.getLocalAuth();
+    try {
+      await localAuth.federatedSessionStore?.delete(session.id);
+      await localAuth.authorizationStore.deletePendingAuthorization(session.pendingAuthId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to clean up an abandoned federated sign-in: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   /**
@@ -884,6 +1004,11 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 </html>`;
   }
 
+  /** An HTML response with the built-in auth pages' security headers (#263). */
+  private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
+    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+  }
+
   private getStateValidation(): 'strict' | 'format' {
     const authOptions = this.scope.auth?.options;
     if (authOptions && isOrchestratedMode(authOptions)) {
@@ -891,4 +1016,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     }
     return 'strict';
   }
+}
+
+/** Constant-time string compare (over SHA-256 digests, so lengths never leak) for the consent CSRF token. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  return timingSafeEqual(sha256(a), sha256(b));
 }

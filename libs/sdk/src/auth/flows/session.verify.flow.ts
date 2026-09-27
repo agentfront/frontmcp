@@ -1,6 +1,7 @@
 // auth/flows/session.verify.flow.ts
 import {
   authorizationSchema,
+  computeResource,
   Flow,
   FlowBase,
   getRequestBaseUrl,
@@ -597,10 +598,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       verify = jwks.verifyTransparentToken(token, providerRefs);
     } else {
       // Public or orchestrated (gateway) mode — verify the token's HS256
-      // signature + expiration using the auth instance's own secret. The
-      // instance is the sole holder of the signing key, so verification lives
-      // there (LocalPrimaryAuth.verifyGatewayToken) rather than in JwksService.
-      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl);
+      // signature + expiration using the auth instance's own secret, and that
+      // it was issued by this instance for THIS resource (#269): another server
+      // with the same JWT_SECRET holds the same key. Verification lives in
+      // LocalPrimaryAuth.verifyGatewayToken rather than in JwksService.
+      const resource = computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
+      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, resource);
     }
 
     const result = await verify;
@@ -614,11 +617,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // that it was minted for THIS resource. The `aud` claim is the sole
       // binding to this server; without this gate a token issued to the same
       // IdP for a different service authenticates here unchanged
-      // (GHSA-hvvp-67p3-j379). Gateway/public tokens are excluded on purpose:
-      // they are HS256-signed with this instance's own secret, so a token from
-      // another service simply fails signature verification — an audience gate
-      // there would add no security and risks rejecting legitimate
-      // resource-scoped tokens whose `aud` is the OAuth `resource` indicator.
+      // (GHSA-hvvp-67p3-j379). Gateway/public tokens are audience-checked in
+      // LocalPrimaryAuth.verifyGatewayToken above (#269): a server started with
+      // the same JWT_SECRET signs with the same key.
       if (isTransparentMode(authOptions)) {
         const configuredAudience = (authOptions as TransparentAuthOptions).expectedAudience;
         // SECURITY: when `expectedAudience` is not configured we derive it from
