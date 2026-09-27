@@ -39,6 +39,10 @@ export type {
   CreateRefreshTokenRecordParams,
 } from './authorization.store';
 
+// Verified sign-in kept on a pending authorization during consent
+export { sealPendingLogin, openPendingLogin } from './pending-login';
+export type { PendingLoginState } from './pending-login';
+
 // Storage-backed Authorization Store (memory / Redis / SQLite via StorageAdapter)
 export { StorageAuthorizationStore } from './storage-authorization.store';
 export type { StorageAuthorizationStoreOptions } from './storage-authorization.store';

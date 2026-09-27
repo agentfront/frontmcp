@@ -142,8 +142,10 @@ describe('LOCAL-mode auth E2E — consent mode', () => {
       expect(html).toContain('list-notes');
       // ...but the excluded `ping` tool is never offered.
       expect(html).not.toContain('value="ping"');
-      // The form round-trips the identity so the resubmit re-derives the sub.
-      expect(html).toContain('name="email" value="user@test.local"');
+      // The form carries no login fields: the sign-in is kept on the server
+      // until consent is given, and the form carries a CSRF token instead.
+      expect(html).not.toContain('name="email"');
+      expect(html).toMatch(/name="csrf" value="[^"]+"/);
     });
 
     it('rejects an empty submit (requireSelection) by re-rendering the consent screen', async () => {

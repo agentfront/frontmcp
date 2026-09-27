@@ -49,21 +49,23 @@ export class Server {}
 
 ## Configuration Options
 
-| Option               | Type                                                                                    | Default                 | Description                                                                                                                                                                           |
-| -------------------- | --------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }`                        | `'memory'`              | Token storage backend (see [Token Storage](#token-storage))                                                                                                                           |
-| `secureStore`        | `'memory' \| { sqlite } \| { redis } \| { backend } \| { scope?, ttlMs?, encryption? }` | `'memory'` (user scope) | Backing for the general session secure-secret store `this.secureStore` (see [Secure-Secret Store](#session-secure-secret-store-thissecurestore))                                      |
-| `requireEmail`       | `boolean`                                                                               | `true`                  | Require an email at the login callback (see [Single-Operator](#single-operator-mode-requireemail-false))                                                                              |
-| `anonymousSubject`   | `string`                                                                                | `'local-operator'`      | Stable `sub` minted when `requireEmail: false` and no email is provided                                                                                                               |
-| `login`              | `LoginConfig`                                                                           | _unset_                 | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
-| `authenticate`       | `(input, ctx) => Promise<AuthenticateResult>`                                           | _unset_                 | Custom verification step run at the login callback before a token is minted — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate)             |
-| `consent`            | `ConsentConfig`                                                                         | _unset_                 | Consent / tool-authorization config — the block is optional; when present, inner `enabled` defaults to `false` (see [Consent](#consent-and-tool-authorization))                       |
-| `providers`          | `UpstreamProviderOptions[]`                                                             | _unset_                 | Upstream OAuth providers to orchestrate (see [Multi-Provider Orchestration](#multi-provider-orchestration-providers))                                                                 |
-| `federatedAuth`      | `FederatedAuthConfig`                                                                   | _unset_                 | Federated-login gating: `minProviders`, `requiredProviders`, `stateValidation`                                                                                                        |
-| `allowDefaultPublic` | `boolean`                                                                               | `false`                 | Allow unauthenticated access                                                                                                                                                          |
-| `anonymousScopes`    | `string[]`                                                                              | `['anonymous']`         | Scopes for anonymous sessions                                                                                                                                                         |
-| `local.issuer`       | `string`                                                                                | auto-derived            | Override the issuer (see [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy))                                                                                                        |
-| `incrementalAuth`    | `IncrementalAuthConfig`                                                                 | _unset_                 | Progressive authorization config — the block is optional; when present, inner `enabled` defaults to `true`                                                                            |
+| Option                     | Type                                                                                    | Default                                            | Description                                                                                                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tokenStorage`             | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }`                        | `'memory'`                                         | Token storage backend (see [Token Storage](#token-storage))                                                                                                                           |
+| `secureStore`              | `'memory' \| { sqlite } \| { redis } \| { backend } \| { scope?, ttlMs?, encryption? }` | `'memory'` (user scope)                            | Backing for the general session secure-secret store `this.secureStore` (see [Secure-Secret Store](#session-secure-secret-store-thissecurestore))                                      |
+| `requireEmail`             | `boolean`                                                                               | `true`                                             | Require an email at the login callback (see [Single-Operator](#single-operator-mode-requireemail-false))                                                                              |
+| `anonymousSubject`         | `string`                                                                                | `'local-operator'`                                 | Stable `sub` minted when `requireEmail: false` and no email is provided                                                                                                               |
+| `login`                    | `LoginConfig`                                                                           | _unset_                                            | Customize the built-in login page (title, fields, full HTML override, subject strategy) — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate) |
+| `authenticate`             | `(input, ctx) => Promise<AuthenticateResult>`                                           | _unset_                                            | Custom verification step run at the login callback before a token is minted — see [Custom Login & Verification](#custom-login-fields-and-verification-login-authenticate)             |
+| `consent`                  | `ConsentConfig`                                                                         | _unset_                                            | Consent / tool-authorization config — the block is optional; when present, inner `enabled` defaults to `false` (see [Consent](#consent-and-tool-authorization))                       |
+| `providers`                | `UpstreamProviderOptions[]`                                                             | _unset_                                            | Upstream OAuth providers to orchestrate (see [Multi-Provider Orchestration](#multi-provider-orchestration-providers))                                                                 |
+| `federatedAuth`            | `FederatedAuthConfig`                                                                   | _unset_                                            | Federated-login gating: `minProviders`, `requiredProviders`, `stateValidation`                                                                                                        |
+| `requireRegisteredClients` | `boolean`                                                                               | `true`                                             | Refuse a `client_id` that isn't registered (DCR / `dcr.clients`) or a CIMD URL. `false` only for local development: an unregistered client's `redirect_uri` can't be checked          |
+| `allowedScopes`            | `string[]`                                                                              | `['openid', 'profile', 'email', 'offline_access']` | Scopes the server may grant (exact, or `*` globs such as `'tickets:*'`). Other requested scopes are left out of the token; the token response's `scope` says what was granted         |
+| `allowDefaultPublic`       | `boolean`                                                                               | `false`                                            | Enable the anonymous grant (`grant_type=anonymous` at `/oauth/token`)                                                                                                                 |
+| `anonymousScopes`          | `string[]`                                                                              | `['anonymous']`                                    | Scopes of anonymous-grant tokens (their holder is anonymous: `anon:` subject)                                                                                                         |
+| `local.issuer`             | `string`                                                                                | auto-derived                                       | Override the issuer (see [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy))                                                                                                        |
+| `incrementalAuth`          | `IncrementalAuthConfig`                                                                 | _unset_                                            | Progressive authorization config — the block is optional; when present, inner `enabled` defaults to `true`                                                                            |
 
 ---
 
@@ -73,7 +75,8 @@ Local mode exposes standard OAuth 2.1 endpoints:
 
 | Endpoint                                  | Method   | Description                                                                                                         |
 | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| `/oauth/authorize`                        | GET      | Start authorization flow                                                                                            |
+| `/oauth/authorize`                        | GET      | Start authorization flow (serves the sign-in page)                                                                  |
+| `/oauth/callback`                         | POST     | Sign-in and consent form submissions (GET is also accepted, for custom pages)                                       |
 | `/oauth/token`                            | POST     | Exchange code for tokens                                                                                            |
 | `/oauth/register`                         | POST     | Dynamic Client Registration                                                                                         |
 | `/oauth/userinfo`                         | GET      | Get user profile (verifies the Bearer token; 401 if missing/invalid)                                                |
@@ -194,19 +197,31 @@ export class Server {}
 
 ### Provider fields (`UpstreamProviderOptions`)
 
-| Field                   | Type       | Required | Description                                                  |
-| ----------------------- | ---------- | -------- | ------------------------------------------------------------ |
-| `id`                    | `string`   | yes      | Stable provider id used in `this.orchestration.getToken(id)` |
-| `authorizationEndpoint` | `string`   | yes\*    | Authorization endpoint (alias: `authorizeUrl`)               |
-| `tokenEndpoint`         | `string`   | yes\*    | Token endpoint (alias: `tokenUrl`)                           |
-| `clientId`              | `string`   | yes      | OAuth client id from the upstream provider                   |
-| `clientSecret`          | `string`   | no       | OAuth client secret (confidential clients)                   |
-| `scopes`                | `string[]` | no       | Scopes to request (defaults to `[]`)                         |
-| `name`                  | `string`   | no       | Display name (defaults to `id`)                              |
-| `userInfoEndpoint`      | `string`   | no       | User-info endpoint to enrich the session identity            |
-| `jwksUri`               | `string`   | no       | JWKS URI for upstream `id_token` validation                  |
+| Field                   | Type       | Required | Description                                                    |
+| ----------------------- | ---------- | -------- | -------------------------------------------------------------- |
+| `id`                    | `string`   | yes      | Stable provider id used in `this.orchestration.getToken(id)`   |
+| `authorizationEndpoint` | `string`   | yes\*    | Authorization endpoint (alias: `authorizeUrl`)                 |
+| `tokenEndpoint`         | `string`   | yes\*    | Token endpoint (alias: `tokenUrl`)                             |
+| `clientId`              | `string`   | yes      | OAuth client id from the upstream provider                     |
+| `clientSecret`          | `string`   | no       | OAuth client secret (confidential clients)                     |
+| `scopes`                | `string[]` | no       | Scopes to request (defaults to `[]`)                           |
+| `name`                  | `string`   | no       | Display name (defaults to `id`)                                |
+| `userInfoEndpoint`      | `string`   | no       | User-info endpoint to enrich the session identity              |
+| `jwksUri`               | `string`   | no       | JWKS URI for upstream `id_token` validation                    |
+| `issuer`                | `string`   | no       | The provider's issuer (OIDC `iss`), checked as described below |
+| `additionalIssuers`     | `string[]` | no       | Other issuer values the provider legitimately uses             |
 
 \* At least one of the canonical name or its alias is required for each endpoint. The per-provider callback URL is computed automatically as `${issuer}/oauth/provider/${id}/callback` — register that exact URL with each provider.
+
+The provider's identity (`sub`, `email`, `name`) comes from its `id_token` only
+when that token verifies against `jwksUri`, names `issuer` (or one of
+`additionalIssuers`) as its issuer and your `clientId` as audience, and hasn't
+expired. A provider with no `issuer` configured never has its `id_token` used:
+many IdPs sign every tenant's tokens with one key set, so the signature alone
+doesn't tell FrontMCP which tenant issued it. FrontMCP then asks
+`userInfoEndpoint`; with neither a usable `id_token` nor a `userInfoEndpoint`
+the provider's sign-in fails. With `issuer` set, a callback whose RFC 9207 `iss`
+names another server is refused.
 
 ### Gating the JWT (`federatedAuth`)
 
@@ -340,9 +355,10 @@ For a `select`, supply `options: Array<{ value; label }>`.
 
 For full control over the markup, provide `login.render` instead — it receives a
 `LoginRenderContext` (`clientId`, `clientName`, `logoUri`, `scopes`,
-`pendingAuthId`, `callbackPath`, `fields`, and `error` on re-render) and must
+`pendingAuthId`, `callbackPath`, `fields`, and `error` and `values` on re-render) and must
 return a complete HTML document. The form must submit `pending_auth_id` and the
-field values back to `callbackPath`.
+field values back to `callbackPath`; use `method="POST"` so they stay out of URLs
+(the built-in page does). `values` never includes a `password` field's value.
 
 ### The `authenticate` verifier
 
@@ -381,8 +397,8 @@ auth: {
   `login.subject` strategy (`per-account` hashes `fromField`), else the
   `anonymousSubject` fallback. `result.claims` are embedded in the access token.
 - **On `{ ok: false }`** — the login page is re-rendered with `message` shown and
-  submitted values preserved; **no code is issued**. Use `retryField` to hint
-  which field to correct.
+  submitted values preserved, except `password` fields, which are left empty;
+  **no code is issued**. Use `retryField` to hint which field to correct.
 
 When `authenticate` is set, the built-in **email requirement no longer applies** —
 your verifier owns required-field semantics via `login.fields`.
@@ -817,7 +833,7 @@ auth: {
 Local mode supports a `consent` config that renders an **interactive tool-selection screen** during login and **enforces the selection at call time**. When `consent.enabled` is `true`:
 
 1. After the user authenticates, `/oauth/callback` renders a **consent screen** (HTTP 200 HTML) listing the available tools.
-2. The user's selection is GET-submitted back to `/oauth/callback` (carrying `pending_auth_id`, the resolved identity, and the checked `tools=`), and only then is the authorization code minted.
+2. The user's selection is POSTed back to `/oauth/callback` (carrying `pending_auth_id`, a CSRF token and the checked `tools=`, never the login fields: the verified sign-in is kept on the server meanwhile), and only then is the authorization code minted.
 3. The chosen tool ids are embedded in the issued token's `consent` claim and **enforced on every `tools/call`** — a call to a tool the user did **not** select is rejected with a `TOOL_NOT_CONSENTED` error (JSON-RPC `-32003`, Forbidden).
 
 ```typescript

@@ -140,7 +140,9 @@ Declare upstream providers to make multi-provider orchestration a turnkey local 
 class Server {}
 ```
 
-`UpstreamProviderOptions` fields: `id` (required; used in `getToken(id)`), `authorizationEndpoint`/`authorizeUrl` (required), `tokenEndpoint`/`tokenUrl` (required), `clientId` (required), `clientSecret?`, `scopes?`, `name?`, `userInfoEndpoint?`, `jwksUri?`. The per-provider callback URL is auto-computed as `${issuer}/oauth/provider/${id}/callback` — register that URL with each provider.
+`UpstreamProviderOptions` fields: `id` (required; used in `getToken(id)`), `authorizationEndpoint`/`authorizeUrl` (required), `tokenEndpoint`/`tokenUrl` (required), `clientId` (required), `clientSecret?`, `scopes?`, `name?`, `userInfoEndpoint?`, `jwksUri?`, `issuer?`, `additionalIssuers?`. The per-provider callback URL is auto-computed as `${issuer}/oauth/provider/${id}/callback` — register that URL with each provider.
+
+The provider's identity comes from its `id_token` only when it verifies against `jwksUri` with `iss` = the provider's `issuer` (or `additionalIssuers`), `aud` containing `clientId`, and a valid `exp`. A provider with no `issuer` never has its `id_token` used (one IdP key set can sign many tenants' tokens); FrontMCP asks `userInfoEndpoint` instead, and with neither the sign-in fails. With `issuer` set, a callback whose RFC 9207 `iss` names another server gets a 400. Set `issuer` for OIDC providers.
 
 Tools read downstream tokens through the `this.orchestration` context extension (available in `local`/`remote` mode):
 

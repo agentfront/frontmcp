@@ -31,6 +31,8 @@ const ACME_SECRET = 'acme-token-abcdef123456';
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     login: {

@@ -7,7 +7,7 @@
  *   3. undefined    → unchanged default email/name page.
  */
 import type { LoginConfig, LoginRenderContext } from '../../options/interfaces';
-import { renderLocalLoginPage, toLoginExtraFields } from '../local-login.helper';
+import { renderLocalLoginPage, toLoginExtraFields, withoutSecretFieldValues } from '../local-login.helper';
 
 const baseCtx: LoginRenderContext = {
   clientId: 'client-123',
@@ -88,5 +88,50 @@ describe('renderLocalLoginPage', () => {
     );
     expect(html).toContain('https://login/logo.png');
     expect(html).not.toContain('https://cdn/logo.png');
+  });
+
+  it('posts the built-in form so its fields never travel in a URL (#263)', () => {
+    const html = renderLocalLoginPage(undefined, baseCtx);
+    expect(html).toContain('<form method="POST" action="/app/oauth/callback">');
+    expect(html).not.toContain('method="GET"');
+  });
+
+  it('never writes a submitted password back into the re-rendered page (#263)', () => {
+    const login: LoginConfig = {
+      fields: { username: { type: 'text' }, password: { type: 'password' } },
+    };
+    const html = renderLocalLoginPage(
+      login,
+      { ...baseCtx, error: 'Bad credentials' },
+      {
+        username: 'alice',
+        password: 'hunter2-typed',
+      },
+    );
+    expect(html).toContain('value="alice"');
+    expect(html).not.toContain('hunter2-typed');
+  });
+
+  it('never hands a submitted password to a login.render override (#263)', () => {
+    const render = jest.fn((ctx: LoginRenderContext) => JSON.stringify(ctx.values));
+    const html = renderLocalLoginPage(
+      { render, fields: { username: { type: 'text' }, password: { type: 'password' } } },
+      baseCtx,
+      { username: 'alice', password: 'hunter2-typed' },
+    );
+    expect(html).toBe('{"username":"alice"}');
+  });
+});
+
+describe('withoutSecretFieldValues', () => {
+  it('keeps values of non-password fields and undeclared fields', () => {
+    expect(
+      withoutSecretFieldValues({ a: '1', pin: '2', extra: '3' }, { a: { type: 'text' }, pin: { type: 'password' } }),
+    ).toEqual({ a: '1', extra: '3' });
+  });
+
+  it('passes undefined through and keeps everything without field declarations', () => {
+    expect(withoutSecretFieldValues(undefined, undefined)).toBeUndefined();
+    expect(withoutSecretFieldValues({ a: '1' }, undefined)).toEqual({ a: '1' });
   });
 });
