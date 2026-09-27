@@ -50,4 +50,3 @@ export type { TraceContext } from './trace-context';
 // Metadata Utilities
 // =====================
 export { extractMetadata, extractClientIp } from './metadata.utils';
-
