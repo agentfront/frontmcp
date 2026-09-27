@@ -351,9 +351,11 @@ describe('Skills MCP Handlers', () => {
 
       await handler.handler(request, ctx as any);
 
+      // The whole matching catalog is read (then filtered and paged), so the request's own
+      // offset and limit are applied after filtering, not passed to the registry.
       expect(mockSkillRegistry.listSkills).toHaveBeenCalledWith({
-        offset: 10,
-        limit: 20,
+        offset: 0,
+        limit: 100,
         tags: ['tag1'],
         sortBy: 'priority',
         sortOrder: 'desc',
@@ -362,23 +364,39 @@ describe('Skills MCP Handlers', () => {
     });
 
     it('should handle pagination correctly', async () => {
-      mockSkillRegistry.listSkills.mockResolvedValueOnce({
-        skills: [{ id: 'skill-1', name: 'Skill', description: 'desc' }],
-        total: 100,
-        hasMore: true,
-      });
+      const catalog = Array.from({ length: 250 }, (_, i) => ({
+        id: `skill-${i}`,
+        name: `Skill ${i}`,
+        description: 'd',
+      }));
+      mockSkillRegistry.listSkills.mockImplementation(async ({ offset = 0, limit = 50 }) => ({
+        skills: catalog.slice(offset, offset + limit),
+        total: catalog.length,
+        hasMore: offset + limit < catalog.length,
+      }));
 
       const handler = skillsListRequestHandler(createHandlerOptions());
-      const request = {
-        method: 'skills/list' as const,
-        params: { offset: 0, limit: 10 },
-      };
       const ctx = createContext();
+      const first = await handler.handler(
+        { method: 'skills/list' as const, params: { offset: 0, limit: 10 } },
+        ctx as any,
+      );
+      const last = await handler.handler(
+        { method: 'skills/list' as const, params: { offset: 240, limit: 20 } },
+        ctx as any,
+      );
 
-      const result = await handler.handler(request, ctx as any);
-
-      expect(result.total).toBe(100);
-      expect(result.hasMore).toBe(true);
+      expect({ ids: first.skills.map((skill) => skill.id), total: first.total, hasMore: first.hasMore }).toEqual({
+        ids: catalog.slice(0, 10).map((skill) => skill.id),
+        total: 250,
+        hasMore: true,
+      });
+      expect({ count: last.skills.length, total: last.total, hasMore: last.hasMore }).toEqual({
+        count: 10,
+        total: 250,
+        hasMore: false,
+      });
+      mockSkillRegistry.listSkills.mockReset();
     });
 
     it('should handle undefined params', async () => {
@@ -397,7 +415,7 @@ describe('Skills MCP Handlers', () => {
 
       const result = await handler.handler(request, ctx as any);
 
-      expect(mockSkillRegistry.listSkills).toHaveBeenCalledWith({});
+      expect(mockSkillRegistry.listSkills).toHaveBeenCalledWith({ offset: 0, limit: 100 });
       expect(result.skills).toHaveLength(0);
     });
 
@@ -478,6 +496,35 @@ describe('Skills MCP Handlers', () => {
 
       expect(result.skills).toEqual([]);
       expect(result.total).toBe(0);
+    });
+
+    it('pages skills/list after leaving them out, so they take no page slots and are not counted', async () => {
+      const catalog = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, name: id, description: id }));
+      const hidden = new Set(['a', 'd']);
+      mockSkillRegistry.listSkills.mockImplementation(async ({ offset = 0, limit = 50 }) => ({
+        skills: catalog.slice(offset, offset + limit),
+        total: catalog.length,
+        hasMore: offset + limit < catalog.length,
+      }));
+      mockSkillRegistry.findByName.mockImplementation((id: string) => ({ name: id, metadata: { id, name: id } }));
+      mockRunFlowForOutput.mockImplementation(async (_flow: string, input: { skills: Array<{ name: string }> }) => ({
+        skills: input.skills.filter((skill) => !hidden.has(skill.name)),
+      }));
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const page = async (offset: number) => {
+        const result = await handler.handler(
+          { method: 'skills/list' as const, params: { offset, limit: 2 } },
+          createContext() as any,
+        );
+        return { ids: result.skills.map((skill) => skill.id), total: result.total, hasMore: result.hasMore };
+      };
+
+      expect([await page(0), await page(2)]).toEqual([
+        { ids: ['b', 'c'], total: 3, hasMore: true },
+        { ids: ['e'], total: 3, hasMore: false },
+      ]);
+      mockSkillRegistry.listSkills.mockReset();
     });
 
     it('reports them as not found from skills/load', async () => {

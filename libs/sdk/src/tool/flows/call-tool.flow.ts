@@ -10,14 +10,7 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import {
-  checkEntryAvailability,
-  findNonFiniteNumber,
-  getRuntimeContext,
-  isDebug,
-  isDevelopment,
-  randomUUID,
-} from '@frontmcp/utils';
+import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
@@ -37,7 +30,7 @@ import {
   type FlowRunOptions,
   type ScopeEntry,
 } from '../../common';
-import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
+import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import { runOnSurface } from '../../context/call-surface';
 import { runAsTool } from '../../context/running-tool';
@@ -47,7 +40,6 @@ import {
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
   ElicitationNotSupportedError,
-  EntryUnavailableError,
   InputRequiredSignal,
   InternalMcpError,
   InvalidInputError,
@@ -315,26 +307,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const allUnfiltered = this.scope.tools.listAllInstances();
       const unavailable = allUnfiltered.find((t) => t.fullName === name || t.name === name);
       if (unavailable && isOfferedOnSurface(unavailable.metadata.availableWhen, callSurface)) {
+        // Issue #417 — the structured error names the axes that blocked the call, judged for the
+        // call's own surface (none for in-process dispatch), as the prompt and resource flows do.
+        const error = entryUnavailableError('Tool', name, unavailable.metadata.availableWhen, callSurface);
         const ctx = getRuntimeContext();
-        // Issue #417 — read the per-call surface tag so the structured
-        // error explains which axis (process-global vs surface) blocked
-        // the call. Defaults to 'mcp' for the call-tool handler path.
-        const callCtxObj = this.input.ctx as { surface?: 'mcp' | 'cli' | 'http-trigger' | 'job' | 'agent' } | undefined;
-        const surface = callCtxObj?.surface ?? 'mcp';
-        const check = checkEntryAvailability(unavailable.metadata.availableWhen, ctx, { surface });
         this.logger.warn(
           `findTool: tool "${name}" exists but is unavailable — ` +
             `constraint=${JSON.stringify(unavailable.metadata.availableWhen)}, ` +
-            `missingAxes=${JSON.stringify(check.missingAxes)}, ` +
-            `current=[os=${ctx.os}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, provider=${ctx.provider}, target=${ctx.target}, surface=${surface}, env=${ctx.env}]`,
+            `missingAxes=${JSON.stringify(error.missingAxes)}, ` +
+            `current=[os=${ctx.os}, runtime=${ctx.runtime}, deployment=${ctx.deployment}, provider=${ctx.provider}, target=${ctx.target}, surface=${callSurface ?? 'none'}, env=${ctx.env}]`,
         );
-        throw new EntryUnavailableError(
-          'Tool',
-          name,
-          unavailable.metadata.availableWhen,
-          { ...ctx, surface },
-          check.missingAxes,
-        );
+        throw error;
       }
       this.logger.warn(`findTool: tool "${name}" not found`);
       throw new ToolNotFoundError(name);

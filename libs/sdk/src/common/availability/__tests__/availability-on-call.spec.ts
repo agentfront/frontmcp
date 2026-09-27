@@ -75,6 +75,28 @@ class UseHelperTool extends ToolContext {
   }
 }
 
+/** Offered only to agents on the edge runtime, so it is unavailable in this (Node) process. */
+@Tool({ name: 'edge_agent_tool', inputSchema: {}, availableWhen: { runtime: ['edge'], surface: ['agent'] } })
+class EdgeAgentTool extends ToolContext {
+  async execute() {
+    runs.push('edge_agent_tool');
+    return { ran: 'edge_agent_tool' };
+  }
+}
+
+/** Calls the edge-only tool in process and reports how the call was refused. */
+@Tool({ name: 'use_edge_helper', inputSchema: {} })
+class UseEdgeHelperTool extends ToolContext {
+  async execute() {
+    try {
+      const result = await this.callTool('edge_agent_tool', {});
+      return { refusal: String(result.content?.[0] && 'text' in result.content[0] ? result.content[0].text : '') };
+    } catch (error) {
+      return { refusal: error instanceof Error ? error.message : String(error) };
+    }
+  }
+}
+
 @Agent({
   name: 'agent_only_agent',
   description: 'Offered to other agents only',
@@ -167,7 +189,7 @@ class EdgePrompt extends PromptContext {
 @App({
   id: 'desk',
   name: 'Desk',
-  tools: [OpenTool, AgentOnlyTool, CliOnlyTool, UseHelperTool],
+  tools: [OpenTool, AgentOnlyTool, CliOnlyTool, UseHelperTool, EdgeAgentTool, UseEdgeHelperTool],
   agents: [AgentOnlyAgent],
   resources: [OpenNotes, AgentNotes, EdgeNotes, AgentNote, EdgeNote, OpenNote],
   prompts: [OpenPrompt, AgentPrompt, EdgePrompt],
@@ -305,6 +327,16 @@ describe('availableWhen on the MCP call paths', () => {
       };
       expect(answers).toEqual({ resource: unavailable, template: unavailable, prompt: unavailable });
       expect(await completions('edge://note/{noteId}')).toEqual([]);
+    });
+
+    it('reports an in-process call refused by a process-wide axis without a surface it never had', async () => {
+      const message = await request('tools/call', { name: 'use_edge_helper', arguments: {} });
+      const refusal = (message.result?.['structuredContent'] as { refusal?: string } | undefined)?.refusal ?? '';
+
+      expect(refusal).toContain('is not available in the current environment');
+      expect(refusal).toContain('(missing axes: runtime)');
+      expect(refusal).not.toMatch(/\(current: [^)]*"surface"/);
+      expect(runs).toEqual([]);
     });
 
     it('still serves entries without a constraint', async () => {

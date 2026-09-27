@@ -57,8 +57,13 @@ export function resolveElicitationOwner(
   requestContext: { readonly authInfo?: Partial<AuthInfo> } | undefined,
 ): string | undefined {
   const authInfo = requestContext?.authInfo;
-  const session = authInfo?.sessionId ?? authInfo?.extra?.['sessionId'];
-  if (typeof session === 'string' && session.length > 0 && session !== STATELESS_SESSION_ID) {
+  // The first usable id: a stateless transport's `__stateless__` must not hide a session that
+  // session verification recorded in `extra.sessionId`.
+  const session = [authInfo?.sessionId, authInfo?.extra?.['sessionId']].find(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' && candidate.length > 0 && candidate !== STATELESS_SESSION_ID,
+  );
+  if (session !== undefined) {
     return `session:${session}`;
   }
 

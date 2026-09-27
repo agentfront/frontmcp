@@ -281,9 +281,12 @@ class MyTool extends ToolContext {
 
 ### Memory Scopes
 
-- `session` -- Valid only for the current session. Default scope. Cleared when the session ends.
+- `session` -- Default scope. With a verified session, valid only for that session and cleared
+  when it ends. Without one (stateless transport, MCP 2026-07-28), it belongs to the authenticated
+  principal and lasts across that principal's requests until its TTL, not per request.
 - `user` -- Persists for the user across sessions. Tied to user identity.
-- `tool` -- Scoped to a specific tool + session combination. Isolated per tool.
+- `tool` -- Scoped to a specific tool plus the same identity as `session` (the verified session,
+  else the authenticated principal). Isolated per tool.
 - `global` -- Shared across all sessions and users. Use carefully.
 
 **`session`, `tool`, and `user` scopes require a per-client identity.** `session` and `tool`

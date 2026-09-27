@@ -164,6 +164,14 @@ describe('resolveElicitationOwner', () => {
     );
   });
 
+  it('is the verified session when the transport only carries the stateless placeholder', () => {
+    expect(
+      resolveElicitationOwner({
+        authInfo: { sessionId: STATELESS_SESSION_ID, clientId: 'alice', extra: { sessionId: 'sse-session' } },
+      }),
+    ).toBe('session:sse-session');
+  });
+
   it('is the principal when the only session id is the shared stateless one', () => {
     expect(resolveElicitationOwner({ authInfo: { sessionId: STATELESS_SESSION_ID, clientId: 'alice' } })).toBe(
       'principal:alice',

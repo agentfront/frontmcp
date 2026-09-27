@@ -87,6 +87,9 @@ class SingleAgent extends AgentContext {
   }
 }
 
+/** How many times SlowAgent.execute started. */
+let slowStarts = 0;
+
 /** Must be stopped after 50 ms. */
 @Agent({
   name: 'slow',
@@ -97,6 +100,7 @@ class SingleAgent extends AgentContext {
 })
 class SlowAgent extends AgentContext {
   override async execute(_input: Record<string, never>) {
+    slowStarts += 1;
     await new Promise((resolve) => setTimeout(resolve, 2_000).unref());
     return { ran: true };
   }
@@ -244,9 +248,11 @@ describe('gates an @Agent declares apply to its invoke_<agent> tool', () => {
   describe('timeout', () => {
     it('stops the agent after timeout.executeMs', async () => {
       const startedAt = Date.now();
+      slowStarts = 0;
       const outcome = await call('invoke_slow');
 
-      expect(outcome.isError).toBe(true);
+      expect(slowStarts).toBe(1);
+      expect(outcome).toEqual({ isError: true, code: 'EXECUTION_TIMEOUT' });
       expect(Date.now() - startedAt).toBeLessThan(1_500);
     });
   });

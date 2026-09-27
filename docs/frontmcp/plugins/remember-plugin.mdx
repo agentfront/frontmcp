@@ -139,12 +139,12 @@ export const PersonalizeGreeting = tool({
 
 Memory is organized into four scopes with different visibility and lifetime:
 
-| Scope     | Description                      | Use Case                              |
-| --------- | -------------------------------- | ------------------------------------- |
-| `session` | Current session only (default)   | Temporary state, conversation context |
-| `user`    | Persists across user sessions    | User preferences, settings            |
-| `tool`    | Tied to specific tool + session  | Tool-specific cache                   |
-| `global`  | Shared across all sessions/users | Application-wide configuration        |
+| Scope     | Description                                                                               | Use Case                              |
+| --------- | ----------------------------------------------------------------------------------------- | ------------------------------------- |
+| `session` | The verified session (default); without one, the signed-in principal, across its requests | Temporary state, conversation context |
+| `user`    | Persists across user sessions                                                             | User preferences, settings            |
+| `tool`    | A specific tool plus the `session` identity                                               | Tool-specific cache                   |
+| `global`  | Shared across all sessions/users                                                          | Application-wide configuration        |
 
 <Warning>
   **`session`, `tool`, and `user` scopes require a per-client identity.**

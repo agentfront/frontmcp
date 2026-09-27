@@ -308,10 +308,12 @@ export class RememberAccessor {
    */
   private get verifiedSessionId(): string | undefined {
     const authInfo = this.ctx.authInfo;
-    const verified = authInfo?.sessionId ?? authInfo?.extra?.['sessionId'];
-    return typeof verified === 'string' && verified.length > 0 && verified !== STATELESS_SESSION_ID
-      ? verified
-      : undefined;
+    // The first usable id: a stateless transport's `__stateless__` must not hide a session that
+    // session verification recorded in `extra.sessionId`.
+    return [authInfo?.sessionId, authInfo?.extra?.['sessionId']].find(
+      (candidate): candidate is string =>
+        typeof candidate === 'string' && candidate.length > 0 && candidate !== STATELESS_SESSION_ID,
+    );
   }
 
   /**
