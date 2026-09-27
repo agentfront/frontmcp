@@ -19,6 +19,15 @@ Some identity providers don't support Dynamic Client Registration (DCR). FrontMC
   is required today (DCR is not yet wired — see below).
 </Info>
 
+<Note>
+  The upstream user is taken from the IdP's `id_token` only when it verifies
+  against the provider's keys (`providerConfig.jwks` / `jwksUri`), names
+  `provider` (or `providerConfig.additionalIssuers`) as issuer and your
+  `clientId` as audience, and hasn't expired; otherwise FrontMCP asks the
+  userinfo endpoint. A declined sign-in at the IdP, or a callback whose `iss`
+  names another server, ends with an error page and no code.
+</Note>
+
 ## When to Use OAuth Proxy
 
 <CardGroup cols={2}>

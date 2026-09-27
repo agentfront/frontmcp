@@ -213,7 +213,9 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
       auth: {
         mode: 'local',
         authenticate,
-        login: { fields: { apiKey: { type: 'password', label: 'API Key' } } },
+        login: {
+          fields: { account: { type: 'text', label: 'Account' }, apiKey: { type: 'password', label: 'API Key' } },
+        },
       } as any,
     });
     const pendingAuthId = await seedPendingAuth(scope);
@@ -221,7 +223,7 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     const input = createMockHttpRequest({
       method: 'GET',
       path: '/oauth/callback',
-      query: { pending_auth_id: pendingAuthId, apiKey: 'wrong' },
+      query: { pending_auth_id: pendingAuthId, account: 'acme', apiKey: 'wrong' },
     });
     const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
     const { output, state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
@@ -230,8 +232,9 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     expect(output?.kind).toBe('html');
     expect(String(output?.body)).toContain('Invalid API key');
     expect(String(output?.body)).toContain('name="apiKey"');
-    // Submitted value is preserved on the re-render.
-    expect(String(output?.body)).toContain('value="wrong"');
+    // Submitted values are preserved on the re-render, except a password (#263).
+    expect(String(output?.body)).toContain('value="acme"');
+    expect(String(output?.body)).not.toContain('value="wrong"');
     // No subject derived — login did not complete.
     expect(state.userSub).toBeUndefined();
   });

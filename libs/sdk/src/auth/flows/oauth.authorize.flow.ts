@@ -19,8 +19,11 @@
 import {
   buildFederatedLoginPage,
   buildIncrementalAuthPage,
+  builtInAuthPageHeaders,
   createFederatedAuthSession,
   escapeHtml,
+  grantScopes,
+  isLoopbackRedirectUri,
   renderLocalLoginPage,
   startNextProvider,
   verifyIncrementalAuthTicket,
@@ -398,7 +401,25 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       if (!result.success) {
         const errors = this.formatZodErrors(result.error);
         this.logger.warn(`Anonymous authorization request validation failed: ${errors.join(', ')}`);
-        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', errors.join('; ')), 400));
+        this.respond(this.htmlPage(this.renderErrorPage('invalid_request', errors.join('; ')), 400));
+        return;
+      }
+
+      // SECURITY: there is no client registry to check this redirect_uri
+      // against, so only a loopback redirect (a native / CLI client on the
+      // user's own machine) is followed. Anything else would make this endpoint
+      // an open redirect.
+      if (!isLoopbackRedirectUri(result.data.redirect_uri)) {
+        this.logger.warn('Anonymous authorization request with a non-loopback redirect_uri refused');
+        this.respond(
+          this.htmlPage(
+            this.renderErrorPage(
+              'invalid_request',
+              'This server has no authorization configured; only a loopback redirect_uri is accepted',
+            ),
+            400,
+          ),
+        );
         return;
       }
 
@@ -439,28 +460,40 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Store validated request
-    this.state.set('validatedRequest', result.data);
-
-    // Validate resource parameter against server's canonical URI (RFC 8707)
-    if (result.data.resource) {
-      const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
-      if (!resourceUriMatches(result.data.resource, canonicalResource)) {
-        this.logger.warn(
-          `OAuth authorize: resource mismatch. Provided: ${result.data.resource}, canonical: ${canonicalResource}`,
-        );
-        this.respondWithError(
-          ['Invalid resource parameter: does not match server resource URI'],
-          rawRedirectUri,
-          rawState,
-        );
-        return;
-      }
+    // Grant only the scopes this server allows (RFC 6749 §3.3): a client must
+    // not be able to award itself a scope such as `admin` by asking for it.
+    // Every later step (login page, pending record, remote federation, the
+    // minted token) reads the narrowed set.
+    const authOptions = this.scope.auth?.options as
+      | { requireRegisteredClients?: boolean; allowedScopes?: string[] }
+      | undefined;
+    const requestedScopes = result.data.scope ? result.data.scope.split(' ').filter(Boolean) : [];
+    const grantedScopes = grantScopes(requestedScopes, authOptions?.allowedScopes);
+    if (grantedScopes.length < requestedScopes.length) {
+      this.logger.info(
+        `OAuth authorize: not granting scope(s) outside allowedScopes: ${requestedScopes
+          .filter((s) => !grantedScopes.includes(s))
+          .join(' ')}`,
+      );
     }
+    const validatedRequest: OAuthAuthorizeRequest = {
+      ...result.data,
+      scope: grantedScopes.length > 0 ? grantedScopes.join(' ') : undefined,
+    };
 
-    // CIMD validation: Check if client_id is a CIMD URL
-    const { client_id, redirect_uri } = result.data;
+    // Store validated request
+    this.state.set('validatedRequest', validatedRequest);
+
+    // SECURITY (open redirect): an OAuth error may be sent to `redirect_uri`
+    // only once the server has validated that redirect_uri for this client —
+    // a registered client's own redirect_uris, a CIMD document, or the
+    // operator's `dcr.allowedRedirectUris`. Until then every error is an error
+    // PAGE, whatever order the checks below fail in.
+    const { client_id, redirect_uri } = validatedRequest;
     const cimdService = this.get(CimdService);
+    const registry = (this.scope.auth as Partial<LocalPrimaryAuth> | undefined)?.dcrClientRegistry;
+    const redirectAllowlisted = !!registry?.hasRedirectAllowlist() && registry.isRedirectUriAllowed(redirect_uri);
+    let redirectVerified = redirectAllowlisted;
 
     // Local-AS DCR allowlist enforcement (#462). When `auth.dcr` declares a
     // redirect_uri and/or client_id allowlist, reject requests that fall
@@ -473,14 +506,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const dcrError = this.checkDcrAllowlist(client_id, redirect_uri, isCimdClientId);
     if (dcrError) {
       this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${dcrError}`);
-      // Do NOT redirect an unlisted redirect_uri (open-redirect guard): show an
-      // error page when the redirect_uri itself is the problem, otherwise it is
-      // safe to redirect the (allowed) redirect_uri with an OAuth error.
-      this.respondWithError([dcrError], dcrError.includes('redirect_uri') ? undefined : redirect_uri, rawState);
+      this.respondWithError([dcrError], redirectVerified ? redirect_uri : undefined, rawState);
       return;
     }
 
-    if (cimdService?.enabled && cimdService.isCimdClientId(client_id)) {
+    if (isCimdClientId) {
       try {
         this.logger.debug(`Processing CIMD client_id: ${client_id}`);
         const resolution = await cimdService.resolveClientMetadata(client_id);
@@ -488,6 +518,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         if (resolution.isCimdClient && resolution.metadata) {
           // Validate redirect_uri against CIMD document
           cimdService.validateRedirectUri(redirect_uri, resolution.metadata);
+          redirectVerified = true;
 
           // Store CIMD metadata for later use (e.g., consent page client_name)
           this.state.set('isCimdClient', true);
@@ -516,42 +547,52 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // an attacker could lure a victim to an authorize URL carrying the victim's
     // (registered) client_id + the attacker's OWN redirect_uri and receive the
     // victim's code. Reject with an error PAGE (never redirect an unvalidated
-    // redirect_uri — open-redirect guard). (Unknown/unregistered client_ids fall
-    // through to the existing CIMD / dcr-allowlist controls; a stricter
-    // require-registration mode is a separate opt-in.)
+    // redirect_uri — open-redirect guard).
     if (!isCimdClientId) {
-      const registry = (this.scope.auth as LocalPrimaryAuth).dcrClientRegistry;
       const registered = registry?.get?.(client_id);
-      if (registered && !registered.redirect_uris.includes(redirect_uri)) {
-        this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
-        this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
-        return;
-      }
-
-      // SECURITY: an UNREGISTERED, non-CIMD client id has no trusted
-      // `redirect_uris` to validate against, so accepting its attacker-chosen
-      // redirect_uri lets a real authorization code be delivered to an attacker
-      // (auth-code interception → account takeover in real-IdP modes). When
-      // `requireRegisteredClients` is enabled, reject an unknown client id
-      // unless a `dcr.allowedRedirectUris` allowlist already validated the
-      // redirect_uri (checkDcrAllowlist above). Show an error PAGE — never
-      // redirect an unvalidated redirect_uri (open-redirect guard).
-      if (!registered) {
-        const authOptions = this.scope.auth?.options as { requireRegisteredClients?: boolean } | undefined;
-        const requireRegistered = authOptions?.requireRegisteredClients === true;
-        const redirectAllowlisted = registry?.hasRedirectAllowlist?.() === true;
-        if (requireRegistered && !redirectAllowlisted) {
-          this.logger.warn(
-            `OAuth authorize: rejecting unregistered client_id "${client_id}" (requireRegisteredClients)`,
-          );
-          this.respondWithError(
-            ['Unknown client_id: register the client (DCR / pre-registered) or use a CIMD client-id URL'],
-            undefined,
-            rawState,
-          );
+      if (registered) {
+        if (!registered.redirect_uris.includes(redirect_uri)) {
+          this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
+          this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
           return;
         }
+        redirectVerified = true;
+      } else if (authOptions?.requireRegisteredClients !== false) {
+        // SECURITY: an UNREGISTERED, non-CIMD client id has no trusted
+        // `redirect_uris` to validate against, so accepting its attacker-chosen
+        // redirect_uri lets a real authorization code be delivered to an
+        // attacker. Refused unless the operator explicitly opted out with
+        // `requireRegisteredClients: false` (the default is true). A
+        // `dcr.allowedRedirectUris` match does NOT register a client. Show an
+        // error PAGE — never redirect an unvalidated redirect_uri.
+        this.logger.warn(`OAuth authorize: rejecting unregistered client_id "${client_id}" (requireRegisteredClients)`);
+        this.respondWithError(
+          ['Unknown client_id: register the client (DCR / pre-registered) or use a CIMD client-id URL'],
+          undefined,
+          rawState,
+        );
+        return;
       }
+    }
+
+    // Validate resource parameter against server's canonical URI (RFC 8707).
+    // Checked only after the client, so its error is redirected only to a
+    // redirect_uri validated above (#260).
+    const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
+    if (!validatedRequest.resource) {
+      // Every token FrontMCP issues names the resource it is for (#269), so a
+      // request without `resource` is a grant for this server's resource.
+      this.state.set('validatedRequest', { ...validatedRequest, resource: canonicalResource });
+    } else if (!resourceUriMatches(validatedRequest.resource, canonicalResource)) {
+      this.logger.warn(
+        `OAuth authorize: resource mismatch. Provided: ${validatedRequest.resource}, canonical: ${canonicalResource}`,
+      );
+      this.respondWithError(
+        ['Invalid resource parameter: does not match server resource URI'],
+        redirectVerified ? redirect_uri : undefined,
+        rawState,
+      );
+      return;
     }
   }
 
@@ -612,7 +653,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // Store pending authorization request
     const auth = this.scope.auth;
     if (!auth || !('authorizationStore' in auth)) {
-      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
       return;
     }
     const localAuth = auth as LocalPrimaryAuth;
@@ -797,7 +838,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         redirectUri: validatedRequest.redirect_uri,
       });
 
-      this.respond(httpRespond.html(incrementalAuthHtml));
+      this.respond(this.htmlPage(incrementalAuthHtml));
       return;
     }
 
@@ -887,7 +928,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         redirectUri: validatedRequest.redirect_uri,
       });
 
-      this.respond(httpRespond.html(federatedLoginHtml));
+      this.respond(this.htmlPage(federatedLoginHtml));
       return;
     }
 
@@ -914,7 +955,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       logoUri: cimdMetadata?.logo_uri, // Use CIMD logo_uri if available
     });
 
-    this.respond(httpRespond.html(loginHtml));
+    // A `login.render` page is the app's own markup: no CSP is imposed on it,
+    // the other security headers still apply.
+    const auth = this.scope.metadata.auth;
+    const customRender = !!(auth && auth.mode === 'local' && (auth as { login?: LoginConfig }).login?.render);
+    this.respond(httpRespond.html(loginHtml, 200, builtInAuthPageHeaders({ csp: !customRender })));
   }
 
   /**
@@ -990,7 +1035,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private async startRemoteFederation(pendingAuthId: string, validatedRequest: OAuthAuthorizeRequest): Promise<void> {
     const auth = this.scope.auth;
     if (!auth || !('federatedSessionStore' in auth)) {
-      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
       return;
     }
     const localAuth = auth as LocalPrimaryAuth;
@@ -1003,7 +1048,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // not linger until TTL expiry after we abort the flow.
       await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
       this.respond(
-        httpRespond.html(this.renderErrorPage('server_error', 'Upstream identity provider is not configured'), 500),
+        this.htmlPage(this.renderErrorPage('server_error', 'Upstream identity provider is not configured'), 500),
       );
       return;
     }
@@ -1044,7 +1089,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       await localAuth.federatedSessionStore.delete(session.id);
       await localAuth.authorizationStore.deletePendingAuthorization(pendingAuthId);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('server_error', `Failed to initiate authentication with provider: ${providerId}`),
           500,
         ),
@@ -1059,6 +1104,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     // Output validation is handled by schema
+  }
+
+  /** An HTML response with the built-in auth pages' security headers (#263). */
+  private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
+    return httpRespond.html(markup, status, builtInAuthPageHeaders());
   }
 
   /**
@@ -1123,7 +1173,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // Unsafe redirect_uri (javascript:, data:, etc.), fall through to error page
     }
 
-    this.respond(httpRespond.html(this.renderErrorPage('invalid_request', errorDescription), 400));
+    this.respond(this.htmlPage(this.renderErrorPage('invalid_request', errorDescription), 400));
   }
 
   /**

@@ -218,7 +218,7 @@ export function buildIncrementalAuthPage(params: {
         </div>
       </div>
 
-      <form method="GET" action="${escapeHtml(callbackPath)}" class="flex gap-3 pt-4 border-t border-gray-100">
+      <form method="POST" action="${escapeHtml(callbackPath)}" class="flex gap-3 pt-4 border-t border-gray-100">
         <input type="hidden" name="pending_auth_id" value="${escapeHtml(sessionHint)}">
         <button type="button" onclick="window.close()"
           class="flex-1 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 font-medium rounded-lg transition-colors">
@@ -288,7 +288,7 @@ export function buildFederatedLoginPage(params: {
       ${escapeHtml(clientName)} uses multiple authentication providers. Select which ones you want to authorize.
     </p>
 
-    <form method="GET" action="${escapeHtml(callbackPath)}" id="federated-form">
+    <form method="POST" action="${escapeHtml(callbackPath)}" id="federated-form">
       <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
       <input type="hidden" name="federated" value="true">
 
@@ -347,10 +347,11 @@ export interface ConsentHiddenField {
 /**
  * Build consent page for tool selection.
  *
- * The form GETs/POSTs back to `callbackPath` (`/oauth/callback`) carrying
- * `pending_auth_id`, the chosen `tools=` checkboxes, and any caller-supplied
- * {@link ConsentHiddenField hidden context} (identity / `federated=true` /
- * `providers=`). Honors the `auth.consent` config flags:
+ * The form POSTs back to `callbackPath` (`/oauth/callback`) carrying
+ * `pending_auth_id`, the `csrfToken`, the chosen `tools=` checkboxes, and any
+ * caller-supplied {@link ConsentHiddenField hidden context}. It never needs the
+ * sign-in fields: the verified sign-in stays on the server until consent is
+ * given. Honors the `auth.consent` config flags:
  *
  * - `groupByApp`      — group tools under per-app cards (default) or render a flat list.
  * - `showDescriptions`— show tool descriptions (default) or hide them.
@@ -536,7 +537,7 @@ export function buildToolConsentPage(params: {
     ${errorBanner}
     ${userInfo}
 
-    <form method="GET" action="${escapeHtml(callbackPath)}" id="consent-form">
+    <form method="POST" action="${escapeHtml(callbackPath)}" id="consent-form">
       <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
       <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
       <input type="hidden" name="consent_submitted" value="1">
@@ -719,7 +720,7 @@ export function buildLoginPage(params: {
 
       ${scopesHtml}
 
-      <form method="GET" action="${escapeHtml(callbackPath)}">
+      <form method="POST" action="${escapeHtml(callbackPath)}">
         <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
 ${fieldsHtml}
 

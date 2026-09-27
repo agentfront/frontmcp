@@ -35,6 +35,8 @@ const upstreamClientSecret = process.env['UPSTREAM_CLIENT_SECRET'];
   http: { port },
   auth: {
     mode: 'remote',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     provider: upstreamIssuer,
     clientId: upstreamClientId,
     clientSecret: upstreamClientSecret,

@@ -12,6 +12,8 @@ const port = parseInt(process.env['PORT'] ?? '3121', 10);
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     consent: {
       enabled: true,
       groupByApp: true,

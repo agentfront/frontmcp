@@ -80,17 +80,21 @@ const sharedAuthFields = {
    * Require the OAuth client to be KNOWN (registered via DCR / pre-registered,
    * or a CIMD client-id URL) before an authorization request is accepted.
    *
-   * @default false (backward compatible — unknown client ids are accepted).
+   * @default true
    *
-   * SECURITY: with the default, an unregistered client id has no trusted
-   * `redirect_uris` to validate against, so its (attacker-chosen) redirect_uri
-   * is accepted and a real authorization code can be delivered to an attacker
-   * (auth-code interception → account takeover in real-IdP modes). Set this to
-   * `true` (recommended for production) to enforce OAuth 2.1 exact redirect-uri
-   * matching for every client. Clients on a configured
-   * `dcr.allowedRedirectUris` allowlist still pass.
+   * SECURITY: an unregistered client id has no trusted `redirect_uris` to
+   * validate against, so accepting it lets anyone start a sign-in whose
+   * authorization code is delivered to a redirect_uri of their choosing
+   * (auth-code interception). `false` is for local development only; a
+   * `dcr.allowedRedirectUris` allowlist still constrains such clients.
    */
-  requireRegisteredClients: z.boolean().default(false),
+  requireRegisteredClients: z.boolean().default(true),
+  /**
+   * Scopes the server may grant (exact values or `*` globs). Requested scopes
+   * outside this list are dropped from the grant. Unset → the standard OpenID
+   * scopes only (see `DEFAULT_ALLOWED_SCOPES`).
+   */
+  allowedScopes: z.array(z.string().trim().min(1, 'allowedScopes entries must be non-empty')).optional(),
   cimd: cimdConfigSchema.optional(),
   // #469 — custom auth UI as a slot→file map + extras name→handler map (per-app
   // under splitByApp). Both optional; omitting them serves the built-in pages.
