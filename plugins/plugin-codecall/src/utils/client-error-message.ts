@@ -54,8 +54,14 @@ function redactPaths(text: string): string {
  */
 export function toClientErrorMessage(message: string | undefined): string {
   if (!message) return '';
-  const text = message.replace(EMBEDDED_STACK_FRAME_RE, '');
+  return redactAbsolutePaths(message.replace(EMBEDDED_STACK_FRAME_RE, ''));
+}
 
+/**
+ * `text` with every absolute path (POSIX, `~/`, Windows drive, UNC, `file:` URL, or quoted) replaced
+ * by `[path]`, and everything else, other URLs included, left as it is. Runs in linear time.
+ */
+export function redactAbsolutePaths(text: string): string {
   let result = '';
   let last = 0;
   for (const match of text.matchAll(URL_RE)) {

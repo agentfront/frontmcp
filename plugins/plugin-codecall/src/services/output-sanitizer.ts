@@ -1,5 +1,7 @@
 // file: libs/plugins/src/codecall/services/output-sanitizer.ts
 
+import { redactAbsolutePaths, toClientErrorMessage } from '../utils/client-error-message';
+
 /**
  * Output Sanitizer for CodeCall
  *
@@ -250,9 +252,9 @@ function sanitizeString(value: string, config: OutputSanitizerConfig, warnings: 
 
   // Remove file paths if configured
   if (config.removeFilePaths) {
-    const pathRegex = /(?:\/[\w.-]+)+|(?:[A-Za-z]:\\[\w\\.-]+)+/g;
-    if (pathRegex.test(result)) {
-      result = result.replace(pathRegex, '[path]');
+    const redacted = redactAbsolutePaths(result);
+    if (redacted !== result) {
+      result = redacted;
       warnings.push('File paths removed from string');
     }
   }
@@ -377,14 +379,11 @@ export function sanitizeLogMessage(message: string, maxLength = 500): string {
 
   let result = message;
 
-  // Remove file paths
-  result = result.replace(/(?:\/[\w.-]+)+|(?:[A-Za-z]:\\[\w\\.-]+)+/g, '[path]');
+  // Remove stack trace lines and file paths
+  result = toClientErrorMessage(result);
 
   // Remove line numbers
   result = result.replace(/:\d+:\d+/g, '');
-
-  // Remove stack trace lines
-  result = result.replace(/\n\s*at .*/g, '');
 
   // Truncate
   if (result.length > maxLength) {

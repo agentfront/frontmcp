@@ -3,9 +3,9 @@
  */
 
 import {
-  TOOL_CALL_ERROR_CODES,
   createToolCallError,
   SelfReferenceError,
+  TOOL_CALL_ERROR_CODES,
   ToolAccessDeniedError,
   ToolNotFoundError,
 } from '../errors/tool-call.errors';
@@ -71,6 +71,13 @@ describe('createToolCallError', () => {
       const rawMessage = 'Error at :15:8';
       const error = createToolCallError('VALIDATION', 'test:tool', rawMessage);
       expect(error.message).toBe('Error at');
+    });
+
+    it('should sanitize a long crafted validation message in linear time', () => {
+      const started = Date.now();
+      createToolCallError('VALIDATION', 'test:tool', '/' + '-'.repeat(100_000) + '!');
+      createToolCallError('VALIDATION', 'test:tool', 'C:\\' + '-'.repeat(100_000));
+      expect(Date.now() - started).toBeLessThan(1_000);
     });
 
     it('should remove stack trace lines', () => {
