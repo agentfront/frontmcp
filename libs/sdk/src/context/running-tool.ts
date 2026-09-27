@@ -1,5 +1,5 @@
 /**
- * The tool whose `execute()` is running, tracked per async call chain.
+ * The tool whose code is running (its construction or `execute()`), tracked per async call chain.
  *
  * One `FrontMcpContext` serves a whole request, and a request can run several tools: a tool that
  * calls another with `this.callTool()`, or several in parallel. Which tool a piece of code runs in
@@ -9,7 +9,7 @@
  */
 import { AsyncLocalStorage } from '@frontmcp/utils';
 
-/** A tool whose `execute()` is running. */
+/** A tool whose code is running. */
 export interface RunningTool {
   /** The tool's name (`metadata.id ?? metadata.name`). */
   readonly name: string;
@@ -20,16 +20,18 @@ export interface RunningTool {
 const runningTools = new AsyncLocalStorage<RunningTool>();
 
 /**
- * Run `fn` as the execution of `tool`.
- * @internal Used by the tool flows around `execute()`.
+ * Run `fn` as `tool`: the tool flows wrap both the construction of the tool's context and its
+ * `execute()`, so work the tool's class starts while it is built is attributed to it too.
+ * @internal Used by the tool flows.
  */
-export function runAsTool<T>(tool: RunningTool, fn: () => Promise<T>): Promise<T> {
+export function runAsTool<T>(tool: RunningTool, fn: () => T): T {
   return runningTools.run(tool, fn);
 }
 
 /**
- * The tool whose `execute()` the calling code runs in, or undefined outside one. A tool that calls
- * other tools sees itself again once they return; tools running in parallel each see themselves.
+ * The tool the calling code runs in (while it is built or while `execute()` runs), or undefined
+ * outside one. A tool that calls other tools sees itself again once they return; tools running in
+ * parallel each see themselves.
  */
 export function getRunningTool(): RunningTool | undefined {
   return runningTools.getStore();

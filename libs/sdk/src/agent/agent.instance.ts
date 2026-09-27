@@ -655,8 +655,9 @@ export class AgentInstance<
 
       // Direct execution - faster but bypasses plugins/hooks, never the tool's `authorities`
       await this.assertToolAuthorized(tool, ctx.authInfo, args);
-      const toolContext = tool.create(args, ctx);
-      return runAsTool({ name: tool.name, fullName: tool.fullName }, () => Promise.resolve(toolContext.execute(args)));
+      const runningTool = { name: tool.name, fullName: tool.fullName };
+      const toolContext = runAsTool(runningTool, () => tool.create(args, ctx));
+      return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
     };
   }
 

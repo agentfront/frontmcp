@@ -186,6 +186,31 @@ describe('SkillRegistry — dynamic registration', () => {
     expect(list.total).toBe(2);
   });
 
+  it('pages listSkills over one deduplicated list: every skill once, the same total on every page', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    const ids = ['a1', 'b2', 'c3', 'd4', 'e5'];
+    for (const id of ids) {
+      await registry.registerSkillContent(buildSkillContent({ id, name: id }));
+    }
+
+    const seen: string[] = [];
+    const totals = new Set<number>();
+    let hasMore = true;
+    for (let offset = 0; hasMore && offset < 20; offset += 2) {
+      const page = await registry.listSkills({ offset, limit: 2 });
+      seen.push(...page.skills.map((s) => s.id ?? s.name));
+      totals.add(page.total);
+      hasMore = page.hasMore;
+    }
+
+    expect(seen.sort()).toEqual(ids);
+    expect([...totals]).toEqual([5]);
+    expect(hasMore).toBe(false);
+  });
+
   it('loadSkill by display name returns the preserved SkillContent (with actions[]/bundleVersion)', async () => {
     // Reproducer for the bug where name-lookup fell through to
     // SkillInstance.load(), which rebuilds content from metadata and drops

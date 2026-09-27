@@ -803,12 +803,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const contextProviders = new FlowContextProviders(tool.providers, toolViews.context);
       const executionAbort = linkedAbortController((ctx as { signal?: AbortSignal }).signal);
       this.state.set('executionAbort', executionAbort);
-      const context = tool.create(input.arguments, {
-        ...ctx,
-        progressToken,
-        contextProviders,
-        signal: executionAbort.signal,
-      });
+      // Built as the tool, so work its class starts during construction is attributed to it.
+      const context = runAsTool({ name: tool.name, fullName: tool.fullName }, () =>
+        tool.create(input.arguments, {
+          ...ctx,
+          progressToken,
+          contextProviders,
+          signal: executionAbort.signal,
+        }),
+      );
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(tool.record.provide), context));
       context.mark('createToolCallContext');
 

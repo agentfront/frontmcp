@@ -399,6 +399,59 @@ describe('Skills MCP Handlers', () => {
       mockSkillRegistry.listSkills.mockReset();
     });
 
+    it('reads a large catalog in two registry calls, not one per 100 skills', async () => {
+      const catalog = Array.from({ length: 2500 }, (_, i) => ({
+        id: `skill-${i}`,
+        name: `Skill ${i}`,
+        description: 'd',
+      }));
+      mockSkillRegistry.listSkills.mockImplementation(async ({ offset = 0, limit = 50 }) => ({
+        skills: catalog.slice(offset, offset + limit),
+        total: catalog.length,
+        hasMore: offset + limit < catalog.length,
+      }));
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const result = await handler.handler(
+        { method: 'skills/list' as const, params: { offset: 2490, limit: 20 } },
+        createContext() as any,
+      );
+
+      expect({ count: result.skills.length, total: result.total, hasMore: result.hasMore }).toEqual({
+        count: 10,
+        total: 2500,
+        hasMore: false,
+      });
+      expect(mockSkillRegistry.listSkills).toHaveBeenCalledTimes(2);
+      mockSkillRegistry.listSkills.mockReset();
+    });
+
+    it('still reads the whole catalog from a registry that caps its page size', async () => {
+      const catalog = Array.from({ length: 250 }, (_, i) => ({
+        id: `skill-${i}`,
+        name: `Skill ${i}`,
+        description: 'd',
+      }));
+      mockSkillRegistry.listSkills.mockImplementation(async ({ offset = 0, limit = 50 }) => {
+        const size = Math.min(limit, 100);
+        return {
+          skills: catalog.slice(offset, offset + size),
+          total: catalog.length,
+          hasMore: offset + size < catalog.length,
+        };
+      });
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const result = await handler.handler(
+        { method: 'skills/list' as const, params: { offset: 240, limit: 20 } },
+        createContext() as any,
+      );
+
+      expect({ count: result.skills.length, total: result.total }).toEqual({ count: 10, total: 250 });
+      expect(mockSkillRegistry.listSkills).toHaveBeenCalledTimes(3);
+      mockSkillRegistry.listSkills.mockReset();
+    });
+
     it('should handle undefined params', async () => {
       mockSkillRegistry.listSkills.mockResolvedValueOnce({
         skills: [],
