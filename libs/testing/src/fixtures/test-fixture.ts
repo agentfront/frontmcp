@@ -29,6 +29,8 @@ import {
   it as _it,
 } from '@jest/globals';
 
+import { trimTrailing } from '@frontmcp/utils';
+
 import { TestTokenFactory } from '../auth/token-factory';
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
@@ -157,7 +159,7 @@ async function initializeSharedResources(): Promise<void> {
   // transparent mode.
   if (!tokenFactory) {
     const sharedSecret = currentConfig.env?.['JWT_SECRET'];
-    const serverUrl = serverInstance ? resolveClientBaseUrl(serverInstance).replace(/\/+$/, '') : undefined;
+    const serverUrl = serverInstance ? trimTrailing(resolveClientBaseUrl(serverInstance), '/') : undefined;
     tokenFactory = new TestTokenFactory(
       sharedSecret
         ? {
