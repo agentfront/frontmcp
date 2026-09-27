@@ -27,8 +27,8 @@ export type {
   RequestMetadata,
   TransportAccessor,
 } from './frontmcp-context';
-export { getRunningTool, runAsTool, type RunningTool } from './running-tool';
-export { getCallSurface, runOnSurface } from './call-surface';
+export { getRunningTool, type RunningTool } from './running-tool';
+export { getCallSurface } from './call-surface';
 
 // =====================
 // FrontMcpContextStorage - AsyncLocalStorage wrapper
