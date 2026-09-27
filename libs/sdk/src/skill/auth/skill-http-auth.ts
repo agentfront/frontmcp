@@ -11,9 +11,16 @@
  * @module skill/auth/skill-http-auth
  */
 
-import type { FrontMcpLogger } from '../../common';
-import type { SkillsConfigOptions } from '../../common/types/options/skills-http';
 import { timingSafeEqual } from '@frontmcp/utils';
+
+import {
+  authInfoFromAuthorization,
+  isPublicMode,
+  type FrontMcpLogger,
+  type ScopeEntry,
+  type ServerRequest,
+} from '../../common';
+import type { SkillsConfigOptions } from '../../common/types/options/skills-http';
 
 /**
  * Request context for auth validation.
@@ -90,8 +97,12 @@ export class SkillHttpAuthValidator {
         return { authorized: true };
 
       case 'inherit':
-        // inherit means use server's default auth - flows handle this
-        return { authorized: true };
+        // The server's own auth needs the whole request, not just headers: authorizeSkillHttpRequest()
+        // applies it. Refuse here rather than let a caller of this validator serve the endpoint open.
+        this.logger?.error(
+          '"inherit" skills HTTP auth is applied by authorizeSkillHttpRequest(), not by this validator',
+        );
+        return { authorized: false, error: 'Server misconfiguration', statusCode: 500 };
 
       case 'api-key':
         return this.validateApiKey(ctx);
@@ -100,8 +111,8 @@ export class SkillHttpAuthValidator {
         return this.validateBearer(ctx);
 
       default:
-        // Unknown mode - default to allowed (inherit behavior)
-        return { authorized: true };
+        this.logger?.error(`unknown skills HTTP auth mode "${String(mode)}"`);
+        return { authorized: false, error: 'Server misconfiguration', statusCode: 500 };
     }
   }
 
@@ -251,10 +262,62 @@ export class SkillHttpAuthValidator {
   }
 }
 
+/** The outcome of {@link authorizeSkillHttpRequest}. */
+export type SkillHttpAccess =
+  | {
+      allowed: true;
+      /** What the skill `authorities` are evaluated against; empty (anonymous) when nothing identifies the caller. */
+      authInfo: Record<string, unknown>;
+    }
+  | { allowed: false; status: number; error: string; headers?: Record<string, string> };
+
+/**
+ * Decide whether a request may use the skills HTTP endpoints, by `skillsConfig.auth`:
+ * - `'inherit'` (the default): the server's own auth, the same `session:verify` flow the MCP
+ *   endpoint runs. A public server lets everyone in; any other mode needs the credential it
+ *   asks for, and the verified caller's claims are what skill `authorities` are evaluated against.
+ * - `'public'`: everyone, anonymously.
+ * - `'api-key'` / `'bearer'`: the endpoint's own credential; skill `authorities` see an anonymous caller.
+ */
+export async function authorizeSkillHttpRequest(
+  scope: ScopeEntry,
+  skillsConfig: SkillsConfigOptions | undefined,
+  request: ServerRequest,
+  logger?: FrontMcpLogger,
+): Promise<SkillHttpAccess> {
+  const mode = skillsConfig?.auth ?? 'inherit';
+
+  if (mode === 'inherit') {
+    const authOptions = scope.auth?.options;
+    if (!authOptions || isPublicMode(authOptions)) return { allowed: true, authInfo: {} };
+
+    const verified = await scope.runFlow('session:verify', { request: request as unknown as Record<string, unknown> });
+    if (verified?.kind === 'authorized') {
+      return { allowed: true, authInfo: { ...authInfoFromAuthorization(verified.authorization) } };
+    }
+    const challenge = verified?.prmMetadataHeader;
+    const headers = challenge ? { 'WWW-Authenticate': challenge } : undefined;
+    return verified?.kind === 'forbidden'
+      ? { allowed: false, status: 403, error: 'Insufficient scope', headers }
+      : { allowed: false, status: 401, error: 'Authentication required', headers };
+  }
+
+  const validator = createSkillHttpAuthValidator(skillsConfig, logger);
+  if (!validator) return { allowed: true, authInfo: {} }; // auth: 'public'
+  const result = await validator.validate({
+    headers: request.headers as Record<string, string | string[] | undefined>,
+  });
+  return result.authorized
+    ? { allowed: true, authInfo: {} }
+    : { allowed: false, status: result.statusCode ?? 401, error: result.error ?? 'Unauthorized' };
+}
+
 /**
  * Create a skill HTTP auth validator from config.
  *
- * Returns null if no validation is needed (public or inherit mode).
+ * Returns null only for `auth: 'public'`. `'inherit'` (the default, also when `auth` is unset)
+ * applies the server's own auth, which needs the whole request: use {@link authorizeSkillHttpRequest};
+ * the validator returned for it refuses every request.
  *
  * @param skillsConfig - Skills configuration
  * @param logger - Optional logger
@@ -264,9 +327,12 @@ export function createSkillHttpAuthValidator(
   skillsConfig: SkillsConfigOptions | undefined,
   logger?: FrontMcpLogger,
 ): SkillHttpAuthValidator | null {
-  if (!skillsConfig?.auth || skillsConfig.auth === 'public' || skillsConfig.auth === 'inherit') {
+  if (skillsConfig?.auth === 'public') {
     return null; // No validation needed
   }
 
-  return new SkillHttpAuthValidator({ skillsConfig, logger });
+  return new SkillHttpAuthValidator({
+    skillsConfig: { ...skillsConfig, auth: skillsConfig?.auth ?? 'inherit' },
+    logger,
+  });
 }

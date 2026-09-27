@@ -271,6 +271,19 @@ export class AgentScope {
     return this.parentScope.metadata;
   }
 
+  // The agent's tools answer to the server's `authorities` rules like every other tool.
+  get authoritiesEngine() {
+    return this.parentScope.authoritiesEngine;
+  }
+
+  get authoritiesContextBuilder() {
+    return this.parentScope.authoritiesContextBuilder;
+  }
+
+  get authoritiesScopeMapping() {
+    return this.parentScope.authoritiesScopeMapping;
+  }
+
   // ============================================================================
   // Flow Execution
   // ============================================================================
@@ -382,6 +395,18 @@ class AgentScopeEntry {
 
   get metadata() {
     return this.agentScope.scopeMetadata;
+  }
+
+  get authoritiesEngine() {
+    return this.agentScope.authoritiesEngine;
+  }
+
+  get authoritiesContextBuilder() {
+    return this.agentScope.authoritiesContextBuilder;
+  }
+
+  get authoritiesScopeMapping() {
+    return this.agentScope.authoritiesScopeMapping;
   }
 
   get record(): undefined {

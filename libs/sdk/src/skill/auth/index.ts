@@ -8,5 +8,10 @@
  * @module skill/auth
  */
 
-export { SkillHttpAuthValidator, createSkillHttpAuthValidator } from './skill-http-auth';
-export type { SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorOptions } from './skill-http-auth';
+export { SkillHttpAuthValidator, authorizeSkillHttpRequest, createSkillHttpAuthValidator } from './skill-http-auth';
+export type {
+  SkillHttpAccess,
+  SkillHttpAuthContext,
+  SkillHttpAuthResult,
+  SkillHttpAuthValidatorOptions,
+} from './skill-http-auth';

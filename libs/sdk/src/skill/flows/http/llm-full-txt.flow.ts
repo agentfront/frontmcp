@@ -23,8 +23,9 @@ import {
   type ServerRequest,
 } from '../../../common';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
-import { createSkillHttpAuthValidator } from '../../auth';
+import { authorizeSkillHttpRequest } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { filterServableSkills } from '../../skill-filter.helper';
 import { formatSkillsForLlmFull } from '../../skill-http.utils';
 
@@ -32,6 +33,8 @@ const inputSchema = httpInputSchema;
 
 const stateSchema = z.object({
   prefix: z.string(),
+  /** The caller skill `authorities` are evaluated against. */
+  authInfo: z.record(z.string(), z.unknown()),
 });
 
 const outputSchema = HttpTextSchema;
@@ -124,26 +127,19 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Validate auth if configured
-    const authValidator = createSkillHttpAuthValidator(skillsConfig, this.logger);
-    if (authValidator) {
-      const { request } = this.rawInput;
-      const authResult = await authValidator.validate({
-        headers: request.headers as Record<string, string | string[] | undefined>,
+    const access = await authorizeSkillHttpRequest(this.scope, skillsConfig, this.rawInput.request, this.logger);
+    if (!access.allowed) {
+      this.respond({
+        kind: 'text',
+        status: access.status,
+        body: access.error,
+        contentType: 'text/plain; charset=utf-8',
+        ...(access.headers ? { headers: access.headers } : {}),
       });
-
-      if (!authResult.authorized) {
-        this.respond({
-          kind: 'text',
-          status: authResult.statusCode ?? 401,
-          body: authResult.error ?? 'Unauthorized',
-          contentType: 'text/plain; charset=utf-8',
-        });
-        return;
-      }
+      return;
     }
 
-    this.state.set({ prefix: options.prefix ?? '' });
+    this.state.set({ prefix: options.prefix ?? '', authInfo: access.authInfo });
   }
 
   @Stage('generateContent')
@@ -161,10 +157,13 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // The cached document lists every skill, so it is only served to a caller the
-    // `skills:filter` flow lets see all of them.
+    // Leave out the skills the caller's authorities don't admit. The cached document lists every
+    // skill, so it is only served to a caller the authorities and the `skills:filter` flow let see all of them.
     const allSkills = skillRegistry.getSkills(false);
-    const skills = await filterServableSkills(this.scope, allSkills);
+    const skills = await filterServableSkills(
+      this.scope,
+      await filterSkillsByAuthorities(this.scope, allSkills, this.state.required.authInfo),
+    );
     const cache = skills.length === allSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {
       const cached = await cache.getLlmFullTxt();

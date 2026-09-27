@@ -18,6 +18,8 @@ When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP support
 | `api-key`           | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality   | Machine-to-machine, server-to-server |
 | `bearer`            | `Authorization: Bearer <jwt>`                | JWT signature via JWKS | User-scoped access, IdP integration  |
 
+With `inherit`, a request to `/skills`, `/llm.txt` or `/llm_full.txt` must pass the same check as the MCP endpoint (a static key, a transparent token, a FrontMCP-issued token...); only a `public`-mode server lets everyone in. Skills with `authorities` are listed only for a caller whose verified claims satisfy them. In the other modes no claims are available, so those skills are never served over HTTP.
+
 ## Configuration
 
 ### Public Mode
@@ -102,8 +104,8 @@ Use `createSkillHttpAuthValidator()` to create a validator from skill config:
 import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
 
 const validator = createSkillHttpAuthValidator(skillsConfig, logger);
-// Returns null when no validation is needed: `auth: 'public'`, `auth: 'inherit'`,
-// or when `skillsConfig.auth` is unset.
+// Returns null only for `auth: 'public'`. `inherit` (the default) is the server's own auth,
+// which the skills endpoints apply themselves; a validator for it refuses every request.
 
 if (validator) {
   const result = await validator.validate({ headers: request.headers });
