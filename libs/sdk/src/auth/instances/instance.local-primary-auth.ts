@@ -219,7 +219,9 @@ export interface UpstreamProviderConfig {
    *   MUST NOT be reused with a different authorization server (SEP-2352).
    *
    * Optional because a provider may be configured by raw endpoints alone; when
-   * absent the `iss` check is skipped (the parameter is only SHOULD-sent).
+   * absent the `iss` check is skipped (the parameter is only SHOULD-sent), and
+   * the provider's `id_token` is not used for identity (its `iss` can't be
+   * checked), unless `verifyIssuer` is explicitly `false`.
    */
   issuer?: string;
   /** Other issuer values this provider legitimately uses (`providerConfig.additionalIssuers`). */
@@ -1502,6 +1504,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         clientSecret: p.clientSecret,
         scopes: p.scopes ?? [],
         callbackUrl: `${this.issuer}/oauth/provider/${p.id}/callback`,
+        issuer: p.issuer,
+        additionalIssuers: p.additionalIssuers,
       });
     }
   }
@@ -1718,8 +1722,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // The id_token names the user only when it verifies (#271): signed by a key
     // the provider publishes (`providerConfig.jwks` / `jwksUri`), issued by the
     // provider, for THIS client, and not expired. An id_token that doesn't
-    // verify, or can't be (no keys configured), is ignored and the identity
-    // comes from the userinfo endpoint, which answers for the access token.
+    // verify, or can't be (no keys or no issuer configured), is ignored and the
+    // identity comes from the userinfo endpoint, which answers for the access
+    // token.
     if (idToken && config) {
       const claims = await this.verifyProviderIdToken(config, idToken);
       const sub = typeof claims?.['sub'] === 'string' && claims['sub'].trim() ? claims['sub'] : undefined;
@@ -1783,19 +1788,25 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * Checks the signature against the provider's published keys (inline
    * `jwks`, else `jwksUri`, else the provider's discovery document), the
    * issuer (the provider, plus `additionalIssuers`, unless `verifyIssuer` is
-   * false or no issuer is known), `exp`, and that `aud` names this client.
+   * false), `exp`, and that `aud` names this client. With no issuer configured
+   * (a local-mode provider without `issuer`) the token is not used: a key set
+   * an IdP shares between tenants would vouch for every tenant's tokens.
    */
   private async verifyProviderIdToken(
     config: UpstreamProviderConfig,
     idToken: string,
   ): Promise<Record<string, unknown> | undefined> {
     if (!config.jwks?.keys?.length && !config.jwksUri) return undefined;
+    if (!config.issuer && config.verifyIssuer !== false) {
+      this.logger.warn(`ID token for ${config.id} not used: the provider has no configured issuer to check it against`);
+      return undefined;
+    }
     const result = await this.jwks.verifyTransparentToken(idToken, [
       {
         id: `upstream:${config.id}`,
         issuerUrl: config.issuer ?? '',
         additionalIssuers: config.additionalIssuers,
-        verifyIssuer: config.issuer ? config.verifyIssuer : false,
+        verifyIssuer: config.verifyIssuer,
         jwks: config.jwks,
         jwksUri: config.jwksUri,
       },

@@ -288,11 +288,13 @@ export class JwksService {
       // Check expiration. `exp` is REQUIRED, as on the primary `jose` path: a
       // token without it would never expire (#272). A truthiness check would
       // also skip `exp: 0` (epoch-expired) and accept a non-numeric `exp`.
+      // `exp` is exclusive (RFC 7519 §4.1.4): the token is expired AT that
+      // second, as jose treats it.
       const nowSec = Math.floor(Date.now() / 1000);
       if (payload.exp === undefined) {
         return { ok: false, error: 'missing_exp' };
       }
-      if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp < nowSec) {
+      if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= nowSec) {
         return { ok: false, error: 'token_expired' };
       }
 

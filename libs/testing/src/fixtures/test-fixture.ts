@@ -29,8 +29,6 @@ import {
   it as _it,
 } from '@jest/globals';
 
-import { trimTrailing } from '@frontmcp/utils';
-
 import { TestTokenFactory } from '../auth/token-factory';
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
@@ -44,6 +42,7 @@ import type {
   TestUser,
   TestWithFixtures,
 } from './fixture-types';
+import { gatewayTokenBinding } from './gateway-token-binding';
 
 // Re-export with compatible types (Jest globals may differ in type signatures
 // between @jest/globals and the global declarations used by our TestWithFixtures)
@@ -153,21 +152,16 @@ async function initializeSharedResources(): Promise<void> {
   // auth.mode public/local/remote verify tokens against their own HS256
   // secret), sign fixture tokens with that SAME secret so `auth.createToken`
   // mints genuinely-valid tokens, and mint them the way that server does: its
-  // own address as issuer (`iss`) and its MCP endpoint as audience (`aud`),
+  // MCP URL (address + entry path) as issuer (`iss`) and as audience (`aud`),
   // since a gateway token is only accepted by the server it was issued by and
   // for. Without a shared secret the factory stays RS256 + JWKS for
   // transparent mode.
   if (!tokenFactory) {
     const sharedSecret = currentConfig.env?.['JWT_SECRET'];
-    const serverUrl = serverInstance ? trimTrailing(resolveClientBaseUrl(serverInstance), '/') : undefined;
-    tokenFactory = new TestTokenFactory(
-      sharedSecret
-        ? {
-            hmacSecret: sharedSecret,
-            ...(serverUrl ? { issuer: serverUrl, audience: `${serverUrl}${currentConfig.entryPath ?? ''}` } : {}),
-          }
-        : {},
-    );
+    const binding = serverInstance
+      ? gatewayTokenBinding(resolveClientBaseUrl(serverInstance), currentConfig.entryPath)
+      : undefined;
+    tokenFactory = new TestTokenFactory(sharedSecret ? { hmacSecret: sharedSecret, ...binding } : {});
   }
 }
 

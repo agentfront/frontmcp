@@ -186,31 +186,47 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
       callbackUrl.searchParams.set('providers', 'github');
 
       let current = callbackUrl.toString();
+      let consentForm: URLSearchParams | undefined;
       let clientCode: string | undefined;
 
       // Follow the redirect chain: callback → github mock → /oauth/provider/github/callback
       // → (consent screen) → client redirect_uri (carrying the FrontMCP authorization code).
       // Consent mode is enabled on this server, so after the last provider is
       // linked the provider-callback renders the tool-consent screen (200 HTML)
-      // which GETs back to /oauth/provider/_consent/callback with the selection.
+      // which POSTs back to /oauth/provider/_consent/callback with the selection.
       for (let hop = 0; hop < 10; hop++) {
-        const res = await fetch(current, { redirect: 'manual' });
+        const res = await fetch(
+          current,
+          consentForm
+            ? {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: consentForm.toString(),
+                redirect: 'manual',
+              }
+            : { redirect: 'manual' },
+        );
+        consentForm = undefined;
         const location = res.headers.get('location');
         if (!location) {
           // No redirect: this should be the consent screen. Submit a selection
-          // (consent_session is round-tripped as a hidden field).
+          // (consent_session and the CSRF token are round-tripped as hidden fields).
           const html = await res.text();
           expect(res.status).toBe(200);
           expect(html).toContain('Select Tools to Enable');
           const sessionMatch = html.match(/name="consent_session"\s+value="([^"]+)"/);
+          const csrfMatch = html.match(/name="csrf"\s+value="([^"]+)"/);
           expect(sessionMatch).toBeTruthy();
+          expect(csrfMatch).toBeTruthy();
 
-          const consentUrl = new URL(`${server.info.baseUrl}/oauth/provider/_consent/callback`);
-          consentUrl.searchParams.set('consent_session', sessionMatch![1]);
-          consentUrl.searchParams.set('consent_submitted', '1');
-          // Select the github tool so the downstream-token tool call is consented.
-          consentUrl.searchParams.set('tools', 'github-repos');
-          current = consentUrl.toString();
+          current = `${server.info.baseUrl}/oauth/provider/_consent/callback`;
+          consentForm = new URLSearchParams({
+            consent_session: sessionMatch![1],
+            csrf: csrfMatch![1],
+            consent_submitted: '1',
+            // Select the github tool so the downstream-token tool call is consented.
+            tools: 'github-repos',
+          });
           continue;
         }
         const next = new URL(location, current);

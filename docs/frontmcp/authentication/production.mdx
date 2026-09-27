@@ -112,7 +112,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 ### Recommended
 
 <Check>**Machine ID** - Set `MACHINE_ID` env var for multi-instance session portability</Check>
-<Check>**Require registered clients** - Keep `auth.requireRegisteredClients` at its default (`true`, local/remote) so every OAuth client must be registered (DCR / pre-registered) or use a CIMD client-id URL. This enforces exact `redirect_uri` matching and prevents auth-code interception via an unregistered client's attacker-chosen redirect_uri.</Check>
+<Check>**Require registered clients** - Keep `auth.requireRegisteredClients` at its default (`true`, local/remote) so every OAuth client must be registered (DCR / pre-registered) or use a CIMD client-id URL. This enforces exact `redirect_uri` matching and prevents auth-code interception via an unregistered client's attacker-chosen redirect_uri. In production, remote mode admits only CIMD clients (it has no pre-registered clients and DCR is off); see [MCP client registration](/frontmcp/authentication/remote#mcp-client-registration).</Check>
 
 <Check>**Grant only the scopes you mean to** - List your scopes in `auth.allowedScopes` (local/remote); a client that asks for anything else doesn't get it.</Check>
 <Check>**Confidential clients** - Clients registered with `client_secret_basic`/`client_secret_post` are authenticated with a constant-time secret check on both the code-exchange and refresh grants.</Check>

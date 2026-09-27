@@ -33,7 +33,15 @@ import {
   type ProviderUserInfo,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
+import {
+  base64urlEncode,
+  generateCodeVerifier,
+  randomBytes,
+  randomUUID,
+  sha256,
+  sha256Base64url,
+  timingSafeEqual,
+} from '@frontmcp/utils';
 
 import {
   enforceIpFilter,
@@ -72,9 +80,11 @@ const stateSchema = z.object({
   // Provider tokens
   providerTokens: z.unknown().optional(), // ProviderTokens
   providerUserInfo: z.unknown().optional(), // ProviderUserInfo
-  // Consent round-trip (the consent screen GETs back here after all providers
-  // are linked): the federated session id + the submitted tool selection.
+  // Consent round-trip (the consent screen POSTs back here after all providers
+  // are linked): the federated session id, the screen's CSRF token and the
+  // submitted tool selection.
   consentSessionId: z.string().optional(),
+  consentCsrf: z.string().optional(),
   consentSubmitted: z.boolean().default(false),
   selectedTools: z.array(z.string()).optional(),
 });
@@ -151,13 +161,23 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
     // Consent round-trip params (set when the consent screen POSTs back here
     // after all providers are linked). `consent_session` identifies the still
-    // alive federated session; `tools` is the submitted selection.
-    const body = parseFormBody(request.body);
-    const consentParam = (key: string): unknown => request.query[key] ?? body[key];
-    const consentSessionRaw = consentParam('consent_session');
-    const consentSessionId = typeof consentSessionRaw === 'string' ? consentSessionRaw : undefined;
-    const consentSubmitted = consentParam('consent_submitted') === '1';
-    const toolsParam = consentParam('tools');
+    // alive federated session, `csrf` is the screen's token and `tools` the
+    // submitted selection. They are read from a POSTed form body only: a
+    // consent that arrives in a URL (a link, an image, a redirect) is refused.
+    if (request.query['consent_session'] !== undefined) {
+      this.logger.warn('Federated consent submitted in the query string; refused');
+      this.respond(
+        this.htmlPage(this.renderErrorPage('invalid_request', 'Consent must be submitted from the consent page.'), 400),
+      );
+      return;
+    }
+    const body = String(request.method).toUpperCase() === 'POST' ? parseFormBody(request.body) : {};
+    const firstString = (value: unknown): string | undefined =>
+      typeof value === 'string' ? value : Array.isArray(value) && typeof value[0] === 'string' ? value[0] : undefined;
+    const consentSessionId = firstString(body['consent_session']);
+    const consentCsrf = firstString(body['csrf']);
+    const consentSubmitted = firstString(body['consent_submitted']) === '1';
+    const toolsParam = body['tools'];
     const selectedTools =
       typeof toolsParam === 'string'
         ? [toolsParam]
@@ -173,6 +193,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       providerState,
       responseIssuer,
       consentSessionId,
+      consentCsrf,
       consentSubmitted,
       selectedTools,
     });
@@ -187,14 +208,15 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    *
    * Federated logins complete (mint the code) here, AFTER all providers are
    * linked. When consent mode is enabled, {@link completeFederatedAuth} first
-   * renders the consent screen, which GETs back to this endpoint with
-   * `consent_session=<sessionId>` + `tools=`. This stage loads that still alive
-   * session, applies the selection (validating + `requireSelection`), and
-   * completes the mint — short-circuiting the provider-code path entirely.
+   * renders the consent screen, which POSTs back to this endpoint with
+   * `consent_session=<sessionId>`, the screen's `csrf` token and `tools=`. This
+   * stage loads that still alive session, checks the token, applies the
+   * selection (validating + `requireSelection`), and completes the mint —
+   * short-circuiting the provider-code path entirely.
    */
   @Stage('handleConsentSubmission')
   async handleConsentSubmission() {
-    const { consentSessionId, consentSubmitted, selectedTools } = this.state;
+    const { consentSessionId, consentCsrf, consentSubmitted, selectedTools } = this.state;
     if (!consentSessionId) {
       return; // Not a consent round-trip — fall through to the provider-callback path.
     }
@@ -214,6 +236,15 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
           400,
         ),
       );
+      return;
+    }
+
+    // The session id is no secret (it travels in every upstream `state`), so a
+    // submission counts only with the token of the consent screen this server
+    // showed for the session. No token on the session means no screen was shown.
+    if (!session.consentCsrf || !consentCsrf || !timingSafeEqualStr(session.consentCsrf, consentCsrf)) {
+      this.logger.warn('Federated consent CSRF token mismatch');
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Invalid or missing CSRF token'), 400));
       return;
     }
 
@@ -617,8 +648,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    *
    * When consent mode is enabled this runs in two passes:
    *  1. First reach (no `consent.consentSubmitted`): render the consent screen,
-   *     which GETs back to this endpoint with `consent_session` + `tools=`. The
-   *     federated session is kept ALIVE for the round-trip.
+   *     which POSTs back to this endpoint with `consent_session`, the CSRF token
+   *     kept on the session and `tools=`. The federated session is kept ALIVE
+   *     for the round-trip.
    *  2. Resubmit (`consent.consentSubmitted` true): validate the selection
    *     (honoring `requireSelection`) and mint the code with the consented set.
    *
@@ -709,6 +741,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
               this.logger.info(
                 'rememberConsent (federated): new tool detected — re-prompting pre-filled with prior selection',
               );
+              await this.keepConsentCsrf(session);
               this.respond(
                 this.htmlPage(this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds)),
               );
@@ -719,6 +752,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
         if (selectedToolIds === undefined) {
           this.logger.info('Federated auth: all providers linked, rendering consent screen');
+          await this.keepConsentCsrf(session);
           this.respond(this.htmlPage(this.renderConsentScreen(session, consentConfig)));
           return;
         }
@@ -823,10 +857,37 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Render the federated consent screen. The form GETs back to this provider
-   * callback endpoint with `consent_session=<sessionId>` + the chosen `tools=`
-   * (and `consent_submitted=1`), so {@link handleConsentSubmission} completes
-   * the mint. Honors the same `auth.consent` flags as the non-federated path.
+   * Give the federated session the consent screen's CSRF token and persist it
+   * before the screen is shown. Fails closed: when the session can't be
+   * written, no consent screen goes out (its submission could not be checked).
+   */
+  private async keepConsentCsrf(session: FederatedAuthSession): Promise<void> {
+    if (session.consentCsrf) return;
+    const sessionStore = this.getLocalAuth().federatedSessionStore;
+    try {
+      if (!sessionStore) throw new Error('no federated session store');
+      session.consentCsrf = base64urlEncode(randomBytes(32));
+      await sessionStore.update(session);
+    } catch (err) {
+      session.consentCsrf = undefined;
+      this.logger.error(
+        `Failed to keep the federated consent CSRF token: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
+          500,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Render the federated consent screen. The form POSTs back to this provider
+   * callback endpoint with `consent_session=<sessionId>`, the session's `csrf`
+   * token and the chosen `tools=` (and `consent_submitted=1`), so
+   * {@link handleConsentSubmission} completes the mint. Honors the same
+   * `auth.consent` flags as the non-federated path.
    */
   private renderConsentScreen(
     session: FederatedAuthSession,
@@ -848,7 +909,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       // The pending_auth_id input is unused on the federated round-trip (we key
       // off `consent_session`), but the builder requires it; reuse the session id.
       pendingAuthId: session.id,
-      csrfToken: '',
+      csrfToken: session.consentCsrf ?? '',
       callbackPath,
       userName: session.userInfo.name,
       userEmail: session.userInfo.email,
@@ -955,4 +1016,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     }
     return 'strict';
   }
+}
+
+/** Constant-time string compare (over SHA-256 digests, so lengths never leak) for the consent CSRF token. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  return timingSafeEqual(sha256(a), sha256(b));
 }

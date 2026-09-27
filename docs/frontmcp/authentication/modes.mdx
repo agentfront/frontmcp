@@ -379,13 +379,23 @@ expired. Otherwise FrontMCP asks the userinfo endpoint. A callback whose RFC 920
 
 | Option                     | Type                                                             | Default                      | Description                                                                                                                             |
 | -------------------------- | ---------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `requireRegisteredClients` | `boolean`                                                        | `true`                       | Refuse an MCP client that isn't registered (DCR) or a CIMD URL                                                                          |
+| `requireRegisteredClients` | `boolean`                                                        | `true`                       | Refuse an MCP client that isn't registered (DCR) or a CIMD URL. In production remote mode only CIMD clients qualify (see below)         |
 | `allowedScopes`            | `string[]`                                                       | OpenID scopes                | Scopes FrontMCP may grant in its own tokens (see Local docs). Unrelated to `scopes`, which are requested from the IdP                   |
 | `consent`                  | `ConsentConfig`                                                  | `undefined` (block optional) | Tool-selection consent screen + call-time enforcement (see Local docs). When the block is present, inner `enabled` defaults to `false`. |
 | `tokenStorage`             | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }` | `'memory'`                   | Storage backend (memory / sqlite / redis)                                                                                               |
 | `allowDefaultPublic`       | `boolean`                                                        | `false`                      | Allow unauthenticated requests                                                                                                          |
 | `federatedAuth`            | `FederatedAuthConfig`                                            | -                            | Federated auth state validation                                                                                                         |
 | `incrementalAuth`          | `IncrementalAuthConfig`                                          | `undefined` (block optional) | Progressive authorization. When the block is present, inner `enabled` defaults to `true`.                                               |
+
+<Warning>
+  **Remote mode and unregistered clients.** Remote mode has no `dcr` block (no
+  pre-registered clients) and its `/oauth/register` is off in production, so with
+  the default `requireRegisteredClients: true` a production remote server admits
+  only MCP clients that use a [CIMD](/frontmcp/authentication/cimd) client-id
+  URL. In 1.8.2 and earlier an unregistered `client_id` was accepted; see [MCP client
+  registration](/frontmcp/authentication/remote#mcp-client-registration) for the
+  migration.
+</Warning>
 
 ### Consent Configuration
 

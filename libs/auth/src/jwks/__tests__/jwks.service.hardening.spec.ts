@@ -110,4 +110,19 @@ describe('JwksService — weak-RSA (<2048-bit) fallback hardening', () => {
     ]);
     expect(res.ok).toBe(false);
   });
+
+  it('rejects a weak-key token in the second its exp names (exp is exclusive, as on the jose path)', async () => {
+    const service = new JwksService();
+    const frozenMs = (now + 60) * 1000 + 500;
+    const token = signRs256({ kid: 'weak' }, { sub: 'u', iss: ISSUER, exp: now + 60 }, privateKey);
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(frozenMs);
+    try {
+      const res = await service.verifyTransparentToken(token, [
+        { id: 'p', issuerUrl: ISSUER, jwks: { keys: [weakJwk] } },
+      ]);
+      expect(res.ok).toBe(false);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });

@@ -179,6 +179,35 @@ export class Server {}
 | `scopes`                    | `string[]`      | `['openid']`         | Scopes to request from IdP                 |
 | `providerConfig.dcrEnabled` | `boolean`       | `false`              | Use Dynamic Client Registration            |
 | `consent`                   | `ConsentConfig` | `{ enabled: false }` | Show consent UI after IdP login            |
+| `requireRegisteredClients`  | `boolean`       | `true`               | Refuse an MCP client that isn't registered |
+| `allowedScopes`             | `string[]`      | OpenID scopes        | Scopes FrontMCP grants in its own tokens   |
+
+### MCP client registration
+
+`requireRegisteredClients` defaults to `true`: `/oauth/authorize` answers a
+`client_id` this server doesn't know with a 400 page (`Unknown client_id`)
+instead of issuing a code to whatever `redirect_uri` the request names. A client
+is known when it registered through FrontMCP's `/oauth/register` (DCR) or
+identifies with a [CIMD](/frontmcp/authentication/cimd) client-id URL.
+
+Remote mode has no `dcr` block, so there is no list of pre-registered clients,
+and `/oauth/register` is on only outside production (`NODE_ENV !== 'production'`,
+registrations kept in memory). A production remote server with the defaults
+therefore serves **CIMD clients only**.
+
+<Warning>
+  **Upgrading a remote-mode server from 1.8.2 or earlier.** There
+  `requireRegisteredClients` defaulted to `false`, so MCP clients that sent a
+  plain `client_id` without registering were accepted. They now get `Unknown
+  client_id`. To keep them working:
+
+- have them use a CIMD client-id URL (an HTTPS URL of their client metadata
+  document; FrontMCP fetches it and checks `redirect_uri` against it), or
+- set `requireRegisteredClients: false` for local development only. An
+  unregistered client's `redirect_uri` can't be checked against anything, so
+  any site could receive a sign-in code for a `client_id` it names.
+
+</Warning>
 
 ### When to Use Orchestrated Remote
 

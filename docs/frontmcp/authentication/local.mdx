@@ -197,19 +197,31 @@ export class Server {}
 
 ### Provider fields (`UpstreamProviderOptions`)
 
-| Field                   | Type       | Required | Description                                                  |
-| ----------------------- | ---------- | -------- | ------------------------------------------------------------ |
-| `id`                    | `string`   | yes      | Stable provider id used in `this.orchestration.getToken(id)` |
-| `authorizationEndpoint` | `string`   | yes\*    | Authorization endpoint (alias: `authorizeUrl`)               |
-| `tokenEndpoint`         | `string`   | yes\*    | Token endpoint (alias: `tokenUrl`)                           |
-| `clientId`              | `string`   | yes      | OAuth client id from the upstream provider                   |
-| `clientSecret`          | `string`   | no       | OAuth client secret (confidential clients)                   |
-| `scopes`                | `string[]` | no       | Scopes to request (defaults to `[]`)                         |
-| `name`                  | `string`   | no       | Display name (defaults to `id`)                              |
-| `userInfoEndpoint`      | `string`   | no       | User-info endpoint to enrich the session identity            |
-| `jwksUri`               | `string`   | no       | JWKS URI for upstream `id_token` validation                  |
+| Field                   | Type       | Required | Description                                                    |
+| ----------------------- | ---------- | -------- | -------------------------------------------------------------- |
+| `id`                    | `string`   | yes      | Stable provider id used in `this.orchestration.getToken(id)`   |
+| `authorizationEndpoint` | `string`   | yes\*    | Authorization endpoint (alias: `authorizeUrl`)                 |
+| `tokenEndpoint`         | `string`   | yes\*    | Token endpoint (alias: `tokenUrl`)                             |
+| `clientId`              | `string`   | yes      | OAuth client id from the upstream provider                     |
+| `clientSecret`          | `string`   | no       | OAuth client secret (confidential clients)                     |
+| `scopes`                | `string[]` | no       | Scopes to request (defaults to `[]`)                           |
+| `name`                  | `string`   | no       | Display name (defaults to `id`)                                |
+| `userInfoEndpoint`      | `string`   | no       | User-info endpoint to enrich the session identity              |
+| `jwksUri`               | `string`   | no       | JWKS URI for upstream `id_token` validation                    |
+| `issuer`                | `string`   | no       | The provider's issuer (OIDC `iss`), checked as described below |
+| `additionalIssuers`     | `string[]` | no       | Other issuer values the provider legitimately uses             |
 
 \* At least one of the canonical name or its alias is required for each endpoint. The per-provider callback URL is computed automatically as `${issuer}/oauth/provider/${id}/callback` — register that exact URL with each provider.
+
+The provider's identity (`sub`, `email`, `name`) comes from its `id_token` only
+when that token verifies against `jwksUri`, names `issuer` (or one of
+`additionalIssuers`) as its issuer and your `clientId` as audience, and hasn't
+expired. A provider with no `issuer` configured never has its `id_token` used:
+many IdPs sign every tenant's tokens with one key set, so the signature alone
+doesn't tell FrontMCP which tenant issued it. FrontMCP then asks
+`userInfoEndpoint`; with neither a usable `id_token` nor a `userInfoEndpoint`
+the provider's sign-in fails. With `issuer` set, a callback whose RFC 9207 `iss`
+names another server is refused.
 
 ### Gating the JWT (`federatedAuth`)
 

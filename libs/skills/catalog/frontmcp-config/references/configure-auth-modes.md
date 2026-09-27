@@ -141,6 +141,8 @@ Endpoints are derived from `provider` using standard OIDC paths
 non-standard IdPs, override them with
 `providerConfig.{authEndpoint,tokenEndpoint,userInfoEndpoint,jwksUri}`.
 
+> **MCP client registration (upgrade note):** `requireRegisteredClients` defaults to `true` in remote mode too (it was `false` in 1.8.2 and earlier). Remote mode has no `dcr` block (no pre-registered clients) and FrontMCP's own `/oauth/register` is off in production, so a production remote server with the defaults admits only MCP clients that use a CIMD client-id URL; an unregistered plain `client_id` gets a 400 `Unknown client_id` page. Migrate clients to CIMD, or set `requireRegisteredClients: false` for local development only (an unregistered client's `redirect_uri` can't be checked). FrontMCP grants only the scopes in `allowedScopes` (default: the OpenID scopes), unrelated to `scopes` (what it asks the IdP for).
+
 **Deferred (not yet wired):** upstream **Dynamic Client Registration**
 (`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered
 `clientId` is required; and upstream **token auto-refresh** — once the upstream

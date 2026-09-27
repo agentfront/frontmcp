@@ -252,12 +252,12 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     return { name: key, def: { type: 'password', label: key, required: true, placeholder: 'Enter value' } };
   }
 
-  /** Render the single-field connect page (reusing the login field renderer). */
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
     return httpRespond.html(markup, status, builtInAuthPageHeaders());
   }
 
+  /** Render the single-field connect page (reusing the login field renderer). */
   private renderConnectPage(
     payload: CredentialResumePayload,
     login: LoginConfig | undefined,

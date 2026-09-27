@@ -401,6 +401,15 @@ export interface UpstreamProviderOptions {
   userInfoEndpoint?: string;
   /** JWKS URI for upstream id_token validation (optional). */
   jwksUri?: string;
+  /**
+   * The provider's issuer identifier (its OIDC `iss`). When set, an RFC 9207
+   * `iss` on the provider's callback and the `iss` of its `id_token` must name
+   * it (or one of {@link additionalIssuers}). Without it the provider's
+   * `id_token` is not used for identity; `userInfoEndpoint` is asked instead.
+   */
+  issuer?: string;
+  /** Other issuer values this provider legitimately uses. */
+  additionalIssuers?: string[];
 }
 
 /**

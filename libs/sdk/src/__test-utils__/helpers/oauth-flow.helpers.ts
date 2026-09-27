@@ -113,26 +113,28 @@ export function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 /**
- * Run `GET /oauth/provider/:providerId/callback` through its flow, exactly as
- * the Node server dispatches it (path parameter included), and render the
- * result as a Web `Response`.
+ * Run `/oauth/provider/:providerId/callback` through its flow, exactly as the
+ * Node server dispatches it (path parameter included), and render the result
+ * as a Web `Response`. A GET (the provider's redirect) unless `form` is given.
  */
 export async function runProviderCallback(
   scope: Scope,
   providerId: string,
   query: Record<string, string>,
   host = 'localhost',
+  /** A POSTed form (the federated consent screen): sent as the parsed body the Node server hands the flow. */
+  form?: Record<string, string | string[]>,
 ): Promise<Response> {
   const path = `/oauth/provider/${providerId}/callback`;
   const search = new URLSearchParams(query).toString();
   const request = {
-    method: 'GET',
+    method: form ? 'POST' : 'GET',
     path,
-    url: `${path}?${search}`,
-    headers: { host },
+    url: search ? `${path}?${search}` : path,
+    headers: form ? { host, 'content-type': 'application/x-www-form-urlencoded' } : { host },
     query,
     params: { providerId },
-    body: undefined,
+    body: form,
   };
   const output = (await scope.runFlow('oauth:provider-callback', { request, response: {} } as never)) as
     | HttpOutput
