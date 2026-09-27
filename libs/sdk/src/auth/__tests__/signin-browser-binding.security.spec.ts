@@ -254,7 +254,7 @@ describe('/oauth/callback', () => {
     expect(callback.status).toBe(400);
   });
 
-  it('sets a cookie that is HttpOnly, SameSite=Lax, scoped to /oauth, and Secure over https', async () => {
+  it('sets an HttpOnly, SameSite=Lax cookie: scoped to /oauth over http, a __Host- cookie over https', async () => {
     const { server } = await serverWith('desk-local-cookie', {
       mode: 'local',
       dcr: { clients: [{ clientId: CLIENT_ID, redirectUris: [REDIRECT_URI] }] },
@@ -269,7 +269,47 @@ describe('/oauth/callback', () => {
     expect(plain[0]).toMatch(
       /^frontmcp_signin_[0-9a-f]{16}=[A-Za-z0-9_-]{43}; Path=\/oauth; Max-Age=1800; HttpOnly; SameSite=Lax$/,
     );
-    expect(https[0]).toMatch(/; HttpOnly; Secure; SameSite=Lax$/);
+    // `__Host-`: browsers only take it Secure, with Path=/ and no Domain, so no other host can set it.
+    expect(https).toHaveLength(1);
+    expect(https[0]).toMatch(
+      /^__Host-frontmcp_signin_[0-9a-f]{16}=[A-Za-z0-9_-]{43}; Path=\/; Max-Age=1800; HttpOnly; Secure; SameSite=Lax$/,
+    );
+  });
+
+  it('over https, refuses a binding cookie a sibling subdomain could plant (no __Host- prefix)', async () => {
+    const { server } = await serverWith('desk-local-host-prefix', {
+      mode: 'local',
+      dcr: { clients: [{ clientId: CLIENT_ID, redirectUris: [REDIRECT_URI] }] },
+    } as AuthConfig);
+    const https = { 'x-forwarded-proto': 'https', origin: `https://${HOST}` };
+
+    // Someone starts a sign-in and learns its binding cookie.
+    const page = await httpGet(server.handler, authorizeUrl('s'), HOST, https, new CookieJar());
+    const pendingAuthId = inputValue(await page.text(), 'pending_auth_id') ?? '';
+    const [pair] = (page.headers.getSetCookie()[0] ?? '').split(';');
+    const eq = pair.indexOf('=');
+    const name = pair.slice(0, eq);
+    const value = pair.slice(eq + 1);
+    const finish = (cookie: string) =>
+      postForm(
+        server.handler,
+        '/oauth/callback',
+        { pending_auth_id: pendingAuthId, email: 'n@example.com' },
+        HOST,
+        { ...https, cookie },
+        new CookieJar(),
+      );
+
+    // A host-only cookie of that name, set in the victim's browser from evil.example.com with
+    // Domain=example.com, reaches the callback just the same. It must not count.
+    const planted = await finish(`${name.replace(/^__Host-/, '')}=${value}`);
+    expect(planted.status).toBe(400);
+    expect(planted.headers.get('location')).toBeNull();
+
+    // The browser that started the sign-in still finishes it.
+    const own = await finish(`${name}=${value}`);
+    expect(own.status).toBe(302);
+    expect(own.headers.get('location')).toContain(REDIRECT_URI);
   });
 });
 

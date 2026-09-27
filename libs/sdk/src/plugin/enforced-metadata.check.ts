@@ -3,6 +3,7 @@ import { getMetadata } from '@frontmcp/di';
 import type AgentRegistry from '../agent/agent.registry';
 import {
   FrontMcpPluginTokens,
+  type AgentEntry,
   type FlowName,
   type HookEntry,
   type PluginType,
@@ -52,6 +53,16 @@ function keysEnforcedByPlugins(plugins: readonly PluginType[] | undefined, into 
   return into;
 }
 
+/**
+ * The metadata of the tools an agent can call: its private scope's tools (declared and contributed by
+ * its plugins) once the agent is initialized, else the tools it declares.
+ */
+function agentToolMetadata(agent: AgentEntry): ToolEntry['metadata'][] {
+  const tools = (agent as { getAgentTools?: () => readonly ToolEntry[] }).getAgentTools?.();
+  if (tools && tools.length > 0) return tools.map((tool) => tool.metadata);
+  return (agent.metadata.tools ?? []).map((toolType) => normalizeTool(toolType).metadata);
+}
+
 /** An entry's requested keys, with who enforces each, as startup-error lines. */
 function problemsOf(label: string, metadata: unknown, isEnforced: (key: string) => boolean): string[] {
   const fields = (metadata ?? {}) as Record<string, unknown>;
@@ -93,10 +104,10 @@ export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
     problems.push(...problemsOf(`Agent "${agent.name}"`, agent.metadata, coveredBy('tools:call-tool', ownerId)));
 
     // The agent's own tools are called through the agent's private scope, which has only its plugins.
+    // They include the tools its plugins contribute, so read the tools that scope holds.
     const agentPlugins = keysEnforcedByPlugins(agent.metadata.plugins);
     const usesToolFlow = agent.metadata.execution?.useToolFlow !== false;
-    for (const toolType of agent.metadata.tools ?? []) {
-      const { metadata } = normalizeTool(toolType);
+    for (const metadata of agentToolMetadata(agent)) {
       problems.push(
         ...problemsOf(
           `Tool "${agent.name}:${metadata.name}"`,

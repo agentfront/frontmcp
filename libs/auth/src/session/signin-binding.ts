@@ -12,12 +12,28 @@
  * FrontMCP code would go to the other person's client.
  *
  * The cookie is named per pending authorization so several sign-ins can run in
- * one browser at once.
+ * one browser at once. Over https it is a `__Host-` cookie: browsers accept that
+ * prefix only on a `Secure` cookie with `Path=/` and no `Domain`, so a sibling
+ * host (`evil.example.com` next to `auth.example.com`) cannot plant one with
+ * `Domain=example.com`, as it could an ordinary host-only cookie.
  */
 import { base64urlEncode, getCookie, randomBytes, sha256Hex, timingSafeEqual } from '@frontmcp/utils';
 
 /** Prefix of the sign-in binding cookie's name; the rest identifies the pending authorization. */
 export const SIGNIN_BINDING_COOKIE_PREFIX = 'frontmcp_signin_';
+
+/** Prefix of the binding cookie's name over https (see {@link SigninBindingCookieOptions.secure}). */
+export const SIGNIN_BINDING_SECURE_COOKIE_PREFIX = `__Host-${SIGNIN_BINDING_COOKIE_PREFIX}`;
+
+/** How the browser reaches the server, which decides the binding cookie's name. */
+export interface SigninBindingCookieOptions {
+  /**
+   * The browser reached the server over https. The cookie is then named
+   * `__Host-frontmcp_signin_…` and must be set `Secure`, with `Path=/` and no
+   * `Domain`; only a cookie of that name counts.
+   */
+  secure?: boolean;
+}
 
 /**
  * How long the binding cookie lives, in seconds: long enough for a pending
@@ -36,28 +52,31 @@ export interface SigninBinding {
 }
 
 /** The binding cookie's name for the pending authorization `pendingAuthId` (it doesn't carry the id itself). */
-export function signinBindingCookieName(pendingAuthId: string): string {
-  return `${SIGNIN_BINDING_COOKIE_PREFIX}${sha256Hex(`signin:${pendingAuthId}`).slice(0, 16)}`;
+export function signinBindingCookieName(pendingAuthId: string, options: SigninBindingCookieOptions = {}): string {
+  const prefix = options.secure ? SIGNIN_BINDING_SECURE_COOKIE_PREFIX : SIGNIN_BINDING_COOKIE_PREFIX;
+  return `${prefix}${sha256Hex(`signin:${pendingAuthId}`).slice(0, 16)}`;
 }
 
 /** Create the binding for a new pending authorization. */
-export function createSigninBinding(pendingAuthId: string): SigninBinding {
+export function createSigninBinding(pendingAuthId: string, options: SigninBindingCookieOptions = {}): SigninBinding {
   const value = base64urlEncode(randomBytes(32));
-  return { cookieName: signinBindingCookieName(pendingAuthId), value, hash: sha256Hex(value) };
+  return { cookieName: signinBindingCookieName(pendingAuthId, options), value, hash: sha256Hex(value) };
 }
 
 /**
  * Whether a request's `Cookie` header carries the binding of `pendingAuthId`
- * whose hash is `expectedHash`. Fails closed: no expected hash (a record created
- * without a binding), no cookie, or a different value all return `false`.
+ * whose hash is `expectedHash`, under the name `options` selects. Fails closed:
+ * no expected hash (a record created without a binding), no cookie, or a
+ * different value all return `false`.
  */
 export function signinBindingMatches(
   cookieHeader: string | undefined,
   pendingAuthId: string,
   expectedHash: string | undefined,
+  options: SigninBindingCookieOptions = {},
 ): boolean {
   if (!expectedHash) return false;
-  const value = getCookie(cookieHeader, signinBindingCookieName(pendingAuthId));
+  const value = getCookie(cookieHeader, signinBindingCookieName(pendingAuthId, options));
   if (!value) return false;
   const encoder = new TextEncoder();
   const actual = encoder.encode(sha256Hex(value));

@@ -21,7 +21,6 @@ import {
   buildIncrementalAuthPage,
   builtInAuthPageHeaders,
   createFederatedAuthSession,
-  createSigninBinding,
   escapeHtml,
   grantScopes,
   isLoopbackRedirectUri,
@@ -73,7 +72,7 @@ import {
 import { CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
+import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
 
 /**
  * Quick checklist (security & correctness)
@@ -791,7 +790,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     // Tie the sign-in to this browser (RFC 9700 §4.7): the callbacks that
     // resume it require the cookie every response from here on sets.
-    const binding = createSigninBinding(pendingRecord.id);
+    const binding = createRequestSigninBinding(this.rawInput.request, pendingRecord.id);
     pendingRecord.signinBinding = binding.hash;
     this.signinBindingHash = binding.hash;
     this.signinCookie = signinBindingCookie(

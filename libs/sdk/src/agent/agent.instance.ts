@@ -472,6 +472,14 @@ export class AgentInstance<
     return this.agentToolInstance;
   }
 
+  /**
+   * The tools this agent can call: those it declares and those its plugins contribute, as its private
+   * scope holds them. Empty until the agent is initialized.
+   */
+  getAgentTools(): readonly ToolEntry[] {
+    return this.agentTools;
+  }
+
   // ============================================================================
   // Entry Methods
   // ============================================================================

@@ -73,7 +73,7 @@ async function rpc(
   method: string,
   params: Record<string, unknown>,
   headers: Record<string, string>,
-): Promise<string> {
+): Promise<{ status: number; body: string }> {
   const response = await handler(
     new Request('http://localhost/', {
       method: 'POST',
@@ -100,7 +100,7 @@ async function rpc(
       }),
     }),
   );
-  return response.text();
+  return { status: response.status, body: await response.text() };
 }
 
 describe('a 2026-07-28 caller naming the targeted session', () => {
@@ -114,13 +114,16 @@ describe('a 2026-07-28 caller naming the targeted session', () => {
   });
 
   it('does not get the flagged tool listed', async () => {
-    const body = await rpc(handler, 'tools/list', {}, { 'mcp-session-id': TARGETED_SESSION });
+    const { status, body } = await rpc(handler, 'tools/list', {}, { 'mcp-session-id': TARGETED_SESSION });
 
+    expect(status).toBe(200);
+    expect(body).toContain('"tools"');
+    expect(body).not.toContain('"error"');
     expect(body).not.toContain('beta_export');
   });
 
   it('does not get the flagged tool run', async () => {
-    const body = await rpc(
+    const { body } = await rpc(
       handler,
       'tools/call',
       { name: 'beta_export', arguments: {} },
@@ -148,6 +151,7 @@ describe('a caller whose session the server established', () => {
       await server.callTool('beta_export', {}, { authContext: { sessionId: TARGETED_SESSION } });
 
       expect(executed).toContain('beta_export');
+      expect(adapter.contexts.length).toBeGreaterThan(0);
       expect(adapter.contexts.every((context) => context.sessionId === TARGETED_SESSION)).toBe(true);
     } finally {
       await server.dispose();
