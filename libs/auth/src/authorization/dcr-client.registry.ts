@@ -88,7 +88,7 @@ const DEFAULT_MAX_DYNAMIC_CLIENTS = 1000;
  * backtracking entirely (no `.*.*` ReDoS surface) on the attacker-supplied
  * `redirect_uri` we test allowlist patterns against.
  */
-function globMatch(pattern: string, input: string): boolean {
+export function globMatch(pattern: string, input: string): boolean {
   let p = 0;
   let i = 0;
   let starIdx = -1; // index in `pattern` of the last `*` seen

@@ -97,19 +97,6 @@ function currentSkipScope(): SkipScope {
  * Initialize shared resources (server, token factory) once per test file
  */
 async function initializeSharedResources(): Promise<void> {
-  // Create token factory if not exists.
-  //
-  // When the test config passes a JWT_SECRET to the server (gateway modes —
-  // auth.mode public/local/orchestrated verify tokens against their own HS256
-  // secret), sign fixture tokens with that SAME secret so `auth.createToken`
-  // mints genuinely-valid tokens (the server now cryptographically verifies
-  // the signature). Without a shared secret the factory stays RS256 + JWKS for
-  // transparent mode.
-  if (!tokenFactory) {
-    const sharedSecret = currentConfig.env?.['JWT_SECRET'];
-    tokenFactory = new TestTokenFactory(sharedSecret ? { hmacSecret: sharedSecret } : {});
-  }
-
   // Start or connect to server if not exists
   if (!serverInstance) {
     if (currentConfig.baseUrl && !currentConfig.server) {
@@ -156,6 +143,29 @@ async function initializeSharedResources(): Promise<void> {
         'test.use() requires either "server" (entry file path) or "baseUrl" (for external server) option',
       );
     }
+  }
+
+  // Create token factory if not exists.
+  //
+  // When the test config passes a JWT_SECRET to the server (gateway modes —
+  // auth.mode public/local/remote verify tokens against their own HS256
+  // secret), sign fixture tokens with that SAME secret so `auth.createToken`
+  // mints genuinely-valid tokens, and mint them the way that server does: its
+  // own address as issuer (`iss`) and its MCP endpoint as audience (`aud`),
+  // since a gateway token is only accepted by the server it was issued by and
+  // for. Without a shared secret the factory stays RS256 + JWKS for
+  // transparent mode.
+  if (!tokenFactory) {
+    const sharedSecret = currentConfig.env?.['JWT_SECRET'];
+    const serverUrl = serverInstance ? resolveClientBaseUrl(serverInstance).replace(/\/+$/, '') : undefined;
+    tokenFactory = new TestTokenFactory(
+      sharedSecret
+        ? {
+            hmacSecret: sharedSecret,
+            ...(serverUrl ? { issuer: serverUrl, audience: `${serverUrl}${currentConfig.entryPath ?? ''}` } : {}),
+          }
+        : {},
+    );
   }
 }
 

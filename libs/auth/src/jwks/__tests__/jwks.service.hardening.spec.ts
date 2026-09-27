@@ -3,7 +3,8 @@
  *  - transparent verify pins asymmetric algorithms, so a symmetric (`oct`) key
  *    in a provider JWKS can never authenticate an HS-signed token;
  *  - the weak-RSA (<2048-bit) fallback enforces `nbf` (not-yet-valid rejected),
- *    matching the primary jose path which previously it did not.
+ *    matching the primary jose path which previously it did not;
+ *  - a token without `exp` is refused on both paths (#272): it would never expire.
  */
 import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
@@ -38,6 +39,21 @@ describe('JwksService — transparent algorithm pinning', () => {
     const res = await service.verifyTransparentToken(hsToken, [
       { id: 'p', issuerUrl: ISSUER, jwks: { keys: [octJwk] } },
     ]);
+    expect(res.ok).toBe(false);
+  });
+
+  it('rejects an RS256 token that has no exp (#272)', async () => {
+    const service = new JwksService();
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    const jwk = (await exportJWK(publicKey)) as JWK;
+    jwk.kid = 'rs';
+    jwk.alg = 'RS256';
+    const token = await new SignJWT({ sub: 'u' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'rs' })
+      .setIssuer(ISSUER)
+      .setIssuedAt()
+      .sign(privateKey);
+    const res = await service.verifyTransparentToken(token, [{ id: 'p', issuerUrl: ISSUER, jwks: { keys: [jwk] } }]);
     expect(res.ok).toBe(false);
   });
 
@@ -80,6 +96,15 @@ describe('JwksService — weak-RSA (<2048-bit) fallback hardening', () => {
   it('rejects a weak-key token whose nbf is in the future (not-yet-valid)', async () => {
     const service = new JwksService();
     const token = signRs256({ kid: 'weak' }, { sub: 'u', iss: ISSUER, exp: now + 3600, nbf: now + 3600 }, privateKey);
+    const res = await service.verifyTransparentToken(token, [
+      { id: 'p', issuerUrl: ISSUER, jwks: { keys: [weakJwk] } },
+    ]);
+    expect(res.ok).toBe(false);
+  });
+
+  it('rejects a weak-key token that has no exp (#272)', async () => {
+    const service = new JwksService();
+    const token = signRs256({ kid: 'weak' }, { sub: 'u', iss: ISSUER }, privateKey);
     const res = await service.verifyTransparentToken(token, [
       { id: 'p', issuerUrl: ISSUER, jwks: { keys: [weakJwk] } },
     ]);

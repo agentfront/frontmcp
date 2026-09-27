@@ -29,6 +29,8 @@ const EXPECTED_API_KEY = 'sk-test-fixed-secret';
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     // Declarative custom login field — an API key the operator pastes in.

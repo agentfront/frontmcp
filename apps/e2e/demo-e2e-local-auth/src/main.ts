@@ -40,6 +40,8 @@ const requireEmail = process.env['REQUIRE_EMAIL'] === 'true';
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     // No consent and no per-app providers → simple (non-federated) login page.
     tokenStorage,
     allowDefaultPublic: false,

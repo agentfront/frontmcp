@@ -20,6 +20,7 @@
 import {
   buildConnectPage,
   buildConnectSuccessPage,
+  builtInAuthPageHeaders,
   escapeHtml,
   toLoginExtraFields,
   verifyCredentialResumeToken,
@@ -120,7 +121,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     const { method, token, fields } = this.state;
 
     if (!token) {
-      this.respond(httpRespond.html(this.renderError('invalid_request', 'Missing or invalid connect token.'), 400));
+      this.respond(this.htmlPage(this.renderError('invalid_request', 'Missing or invalid connect token.'), 400));
       return;
     }
 
@@ -128,7 +129,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     const payload = this.verifyToken(token, localAuth);
     if (!payload) {
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderError('invalid_token', 'This connect link is invalid or has expired. Please try again.'),
           400,
         ),
@@ -146,13 +147,13 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
 
     // GET → render the single-field add-credential page.
     if (method === 'GET') {
-      this.respond(httpRespond.html(this.renderConnectPage(payload, localOptions.login, token)));
+      this.respond(this.htmlPage(this.renderConnectPage(payload, localOptions.login, token)));
       return;
     }
     // Only GET (render) and POST (submit) are supported — reject other verbs
     // instead of falling through to the render branch.
     if (method !== 'POST') {
-      this.respond(httpRespond.html(this.renderError('invalid_request', 'Method not allowed. Use GET or POST.'), 405));
+      this.respond(this.htmlPage(this.renderError('invalid_request', 'Method not allowed. Use GET or POST.'), 405));
       return;
     }
 
@@ -161,7 +162,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     const authenticateFn = typeof localOptions.authenticate === 'function' ? localOptions.authenticate : undefined;
     if (!authenticateFn) {
       this.respond(
-        httpRespond.html(this.renderError('server_error', 'Credential connect is not configured on this server.'), 500),
+        this.htmlPage(this.renderError('server_error', 'Credential connect is not configured on this server.'), 500),
       );
       return;
     }
@@ -169,21 +170,21 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     const result = await this.runAuthenticate(authenticateFn, fields ?? {}, payload);
     if (!result.ok) {
       // Re-render the connect page with the verifier's error.
-      this.respond(httpRespond.html(this.renderConnectPage(payload, localOptions.login, token, result.message), 200));
+      this.respond(this.htmlPage(this.renderConnectPage(payload, localOptions.login, token, result.message), 200));
       return;
     }
 
     const credentials = Array.isArray(result.credentials) ? result.credentials : [];
     if (credentials.length === 0) {
       this.respond(
-        httpRespond.html(this.renderError('invalid_request', 'No credential was returned. Please try again.'), 400),
+        this.htmlPage(this.renderError('invalid_request', 'No credential was returned. Please try again.'), 400),
       );
       return;
     }
 
     const vault = localAuth.credentialVault;
     if (!vault) {
-      this.respond(httpRespond.html(this.renderError('server_error', 'Credential storage is not configured.'), 500));
+      this.respond(this.htmlPage(this.renderError('server_error', 'Credential storage is not configured.'), 500));
       return;
     }
 
@@ -193,7 +194,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     if (!vaultId) {
       this.logger.warn('Connect attempted with no live vault for subject; refusing');
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderError('invalid_request', 'Your session is no longer active. Please sign in again.'),
           409,
         ),
@@ -215,10 +216,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     if (stored === 0) {
       this.logger.warn('Connect produced no storable credentials (all returned entries were malformed)');
       this.respond(
-        httpRespond.html(
-          this.renderError('invalid_request', 'No valid credential was returned. Please try again.'),
-          400,
-        ),
+        this.htmlPage(this.renderError('invalid_request', 'No valid credential was returned. Please try again.'), 400),
       );
       return;
     }
@@ -229,7 +227,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     // lets connected clients know session-scoped resources may have changed.
     this.notifyResourcesUpdated(payload.key);
 
-    this.respond(httpRespond.html(buildConnectSuccessPage({ key: payload.key })));
+    this.respond(this.htmlPage(buildConnectSuccessPage({ key: payload.key })));
   }
 
   // ============================================
@@ -255,6 +253,11 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
   }
 
   /** Render the single-field connect page (reusing the login field renderer). */
+  /** An HTML response with the built-in auth pages' security headers (#263). */
+  private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
+    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+  }
+
   private renderConnectPage(
     payload: CredentialResumePayload,
     login: LoginConfig | undefined,

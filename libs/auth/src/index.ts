@@ -51,6 +51,8 @@ export {
   wideLayout,
   extraWideLayout,
   escapeHtml,
+  BUILT_IN_AUTH_PAGE_CSP,
+  builtInAuthPageHeaders,
   // Templates
   buildConsentPage,
   buildIncrementalAuthPage,
@@ -64,6 +66,7 @@ export {
   // Local-login rendering helper (Checkpoint 3a)
   renderLocalLoginPage,
   toLoginExtraFields,
+  withoutSecretFieldValues,
 } from './ui';
 export type {
   ThemeColors,
@@ -85,6 +88,8 @@ export {
   InMemoryAuthorizationStore,
   RedisAuthorizationStore,
   StorageAuthorizationStore,
+  sealPendingLogin,
+  openPendingLogin,
   verifyPkce,
   generatePkceChallenge,
   generateAuthorizationCode,
@@ -233,6 +238,7 @@ export type {
   PkceChallenge,
   AuthorizationCodeRecord,
   PendingAuthorizationRecord,
+  PendingLoginState,
   RefreshTokenRecord,
   ConsentStateRecord,
   FederatedLoginStateRecord,
@@ -517,6 +523,11 @@ export {
   AudienceValidator,
   // Authorization ID
   deriveAuthorizationId,
+  // Scope grants
+  DEFAULT_ALLOWED_SCOPES,
+  grantScopes,
+  // Redirect URIs
+  isLoopbackRedirectUri,
 } from './utils';
 export type {
   BearerErrorCode,

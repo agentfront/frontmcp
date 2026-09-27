@@ -26,6 +26,8 @@ const port = parseInt(process.env['PORT'] ?? '3122', 10);
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     // Progressive/Incremental authorization — opt-in. Enables app-level gating
     // and the incremental-authorize expansion path.
     incrementalAuth: {

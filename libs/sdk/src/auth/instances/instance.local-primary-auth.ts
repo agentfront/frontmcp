@@ -22,6 +22,7 @@ import {
   type ConsentStore,
   type DcrRegistryConfig,
   type FederatedAuthSessionStore,
+  type JSONWebKeySet,
   type SecureStoreBackend,
   type SecureStoreConfig,
   type TokenStorageConfig,
@@ -29,7 +30,6 @@ import {
   type VerifyResult,
 } from '@frontmcp/auth';
 import {
-  base64urlDecode,
   getEnv,
   isProduction,
   MemoryStorageAdapter,
@@ -43,6 +43,7 @@ import {
 import {
   FrontMcpAuth,
   ProviderScope,
+  resourceUriMatches,
   type FrontMcpLogger,
   type JWK,
   type ScopeEntry,
@@ -198,6 +199,8 @@ export interface UpstreamProviderConfig {
   userInfoEndpoint?: string;
   /** JWKS URI for ID token validation (optional) */
   jwksUri?: string;
+  /** Inline JWKS for ID token validation (optional; wins over `jwksUri`). */
+  jwks?: JSONWebKeySet;
   /** Client ID */
   clientId: string;
   /** Client secret (for confidential clients) */
@@ -219,6 +222,10 @@ export interface UpstreamProviderConfig {
    * absent the `iss` check is skipped (the parameter is only SHOULD-sent).
    */
   issuer?: string;
+  /** Other issuer values this provider legitimately uses (`providerConfig.additionalIssuers`). */
+  additionalIssuers?: string[];
+  /** `false` turns off the issuer checks for this provider (`providerConfig.verifyIssuer`). */
+  verifyIssuer?: boolean;
 }
 
 /**
@@ -245,17 +252,30 @@ function normalizeIssuer(value: string): string {
 export function validateAuthorizationIssuer(
   received: string | undefined,
   expected: string | undefined,
+  /** Other issuer values the provider is configured to use. */
+  additional: readonly string[] = [],
 ): { ok: true } | { ok: false; reason: string } {
   if (received === undefined) return { ok: true };
   if (!expected) return { ok: true };
 
-  if (normalizeIssuer(received) !== normalizeIssuer(expected)) {
+  const accepted = [expected, ...additional].map(normalizeIssuer);
+  if (!accepted.includes(normalizeIssuer(received))) {
     return {
       ok: false,
       reason: `Authorization response issuer "${received}" does not match the configured issuer "${expected}"`,
     };
   }
   return { ok: true };
+}
+
+/**
+ * Whether a token's `aud` (a string or a list) names the protected resource
+ * `resource`, comparing RFC 8707 resource URIs (scheme/host case, default
+ * ports and a trailing slash don't matter). A token without `aud` never does.
+ */
+function audienceMatchesResource(aud: unknown, resource: string): boolean {
+  const audiences = typeof aud === 'string' ? [aud] : Array.isArray(aud) ? aud : [];
+  return audiences.some((value) => typeof value === 'string' && resourceUriMatches(value, resource));
 }
 
 /**
@@ -827,38 +847,65 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     return false;
   }
 
-  async signAnonymousJwt() {
-    const sub = randomUUID();
-    return new SignJWT({ sub, role: 'user', anonymous: true })
+  /**
+   * Sign a token for the anonymous grant (`grant_type=anonymous`).
+   *
+   * The holder is anonymous (#270): the subject is an `anon:` id, so
+   * `this.auth.isAnonymous` is true and authorities treat it as no signed-in
+   * user, and its scopes are the configured `anonymousScopes`, never a role.
+   *
+   * @param options.audience The protected resource the token is for (`aud`, #269).
+   */
+  async signAnonymousJwt(options: { audience?: string } = {}) {
+    const jwt = new SignJWT({ sub: `anon:${randomUUID()}`, anonymous: true, scope: this.anonymousScopes().join(' ') })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
       .setIssuer(this.issuer)
       .setExpirationTime('1d')
-      .sign(this.secret);
+      .setJti(randomUUID());
+    if (options.audience) jwt.setAudience(options.audience);
+    return jwt.sign(this.secret);
+  }
+
+  /** The scopes an anonymous caller holds: `anonymousScopes`, default `['anonymous']`. */
+  private anonymousScopes(): string[] {
+    const scopes = (this.options as { anonymousScopes?: unknown }).anonymousScopes;
+    return Array.isArray(scopes) ? scopes.filter((s): s is string => typeof s === 'string') : ['anonymous'];
   }
 
   /**
    * Cryptographically verify a gateway-issued access token (public/local/remote
    * "gateway" modes). Gateway tokens — both authenticated access tokens
    * ({@link signAccessToken}) and anonymous tokens ({@link signAnonymousJwt}) —
-   * are HS256-signed with `this.secret`, so this instance is the sole holder of
-   * the verification key.
+   * are HS256-signed with `this.secret`.
    *
-   * Enforces the signature and lifetime claims (`exp`/`nbf`, checked by `jose`
-   * by default). Issuer equality is intentionally NOT enforced: proxy/tunnel
-   * deployments legitimately present an `iss` that differs from the
-   * request-derived base URL (see {@link deriveIssuer}). Algorithm is pinned to
-   * HS256 to block `alg` confusion (e.g. a forged `alg: none` or asymmetric
-   * header). `expectedIssuer` is accepted for parity/logging only.
+   * The secret alone doesn't make a token this server's: every server started
+   * with the same JWT_SECRET holds it. So a token must also (#269):
+   * - name THIS instance as its issuer (`iss`, the boot-time issuer it signs
+   *   with, never the request-derived base URL), and
+   * - when `expectedAudience` is given, be issued for that protected resource
+   *   (`aud`, compared as RFC 8707 resource URIs).
+   *
+   * Lifetime: `exp` is required (#272) and checked with `nbf` by `jose`. The
+   * algorithm is pinned to HS256 to block `alg` confusion.
    */
-  override async verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult> {
+  override async verifyGatewayToken(
+    token: string,
+    requestBaseUrl: string,
+    expectedAudience?: string,
+  ): Promise<VerifyResult> {
     try {
       const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
         algorithms: ['HS256'],
+        issuer: this.issuer,
+        requiredClaims: ['exp'],
       });
+      if (expectedAudience !== undefined && !audienceMatchesResource(payload.aud, expectedAudience)) {
+        return { ok: false, error: 'Token audience does not match this resource' };
+      }
       return {
         ok: true,
-        issuer: (payload.iss as string | undefined) ?? expectedIssuer,
+        issuer: (payload.iss as string | undefined) ?? requestBaseUrl,
         sub: payload.sub,
         header: protectedHeader,
         payload,
@@ -950,6 +997,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     redirectUri: string,
     codeVerifier: string,
     clientSecret?: string,
+    /** The protected resource the token is for when the grant recorded none (#269). */
+    defaultAudience?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients (RFC 6749 §2.3 / §3.2.1). Public and
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
@@ -1049,7 +1098,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
           }
         : undefined;
 
-    const accessToken = await this.signAccessToken(user, codeRecord.scopes, codeRecord.resource, consentMetadata);
+    // Every token names the resource it is for (#269); the authorize flow
+    // records one, `defaultAudience` covers a grant that predates that.
+    const resource = codeRecord.resource ?? defaultAudience;
+    const accessToken = await this.signAccessToken(user, codeRecord.scopes, resource, consentMetadata);
 
     // Migrate tokens from pending to real authorization ID (for federated auth)
     if (codeRecord.pendingAuthId && codeRecord.federatedLoginUsed) {
@@ -1076,7 +1128,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       clientId,
       userSub: user.sub,
       scopes: codeRecord.scopes,
-      resource: codeRecord.resource,
+      resource,
       userEmail: user.email,
       userName: user.name,
       consentEnabled: codeRecord.consentEnabled,
@@ -1110,6 +1162,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     refreshToken: string,
     clientId: string,
     clientSecret?: string,
+    /** The protected resource the token is for when the grant recorded none (#269). */
+    defaultAudience?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
@@ -1160,14 +1214,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
             customClaims: tokenRecord.customClaims,
           }
         : undefined;
-    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, tokenRecord.resource, consentMetadata);
+    // A refresh token issued before tokens named their resource gets one now (#269).
+    const resource = tokenRecord.resource ?? defaultAudience;
+    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata);
 
     // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({
       clientId,
       userSub: tokenRecord.userSub,
       scopes: tokenRecord.scopes,
-      resource: tokenRecord.resource,
+      resource,
       userEmail: tokenRecord.userEmail,
       userName: tokenRecord.userName,
       consentEnabled: tokenRecord.consentEnabled,
@@ -1498,10 +1554,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       tokenEndpoint: cfg?.tokenEndpoint ?? `${base}/token`,
       userInfoEndpoint: cfg?.userInfoEndpoint ?? `${base}/userinfo`,
       jwksUri: cfg?.jwksUri ?? `${base}/.well-known/jwks.json`,
+      jwks: cfg?.jwks,
       clientId: options.clientId,
       clientSecret: options.clientSecret,
       scopes: options.scopes ?? ['openid'],
       callbackUrl: `${this.issuer}/oauth/provider/${id}/callback`,
+      // The provider is the issuer, as in transparent mode (#271): an RFC 9207
+      // `iss` on its callback and its id_token's `iss` must name it.
+      issuer: options.provider,
+      additionalIssuers: cfg?.additionalIssuers,
+      verifyIssuer: cfg?.verifyIssuer,
     });
   }
 
@@ -1653,39 +1715,24 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   ): Promise<{ sub: string; email?: string; name?: string; picture?: string; claims?: Record<string, unknown> }> {
     const config = this.providerConfigs.get(providerId);
 
-    // If ID token is provided, extract user info from it.
-    //
-    // NOTE (defense-in-depth): the id_token is obtained on the server-to-server
-    // token back-channel over TLS (see `exchangeProviderCode`), NOT the browser
-    // front-channel, so OIDC Core §3.1.3.7 permits skipping JWS signature
-    // verification here. We still validate expiry and require a non-empty `sub`
-    // so a malformed/expired token is not trusted as identity.
-    if (idToken) {
-      try {
-        const [, payloadB64] = idToken.split('.');
-        const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64))) as Record<string, unknown>;
-
-        const exp = typeof payload['exp'] === 'number' ? (payload['exp'] as number) : undefined;
-        if (exp !== undefined && exp * 1000 < Date.now()) {
-          this.logger.warn(`ID token for ${providerId} is expired; falling back to userinfo`);
-        } else {
-          const sub =
-            typeof payload['sub'] === 'string' && payload['sub'].trim() ? (payload['sub'] as string) : undefined;
-          if (sub) {
-            return {
-              sub,
-              email: payload['email'] as string | undefined,
-              name: payload['name'] as string | undefined,
-              picture: payload['picture'] as string | undefined,
-              claims: payload,
-            };
-          }
-          this.logger.warn(`ID token for ${providerId} has no usable sub; falling back to userinfo`);
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to parse ID token for ${providerId}: ${err}`);
-        // Fall through to userinfo endpoint
+    // The id_token names the user only when it verifies (#271): signed by a key
+    // the provider publishes (`providerConfig.jwks` / `jwksUri`), issued by the
+    // provider, for THIS client, and not expired. An id_token that doesn't
+    // verify, or can't be (no keys configured), is ignored and the identity
+    // comes from the userinfo endpoint, which answers for the access token.
+    if (idToken && config) {
+      const claims = await this.verifyProviderIdToken(config, idToken);
+      const sub = typeof claims?.['sub'] === 'string' && claims['sub'].trim() ? claims['sub'] : undefined;
+      if (claims && sub) {
+        return {
+          sub,
+          email: claims['email'] as string | undefined,
+          name: claims['name'] as string | undefined,
+          picture: claims['picture'] as string | undefined,
+          claims,
+        };
       }
+      this.logger.warn(`ID token for ${providerId} was not verified; using the userinfo endpoint for identity`);
     }
 
     // Try userinfo endpoint if available
@@ -1727,6 +1774,43 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       `Unable to determine a stable user identity from provider "${providerId}" ` +
         `(no id_token sub and no usable userinfo endpoint)`,
     );
+  }
+
+  /**
+   * Verify an upstream provider's `id_token` and return its claims, or
+   * `undefined` when it doesn't verify or no keys are configured to verify it.
+   *
+   * Checks the signature against the provider's published keys (inline
+   * `jwks`, else `jwksUri`, else the provider's discovery document), the
+   * issuer (the provider, plus `additionalIssuers`, unless `verifyIssuer` is
+   * false or no issuer is known), `exp`, and that `aud` names this client.
+   */
+  private async verifyProviderIdToken(
+    config: UpstreamProviderConfig,
+    idToken: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (!config.jwks?.keys?.length && !config.jwksUri) return undefined;
+    const result = await this.jwks.verifyTransparentToken(idToken, [
+      {
+        id: `upstream:${config.id}`,
+        issuerUrl: config.issuer ?? '',
+        additionalIssuers: config.additionalIssuers,
+        verifyIssuer: config.issuer ? config.verifyIssuer : false,
+        jwks: config.jwks,
+        jwksUri: config.jwksUri,
+      },
+    ]);
+    if (!result.ok || !result.payload) {
+      this.logger.warn(`ID token for ${config.id} failed verification: ${result.error ?? 'unknown'}`);
+      return undefined;
+    }
+    const aud = result.payload['aud'];
+    const audiences = typeof aud === 'string' ? [aud] : Array.isArray(aud) ? aud : [];
+    if (!audiences.includes(config.clientId)) {
+      this.logger.warn(`ID token for ${config.id} was issued for another client`);
+      return undefined;
+    }
+    return result.payload;
   }
 
   /**

@@ -40,6 +40,8 @@ function resolveSecureStore(): SecureStoreConfig {
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     secureStore: resolveSecureStore(),

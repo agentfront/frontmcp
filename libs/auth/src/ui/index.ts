@@ -15,6 +15,8 @@ export {
   wideLayout,
   extraWideLayout,
   escapeHtml,
+  BUILT_IN_AUTH_PAGE_CSP,
+  builtInAuthPageHeaders,
 } from './base-layout';
 export type { ThemeColors, ThemeFonts, ThemeConfig, BaseLayoutOptions } from './base-layout';
 
@@ -33,4 +35,4 @@ export {
 export type { AppAuthCard, ProviderCard, ToolCard, LoginExtraField, ConsentHiddenField } from './templates';
 
 // Local-login rendering helper (Checkpoint 3a)
-export { renderLocalLoginPage, toLoginExtraFields } from './local-login.helper';
+export { renderLocalLoginPage, toLoginExtraFields, withoutSecretFieldValues } from './local-login.helper';

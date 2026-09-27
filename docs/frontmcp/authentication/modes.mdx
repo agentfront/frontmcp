@@ -214,6 +214,8 @@ the same signing keys, FrontMCP enforces two claims on top of the signature:
   **service A** from being replayed against **service B**. Tokens with no `aud`
   claim are accepted for IdP compatibility; set `expectedAudience` and issue
   audience-bound tokens for the strictest posture.
+- **Expiry (`exp`)** — required. A token without `exp` would never expire, so it
+  is refused.
 
 <Warning>
   **`providerConfig.verifyIssuer: false` disables issuer validation entirely.**
@@ -360,20 +362,30 @@ sequenceDiagram
     FrontMCP->>Store: Get & validate code
     FrontMCP->>FrontMCP: Verify PKCE<br/>SHA256(code_verifier) == code_challenge
     FrontMCP->>Store: Mark code as used
-    FrontMCP->>FrontMCP: Sign FrontMCP session token (JWT)<br/>using identity from upstream id_token
+    FrontMCP->>FrontMCP: Sign FrontMCP session token (JWT)<br/>using the upstream identity
     FrontMCP->>Store: Store refresh token (links to upstream tokens)
     FrontMCP-->>Client: { access_token, refresh_token, expires_in }
 ```
 
+The upstream identity comes from the IdP's `id_token` only when it verifies:
+signed by a key the provider publishes (`providerConfig.jwks`, else
+`providerConfig.jwksUri`, else `<provider>/.well-known/jwks.json`), issued by
+`provider` (or `providerConfig.additionalIssuers`), for `clientId`, and not
+expired. Otherwise FrontMCP asks the userinfo endpoint. A callback whose RFC 9207
+`iss` names another server, and a sign-in the user declined at the IdP
+(`error=access_denied`), end with an error page and no code.
+
 ### Configuration Options
 
-| Option               | Type                                                             | Default                      | Description                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `consent`            | `ConsentConfig`                                                  | `undefined` (block optional) | Tool-selection consent screen + call-time enforcement (see Local docs). When the block is present, inner `enabled` defaults to `false`. |
-| `tokenStorage`       | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }` | `'memory'`                   | Storage backend (memory / sqlite / redis)                                                                                               |
-| `allowDefaultPublic` | `boolean`                                                        | `false`                      | Allow unauthenticated requests                                                                                                          |
-| `federatedAuth`      | `FederatedAuthConfig`                                            | -                            | Federated auth state validation                                                                                                         |
-| `incrementalAuth`    | `IncrementalAuthConfig`                                          | `undefined` (block optional) | Progressive authorization. When the block is present, inner `enabled` defaults to `true`.                                               |
+| Option                     | Type                                                             | Default                      | Description                                                                                                                             |
+| -------------------------- | ---------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `requireRegisteredClients` | `boolean`                                                        | `true`                       | Refuse an MCP client that isn't registered (DCR) or a CIMD URL                                                                          |
+| `allowedScopes`            | `string[]`                                                       | OpenID scopes                | Scopes FrontMCP may grant in its own tokens (see Local docs). Unrelated to `scopes`, which are requested from the IdP                   |
+| `consent`                  | `ConsentConfig`                                                  | `undefined` (block optional) | Tool-selection consent screen + call-time enforcement (see Local docs). When the block is present, inner `enabled` defaults to `false`. |
+| `tokenStorage`             | `'memory' \| { redis: RedisConfig } \| { sqlite: SqliteConfig }` | `'memory'`                   | Storage backend (memory / sqlite / redis)                                                                                               |
+| `allowDefaultPublic`       | `boolean`                                                        | `false`                      | Allow unauthenticated requests                                                                                                          |
+| `federatedAuth`            | `FederatedAuthConfig`                                            | -                            | Federated auth state validation                                                                                                         |
+| `incrementalAuth`          | `IncrementalAuthConfig`                                          | `undefined` (block optional) | Progressive authorization. When the block is present, inner `enabled` defaults to `true`.                                               |
 
 ### Consent Configuration
 
