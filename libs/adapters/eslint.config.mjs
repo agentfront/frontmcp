@@ -26,10 +26,13 @@ export default [
       // Allow mcp-from-openapi imports despite being mocked in tests
       '@nx/enforce-module-boundaries': ['error', { allow: ['mcp-from-openapi'] }],
       // Block self-referencing package import
-      'no-restricted-imports': ['error', {
-        paths: [{ name: '@frontmcp/adapters', message: 'Do not self-import. Use relative paths.' }],
-        patterns: [{ group: ['@frontmcp/adapters/*'], message: 'Do not self-import. Use relative paths.' }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: '@frontmcp/adapters', message: 'Do not self-import. Use relative paths.' }],
+          patterns: [{ group: ['@frontmcp/adapters/*'], message: 'Do not self-import. Use relative paths.' }],
+        },
+      ],
     },
   },
   {
