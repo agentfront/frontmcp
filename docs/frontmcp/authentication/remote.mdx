@@ -184,7 +184,7 @@ export class Server {}
 | `expectedAudience`          | `string \| string[]` | Resource URL         | Audiences (`aud`) whose tokens this server accepts, in place of the request's URL |
 
 <Note>
-  `/oauth/authorize` gives the browser a `frontmcp_signin_<id>` cookie, and the
+  `/oauth/authorize` gives the browser a `frontmcp_signin_<id>` cookie (`__Host-frontmcp_signin_<id>` over https), and the
   provider callback accepts the sign-in only from the browser that holds it, so
   the browser must start the sign-in on the host the IdP returns to (the
   issuer's host). See [Sign-in cookie](/frontmcp/authentication/local#sign-in-cookie).

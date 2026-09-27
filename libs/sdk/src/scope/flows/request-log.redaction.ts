@@ -22,11 +22,11 @@ const CREDENTIAL_HEADERS = new Set([
 
 /**
  * Header names that carry a credential by convention (`x-auth-token`, `x-access-token`,
- * `x-client-secret`, `x-amz-security-token`, `x-hub-signature-256`, ...), matched by whole
- * dash-separated words.
+ * `x-client-secret`, `x-client-key`, `x-functions-key`, `x-amz-security-token`,
+ * `x-hub-signature-256`, ...), matched by whole dash-separated words.
  */
 const CREDENTIAL_HEADER_WORDS =
-  /(?:^|-)(?:auth|authorization|token|secret|password|passwd|credential|credentials|apikey|api-key|signature|cookie)(?:-|$)/;
+  /(?:^|-)(?:auth|authorization|token|secret|password|passwd|credential|credentials|key|apikey|signature|cookie)(?:-|$)/;
 
 /** `mcp-session-id`, and the edge runtime's `x-frontmcp-session-id`. */
 const SESSION_ID_HEADER = /(?:^|-)session-id$/;

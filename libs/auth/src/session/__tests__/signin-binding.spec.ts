@@ -3,6 +3,7 @@ import { sha256Hex } from '@frontmcp/utils';
 import {
   createSigninBinding,
   SIGNIN_BINDING_COOKIE_PREFIX,
+  SIGNIN_BINDING_SECURE_COOKIE_PREFIX,
   signinBindingCookieName,
   signinBindingMatches,
 } from '../signin-binding';
@@ -57,5 +58,27 @@ describe('sign-in binding', () => {
     const binding = createSigninBinding('pending-1');
 
     expect(signinBindingMatches(`${binding.cookieName}=${binding.value}`, 'pending-1', undefined)).toBe(false);
+  });
+
+  describe('over https', () => {
+    it('names the cookie with the __Host- prefix', () => {
+      const binding = createSigninBinding('pending-1', { secure: true });
+
+      expect(SIGNIN_BINDING_SECURE_COOKIE_PREFIX).toBe(`__Host-${SIGNIN_BINDING_COOKIE_PREFIX}`);
+      expect(binding.cookieName).toBe(`__Host-${signinBindingCookieName('pending-1')}`);
+      expect(binding.cookieName).toBe(signinBindingCookieName('pending-1', { secure: true }));
+    });
+
+    it('matches only the __Host- cookie, never a same-named cookie another host could set', () => {
+      const binding = createSigninBinding('pending-1', { secure: true });
+      const plainName = signinBindingCookieName('pending-1');
+
+      expect(
+        signinBindingMatches(`${binding.cookieName}=${binding.value}`, 'pending-1', binding.hash, { secure: true }),
+      ).toBe(true);
+      expect(signinBindingMatches(`${plainName}=${binding.value}`, 'pending-1', binding.hash, { secure: true })).toBe(
+        false,
+      );
+    });
   });
 });

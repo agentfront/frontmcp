@@ -52,6 +52,8 @@ const SECRETS = {
   'x-auth-token': 'auth-token-secret-0007',
   'x-access-token': 'access-token-secret-0008',
   'x-client-secret': 'client-secret-0009',
+  'x-client-key': 'client-key-secret-0011',
+  'x-functions-key': 'functions-key-secret-0012',
   referer: 'https://ops.example.com/dashboard?token=referer-token-secret-0010',
 } as const;
 
@@ -67,6 +69,8 @@ function secretValues(): string[] {
     'access-token-secret-0008',
     'client-secret-0009',
     'referer-token-secret-0010',
+    'client-key-secret-0011',
+    'functions-key-secret-0012',
   ];
 }
 

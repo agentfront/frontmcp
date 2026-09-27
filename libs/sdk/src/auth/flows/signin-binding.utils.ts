@@ -4,6 +4,7 @@
  * callbacks run before resuming a sign-in.
  */
 import {
+  createSigninBinding,
   SIGNIN_BINDING_MAX_AGE_SECONDS,
   signinBindingCookieName,
   signinBindingMatches,
@@ -29,43 +30,63 @@ export function signinCookiePath(issuer: string, scopePath: string): string {
   return issuerPath === '' && scopePath.replace(/\/+$/, '') === '' ? '/oauth' : '/';
 }
 
-/** Whether the browser reached this request over https (so the cookie can be `Secure`). */
-function isHttps(request: ServerRequest): boolean {
+/**
+ * Whether the browser reached this request over https. The binding cookie is then a `__Host-`
+ * cookie (`Secure`, `Path=/`, no `Domain`), which no other host can set in the browser.
+ */
+export function signinOverHttps(request: ServerRequest): boolean {
   if (isSecureRequest(request as unknown as Parameters<typeof isSecureRequest>[0])) return true;
   if (getRequestBaseUrl(request).startsWith('https:')) return true;
   const webRequest = (request as unknown as Record<PropertyKey, unknown>)[ServerRequestTokens.webRequest];
   return webRequest instanceof Request && webRequest.url.startsWith('https:');
 }
 
-/** The cookie that gives the browser its binding: HttpOnly, SameSite=Lax, Secure over https. */
+/**
+ * The binding for a new sign-in started by `request`: named `__Host-…` when the browser came over
+ * https (see {@link signinOverHttps}).
+ */
+export function createRequestSigninBinding(request: ServerRequest, pendingAuthId: string): SigninBinding {
+  return createSigninBinding(pendingAuthId, { secure: signinOverHttps(request) });
+}
+
+/**
+ * The cookie that gives the browser its binding: HttpOnly and SameSite=Lax. Over https it is the
+ * `__Host-` cookie, so `Secure` with `Path=/` (the prefix requires both); otherwise it is scoped to `path`.
+ */
 export function signinBindingCookie(request: ServerRequest, binding: SigninBinding, path: string): HttpCookie {
+  const secure = signinOverHttps(request);
   return {
     name: binding.cookieName,
     value: binding.value,
-    path,
+    path: secure ? '/' : path,
     httpOnly: true,
     // Lax, not Strict: the upstream provider returns the browser with a
     // cross-site top-level GET, which must carry the cookie.
     sameSite: 'lax',
-    secure: isHttps(request),
+    secure,
     maxAge: SIGNIN_BINDING_MAX_AGE_SECONDS,
   };
 }
 
 /** A `Set-Cookie` that removes the binding cookie of `pendingAuthId` once its sign-in is over. */
 export function clearedSigninBindingCookie(request: ServerRequest, pendingAuthId: string, path: string): HttpCookie {
+  const secure = signinOverHttps(request);
   return {
-    name: signinBindingCookieName(pendingAuthId),
+    name: signinBindingCookieName(pendingAuthId, { secure }),
     value: '',
-    path,
+    path: secure ? '/' : path,
     httpOnly: true,
     sameSite: 'lax',
-    secure: isHttps(request),
+    secure,
     maxAge: 0,
   };
 }
 
-/** Whether `request` comes from the browser that started the sign-in `pendingAuthId` (its binding hash is `hash`). */
+/**
+ * Whether `request` comes from the browser that started the sign-in `pendingAuthId` (its binding hash
+ * is `hash`). Over https only the `__Host-` cookie counts: a same-named cookie without the prefix may
+ * have been planted by a sibling host.
+ */
 export function requestHoldsSigninBinding(
   request: ServerRequest,
   pendingAuthId: string,
@@ -73,7 +94,7 @@ export function requestHoldsSigninBinding(
 ): boolean {
   const raw = (request.headers as Record<string, string | string[] | undefined> | undefined)?.['cookie'];
   const header = Array.isArray(raw) ? raw.join('; ') : raw;
-  return signinBindingMatches(header, pendingAuthId, hash);
+  return signinBindingMatches(header, pendingAuthId, hash, { secure: signinOverHttps(request) });
 }
 
 /** `output` with `cookie` added to the cookies it sets. */

@@ -112,6 +112,16 @@ class AnyAppApprovalPlugin {
 })
 class GuardedTriageAgent extends AgentContext {}
 
+/** A plugin that contributes a tool asking for approval to whatever installs it, and enforces nothing. */
+@Plugin({ name: 'queue-tools', tools: [tool('purge_queue', APPROVAL)] })
+class QueueToolsPlugin {}
+
+@Agent({ name: 'queue_agent', inputSchema: {}, llm, plugins: [QueueToolsPlugin] })
+class QueueAgent extends AgentContext {}
+
+@Agent({ name: 'guarded_queue_agent', inputSchema: {}, llm, plugins: [QueueToolsPlugin, AnyAppApprovalPlugin] })
+class GuardedQueueAgent extends AgentContext {}
+
 function server(app: Record<string, unknown>, extra: Partial<FrontMcpConfigInput> = {}): FrontMcpConfigInput {
   @App({ id: 'desk', name: 'Desk', ...app })
   class DeskApp {}
@@ -166,6 +176,13 @@ describe('startup check for metadata that only a plugin enforces', () => {
     await expect(startup).rejects.toThrow(/Tool "triage:close_ticket".*'approval'/);
   });
 
+  it("refuses to start when a tool an agent's plugin contributes asks for approval nothing on the agent enforces", async () => {
+    const startup = start(server({ agents: [QueueAgent] }, { plugins: [AnyAppApprovalPlugin] }));
+
+    await expect(startup).rejects.toBeInstanceOf(UnenforcedMetadataError);
+    await expect(startup).rejects.toThrow(/Tool "queue_agent:purge_queue".*'approval'/);
+  });
+
   it('names every entry, the first five in the message', async () => {
     const tools = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((name) => tool(`tool_${name}`, APPROVAL));
 
@@ -199,6 +216,10 @@ describe('servers the check lets start', () => {
 
   it("starts when the agent's own plugin enforces its tools' field", async () => {
     await expect(start(server({ agents: [GuardedTriageAgent] }))).resolves.toBeUndefined();
+  });
+
+  it("starts when the agent's own plugin enforces the field of a tool another of its plugins contributes", async () => {
+    await expect(start(server({ agents: [GuardedQueueAgent] }))).resolves.toBeUndefined();
   });
 
   it('starts when the field is off or absent', async () => {

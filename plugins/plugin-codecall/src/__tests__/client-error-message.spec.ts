@@ -22,6 +22,24 @@ describe('toClientErrorMessage', () => {
     ['a Windows path with forward slashes', 'failed reading C:/Users/ops/secret.json', 'failed reading [path]'],
     ['a UNC path', 'failed reading \\\\fileserver\\share\\secret.json', 'failed reading [path]'],
     ['a line and column suffix', 'boom in /srv/app/x.js:10:5', 'boom in [path]:10:5'],
+    [
+      'a path right after a URL',
+      'https://api.example.com/v1/users,/srv/app/secret.txt',
+      'https://api.example.com/v1/users,[path]',
+    ],
+    [
+      'a path in a URL query value',
+      'GET https://x.example.com/cb?file=/srv/app/secret.txt&y=2 failed',
+      'GET https://x.example.com/cb?file=[path]&y=2 failed',
+    ],
+    ['a Windows drive path with doubled slashes', 'failed reading C://Users/alice/secret.txt', 'failed reading [path]'],
+    [
+      'a Windows drive path with doubled backslashes',
+      'failed reading C:\\\\Users\\\\alice\\\\x.txt',
+      'failed reading [path]',
+    ],
+    ['a POSIX path with a leading doubled slash', 'open //etc/passwd failed', 'open [path] failed'],
+    ['a POSIX path with a doubled slash inside', 'open /srv//app/secret.txt failed', 'open [path] failed'],
   ])('redacts %s', (_label, message, expected) => {
     expect(toClientErrorMessage(message)).toBe(expected);
   });
@@ -48,6 +66,7 @@ describe('toClientErrorMessage', () => {
 
   it.each([
     ['an https URL', 'upstream said 404 for https://api.example.com/v1/users?id=2'],
+    ['a URL with commas and semicolons', 'GET https://api.example.com/v1/items;v=2?ids=1,2,3 failed'],
     ['an http URL', 'fetch http://localhost:3000/mcp failed'],
     ['a ratio', 'expected 1/2 of the quota, got 3/4'],
     ['a date', 'expired on 2026/09/27'],
@@ -66,6 +85,9 @@ describe('toClientErrorMessage', () => {
     ['blank lines', '\n'.repeat(100_000)],
     ['spaced path segments', ' /a b c'.repeat(30_000)],
     ['unclosed quotes', "'/a".repeat(60_000)],
+    ['URL query pairs', 'https://x.example.com/?' + 'a=/b&'.repeat(30_000)],
+    ['doubled drive separators', 'C:' + '//a'.repeat(30_000)],
+    ['doubled POSIX separators', '/' + '/a/'.repeat(30_000)],
   ])('redacts a long message of %s in linear time', (_label, message) => {
     const started = Date.now();
     toClientErrorMessage(message);

@@ -14,9 +14,14 @@ const QUOTED_PATH_RE = /(['"`])((?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s'"`\\/][^'"`\n]*
 
 /**
  * A URL with a scheme. Kept as it is, except a `file:` URL, which is a path. The scheme is capped
- * at 32 characters: unbounded, every word of `a.a.a.…` would scan to the end of the message.
+ * at 32 characters: unbounded, every word of `a.a.a.…` would scan to the end of the message. It
+ * has at least two, so a drive letter (`C://Users/…`) is a path, not a scheme. A `,` or `;` ends
+ * the URL when a path follows it (`https://x/a,/srv/secret`), and is part of it otherwise.
  */
-const URL_RE = /\b[A-Za-z][A-Za-z0-9+.-]{0,31}:\/\/[^\s'"`<>]*/g;
+const URL_RE = /\b[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/(?:[^\s'"`<>,;]|[,;](?!~?\/|[A-Za-z]:[\\/]|\\\\))*/g;
+
+/** A URL query value that is an absolute path (`?file=/srv/app/x`), up to the next `&` or `#`. */
+const QUERY_PATH_VALUE_RE = /([?&][^=&#]*=)(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^&#]*/g;
 
 const POSIX_SEGMENT = String.raw`[^\s/\\'"\x60<>|,;:()\[\]{}]+`;
 const WINDOWS_SEGMENT = String.raw`[^\s/\\'"\x60<>|,;:*?]+`;
@@ -33,13 +38,14 @@ function segments(segment: string, separator: string): string {
 
 /**
  * An unquoted absolute path. A POSIX path must start the word (not `1/2`, `and/or`, `docs/x`,
- * `./x`), and needs a character after the slash (not `a / b`).
+ * `./x`), and needs a character after the slash (not `a / b`). Separators may repeat
+ * (`//etc/passwd`, `/srv//app`, `C://Users`), as they do in paths the OS accepts.
  */
 const UNQUOTED_PATH_RE = new RegExp(
   [
-    String.raw`(?<![\w.~/\\)\]-])~?/${segments(POSIX_SEGMENT, '/')}`,
-    String.raw`(?<![\w\\/])[A-Za-z]:[\\/]${segments(WINDOWS_SEGMENT, String.raw`[\\/]`)}?`,
-    String.raw`(?<![\w\\])\\\\${segments(WINDOWS_SEGMENT, String.raw`[\\/]`)}`,
+    String.raw`(?<![\w.~/\\)\]-])~?/+${segments(POSIX_SEGMENT, '/+')}`,
+    String.raw`(?<![\w\\/])[A-Za-z]:[\\/]+${segments(WINDOWS_SEGMENT, String.raw`[\\/]+`)}?`,
+    String.raw`(?<![\w\\])\\\\${segments(WINDOWS_SEGMENT, String.raw`[\\/]+`)}`,
   ].join('|'),
   'g',
 );
@@ -67,7 +73,7 @@ export function redactAbsolutePaths(text: string): string {
   for (const match of text.matchAll(URL_RE)) {
     const start = match.index ?? 0;
     result += redactPaths(text.slice(last, start));
-    result += /^file:/i.test(match[0]) ? '[path]' : match[0];
+    result += /^file:/i.test(match[0]) ? '[path]' : match[0].replace(QUERY_PATH_VALUE_RE, '$1[path]');
     last = start + match[0].length;
   }
   return result + redactPaths(text.slice(last));
