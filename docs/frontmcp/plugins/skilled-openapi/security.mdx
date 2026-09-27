@@ -84,7 +84,7 @@ SkilledOpenApiPlugin.init({
 
 ## RFC 8707 enforcement
 
-On the `saas` source, the pinned `authToken` is verified before every pull: it must be signed by a key in `jwksUrl`, its `iss` must equal `expectedIssuer`, its `aud` must include `expectedAudience` (and its `resource` claim too, when it has one), and it must not be expired. A rejected token stops the pull, and the cached bundle is not used in its place; an unreachable JWKS is treated like any other pull failure.
+On the `saas` source, the pinned `authToken` is verified before every pull: it must be signed by a key in `jwksUrl`, its `iss` must equal `expectedIssuer`, its `aud` must include `expectedAudience` (and its `resource` claim too, when it has one), and it must not be expired. A rejected token stops the pull, and the cached bundle is not used in its place; an unreachable JWKS, or one with no usable signing key, is treated like any other pull failure.
 
 Per the MCP authorization spec (draft 2026-03-15), every JWT must carry RFC 8707 Resource Indicators. The plugin enforces this on the SaaS-push channel via `BundlePushJwtVerifier`:
 
@@ -148,7 +148,7 @@ The check happens on each `callTool` the `run_workflow` script issues, with the 
 
 When the server configures [authorities](/frontmcp/authentication/authorities) (`@FrontMcp({ authorities })` or the authorities plugin), bundle rules are evaluated with the server's engine and context builder, so roles and permissions come through its `claimsMapping` / `claimsResolver` and its custom evaluators apply, exactly as for `@Tool({ authorities })`. Without server authorities, roles come from the token's `roles` claim and permissions from `permissions`.
 
-The same rules decide what a caller can discover. `search_skill`, the skill catalog in the `search_skill` description, and the SDK's skill surfaces (`skills/list`, `skills/load`, `skill://` resources) leave out a skill whose skill-level `requiredAuthorities` the caller doesn't satisfy, and `load_skill` answers `SKILL_NOT_FOUND` for it. `load_skill` also leaves out the actions the caller can never run (an operation rule that refuses the caller, or a policy-less, non-public operation under `unprotectedOps: 'deny'`); a rule that depends on the action's input can only be judged at call time, so it doesn't hide the action. `search_skill` and `load_skill` also apply `@Skill({ authorities })` and the `skills:filter` flow (feature flags) to the server's other skills.
+The same rules decide what a caller can discover. `search_skill`, the skill catalog in the `search_skill` description, and the SDK's skill surfaces (`skills/list`, `skills/load`, `skill://` resources) leave out a skill whose skill-level `requiredAuthorities` the caller doesn't satisfy, and `load_skill` answers `SKILL_NOT_FOUND` for it. `load_skill` also leaves out the actions the caller can never run (an operation rule that refuses the caller, or a policy-less, non-public operation under `unprotectedOps: 'deny'`); a rule that depends on the action's input (including a profile name whose rule does) can only be judged at call time, so it doesn't hide the action. `search_skill` and `load_skill` also apply `@Skill({ authorities })` and the `skills:filter` flow (feature flags) to the server's other skills.
 
 ## OWASP MCP Top 10 (2026) coverage
 

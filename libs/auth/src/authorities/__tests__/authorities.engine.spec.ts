@@ -1,10 +1,10 @@
 import { AuthoritiesEngine } from '../authorities.engine';
-import { AuthoritiesProfileRegistry, AuthoritiesEvaluatorRegistry } from '../authorities.registry';
+import { AuthoritiesEvaluatorRegistry, AuthoritiesProfileRegistry } from '../authorities.registry';
 import type {
   AuthoritiesEvaluationContext,
+  AuthoritiesEvaluator,
   AuthoritiesPolicyMetadata,
   RelationshipResolver,
-  AuthoritiesEvaluator,
 } from '../authorities.types';
 
 function createCtx(overrides: Partial<AuthoritiesEvaluationContext> = {}): AuthoritiesEvaluationContext {
@@ -73,6 +73,12 @@ describe('AuthoritiesEngine', () => {
       const result = await engine.evaluate(['admin', 'superadmin'], createCtx());
       expect(result.granted).toBe(false);
     });
+
+    it('should expose the policy a profile name stands for without evaluating it', () => {
+      const engine = createEngine({ admin: { roles: { any: ['admin'] } } });
+      expect(engine.resolveProfile('admin')).toEqual({ roles: { any: ['admin'] } });
+      expect(engine.resolveProfile('unknown')).toBeUndefined();
+    });
   });
 
   // =============================================
@@ -94,10 +100,7 @@ describe('AuthoritiesEngine', () => {
 
     it('should grant when ABAC attributes pass', async () => {
       const engine = createEngine();
-      const result = await engine.evaluate(
-        { attributes: { match: { 'claims.department': 'eng' } } },
-        createCtx(),
-      );
+      const result = await engine.evaluate({ attributes: { match: { 'claims.department': 'eng' } } }, createCtx());
       expect(result.granted).toBe(true);
     });
 
@@ -151,10 +154,7 @@ describe('AuthoritiesEngine', () => {
       const engine = createEngine();
       const result = await engine.evaluate(
         {
-          allOf: [
-            { roles: { any: ['admin'] } },
-            { permissions: { any: ['users:read'] } },
-          ],
+          allOf: [{ roles: { any: ['admin'] } }, { permissions: { any: ['users:read'] } }],
         },
         createCtx(),
       );
@@ -165,10 +165,7 @@ describe('AuthoritiesEngine', () => {
       const engine = createEngine();
       const result = await engine.evaluate(
         {
-          allOf: [
-            { roles: { any: ['admin'] } },
-            { roles: { all: ['superadmin'] } },
-          ],
+          allOf: [{ roles: { any: ['admin'] } }, { roles: { all: ['superadmin'] } }],
         },
         createCtx(),
       );
@@ -181,10 +178,7 @@ describe('AuthoritiesEngine', () => {
       const engine = createEngine();
       const result = await engine.evaluate(
         {
-          anyOf: [
-            { roles: { all: ['superadmin'] } },
-            { roles: { any: ['admin'] } },
-          ],
+          anyOf: [{ roles: { all: ['superadmin'] } }, { roles: { any: ['admin'] } }],
         },
         createCtx(),
       );
@@ -195,10 +189,7 @@ describe('AuthoritiesEngine', () => {
       const engine = createEngine();
       const result = await engine.evaluate(
         {
-          anyOf: [
-            { roles: { all: ['superadmin'] } },
-            { permissions: { all: ['admin:all'] } },
-          ],
+          anyOf: [{ roles: { all: ['superadmin'] } }, { permissions: { all: ['admin:all'] } }],
         },
         createCtx(),
       );
@@ -209,19 +200,13 @@ describe('AuthoritiesEngine', () => {
   describe('not combinator', () => {
     it('should grant when inner policy is denied (negation)', async () => {
       const engine = createEngine();
-      const result = await engine.evaluate(
-        { not: { roles: { any: ['banned'] } } },
-        createCtx(),
-      );
+      const result = await engine.evaluate({ not: { roles: { any: ['banned'] } } }, createCtx());
       expect(result.granted).toBe(true);
     });
 
     it('should deny when inner policy is granted (negation)', async () => {
       const engine = createEngine();
-      const result = await engine.evaluate(
-        { not: { roles: { any: ['admin'] } } },
-        createCtx(),
-      );
+      const result = await engine.evaluate({ not: { roles: { any: ['admin'] } } }, createCtx());
       expect(result.granted).toBe(false);
       expect(result.deniedBy).toContain('not');
     });
@@ -238,10 +223,7 @@ describe('AuthoritiesEngine', () => {
           anyOf: [
             { roles: { any: ['superadmin'] } },
             {
-              allOf: [
-                { roles: { any: ['manager'] } },
-                { attributes: { match: { 'claims.department': 'ops' } } },
-              ],
+              allOf: [{ roles: { any: ['manager'] } }, { attributes: { match: { 'claims.department': 'ops' } } }],
             },
           ],
         },
@@ -270,25 +252,16 @@ describe('AuthoritiesEngine', () => {
       };
       const engine = createEngine({}, { ipAllowList: ipEvaluator });
 
-      const granted = await engine.evaluate(
-        { custom: { ipAllowList: { allowed: true } } },
-        createCtx(),
-      );
+      const granted = await engine.evaluate({ custom: { ipAllowList: { allowed: true } } }, createCtx());
       expect(granted.granted).toBe(true);
 
-      const denied = await engine.evaluate(
-        { custom: { ipAllowList: { allowed: false } } },
-        createCtx(),
-      );
+      const denied = await engine.evaluate({ custom: { ipAllowList: { allowed: false } } }, createCtx());
       expect(denied.granted).toBe(false);
     });
 
     it('should deny when custom evaluator is not registered', async () => {
       const engine = createEngine();
-      const result = await engine.evaluate(
-        { custom: { unknownEval: { config: true } } },
-        createCtx(),
-      );
+      const result = await engine.evaluate({ custom: { unknownEval: { config: true } } }, createCtx());
       expect(result.granted).toBe(false);
       expect(result.deniedBy).toContain("custom evaluator 'unknownEval' is not registered");
     });

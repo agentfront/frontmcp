@@ -77,6 +77,7 @@ describe('NpmSource', () => {
     source.onChange((b) => events.push(b));
 
     await expect(source.start()).rejects.toThrow(/provenance/);
+    await expect(source.start()).rejects.toThrow(/runs its code before any bundle signature is checked/);
 
     expect(events).toEqual([]);
     expect(imported).toEqual([]);

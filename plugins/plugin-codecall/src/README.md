@@ -746,7 +746,6 @@ export type CodeCallExecuteResult =
         toolInput: unknown;
         message: string;
         code?: string;
-        details?: unknown;
       };
     }
   | {
@@ -816,14 +815,11 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
   - Include:
     - `toolName`
     - `toolInput`
-    - `message` (+ optional `code` / `details`).
+    - `message` (+ optional `code`). No `details`: the enclave's error data is not sanitized for clients.
 
 The LLM can also wrap `callTool` in `try/catch` inside the plan. If it doesn’t, CodeCall surfaces failures as `tool_error` with enough context for retries.
 
-Unknown tool / permission issues should typically surface as:
-
-- `tool_error` with `code: 'UnknownTool'`, or
-- A tool-defined “authorization required” payload in `details` (for a future auth plugin to handle).
+Unknown tool / permission issues should typically surface as `tool_error` with a `code` such as `ACCESS_DENIED`.
 
 ---
 

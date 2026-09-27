@@ -300,10 +300,9 @@ const adapter = new OpenapiAdapter({
       };
     }
 
-    // Default to main JWT
-    return {
-      jwt: authInfo.token,
-    };
+    // No credential for other tools. Don't return `authInfo.token`: it was issued for this
+    // MCP server, not for the API (token passthrough).
+    return {};
   },
 });
 ```
@@ -397,8 +396,8 @@ The adapter resolves authentication in this order:
 1. **Custom `securityResolver`** (highest priority) - Full control per tool
 2. **`authProviderMapper`** with `securitySchemesInInput` - Hybrid: some from input, some from context
 3. **`authProviderMapper`** - Map security schemes to auth providers
-4. **`staticAuth`** - Static credentials
-5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent)
+4. **`staticAuth`** - Static credentials; with an `authProviderMapper`, fills every credential no mapper function returned (a mapped value wins)
+5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent). Never reached when `staticAuth` is set. It also covers a security scheme that has no `authProviderMapper` entry, which is otherwise refused at startup
 
 **Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
 
@@ -1222,8 +1221,9 @@ Security is resolved automatically using the `SecurityResolver`. Tokens are rout
 
 ```typescript
 // 1. Extract security from OpenAPI spec
+// (the context comes from securityResolver / authProviderMapper / staticAuth, see "Auth Resolution Priority")
 const security = await securityResolver.resolve(tool.mapper, {
-  jwt: ctx.authInfo.token, // From FrontMCP context
+  jwt: apiToken, // A credential issued for the API
 });
 
 // 2. Apply to request
@@ -1273,20 +1273,22 @@ for the full reference.
 
 ## Supported Authentication Types
 
-| Type             | OpenAPI          | Auto-Resolved From   |
-| ---------------- | ---------------- | -------------------- |
-| Bearer Token     | `http: bearer`   | `ctx.authInfo.token` |
-| Basic Auth       | `http: basic`    | Custom resolver      |
-| Digest Auth      | `http: digest`   | Custom resolver      |
-| API Key (Header) | `apiKey: header` | `additionalHeaders`  |
-| API Key (Query)  | `apiKey: query`  | `additionalHeaders`  |
-| OAuth2           | `oauth2`         | `ctx.authInfo.token` |
-| OpenID Connect   | `openIdConnect`  | `ctx.authInfo.token` |
-| mTLS             | `mutualTLS`      | Custom resolver      |
-| HMAC Signature   | Custom           | Custom resolver      |
-| AWS Signature V4 | Custom           | Custom resolver      |
-| Custom Headers   | `apiKey`         | `additionalHeaders`  |
-| Cookies          | Context          | Custom resolver      |
+| Type             | OpenAPI          | Resolved From                                            |
+| ---------------- | ---------------- | -------------------------------------------------------- |
+| Bearer Token     | `http: bearer`   | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| Basic Auth       | `http: basic`    | Custom resolver                                          |
+| Digest Auth      | `http: digest`   | Custom resolver                                          |
+| API Key (Header) | `apiKey: header` | `additionalHeaders`                                      |
+| API Key (Query)  | `apiKey: query`  | `additionalHeaders`                                      |
+| OAuth2           | `oauth2`         | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| OpenID Connect   | `openIdConnect`  | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| mTLS             | `mutualTLS`      | Custom resolver                                          |
+| HMAC Signature   | Custom           | Custom resolver                                          |
+| AWS Signature V4 | Custom           | Custom resolver                                          |
+| Custom Headers   | `apiKey`         | `additionalHeaders`                                      |
+| Cookies          | Context          | Custom resolver                                          |
+
+The MCP client's own token (`ctx.authInfo.token`) is used only with `passthroughCallerToken: true`.
 
 See the [mcp-from-openapi documentation](https://github.com/agentfront/mcp-from-openapi) for detailed authentication examples.
 
@@ -1357,7 +1359,7 @@ Add one of the following to your adapter configuration:
    }
 
 2. securityResolver:
-   securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })
+   securityResolver: async (tool, ctx) => ({ jwt: await getApiToken(ctx) })
 
 3. staticAuth:
    staticAuth: { jwt: process.env.API_TOKEN }
@@ -1490,7 +1492,7 @@ headersMapper: (authInfo, headers) => {
 ### Authentication not working
 
 - Ensure security is defined in OpenAPI spec
-- Verify `ctx.authInfo.token` is available
+- Verify a credential source is configured (`authProviderMapper`, `securityResolver` or `staticAuth`); `ctx.authInfo.token` is only sent with `passthroughCallerToken: true`
 - Add `additionalHeaders` if needed
 - Check auth type routing matches your scheme (Bearer → `jwt`, API Key → `apiKey`)
 

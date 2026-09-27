@@ -106,9 +106,10 @@ over HTTP there, and `GET /skills/<gated id>` answers 404.
 
 Custom routes that guard skills content should call `authorizeSkillHttpRequest(scope,
 skillsConfig, request)` from `@frontmcp/sdk`, which covers every mode.
-`createSkillHttpAuthValidator()` returns `null` only for `'public'`; its validator
-refuses every request under `'inherit'` (it only sees headers), so code that treated
-`null` as "no auth needed" must switch.
+`createSkillHttpAuthValidator()` is only for an explicit `'api-key'` or `'bearer'`
+(it returns `null` only for `'public'`); its validator only sees headers, so it
+refuses every request under `'inherit'` or an unset `auth`, and code that treated
+`null` as "no auth needed" must switch to `authorizeSkillHttpRequest`.
 
 ## Skills HTTP Caching
 

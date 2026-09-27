@@ -736,7 +736,7 @@ Authority enforcement runs as **native flow stages**, not plugin hooks. This mea
 | `prompts:get-prompt`       | `checkEntryAuthorities` | Enforce before prompt execution              |
 | `prompts:list-prompts`     | `filterByAuthorities`   | Filter unauthorized prompts from discovery   |
 
-Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
+Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`, over MCP; `GET /skills/{id}` answers 404) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
 
 ### Will Hook — Run Before the Authority Check
 

@@ -156,6 +156,72 @@ describe('OpenAPI adapter - caller token passthrough (regression)', () => {
     expect(received).toEqual([{ path: '/tickets/T-1', authorization: `Bearer ${CLIENT_TOKEN}` }]);
   });
 
+  // Credential sources are tried in order: securityResolver, authProviderMapper, staticAuth, and
+  // only then (with passthroughCallerToken) the caller's own token.
+  describe('staticAuth after authProviderMapper', () => {
+    it('sends staticAuth when authProviderMapper returns undefined', async () => {
+      const { execute } = await getTool('getTicket', {
+        authProviderMapper: { DeskToken: () => undefined },
+        staticAuth: { jwt: 'desk-service-token' },
+      });
+
+      await execute({ id: 'T-1' }, callerContext);
+      expect(received).toEqual([{ path: '/tickets/T-1', authorization: 'Bearer desk-service-token' }]);
+    });
+
+    it('sends staticAuth, not the caller token, when passthroughCallerToken is also set', async () => {
+      const { execute } = await getTool('getTicket', {
+        authProviderMapper: { DeskToken: () => undefined },
+        staticAuth: { jwt: 'desk-service-token' },
+        passthroughCallerToken: true,
+      });
+
+      await execute({ id: 'T-1' }, callerContext);
+      expect(received).toEqual([{ path: '/tickets/T-1', authorization: 'Bearer desk-service-token' }]);
+    });
+
+    it('sends staticAuth for a scheme authProviderMapper has no entry for', async () => {
+      const { execute } = await getTool('getTicket', {
+        authProviderMapper: { OtherAuth: () => 'other-token' },
+        staticAuth: { jwt: 'desk-service-token' },
+      });
+
+      await execute({ id: 'T-1' }, callerContext);
+      expect(received).toEqual([{ path: '/tickets/T-1', authorization: 'Bearer desk-service-token' }]);
+    });
+
+    it('prefers the mapped credential over staticAuth', async () => {
+      const { execute } = await getTool('getTicket', {
+        authProviderMapper: { DeskToken: () => 'desk-token-acme' },
+        staticAuth: { jwt: 'desk-service-token' },
+      });
+
+      await execute({ id: 'T-1' }, callerContext);
+      expect(received).toEqual([{ path: '/tickets/T-1', authorization: 'Bearer desk-token-acme' }]);
+    });
+  });
+
+  describe('schemes without an authProviderMapper entry', () => {
+    it('refuses the configuration when nothing covers the scheme', async () => {
+      await expect(getTool('getTicket', { authProviderMapper: { OtherAuth: () => 'other-token' } })).rejects.toThrow(
+        /Missing auth provider mappings for security schemes: DeskToken/,
+      );
+    });
+
+    it('accepts the configuration when passthroughCallerToken is the declared fallback, and warns', async () => {
+      const { execute, logger } = await getTool('getTicket', {
+        authProviderMapper: { OtherAuth: () => 'other-token' },
+        passthroughCallerToken: true,
+      });
+
+      await execute({ id: 'T-1' }, callerContext);
+      expect(received).toEqual([{ path: '/tickets/T-1', authorization: `Bearer ${CLIENT_TOKEN}` }]);
+      const warnings = (logger.warn as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n');
+      expect(warnings).toMatch(/passthroughCallerToken is enabled/);
+      expect(warnings).toMatch(/no authProviderMapper entry.*DeskToken/);
+    });
+  });
+
   it('warns at startup when secured operations have no credential source', async () => {
     const { logger } = await getTool('getTicket');
     const warnings = (logger.warn as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n');

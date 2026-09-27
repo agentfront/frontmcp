@@ -308,7 +308,9 @@ describe('ExecuteTool', () => {
       expect(result.error.toolInput).toEqual({ name: 'Test' });
       expect(result.error.message).toContain('Database connection failed');
       expect(result.error.code).toBe('DB_ERROR');
-      expect(result.error.details).toEqual({ host: 'db.example.com' });
+      // The enclave's error data is not sanitized, so it never reaches the client.
+      expect(result.error).not.toHaveProperty('details');
+      expect(JSON.stringify(result)).not.toContain('db.example.com');
     });
 
     it('should return runtime_error status for script exceptions', async () => {

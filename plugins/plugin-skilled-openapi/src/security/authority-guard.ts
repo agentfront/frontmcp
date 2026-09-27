@@ -52,6 +52,28 @@ export function policyDependsOnInput(value: unknown): boolean {
   return false;
 }
 
+/**
+ * The part of a policy that can be judged before the action is called, or `undefined` when
+ * nothing can. A profile name is judged by the rule it names, so a profile that reads the
+ * input can't be judged either; a list of profile names (AND) keeps the profiles that can.
+ * An unregistered profile stays in: the engine denies it at call time as well.
+ */
+function judgeablePart(
+  policy: AuthoritiesPolicy | undefined,
+  engine: AuthoritiesEngine,
+): AuthoritiesPolicy | undefined {
+  if (policy === undefined || policy === null) return undefined;
+  const profileDependsOnInput = (name: unknown): boolean =>
+    typeof name === 'string' && policyDependsOnInput(engine.resolveProfile(name));
+  const value: unknown = policy;
+  if (typeof value === 'string') return profileDependsOnInput(value) ? undefined : policy;
+  if (Array.isArray(value)) {
+    const names = value.filter((name) => !profileDependsOnInput(name));
+    return names.length > 0 ? (names as unknown as AuthoritiesPolicy) : undefined;
+  }
+  return policyDependsOnInput(policy) ? undefined : policy;
+}
+
 export interface AuthorityCheckArgs {
   /** Op-level required-authorities policy from the bundle (`OperationDescriptor.requiredAuthorities`). */
   policy: AuthoritiesPolicy | undefined;
@@ -138,11 +160,10 @@ export class AuthorityGuard {
    * be public, exactly as at call time.
    */
   async canDiscover(args: DiscoveryCheckArgs): Promise<boolean> {
-    const judgeable = (p: AuthoritiesPolicy | undefined): AuthoritiesPolicy | undefined =>
-      p !== undefined && p !== null && !policyDependsOnInput(p) ? p : undefined;
+    const { engine } = this.authorities();
     const hasPolicy = [args.skillPolicy, args.policy].some((p) => p !== undefined && p !== null);
-    const skillPolicy = judgeable(args.skillPolicy);
-    const policy = judgeable(args.policy);
+    const skillPolicy = judgeablePart(args.skillPolicy, engine);
+    const policy = judgeablePart(args.policy, engine);
     // Only input-dependent rules: nothing to judge before the call.
     if (hasPolicy && skillPolicy === undefined && policy === undefined) return true;
     const result = await this.check({ ...args, skillPolicy, policy, input: {} });

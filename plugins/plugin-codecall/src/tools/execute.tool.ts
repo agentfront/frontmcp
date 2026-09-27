@@ -359,7 +359,7 @@ export default class ExecuteTool extends ToolContext {
               toolInput: error.toolInput,
               message: toClientErrorMessage(error.message),
               code: error.code,
-              details: error.details,
+              // No `details`: the enclave's error data is not sanitized for clients.
             },
           };
         }

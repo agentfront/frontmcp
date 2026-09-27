@@ -294,8 +294,9 @@ authorities: {
 
 - **Deny on load/read** — loading a gated skill the caller can't access throws
   `AuthorityDeniedError` (MCP code `-32003`), the same as a denied `tools/call`.
-  Covers `skills/load` (MCP), `skill://<path>/SKILL.md` and `skill://<path>/<file>`
-  reads (SEP-2640), and `GET /skills/{id}` (HTTP).
+  Covers `skills/load` (MCP) and `skill://<path>/SKILL.md` and `skill://<path>/<file>`
+  reads (SEP-2640). Over HTTP, `GET /skills/{id}` answers 404 for such a skill, as
+  for an unknown one.
 - **Filter on discovery** — gated skills the caller can't access are removed from
   `skills/search` / `skills/list` (MCP), the `skill://index.json` discovery index and
   skill-path autocomplete (SEP-2640), and `GET /skills` (HTTP).

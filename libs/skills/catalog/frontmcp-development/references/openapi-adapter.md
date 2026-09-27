@@ -135,7 +135,9 @@ With no `authProviderMapper`, `securityResolver` or `staticAuth`, the adapter se
 | HIGH       | `includeSecurityInInput: true`             | Auth fields exposed to MCP clients (not recommended) |
 | HIGH       | `passthroughCallerToken: true`             | The MCP client's own token is sent to the API        |
 
-`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
+`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver` or a non-empty `staticAuth` leaves it unused.
+
+Resolution order: `securityResolver` → `authProviderMapper` → `staticAuth` (fills every credential no mapper function returned; a mapped value wins) → `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` or `passthroughCallerToken` covers it (the latter sends the caller's token for it and logs a `SECURITY WARNING`).
 
 ## Spec Polling
 
