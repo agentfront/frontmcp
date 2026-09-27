@@ -206,8 +206,11 @@ describe('DashboardHttpPlugin', () => {
 });
 
 describe('Dashboard middleware', () => {
+  /** The dashboard scope the factory is built in: its route is the MCP endpoint. */
+  const mockScope = { fullPath: '/dashboard' };
+
   describe('middleware provider factory', () => {
-    it('should have inject function that requests FrontMcpServer', () => {
+    it('should have inject function that requests FrontMcpServer and the scope', () => {
       const providers = DashboardHttpPlugin.dynamicProviders({});
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware');
 
@@ -226,23 +229,24 @@ describe('Dashboard middleware', () => {
     it('should register middleware when factory is called', () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ basePath: '/dash' });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       const mockServer = {
         registerMiddleware: jest.fn(),
       };
 
-      const result = middlewareProvider.useFactory(mockServer);
+      const result = middlewareProvider.useFactory(mockServer, mockScope);
 
-      expect(result).toEqual({ registered: true });
+      // The page moves to basePath; the MCP endpoint stays the scope's route.
+      expect(result).toEqual({ registered: true, mcpPath: '/dashboard' });
       expect(mockServer.registerMiddleware).toHaveBeenCalledWith('/dash', expect.any(Function));
     });
 
     it('should create middleware that serves HTML for GET /', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -252,7 +256,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
       expect(capturedMiddleware).not.toBeNull();
 
       // Test GET / request
@@ -274,7 +278,7 @@ describe('Dashboard middleware', () => {
     it('should pass through non-GET requests', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -284,7 +288,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -302,7 +306,7 @@ describe('Dashboard middleware', () => {
     it('should pass through non-root paths', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -312,7 +316,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -330,7 +334,7 @@ describe('Dashboard middleware', () => {
     it('should call next when dashboard is disabled', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: false });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -340,7 +344,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -358,7 +362,7 @@ describe('Dashboard middleware', () => {
     it('should handle empty path and url', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -368,7 +372,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -387,7 +391,7 @@ describe('Dashboard middleware', () => {
     it('should use url when path is not available', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -397,7 +401,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -415,7 +419,7 @@ describe('Dashboard middleware', () => {
     it('should default method to GET when not provided', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -425,7 +429,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       const mockRes = {
         setHeader: jest.fn(),
@@ -443,7 +447,7 @@ describe('Dashboard middleware', () => {
     it('should work without setHeader method', async () => {
       const providers = DashboardHttpPlugin.dynamicProviders({ enabled: true });
       const middlewareProvider = providers.find((p) => p.name === 'dashboard:middleware') as {
-        useFactory: (server: unknown) => { registered: boolean };
+        useFactory: (server: unknown, scope: unknown) => { registered: boolean };
       };
 
       let capturedMiddleware: ((req: unknown, res: unknown, next: () => void) => Promise<void>) | null = null;
@@ -453,7 +457,7 @@ describe('Dashboard middleware', () => {
         }),
       };
 
-      middlewareProvider.useFactory(mockServer);
+      middlewareProvider.useFactory(mockServer, mockScope);
 
       // Response without setHeader method
       const mockRes = {

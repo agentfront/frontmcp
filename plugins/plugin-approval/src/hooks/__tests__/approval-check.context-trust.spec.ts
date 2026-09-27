@@ -88,7 +88,8 @@ describe('ApprovalCheckPlugin — context trust (GHSA-r848-p7wf-96rc)', () => {
     const { plugin, store, flowCtx } = createGate({ input: { context: PRE_APPROVED } });
 
     await expect(plugin.checkApproval(flowCtx as never)).rejects.toThrow(ApprovalRequiredError);
-    expect(store.getApproval).toHaveBeenCalledWith('billing:refund', 'session-123', 'client-456');
+    // The caller-supplied context is not handed to the store either.
+    expect(store.getApproval).toHaveBeenCalledWith('billing:refund', 'session-123', 'client-456', undefined);
   });
 
   it('honours a pre-approved context established by the session', async () => {
@@ -108,7 +109,7 @@ describe('ApprovalCheckPlugin — context trust (GHSA-r848-p7wf-96rc)', () => {
     });
 
     await expect(plugin.checkApproval(flowCtx as never)).rejects.toMatchObject({ details: { state: 'denied' } });
-    expect(store.getApproval).toHaveBeenCalledWith('billing:refund', 'session-123', 'client-456');
+    expect(store.getApproval).toHaveBeenCalledWith('billing:refund', 'session-123', 'client-456', PRE_APPROVED);
   });
 
   it('honours the session context even when caller input names a different one', async () => {

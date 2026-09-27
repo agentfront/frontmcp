@@ -95,18 +95,16 @@ export interface CodeCallVmEnvironment {
   mcpNotify?: (event: string, payload: Record<string, unknown>) => void;
 
   /**
-   * Optional dotted-tool-name namespaces, e.g. `{ acme: { getUser: (...) => ... } }`.
+   * Optional dotted-tool-name namespaces, as data: `{ acme: { getUser: 'acme.getUser' } }`.
    *
-   * When present, the underlying enclave merges these into the VM globals so
-   * AgentScript can call `await acme.getUser({...})` instead of
-   * `await callTool('acme.getUser', {...})`.
-   *
-   * Each method delegates to `callTool` with the original full tool name, so
-   * all security checks, hooks, quotas, and audit paths run unchanged. Tools
-   * whose names cannot be expressed as `{validIdent}.{validIdent}` remain
-   * reachable only via `callTool`.
+   * The enclave service writes them into the script as AgentScript objects whose methods
+   * call `callTool('acme.getUser', input)` inside the sandbox, so AgentScript can call
+   * `await acme.getUser({...})` and every such call still passes the sandbox's tool-call
+   * cap, rate limit and suspicious-sequence checks (they are never host functions). Tools
+   * whose names cannot be expressed as `{validIdent}.{validIdent}` remain reachable only
+   * via `callTool`.
    */
-  namespaces?: Record<string, Record<string, (input?: unknown, options?: CallToolOptions) => Promise<unknown>>>;
+  toolNamespaces?: Record<string, Record<string, string>>;
 }
 
 /**

@@ -2,8 +2,9 @@
  * OpenAPI Adapter validation tests
  */
 
-import { validateSecurityConfiguration, extractSecuritySchemes } from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { extractSecuritySchemes, validateSecurityConfiguration } from '../openapi.security';
 
 describe('OpenapiAdapter - Validation', () => {
   describe('extractSecuritySchemes', () => {
@@ -293,11 +294,73 @@ describe('OpenapiAdapter - Validation', () => {
         expect(result.warnings.some((w) => w.includes('Using staticAuth'))).toBe(true);
       });
 
-      it('should provide recommendation for default behavior', () => {
+      it('should warn that no credentials are sent by default', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {});
 
+        expect(result.securityRiskScore).toBe('medium');
         expect(result.warnings.some((w) => w.includes('No auth configuration provided'))).toBe(true);
-        expect(result.warnings.some((w) => w.includes('RECOMMENDATION'))).toBe(true);
+        expect(result.warnings.some((w) => w.includes('passthroughCallerToken: true'))).toBe(true);
+      });
+
+      it('should flag passthroughCallerToken as high risk', () => {
+        const result = validateSecurityConfiguration([mockToolWithAuth], { passthroughCallerToken: true });
+
+        expect(result.valid).toBe(true);
+        expect(result.securityRiskScore).toBe('high');
+        expect(result.warnings.some((w) => w.includes('passthroughCallerToken is enabled'))).toBe(true);
+      });
+
+      // The caller's token is the fallback when every authProviderMapper function returns nothing,
+      // so a mapper does not make passthroughCallerToken any less risky.
+      it.each<[string, Parameters<typeof validateSecurityConfiguration>[1]]>([
+        ['authProviderMapper', { authProviderMapper: { BearerAuth: () => undefined } }],
+        ['securitySchemesInInput', { securitySchemesInInput: ['OtherAuth'] }],
+        ['an empty staticAuth', { staticAuth: {} }],
+      ])('should keep passthroughCallerToken HIGH risk alongside %s', (_label, options) => {
+        const result = validateSecurityConfiguration([mockToolWithAuth], { ...options, passthroughCallerToken: true });
+
+        expect(result.securityRiskScore).toBe('high');
+        expect(result.warnings.some((w) => w.startsWith('SECURITY WARNING: passthroughCallerToken is enabled'))).toBe(
+          true,
+        );
+      });
+
+      it.each<[string, Parameters<typeof validateSecurityConfiguration>[1], 'low' | 'medium']>([
+        ['securityResolver', { securityResolver: () => ({ jwt: 'api-token' }) }, 'low'],
+        ['staticAuth', { staticAuth: { jwt: 'static-token' } }, 'medium'],
+        // staticAuth answers for every scheme the mapper returns nothing for
+        [
+          'authProviderMapper and staticAuth',
+          { authProviderMapper: { BearerAuth: () => undefined }, staticAuth: { jwt: 'static-token' } },
+          'medium',
+        ],
+      ])(
+        'should not flag passthroughCallerToken alongside %s, which never falls back to it',
+        (_label, options, score) => {
+          const result = validateSecurityConfiguration([mockToolWithAuth], {
+            ...options,
+            passthroughCallerToken: true,
+          });
+
+          expect(result.securityRiskScore).toBe(score);
+          expect(result.warnings.some((w) => w.includes('passthroughCallerToken is enabled'))).toBe(false);
+        },
+      );
+
+      it('should accept a scheme without an authProviderMapper entry when passthroughCallerToken covers it', () => {
+        const result = validateSecurityConfiguration([mockToolWithAuth], {
+          authProviderMapper: { OtherAuth: () => 'other-token' },
+          passthroughCallerToken: true,
+        });
+
+        expect(result.valid).toBe(true);
+        expect(result.missingMappings).toEqual([]);
+        expect(result.securityRiskScore).toBe('high');
+        expect(
+          result.warnings.some((w) =>
+            w.startsWith('SECURITY WARNING: Security schemes with no authProviderMapper entry'),
+          ),
+        ).toBe(true);
       });
 
       it('should warn about security risk with includeSecurityInInput', () => {

@@ -39,6 +39,7 @@ const adapter = new OpenapiAdapter({
 
 ```typescript
 import { OpenapiAdapter } from '@frontmcp/adapters';
+
 import spec from './openapi.json';
 
 const adapter = new OpenapiAdapter({
@@ -138,10 +139,12 @@ const adapter = new OpenapiAdapter({
 
 ## Authentication
 
-### Automatic Bearer Token
+### Forwarding the Caller's Token (opt-in)
 
-If your OpenAPI spec uses Bearer authentication, the adapter automatically uses the JWT token from FrontMCP's auth
-context:
+By default the adapter never sends the MCP client's own token to the API: it was issued for your MCP server, and
+forwarding it is token passthrough, which the MCP specification forbids. Without a credential source
+(`authProviderMapper`, `securityResolver`, `staticAuth`), operations that require authentication fail. If the API is
+meant to accept the same token (same issuer and audience), opt in with `passthroughCallerToken: true`:
 
 ```typescript
 // OpenAPI spec with Bearer auth
@@ -157,16 +160,17 @@ context:
   "security": [{ "BearerAuth": [] }]
 }
 
-// Adapter (no config needed - uses ctx.authInfo.token automatically!)
+// Adapter: forwards ctx.authInfo.token only because passthroughCallerToken is set
 const adapter = new OpenapiAdapter({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
+  passthroughCallerToken: true,
 });
 ```
 
-**Works with ANY security scheme name** - Whether it's called "BearerAuth", "JWT", "Authorization", or anything else,
-the adapter automatically detects Bearer tokens and uses `ctx.authInfo.token`!
+The same option makes the caller's token the fallback when every `authProviderMapper` function returns `undefined`;
+without it, nothing is sent for those schemes.
 
 ### Custom Headers (API Keys)
 
@@ -296,10 +300,9 @@ const adapter = new OpenapiAdapter({
       };
     }
 
-    // Default to main JWT
-    return {
-      jwt: authInfo.token,
-    };
+    // No credential for other tools. Don't return `authInfo.token`: it was issued for this
+    // MCP server, not for the API (token passthrough).
+    return {};
   },
 });
 ```
@@ -393,8 +396,8 @@ The adapter resolves authentication in this order:
 1. **Custom `securityResolver`** (highest priority) - Full control per tool
 2. **`authProviderMapper`** with `securitySchemesInInput` - Hybrid: some from input, some from context
 3. **`authProviderMapper`** - Map security schemes to auth providers
-4. **`staticAuth`** - Static credentials
-5. **Default** - Uses `ctx.authInfo.token` (lowest priority)
+4. **`staticAuth`** - Static credentials; with an `authProviderMapper`, fills every credential no mapper function returned (a mapped value wins)
+5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent). Never reached when `staticAuth` is set. It also covers a security scheme that has no `authProviderMapper` entry, which is otherwise refused at startup
 
 **Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
 
@@ -1110,8 +1113,8 @@ The adapter uses logging for diagnostics and security analysis. The logger is ha
 When using the adapter within a FrontMCP app, the SDK automatically injects the logger before `fetch()` is called:
 
 ```typescript
-import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App } from '@frontmcp/sdk';
 
 @App({
   id: 'my-api',
@@ -1218,8 +1221,9 @@ Security is resolved automatically using the `SecurityResolver`. Tokens are rout
 
 ```typescript
 // 1. Extract security from OpenAPI spec
+// (the context comes from securityResolver / authProviderMapper / staticAuth, see "Auth Resolution Priority")
 const security = await securityResolver.resolve(tool.mapper, {
-  jwt: ctx.authInfo.token, // From FrontMCP context
+  jwt: apiToken, // A credential issued for the API
 });
 
 // 2. Apply to request
@@ -1269,20 +1273,22 @@ for the full reference.
 
 ## Supported Authentication Types
 
-| Type             | OpenAPI          | Auto-Resolved From   |
-| ---------------- | ---------------- | -------------------- |
-| Bearer Token     | `http: bearer`   | `ctx.authInfo.token` |
-| Basic Auth       | `http: basic`    | Custom resolver      |
-| Digest Auth      | `http: digest`   | Custom resolver      |
-| API Key (Header) | `apiKey: header` | `additionalHeaders`  |
-| API Key (Query)  | `apiKey: query`  | `additionalHeaders`  |
-| OAuth2           | `oauth2`         | `ctx.authInfo.token` |
-| OpenID Connect   | `openIdConnect`  | `ctx.authInfo.token` |
-| mTLS             | `mutualTLS`      | Custom resolver      |
-| HMAC Signature   | Custom           | Custom resolver      |
-| AWS Signature V4 | Custom           | Custom resolver      |
-| Custom Headers   | `apiKey`         | `additionalHeaders`  |
-| Cookies          | Context          | Custom resolver      |
+| Type             | OpenAPI          | Resolved From                                            |
+| ---------------- | ---------------- | -------------------------------------------------------- |
+| Bearer Token     | `http: bearer`   | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| Basic Auth       | `http: basic`    | Custom resolver                                          |
+| Digest Auth      | `http: digest`   | Custom resolver                                          |
+| API Key (Header) | `apiKey: header` | `additionalHeaders`                                      |
+| API Key (Query)  | `apiKey: query`  | `additionalHeaders`                                      |
+| OAuth2           | `oauth2`         | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| OpenID Connect   | `openIdConnect`  | `authProviderMapper` / `securityResolver` / `staticAuth` |
+| mTLS             | `mutualTLS`      | Custom resolver                                          |
+| HMAC Signature   | Custom           | Custom resolver                                          |
+| AWS Signature V4 | Custom           | Custom resolver                                          |
+| Custom Headers   | `apiKey`         | `additionalHeaders`                                      |
+| Cookies          | Context          | Custom resolver                                          |
+
+The MCP client's own token (`ctx.authInfo.token`) is used only with `passthroughCallerToken: true`.
 
 See the [mcp-from-openapi documentation](https://github.com/agentfront/mcp-from-openapi) for detailed authentication examples.
 
@@ -1308,6 +1314,9 @@ When the adapter loads, it:
 | **MEDIUM** ⚠️ | `securitySchemesInInput` with `authProviderMapper` | Hybrid: some user-provided, some from context |
 | **MEDIUM** ⚠️ | `staticAuth` or default                            | Static credentials - Secure but less flexible |
 | **HIGH** ❌   | `includeSecurityInInput: true`                     | User provides auth - High security risk       |
+| **HIGH** ❌   | `passthroughCallerToken: true`                     | The MCP client's own token is sent to the API |
+
+`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ### Example: Missing Auth Configuration
 
@@ -1350,7 +1359,7 @@ Add one of the following to your adapter configuration:
    }
 
 2. securityResolver:
-   securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })
+   securityResolver: async (tool, ctx) => ({ jwt: await getApiToken(ctx) })
 
 3. staticAuth:
    staticAuth: { jwt: process.env.API_TOKEN }
@@ -1483,7 +1492,7 @@ headersMapper: (authInfo, headers) => {
 ### Authentication not working
 
 - Ensure security is defined in OpenAPI spec
-- Verify `ctx.authInfo.token` is available
+- Verify a credential source is configured (`authProviderMapper`, `securityResolver` or `staticAuth`); `ctx.authInfo.token` is only sent with `passthroughCallerToken: true`
 - Add `additionalHeaders` if needed
 - Check auth type routing matches your scheme (Bearer → `jwt`, API Key → `apiKey`)
 

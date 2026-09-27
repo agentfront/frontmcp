@@ -61,15 +61,26 @@ describe('NpmSource', () => {
     expect(events).toHaveLength(1);
   });
 
-  it('warns when verifyProvenance=true (provenance check not yet implemented)', async () => {
-    const warnSpy = jest.spyOn(fakeLogger as never as { warn: (m: string) => void }, 'warn');
+  // verifyProvenance defaults to true, and provenance verification is not implemented:
+  // 1.8.2 only logged a warning and loaded the package anyway. It now refuses to load
+  // the package at all (its code never runs) until provenance is explicitly waived.
+  it('refuses to load the package when verifyProvenance=true, since provenance cannot be verified', async () => {
+    const imported: string[] = [];
     const source = new FakeNpmSource(
       { type: 'npm', packageName: '@acme/bundle', verifyProvenance: true },
-      async () => ({ default: baseBundle }),
+      async (s) => {
+        imported.push(s);
+        return { default: baseBundle };
+      },
     );
-    source.onChange(() => {});
-    await source.start();
-    expect(warnSpy).toHaveBeenCalled();
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+
+    await expect(source.start()).rejects.toThrow(/provenance/);
+    await expect(source.start()).rejects.toThrow(/runs its code before any bundle signature is checked/);
+
+    expect(events).toEqual([]);
+    expect(imported).toEqual([]);
     await source.stop();
   });
 

@@ -172,8 +172,14 @@ class CustomFlow {
 interface HookOptions<Ctx = unknown> {
   priority?: number;                              // Execution order (lower = first)
   filter?: (ctx: Ctx) => boolean | Promise<boolean>; // Conditional execution
+  appliesTo?: 'own-app' | 'uncovered-apps';        // Reach of an app plugin's hook (default 'own-app')
 }
 ```
+
+A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and
+`completion/complete`, only for that app's entries. With `appliesTo: 'uncovered-apps'` it also runs for the entries of
+any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it
+for gates that an entry's metadata asks for, so the entry is not left ungated when the plugin sits on another app.
 
 ## Registering Hooks
 

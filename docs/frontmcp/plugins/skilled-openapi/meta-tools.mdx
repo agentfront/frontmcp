@@ -65,6 +65,8 @@ Load the full markdown instructions and the executable actions for one skill.
 }
 ```
 
+`search_skill` and `load_skill` only show what the caller may use: a skill whose `requiredAuthorities` the caller doesn't satisfy is left out of search and is `SKILL_NOT_FOUND` for `load_skill`, and `actions[]` leaves out operations the caller can never run (see [ABAC integration](/frontmcp/plugins/skilled-openapi/security#abac-integration)).
+
 The LLM should call `load_skill` once per skill it intends to use, then keep the action schemas in context. Schemas inside `actions[]` are the same schemas the OpenAPI spec declared; the executor validates input against them on every `callTool` a `run_workflow` script issues. The `actionId` values listed here are exactly what you pass to `callTool(actionId, input)`.
 
 Throws an MCP-protocol error when the `skillId` is unknown.

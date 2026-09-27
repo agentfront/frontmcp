@@ -23,6 +23,7 @@ interface EntryOptions {
   tags?: string[];
   codecall?: CodeCallToolMetadata;
   visibility?: 'public' | 'hidden' | 'internal';
+  annotations?: Record<string, boolean>;
 }
 
 function appEntry(name: string, options: EntryOptions = {}) {
@@ -37,6 +38,7 @@ function appEntry(name: string, options: EntryOptions = {}) {
       tags: options.tags,
       codecall: options.codecall,
       visibility: options.visibility,
+      ...(options.annotations ? { annotations: options.annotations } : {}),
     },
   };
 }
@@ -83,11 +85,76 @@ describe('CodeCall tool policy subject (GHSA-6w3j-82v5-6qrr)', () => {
     expect(executionInfo).toEqual(searchInfo);
     expect(searchInfo).toEqual({
       name: 'admin:deleteUser',
+      fullName: 'crm:admin:deleteUser',
       appId: 'crm',
       source: 'inline',
       description: 'Runs admin:deleteUser',
       tags: ['users'],
+      annotations: undefined,
+      metadata: expect.objectContaining({ name: 'admin:deleteUser', tags: ['users'], codecall: { source: 'inline' } }),
     });
+  });
+
+  it('hands includeTools the tool annotations, top level and under metadata, read-only', () => {
+    const entry = appEntry('admin:deleteUser', { annotations: { destructiveHint: true } });
+    const includeTools = jest.fn((info: IncludeToolsFilterToolInfo) => !info.metadata?.annotations?.destructiveHint);
+
+    const access = checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools }), 'admin:deleteUser');
+
+    expect(access.allowed).toBe(false);
+    const [info] = includeTools.mock.calls[0];
+    expect(info.annotations).toEqual({ destructiveHint: true });
+    expect(info.metadata?.annotations).toEqual({ destructiveHint: true });
+    expect(Object.isFrozen(info.metadata)).toBe(true);
+    expect(Object.isFrozen(info.annotations)).toBe(true);
+  });
+
+  it('does not let a filter change the nested metadata or tags the next decision reads', () => {
+    const entry = appEntry('users:list', {
+      tags: ['users'],
+      codecall: { enabledInCodeCall: true, tags: ['crm'] },
+      annotations: { destructiveHint: false },
+    });
+    const tamper = (info: IncludeToolsFilterToolInfo): boolean => {
+      const attempts = [
+        () => ((info.metadata?.codecall as { enabledInCodeCall?: boolean }).enabledInCodeCall = false),
+        () => (info.metadata?.tags as string[]).push('admin'),
+        () => (info.tags as string[]).push('admin'),
+        () => ((info.metadata?.annotations as { destructiveHint?: boolean }).destructiveHint = true),
+      ];
+      for (const attempt of attempts) {
+        try {
+          attempt();
+        } catch {
+          // frozen: the attempt is refused
+        }
+      }
+      return true;
+    };
+
+    checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools: tamper }), 'users:list');
+
+    expect(entry.metadata.codecall).toEqual({ enabledInCodeCall: true, tags: ['crm'] });
+    expect(entry.metadata.tags).toEqual(['users']);
+    expect(entry.metadata.annotations).toEqual({ destructiveHint: false });
+  });
+
+  it('hands filters metadata holding functions and cyclic values without throwing', () => {
+    const entry = appEntry('users:list');
+    const cyclic: Record<string, unknown> = { kind: 'cyclic' };
+    cyclic['self'] = cyclic;
+    const render = () => '<div />';
+    Object.assign(entry.metadata, { ui: { render }, extra: cyclic });
+    const includeTools = jest.fn((_info: IncludeToolsFilterToolInfo) => true);
+
+    const access = checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools }), 'users:list');
+
+    expect(access.allowed).toBe(true);
+    const [info] = includeTools.mock.calls[0];
+    const extra = info.metadata?.['extra'] as Record<string, unknown>;
+    expect(extra['self']).toBe(extra);
+    expect(Object.isFrozen(extra)).toBe(true);
+    expect((info.metadata?.['ui'] as { render: unknown }).render).toBe(render);
   });
 
   it.each(['admin:deleteUser', 'crm:admin:deleteUser'])(

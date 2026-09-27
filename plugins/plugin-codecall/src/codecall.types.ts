@@ -5,25 +5,50 @@ import { z } from '@frontmcp/lazy-zod';
 // ===== Filter Function Types =====
 
 /**
+ * The tool's MCP annotations, as filters receive them.
+ */
+export interface CodeCallFilterToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+  [key: string]: unknown;
+}
+
+/**
  * Tool info passed to the directCalls filter function
  */
 export interface DirectCallsFilterToolInfo {
   name: string;
+  /** The qualified `<owner>:<name>` spelling. */
+  fullName?: string;
   appId?: string;
   source?: string;
+  description?: string;
   tags?: string[];
+  /** The tool's MCP annotations (`readOnlyHint`, `destructiveHint`, ...). */
+  annotations?: Readonly<CodeCallFilterToolAnnotations>;
+  /** The tool's metadata as declared (`annotations`, `tags`, `codecall`, ...), read-only. */
+  metadata?: Readonly<CodeCallFilterToolMetadata>;
+}
+
+/**
+ * The tool's declared metadata, as filters receive it.
+ */
+export interface CodeCallFilterToolMetadata {
+  name?: string;
+  description?: string;
+  tags?: string[];
+  annotations?: Readonly<CodeCallFilterToolAnnotations>;
+  codecall?: CodeCallToolMetadata;
+  [key: string]: unknown;
 }
 
 /**
  * Tool info passed to the includeTools filter function
  */
-export interface IncludeToolsFilterToolInfo {
-  name: string;
-  appId?: string;
-  source?: string;
-  description?: string;
-  tags?: string[];
-}
+export type IncludeToolsFilterToolInfo = DirectCallsFilterToolInfo;
 
 /**
  * Function type for directCalls filter

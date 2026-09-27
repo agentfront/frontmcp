@@ -7,11 +7,11 @@
 import { DynamicPlugin, Plugin, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
+import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
 import { resolveApprovalIdentity } from '../approval.identity';
 import { ApprovalStoreToken } from '../approval.symbols';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import {
-  ApprovalScope,
   ApprovalState,
   type ApprovalContext,
   type ApprovalRecord,
@@ -36,15 +36,19 @@ const passedApprovalStores = new WeakMap<object, WeakSet<ApprovalStore>>();
 export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, never>> {
   /**
    * Check tool approval before execution.
+   *
+   * Runs for the tools of the app the plugin is installed on and, `appliesTo: 'uncovered-apps'`,
+   * for the tools of any app with no approval gate of its own, so an `approval` tool is never left
+   * ungated because the plugin sits on a different app.
    */
-  @ToolHook.Will('execute', { priority: 100 })
+  @ToolHook.Will('execute', { priority: 100, appliesTo: 'uncovered-apps' })
   async checkApproval(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool, toolContext } = flowCtx.state;
     if (!tool || !toolContext) return;
 
     // Get approval config from tool metadata (if it exists)
     const metadata = tool.metadata as unknown as Record<string, unknown>;
-    const approvalConfig = this.resolveApprovalConfig(
+    const approvalConfig = resolveApprovalRequirement(
       metadata['approval'] as ToolApprovalRequirement | boolean | undefined,
     );
 
@@ -73,10 +77,11 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     approvalStore: ApprovalStore,
   ): Promise<void> {
     const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
-    const approval = await approvalStore.getApproval(tool.fullName, sessionId, userId);
+    const currentContext = this.getCurrentContext(flowCtx);
+    const records = await this.readApprovals(approvalStore, tool.fullName, sessionId, userId, currentContext);
 
     // A recorded denial outranks every way of skipping the prompt, pre-approved contexts included.
-    if (approval?.state === ApprovalState.DENIED) {
+    if (records.some((record) => record.state === ApprovalState.DENIED)) {
       throw new ApprovalRequiredError({
         toolId: tool.fullName,
         state: 'denied',
@@ -84,41 +89,47 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       });
     }
 
-    if (this.isPreApprovedContext(approvalConfig, this.getCurrentContext(flowCtx))) {
+    if (this.isPreApprovedContext(approvalConfig, currentContext)) {
       return;
     }
+
+    const approved = records.filter((record) => record.state === ApprovalState.APPROVED);
 
     if (approvalConfig.alwaysPrompt) {
-      await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
+      await this.handleApprovalRequired(flowCtx, approvalConfig, approved[0]);
       return;
     }
 
-    if (approval?.state === ApprovalState.APPROVED) {
-      if (!this.isExpired(approval)) {
-        return;
-      }
+    // Only an approval the tool's policy accepts opens the gate: a scope in `allowedScopes`, and
+    // not older than `maxTtlMs`, however it was recorded.
+    const now = Date.now();
+    if (approved.some((record) => isApprovalUsable(record, approvalConfig, now))) {
+      return;
     }
 
-    await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
+    await this.handleApprovalRequired(
+      flowCtx,
+      approvalConfig,
+      approved.find((record) => isApprovalExpired(record, approvalConfig, now)) ?? approved[0],
+    );
   }
 
-  private resolveApprovalConfig(config: ToolApprovalRequirement | boolean | undefined): ToolApprovalRequirement {
-    if (config === true) {
-      return { required: true, defaultScope: ApprovalScope.SESSION };
+  /**
+   * The caller's approvals and denials of the tool, from the context it runs in too. Stores
+   * without `getApprovals()` give the one record `getApproval()` picks.
+   */
+  private async readApprovals(
+    store: ApprovalStore,
+    toolId: string,
+    sessionId: string,
+    userId: string | undefined,
+    context: ApprovalContext | undefined,
+  ): Promise<ApprovalRecord[]> {
+    if (store.getApprovals) {
+      return store.getApprovals(toolId, sessionId, userId, context);
     }
-    if (config === false || config === undefined) {
-      return { required: false };
-    }
-    return {
-      ...config,
-      required: config.required ?? true,
-      defaultScope: config.defaultScope ?? ApprovalScope.SESSION,
-    };
-  }
-
-  private isExpired(approval: ApprovalRecord): boolean {
-    if (!approval.expiresAt) return false;
-    return Date.now() > approval.expiresAt;
+    const record = await store.getApproval(toolId, sessionId, userId, context);
+    return record ? [record] : [];
   }
 
   /**
@@ -165,7 +176,7 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
   ): Promise<void> {
     const { tool } = flowCtx.state;
     const message = config.approvalMessage ?? `Tool "${tool?.fullName}" requires approval to execute. Allow?`;
-    const isExpiredApproval = existingApproval ? this.isExpired(existingApproval) : false;
+    const isExpiredApproval = existingApproval ? isApprovalExpired(existingApproval, config, Date.now()) : false;
 
     throw new ApprovalRequiredError({
       toolId: tool?.fullName ?? 'unknown',

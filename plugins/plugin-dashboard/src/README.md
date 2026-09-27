@@ -63,9 +63,9 @@ class MyServer {}
 
 | Option           | Type      | Default      | Description                                                              |
 | ---------------- | --------- | ------------ | ------------------------------------------------------------------------ |
-| `enabled`        | `boolean` | auto         | Enable/disable dashboard. Auto-detects: enabled in dev, disabled in prod |
-| `basePath`       | `string`  | `/dashboard` | Base path for dashboard routes                                           |
-| `auth.enabled`   | `boolean` | `false`      | Enable token authentication                                              |
+| `enabled`        | `boolean` | auto         | Enable/disable the page, the MCP endpoint and its tools. Auto-detects: enabled in dev, disabled in prod |
+| `basePath`       | `string`  | `/dashboard` | Where the page is served. The MCP endpoint stays at the dashboard app's route (`/dashboard`) |
+| `auth.enabled`   | `boolean` | `false`      | Require the token for the page and the MCP endpoint                      |
 | `auth.token`     | `string`  | -            | Secret token for authentication                                          |
 | `cdn.entrypoint` | `string`  | -            | Custom CDN URL for external dashboard UI                                 |
 | `cdn.react`      | `string`  | esm.sh       | React CDN URL                                                            |
@@ -85,6 +85,11 @@ new DashboardPlugin({
 
 // Access: http://localhost:3000/dashboard?token=your-secret-token
 ```
+
+With `auth` on, the token guards the MCP endpoint (`/dashboard`) too. MCP clients send it as
+`Authorization: Bearer <token>` or, when the server's own auth uses `Authorization`, as
+`x-frontmcp-dashboard-token: <token>`. The page's own client uses the HttpOnly cookie the page
+sets. `?token=` works for the page only.
 
 ### Custom CDN Example
 

@@ -7,6 +7,7 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
+import { wrapScriptWithToolNamespaces } from '../utils/build-tool-namespaces';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -120,16 +121,11 @@ export default class EnclaveService {
         }
       : undefined;
 
-    // Reserved global identifiers the enclave runtime owns. A tool
-    // namespace whose key collides with one of these would silently
-    // override the runtime helper (since the spread is otherwise
-    // last-wins), opening a path for a malicious bundle to neutralise
-    // `getTool` / `mcpLog` / `mcpNotify`. Filter the namespaces map
-    // before merging so the reserved entries below stay authoritative.
-    const RESERVED_GLOBALS = new Set(['getTool', 'mcpLog', 'mcpNotify']);
-    const safeNamespaces = Object.fromEntries(
-      Object.entries(environment.namespaces ?? {}).filter(([key]) => !RESERVED_GLOBALS.has(key)),
-    );
+    // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are written into the
+    // script as AgentScript that calls `callTool()`, never injected as host functions: a host
+    // function reaches the tool pipeline without passing the enclave's tool-call cap, rate
+    // limit or suspicious-sequence checks, which only guard `callTool()`.
+    const source = wrapScriptWithToolNamespaces(code, environment.toolNamespaces);
 
     // Create enclave with configuration from CodeCallConfig
     const enclave = new Enclave({
@@ -145,11 +141,6 @@ export default class EnclaveService {
       // Allow functions in globals since we intentionally provide getTool, mcpLog, mcpNotify, and console
       allowFunctionsInGlobals: true,
       globals: {
-        // Tool namespaces (e.g. `acme.getUser`) flow through here. Spread
-        // FIRST so the runtime reserved globals below are guaranteed
-        // last-wins. Reserved keys have already been stripped above —
-        // belt-and-braces ordering makes the invariant locally obvious.
-        ...safeNamespaces,
         // Provide getTool as a custom global
         getTool: environment.getTool,
         // Provide logging functions if available
@@ -181,7 +172,7 @@ export default class EnclaveService {
     });
 
     try {
-      const result = await enclave.run<unknown>(code);
+      const result = await enclave.run<unknown>(source);
       return this.mapEnclaveResult(result, logs);
     } finally {
       enclave.dispose();
