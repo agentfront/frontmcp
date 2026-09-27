@@ -1983,6 +1983,34 @@ describe('EnclaveService', () => {
       expect(result.stats?.toolCallCount).toBe(1);
     });
 
+    it('reports a failed namespace call with { throwOnError: false } as { message, toolName }', async () => {
+      // The enclave hands a script only the name and message of a tool error, so the sanitized
+      // error's `code` never reaches the namespace helper; a direct `callTool()` sees the same.
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockRejectedValue(
+          Object.freeze({
+            code: 'ACCESS_DENIED',
+            message: 'Access denied for tool "acme.echo"',
+            toolName: 'acme.echo',
+          }),
+        ),
+        toolNamespaces: { acme: { echo: 'acme.echo' } },
+      };
+
+      const viaNamespace = await service.execute(`return await acme.echo({}, { throwOnError: false });`, env);
+      expect(viaNamespace.result).toEqual({
+        success: false,
+        error: { message: 'Access denied for tool "acme.echo"', toolName: 'acme.echo' },
+      });
+
+      const direct = await service.execute(
+        `try { await callTool('acme.echo', {}); } catch (e) { return { code: e.code, message: e.message }; }`,
+        env,
+      );
+      expect(direct.result).toEqual({ message: 'Access denied for tool "acme.echo"' });
+    });
+
     it('counts namespace calls against maxToolCalls like callTool', async () => {
       const limited = new EnclaveService(new CodeCallConfig({ vm: { preset: 'secure', maxSteps: 1 } }));
       const env: CodeCallVmEnvironment = {

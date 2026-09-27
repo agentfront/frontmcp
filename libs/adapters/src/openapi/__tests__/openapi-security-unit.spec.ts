@@ -6,15 +6,17 @@
  * Authorization header generation), see openapi-security-integration.spec.ts
  */
 
-import {
-  createSecurityContextFromAuth,
-  validateSecurityConfiguration,
-  extractSecuritySchemes,
-  resolveToolSecurity,
-} from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
 import type { AuthInfo } from '@frontmcp/protocol';
 import type { FrontMcpContext } from '@frontmcp/sdk';
+
+import {
+  createSecurityContextFromAuth,
+  extractSecuritySchemes,
+  resolveToolSecurity,
+  validateSecurityConfiguration,
+} from '../openapi.security';
 
 // Mock mcp-from-openapi
 jest.mock('mcp-from-openapi', () => ({
@@ -267,6 +269,43 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       });
 
       expect(createSecurityContext).toHaveBeenCalledWith({ jwt: 'static-token' });
+    });
+
+    it('should fill the credentials authProviderMapper returned nothing for from staticAuth', async () => {
+      const { createSecurityContext } = require('mcp-from-openapi');
+      const tool = createMockTool('BearerAuth');
+
+      await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
+        authProviderMapper: { BearerAuth: () => undefined },
+        staticAuth: { jwt: 'static-token', apiKey: 'static-key' },
+        passthroughCallerToken: true,
+      });
+
+      expect(createSecurityContext).toHaveBeenLastCalledWith({ jwt: 'static-token', apiKey: 'static-key' });
+    });
+
+    it('should keep a mapped credential over the staticAuth one', async () => {
+      const { createSecurityContext } = require('mcp-from-openapi');
+      const tool = createMockTool('BearerAuth');
+
+      await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
+        authProviderMapper: { BearerAuth: () => 'mapper-token' },
+        staticAuth: { jwt: 'static-token', apiKey: 'static-key' },
+      });
+
+      expect(createSecurityContext).toHaveBeenLastCalledWith({ jwt: 'mapper-token', apiKey: 'static-key' });
+    });
+
+    it('should treat an empty staticAuth as absent', async () => {
+      const { createSecurityContext } = require('mcp-from-openapi');
+      const tool = createMockTool('BearerAuth');
+
+      await createSecurityContextFromAuth(tool, createMockContext({ ...mockAuthInfo, token: 'default-token' }), {
+        staticAuth: {},
+        passthroughCallerToken: true,
+      });
+
+      expect(createSecurityContext).toHaveBeenLastCalledWith({ jwt: 'default-token' });
     });
 
     it('should not use authInfo.token when no configuration provided', async () => {

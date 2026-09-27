@@ -60,6 +60,8 @@ For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./depl
 
 ```ts
 // worker.ts — the real API is createEdgeMcp (not createWorker)
+import { env } from 'cloudflare:workers';
+
 import { createEdgeMcp, kvBundleCacheFromEnv } from '@frontmcp/edge';
 
 export default createEdgeMcp({
@@ -68,7 +70,10 @@ export default createEdgeMcp({
   tasks: { enabled: false },
   managed: {
     endpoint: 'https://cloud.example.com/v1/bundles/acme',
-    authToken: 'pinned-pull-token',
+    // The pull JWT the SaaS issued for this server (iss = expectedIssuer, aud includes
+    // expectedAudience, with exp), kept in a Worker secret:
+    //   npx wrangler secret put FRONTMCP_PULL_TOKEN
+    authToken: env.FRONTMCP_PULL_TOKEN,
     expectedAudience: 'acme-mcp',
     jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
     expectedIssuer: 'https://cloud.example.com',
@@ -91,7 +96,8 @@ key served at `jwksUrl` (fetched without the token, redirects refused), with
 `iss` equal to `expectedIssuer`, an `aud` that includes `expectedAudience` (and
 a `resource` claim that does too, when it has one), and not expired. A token
 that fails is refused with `[saas-source] pull token rejected: …`: nothing is
-pulled, and the KV cache is **not** used in its place. An unreachable JWKS
+pulled, and the KV cache is **not** used in its place. An unreachable JWKS, or
+one with no usable signing key (no RSA, EC or OKP public key for signatures),
 counts as an ordinary pull failure, so the cache fallback still applies.
 
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain

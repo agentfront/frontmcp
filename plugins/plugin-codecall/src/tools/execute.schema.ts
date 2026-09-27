@@ -80,6 +80,7 @@ const toolErrorPayloadSchema = z.object({
   toolInput: z.unknown(),
   message: z.string(),
   code: z.string().optional(),
+  /** @deprecated Never set: the enclave's error data is not sanitized for clients. */
   details: z.unknown().optional(),
 });
 

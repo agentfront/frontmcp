@@ -1,11 +1,11 @@
 // file: plugins/plugin-approval/src/__tests__/approval.service.spec.ts
 
 import 'reflect-metadata';
+
 import { ApprovalOperationError, ApprovalScopeNotAllowedError } from '../approval';
 import { ApprovalService, createApprovalService } from '../services/approval.service';
-import { ApprovalScope, ApprovalState } from '../types';
 import type { ApprovalStore } from '../stores/approval-store.interface';
-import type { ApprovalRecord } from '../types';
+import { ApprovalScope, ApprovalState, type ApprovalRecord } from '../types';
 
 describe('ApprovalService', () => {
   let mockStore: jest.Mocked<ApprovalStore>;
@@ -158,18 +158,27 @@ describe('ApprovalService', () => {
       expect(await anonymous.queryApprovals({})).toEqual([]);
     });
 
-    it('should allow overriding sessionId and userId', async () => {
-      mockStore.queryApprovals.mockResolvedValue([]);
+    it("should not return another caller's records when the query names its sessionId or userId", async () => {
+      const otherRecord = { ...mockApprovalRecord, sessionId: 'other-session', userId: 'other-user' };
+      mockStore.queryApprovals.mockResolvedValue([otherRecord]);
 
-      await service.queryApprovals({
+      const result = await service.queryApprovals({
         sessionId: 'other-session',
         userId: 'other-user',
       });
 
+      expect(result).toEqual([]);
       expect(mockStore.queryApprovals).toHaveBeenCalledWith({
         sessionId: 'other-session',
         userId: 'other-user',
       });
+    });
+
+    it("should narrow the caller's records by its own userId", async () => {
+      const userRecord = { ...mockApprovalRecord, scope: ApprovalScope.USER, sessionId: 'another-session', userId };
+      mockStore.queryApprovals.mockResolvedValue([userRecord]);
+
+      expect(await service.queryApprovals({ userId })).toEqual([userRecord]);
     });
   });
 
@@ -317,7 +326,11 @@ describe('ApprovalService', () => {
   });
 
   describe("the tool's approval policy", () => {
-    const policy = { required: true, allowedScopes: [ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED], maxTtlMs: 60_000 };
+    const policy = {
+      required: true,
+      allowedScopes: [ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED],
+      maxTtlMs: 60_000,
+    };
     let governed: ApprovalService;
 
     beforeEach(() => {
@@ -329,9 +342,9 @@ describe('ApprovalService', () => {
 
     it('rejects a grant of a scope the tool does not allow', async () => {
       await expect(governed.grantUserApproval('app:governed')).rejects.toBeInstanceOf(ApprovalScopeNotAllowedError);
-      await expect(governed.grantContextApproval('app:governed', { type: 'repo', identifier: 'x' })).rejects.toBeInstanceOf(
-        ApprovalScopeNotAllowedError,
-      );
+      await expect(
+        governed.grantContextApproval('app:governed', { type: 'repo', identifier: 'x' }),
+      ).rejects.toBeInstanceOf(ApprovalScopeNotAllowedError);
       expect(mockStore.grantApproval).not.toHaveBeenCalled();
     });
 
@@ -386,7 +399,10 @@ describe('ApprovalService', () => {
       getApprovals.mockResolvedValueOnce([approval({ grantedAt: now - 120_000 })]);
       expect(await svc.isApproved('app:governed')).toBe(false);
 
-      getApprovals.mockResolvedValueOnce([approval({}), approval({ scope: ApprovalScope.USER, state: ApprovalState.DENIED })]);
+      getApprovals.mockResolvedValueOnce([
+        approval({}),
+        approval({ scope: ApprovalScope.USER, state: ApprovalState.DENIED }),
+      ]);
       expect(await svc.isApproved('app:governed')).toBe(false);
     });
   });

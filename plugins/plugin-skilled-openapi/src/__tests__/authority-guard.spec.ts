@@ -340,6 +340,50 @@ describe('AuthorityGuard', () => {
       expect(await guard.canDiscover({ unprotectedOps: 'deny', authInfo: viewer })).toBe(false);
       expect(await guard.canDiscover({ unprotectedOps: 'deny', isPublic: true, authInfo: viewer })).toBe(true);
     });
+
+    describe('profile names', () => {
+      const profiles = new AuthoritiesProfileRegistry();
+      profiles.registerAll({
+        admin: { roles: { any: ['admin'] } },
+        smallRefunds: { attributes: { conditions: [{ path: 'input.amount', op: 'lte', value: 100 }] } },
+      });
+      const withProfiles = new AuthorityGuard({ profiles });
+      // The bundle policy type is an object map; profile names reach the guard as strings or lists.
+      const named = (value: string | string[]) => value as unknown as Record<string, unknown>;
+
+      it('shows an action whose profile depends on the input, as at call time some inputs pass', async () => {
+        expect(await withProfiles.canDiscover({ policy: named('smallRefunds'), authInfo: viewer })).toBe(true);
+        expect(
+          (await withProfiles.check({ policy: named('smallRefunds'), authInfo: viewer, input: { amount: 50 } }))
+            .granted,
+        ).toBe(true);
+      });
+
+      it('still hides an action whose profile refuses the caller whatever the input', async () => {
+        expect(await withProfiles.canDiscover({ policy: named('admin'), authInfo: viewer })).toBe(false);
+      });
+
+      it('judges the profiles of a list that do not depend on the input', async () => {
+        expect(await withProfiles.canDiscover({ policy: named(['admin', 'smallRefunds']), authInfo: viewer })).toBe(
+          false,
+        );
+        expect(await withProfiles.canDiscover({ policy: named(['smallRefunds']), authInfo: viewer })).toBe(true);
+      });
+
+      it('hides an action naming an unregistered profile, which is refused at call time too', async () => {
+        expect(await withProfiles.canDiscover({ policy: named('missing'), authInfo: viewer })).toBe(false);
+      });
+
+      it("resolves profile names through the server's engine when the server has authorities", async () => {
+        const guard = new AuthorityGuard({
+          serverAuthorities: () => ({
+            engine: new AuthoritiesEngine(profiles, new AuthoritiesEvaluatorRegistry()),
+            contextBuilder: new AuthoritiesContextBuilder(),
+          }),
+        });
+        expect(await guard.canDiscover({ policy: named('smallRefunds'), authInfo: viewer })).toBe(true);
+      });
+    });
   });
 
   describe('policyDependsOnInput', () => {

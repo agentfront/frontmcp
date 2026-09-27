@@ -305,4 +305,12 @@ export class AuthoritiesEngine {
       evaluatedPolicies: ['not', ...result.evaluatedPolicies],
     };
   }
+
+  /**
+   * The policy a profile name stands for when `evaluate()` is given that name, or `undefined`
+   * when no such profile is registered. Lets callers inspect a named rule without evaluating it.
+   */
+  resolveProfile(name: string): AuthoritiesPolicyMetadata | undefined {
+    return this.profiles.resolve(name);
+  }
 }

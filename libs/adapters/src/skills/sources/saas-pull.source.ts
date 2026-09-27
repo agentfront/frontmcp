@@ -34,6 +34,26 @@ function claimValues(claim: unknown): unknown[] {
   return claim === undefined ? [] : [claim];
 }
 
+/** Public-key members each asymmetric key type needs (RFC 7518 §6, RFC 8037 §2). */
+const PUBLIC_KEY_MEMBERS = new Map<string, readonly string[]>([
+  ['RSA', ['n', 'e']],
+  ['EC', ['crv', 'x', 'y']],
+  ['OKP', ['crv', 'x']],
+]);
+
+/**
+ * Whether a JWKS entry could verify a pull token: an asymmetric public key with its members,
+ * not marked for encryption. Symmetric (`oct`) keys never can: verification is pinned to
+ * asymmetric algorithms.
+ */
+function isUsableSigningKey(key: unknown): boolean {
+  if (typeof key !== 'object' || key === null) return false;
+  const jwk = key as Record<string, unknown>;
+  const members = typeof jwk['kty'] === 'string' ? PUBLIC_KEY_MEMBERS.get(jwk['kty']) : undefined;
+  if (!members || (jwk['use'] !== undefined && jwk['use'] !== 'sig')) return false;
+  return members.every((m) => typeof jwk[m] === 'string' && jwk[m] !== '');
+}
+
 /**
  * Pulls bundles from a configured SaaS endpoint via authenticated HTTPS.
  *
@@ -54,7 +74,8 @@ function claimValues(claim: unknown): unknown[] {
  * `expectedIssuer` and `aud` including `expectedAudience` (and `resource` too,
  * when the token carries one), and not expired. A rejected token stops the pull
  * and is never answered with the cached bundle ({@link SaasPullTokenRejectedError});
- * an unreachable JWKS is treated like any other pull failure.
+ * an unreachable JWKS, or one with no usable signing key, is treated like any
+ * other pull failure (the cache fallback still applies).
  *
  * NOTE: Bundle signature verification is applied by the bundle-sync service
  * before the bundle becomes active.
@@ -233,9 +254,16 @@ export class SaasPullSource implements SkillBundleSource {
     if (!jwks || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
       throw new Error(`JWKS ${jwksUrl} has no keys`);
     }
+    // A JWKS with no key that could verify a token says nothing about the token: treat it like an
+    // unreachable JWKS (a pull failure), and keep SaasPullTokenRejectedError for a token that a
+    // usable key set refuses.
+    const signingKeys = (jwks.keys as unknown[]).filter(isUsableSigningKey);
+    if (signingKeys.length === 0) {
+      throw new Error(`JWKS ${jwksUrl} has no usable signing keys`);
+    }
 
     const verified = await this.jwksService.verifyTransparentToken(authToken, [
-      { id: 'skilled-openapi-saas', issuerUrl: expectedIssuer, jwks },
+      { id: 'skilled-openapi-saas', issuerUrl: expectedIssuer, jwks: { keys: signingKeys } as JSONWebKeySet },
     ]);
     if (!verified.ok || !verified.payload) {
       throw new SaasPullTokenRejectedError(
