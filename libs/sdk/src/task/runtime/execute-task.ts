@@ -14,6 +14,7 @@
  */
 
 import { frontMcpMetadataSchema, type FrontMcpConfigInput, type FrontMcpLogger } from '../../common';
+import { MCP_ERROR_CODES } from '../../errors/mcp.error';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { FileLogTransportInstance } from '../../logger/instances/instance.file-logger';
 import type { Scope } from '../../scope/scope.instance';
@@ -52,13 +53,15 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
   const instance = new FrontMcpInstance(parsedConfig);
   await instance.ready;
 
-  const [scope] = instance.getScopes() as Scope[];
-  if (!scope) return fatal('no scope initialized in task worker', instance);
-  const logger = scope.logger.child('task-worker');
+  // Every scope writes its tasks to the same backend, so the primary scope's store finds the record;
+  // the task then runs through the scope that created it (see `TaskRecord.scopeId`).
+  const primary = instance.getPrimaryScope() as Scope | undefined;
+  if (!primary) return fatal('no scope initialized in task worker', instance);
+  const logger = primary.logger.child('task-worker');
+  const scopes = instance.getScopes() as Scope[];
 
-  const store = scope.taskStore;
-  const registry = scope.tasks;
-  if (!store || !registry) {
+  const store = primary.taskStore;
+  if (!store || !primary.tasks) {
     return fatal(
       'task worker booted without a task store — did you forget `tasks.sqlite` in config?',
       instance,
@@ -87,14 +90,14 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
   }
   if (!sessionId) {
     logger.warn('task worker: task record not found', { taskId });
-    await shutdownScopeResources(scope);
+    await shutdownScopeResources(scopes);
     return 0; // nothing to do; exit cleanly
   }
 
   const record = await store.get(taskId, sessionId);
   if (!record) {
     logger.warn('task worker: task record missing after session resolution', { taskId });
-    await shutdownScopeResources(scope);
+    await shutdownScopeResources(scopes);
     return 0;
   }
   if (isTerminal(record.status)) {
@@ -102,13 +105,34 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
       taskId,
       status: record.status,
     });
-    await shutdownScopeResources(scope);
+    await shutdownScopeResources(scopes);
     return 0;
   }
 
+  // A record without a scope was written by an earlier release, which ran every task through one scope.
+  const scope = record.scopeId === undefined ? primary : scopes.find((candidate) => candidate.id === record.scopeId);
+  const registry = scope?.tasks;
+  if (!scope || !scope.taskStore || !registry) {
+    // Never fall back to another scope: it may hold a different tool under the same name.
+    logger.error('task worker: the scope that created the task is not on this server', {
+      taskId,
+      scopeId: record.scopeId,
+    });
+    const message = 'The server no longer has the app that created this task.';
+    const failed = await store.update(taskId, sessionId, {
+      status: 'failed',
+      statusMessage: message,
+      outcome: { kind: 'error', error: { code: MCP_ERROR_CODES.INTERNAL_ERROR, message } },
+    });
+    if (failed) await store.publishTerminal(failed).catch(() => undefined);
+    await shutdownScopeResources(scopes);
+    return 1;
+  }
+  const taskStore = scope.taskStore;
+
   // Persist the worker's own PID so `tasks/cancel` from any process knows
   // which OS process to signal.
-  await store.update(taskId, sessionId, {
+  await taskStore.update(taskId, sessionId, {
     executor: {
       host: 'cli',
       pid: process.pid,
@@ -131,7 +155,7 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
       cleanedRequestParams: record.request.params,
       ctx: { authInfo: { sessionId } },
       scope: scope as unknown as Parameters<typeof runTaskInBackground>[0]['scope'],
-      store,
+      store: taskStore,
       registry,
       notifier,
       logger,
@@ -146,7 +170,7 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
   } finally {
     process.off('SIGTERM', onSignal);
     process.off('SIGINT', onSignal);
-    await shutdownScopeResources(scope);
+    await shutdownScopeResources(scopes);
   }
 }
 
@@ -159,15 +183,17 @@ function fatal(message: string, _instance: FrontMcpInstance, logger?: FrontMcpLo
 /**
  * Best-effort cleanup of long-lived scope resources before the worker exits.
  * Node's process exit will reclaim file descriptors anyway, but explicitly
- * destroying the store also flushes any pending writes.
+ * destroying each scope's store also flushes any pending writes.
  */
-async function shutdownScopeResources(scope: Scope): Promise<void> {
-  const storeAny = scope.taskStore as unknown as { destroy?: () => Promise<void> } | undefined;
-  if (storeAny?.destroy) {
-    try {
-      await storeAny.destroy();
-    } catch {
-      /* ignore */
+async function shutdownScopeResources(scopes: readonly Scope[]): Promise<void> {
+  for (const scope of scopes) {
+    const storeAny = scope.taskStore as unknown as { destroy?: () => Promise<void> } | undefined;
+    if (storeAny?.destroy) {
+      try {
+        await storeAny.destroy();
+      } catch {
+        /* ignore */
+      }
     }
   }
 }

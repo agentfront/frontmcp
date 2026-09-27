@@ -44,6 +44,7 @@ import { createElicitationStore, type ElicitationStore } from '../elicitation';
 import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
+import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { HaManager } from '../ha';
 import { HealthService } from '../health';
@@ -56,6 +57,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
+import { findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
@@ -722,6 +724,9 @@ export class Scope extends ScopeEntry {
 
     // Fail-fast: entries with 'authorities' metadata but no engine configured
     this.validateAuthoritiesConfig();
+
+    // Fail-fast: entries with metadata only a plugin enforces (`approval`, `featureFlag`, ...) that no such plugin covers
+    this.validateEnforcedMetadata();
 
     await this.initGuardForDeclaredLimits();
 
@@ -1655,6 +1660,24 @@ export class Scope extends ScopeEntry {
           'allOf, anyOf or not) with known fields and no empty lists. To leave an entry open, remove its authorities.',
       });
     }
+  }
+
+  /**
+   * Fail-fast at startup, so a field that asks a plugin for protection never silently does nothing:
+   * an entry declares metadata only a plugin enforces (`approval`, `featureFlag`, ...) and no hook of
+   * a plugin that enforces it reaches the entry. See `findUnenforcedMetadata`.
+   * @internal
+   */
+  private validateEnforcedMetadata(): void {
+    const problems = findUnenforcedMetadata({
+      hooks: this.scopeHooks,
+      tools: this.scopeTools,
+      resources: this.scopeResources,
+      prompts: this.scopePrompts,
+      agents: this.scopeAgents,
+      skills: this.scopeSkills,
+    });
+    if (problems.length > 0) throw new UnenforcedMetadataError(problems);
   }
 
   /**

@@ -171,16 +171,24 @@ export class Server {}
 
 ### Configuration Options
 
-| Option                      | Type            | Default              | Description                                |
-| --------------------------- | --------------- | -------------------- | ------------------------------------------ |
-| `provider`                  | `string`        | Required             | Upstream IdP base URL                      |
-| `clientId`                  | `string`        | Required             | OAuth client ID                            |
-| `clientSecret`              | `string`        | -                    | OAuth client secret (confidential clients) |
-| `scopes`                    | `string[]`      | `['openid']`         | Scopes to request from IdP                 |
-| `providerConfig.dcrEnabled` | `boolean`       | `false`              | Use Dynamic Client Registration            |
-| `consent`                   | `ConsentConfig` | `{ enabled: false }` | Show consent UI after IdP login            |
-| `requireRegisteredClients`  | `boolean`       | `true`               | Refuse an MCP client that isn't registered |
-| `allowedScopes`             | `string[]`      | OpenID scopes        | Scopes FrontMCP grants in its own tokens   |
+| Option                      | Type                 | Default              | Description                                                                       |
+| --------------------------- | -------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| `provider`                  | `string`             | Required             | Upstream IdP base URL                                                             |
+| `clientId`                  | `string`             | Required             | OAuth client ID                                                                   |
+| `clientSecret`              | `string`             | -                    | OAuth client secret (confidential clients)                                        |
+| `scopes`                    | `string[]`           | `['openid']`         | Scopes to request from IdP                                                        |
+| `providerConfig.dcrEnabled` | `boolean`            | `false`              | Use Dynamic Client Registration                                                   |
+| `consent`                   | `ConsentConfig`      | `{ enabled: false }` | Show consent UI after IdP login                                                   |
+| `requireRegisteredClients`  | `boolean`            | `true`               | Refuse an MCP client that isn't registered                                        |
+| `allowedScopes`             | `string[]`           | OpenID scopes        | Scopes FrontMCP grants in its own tokens                                          |
+| `expectedAudience`          | `string \| string[]` | Resource URL         | Audiences (`aud`) whose tokens this server accepts, in place of the request's URL |
+
+<Note>
+  `/oauth/authorize` gives the browser a `frontmcp_signin_<id>` cookie (`__Host-frontmcp_signin_<id>` over https), and the
+  provider callback accepts the sign-in only from the browser that holds it, so
+  the browser must start the sign-in on the host the IdP returns to (the
+  issuer's host). See [Sign-in cookie](/frontmcp/authentication/local#sign-in-cookie).
+</Note>
 
 ### MCP client registration
 

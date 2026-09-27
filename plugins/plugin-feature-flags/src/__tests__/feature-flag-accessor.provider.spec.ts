@@ -19,6 +19,8 @@ function createMockContext(overrides: Partial<FrontMcpContext> = {}): FrontMcpCo
     sessionId: 'test-session-id',
     authInfo: {
       clientId: 'test-client',
+      // The session the server verified; only it reaches the adapter as the context's sessionId.
+      sessionId: 'test-session-id',
       extra: { sub: 'user-123', userId: 'user-456' },
     },
     ...overrides,

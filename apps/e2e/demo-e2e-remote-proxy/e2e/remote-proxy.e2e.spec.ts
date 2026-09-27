@@ -17,6 +17,8 @@ import { decodeJwt } from 'jose';
 
 import { expect, MockOAuthServer, test, TestTokenFactory } from '@frontmcp/testing';
 
+import { browserFetch } from './browser-fetch';
+
 let upstreamTokenFactory: TestTokenFactory;
 let upstreamServer: MockOAuthServer;
 
@@ -73,7 +75,7 @@ test.describe('Remote OAuth Proxy E2E', () => {
     url.searchParams.set('code_challenge_method', 'S256');
     url.searchParams.set('scope', 'openid profile email');
     url.searchParams.set('state', 'e2e-remote-state');
-    return fetch(url.toString(), { redirect: 'manual' });
+    return browserFetch(url.toString(), { redirect: 'manual' });
   }
 
   test('GET /oauth/authorize redirects straight to the upstream IdP (no in-tree login page)', async ({ server }) => {
@@ -114,7 +116,7 @@ test.describe('Remote OAuth Proxy E2E', () => {
     //    redirects to the client redirect_uri carrying the FrontMCP code.
     let clientCode: string | undefined;
     for (let hop = 0; hop < 10; hop++) {
-      const res = await fetch(current!, { redirect: 'manual' });
+      const res = await browserFetch(current!, { redirect: 'manual' });
       const location = res.headers.get('location');
       if (!location) {
         // No further redirect — surface the body to aid debugging on failure.
@@ -133,7 +135,7 @@ test.describe('Remote OAuth Proxy E2E', () => {
     expect(clientCode).toBeDefined();
 
     // 3) Exchange the FrontMCP authorization code for a FrontMCP token.
-    const tokenRes = await fetch(`${server.info.baseUrl}/oauth/token`, {
+    const tokenRes = await browserFetch(`${server.info.baseUrl}/oauth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -177,7 +179,7 @@ test.describe('Remote OAuth Proxy E2E', () => {
   });
 
   test('unauthenticated MCP requests are rejected with 401', async ({ server }) => {
-    const response = await fetch(`${server.info.baseUrl}/`, {
+    const response = await browserFetch(`${server.info.baseUrl}/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

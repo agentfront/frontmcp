@@ -29,6 +29,7 @@ import {
   type ToolOutputType,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
+import { getEnforcedMetadataKeys } from '../common/utils/enforced-metadata.utils';
 import {
   AgentConfigKeyNotFoundError,
   AgentNotConfiguredError,
@@ -420,6 +421,14 @@ export class AgentInstance<
       }
     }
 
+    // Metadata a plugin enforces (`approval`, `featureFlag`, ...): the plugin gates this tool, so an
+    // agent that declares it must pass it on, or the field would do nothing.
+    for (const key of getEnforcedMetadataKeys()) {
+      if (extendedMeta[key] !== undefined) {
+        mutableToolMeta[key] = extendedMeta[key];
+      }
+    }
+
     return toolMeta;
   }
 
@@ -461,6 +470,14 @@ export class AgentInstance<
    */
   getToolInstance(): ToolInstance | null {
     return this.agentToolInstance;
+  }
+
+  /**
+   * The tools this agent can call: those it declares and those its plugins contribute, as its private
+   * scope holds them. Empty until the agent is initialized.
+   */
+  getAgentTools(): readonly ToolEntry[] {
+    return this.agentTools;
   }
 
   // ============================================================================

@@ -2,6 +2,8 @@
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
+import { toClientErrorMessage } from '../utils/client-error-message';
+
 /**
  * Audit event types for CodeCall operations.
  */
@@ -406,14 +408,11 @@ export class AuditLoggerService {
   private sanitizeError(error: string): string {
     if (!error) return 'Unknown error';
 
-    // Remove file paths
-    let sanitized = error.replace(/(?:\/[\w.-]+)+|(?:[A-Za-z]:\\[\w\\.-]+)+/g, '[path]');
+    // Remove stack frames and file paths (linear time, whatever the message holds)
+    let sanitized = toClientErrorMessage(error);
 
     // Remove line numbers
     sanitized = sanitized.replace(/:\d+:\d+/g, '');
-
-    // Remove stack traces
-    sanitized = sanitized.replace(/\n\s*at .*/g, '');
 
     // Truncate
     if (sanitized.length > 200) {

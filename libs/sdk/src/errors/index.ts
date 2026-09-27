@@ -269,3 +269,4 @@ export {
   DynamicJobDirectExecutionError,
 } from './sdk.errors';
 export * from './job.errors';
+export * from './plugin.errors';

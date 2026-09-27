@@ -82,7 +82,7 @@ Authorization: ApiKey sk-your-api-key
 class Server {}
 ```
 
-JWT tokens are validated against the issuer's JWKS endpoint (auto-discovered from `{issuer}/.well-known/jwks.json`).
+JWT tokens are validated against the issuer's JWKS endpoint (auto-discovered from `{issuer}/.well-known/jwks.json`). A token must carry `exp`: one without it would never expire, so it is refused (401).
 
 ## Validation Result
 

@@ -231,10 +231,12 @@ async function dispatch(method: AuthSubmitMethod, url: string, entries: Array<[s
  */
 export interface SubmitFinishOptions {
   /**
-   * When true (the default in a real browser), a non-redirected/non-JSON HTML
-   * response causes a full navigation to `response.url` (the OAuth code
-   * redirect). Set false to suppress navigation and inspect the {@link Response}
-   * yourself (used by tests and SPA-style pages).
+   * Submit as a real top-level navigation (the default in a browser): a POST is
+   * a form submission, a GET a navigation to the callback URL, and the browser
+   * follows the server's redirect to the client's `redirect_uri` itself. Set
+   * false to send the request with `fetch()` and inspect the {@link Response}
+   * yourself (SPA-style pages and tests); that request can't follow a redirect
+   * to another origin.
    */
   navigate?: boolean;
   /**
@@ -246,10 +248,11 @@ export interface SubmitFinishOptions {
 }
 
 /**
- * How {@link submitFinish} performs a top-level navigation to the OAuth
- * redirect. Defaults to `window.location.assign`. Exposed so SPA-style pages
- * (and tests) can override it via {@link setAuthNavigator} without fighting a
- * non-configurable `window.location`.
+ * How {@link submitFinish} performs a top-level navigation (a GET submission,
+ * or following a redirect outside a browser). Defaults to
+ * `window.location.assign`. Exposed so SPA-style pages (and tests) can override
+ * it via {@link setAuthNavigator} without fighting a non-configurable
+ * `window.location`.
  */
 export type AuthNavigator = (url: string) => void;
 
@@ -262,12 +265,38 @@ const defaultNavigator: AuthNavigator = (url) => {
 let currentNavigator: AuthNavigator = defaultNavigator;
 
 /**
- * Override the navigation function used to follow the OAuth redirect after a
- * successful {@link submitFinish}. Pass no argument to reset to the default
+ * Override the navigation function {@link submitFinish} uses for a GET
+ * submission. Pass no argument to reset to the default
  * (`window.location.assign`).
  */
 export function setAuthNavigator(navigator?: AuthNavigator): void {
   currentNavigator = navigator ?? defaultNavigator;
+}
+
+/** Whether a DOM is available to build and submit a form in. */
+function hasDocument(): boolean {
+  return typeof document !== 'undefined' && typeof document.createElement === 'function' && !!document.body;
+}
+
+/**
+ * POST `entries` to `url` as a real HTML form submission: a top-level
+ * navigation, so the browser sends the page's cookies and `Origin`, applies
+ * its CSP `form-action` and follows the redirect that answers it.
+ */
+function submitAsForm(url: string, entries: Array<[string, string]>): void {
+  const form = document.createElement('form');
+  form.method = 'post';
+  form.action = url;
+  form.style.display = 'none';
+  for (const [name, value] of entries) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 /**
@@ -275,17 +304,24 @@ export function setAuthNavigator(navigator?: AuthNavigator): void {
  * server's callback (`submitUrl`), carrying `pending_auth_id`, `csrf`, and the
  * slot's marker fields (e.g. `consent_submitted=1` for consent).
  *
- * On success the server responds with the OAuth redirect to the client's
- * `redirect_uri`; in a browser this helper follows it via a full navigation
- * unless {@link SubmitFinishOptions.navigate} is false.
+ * In a browser this is a real top-level navigation: a POST submits a form, a
+ * GET navigates to the callback URL. The page is replaced by the server's
+ * answer: the redirect to the client's `redirect_uri` (on another origin,
+ * which only the browser can follow under the page's CSP), or the page again
+ * with an error. The returned promise then resolves with an empty `204`
+ * {@link Response}, since the real one goes to the browser.
+ *
+ * With {@link SubmitFinishOptions.navigate} `false`, or outside a browser, the
+ * request is sent with `fetch()` and its {@link Response} returned (outside a
+ * browser a redirect it followed is then passed to the navigator).
  *
  * @param formOrData The developer's form/fields (identity inputs, selected
  * `tools`/`providers` checkboxes, etc.).
  * @param options Submit options. `options.state` lets a caller (e.g. the React
  * hooks) drive the submit from an explicit flow state instead of re-reading the
  * injected global; when omitted the injected `window.__FRONTMCP_AUTH__` is used.
- * @returns The raw {@link Response} (so callers can branch on a re-rendered
- * error page vs. a redirect).
+ * @returns An empty `204` response once a navigation has started, else the
+ * `fetch()` {@link Response}.
  */
 export async function submitFinish(formOrData?: AuthFormInput, options: SubmitFinishOptions = {}): Promise<Response> {
   const state = options.state ?? getAuthFlow();
@@ -294,10 +330,19 @@ export async function submitFinish(formOrData?: AuthFormInput, options: SubmitFi
   }
   const method = state.submitMethod ?? DEFAULT_SUBMIT_METHOD;
   const entries = withControlFields(state, toEntries(formOrData), finishMarkers(state));
-  const response = await dispatch(method, state.submitUrl, entries);
 
   // Default to navigating when running in a real browser (location present).
   const shouldNavigate = options.navigate ?? (typeof window !== 'undefined' && !!window.location);
+  if (shouldNavigate && method === 'GET') {
+    currentNavigator(buildGetUrl(state.submitUrl, entries));
+    return new Response(null, { status: 204 });
+  }
+  if (shouldNavigate && hasDocument()) {
+    submitAsForm(state.submitUrl, entries);
+    return new Response(null, { status: 204 });
+  }
+
+  const response = await dispatch(method, state.submitUrl, entries);
   if (shouldNavigate && response.redirected && response.url) {
     currentNavigator(response.url);
   }

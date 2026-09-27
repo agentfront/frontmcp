@@ -18,6 +18,7 @@ import { generatePkceChallenge } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
+import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
@@ -62,7 +63,7 @@ async function seedIncrementalPending(
     targetAppId: opts.targetAppId,
     priorAuthorizedAppIds: opts.priorAuthorizedAppIds,
   });
-  await store.storePendingAuthorization(pending);
+  await store.storePendingAuthorization(bindSignin(pending, pending.id));
   return pending.id;
 }
 
@@ -71,6 +72,7 @@ function makeCallback(scope: any, pendingAuthId: string, extraQuery: Record<stri
     method: 'GET',
     path: '/oauth/callback',
     query: { pending_auth_id: pendingAuthId, email: 'user@example.com', ...extraQuery },
+    headers: { cookie: signinCookie(pendingAuthId) },
   });
   return new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
 }
@@ -189,7 +191,7 @@ describe('OAuth Callback Flow — incremental authorization expansion', () => {
       // Initial (non-incremental) login that narrows the grant via apps=.
       priorAuthorizedAppIds: ['notes'],
     });
-    await store.storePendingAuthorization(pending);
+    await store.storePendingAuthorization(bindSignin(pending, pending.id));
 
     const flow = makeCallback(scope, pending.id);
     const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth', 'handleIncrementalAuth']);
@@ -211,7 +213,7 @@ describe('OAuth Callback Flow — incremental authorization expansion', () => {
       pkce,
       state: 'xyz',
     });
-    await store.storePendingAuthorization(pending);
+    await store.storePendingAuthorization(bindSignin(pending, pending.id));
 
     const flow = makeCallback(scope, pending.id);
     const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth', 'handleIncrementalAuth']);
@@ -234,7 +236,7 @@ describe('OAuth Callback Flow — incremental authorization expansion', () => {
       pkce,
       state: 'xyz',
     });
-    await store.storePendingAuthorization(pending);
+    await store.storePendingAuthorization(bindSignin(pending, pending.id));
 
     const flow = makeCallback(scope, pending.id);
     const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth', 'handleIncrementalAuth']);

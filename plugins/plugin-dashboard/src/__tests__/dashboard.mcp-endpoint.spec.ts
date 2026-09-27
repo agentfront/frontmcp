@@ -23,6 +23,8 @@ import type { DashboardPluginOptionsInput } from '../dashboard.types';
 const TOKEN = 'dashboard-test-token';
 /** A tool whose name is the secret the inventory would leak. */
 const CANARY = 'export_revenue_canary';
+/** The server node of `dashboard:graph`'s answer, present only when the graph was served. */
+const GRAPH_MARKER = 'server:inventory';
 
 @Tool({ name: CANARY, description: 'Internal revenue export', inputSchema: {} })
 class CanaryTool extends ToolContext {
@@ -401,15 +403,16 @@ describe('Dashboard MCP endpoint', () => {
 
 /**
  * The same checks inside the tools, for servers where no HTTP request reaches the dashboard
- * scope's gate: `createDirect`, stdio and the fetch handler serve the FIRST scope, which is
- * the dashboard's standalone scope when `DashboardApp` is in `apps`.
+ * scope's gate. `createDirect`, stdio and the fetch handler serve the scope of the server's own
+ * apps, and the dashboard's standalone scope only when no app shares that scope, as when
+ * `DashboardApp` is the server's only app.
  */
 describe('Dashboard tools without the HTTP gate', () => {
   async function directServer(options: DashboardPluginOptionsInput) {
     resetDashboardOptions();
     return FrontMcpInstance.createDirect({
       info: { name: 'inventory', version: '1.0.0' },
-      apps: [LabApp, DashboardApp],
+      apps: [DashboardApp],
       plugins: [DashboardPlugin.init(options)],
       logging: { level: LogLevel.Off, enableConsole: false },
     });
@@ -441,7 +444,7 @@ describe('Dashboard tools without the HTTP gate', () => {
       const result = await server.callTool('dashboard:graph', {});
 
       expect(result.isError).toBeFalsy();
-      expect(JSON.stringify(result)).toContain(CANARY);
+      expect(JSON.stringify(result)).toContain(GRAPH_MARKER);
     } finally {
       await server.dispose();
     }
@@ -449,16 +452,16 @@ describe('Dashboard tools without the HTTP gate', () => {
 });
 
 /**
- * `createFetchHandler` serves one scope, the first, which is the dashboard's standalone scope
- * when `DashboardApp` is in `apps`; no Express middleware runs there. The gate is a hook on
- * the scope's own `http:request` flow, so it holds on this path too.
+ * `createFetchHandler` serves one scope: the dashboard's standalone scope when `DashboardApp` is
+ * the server's only app. No Express middleware runs there. The gate is a hook on the scope's own
+ * `http:request` flow, so it holds on this path too.
  */
 describe('Dashboard MCP endpoint through createFetchHandler', () => {
   async function fetchHandler(options: DashboardPluginOptionsInput) {
     resetDashboardOptions();
     return FrontMcpInstance.createFetchHandler({
       info: { name: 'inventory', version: '1.0.0' },
-      apps: [LabApp, DashboardApp],
+      apps: [DashboardApp],
       plugins: [DashboardPlugin.init(options)],
       logging: { level: LogLevel.Off, enableConsole: false },
     });
@@ -511,6 +514,6 @@ describe('Dashboard MCP endpoint through createFetchHandler', () => {
     expect(refused.status).toBe(401);
 
     const served = await handler(graphRequest({ 'x-frontmcp-dashboard-token': TOKEN }));
-    expect(await served.text()).toContain(CANARY);
+    expect(await served.text()).toContain(GRAPH_MARKER);
   });
 });

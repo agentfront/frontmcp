@@ -23,6 +23,8 @@
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.authenticate.ts';
 
 const REDIRECT_URI = 'http://127.0.0.1:9878/callback';
@@ -57,7 +59,7 @@ async function startAuthorization(
   challenge: string,
   extraParams: Record<string, string> = {},
 ): Promise<{ html: string; pendingAuthId: string }> {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge, extraParams), {
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge, extraParams), {
     method: 'GET',
     redirect: 'manual',
   });
@@ -74,7 +76,7 @@ function callback(baseUrl: string, params: Record<string, string>): Promise<Resp
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  return fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
 }
 
 /** The authorization code from a 302, or undefined when none was issued. */
@@ -92,7 +94,7 @@ async function exchangeToken(baseUrl: string, code: string, verifier: string): P
     client_id: CLIENT_ID,
     code_verifier: verifier,
   });
-  return fetch(`${baseUrl}/oauth/token`, {
+  return browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),

@@ -155,6 +155,17 @@ export interface PluginMetadata {
    * ```
    */
   contextExtensions?: ContextExtension[];
+
+  /**
+   * Entry metadata keys this plugin's hooks enforce (e.g. `['approval']`), on the entries of the
+   * flows those hooks run in: `tools/call` for tools and agents, `resources/read` for resources and
+   * resource templates, `prompts/get` for prompts, and `skills:filter` for skills.
+   *
+   * Declare it on the plugin class whose hooks do the enforcing. A server where an entry declares
+   * such a key and no hook of a plugin that enforces it reaches the entry refuses to start, so a
+   * field that looks protective never silently does nothing.
+   */
+  enforcesMetadata?: string[];
 }
 
 // Schema for context extensions (uses passthrough since token is a Symbol)
@@ -181,5 +192,6 @@ export const frontMcpPluginMetadataSchema = z
     skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
     scope: z.enum(['app', 'server']).optional().default('app'),
     contextExtensions: z.array(contextExtensionSchema).optional(),
+    enforcesMetadata: z.array(z.string().min(1)).optional(),
   } satisfies RawZodShape<PluginMetadata>)
   .passthrough();

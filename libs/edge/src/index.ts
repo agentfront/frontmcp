@@ -318,7 +318,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     }
 
     const instance = await FrontMcpInstance.createForGraph(frontmcpConfig);
-    const scope = instance.getScopes()[0] as Scope | undefined;
+    const scope = instance.getPrimaryScope() as Scope | undefined;
     if (!scope) {
       throw new Error('createEdgeMcp: the config produced no scope — declare an app/tool or `managed`.');
     }

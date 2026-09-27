@@ -20,6 +20,8 @@
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.credentials.ts';
 
 const REDIRECT_URI = 'http://127.0.0.1:9877/callback';
@@ -43,7 +45,7 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string, scope?: string): 
 }
 
 async function startAuthorization(baseUrl: string, challenge: string, scope?: string): Promise<string> {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge, scope), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge, scope), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
@@ -55,7 +57,7 @@ async function submitLogin(baseUrl: string, pendingAuthId: string, apiKey: strin
   const url = new URL(`${baseUrl}/oauth/callback`);
   url.searchParams.set('pending_auth_id', pendingAuthId);
   url.searchParams.set('apiKey', apiKey);
-  return fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
 }
 
 async function exchangeToken(baseUrl: string, code: string, verifier: string): Promise<string> {
@@ -66,7 +68,7 @@ async function exchangeToken(baseUrl: string, code: string, verifier: string): P
     client_id: CLIENT_ID,
     code_verifier: verifier,
   });
-  const res = await fetch(`${baseUrl}/oauth/token`, {
+  const res = await browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
@@ -180,7 +182,7 @@ describe('LOCAL-mode tool-level authProviders credential gate E2E', () => {
       // resume branch ADDS the globex credential to the SAME session vault).
       const tokenParam = new URL(connectUrl!).searchParams.get('token')!;
       const form = new URLSearchParams({ token: tokenParam, apiKey: GOOD_API_KEY });
-      const submit = await fetch(`${baseUrl}/oauth/connect`, {
+      const submit = await browserFetch(`${baseUrl}/oauth/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: form.toString(),

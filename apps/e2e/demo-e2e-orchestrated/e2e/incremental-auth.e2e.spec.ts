@@ -25,6 +25,8 @@
 import { expect, TestServer } from '@frontmcp/testing';
 import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-orchestrated/src/main.incremental.ts';
 
 const REDIRECT_URI = 'http://127.0.0.1:9876/callback';
@@ -66,7 +68,7 @@ async function startAuthorization(
   if (opts.apps) url.searchParams.set('apps', opts.apps.join(','));
   if (opts.ticket) url.searchParams.set('ticket', opts.ticket);
 
-  const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
@@ -92,7 +94,7 @@ function ticketFromAuthUrl(authUrl: string): string {
 async function completeLogin(baseUrl: string, pendingAuthId: string): Promise<string> {
   const url = new URL(`${baseUrl}/oauth/callback`);
   url.searchParams.set('pending_auth_id', pendingAuthId);
-  const res = await fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
   expect([302, 303]).toContain(res.status);
   const location = res.headers.get('location');
   expect(location).toBeTruthy();
@@ -110,7 +112,7 @@ async function exchangeToken(baseUrl: string, code: string, verifier: string): P
     client_id: CLIENT_ID,
     code_verifier: verifier,
   });
-  const res = await fetch(`${baseUrl}/oauth/token`, {
+  const res = await browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
@@ -147,7 +149,7 @@ interface McpSession {
 
 /** Initialize an MCP streamable-http session with the given bearer token. */
 async function initSession(baseUrl: string, token: string): Promise<McpSession> {
-  const res = await fetch(`${baseUrl}/`, {
+  const res = await browserFetch(`${baseUrl}/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -183,7 +185,7 @@ async function callTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<any> {
-  const res = await fetch(`${baseUrl}/`, {
+  const res = await browserFetch(`${baseUrl}/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -300,7 +302,7 @@ describe('Progressive/Incremental Authorization E2E (orchestrated/local)', () =>
     url.searchParams.set('mode', 'incremental');
     url.searchParams.set('app', APP_TASKS);
 
-    const res = await fetch(url.toString(), { redirect: 'manual' });
+    const res = await browserFetch(url.toString(), { redirect: 'manual' });
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).not.toContain('Authorization Required');

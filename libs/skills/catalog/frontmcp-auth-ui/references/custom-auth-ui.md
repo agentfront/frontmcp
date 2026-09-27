@@ -108,7 +108,7 @@ npm install @frontmcp/ui react react-dom
 
 ### React hooks + wrapper + client mount
 
-- **`useAuthFlow()`** — the flow-state fields above plus a `submitFinish` handler. `<form onSubmit={submitFinish}>` `preventDefault`s, serializes the form, attaches `pending_auth_id` + `csrf` + the slot marker, posts to the callback, and follows the OAuth redirect.
+- **`useAuthFlow()`** — the flow-state fields above plus a `submitFinish` handler. `<form onSubmit={submitFinish}>` `preventDefault`s, serializes the form, attaches `pending_auth_id` + `csrf` + the slot marker, and submits it to the callback as a real form navigation, so the browser follows the OAuth redirect.
 - **`useExtraField(name)`** — `{ onSubmit, result, pending }` for an `auth.extras` form. On success it merges the returned `addedItems` back into context.
 - **`useAddedItems(name)`** — the server-side accumulator for a named extra, reactively.
 - **`<AuthPageWrapper>`** — outer chrome that reads the injected state once, provides it via context, and (by default) renders the enclosing `<form>` with the `pending_auth_id` + `csrf` hidden fields so a no-JS submit still works. Pass `renderForm={false}` to supply your own forms.
@@ -131,7 +131,7 @@ There is **no `/oauth/ui/:slot.js` route** — the component is transpiled serve
 ## Security — the framework owns it
 
 - **CSRF**: the server mints a per-pending-authorization token, stores it (echoed into `csrfToken`), and verifies it on the finish submit and every `auth.extras` POST with a constant-time compare. Your component never generates or checks it.
-- **CSP + anti-clickjacking**: the auth-UI HTML ships with a strict CSP — `default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://esm.sh; img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` — plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. It allows `https://esm.sh` (deps) + `'unsafe-inline'` (the JSON-escaped state script) but **NOT `'unsafe-eval'`** — the transform is server-side, never in the browser.
+- **CSP + anti-clickjacking**: the auth-UI HTML ships with a strict CSP — `default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://esm.sh; img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' <redirect origin>` (the validated `redirect_uri`'s origin, plus the upstream authorization endpoints on the provider-selection page) — plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (a POST of the form carries its `Origin`, which the callback checks), `Cache-Control: no-store`. The finish submit is a POST (`submitMethod: 'POST'`). It allows `https://esm.sh` (deps) + `'unsafe-inline'` (the JSON-escaped state script) but **NOT `'unsafe-eval'`** — the transform is server-side, never in the browser.
 - **No PII**: the injected state carries OAuth client identifiers + control fields only.
 - **Fail-safe**: a component that can't be transpiled (missing / invalid `.tsx`) is logged (error cached so a broken file isn't retried each request) and **falls back to the built-in page** — a broken custom page can't take the server down.
 

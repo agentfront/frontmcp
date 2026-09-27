@@ -90,10 +90,15 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
    * @param _requestBaseUrl    The request-derived base URL, for context / logging.
    *                           The token's `iss` must be this instance's own
    *                           issuer, not this request-derived value.
-   * @param _expectedAudience  The protected resource the token must be for
-   *                           (`aud`), when the caller is a resource endpoint.
+   * @param _expectedAudience  The protected resource(s) the token must be for
+   *                           (`aud` names at least one), when the caller is a
+   *                           resource endpoint.
    */
-  verifyGatewayToken(_token: string, _requestBaseUrl: string, _expectedAudience?: string): Promise<VerifyResult> {
+  verifyGatewayToken(
+    _token: string,
+    _requestBaseUrl: string,
+    _expectedAudience?: string | readonly string[],
+  ): Promise<VerifyResult> {
     return Promise.resolve({
       ok: false,
       error: 'gateway token verification is not supported by this auth mode',

@@ -892,6 +892,14 @@ export interface LocalAuthOptionsInterface {
   consent?: ConsentConfig;
   federatedAuth?: FederatedAuthConfig;
   refresh?: TokenRefreshConfig;
+  /**
+   * Audiences whose tokens this server accepts: a token FrontMCP issued is
+   * served only when its `aud` names one of them (RFC 8707 resource URIs),
+   * checked in place of the URL the request arrived at. List every resource
+   * URL clients use (the `resource` their tokens are issued for).
+   *
+   * @default this server's resource URL, taken from the request
+   */
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
   /**
@@ -1033,6 +1041,10 @@ export interface RemoteAuthOptionsInterface {
   consent?: ConsentConfig;
   federatedAuth?: FederatedAuthConfig;
   refresh?: TokenRefreshConfig;
+  /**
+   * Audiences whose tokens this server accepts, in place of the request's
+   * resource URL. See {@link LocalAuthOptionsInterface.expectedAudience}.
+   */
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
   /**

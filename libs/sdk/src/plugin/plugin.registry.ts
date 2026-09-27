@@ -170,8 +170,11 @@ export default class PluginRegistry
         ref: token,
       };
 
-      // Nested plugins' hooks belong to the app or scope that installed this plugin, not to the plugin.
-      const nestedHookOwner = this.owner?.kind === 'app' || this.owner?.kind === 'scope' ? this.owner : pluginOwner;
+      // Nested plugins' hooks belong to the app, agent or scope that installed this plugin, not to the plugin.
+      const nestedHookOwner =
+        this.owner?.kind === 'app' || this.owner?.kind === 'agent' || this.owner?.kind === 'scope'
+          ? this.owner
+          : pluginOwner;
       const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], nestedHookOwner, this.scopeInfo);
       await plugins.ready;
 
