@@ -16,6 +16,7 @@ import {
   type PromptEntry,
   type ScopeEntry,
 } from '../../common';
+import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import {
   InvalidInputError,
   InvalidMethodError,
@@ -196,6 +197,20 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     if (!prompt) {
       this.logger.warn(`findPrompt: prompt "${name}" not found`);
       throw new PromptNotFoundError(name);
+    }
+
+    // `availableWhen` gates prompts/get, not only the listing: a surface the prompt isn't offered on
+    // answers like an unknown prompt, and a process-wide axis answers EntryUnavailableError.
+    const { availableWhen } = prompt.metadata;
+    const callSurface = callSurfaceOf(this.input.ctx);
+    const availability = availabilityForCall(availableWhen, callSurface);
+    if (availability === 'not-offered') {
+      this.logger.warn(`findPrompt: prompt "${name}" is not offered on surface "${callSurface}"`);
+      throw new PromptNotFoundError(name);
+    }
+    if (availability === 'unavailable') {
+      this.logger.warn(`findPrompt: prompt "${name}" is unavailable in this environment`);
+      throw entryUnavailableError('Prompt', name, availableWhen, callSurface);
     }
 
     // Store prompt owner ID in state for hook filtering during execution

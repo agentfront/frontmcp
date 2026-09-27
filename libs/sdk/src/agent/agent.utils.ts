@@ -58,6 +58,11 @@ export function extractAgentClassMetadata(cls: Function): AgentMetadata {
     execution: Reflect.getMetadata(FrontMcpAgentTokens.execution, cls),
     tags: Reflect.getMetadata(FrontMcpAgentTokens.tags, cls),
     hideFromDiscovery: Reflect.getMetadata(FrontMcpAgentTokens.hideFromDiscovery, cls),
+    // The decorator stores these under their own tokens, so they are not part of `extended`.
+    rateLimit: Reflect.getMetadata(FrontMcpAgentTokens.rateLimit, cls),
+    concurrency: Reflect.getMetadata(FrontMcpAgentTokens.concurrency, cls),
+    timeout: Reflect.getMetadata(FrontMcpAgentTokens.timeout, cls),
+    availableWhen: Reflect.getMetadata(FrontMcpAgentTokens.availableWhen, cls),
   };
 
   // Merge extended metadata

@@ -37,11 +37,16 @@ import {
   type FlowRunOptions,
   type ScopeEntry,
 } from '../../common';
+import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
+import { runOnSurface } from '../../context/call-surface';
+import { runAsTool } from '../../context/running-tool';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
+import { resolveElicitationOwner } from '../../elicitation/helpers/fallback.helper';
 import {
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
+  ElicitationNotSupportedError,
   EntryUnavailableError,
   InputRequiredSignal,
   InternalMcpError,
@@ -300,12 +305,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       );
     }
 
+    // The surface this call came from (`'mcp'` from an MCP client); untagged for in-process dispatch.
+    const callSurface = callSurfaceOf(this.input.ctx);
+
     if (!tool) {
       // Check if tool exists but is unavailable in current environment.
       // This is a REGISTRY-LEVEL constraint (availableWhen), not HTTP/flow-level auth.
+      // A tool the caller's surface isn't offered is never reported as existing (see below).
       const allUnfiltered = this.scope.tools.listAllInstances();
       const unavailable = allUnfiltered.find((t) => t.fullName === name || t.name === name);
-      if (unavailable) {
+      if (unavailable && isOfferedOnSurface(unavailable.metadata.availableWhen, callSurface)) {
         const ctx = getRuntimeContext();
         // Issue #417 — read the per-call surface tag so the structured
         // error explains which axis (process-global vs surface) blocked
@@ -328,6 +337,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         );
       }
       this.logger.warn(`findTool: tool "${name}" not found`);
+      throw new ToolNotFoundError(name);
+    }
+
+    // `availableWhen.surface` is per call: a tool offered only to agents or the CLI answers an MCP
+    // client like an unknown tool, so that client cannot tell it exists (as for `internal` below).
+    if (!isOfferedOnSurface(tool.metadata.availableWhen, callSurface)) {
+      this.logger.warn(`findTool: tool "${name}" is not offered on surface "${callSurface}"`);
       throw new ToolNotFoundError(name);
     }
 
@@ -1025,9 +1041,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const timeoutMs =
       tool.metadata.timeout?.executeMs ?? this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
-    const running = (async () => {
-      toolContext.output = await toolContext.execute(toolContext.input);
-    })();
+    // Code in the tool (and whatever it awaits) sees this tool as `getRunningTool()`, including after
+    // it calls other tools, which run as themselves; and the surface of this call as
+    // `getCallSurface()`, so what it does for the caller (CodeCall, the skill tools) is judged for it.
+    const running = runOnSurface(callSurfaceOf(this.input.ctx), () =>
+      runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
+        toolContext.output = await toolContext.execute(toolContext.input);
+      }),
+    );
 
     try {
       await (timeoutMs ? withTimeout(() => running, timeoutMs, tool.metadata.name) : running);
@@ -1072,9 +1093,21 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           throw new InternalMcpError('Elicitation store not initialized');
         }
 
+        // Only this caller may answer (sendElicitationResult checks it). An anonymous caller without
+        // a verified session has nothing a later request could be matched against, so it cannot use
+        // the fallback at all rather than leaving an answer open to anyone.
+        const owner = resolveElicitationOwner(this.tryGetContext());
+        if (!owner) {
+          throw new ElicitationNotSupportedError(
+            'This client does not support elicitation, and the elicitation fallback needs a verified session ' +
+              'or an authenticated caller to know who may answer it',
+          );
+        }
+
         await store.setPendingFallback({
           elicitId: error.elicitId,
           sessionId,
+          owner,
           toolName: error.toolName,
           toolInput: error.toolInput,
           elicitMessage: error.elicitMessage,

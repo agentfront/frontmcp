@@ -6,6 +6,8 @@ import ExecuteTool from '../tools/execute.tool';
 
 // Mock the SDK - ToolContext with dependency injection
 jest.mock('@frontmcp/sdk', () => ({
+  // The caller's surface CodeCall passes on; these specs run tools outside a tool call.
+  getCallSurface: () => undefined,
   Tool:
     (_config: unknown) =>
     <T>(target: T) =>

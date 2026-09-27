@@ -8,6 +8,8 @@ import SearchTool from '../tools/search.tool';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
+  // The caller's surface CodeCall passes on; these specs run tools outside a tool call.
+  getCallSurface: () => undefined,
   Tool: (config: any) => (target: any) => target,
   Provider: (_config: any) => (target: any) => target,
   ProviderScope: { GLOBAL: 'global', CONTEXT: 'context' },

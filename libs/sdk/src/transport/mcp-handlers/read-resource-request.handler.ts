@@ -5,6 +5,7 @@ import { ReadResourceRequestSchema, type ReadResourceRequest, type ReadResourceR
 import { ErrorHandler, isMrtrSignal } from '../../errors';
 import { errorBehindFlowControl, toReportedError, toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function readResourceRequestHandler({
   scope,
@@ -19,7 +20,10 @@ export default function readResourceRequestHandler({
       logger.info(`resources/read: ${uri}`);
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('resources:read-resource', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:read-resource', {
+          request,
+          ctx: withMcpSurface(scope, ctx),
+        });
         logger.verbose('resources/read completed', { uri, durationMs: Date.now() - start });
         return result;
       } catch (e) {

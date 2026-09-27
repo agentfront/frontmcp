@@ -458,7 +458,11 @@ describe('Skills MCP Handlers', () => {
         ctx as any,
       );
 
-      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [droppedSkill], ctx });
+      // The handler passes its context on tagged with the request's surface.
+      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', {
+        skills: [droppedSkill],
+        ctx: { ...ctx, surface: 'mcp' },
+      });
       expect(result.skills.map((skill) => skill.id)).toEqual(['external-skill']);
     });
 
@@ -538,7 +542,10 @@ describe('Skills MCP Handlers', () => {
       );
 
       expect(authoritiesEngine.evaluate).toHaveBeenCalledWith(judged.metadata.authorities, {});
-      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', { skills: [judged], ctx });
+      expect(mockRunFlowForOutput).toHaveBeenCalledWith('skills:filter', {
+        skills: [judged],
+        ctx: { ...ctx, surface: 'mcp' },
+      });
     });
 
     it('does not list the registry again for every result it cannot resolve', async () => {

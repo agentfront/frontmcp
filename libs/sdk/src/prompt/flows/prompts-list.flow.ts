@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
 
+import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
@@ -162,7 +163,11 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       const seenPromptIds = new Set<string>();
 
       // Get prompts from scope's prompt registry
-      const scopePrompts = this.scope.prompts.getPrompts();
+      // `availableWhen.surface`: leave out prompts not offered to the surface this listing is for.
+      const callSurface = callSurfaceOf((this.rawInput as { ctx?: unknown } | undefined)?.ctx);
+      const scopePrompts = this.scope.prompts
+        .getPrompts()
+        .filter((prompt) => isOfferedOnSurface(prompt.metadata.availableWhen, callSurface));
       this.logger.verbose(`findPrompts: scope prompts=${scopePrompts.length}`);
 
       for (const prompt of scopePrompts) {

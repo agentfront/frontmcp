@@ -29,7 +29,7 @@ import {
   type ToolOutputType,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
-import { getEnforcedMetadataKeys } from '../common/utils/enforced-metadata.utils';
+import { runAsTool } from '../context/running-tool';
 import {
   AgentConfigKeyNotFoundError,
   AgentNotConfiguredError,
@@ -53,6 +53,34 @@ import { agentToolName, canAgentSeeSwarm, getVisibleAgentIds, isAgentVisibleToSw
 
 /** Valid flow names for agent hooks */
 const VALID_AGENT_HOOK_FLOWS = ['agents:call-agent', 'agents:list-agents'] as const;
+
+/**
+ * Agent configuration that is not tool metadata, so it is never copied onto the agent's
+ * `invoke_<agent>` tool. `execution` is the agent loop's configuration, not a tool's task support.
+ * Any other field an agent declares is copied (see `buildAgentToolMetadata`).
+ * @internal Exported for tests.
+ */
+export const AGENT_ONLY_METADATA_KEYS: ReadonlySet<string> = new Set([
+  'id',
+  'name',
+  'description',
+  'systemInstructions',
+  'inputSchema',
+  'outputSchema',
+  'llm',
+  'providers',
+  'plugins',
+  'adapters',
+  'agents',
+  'tools',
+  'resources',
+  'prompts',
+  'exports',
+  'swarm',
+  'execution',
+  'tags',
+  'hideFromDiscovery',
+]);
 
 // ============================================================================
 // Agent Instance
@@ -379,8 +407,9 @@ export class AgentInstance<
   /**
    * Build ToolMetadata from AgentMetadata.
    *
-   * Includes plugin metadata extensions (cache, codecall) from agent metadata
-   * so plugins can apply to agent tools.
+   * The agent is listed and called only through this tool, so everything the agent declares
+   * that gates a tool (availability, limits, and every plugin extension such as `authorities`,
+   * `approval` or `featureFlag`) is copied onto it.
    */
   private buildAgentToolMetadata(): ToolMetadata {
     const agentMeta = this.record.metadata;
@@ -401,9 +430,11 @@ export class AgentInstance<
       hideFromDiscovery: agentMeta.hideFromDiscovery,
     };
 
-    // Copy plugin metadata extensions dynamically
-    // These are added via ExtendFrontMcpToolMetadata which AgentMetadata now extends
-    // Using dynamic approach to support future plugin extensions without code changes
+    // Copy everything else the agent declares. The tools:list-tools and tools:call-tool flows, and
+    // the plugins hooked into them, only read this tool's metadata, so a field left behind gates
+    // nothing: `availableWhen`, `rateLimit`, `concurrency`, `timeout`, and every plugin extension
+    // (AgentMetadata extends ExtendFrontMcpToolMetadata: `authorities`, `approval`, `featureFlag`,
+    // `cache`, `codecall`, and whatever a plugin adds later).
     //
     // Note: Double-cast through 'unknown' is required because TypeScript's control flow
     // analysis cannot track properties added via global interface augmentation
@@ -412,21 +443,9 @@ export class AgentInstance<
     const extendedMeta = agentMeta as unknown as Record<string, unknown>;
     const mutableToolMeta = toolMeta as unknown as Record<string, unknown>;
 
-    // Known plugin extension keys - copy all that are present. `authorities` must come along: the
-    // tools:call-tool and tools:list-tools flows enforce it on this tool, and nothing else gates the agent.
-    const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry', 'authorities'] as const;
-    for (const key of pluginExtensionKeys) {
-      if (key in extendedMeta && extendedMeta[key] !== undefined) {
-        mutableToolMeta[key] = extendedMeta[key];
-      }
-    }
-
-    // Metadata a plugin enforces (`approval`, `featureFlag`, ...): the plugin gates this tool, so an
-    // agent that declares it must pass it on, or the field would do nothing.
-    for (const key of getEnforcedMetadataKeys()) {
-      if (extendedMeta[key] !== undefined) {
-        mutableToolMeta[key] = extendedMeta[key];
-      }
+    for (const [key, value] of Object.entries(extendedMeta)) {
+      if (value === undefined || AGENT_ONLY_METADATA_KEYS.has(key) || key in mutableToolMeta) continue;
+      mutableToolMeta[key] = value;
     }
 
     return toolMeta;
@@ -629,7 +648,7 @@ export class AgentInstance<
       // Direct execution - faster but bypasses plugins/hooks, never the tool's `authorities`
       await this.assertToolAuthorized(tool, ctx.authInfo, args);
       const toolContext = tool.create(args, ctx);
-      return toolContext.execute(args);
+      return runAsTool({ name: tool.name, fullName: tool.fullName }, () => Promise.resolve(toolContext.execute(args)));
     };
   }
 

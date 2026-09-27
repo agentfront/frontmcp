@@ -35,6 +35,8 @@ function getResultText(result: CallToolResult): string {
 
 // Mock the SDK - the mock class accepts any args to match ToolContext constructor
 jest.mock('@frontmcp/sdk', () => ({
+  // The caller's surface CodeCall passes on; these specs run tools outside a tool call.
+  getCallSurface: () => undefined,
   Tool:
     (_config: unknown) =>
     <T>(target: T) =>

@@ -1,6 +1,7 @@
 import { PublicMcpError } from '../../errors';
 import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 import {
   SkillsListRequestSchema,
   SkillsListResultSchema,
@@ -47,7 +48,10 @@ export default function skillsListRequestHandler({
       // the page and its `total` are returned exactly as before.
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
       const wrapped = listResult.skills.map((metadata) => ({ metadata }));
-      const visible = await filterDiscoverableSkillResults(scope, skillRegistry, wrapped, { authInfo, ctx });
+      const visible = await filterDiscoverableSkillResults(scope, skillRegistry, wrapped, {
+        authInfo,
+        ctx: withMcpSurface(scope, ctx),
+      });
       const removed = listResult.skills.length - visible.length;
 
       // Transform to response format

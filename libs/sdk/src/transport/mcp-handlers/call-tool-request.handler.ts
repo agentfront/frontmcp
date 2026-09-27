@@ -18,6 +18,7 @@ import {
 } from '../../errors';
 import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function callToolRequestHandler({
   scope,
@@ -33,12 +34,11 @@ export default function callToolRequestHandler({
       const start = Date.now();
 
       try {
-        // Issue #417 — tag the call ctx with `surface: 'mcp'` so per-call
-        // surface filtering in the tool flow knows which transport this
-        // request came from. Tools that opt into `availableWhen: {
-        // surface: ['cli'] }` (or any surface other than mcp) are then
-        // blocked at the call boundary with a structured error.
-        const taggedCtx = { ...(ctx as Record<string, unknown>), surface: 'mcp' };
+        // Issue #417 — tag the call ctx with the surface the request arrived on
+        // (`'mcp'`, or `'cli'` for a CLI build's in-process client) so the tool
+        // flow answers a tool whose `availableWhen.surface` excludes it like an
+        // unknown tool.
+        const taggedCtx = withMcpSurface(scope, ctx as Record<string, unknown>);
         const result = await scope.runFlowForOutput('tools:call-tool', { request, ctx: taggedCtx });
         logger.verbose('tools/call completed', { tool: toolName, durationMs: Date.now() - start });
         return result;

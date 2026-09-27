@@ -127,6 +127,13 @@ export interface PendingElicitFallback {
   /** Session ID that initiated the elicitation */
   sessionId: string;
 
+  /**
+   * The only caller whose `sendElicitationResult` is accepted: `session:<id>` for the session the
+   * server verified, else `principal:<sub>` (see `resolveElicitationOwner`). A record without one
+   * (written before the field existed) accepts no result.
+   */
+  owner?: string;
+
   /** Name of the tool that requested elicitation */
   toolName: string;
 

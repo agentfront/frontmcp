@@ -18,8 +18,10 @@ import {
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
+import { type CallSurface } from '../common/availability';
 import { ErrorHandler, InternalMcpError, toMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
+import { withMcpSurface } from '../transport/mcp-handlers/mcp-surface';
 import { type ConnectOptions, type DirectClient } from './client.types';
 import {
   type DirectAuthContext,
@@ -95,17 +97,19 @@ export class DirectMcpServerImpl implements DirectMcpServer {
 
   /**
    * Build the MCP handler context that flows expect.
-   * This simulates what the transport layer creates from HTTP request.
+   * This simulates what the transport layer creates from HTTP request, including the surface an
+   * MCP request arrives on, so `availableWhen.surface` applies to direct calls as it does to MCP ones.
    */
   private buildHandlerContext(options?: DirectCallOptions): {
     authInfo?: Partial<AuthInfo>;
     metadata?: DirectRequestMetadata;
+    surface: CallSurface;
   } {
     const authInfo = buildAuthInfo(options?.authContext, this.defaultSessionId);
-    return {
+    return withMcpSurface(this.scope, {
       authInfo,
       metadata: options?.metadata,
-    };
+    });
   }
 
   /**
