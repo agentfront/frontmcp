@@ -17,6 +17,7 @@ import { BundleStore } from '@frontmcp/adapters/skills';
 import { ScopeEntry } from '@frontmcp/sdk';
 
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
+import { AuthorityGuard } from '../security/authority-guard';
 import SkilledOpenApiPlugin, { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN } from '../skilled-openapi.plugin';
 import { searchSkillDescription } from '../tools/search-skill.schema';
 import { BundleSyncService } from '../sync/bundle-sync.service';
@@ -40,8 +41,21 @@ const validBundle = {
  */
 function makePluginWithGet(getImpl: (token: unknown) => unknown): SkilledOpenApiPlugin {
   const plugin = new SkilledOpenApiPlugin({ source: { type: 'static', path: '/x' } });
-  (plugin as unknown as { get: (t: unknown) => unknown }).get = getImpl;
+  // The catalog only names skills the caller may see, which needs the guard and the active bundle.
+  (plugin as unknown as { get: (t: unknown) => unknown }).get = (token) => {
+    if (token === AuthorityGuard) return new AuthorityGuard();
+    if (token === BundleStore) return { current: () => undefined };
+    return getImpl(token);
+  };
   return plugin;
+}
+
+/** A scope whose `skills:filter` flow keeps every skill. */
+function fakeScope(extra: Record<string, unknown>): unknown {
+  return {
+    runFlowForOutput: async (_flow: string, input: { skills: unknown[] }) => ({ skills: input.skills }),
+    ...extra,
+  };
 }
 
 /** Minimal fake skill registry whose `getSkills` returns a single mcp skill. */
@@ -52,8 +66,23 @@ function fakeSkillRegistryWithOne() {
 }
 
 describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
-  function flowCtxWith(tools: unknown): { state: { tools: unknown } } {
-    return { state: { tools } } as never;
+  interface FakeState {
+    tools: unknown;
+    set(key: string, value: unknown): void;
+  }
+  function flowCtxWith(tools: unknown): { state: FakeState } {
+    const state: FakeState = {
+      tools,
+      set(key, value) {
+        (state as unknown as Record<string, unknown>)[key] = value;
+      },
+    };
+    return { state };
+  }
+  /** The search_skill description this list answers with (a per-request view of the tool). */
+  function listedDescription(ctx: { state: FakeState }): string | undefined {
+    const tools = ctx.state.tools as Array<{ tool: { metadata: { name: string; description?: string } } }>;
+    return tools.find((t) => t.tool.metadata.name === 'search_skill')?.tool.metadata.description;
   }
 
   it('returns early when there are no tools in the flow state', async () => {
@@ -80,15 +109,18 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     const skills = fakeSkillRegistryWithOne();
     const plugin = makePluginWithGet((token) => {
       if (token === BundleSyncService) return {} as never;
-      if (token === ScopeEntry) return { skills } as never;
+      if (token === ScopeEntry) return fakeScope({ skills }) as never;
       return undefined;
     });
 
-    await plugin.injectSkillCatalogIntoSearchTool(flowCtxWith([target]) as never);
+    const ctx = flowCtxWith([target]);
+    await plugin.injectSkillCatalogIntoSearchTool(ctx as never);
 
-    expect(target.tool.metadata.description).toContain(searchSkillDescription);
-    expect(target.tool.metadata.description).toContain('billing');
-    expect(target.tool.metadata.description).toContain('---');
+    expect(listedDescription(ctx)).toContain(searchSkillDescription);
+    expect(listedDescription(ctx)).toContain('billing');
+    expect(listedDescription(ctx)).toContain('---');
+    // The catalog is per caller: the shared tool metadata is left alone.
+    expect(target.tool.metadata.description).toBe('orig');
   });
 
   it('points at the skills/* methods, not skill://, when mcpResources is disabled', async () => {
@@ -96,15 +128,17 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     const skills = fakeSkillRegistryWithOne();
     const plugin = makePluginWithGet((token) => {
       if (token === BundleSyncService) return {} as never;
-      if (token === ScopeEntry) return { skills, metadata: { skillsConfig: { mcpResources: false } } } as never;
+      if (token === ScopeEntry)
+        return fakeScope({ skills, metadata: { skillsConfig: { mcpResources: false } } }) as never;
       return undefined;
     });
 
-    await plugin.injectSkillCatalogIntoSearchTool(flowCtxWith([target]) as never);
+    const ctx = flowCtxWith([target]);
+    await plugin.injectSkillCatalogIntoSearchTool(ctx as never);
 
-    expect(target.tool.metadata.description).toContain('billing');
-    expect(target.tool.metadata.description).toContain('skills/load');
-    expect(target.tool.metadata.description).not.toContain('skill://');
+    expect(listedDescription(ctx)).toContain('billing');
+    expect(listedDescription(ctx)).toContain('skills/load');
+    expect(listedDescription(ctx)).not.toContain('skill://');
   });
 
   it('falls back to the static description when the catalog is empty', async () => {
@@ -112,14 +146,15 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     const emptySkills = { getSkills: jest.fn(() => []) };
     const plugin = makePluginWithGet((token) => {
       if (token === BundleSyncService) return {} as never;
-      if (token === ScopeEntry) return { skills: emptySkills } as never;
+      if (token === ScopeEntry) return fakeScope({ skills: emptySkills }) as never;
       return undefined;
     });
 
-    await plugin.injectSkillCatalogIntoSearchTool(flowCtxWith([target]) as never);
+    const ctx = flowCtxWith([target]);
+    await plugin.injectSkillCatalogIntoSearchTool(ctx as never);
 
     // No catalog => exactly the static base, no separator.
-    expect(target.tool.metadata.description).toBe(searchSkillDescription);
+    expect(listedDescription(ctx)).toBe(searchSkillDescription);
   });
 
   it('still injects when BundleSyncService is not yet resolvable (the get() throws)', async () => {
@@ -127,14 +162,15 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     const skills = fakeSkillRegistryWithOne();
     const plugin = makePluginWithGet((token) => {
       if (token === BundleSyncService) throw new Error('sync service not ready');
-      if (token === ScopeEntry) return { skills } as never;
+      if (token === ScopeEntry) return fakeScope({ skills }) as never;
       return undefined;
     });
 
-    await plugin.injectSkillCatalogIntoSearchTool(flowCtxWith([target]) as never);
+    const ctx = flowCtxWith([target]);
+    await plugin.injectSkillCatalogIntoSearchTool(ctx as never);
 
     // The catch is swallowed; the catalog is still derived from scope.skills.
-    expect(target.tool.metadata.description).toContain('billing');
+    expect(listedDescription(ctx)).toContain('billing');
   });
 });
 

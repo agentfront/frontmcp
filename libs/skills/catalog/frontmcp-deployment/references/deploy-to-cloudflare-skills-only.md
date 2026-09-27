@@ -27,6 +27,13 @@ short AgentScript program in the Worker isolate, where each `callTool(actionId,
 input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
 endpoint, cached in KV, and refreshed on a Cron Trigger.
 
+The meta-tools only show what the caller may use: a skill whose
+`requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
+(and its catalog) and is `SKILL_NOT_FOUND` for `load_skill`, and `load_skill`
+leaves out actions the caller can never run. When the server configures
+`authorities`, bundle rules are evaluated with the server's engine (its
+`claimsMapping`, resolvers and custom evaluators).
+
 For the conceptual picture, see [Skills-Only Deployment](https://docs.agentfront.dev/frontmcp/features/skills-only-deployment).
 For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
 
@@ -53,6 +60,8 @@ For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./depl
 
 ```ts
 // worker.ts — the real API is createEdgeMcp (not createWorker)
+import { env } from 'cloudflare:workers';
+
 import { createEdgeMcp, kvBundleCacheFromEnv } from '@frontmcp/edge';
 
 export default createEdgeMcp({
@@ -61,7 +70,10 @@ export default createEdgeMcp({
   tasks: { enabled: false },
   managed: {
     endpoint: 'https://cloud.example.com/v1/bundles/acme',
-    authToken: 'pinned-pull-token',
+    // The pull JWT the SaaS issued for this server (iss = expectedIssuer, aud includes
+    // expectedAudience, with exp), kept in a Worker secret:
+    //   npx wrangler secret put FRONTMCP_PULL_TOKEN
+    authToken: env.FRONTMCP_PULL_TOKEN,
     expectedAudience: 'acme-mcp',
     jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
     expectedIssuer: 'https://cloud.example.com',
@@ -78,6 +90,15 @@ Managed mode requires the optional peer `@frontmcp/plugin-skilled-openapi`.
 The pull sends `authToken` as a bearer token and never follows a redirect, so
 `endpoint` must serve the bundle directly; a 3xx (or a status-0
 `opaqueredirect`) fails the pull.
+
+Before every pull, `authToken` itself is verified: it must be a JWT signed by a
+key served at `jwksUrl` (fetched without the token, redirects refused), with
+`iss` equal to `expectedIssuer`, an `aud` that includes `expectedAudience` (and
+a `resource` claim that does too, when it has one), and not expired. A token
+that fails is refused with `[saas-source] pull token rejected: …`: nothing is
+pulled, and the KV cache is **not** used in its place. An unreachable JWKS, or
+one with no usable signing key (no RSA, EC or OKP public key for signatures),
+counts as an ordinary pull failure, so the cache fallback still applies.
 
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
 `wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`

@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext, type ScopeEntry } from '@frontmcp/sdk';
 
+import { assertDashboardToolAccess } from '../auth/dashboard-access';
 import { ParentScopeToken } from '../dashboard.symbol';
 import { safeRegex } from '../shared/safe-regex';
 
@@ -49,6 +50,8 @@ export type ListToolsOutput = z.output<typeof listToolsOutputSchema>;
 })
 export default class ListToolsTool extends ToolContext {
   async execute(input: ListToolsInput): Promise<ListToolsOutput> {
+    assertDashboardToolAccess(this);
+
     // Try to get parent scope, fall back to current scope
     const parentScope = this.tryGet(ParentScopeToken) as ScopeEntry | undefined;
     const targetScope = parentScope || this.scope;

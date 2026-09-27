@@ -16,6 +16,8 @@
 // `toCodeCallPolicyTool`, and `includeTools` receives one object from `toToolFilterInfo`.
 
 import type {
+  CodeCallFilterToolAnnotations,
+  CodeCallFilterToolMetadata,
   CodeCallMode,
   CodeCallToolMetadata,
   DirectCallsFilterFn,
@@ -43,6 +45,7 @@ export interface CodeCallPolicyEntry {
     hideFromDiscovery?: boolean;
     visibility?: string;
     codecall?: CodeCallToolMetadata;
+    annotations?: CodeCallFilterToolAnnotations;
   };
 }
 
@@ -64,6 +67,10 @@ export interface CodeCallPolicyTool {
   tags?: string[];
   hidden?: boolean;
   codecall?: CodeCallToolMetadata;
+  /** The tool's MCP annotations, for `includeTools` and `directCalls.filter`. */
+  annotations?: CodeCallFilterToolAnnotations;
+  /** The tool's declared metadata, for `includeTools` and `directCalls.filter`. */
+  metadata?: CodeCallFilterToolMetadata;
 }
 
 export interface CodeCallPolicyConfig {
@@ -129,17 +136,65 @@ export function toCodeCallPolicyTool(
     hidden:
       metadata?.hideFromDiscovery === true || metadata?.visibility === 'hidden' || metadata?.visibility === 'internal',
     codecall: metadata?.codecall,
+    annotations: metadata?.annotations,
+    metadata: metadata as CodeCallFilterToolMetadata | undefined,
   };
 }
 
-/** The object `includeTools` and `directCalls.filter` receive, wherever the policy runs. */
+function isPlainData(value: object): boolean {
+  if (Array.isArray(value)) return true;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * A deep, frozen copy of the plain objects and arrays in `value`, so a filter cannot change what
+ * the next decision reads (`codecall`, `tags`, `annotations`, ...). Every policy input is plain
+ * data; anything else (functions, schemas, class instances) is handed over as is. `copies` maps
+ * each source object to its copy, so shared and cyclic references stay shared.
+ */
+function readOnlyCopy<T>(value: T, copies: WeakMap<object, unknown>): T {
+  if (typeof value !== 'object' || value === null || !isPlainData(value)) return value;
+  const existing = copies.get(value);
+  if (existing !== undefined) return existing as T;
+
+  const copy: object = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value) as object | null);
+  copies.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue;
+    // defineProperty, not assignment: an own `__proto__` key stays a key, as in the source.
+    Object.defineProperty(copy, key, {
+      value: readOnlyCopy(Reflect.get(value, key), copies),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return Object.freeze(copy) as T;
+}
+
+/**
+ * The object `includeTools` and `directCalls.filter` receive, wherever the policy runs.
+ *
+ * It carries the tool's annotations and metadata as well as its name, app and tags: a filter
+ * written against `tool.metadata.annotations.destructiveHint` (or `tool.annotations`) must see
+ * the value, or it silently excludes nothing. Everything in it is a read-only copy.
+ */
 export function toToolFilterInfo(tool: CodeCallPolicyTool): IncludeToolsFilterToolInfo {
+  const copies = new WeakMap<object, unknown>();
+  const annotations = readOnlyCopy(tool.annotations, copies);
+  const metadata = tool.metadata
+    ? readOnlyCopy({ ...tool.metadata, ...(annotations ? { annotations: tool.annotations } : {}) }, copies)
+    : undefined;
   return {
     name: tool.name,
+    fullName: tool.fullName,
     appId: tool.appId,
     source: tool.codecall?.source,
     description: tool.description,
-    tags: tool.codecall?.tags ?? tool.tags,
+    tags: readOnlyCopy(tool.codecall?.tags ?? tool.tags, copies),
+    annotations,
+    metadata,
   };
 }
 

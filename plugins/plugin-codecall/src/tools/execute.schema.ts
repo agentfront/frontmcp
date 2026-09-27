@@ -70,6 +70,7 @@ const runtimeErrorPayloadSchema = z.object({
   source: z.literal('script'),
   message: z.string(),
   name: z.string().optional(),
+  /** @deprecated Never set: stack traces name server files, so results don't carry them. */
   stack: z.string().optional(),
 });
 
@@ -79,6 +80,7 @@ const toolErrorPayloadSchema = z.object({
   toolInput: z.unknown(),
   message: z.string(),
   code: z.string().optional(),
+  /** @deprecated Never set: the enclave's error data is not sanitized for clients. */
   details: z.unknown().optional(),
 });
 

@@ -27,29 +27,30 @@ function escapeForJs(str: string): string {
  *
  * The configured `auth.token` is deliberately NOT embedded here, and not put in
  * the SSE query string: a URL token lands in access logs, `Referer` headers and
- * browser history, and the page's own MCP POSTs never carried it anyway
- * (GHSA-rgxj-434m-vxh3). The token gates the page; the dashboard's MCP scope
- * uses the server's normal authentication.
+ * browser history (GHSA-rgxj-434m-vxh3). When `auth` is on, the page's MCP
+ * client authenticates with the HttpOnly cookie the server sets with the page.
+ *
+ * @param mcpPath - where the dashboard's MCP endpoint is served (its scope's
+ *   route, `/dashboard` unless the server has an `entryPath`), which `basePath`
+ *   does not move. Defaults to `basePath`.
  */
-export function generateDashboardHtml(options: DashboardPluginOptions): string {
-  const cdn = options.cdn;
-  const basePath = options.basePath;
-
+export function generateDashboardHtml(options: DashboardPluginOptions, mcpPath: string = options.basePath): string {
   // Check if custom entrypoint is provided (external UI bundle)
-  if (cdn.entrypoint) {
-    return generateExternalEntrypointHtml(options);
+  if (options.cdn.entrypoint) {
+    return generateExternalEntrypointHtml(options, mcpPath);
   }
 
   // Generate inline dashboard UI
-  return generateInlineDashboardHtml(options);
+  return generateInlineDashboardHtml(options, mcpPath);
 }
 
 /**
  * Generate HTML that loads dashboard from an external CDN entrypoint.
  */
-function generateExternalEntrypointHtml(options: DashboardPluginOptions): string {
+function generateExternalEntrypointHtml(options: DashboardPluginOptions, mcpPath: string): string {
   const { cdn } = options;
   const safeBasePath = escapeForJs(options.basePath);
+  const safeMcpPath = escapeForJs(mcpPath);
 
   // Escape CDN URLs for safe interpolation
   const safeReact = escapeForJs(cdn.react);
@@ -92,7 +93,8 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
     // Dashboard configuration
     window.__FRONTMCP_DASHBOARD__ = {
       basePath: '${safeBasePath}',
-      sseUrl: '${safeBasePath}/sse',
+      mcpPath: '${safeMcpPath}',
+      sseUrl: '${safeMcpPath}/sse',
     };
 
     // Load external dashboard UI
@@ -113,10 +115,11 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
  * Generate inline dashboard HTML with embedded React app.
  * Uses MCP protocol via SSE to fetch data from dashboard:graph tool.
  */
-function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
+function generateInlineDashboardHtml(options: DashboardPluginOptions, mcpPath: string): string {
   const { cdn } = options;
   const safeBasePath = escapeForJs(options.basePath);
-  const sseUrl = `${safeBasePath}/sse`;
+  const safeMcpPath = escapeForJs(mcpPath);
+  const sseUrl = `${safeMcpPath}/sse`;
 
   // Escape CDN URLs for safe interpolation
   const safeReact = escapeForJs(cdn.react);
@@ -317,6 +320,7 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
     // Configuration
     const config = {
       basePath: '${safeBasePath}',
+      mcpPath: '${safeMcpPath}',
       sseUrl: '${sseUrl}',
     };
 
@@ -514,7 +518,7 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
       const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
       useEffect(() => {
-        const client = new McpClient(config.sseUrl, config.basePath);
+        const client = new McpClient(config.sseUrl, config.mcpPath);
 
         async function init() {
           try {

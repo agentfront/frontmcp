@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { bearerAuthSpec, multiAuthSpec, mockAuthInfo, spyOnConsole, createMockLogger } from './fixtures';
+import { bearerAuthSpec, multiAuthSpec, spyOnConsole, createMockLogger } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
 // Mock the OpenAPIToolGenerator and security
@@ -247,7 +247,7 @@ describe('OpenapiAdapter - Security', () => {
   });
 
   describe('Default Auth Behavior', () => {
-    it('should use default ctx.authInfo.token when no auth config provided', async () => {
+    it('should warn that the caller token is not forwarded when no auth config provided', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool: McpOpenAPITool = {
@@ -290,9 +290,10 @@ describe('OpenapiAdapter - Security', () => {
 
       await adapter.fetch();
 
-      // Should log MEDIUM security risk (default behavior)
+      // Should log MEDIUM security risk (default behavior) and warn that no credentials are sent
       expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: MEDIUM'));
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('No auth configuration provided'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('No auth configuration provided'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('is not forwarded'));
     });
   });
 

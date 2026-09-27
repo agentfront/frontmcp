@@ -16,6 +16,46 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { HookInstance } from './hook.instance';
 
+/** Whether a hook runs for an entry of `ownerId` by its owner alone. */
+function appliesToOwner(hook: HookEntry, ownerId: string): boolean {
+  const hookOwner = hook.metadata.owner;
+  // Include hooks with no owner (global hooks)
+  if (!hookOwner) return true;
+
+  // Handle known owner kinds explicitly
+  switch (hookOwner.kind) {
+    case 'scope':
+    case 'plugin':
+      // Scope/plugin-level hooks apply globally to all tools
+      return true;
+    case 'app':
+      // App-level hooks only apply to matching owner
+      return hookOwner.id === ownerId;
+    default:
+      // Fail fast on unknown owner kinds to catch misconfigurations
+      throw new UnsupportedHookOwnerKindError(hookOwner.kind);
+  }
+}
+
+/** The class that declared a hook: instances of one plugin class installed in several places share it. */
+function hookClassOf(hook: HookEntry): unknown {
+  const { target } = hook.metadata;
+  if (target === null || target === undefined) return undefined;
+  if (hook.metadata.static || typeof target !== 'object') return target;
+  return (target as object).constructor;
+}
+
+/** Two registrations of the same hook method of the same class (e.g. one plugin installed on two apps). */
+function isSameHook(a: HookEntry, b: HookEntry): boolean {
+  const cls = hookClassOf(a);
+  return (
+    cls !== undefined &&
+    cls === hookClassOf(b) &&
+    a.metadata.flow === b.metadata.flow &&
+    a.metadata.method === b.metadata.method
+  );
+}
+
 export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord, HookType[]> {
   scope: ScopeEntry;
 
@@ -159,25 +199,17 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     // 1. Global hooks (no owner)
     // 2. Scope/plugin-level hooks (apply globally to all tools)
     // 3. App-level hooks that match the tool's owner
-    return allHooks.filter((hook) => {
-      const hookOwner = hook.metadata.owner;
-      // Include hooks with no owner (global hooks)
-      if (!hookOwner) return true;
-
-      // Handle known owner kinds explicitly
-      switch (hookOwner.kind) {
-        case 'scope':
-        case 'plugin':
-          // Scope/plugin-level hooks apply globally to all tools
-          return true;
-        case 'app':
-          // App-level hooks only apply to matching owner
-          return hookOwner.id === ownerId;
-        default:
-          // Fail fast on unknown owner kinds to catch misconfigurations
-          throw new UnsupportedHookOwnerKindError(hookOwner.kind);
-      }
-    });
+    // 4. Another app's hooks marked `appliesTo: 'uncovered-apps'`, when no instance of the same
+    //    hook applies to this owner by 1-3 (so a gate an entry asks for is never skipped just
+    //    because the plugin sits on a different app)
+    const ownHooks = allHooks.filter((hook) => appliesToOwner(hook, ownerId));
+    if (!allHooks.some((hook) => hook.metadata.appliesTo === 'uncovered-apps')) return ownHooks;
+    const own = new Set(ownHooks);
+    return allHooks.filter(
+      (hook) =>
+        own.has(hook) ||
+        (hook.metadata.appliesTo === 'uncovered-apps' && !ownHooks.some((ownHook) => isSameHook(ownHook, hook))),
+    );
   }
 
   /** Hooks defined on a given *class* (metadata.target), sorted by priority (desc). */

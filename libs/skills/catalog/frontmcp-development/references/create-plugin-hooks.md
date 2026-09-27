@@ -190,11 +190,13 @@ Both `@Will` and `@Did` (and `@Around`) accept an optional options object:
 @Will('execute', {
   priority: 10,                          // Lower runs first (default: 0)
   filter: (ctx) => ctx.toolName !== 'health_check',  // Predicate to skip
+  appliesTo: 'own-app',                  // Reach of an app plugin's hook (default: 'own-app')
 })
 ```
 
 - **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did` and `@Around` alike. Default: `0`.
 - **filter** (`(ctx) => boolean`) - A predicate that receives the flow context. Return `false` to skip this hook for the current invocation.
+- **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`). With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
 
 ## Examples
 

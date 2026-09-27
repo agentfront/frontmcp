@@ -127,9 +127,22 @@ export interface ApprovalStore {
   initialize(): Promise<void>;
 
   /**
-   * Get approval for a specific tool.
+   * Get approval for a specific tool: the caller's record, a denial in any of its scopes first.
+   * With `context`, context-specific records for that context count too.
    */
-  getApproval(toolId: string, sessionId: string, userId?: string): Promise<ApprovalRecord | undefined>;
+  getApproval(
+    toolId: string,
+    sessionId: string,
+    userId?: string,
+    context?: ApprovalContext,
+  ): Promise<ApprovalRecord | undefined>;
+
+  /**
+   * Every unexpired record of a tool that applies to the caller (session, user, time-limited and,
+   * with `context`, context-specific). The approval gate uses it to find an approval the tool's
+   * policy accepts; stores without it are read through `getApproval()`.
+   */
+  getApprovals?(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): Promise<ApprovalRecord[]>;
 
   /**
    * Get all approvals matching a query.
@@ -142,7 +155,8 @@ export interface ApprovalStore {
   grantApproval(options: GrantApprovalOptions): Promise<ApprovalRecord>;
 
   /**
-   * Revoke approval for a tool.
+   * Revoke approval for a tool: every approval of the tool stored for the given session or user
+   * (only the given context's, when `context` is set). Recorded denials are kept.
    */
   revokeApproval(options: RevokeApprovalOptions): Promise<boolean>;
 

@@ -50,11 +50,19 @@ SkilledOpenApiPlugin.init({
 })
 ```
 
-The package's exported value must conform to the `ResolvedBundle` shape; the plugin parses it through the same Zod validator the static source uses. Pin the package version in your `package.json` and sign your bundles via the `integrity` envelope as your supply-chain controls.
+The package's exported value must conform to the `ResolvedBundle` shape; the plugin parses it through the same Zod validator the static source uses.
+
+`verifyProvenance` defaults to `true`, and npm provenance verification is not implemented yet, so with `true` the source refuses to load the package (it is never imported) and logs why. Set `verifyProvenance: false` to load it without a provenance check.
+
+<Warning>
+  With `verifyProvenance: false` the package is imported, and its code runs, before the bundle is parsed. Bundle signing (the `integrity` envelope, `requireSignature` + `trustedKeys`) protects the bundle's content, not the import: a compromised package runs its code even if its bundle then fails verification. Only load a package you trust, pin its exact version in `package.json`, and install it from a lockfile with integrity hashes.
+</Warning>
 
 ## `saas`
 
 Pulls bundles from a configured HTTPS endpoint with a pinned JWT. Boot pull is mandatory; interval polling refreshes; a last-good cached bundle on disk is the fallback if a fresh pull fails.
+
+Before every pull the pinned `authToken` is verified against the SaaS: signed by a key served at `jwksUrl` (fetched without the token, redirects refused), `iss` equal to `expectedIssuer`, `aud` including `expectedAudience`, not expired. A token that fails is refused with `[saas-source] pull token rejected: …`: nothing is pulled, and the cached bundle is not used instead. The JWKS being unreachable, or serving no usable signing key (no RSA, EC or OKP public key for signatures), counts as an ordinary pull failure, so the cache fallback still applies.
 
 ```ts
 SkilledOpenApiPlugin.init({
@@ -76,7 +84,7 @@ SkilledOpenApiPlugin.init({
 
 1. **Initial pull** runs synchronously when the plugin's `BundleSyncService` factory boots.
 2. If the pull **succeeds**, the bundle is persisted to `bundleCacheDir` and applied via the sync service.
-3. If the pull **fails** AND a cached bundle exists, the cache is loaded with a startup warning. The server stays healthy.
+3. If the pull **fails** AND a cached bundle exists, the cache is loaded with a startup warning. The server stays healthy. A rejected `authToken` is not a pull failure: the cache is not used, and the source reports an error.
 4. If the pull fails AND no cache exists, the source throws — the plugin reports a startup error but does not kill the server.
 
 This prevents a SaaS outage at boot from killing every customer's MCP server. The trade-off is that a long-broken SaaS will leave the server serving an old bundle indefinitely; monitor your SaaS-side metrics to catch a stalled pipeline.

@@ -9,7 +9,12 @@ import type {
   ToolSearchResult as SymbolToolSearchResult,
   ToolSearch,
 } from '../codecall.symbol';
-import type { CodeCallEmbeddingOptions, CodeCallMode, EmbeddingStrategy } from '../codecall.types';
+import type {
+  CodeCallEmbeddingOptions,
+  CodeCallMode,
+  EmbeddingStrategy,
+  IncludeToolsFilterToolInfo,
+} from '../codecall.types';
 import { checkCodeCallToolPolicy, codeCallAppIdOf, toCodeCallPolicyTool } from '../security/codecall-tool-policy';
 import { SynonymExpansionService, type SynonymExpansionConfig } from './synonym-expansion.service';
 
@@ -232,13 +237,7 @@ export interface SearchOptions {
 /**
  * Filter function type for including tools
  */
-export type IncludeToolsFilter = (info: {
-  name: string;
-  appId?: string;
-  source?: string;
-  description?: string;
-  tags?: string[];
-}) => boolean;
+export type IncludeToolsFilter = (info: IncludeToolsFilterToolInfo) => boolean;
 
 /**
  * Configuration for tool search service
