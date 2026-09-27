@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from '@frontmcp/utils';
+
 import { AuthFlowError } from '../errors/auth-internal.errors';
 
 /**
@@ -133,6 +134,13 @@ export interface FederatedAuthSession {
   /** State parameter for current provider's OAuth flow */
   currentProviderState?: string;
 
+  /**
+   * Anti-CSRF token of the consent screen, set when the screen is first shown
+   * once every provider is linked. The consent submission must echo it: the
+   * session id alone is not secret (it travels in every upstream `state`).
+   */
+  consentCsrf?: string;
+
   /** Session creation timestamp */
   createdAt: number;
 
@@ -166,6 +174,7 @@ export interface FederatedAuthSessionRecord {
   currentProviderId?: string;
   currentProviderPkce?: ProviderPkce;
   currentProviderState?: string;
+  consentCsrf?: string;
   createdAt: number;
   expiresAt: number;
 }

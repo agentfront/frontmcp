@@ -11,6 +11,8 @@ import {
   authLayout,
   CDN,
   DEFAULT_THEME,
+  BUILT_IN_AUTH_PAGE_CSP,
+  builtInAuthPageHeaders,
 } from '../base-layout';
 
 describe('escapeHtml', () => {
@@ -355,5 +357,30 @@ describe('authLayout', () => {
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<div>Auth Content</div>');
     expect(html).toContain('Login - FrontMCP');
+  });
+});
+
+describe('builtInAuthPageHeaders (#263)', () => {
+  it('sends CSP, anti-framing, nosniff, referrer and no-store headers', () => {
+    expect(builtInAuthPageHeaders()).toEqual({
+      'Content-Security-Policy': BUILT_IN_AUTH_PAGE_CSP,
+      'X-Frame-Options': 'DENY',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'same-origin',
+      'Cache-Control': 'no-store',
+    });
+  });
+
+  it('allows the CDN resources the built-in pages load, and forbids framing', () => {
+    expect(BUILT_IN_AUTH_PAGE_CSP).toContain(`script-src 'self' 'unsafe-inline' ${new URL(CDN.tailwind).origin}`);
+    expect(BUILT_IN_AUTH_PAGE_CSP).toContain('https://fonts.googleapis.com');
+    expect(BUILT_IN_AUTH_PAGE_CSP).toContain('https://fonts.gstatic.com');
+    expect(BUILT_IN_AUTH_PAGE_CSP).toContain("frame-ancestors 'none'");
+  });
+
+  it('leaves out the CSP for markup the server did not write', () => {
+    const headers = builtInAuthPageHeaders({ csp: false });
+    expect(headers['Content-Security-Policy']).toBeUndefined();
+    expect(headers['X-Frame-Options']).toBe('DENY');
   });
 });

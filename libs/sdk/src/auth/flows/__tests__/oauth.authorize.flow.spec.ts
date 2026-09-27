@@ -525,11 +525,11 @@ describe('OAuth Authorize Flow', () => {
   // ============================================
 
   describe('Flow Execution - Anonymous Mode', () => {
-    it('should redirect with anonymous code when no auth is configured', async () => {
+    it('should redirect a loopback redirect_uri with anonymous code when no auth is configured', async () => {
       const scope = flowScenarios.anonymous();
       const metadata = createFlowMetadata();
       const params = createAnonymousOAuthRequest({
-        redirect_uri: 'https://client.example.com/callback',
+        redirect_uri: 'http://127.0.0.1:5000/callback',
         state: 'test-state',
       });
       const input = createOAuthInput(params);
@@ -548,7 +548,7 @@ describe('OAuth Authorize Flow', () => {
       const scope = flowScenarios.anonymous();
       const metadata = createFlowMetadata();
       const params = createAnonymousOAuthRequest({
-        redirect_uri: 'https://client.example.com/callback',
+        redirect_uri: 'http://localhost:5000/callback',
       });
       const input = createOAuthInput(params);
 
@@ -558,6 +558,22 @@ describe('OAuth Authorize Flow', () => {
 
       expectOAuthRedirect(output, { code: 'anonymous' });
       expect(output.location).not.toContain('state=');
+    });
+
+    it('refuses a non-loopback redirect_uri when no auth is configured (no open redirect)', async () => {
+      const scope = flowScenarios.anonymous();
+      const metadata = createFlowMetadata();
+      const params = createAnonymousOAuthRequest({
+        redirect_uri: 'https://client.example.com/callback',
+        state: 'test-state',
+      });
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+
+      expectOAuthHtmlPage(output, { status: 400, contains: ['Authorization Error', 'loopback'] });
     });
 
     it('should return error page for invalid redirect_uri', async () => {
@@ -844,8 +860,27 @@ describe('OAuth Authorize Flow', () => {
       expect(output).toBeUndefined();
     });
 
-    it('accepts an UNREGISTERED client by default (requireRegisteredClients unset — back-compat)', async () => {
+    it('refuses an UNREGISTERED client by default (requireRegisteredClients defaults to true)', async () => {
       const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {});
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({
+        client_id: 'unknown-client',
+        redirect_uri: 'https://client.example.com/callback',
+        scope: 'openid',
+      });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+      expectOAuthHtmlPage(output, { status: 400, contains: ['Authorization Error', 'Unknown client_id'] });
+    });
+
+    it('accepts an UNREGISTERED client only with an explicit requireRegisteredClients: false', async () => {
+      const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {});
+      (scope.auth as unknown as Record<string, unknown>)['options'] = {
+        mode: 'local',
+        requireRegisteredClients: false,
+      };
       const metadata = createFlowMetadata();
       const params = createValidOAuthRequest({
         client_id: 'unknown-client',
@@ -862,6 +897,7 @@ describe('OAuth Authorize Flow', () => {
     it('accepts an authorize request whose redirect_uri is on the allowlist', async () => {
       const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {
         allowedRedirectUris: ['https://client.example.com/callback'],
+        clients: [{ clientId: 'test-client-id', redirectUris: ['https://client.example.com/callback'] }],
       });
       const metadata = createFlowMetadata();
       const params = createValidOAuthRequest({ redirect_uri: 'https://client.example.com/callback', scope: 'openid' });
@@ -879,7 +915,7 @@ describe('OAuth Authorize Flow', () => {
       expectOAuthHtmlPage(output, { contains: ['Sign In'] });
     });
 
-    it('rejects an authorize request whose client_id is not on the allowlist (redirects with error)', async () => {
+    it('rejects an authorize request whose client_id is not on the allowlist (error page: redirect_uri unvalidated)', async () => {
       const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {
         allowedClientIds: ['trusted-client'],
       });
@@ -889,14 +925,29 @@ describe('OAuth Authorize Flow', () => {
       const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
 
       const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
-      // The redirect_uri is allowed (no allowlist for it), so the client_id
-      // rejection is delivered as an OAuth error on the redirect.
+      // Nothing validated this redirect_uri for `random-client`, so the refusal
+      // is an error page, never a redirect (open-redirect guard).
+      expectOAuthHtmlPage(output, { status: 400, contains: ['Authorization Error', 'client_id'] });
+    });
+
+    it('redirects a client_id-allowlist refusal when the redirect_uri is on the redirect allowlist', async () => {
+      const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {
+        allowedClientIds: ['trusted-client'],
+        allowedRedirectUris: ['https://client.example.com/callback'],
+      });
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest({ client_id: 'random-client' });
+      const input = createOAuthInput(params);
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
       expectOAuthRedirect(output, { error: 'invalid_request', errorContains: 'client_id' });
     });
 
     it('accepts an allowlisted client_id', async () => {
       const scope = withDcr(createMockScopeEntry({ auth: { mode: 'local' } as never }), {
         allowedClientIds: ['trusted-client'],
+        clients: [{ clientId: 'trusted-client', redirectUris: ['https://client.example.com/callback'] }],
       });
       const metadata = createFlowMetadata();
       const params = createValidOAuthRequest({ client_id: 'trusted-client', scope: 'openid' });
@@ -914,10 +965,10 @@ describe('OAuth Authorize Flow', () => {
     });
 
     it('leaves authorize unchanged when no allowlist is configured (default preserved)', async () => {
-      // No DcrClientRegistry attached at all → behaves like today.
+      // No allowlist configured → a registered client reaches the login page.
       const scope = createMockScopeEntry({ auth: { mode: 'local' } as never });
       const metadata = createFlowMetadata();
-      const params = createValidOAuthRequest({ client_id: 'anything', scope: 'openid' });
+      const params = createValidOAuthRequest({ scope: 'openid' });
       const input = createOAuthInput(params);
       const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
 

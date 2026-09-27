@@ -45,6 +45,50 @@ export const CDN = {
   },
 } as const;
 
+/**
+ * Content-Security-Policy for the built-in authorization pages (sign-in,
+ * consent, provider selection, incremental authorization, errors).
+ *
+ * Scripts may come only from this server and the Tailwind CDN; the pages' own
+ * small inline handlers need `'unsafe-inline'` (every interpolated value is
+ * HTML-escaped). Styles and fonts are limited to Google Fonts, images to this
+ * server, `data:` and https (a client's `logo_uri`), and the pages can't be
+ * framed (clickjacking) or rebased.
+ */
+export const BUILT_IN_AUTH_PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/**
+ * Security headers for a built-in authorization page.
+ *
+ * `Referrer-Policy: same-origin` keeps the page's URL (client, redirect_uri,
+ * state) away from the CDNs it loads, while the page's own form POST still
+ * carries its `Origin`, which the callback checks; `no-referrer` would turn
+ * that into `Origin: null` and every sign-in would be refused as cross-origin.
+ *
+ * @param options.csp - `false` leaves out the Content-Security-Policy, for
+ *   markup the server didn't write (a `login.render` override may load its own
+ *   scripts); the anti-framing, sniffing, referrer and caching headers still apply.
+ */
+export function builtInAuthPageHeaders(options: { csp?: boolean } = {}): Record<string, string> {
+  return {
+    ...(options.csp === false ? {} : { 'Content-Security-Policy': BUILT_IN_AUTH_PAGE_CSP }),
+    'X-Frame-Options': 'DENY',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'same-origin',
+    'Cache-Control': 'no-store',
+  };
+}
+
 // ============================================
 // Theme Configuration
 // ============================================

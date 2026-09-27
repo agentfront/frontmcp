@@ -70,6 +70,8 @@ const upstreamProviders = buildUpstreamProviders();
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     consent: {
       enabled: true,
       groupByApp: true,

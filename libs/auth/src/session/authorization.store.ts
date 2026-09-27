@@ -172,11 +172,20 @@ export interface PendingAuthorizationRecord {
   consent?: ConsentStateRecord;
 
   /**
-   * Anti-CSRF token minted at SSR time for a custom `@AuthUi` page (#469).
-   * Echoed back by the client in the `csrf` field and verified on the callback /
-   * extra submit. Absent for the built-in pages (no CSRF requirement there).
+   * Anti-CSRF token for the page that submits back to the callback: minted at
+   * SSR time for a custom `@AuthUi` page (#469), and for the built-in consent
+   * screen. Echoed back in the `csrf` field and verified on the callback /
+   * extra submit.
    */
   authUiCsrf?: string;
+
+  /**
+   * The sign-in verified before the consent screen, sealed with the server
+   * secret (see `sealPendingLogin`). The consent form then carries no login
+   * fields: the consent submission completes this sign-in instead of running
+   * `authenticate()` again with credentials round-tripped through the browser.
+   */
+  verifiedLogin?: string;
 }
 
 /**
