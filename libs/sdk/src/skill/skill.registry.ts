@@ -810,9 +810,9 @@ export default class SkillRegistry
     // page compared the dynamic skills only with that page, so a skill held on another page was
     // appended again, and `total` changed from page to page. As in `count()`, the provider is read
     // whole to know which ids it holds.
-    const base = await this.storageProvider.list({ ...options, offset: 0, limit: Number.MAX_SAFE_INTEGER });
+    const base = await this.listAllFromProvider(options);
     const baseIds = new Set<string>();
-    const merged: SkillMetadata[] = base.skills.map((meta) => {
+    const merged: SkillMetadata[] = base.map((meta) => {
       const id = meta.id ?? meta.name;
       baseIds.add(id);
       const dyn = this.dynamicContents.get(id);
@@ -830,6 +830,20 @@ export default class SkillRegistry
     const limit = options?.limit ?? DEFAULT_LIST_LIMIT;
     const skills = merged.slice(offset, offset + limit);
     return { skills, total: merged.length, hasMore: offset + skills.length < merged.length };
+  }
+
+  /**
+   * Every skill the storage provider lists for `options`, following its pages: a provider (an
+   * external read-only one, say) may cap `limit` and report the rest with `hasMore`.
+   */
+  private async listAllFromProvider(options?: SkillListOptions): Promise<SkillMetadata[]> {
+    const all: SkillMetadata[] = [];
+    for (;;) {
+      const page = await this.storageProvider.list({ ...options, offset: all.length, limit: Number.MAX_SAFE_INTEGER });
+      all.push(...page.skills);
+      // An empty page ends the read even if the provider still claims more, so it cannot loop forever.
+      if (!page.hasMore || page.skills.length === 0) return all;
+    }
   }
 
   /**

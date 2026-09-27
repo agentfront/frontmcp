@@ -211,6 +211,29 @@ describe('SkillRegistry — dynamic registration', () => {
     expect(hasMore).toBe(false);
   });
 
+  it('reads every page of a provider that caps its page size before merging dynamic skills', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    const external = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => ({ id, name: id, description: id }));
+    const list = jest.fn(async (options?: { offset?: number; limit?: number }) => {
+      const offset = options?.offset ?? 0;
+      const skills = external.slice(offset, offset + Math.min(options?.limit ?? 50, 2)); // caps at 2
+      return { skills, total: external.length, hasMore: offset + skills.length < external.length };
+    });
+    registry.setExternalProvider({ isReadOnly: () => true, list } as unknown as Parameters<
+      typeof registry.setExternalProvider
+    >[0]);
+    await registry.registerSkillContent(buildSkillContent({ id: 'dyn', name: 'dyn' }));
+
+    const page = await registry.listSkills({ offset: 0, limit: 50 });
+
+    expect(page.skills.map((s) => s.id ?? s.name)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'dyn']);
+    expect(page.total).toBe(6);
+    expect(page.hasMore).toBe(false);
+  });
+
   it('loadSkill by display name returns the preserved SkillContent (with actions[]/bundleVersion)', async () => {
     // Reproducer for the bug where name-lookup fell through to
     // SkillInstance.load(), which rebuilds content from metadata and drops
