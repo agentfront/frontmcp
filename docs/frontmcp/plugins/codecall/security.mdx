@@ -636,7 +636,9 @@ password=xxx       → password=[REDACTED]
 ```
 
 `codecall:execute` results never include a `stack`, in any environment, and absolute file paths in
-error messages are replaced with `[path]`.
+error messages are replaced with `[path]`: POSIX (`/secret.txt`, `/srv/my app/config.json`, `~/.ssh/id_rsa`),
+Windows (`C:\Program Files\App\secret.json`, `\\server\share\x`), `file:` URLs, and any quoted absolute path.
+Other URLs (`https://api.example.com/v1`) are kept.
 
 ---
 

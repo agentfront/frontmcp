@@ -160,8 +160,9 @@ One policy decides every CodeCall surface: `codecall:search`, `codecall:describe
 ```typescript
 CodeCallPlugin.init({
   mode: 'codecall_only',
-  // `tool` is { name, appId, source, description, tags }; `name` is the tool's own name, never `<appId>:<name>`
-  includeTools: (tool) => !tool.name.startsWith('admin:'),
+  // `tool` is { name, fullName, appId, source, description, tags, annotations, metadata }, read-only;
+  // `name` is the tool's own name, never `<appId>:<name>`
+  includeTools: (tool) => !tool.name.startsWith('admin:') && !tool.annotations?.destructiveHint,
   directCalls: {
     enabled: true,
     allowedTools: ['users:list', 'crm:users:get'], // bare name, or `<appId>:<name>` to pin one app
@@ -174,6 +175,9 @@ CodeCallPlugin.init({
 - `codecall:searchSkills` and `codecall:searchKnowledge` run the SDK's `skills:filter` flow, so a skill a plugin withholds there (a flag-disabled skill, for one) is absent from both.
 - `directCalls.allowedTools` and `directCalls.filter` only narrow the base policy; listing a withheld tool does not make it callable. Unlisted tools are refused.
 - Hiding a tool from search is not the control; the refusal at execution is. Do not rely on `visibleInListTools` or search ranking to protect a tool.
+- `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
+- Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
+- `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.
 
 ### Power Features
 
@@ -405,11 +409,14 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 ### How the check decides
 
 1. `skipApproval: true`, or approval not required: the tool runs.
-2. A recorded **denial** for the caller (session or user scope): refused with state `denied`. A
-   denial outranks pre-approved contexts and any session approval.
+2. A recorded **denial** for the caller (session, user, time-limited or context scope): refused
+   with state `denied`. A denial outranks pre-approved contexts and any approval.
 3. The session context is one of `preApprovedContexts`: the tool runs.
 4. `alwaysPrompt: true`: refused with state `pending`.
-5. A valid approval for the caller: the tool runs.
+5. An approval for the caller that the tool's policy accepts: the tool runs. The caller's session,
+   user, time-limited and context approvals all count (a context approval only when the session
+   carries that context); its scope must be in `allowedScopes`, and it must be younger than
+   `maxTtlMs`, however it was stored.
 6. Otherwise refused with state `pending` (or `expired`).
 
 A refused call throws `ApprovalRequiredError`; the client receives an error result.
@@ -427,9 +434,12 @@ cannot hold a session approval. Releases up to 1.8.1 keyed a request without `mc
 its per-request id, so the grant was never found again
 ([#597](https://github.com/agentfront/frontmcp/issues/597)).
 
-Installed on an app, `ApprovalPlugin` gates only that app's tools (including those its adapters
-and plugins provide) against its own store, so two apps can each install it with separate stores.
-Installed on the server, it gates every tool; a tool both gate must pass each store's check.
+Installed on an app, `ApprovalPlugin` gates that app's tools (including those its adapters and
+plugins provide) against its own store, so two apps can each install it with separate stores. It
+also gates, against its store, the `approval` tools of apps with no approval plugin of their own,
+so such a tool never runs ungated because the plugin sits on another app (releases up to 1.8.2 ran
+them for anyone). Installed on the server, it gates every tool; a tool several plugins gate must
+pass each store's check, and a denial in any of them refuses the call.
 `this.approval` resolves the `ApprovalService` of the nearest `ApprovalPlugin` -- the one the
 tool's own app installed, otherwise the server's -- so with two apps each installing it, a grant
 or check in one app's tool uses that app's store. Releases up to 1.8.1 resolved the store of the
@@ -456,8 +466,11 @@ class DangerousActionTool extends ToolContext {
     // await this.approval.getSessionApprovals()            -- List session approvals
     // await this.approval.getUserApprovals()                -- List user approvals
     // await this.approval.grantUserApproval('tool-id')     -- Persist across sessions
-    // await this.approval.grantTimeLimitedApproval('tool-id', 60000)  -- Auto-expire
-    // await this.approval.revokeApproval('tool-id')        -- Revoke any approval
+    // await this.approval.grantTimeLimitedApproval('tool-id', 60000)  -- Auto-expire (ttlMs > 0)
+    // await this.approval.revokeApproval('tool-id')        -- Revoke the caller's session, user,
+    //                                                         time-limited and context approvals;
+    //                                                         returns whether any was revoked
+    //                                                         (recorded denials are kept)
 
     return { content: [{ type: 'text', text: 'Action completed' }] };
   }
@@ -477,12 +490,20 @@ import { ApprovalScope } from '@frontmcp/plugin-approval';
     category: 'write',
     riskLevel: 'medium', // 'low' | 'medium' | 'high' | 'critical'
     approvalMessage: 'Allow file writing for this session?',
+    allowedScopes: [ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED],
+    maxTtlMs: 60 * 60 * 1000,
   },
 })
 class FileWriteTool extends ToolContext {
   /* ... */
 }
 ```
+
+- `allowedScopes` is enforced: granting another scope through `this.approval` throws
+  `ApprovalScopeNotAllowedError`, and a stored approval of another scope does not open the gate.
+- `maxTtlMs` is enforced: a longer `grantTimeLimitedApproval()` throws `ApprovalOperationError`,
+  grants without a TTL get `maxTtlMs`, and no approval counts beyond `grantedAt + maxTtlMs`.
+- A `ttlMs` of 0, a negative number, `NaN` or `Infinity` throws, and a time-limited grant needs one.
 
 When `approval.required` is `true`, the plugin automatically intercepts tool execution and checks approval status before allowing the tool to run.
 
@@ -770,7 +791,7 @@ The `toolName` completion of `ui://widget/{toolName}.html` runs the caller's `to
 
 The skill catalog in the `initialize` instructions (and the SEP-2640 `skill://` hints under `skillsConfig.sep2640InInstructions`) is filtered for the initializing client too, so a flag-disabled skill's name and description never appear there ([#603](https://github.com/agentfront/frontmcp/issues/603)). A skill's `skill://<path>/SKILL.md` entry in `resources/list` is gated by the skill that path serves now -- replace a skill at the same path and the entry takes the new skill's flag ([#606](https://github.com/agentfront/frontmcp/issues/606)).
 
-Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource, prompt and completion gates do not run for other apps' capabilities -- install it in `@FrontMcp({ plugins })` to gate every app. Resources and prompts served outside every app (the SEP-2640 `skill://` resources) are gated by every installed copy. Skills are gated through the `skills:filter` flow, which every skill surface runs -- as the calling user on every transport, stdio and in-memory included; custom plugins can hook `Did('filterSkills')` on it the same way, and reuse `filterServableSkills(scope, skills)` from `@frontmcp/sdk` to serve skills from a surface of their own.
+Installed on an `@App`, the gates cover every capability that app provides, including tools, resources and prompts contributed by its adapters (e.g. an OpenAPI adapter) and plugins. Its tool, resource, prompt and completion gates also cover the flagged capabilities of apps with no feature-flag plugin of their own (as its list filters already did), but not those of an app that installs its own -- install it in `@FrontMcp({ plugins })` to gate every app with one adapter. Releases up to 1.8.2 hid another app's flagged-off tool from `tools/list` but still ran it when called by name. Resources and prompts served outside every app (the SEP-2640 `skill://` resources) are gated by every installed copy. Skills are gated through the `skills:filter` flow, which every skill surface runs -- as the calling user on every transport, stdio and in-memory included; custom plugins can hook `Did('filterSkills')` on it the same way, and reuse `filterServableSkills(scope, skills)` from `@frontmcp/sdk` to serve skills from a surface of their own.
 
 ---
 
@@ -819,7 +840,7 @@ interface DashboardPluginOptionsInput {
   basePath?: string; // Default: '/dashboard'
   auth?: {
     enabled?: boolean; // Default: false
-    token?: string; // Query param auth (?token=xxx)
+    token?: string; // Bearer / x-frontmcp-dashboard-token; ?token=xxx for the page only
   };
   cdn?: {
     entrypoint?: string; // Custom UI bundle URL
@@ -831,9 +852,9 @@ interface DashboardPluginOptionsInput {
 }
 ```
 
-- `enabled` -- When omitted, the dashboard is automatically enabled in development (`NODE_ENV !== 'production'`) and disabled in production.
-- `basePath` -- URL path where the dashboard is served. Default: `'/dashboard'`.
-- `auth.enabled` / `auth.token` -- Gate the dashboard page on a shared secret. Present it as `Authorization: Bearer <token>` (preferred) or `?token=<value>`. `enabled: true` without a `token` is a **startup error** — the server refuses to boot rather than serve an "authenticated" dashboard with nothing to check. The token is compared in constant time and is never embedded in the served page.
+- `enabled` -- When omitted, the dashboard is automatically enabled in development (`NODE_ENV !== 'production'`) and disabled in production. Disabled means disabled everywhere: the page and the dashboard's MCP endpoint answer 404, and its tools refuse with `DASHBOARD_DISABLED` on every transport (`createDirect` and stdio included). To keep the dashboard in production, set `enabled: true` with `auth`.
+- `basePath` -- URL path where the dashboard page is served. Default: `'/dashboard'`. The page's MCP client talks to the dashboard app's own route (`/dashboard`, after the server's `entryPath`), which `basePath` does not move.
+- `auth.enabled` / `auth.token` -- Gate the dashboard on a shared secret: the page, its MCP endpoint and its tools. The page takes `Authorization: Bearer <token>` (preferred) or `?token=<value>`, and sets an HttpOnly `SameSite=Strict` cookie (an HMAC of the token, never the token) that its own MCP client uses. MCP clients send `Authorization: Bearer <token>`, or `x-frontmcp-dashboard-token: <token>` when the server's own auth uses `Authorization`; `?token=` is refused there. Without the token the MCP endpoint answers 401 (`WWW-Authenticate: Bearer realm="frontmcp-dashboard"`). `enabled: true` without a `token` is a **startup error** — the server refuses to boot rather than serve an "authenticated" dashboard with nothing to check. The token is compared in constant time and is never embedded in the served page.
 - `cdn` -- Override default CDN URLs for the dashboard UI bundle and its dependencies. Useful for air-gapped environments.
 
 ### Security
@@ -843,12 +864,12 @@ interface DashboardPluginOptionsInput {
 The dashboard's MCP scope **inherits the server's authentication**. Its introspection tools (`dashboard:graph`, `dashboard:list-tools`, `dashboard:list-resources`) reach the root scope and enumerate every app, tool, resource and prompt on the server — including names, descriptions and (on request) schemas. Two consequences:
 
 - On an authenticated server (`local`, `remote`, `transparent`, `orchestrated`), the dashboard requires the same credential as everything else.
-- On a **public** server the dashboard is public too, because the server is. `auth.token` gates the dashboard _page_, not the MCP scope or the SSE stream. If the inventory is sensitive, authenticate the server — do not rely on the dashboard token alone.
+- On a **public** server, `auth.token` is what keeps the inventory private: it gates the page, the dashboard's MCP endpoint (SSE stream and POSTs included) and the tools. Releases up to 1.8.2 gated only the page, answered MCP with the dashboard disabled, and pointed the page at `<basePath>/sse`.
 
 Three further limitations worth knowing:
 
-- **The bundled page cannot authenticate itself against a non-public server.** The browser client opens `EventSource(sseUrl)` and POSTs with no `Authorization` header, and the SDK reads the credential from that header only. So on a server with `local`/`remote`/`transparent`/`orchestrated` auth the page loads (its own token gates that) but the in-page graph, tool list and SSE stream get `401`. Run the dashboard on a public/development server, or put it behind a proxy that injects a credential — scoped to the dashboard's own routes (`<basePath>/sse` and `<basePath>/message`) and holding no grant beyond the dashboard scope, since injecting a server credential across the MCP endpoint would let any page on that origin issue arbitrary authenticated JSON-RPC. Failing closed here is deliberate — the alternative is the `mode: 'public'` scope that GHSA-rgxj-434m-vxh3 was about.
-- The token is accepted as `Authorization: Bearer <token>` (scheme matched case-insensitively) or `?token=`. Prefer the header: a URL token lands in browser history, `Referer` headers and access logs. There is no cookie/session option yet.
+- **The bundled page cannot authenticate itself against a non-public server.** Its cookie carries the dashboard token only; the browser client opens `EventSource(sseUrl)` and POSTs with no `Authorization` header, and the server's own authentication reads its credential from that header. So on a server with `local`/`remote`/`transparent`/`orchestrated` auth the page loads but the in-page graph, tool list and SSE stream get `401`. Run the dashboard on a public/development server, or put it behind a proxy that injects a credential — scoped to the dashboard's own MCP routes (`/dashboard/sse` and `/dashboard/message`, after the server's `entryPath`) and holding no grant beyond the dashboard scope, since injecting a server credential across the MCP endpoint would let any page on that origin issue arbitrary authenticated JSON-RPC. Failing closed here is deliberate — the alternative is the `mode: 'public'` scope that GHSA-rgxj-434m-vxh3 was about.
+- The token is accepted as `Authorization: Bearer <token>` (scheme matched case-insensitively), as `x-frontmcp-dashboard-token` on the MCP endpoint, through the page's cookie, and as `?token=` for the page only. Prefer a header: a URL token lands in browser history, `Referer` headers and access logs.
 - Dashboard options are **process-wide**. Two `@FrontMcp` servers built in one process that configure the dashboard with CONFLICTING auth now throw at registration rather than silently sharing the last token; a differing `basePath` or `cdn` logs a warning. Run one dashboard per process, or call `resetDashboardOptions()` between serial constructions.
 
 ---

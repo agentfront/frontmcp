@@ -20,7 +20,16 @@ import {
 } from '@frontmcp/sdk';
 import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 
-import { ApprovalPlugin, ApprovalRequiredError, ApprovalScope, ApprovalState, type ApprovalRecord } from '../index';
+import {
+  ApprovalPlugin,
+  ApprovalRequiredError,
+  ApprovalScope,
+  ApprovalService,
+  ApprovalState,
+  ApprovalStorageStore,
+  createApprovalService,
+  type ApprovalRecord,
+} from '../index';
 
 const DEPLOY_ID = 'ops:deploy';
 const LIMITED_ID = 'ops:limited_deploy';
@@ -301,6 +310,83 @@ describe('this.approval revocation and the tool approval policy', () => {
       await approvals('session', DEPLOY_ID, { sessionId: 'session-bob', user: { sub: 'bob' } });
 
       expect((await approvals('query', DEPLOY_ID)).result).toEqual([]);
+    });
+  });
+
+  /**
+   * A caller with a session and no user id (an anonymous HTTP caller): its session approval and its
+   * time-limited approval used to share the `<tool>:session:<id>` key, so each grant replaced the other,
+   * or a denial recorded for the session.
+   */
+  describe('a caller without a user id', () => {
+    const ANON_SESSION = 'session-anon';
+    let store: ApprovalStorageStore;
+    let service: ApprovalService;
+
+    beforeEach(async () => {
+      store = new ApprovalStorageStore({ storageInstance: storage, cleanupIntervalSeconds: 0 });
+      await store.initialize();
+      service = createApprovalService(store, ANON_SESSION);
+    });
+
+    afterEach(async () => {
+      await store.close();
+    });
+
+    it('does not let a time-limited grant replace a denial recorded for the session', async () => {
+      await storeRecord(`${DEPLOY_ID}:session:${ANON_SESSION}`, {
+        toolId: DEPLOY_ID,
+        scope: ApprovalScope.SESSION,
+        sessionId: ANON_SESSION,
+        state: ApprovalState.DENIED,
+      });
+
+      await service.grantTimeLimitedApproval(DEPLOY_ID, MAX_TTL_MS);
+
+      expect(await service.isApproved(DEPLOY_ID)).toBe(false);
+      expect((await store.getApproval(DEPLOY_ID, ANON_SESSION))?.state).toBe(ApprovalState.DENIED);
+    });
+
+    it('keeps its session approval when it also grants a time-limited one', async () => {
+      const grantedAt = Date.now();
+      await service.grantSessionApproval(DEPLOY_ID);
+      await service.grantTimeLimitedApproval(DEPLOY_ID, 1_000);
+
+      const scopes = (await store.getApprovals(DEPLOY_ID, ANON_SESSION)).map((record) => record.scope).sort();
+      expect(scopes).toEqual([ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED]);
+
+      jest.spyOn(Date, 'now').mockReturnValue(grantedAt + 5_000);
+      expect(await service.isApproved(DEPLOY_ID)).toBe(true);
+    });
+
+    it('keeps its time-limited approval when it also grants a session one', async () => {
+      await service.grantTimeLimitedApproval(DEPLOY_ID, MAX_TTL_MS);
+      await service.grantSessionApproval(DEPLOY_ID);
+
+      const scopes = (await store.getApprovals(DEPLOY_ID, ANON_SESSION)).map((record) => record.scope).sort();
+      expect(scopes).toEqual([ApprovalScope.SESSION, ApprovalScope.TIME_LIMITED]);
+    });
+
+    it('still reads a time-limited approval stored under the session key by 1.8.2', async () => {
+      await storeRecord(`${DEPLOY_ID}:session:${ANON_SESSION}`, {
+        toolId: DEPLOY_ID,
+        scope: ApprovalScope.TIME_LIMITED,
+        sessionId: ANON_SESSION,
+        expiresAt: Date.now() + MAX_TTL_MS,
+        ttlMs: MAX_TTL_MS,
+      });
+
+      expect(await service.isApproved(DEPLOY_ID)).toBe(true);
+    });
+
+    it('revokes and clears its time-limited approval', async () => {
+      await service.grantTimeLimitedApproval(DEPLOY_ID, MAX_TTL_MS);
+      expect(await service.revokeApproval(DEPLOY_ID)).toBe(true);
+      expect(await service.isApproved(DEPLOY_ID)).toBe(false);
+
+      await service.grantTimeLimitedApproval(DEPLOY_ID, MAX_TTL_MS);
+      expect(await service.clearSessionApprovals()).toBe(1);
+      expect(await service.isApproved(DEPLOY_ID)).toBe(false);
     });
   });
 });

@@ -239,8 +239,9 @@ OpenapiAdapter.init({
       return { apiKey: authInfo.user?.adminApiKey };
     }
 
-    // Default to main JWT token
-    return { jwt: authInfo.token };
+    // No credential for other tools. Don't return `authInfo.token`: it was issued for this MCP
+    // server, not for the API (see "Default Behavior" below).
+    return {};
   },
 });
 ```
@@ -277,12 +278,8 @@ OpenapiAdapter.init({
   headersMapper: (ctx, headers) => {
     const authInfo = ctx.authInfo;
 
-    // Add authorization header
-    if (authInfo.token) {
-      headers.set('authorization', `Bearer ${authInfo.token}`);
-    }
-
-    // Add tenant ID from user context
+    // Add tenant ID from user context (credentials for the API belong in
+    // authProviderMapper / securityResolver, never the caller's own authInfo.token)
     if (authInfo.user?.tenantId) {
       headers.set('x-tenant-id', authInfo.user.tenantId);
     }
@@ -1202,6 +1199,8 @@ The adapter automatically validates your security configuration and assigns a ri
 | **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials, or no credentials at all            |
 | **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
 | **HIGH** 🚨   | `passthroughCallerToken: true`                 | The MCP client's own token is sent to the API           |
+
+`passthroughCallerToken: true` scores HIGH whenever the caller's token can reach the API: on its own, and alongside an `authProviderMapper` (the token is sent when no mapper function returns a credential). Only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ## Built-in Security Protections
 

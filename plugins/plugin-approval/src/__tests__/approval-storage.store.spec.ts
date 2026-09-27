@@ -210,7 +210,23 @@ describe('ApprovalStorageStore', () => {
 
       expect(result.ttlMs).toBe(60000);
       expect(result.expiresAt).toBeDefined();
-      expect(mockStorage.set).toHaveBeenCalledWith(expect.any(String), expect.any(String), { ttlSeconds: 60 });
+      expect(mockStorage.set).toHaveBeenCalledWith('tool-1:session:session-1:scope:time_limited', expect.any(String), {
+        ttlSeconds: 60,
+      });
+    });
+
+    it('should store a time-limited approval of a session and a user under their combined key', async () => {
+      await store.grantApproval({
+        toolId: 'tool-1',
+        scope: ApprovalScope.TIME_LIMITED,
+        sessionId: 'session-1',
+        userId: 'user-1',
+        ttlMs: 60000,
+      });
+
+      expect(mockStorage.set).toHaveBeenCalledWith('tool-1:session:session-1:user:user-1', expect.any(String), {
+        ttlSeconds: 60,
+      });
     });
 
     it('should grant context-specific approval', async () => {
@@ -270,18 +286,23 @@ describe('ApprovalStorageStore', () => {
 
       expect(mockStorage.get.mock.calls.map(([key]) => key)).toEqual([
         'tool-1:session:session-1',
+        'tool-1:session:session-1:scope:time_limited',
         'tool-1:user:user-1',
+        'tool-1:user:user-1:scope:time_limited',
         'tool-1:session:session-1:user:user-1',
         'tool-1:session:session-1:user:user-1:ctx:repo:acme',
       ]);
     });
 
-    it('should read only the session key for a caller without a user or context', async () => {
+    it('should read only the session keys for a caller without a user or context', async () => {
       mockStorage.get.mockResolvedValue(null);
 
       await store.getApprovals('tool-1', 'session-1');
 
-      expect(mockStorage.get.mock.calls.map(([key]) => key)).toEqual(['tool-1:session:session-1']);
+      expect(mockStorage.get.mock.calls.map(([key]) => key)).toEqual([
+        'tool-1:session:session-1',
+        'tool-1:session:session-1:scope:time_limited',
+      ]);
     });
 
     it('should ignore a record stored for another tool under the key', async () => {
@@ -336,9 +357,9 @@ describe('ApprovalStorageStore', () => {
         grantedAt: Date.now(),
         grantedBy: { source: 'admin' },
       };
-      mockStorage.get
-        .mockResolvedValueOnce(null) // session lookup
-        .mockResolvedValueOnce(JSON.stringify(userRecord)); // user lookup
+      mockStorage.get.mockImplementation(async (key: string) =>
+        key === 'tool-1:user:user-1' ? JSON.stringify(userRecord) : null,
+      );
 
       const result = await store.getApproval('tool-1', 'session-1', 'user-1');
 
@@ -362,9 +383,11 @@ describe('ApprovalStorageStore', () => {
         grantedAt: Date.now(),
         grantedBy: { source: 'admin' },
       };
-      mockStorage.get
-        .mockResolvedValueOnce(JSON.stringify(sessionApproval))
-        .mockResolvedValueOnce(JSON.stringify(userDenial));
+      const byKey: Record<string, string> = {
+        'tool-1:session:session-1': JSON.stringify(sessionApproval),
+        'tool-1:user:user-1': JSON.stringify(userDenial),
+      };
+      mockStorage.get.mockImplementation(async (key: string) => byKey[key] ?? null);
 
       const result = await store.getApproval('tool-1', 'session-1', 'user-1');
 
@@ -441,9 +464,9 @@ describe('ApprovalStorageStore', () => {
         grantedAt: Date.now(),
         grantedBy: { source: 'admin' },
       };
-      mockStorage.get
-        .mockResolvedValueOnce(null) // session lookup
-        .mockResolvedValueOnce(JSON.stringify(userRecord)); // user lookup
+      mockStorage.get.mockImplementation(async (key: string) =>
+        key === 'tool-1:user:user-1' ? JSON.stringify(userRecord) : null,
+      );
 
       const result = await store.isApproved('tool-1', 'session-1', 'user-1');
 
@@ -561,7 +584,12 @@ describe('ApprovalStorageStore', () => {
       mockStorage.mget.mockResolvedValue([
         stored({ sessionId: 'session-1' }),
         stored({ scope: ApprovalScope.USER, userId: 'user-1' }),
-        stored({ scope: ApprovalScope.TIME_LIMITED, sessionId: 'session-1', userId: 'user-1', expiresAt: Date.now() + 1000 }),
+        stored({
+          scope: ApprovalScope.TIME_LIMITED,
+          sessionId: 'session-1',
+          userId: 'user-1',
+          expiresAt: Date.now() + 1000,
+        }),
         stored({
           scope: ApprovalScope.CONTEXT_SPECIFIC,
           sessionId: 'session-1',
@@ -591,8 +619,16 @@ describe('ApprovalStorageStore', () => {
       ]);
       mockStorage.mget.mockResolvedValue([
         stored({ sessionId: 'session-1' }),
-        stored({ scope: ApprovalScope.CONTEXT_SPECIFIC, sessionId: 'session-1', context: { type: 'repo', identifier: 'acme' } }),
-        stored({ scope: ApprovalScope.CONTEXT_SPECIFIC, sessionId: 'session-1', context: { type: 'repo', identifier: 'other' } }),
+        stored({
+          scope: ApprovalScope.CONTEXT_SPECIFIC,
+          sessionId: 'session-1',
+          context: { type: 'repo', identifier: 'acme' },
+        }),
+        stored({
+          scope: ApprovalScope.CONTEXT_SPECIFIC,
+          sessionId: 'session-1',
+          context: { type: 'repo', identifier: 'other' },
+        }),
       ]);
 
       const result = await store.revokeApproval({

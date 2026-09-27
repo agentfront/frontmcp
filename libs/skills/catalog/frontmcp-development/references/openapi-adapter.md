@@ -89,8 +89,9 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  securityResolver: (tool, ctx) => {
-    return { jwt: ctx.authInfo?.token };
+  securityResolver: async (tool, ctx) => {
+    // A credential issued for the API, never the caller's own ctx.authInfo.token
+    return { jwt: await getApiToken(ctx) };
   },
 });
 
@@ -110,17 +111,31 @@ OpenapiAdapter.init({
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
   headersMapper: (ctx, headers) => {
-    headers.set('Authorization', `Bearer ${ctx.authInfo?.token}`);
+    const tenantId = ctx.authInfo.user?.tenantId;
+    if (tenantId) headers.set('x-tenant-id', tenantId);
     return headers;
   },
 });
+
+// Opt-in token passthrough (High Risk) — only when the API accepts tokens issued for this MCP server
+OpenapiAdapter.init({
+  name: 'same-issuer-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  passthroughCallerToken: true,
+});
 ```
+
+With no `authProviderMapper`, `securityResolver` or `staticAuth`, the adapter sends **no** credentials: operations that require auth fail with `Authentication required for tool '…'` and a `SECURITY WARNING` is logged at startup. The caller's MCP token (`ctx.authInfo.token`) is never forwarded implicitly — not by default, and not when an `authProviderMapper` function returns `undefined` — because passing it to another API is token passthrough, which the MCP specification forbids. `passthroughCallerToken: true` is the explicit opt-in, used only after every other credential source came up empty.
 
 | Risk Level | Strategy                                   | Description                                          |
 | ---------- | ------------------------------------------ | ---------------------------------------------------- |
 | LOW        | `authProviderMapper` or `securityResolver` | Auth from user context, not exposed to clients       |
-| MEDIUM     | `staticAuth`, `additionalHeaders`          | Static credentials                                   |
+| MEDIUM     | `staticAuth`, `additionalHeaders`, or none | Static credentials, or no credentials at all         |
 | HIGH       | `includeSecurityInInput: true`             | Auth fields exposed to MCP clients (not recommended) |
+| HIGH       | `passthroughCallerToken: true`             | The MCP client's own token is sent to the API        |
+
+`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ## Spec Polling
 

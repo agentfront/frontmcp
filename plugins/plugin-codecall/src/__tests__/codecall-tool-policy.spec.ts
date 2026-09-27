@@ -109,6 +109,54 @@ describe('CodeCall tool policy subject (GHSA-6w3j-82v5-6qrr)', () => {
     expect(Object.isFrozen(info.annotations)).toBe(true);
   });
 
+  it('does not let a filter change the nested metadata or tags the next decision reads', () => {
+    const entry = appEntry('users:list', {
+      tags: ['users'],
+      codecall: { enabledInCodeCall: true, tags: ['crm'] },
+      annotations: { destructiveHint: false },
+    });
+    const tamper = (info: IncludeToolsFilterToolInfo): boolean => {
+      const attempts = [
+        () => ((info.metadata?.codecall as { enabledInCodeCall?: boolean }).enabledInCodeCall = false),
+        () => (info.metadata?.tags as string[]).push('admin'),
+        () => (info.tags as string[]).push('admin'),
+        () => ((info.metadata?.annotations as { destructiveHint?: boolean }).destructiveHint = true),
+      ];
+      for (const attempt of attempts) {
+        try {
+          attempt();
+        } catch {
+          // frozen: the attempt is refused
+        }
+      }
+      return true;
+    };
+
+    checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools: tamper }), 'users:list');
+
+    expect(entry.metadata.codecall).toEqual({ enabledInCodeCall: true, tags: ['crm'] });
+    expect(entry.metadata.tags).toEqual(['users']);
+    expect(entry.metadata.annotations).toEqual({ destructiveHint: false });
+  });
+
+  it('hands filters metadata holding functions and cyclic values without throwing', () => {
+    const entry = appEntry('users:list');
+    const cyclic: Record<string, unknown> = { kind: 'cyclic' };
+    cyclic['self'] = cyclic;
+    const render = () => '<div />';
+    Object.assign(entry.metadata, { ui: { render }, extra: cyclic });
+    const includeTools = jest.fn((_info: IncludeToolsFilterToolInfo) => true);
+
+    const access = checkCodeCallToolAccess(scopeWith([entry]), configReader({ includeTools }), 'users:list');
+
+    expect(access.allowed).toBe(true);
+    const [info] = includeTools.mock.calls[0];
+    const extra = info.metadata?.['extra'] as Record<string, unknown>;
+    expect(extra['self']).toBe(extra);
+    expect(Object.isFrozen(extra)).toBe(true);
+    expect((info.metadata?.['ui'] as { render: unknown }).render).toBe(render);
+  });
+
   it.each(['admin:deleteUser', 'crm:admin:deleteUser'])(
     'denies execution of a tool includeTools excludes, requested as "%s"',
     (requestedName) => {

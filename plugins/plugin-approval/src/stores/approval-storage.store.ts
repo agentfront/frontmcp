@@ -13,7 +13,7 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { approvalRecordSchema, ApprovalOperationError, normalizeGrantor } from '../approval';
+import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor } from '../approval';
 import { assertValidTtl } from '../approval/policy';
 import { ApprovalScope, ApprovalState, type ApprovalContext, type ApprovalRecord } from '../types';
 import type {
@@ -34,6 +34,9 @@ import type {
 function escapePattern(str: string): string {
   return str.replace(/[*?[\]\\]/g, '\\$&');
 }
+
+/** Suffix of the key of a time-limited approval granted to a session alone or a user alone. */
+const TIME_LIMITED_KEY_SEGMENT = `scope:${ApprovalScope.TIME_LIMITED}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -140,6 +143,24 @@ export class ApprovalStorageStore implements ApprovalStore {
     return parts.join(':');
   }
 
+  /**
+   * The key of a time-limited approval granted to a session alone or a user alone. Kept apart from
+   * that session's or user's own key, so a time-limited grant never replaces the session or user
+   * approval, or a denial recorded there. (With both a session and a user, `buildKey` is already distinct.)
+   */
+  private timeLimitedKey(toolId: string, sessionId?: string, userId?: string): string {
+    return `${this.buildKey(toolId, sessionId, userId)}:${TIME_LIMITED_KEY_SEGMENT}`;
+  }
+
+  /** The key a new record is stored under. */
+  private recordKey(options: GrantApprovalOptions): string {
+    const { toolId, scope, sessionId, userId, context } = options;
+    if (scope === ApprovalScope.TIME_LIMITED && !context && !(sessionId && userId)) {
+      return this.timeLimitedKey(toolId, sessionId, userId);
+    }
+    return this.buildKey(toolId, sessionId, userId, context);
+  }
+
   private parseRecord(value: string | null): ApprovalRecord | undefined {
     if (!value) return undefined;
     try {
@@ -160,13 +181,19 @@ export class ApprovalStorageStore implements ApprovalStore {
 
   /**
    * The keys a caller's approvals of a tool can be stored under: its session, its user, both
-   * (time-limited and context grants made through `ApprovalService`), and, for a call in a
-   * server-established context, that context.
+   * (time-limited and context grants made through `ApprovalService`), the time-limited keys of its
+   * session and its user, and, for a call in a server-established context, that context.
+   * Records written by 1.8.2 sit under the same keys (a time-limited grant without a user under
+   * the session key), so they are still read.
    */
   private callerKeys(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): string[] {
-    const keys = [this.buildKey(toolId, sessionId)];
+    const keys = [this.buildKey(toolId, sessionId), this.timeLimitedKey(toolId, sessionId)];
     if (userId) {
-      keys.push(this.buildKey(toolId, undefined, userId), this.buildKey(toolId, sessionId, userId));
+      keys.push(
+        this.buildKey(toolId, undefined, userId),
+        this.timeLimitedKey(toolId, undefined, userId),
+        this.buildKey(toolId, sessionId, userId),
+      );
     }
     if (context) {
       keys.push(this.buildKey(toolId, sessionId, userId, context));
@@ -277,7 +304,7 @@ export class ApprovalStorageStore implements ApprovalStore {
       metadata: options.metadata,
     };
 
-    const key = this.buildKey(options.toolId, options.sessionId, options.userId, options.context);
+    const key = this.recordKey(options);
     const ttlSeconds = options.ttlMs !== undefined ? Math.ceil(options.ttlMs / 1000) : undefined;
     await this.storage.set(key, JSON.stringify(record), { ttlSeconds });
 

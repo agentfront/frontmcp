@@ -23,6 +23,7 @@ import {
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
 import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
+import { toClientErrorMessage } from '../utils/client-error-message';
 import {
   executeToolDescription,
   executeToolInputSchema,
@@ -54,20 +55,6 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
   }
 
   return TOOL_CALL_ERROR_CODES.EXECUTION;
-}
-
-/** Stack frames embedded in a message (`\n    at fn (/srv/app/x.js:1:2)`). */
-const EMBEDDED_STACK_FRAME_RE = /\n\s*at\s[^\n]*/g;
-/** Absolute file paths and file URLs: POSIX with two or more segments, and Windows drive paths. */
-const ABSOLUTE_PATH_RE = /(?:file:\/\/)?(?:\/[\w.@+-]+){2,}\/?|\b[A-Za-z]:\\[\w.@+\\-]+/g;
-
-/**
- * The message a client may see for a script error: no stack frames and no absolute server
- * paths, in every environment. (Stack traces are dropped from results entirely.)
- */
-function toClientErrorMessage(message: string | undefined): string {
-  if (!message) return '';
-  return message.replace(EMBEDDED_STACK_FRAME_RE, '').replace(ABSOLUTE_PATH_RE, '[path]');
 }
 
 @Tool({

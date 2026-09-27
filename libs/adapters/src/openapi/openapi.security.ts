@@ -1,5 +1,7 @@
-import { SecurityResolver, createSecurityContext, type McpOpenAPITool, type SecurityContext } from 'mcp-from-openapi';
+import { createSecurityContext, SecurityResolver, type McpOpenAPITool, type SecurityContext } from 'mcp-from-openapi';
+
 import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import type { OpenApiAdapterOptions } from './openapi.types';
 
 /**
@@ -34,7 +36,10 @@ export interface SecurityValidationResult {
 export async function createSecurityContextFromAuth(
   tool: McpOpenAPITool,
   ctx: FrontMcpContext,
-  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'>,
+  options: Pick<
+    OpenApiAdapterOptions,
+    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'
+  >,
 ): Promise<SecurityContext> {
   // 1. Use custom security resolver if provided (highest priority)
   if (options.securityResolver) {
@@ -235,7 +240,7 @@ export function validateSecurityConfiguration(
       'SECURITY INFO: Using staticAuth with hardcoded credentials. Ensure credentials are stored securely (environment variables, secrets manager).',
     );
     // If static auth is provided, assume it covers all schemes
-    return result;
+    return withPassthroughRisk(result, securitySchemes, options);
   }
 
   // Get schemes that will be provided via input (don't need mapping)
@@ -271,28 +276,57 @@ export function validateSecurityConfiguration(
       );
     }
 
-    return result;
+    return withPassthroughRisk(result, securitySchemes, options);
   }
 
   // No auth configuration provided
-  if (securitySchemes.size > 0) {
+  if (securitySchemes.size > 0 && options.passthroughCallerToken !== true) {
     const schemesStr = Array.from(securitySchemes).join(', ');
-    if (options.passthroughCallerToken === true) {
-      // Explicit opt-in: the caller's own MCP token is sent to the API
-      result.securityRiskScore = 'high';
-      result.warnings.push(
-        `SECURITY WARNING: passthroughCallerToken is enabled. The MCP client's own token (ctx.authInfo.token) is sent to the API for security schemes: ${schemesStr}. Only use this when the API accepts tokens issued for this MCP server.`,
-      );
-    } else {
-      result.securityRiskScore = 'medium';
-      result.warnings.push(
-        `SECURITY WARNING: No auth configuration provided, so the adapter has no credentials for the API (security schemes: ${schemesStr}). ` +
-          `Operations that require authentication will fail. The MCP client's own token is not forwarded: configure authProviderMapper, securityResolver or staticAuth, ` +
-          `or set passthroughCallerToken: true if the API is meant to receive the caller's MCP token.`,
-      );
-    }
+    result.securityRiskScore = 'medium';
+    result.warnings.push(
+      `SECURITY WARNING: No auth configuration provided, so the adapter has no credentials for the API (security schemes: ${schemesStr}). ` +
+        `Operations that require authentication will fail. The MCP client's own token is not forwarded: configure authProviderMapper, securityResolver or staticAuth, ` +
+        `or set passthroughCallerToken: true if the API is meant to receive the caller's MCP token.`,
+    );
   }
 
+  return withPassthroughRisk(result, securitySchemes, options);
+}
+
+/**
+ * Whether `createSecurityContextFromAuth` can forward the caller's token: `passthroughCallerToken`
+ * is set and nothing ahead of it always answers. A `securityResolver` always does, and so does
+ * `staticAuth` unless an `authProviderMapper` (which takes precedence and falls back to the
+ * caller's token when every mapper returns nothing) is also configured.
+ */
+function canPassThroughCallerToken(
+  options: Pick<
+    OpenApiAdapterOptions,
+    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'
+  >,
+): boolean {
+  if (options.passthroughCallerToken !== true || options.securityResolver) return false;
+  return !!options.authProviderMapper || !options.staticAuth;
+}
+
+/** Scores the configuration HIGH, with a warning, when the caller's token can reach the API. */
+function withPassthroughRisk(
+  result: SecurityValidationResult,
+  securitySchemes: Set<string>,
+  options: Pick<
+    OpenApiAdapterOptions,
+    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'
+  >,
+): SecurityValidationResult {
+  if (securitySchemes.size === 0 || !canPassThroughCallerToken(options)) {
+    return result;
+  }
+  const schemesStr = Array.from(securitySchemes).join(', ');
+  const when = options.authProviderMapper ? ' whenever no authProviderMapper function returns a credential' : '';
+  result.securityRiskScore = 'high';
+  result.warnings.push(
+    `SECURITY WARNING: passthroughCallerToken is enabled. The MCP client's own token (ctx.authInfo.token) is sent to the API${when} for security schemes: ${schemesStr}. Only use this when the API accepts tokens issued for this MCP server.`,
+  );
   return result;
 }
 
@@ -308,7 +342,10 @@ export function validateSecurityConfiguration(
 export async function resolveToolSecurity(
   tool: McpOpenAPITool,
   ctx: FrontMcpContext,
-  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'>,
+  options: Pick<
+    OpenApiAdapterOptions,
+    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'passthroughCallerToken'
+  >,
 ) {
   const securityResolver = new SecurityResolver();
   const securityContext = await createSecurityContextFromAuth(tool, ctx, options);

@@ -39,6 +39,7 @@ const adapter = new OpenapiAdapter({
 
 ```typescript
 import { OpenapiAdapter } from '@frontmcp/adapters';
+
 import spec from './openapi.json';
 
 const adapter = new OpenapiAdapter({
@@ -1113,8 +1114,8 @@ The adapter uses logging for diagnostics and security analysis. The logger is ha
 When using the adapter within a FrontMCP app, the SDK automatically injects the logger before `fetch()` is called:
 
 ```typescript
-import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App } from '@frontmcp/sdk';
 
 @App({
   id: 'my-api',
@@ -1311,6 +1312,9 @@ When the adapter loads, it:
 | **MEDIUM** ⚠️ | `securitySchemesInInput` with `authProviderMapper` | Hybrid: some user-provided, some from context |
 | **MEDIUM** ⚠️ | `staticAuth` or default                            | Static credentials - Secure but less flexible |
 | **HIGH** ❌   | `includeSecurityInInput: true`                     | User provides auth - High security risk       |
+| **HIGH** ❌   | `passthroughCallerToken: true`                     | The MCP client's own token is sent to the API |
+
+`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ### Example: Missing Auth Configuration
 

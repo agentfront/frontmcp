@@ -2,8 +2,9 @@
  * OpenAPI Adapter validation tests
  */
 
-import { validateSecurityConfiguration, extractSecuritySchemes } from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { extractSecuritySchemes, validateSecurityConfiguration } from '../openapi.security';
 
 describe('OpenapiAdapter - Validation', () => {
   describe('extractSecuritySchemes', () => {
@@ -308,6 +309,40 @@ describe('OpenapiAdapter - Validation', () => {
         expect(result.securityRiskScore).toBe('high');
         expect(result.warnings.some((w) => w.includes('passthroughCallerToken is enabled'))).toBe(true);
       });
+
+      // The caller's token is the fallback when every authProviderMapper function returns nothing,
+      // so a mapper does not make passthroughCallerToken any less risky.
+      it.each<[string, Parameters<typeof validateSecurityConfiguration>[1]]>([
+        ['authProviderMapper', { authProviderMapper: { BearerAuth: () => undefined } }],
+        [
+          'authProviderMapper and staticAuth',
+          { authProviderMapper: { BearerAuth: () => undefined }, staticAuth: { jwt: 'static-token' } },
+        ],
+        ['securitySchemesInInput', { securitySchemesInInput: ['OtherAuth'] }],
+      ])('should keep passthroughCallerToken HIGH risk alongside %s', (_label, options) => {
+        const result = validateSecurityConfiguration([mockToolWithAuth], { ...options, passthroughCallerToken: true });
+
+        expect(result.securityRiskScore).toBe('high');
+        expect(result.warnings.some((w) => w.startsWith('SECURITY WARNING: passthroughCallerToken is enabled'))).toBe(
+          true,
+        );
+      });
+
+      it.each<[string, Parameters<typeof validateSecurityConfiguration>[1], 'low' | 'medium']>([
+        ['securityResolver', { securityResolver: () => ({ jwt: 'api-token' }) }, 'low'],
+        ['staticAuth', { staticAuth: { jwt: 'static-token' } }, 'medium'],
+      ])(
+        'should not flag passthroughCallerToken alongside %s, which never falls back to it',
+        (_label, options, score) => {
+          const result = validateSecurityConfiguration([mockToolWithAuth], {
+            ...options,
+            passthroughCallerToken: true,
+          });
+
+          expect(result.securityRiskScore).toBe(score);
+          expect(result.warnings.some((w) => w.includes('passthroughCallerToken is enabled'))).toBe(false);
+        },
+      );
 
       it('should warn about security risk with includeSecurityInInput', () => {
         const result = validateSecurityConfiguration([mockToolWithAuth], {
