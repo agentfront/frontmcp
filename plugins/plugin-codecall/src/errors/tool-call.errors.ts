@@ -1,5 +1,7 @@
 // file: libs/plugins/src/codecall/errors/tool-call.errors.ts
 
+import { toClientErrorMessage } from '../utils/client-error-message';
+
 /**
  * Error codes exposed to AgentScript via result-based error handling.
  * These are the ONLY error codes scripts can see - no internal details.
@@ -94,16 +96,13 @@ function getSanitizedMessage(code: ToolCallErrorCode, toolName: string, rawMessa
  * Sanitize validation error messages to remove internal details.
  */
 function sanitizeValidationMessage(message: string): string {
-  // Remove file paths (Unix and Windows)
-  let sanitized = message.replace(/(?:\/[\w.-]+)+|(?:[A-Za-z]:\\[\w\\.-]+)+/g, '[path]');
+  // Remove stack frames and file paths (Unix and Windows)
+  let sanitized = toClientErrorMessage(message);
 
   // Remove line numbers and stack traces
   sanitized = sanitized.replace(/\bat line \d+/gi, '');
   sanitized = sanitized.replace(/\bline \d+/gi, '');
   sanitized = sanitized.replace(/:\d+:\d+/g, '');
-
-  // Remove "at" stack trace lines
-  sanitized = sanitized.replace(/\n\s*at .*/g, '');
 
   // Truncate if too long (prevent information disclosure via long messages)
   if (sanitized.length > 200) {
