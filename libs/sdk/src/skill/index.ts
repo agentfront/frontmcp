@@ -265,8 +265,8 @@ export type {
 } from './skill-instructions.helper';
 
 // HTTP Authentication
-export { SkillHttpAuthValidator, createSkillHttpAuthValidator } from './auth';
-export type { SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorOptions } from './auth';
+export { SkillHttpAuthValidator, authorizeSkillHttpRequest, createSkillHttpAuthValidator } from './auth';
+export type { SkillHttpAccess, SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorOptions } from './auth';
 
 // HTTP Caching
 export {

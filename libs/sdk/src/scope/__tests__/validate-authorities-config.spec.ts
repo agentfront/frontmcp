@@ -12,10 +12,16 @@ import { Scope } from '../scope.instance';
  * an entry appears protected but is actually accessible to all users.
  */
 
-// Extract the private method for direct testing
+// Extract the private methods for direct testing
 const validateAuthoritiesConfig = (Scope.prototype as unknown as Record<string, unknown>)[
   'validateAuthoritiesConfig'
 ] as () => void;
+const collectEntriesWithAuthorities = (Scope.prototype as unknown as Record<string, unknown>)[
+  'collectEntriesWithAuthorities'
+] as () => Array<{ label: string; authorities: unknown }>;
+
+/** An engine mock whose rules and profiles are all valid. */
+const validEngine = () => ({ evaluate: jest.fn(), findProfileProblems: () => [], findRuleProblems: () => [] });
 
 interface MockEntry {
   name: string;
@@ -26,10 +32,11 @@ interface MockScope {
   _authoritiesEngine: unknown;
   _authoritiesContextBuilder: unknown;
   scopeTools: { getTools(includeHidden: boolean): MockEntry[] };
-  scopeResources: { getResources(): MockEntry[] };
-  scopePrompts: { getPrompts(): MockEntry[] };
-  scopeAgents: { getAgents(): Array<Record<string, unknown>> };
+  scopeResources: { getResources(includeHidden?: boolean): MockEntry[]; getResourceTemplates(): MockEntry[] };
+  scopePrompts: { getPrompts(includeHidden?: boolean): MockEntry[] };
+  scopeAgents: { getAgents(includeHidden?: boolean): MockEntry[] };
   scopeSkills: { getSkills(includeHidden: boolean): MockEntry[] };
+  collectEntriesWithAuthorities: typeof collectEntriesWithAuthorities;
 }
 
 function createMockScope(overrides: Partial<MockScope> = {}): MockScope {
@@ -37,10 +44,11 @@ function createMockScope(overrides: Partial<MockScope> = {}): MockScope {
     _authoritiesEngine: undefined,
     _authoritiesContextBuilder: undefined,
     scopeTools: { getTools: () => [] },
-    scopeResources: { getResources: () => [] },
+    scopeResources: { getResources: () => [], getResourceTemplates: () => [] },
     scopePrompts: { getPrompts: () => [] },
     scopeAgents: { getAgents: () => [] },
     scopeSkills: { getSkills: () => [] },
+    collectEntriesWithAuthorities,
     ...overrides,
   };
 }
@@ -53,7 +61,7 @@ describe('validateAuthoritiesConfig', () => {
 
   it('should not throw when engine is configured even if entries have authorities', () => {
     const scope = createMockScope({
-      _authoritiesEngine: { evaluate: jest.fn() },
+      _authoritiesEngine: validEngine(),
       _authoritiesContextBuilder: { build: jest.fn() },
       scopeTools: {
         getTools: () => [{ name: 'admin-tool', metadata: { name: 'admin-tool', authorities: 'admin' } }],
@@ -88,6 +96,7 @@ describe('validateAuthoritiesConfig', () => {
             metadata: { name: 'secret-resource', authorities: 'admin' },
           },
         ],
+        getResourceTemplates: () => [],
       },
     });
 
@@ -145,7 +154,7 @@ describe('validateAuthoritiesConfig', () => {
 
   it('should not throw when a skill has authorities and an engine is configured', () => {
     const scope = createMockScope({
-      _authoritiesEngine: { evaluate: jest.fn() },
+      _authoritiesEngine: validEngine(),
       _authoritiesContextBuilder: { build: jest.fn() },
       scopeSkills: {
         getSkills: () => [{ name: 'internal-skill', metadata: { name: 'internal-skill', authorities: 'admin' } }],
@@ -173,6 +182,7 @@ describe('validateAuthoritiesConfig', () => {
       },
       scopeResources: {
         getResources: () => [{ name: 'res-a', metadata: { name: 'res-a', authorities: 'admin' } }],
+        getResourceTemplates: () => [],
       },
     });
 
@@ -236,6 +246,7 @@ describe('validateAuthoritiesConfig', () => {
       },
       scopeResources: {
         getResources: () => [{ name: 'open-resource', metadata: { name: 'open-resource' } }],
+        getResourceTemplates: () => [],
       },
       scopePrompts: {
         getPrompts: () => [{ name: 'open-prompt', metadata: { name: 'open-prompt' } }],
@@ -265,5 +276,56 @@ describe('validateAuthoritiesConfig', () => {
     });
 
     expect(() => validateAuthoritiesConfig.call(scope)).toThrow(/or remove 'authorities' from entry metadata/);
+  });
+
+  it('should throw when a resource template has authorities but no engine is configured', () => {
+    const scope = createMockScope({
+      scopeResources: {
+        getResources: () => [],
+        getResourceTemplates: () => [{ name: 'ticket', metadata: { name: 'ticket', authorities: 'admin' } }],
+      },
+    });
+
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(/Resource template "ticket"/);
+  });
+
+  it('should include hidden resources, prompts and agents in the check', () => {
+    const getResources = jest.fn().mockReturnValue([]);
+    const getPrompts = jest.fn().mockReturnValue([]);
+    const getAgents = jest.fn().mockReturnValue([]);
+    const scope = createMockScope({
+      scopeResources: { getResources, getResourceTemplates: () => [] },
+      scopePrompts: { getPrompts },
+      scopeAgents: { getAgents },
+    });
+
+    validateAuthoritiesConfig.call(scope);
+
+    expect([getResources.mock.calls, getPrompts.mock.calls, getAgents.mock.calls]).toEqual([
+      [[true]],
+      [[true]],
+      [[true]],
+    ]);
+  });
+
+  it('should throw when an engine is configured but a rule checks nothing', () => {
+    const scope = createMockScope({
+      _authoritiesEngine: {
+        ...validEngine(),
+        findProfileProblems: () => ['profile "open": checks nothing'],
+        findRuleProblems: (authorities: unknown) => (authorities === 'admin' ? [] : ['checks nothing']),
+      },
+      _authoritiesContextBuilder: { build: jest.fn() },
+      scopeTools: {
+        getTools: () => [
+          { name: 'admin-tool', metadata: { name: 'admin-tool', authorities: 'admin' } },
+          { name: 'open-tool', metadata: { name: 'open-tool', authorities: {} } },
+        ],
+      },
+    });
+
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
+      'Invalid authorities rule: profile "open": checks nothing; Tool "open-tool": authorities checks nothing',
+    );
   });
 });

@@ -235,8 +235,19 @@ export {
   hasSkillAuditFactory,
   // Runs skills through the hookable `skills:filter` flow before a surface serves them
   filterServableSkills,
+  // Skills HTTP endpoint auth
+  authorizeSkillHttpRequest,
+  createSkillHttpAuthValidator,
+  SkillHttpAuthValidator,
 } from './skill';
-export type { SkillAuditFactory, AuditModuleShape } from './skill';
+export type {
+  SkillAuditFactory,
+  AuditModuleShape,
+  SkillHttpAccess,
+  SkillHttpAuthContext,
+  SkillHttpAuthResult,
+  SkillHttpAuthValidatorOptions,
+} from './skill';
 export type {
   SkillRegistryInterface,
   IndexedSkill,

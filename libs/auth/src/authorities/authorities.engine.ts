@@ -14,6 +14,7 @@ import type {
   AuthoritiesResult,
   AuthorityGuardFn,
 } from './authorities.types';
+import { findAuthoritiesProfileProblems, findAuthoritiesRuleProblems } from './authorities.validation';
 
 /**
  * Merges two AuthoritiesResult arrays, combining evaluatedPolicies.
@@ -27,10 +28,15 @@ function mergeResult(base: AuthoritiesResult, ...others: AuthoritiesResult[]): A
 }
 
 /**
- * A granted result with the given policies.
+ * A denial for a rule that is malformed or checks nothing. Such a rule must never grant,
+ * and it is refused before evaluation so a `not` around it cannot turn it into a grant.
  */
-function granted(policies: string[]): AuthoritiesResult {
-  return { granted: true, evaluatedPolicies: policies };
+function invalidRule(problems: string[], policies: string[] = []): AuthoritiesResult {
+  return {
+    granted: false,
+    deniedBy: `invalid authorities rule: ${problems.join('; ')}`,
+    evaluatedPolicies: policies,
+  };
 }
 
 /**
@@ -44,15 +50,41 @@ function granted(policies: string[]): AuthoritiesResult {
  * ```
  */
 export class AuthoritiesEngine {
+  /** Problems found per rule object, so a rule is validated once however often it is evaluated. */
+  private readonly ruleProblems = new WeakMap<object, string[]>();
+
   constructor(
     private readonly profiles: AuthoritiesProfileRegistry,
     private readonly evaluators: AuthoritiesEvaluatorRegistry,
   ) {}
 
   /**
+   * Problems with an `authorities` value declared on an entry (see {@link findAuthoritiesRuleProblems}).
+   * The server reports them when it starts; {@link evaluate} denies such a value.
+   */
+  findRuleProblems(authorities: unknown): string[] {
+    return findAuthoritiesRuleProblems(authorities);
+  }
+
+  /**
+   * Problems with every registered profile's rule (see {@link findAuthoritiesRuleProblems}).
+   * The server reports them when it starts.
+   */
+  findProfileProblems(): string[] {
+    return Object.entries(this.profiles.getAll()).flatMap(([name, policy]) =>
+      findAuthoritiesProfileProblems(name, policy),
+    );
+  }
+
+  /**
    * Evaluate an AuthoritiesMetadata value (string, string[], or policy object).
+   *
+   * A value that is malformed or checks nothing (see {@link findAuthoritiesRuleProblems}) is denied.
    */
   async evaluate(authorities: AuthoritiesMetadata, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
+    const problems = this.problemsOf(authorities, findAuthoritiesRuleProblems);
+    if (problems.length > 0) return invalidRule(problems);
+
     // String → single profile lookup
     if (typeof authorities === 'string') {
       return this.evaluateProfile(authorities, ctx);
@@ -80,6 +112,9 @@ export class AuthoritiesEngine {
       };
     }
 
+    const problems = this.problemsOf(policy, (rule) => findAuthoritiesProfileProblems(name, rule));
+    if (problems.length > 0) return invalidRule(problems, [`profile:${name}`]);
+
     const result = await this.evaluatePolicy(policy, ctx);
     if (!result.granted) {
       return {
@@ -90,6 +125,17 @@ export class AuthoritiesEngine {
     }
 
     return mergeResult(result, { granted: true, evaluatedPolicies: [`profile:${name}`] });
+  }
+
+  /** Validate a rule, reusing the result for a rule object seen before. */
+  private problemsOf(rule: unknown, find: (rule: unknown) => string[]): string[] {
+    if (typeof rule !== 'object' || rule === null) return find(rule);
+    let problems = this.ruleProblems.get(rule);
+    if (!problems) {
+      problems = find(rule);
+      this.ruleProblems.set(rule, problems);
+    }
+    return problems;
   }
 
   /**
@@ -150,9 +196,9 @@ export class AuthoritiesEngine {
       results.push(await this.evaluateNot(policy.not, ctx));
     }
 
-    // No fields specified → grant (empty policy = no restrictions)
+    // A rule that checks nothing never grants (evaluate() refuses it before it gets here).
     if (results.length === 0) {
-      return granted([]);
+      return invalidRule(['checks nothing']);
     }
 
     // Combine with operator
@@ -220,7 +266,8 @@ export class AuthoritiesEngine {
 
   /**
    * Evaluate async guard functions in sequence.
-   * Each guard returns true (granted) or a string (denial message).
+   * Only `true` grants. A string is the denial message; anything else (`false`, but also
+   * `undefined` from a guard that forgot to return, `null`, `0` or an object) denies.
    */
   private async evaluateGuards(
     guards: AuthorityGuardFn[],
@@ -228,9 +275,14 @@ export class AuthoritiesEngine {
   ): Promise<AuthoritiesResult> {
     for (let i = 0; i < guards.length; i++) {
       const guard = guards[i];
-      const result = await guard(ctx);
-      if (result === false || typeof result === 'string') {
-        const denialMessage = typeof result === 'string' ? result : `guard[${i}] denied`;
+      const result: unknown = await guard(ctx);
+      if (result !== true) {
+        const denialMessage =
+          typeof result === 'string'
+            ? result
+            : result === false
+              ? `guard[${i}] denied`
+              : `guard[${i}] did not return true (returned ${result === null ? 'null' : typeof result})`;
         return {
           granted: false,
           deniedBy: `guards[${i}]: ${denialMessage}`,

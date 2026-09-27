@@ -37,7 +37,7 @@ export class DbProvider {
 ### Scopes
 
 - **GLOBAL** (default): one instance per process/worker. Ideal for clients, pools, caches.
-- **CONTEXT**: one instance per request. Use for per-request state, tracing, or user-specific data.
+- **CONTEXT**: one instance per request. Use for per-request state, tracing, or user-specific data. A client that opens a session (MCP before 2026-07-28) keeps one instance for the session the server verified; any other caller, such as one with a token under 2026-07-28, gets new instances on every request, never another caller's.
 
 <Info>
   Legacy scopes `SESSION` and `REQUEST` are deprecated and automatically normalized to `CONTEXT`.
