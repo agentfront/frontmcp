@@ -39,6 +39,7 @@ const adapter = new OpenapiAdapter({
 
 ```typescript
 import { OpenapiAdapter } from '@frontmcp/adapters';
+
 import spec from './openapi.json';
 
 const adapter = new OpenapiAdapter({
@@ -138,10 +139,12 @@ const adapter = new OpenapiAdapter({
 
 ## Authentication
 
-### Automatic Bearer Token
+### Forwarding the Caller's Token (opt-in)
 
-If your OpenAPI spec uses Bearer authentication, the adapter automatically uses the JWT token from FrontMCP's auth
-context:
+By default the adapter never sends the MCP client's own token to the API: it was issued for your MCP server, and
+forwarding it is token passthrough, which the MCP specification forbids. Without a credential source
+(`authProviderMapper`, `securityResolver`, `staticAuth`), operations that require authentication fail. If the API is
+meant to accept the same token (same issuer and audience), opt in with `passthroughCallerToken: true`:
 
 ```typescript
 // OpenAPI spec with Bearer auth
@@ -157,16 +160,17 @@ context:
   "security": [{ "BearerAuth": [] }]
 }
 
-// Adapter (no config needed - uses ctx.authInfo.token automatically!)
+// Adapter: forwards ctx.authInfo.token only because passthroughCallerToken is set
 const adapter = new OpenapiAdapter({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
+  passthroughCallerToken: true,
 });
 ```
 
-**Works with ANY security scheme name** - Whether it's called "BearerAuth", "JWT", "Authorization", or anything else,
-the adapter automatically detects Bearer tokens and uses `ctx.authInfo.token`!
+The same option makes the caller's token the fallback when every `authProviderMapper` function returns `undefined`;
+without it, nothing is sent for those schemes.
 
 ### Custom Headers (API Keys)
 
@@ -394,7 +398,7 @@ The adapter resolves authentication in this order:
 2. **`authProviderMapper`** with `securitySchemesInInput` - Hybrid: some from input, some from context
 3. **`authProviderMapper`** - Map security schemes to auth providers
 4. **`staticAuth`** - Static credentials
-5. **Default** - Uses `ctx.authInfo.token` (lowest priority)
+5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent)
 
 **Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
 
@@ -1110,8 +1114,8 @@ The adapter uses logging for diagnostics and security analysis. The logger is ha
 When using the adapter within a FrontMCP app, the SDK automatically injects the logger before `fetch()` is called:
 
 ```typescript
-import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App } from '@frontmcp/sdk';
 
 @App({
   id: 'my-api',
@@ -1308,6 +1312,9 @@ When the adapter loads, it:
 | **MEDIUM** ⚠️ | `securitySchemesInInput` with `authProviderMapper` | Hybrid: some user-provided, some from context |
 | **MEDIUM** ⚠️ | `staticAuth` or default                            | Static credentials - Secure but less flexible |
 | **HIGH** ❌   | `includeSecurityInInput: true`                     | User provides auth - High security risk       |
+| **HIGH** ❌   | `passthroughCallerToken: true`                     | The MCP client's own token is sent to the API |
+
+`passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ### Example: Missing Auth Configuration
 

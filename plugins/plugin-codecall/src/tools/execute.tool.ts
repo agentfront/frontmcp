@@ -23,6 +23,7 @@ import {
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
 import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
+import { toClientErrorMessage } from '../utils/client-error-message';
 import {
   executeToolDescription,
   executeToolInputSchema,
@@ -275,10 +276,11 @@ export default class ExecuteTool extends ToolContext {
 
     // Build namespaced bindings for AgentScript ergonomics. Tools named
     // `${ns}.${method}` become `await ns.method(args)` instead of
-    // `await callTool('ns.method', args)`. Each binding delegates to the
-    // same `callTool` closure above so all security checks (self-reference,
-    // whitelist, sanitization, flow execution) apply uniformly. Only tools the policy
-    // allows get a binding, so the globals do not enumerate withheld tool names.
+    // `await callTool('ns.method', args)`. The bindings are AgentScript that calls
+    // `callTool()` inside the sandbox (see `wrapScriptWithToolNamespaces`), so they pass the
+    // enclave's call cap, rate limit and sequence checks, then this same `callTool` closure
+    // above, like any direct call. Only tools the policy allows get a binding, so the
+    // bindings do not enumerate withheld tool names.
     try {
       const policyConfig = readCodeCallPolicyConfig(this.get(CodeCallConfig));
       const callableTools = this.scope.tools
@@ -286,8 +288,8 @@ export default class ExecuteTool extends ToolContext {
         .filter(
           (tool) => checkCodeCallToolPolicy(toCodeCallPolicyTool(tool, undefined, this.scope), policyConfig).allowed,
         );
-      const { namespaces, skipped } = buildToolNamespaces(callableTools, environment.callTool);
-      environment.namespaces = namespaces;
+      const { namespaces, skipped } = buildToolNamespaces(callableTools);
+      environment.toolNamespaces = namespaces;
       if (skipped.length > 0) {
         this.logger?.debug?.('codecall: tools skipped during namespace generation', {
           count: skipped.length,
@@ -355,22 +357,22 @@ export default class ExecuteTool extends ToolContext {
               source: 'tool',
               toolName: error.toolName,
               toolInput: error.toolInput,
-              message: error.message,
+              message: toClientErrorMessage(error.message),
               code: error.code,
               details: error.details,
             },
           };
         }
 
-        // Otherwise it's a runtime error
+        // Otherwise it's a runtime error. No stack trace: it names server files and
+        // dependencies, in every environment.
         audit?.logExecutionFailure(executionId, script, durationMs, error.message);
         return {
           status: 'runtime_error',
           error: {
             source: 'script',
-            message: error.message,
+            message: toClientErrorMessage(error.message),
             name: error.name,
-            stack: error.stack,
           },
         };
       }
@@ -389,7 +391,6 @@ export default class ExecuteTool extends ToolContext {
 
       // The enclave threw rather than returning a result, so there is no `stats` to prefer.
       audit?.logExecutionFailure(executionId, script, elapsed(), errorMessage);
-      const errorStack = error instanceof Error ? error.stack : undefined;
       const errorLoc = (error as { loc?: { line: number; column: number } }).loc;
 
       // Check for syntax errors
@@ -397,20 +398,19 @@ export default class ExecuteTool extends ToolContext {
         return {
           status: 'syntax_error',
           error: {
-            message: errorMessage || 'Syntax error in script',
+            message: toClientErrorMessage(errorMessage) || 'Syntax error in script',
             location: errorLoc ? { line: errorLoc.line, column: errorLoc.column } : undefined,
           },
         };
       }
 
-      // Unexpected error during execution
+      // Unexpected error during execution. No stack trace, as above.
       return {
         status: 'runtime_error',
         error: {
           source: 'script',
-          message: errorMessage || 'An unexpected error occurred during script execution',
+          message: toClientErrorMessage(errorMessage) || 'An unexpected error occurred during script execution',
           name: errorName,
-          stack: errorStack,
         },
       };
     }

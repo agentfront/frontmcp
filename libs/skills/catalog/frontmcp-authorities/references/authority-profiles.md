@@ -265,11 +265,17 @@ time, where input is available). For entries (especially **skills**) that must r
 discoverable, gate them with role/permission/claims-based authorities such as
 `authorities: 'admin'` or `{ roles: { any: ['admin'] } }`.
 
-**HTTP skills discovery is fail-closed.** The Skills HTTP API authenticates with a
-binary api-key/bearer gate that surfaces no JWT claims, so authority-gated skills are
-hidden from `GET /skills` and denied on `GET /skills/{id}` regardless of the bearer.
-Serve gated skills over an MCP transport (full claims context) for claims-based access;
-skills without `authorities` are served over HTTP unchanged.
+**HTTP skills discovery follows `skillsConfig.auth`.** With `'inherit'` (the default),
+`GET /skills`, `/llm.txt` and `/llm_full.txt` run the server's own auth, and gated skills
+are evaluated against the caller it verified. `'api-key'`, `'bearer'` and `'public'`
+surface no claims, so there authority-gated skills are left out of every listing and
+`GET /skills/{id}` answers 404 for them; skills without `authorities` are served over
+HTTP unchanged.
+
+**A profile must check something.** A profile whose rule checks nothing (`{}`,
+`{ roles: { all: [] } }`, a misspelled field, a profile name inside `anyOf`, an ABAC
+condition without a usable `value`) fails startup with `Invalid authorities rule: profile
+"<name>": …`, and the engine denies it.
 
 ## Profile Design Guidelines
 

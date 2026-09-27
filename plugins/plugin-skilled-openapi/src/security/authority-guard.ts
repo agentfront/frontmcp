@@ -2,8 +2,12 @@
 //
 // Adapter from the bundle's `requiredAuthorities` policy (a free-form
 // Record<string, unknown> at the SDK boundary) into libs/auth's
-// AuthoritiesEngine. The plugin owns the engine instance because it has its
-// own profile registry (none, in v1.2 — bundles ship inline policies).
+// AuthoritiesEngine. When the server configures authorities (`@FrontMcp({
+// authorities })` or AuthoritiesPlugin), the server's engine and context
+// builder are used, so bundle rules read roles/permissions through the same
+// `claimsMapping` / `claimsResolver`, and use the same custom evaluators, as
+// `@Tool({ authorities })`. Without server authorities, the plugin's own default engine
+// applies (roles from the `roles` claim, permissions from `permissions`).
 
 import type { AuthoritiesPolicy } from '@frontmcp/adapters/skills';
 import {
@@ -19,6 +23,34 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 /** How an op with NO authorities policy at all is treated by {@link AuthorityGuard}. */
 export type UnprotectedOpsPolicy = 'allow' | 'deny';
+
+/** The server's authorities engine and context builder, when the server configures authorities. */
+export interface ServerAuthorities {
+  engine: AuthoritiesEngine;
+  contextBuilder: AuthoritiesContextBuilder;
+}
+
+/** What {@link AuthorityGuard.canDiscover} needs: the rules of an action, without its input. */
+export type DiscoveryCheckArgs = Omit<AuthorityCheckArgs, 'input' | 'env' | 'policy'> & {
+  policy?: AuthoritiesPolicy;
+};
+
+/**
+ * Whether a policy reads the action's input (or runs code the guard can't see
+ * into): `input.*` paths or keys, `fromInput` references, `custom` evaluators and
+ * `guards`. Such a policy can't be judged before the action is called.
+ */
+export function policyDependsOnInput(value: unknown): boolean {
+  if (typeof value === 'string') return value === 'input' || value.startsWith('input.');
+  if (Array.isArray(value)) return value.some(policyDependsOnInput);
+  if (value !== null && typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === 'fromInput' || key === 'custom' || key === 'guards') return true;
+      if (policyDependsOnInput(key) || policyDependsOnInput(nested)) return true;
+    }
+  }
+  return false;
+}
 
 export interface AuthorityCheckArgs {
   /** Op-level required-authorities policy from the bundle (`OperationDescriptor.requiredAuthorities`). */
@@ -69,12 +101,19 @@ export class AuthorityGuard {
   private readonly engine: AuthoritiesEngine;
   private readonly contextBuilder: AuthoritiesContextBuilder;
   private readonly logger: FrontMcpLogger | undefined;
+  private readonly serverAuthorities: (() => ServerAuthorities | undefined) | undefined;
 
   constructor(
     opts: {
       profiles?: AuthoritiesProfileRegistry;
       evaluators?: AuthoritiesEvaluatorRegistry;
       logger?: FrontMcpLogger;
+      /**
+       * The server's authorities, read on every check (the server may register
+       * them after this guard is built). When it returns an engine and context
+       * builder, they replace the guard's own defaults.
+       */
+      serverAuthorities?: () => ServerAuthorities | undefined;
     } = {},
   ) {
     const profiles = opts.profiles ?? new AuthoritiesProfileRegistry();
@@ -82,6 +121,32 @@ export class AuthorityGuard {
     this.engine = new AuthoritiesEngine(profiles, evaluators);
     this.contextBuilder = new AuthoritiesContextBuilder();
     this.logger = opts.logger;
+    this.serverAuthorities = opts.serverAuthorities;
+  }
+
+  /** The server's engine and context builder when it configures authorities, else the guard's own. */
+  private authorities(): ServerAuthorities {
+    return this.serverAuthorities?.() ?? { engine: this.engine, contextBuilder: this.contextBuilder };
+  }
+
+  /**
+   * Whether the caller may be shown a skill or action (in `search_skill`,
+   * `load_skill`, the catalog and the SDK skill surfaces), judged without the
+   * action's input. A rule that depends on the input can't be judged yet and
+   * doesn't hide anything; the call is still checked by {@link check}. Every other
+   * rule must grant, and a policy-less action under `unprotectedOps: 'deny'` must
+   * be public, exactly as at call time.
+   */
+  async canDiscover(args: DiscoveryCheckArgs): Promise<boolean> {
+    const judgeable = (p: AuthoritiesPolicy | undefined): AuthoritiesPolicy | undefined =>
+      p !== undefined && p !== null && !policyDependsOnInput(p) ? p : undefined;
+    const hasPolicy = [args.skillPolicy, args.policy].some((p) => p !== undefined && p !== null);
+    const skillPolicy = judgeable(args.skillPolicy);
+    const policy = judgeable(args.policy);
+    // Only input-dependent rules: nothing to judge before the call.
+    if (hasPolicy && skillPolicy === undefined && policy === undefined) return true;
+    const result = await this.check({ ...args, skillPolicy, policy, input: {} });
+    return result.granted;
   }
 
   async check(args: AuthorityCheckArgs): Promise<AuthoritiesResult> {
@@ -114,13 +179,14 @@ export class AuthorityGuard {
     // contextBuilder.build / engine.evaluate, so wrap both in try/catch and
     // translate to the structured envelope.
     try {
-      const ctx: AuthoritiesEvaluationContext = this.contextBuilder.build(authInfo, input, env);
+      const { engine, contextBuilder } = this.authorities();
+      const ctx: AuthoritiesEvaluationContext = contextBuilder.build(authInfo, input, env);
       // AND across the applicable policies: the FIRST denial wins; only when
       // every present policy grants do we grant. evaluatedPolicies accumulate
       // for the audit trail.
       const evaluatedPolicies: string[] = [];
       for (const p of policies) {
-        const res = await this.engine.evaluate(p as AuthoritiesMetadata, ctx);
+        const res = await engine.evaluate(p as AuthoritiesMetadata, ctx);
         evaluatedPolicies.push(...(res.evaluatedPolicies ?? []));
         if (!res.granted) {
           return { ...res, evaluatedPolicies };

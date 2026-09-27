@@ -163,6 +163,8 @@ interface AbacCondition {
 
 An anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub`, even when `claimsMapping.userId` points at another claim, and a subject that is not a string counts as anonymous too, so `{ path: 'user.sub', op: 'exists', value: true }` admits signed-in callers only. A caller whose identity carries no `sub` at all gets the string `claimsMapping.userId` resolves to as its `user.sub`, when there is one, and so passes `exists`. When `claimsMapping.userId` resolves to something other than a string, a signed-in caller keeps its own `sub`. An expected value that resolves to nothing (for example a missing `fromInput` field) never satisfies `eq` or `match`, even when the actual value is missing too. A denied `tools/call` returns an error result with `_meta.code: 'AUTHORITY_DENIED'`.
 
+Every condition needs a `value` the operator can use: `exists` takes `true` or `false`, `in`/`notIn` a non-empty list, `gt`/`gte`/`lt`/`lte` a number, and `startsWith`/`endsWith`/`matches` a string; a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`. A condition without one (for example `{ path: 'user.sub', op: 'exists' }`, which would admit every caller without a `sub`) fails startup with `Invalid authorities rule`, and the engine denies it.
+
 ### Dynamic Value References
 
 Instead of hardcoding values, reference runtime data from tool input or JWT claims.

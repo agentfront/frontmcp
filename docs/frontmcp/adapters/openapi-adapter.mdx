@@ -200,6 +200,8 @@ OpenapiAdapter.init({
 3. Calls the corresponding extractor function to get the token from `ctx.authInfo`
 4. Applies the token to the request
 
+If an extractor returns `undefined`, nothing is sent for that scheme: the caller's own MCP token is not used in its place (unless `passthroughCallerToken: true`), and an operation that requires the scheme fails.
+
 <Check>
   **Security Risk: LOW** — Authentication is resolved from the request context, not exposed to MCP clients.
 </Check>
@@ -237,8 +239,9 @@ OpenapiAdapter.init({
       return { apiKey: authInfo.user?.adminApiKey };
     }
 
-    // Default to main JWT token
-    return { jwt: authInfo.token };
+    // No credential for other tools. Don't return `authInfo.token`: it was issued for this MCP
+    // server, not for the API (see "Default Behavior" below).
+    return {};
   },
 });
 ```
@@ -275,12 +278,8 @@ OpenapiAdapter.init({
   headersMapper: (ctx, headers) => {
     const authInfo = ctx.authInfo;
 
-    // Add authorization header
-    if (authInfo.token) {
-      headers.set('authorization', `Bearer ${authInfo.token}`);
-    }
-
-    // Add tenant ID from user context
+    // Add tenant ID from user context (credentials for the API belong in
+    // authProviderMapper / securityResolver, never the caller's own authInfo.token)
     if (authInfo.user?.tenantId) {
       headers.set('x-tenant-id', authInfo.user.tenantId);
     }
@@ -305,22 +304,25 @@ OpenapiAdapter.init({
 
 <Check>**Security Risk: LOW** — User-specific data is injected server-side, hidden from MCP clients.</Check>
 
-### Default Behavior (Medium Risk)
+### Default Behavior: No Credentials
 
-If no authentication configuration is provided, the adapter uses `authInfo.token` for all Bearer auth schemes.
+If no authentication configuration is provided, the adapter sends no credentials, and operations that require authentication fail with `Authentication required for tool '...'`. The MCP client's own token (`ctx.authInfo.token`) is never forwarded implicitly: it was issued for your MCP server, and passing it on to another API is token passthrough, which the MCP specification forbids.
+
+If the API is meant to accept the same token (same issuer and audience), opt in explicitly:
 
 ```ts
 OpenapiAdapter.init({
   name: 'simple-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  // No auth config - will use authInfo.token by default
+  // Sends Authorization: Bearer <the MCP client's token> when nothing else supplied a credential
+  passthroughCallerToken: true,
 });
 ```
 
 <Warning>
-  **Security Risk: MEDIUM** — Only works for single Bearer auth. For multiple auth providers, use `authProviderMapper`
-  or `securityResolver`.
+  **Security Risk: HIGH** — The API receives the token the client presented to your MCP server. Prefer
+  `authProviderMapper`, `securityResolver` or `staticAuth` with credentials issued for the API.
 </Warning>
 
 ## Advanced Features
@@ -1194,8 +1196,11 @@ The adapter automatically validates your security configuration and assigns a ri
 | Risk Level    | Configuration                                  | Description                                             |
 | ------------- | ---------------------------------------------- | ------------------------------------------------------- |
 | **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
-| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials, or no credentials at all            |
 | **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
+| **HIGH** 🚨   | `passthroughCallerToken: true`                 | The MCP client's own token is sent to the API           |
+
+`passthroughCallerToken: true` scores HIGH whenever the caller's token can reach the API: on its own, and alongside an `authProviderMapper` (the token is sent when no mapper function returns a credential). Only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
 ## Built-in Security Protections
 
@@ -1243,6 +1248,9 @@ Beyond authentication, the adapter includes defense-in-depth protections:
     2. Add `securityResolver` (for custom logic)
     3. Add `staticAuth` (for server-to-server)
     4. Add `additionalHeaders` (for static API keys)
+    5. Set `passthroughCallerToken: true`, only if the API accepts the token clients present to your MCP server
+
+    The adapter no longer sends the caller's own token when nothing is configured, or when an `authProviderMapper` function returns `undefined`.
 
   </Accordion>
 

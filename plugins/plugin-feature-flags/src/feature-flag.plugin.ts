@@ -301,7 +301,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * Execution gate: block direct tool/call when the tool's feature flag is off.
    * This prevents bypassing the list filter via direct tool invocation.
    */
-  @ToolHook.Will('execute', { priority: 50 })
+  @ToolHook.Will('execute', { priority: 50, appliesTo: 'uncovered-apps' })
   async gateToolExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     await this.gateEntryExecution('Tool', flowCtx.state.tool);
   }
@@ -313,7 +313,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * from resources/list and still readable by URI. Hiding a capability from a listing is not
    * the same as withholding it — clients cache listings and hold URIs from earlier sessions.
    */
-  @ReadResourceHook.Will('execute', { priority: 50 })
+  @ReadResourceHook.Will('execute', { priority: 50, appliesTo: 'uncovered-apps' })
   async gateResourceRead(flowCtx: any) {
     await this.gateEntryExecution('Resource', flowCtx.state.resource);
   }
@@ -324,7 +324,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * The same gap as resources (GHSA-gf7p-j3hr-h5h4): filtering prompts/list left the prompt
    * retrievable by name.
    */
-  @GetPromptHook.Will('execute', { priority: 50 })
+  @GetPromptHook.Will('execute', { priority: 50, appliesTo: 'uncovered-apps' })
   async gatePromptGet(flowCtx: any) {
     await this.gateEntryExecution('Prompt', flowCtx.state.prompt);
   }
@@ -335,7 +335,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * GHSA-gf7p-j3hr-h5h4: completion looked the entry up and ran its argument completers without
    * a gate, so a disabled resource template still suggested its values.
    */
-  @CompleteHook.Will('complete', { priority: 50 })
+  @CompleteHook.Will('complete', { priority: 50, appliesTo: 'uncovered-apps' })
   async gateCompletion(flowCtx: any) {
     const { prompt, resource } = flowCtx.state;
     if (prompt) await this.gateEntryExecution('Prompt', prompt);

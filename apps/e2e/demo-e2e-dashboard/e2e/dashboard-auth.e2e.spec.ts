@@ -94,20 +94,29 @@ describe('Dashboard authentication (GHSA-rgxj-434m-vxh3)', () => {
     });
   });
 
-  describe('the dashboard MCP scope on a PUBLIC server', () => {
-    it('is exactly as open as the server itself — no more, no less', async () => {
-      // The dashboard used to declare `auth: { mode: 'public' }` regardless of
-      // the server's policy. It now inherits, so on a public server the
-      // dashboard's introspection is public too — the same exposure as the
-      // server's own `tools/list`, not an extra one. The authenticated case
-      // below is where the fix bites.
+  describe('the dashboard MCP endpoint on a PUBLIC server', () => {
+    it('refuses a caller without the dashboard token', async () => {
+      // The page holds no data: the inventory comes from this endpoint, so the token
+      // the operator configured must guard it too, not only the page.
       const res = await fetch(`${baseUrl}/dashboard`, {
         method: 'POST',
         headers: MCP_HEADERS,
         body: initializeBody(),
       });
 
+      expect(res.status).toBe(401);
+      expect(res.headers.get('mcp-session-id')).toBeNull();
+    });
+
+    it('serves a caller with the dashboard token', async () => {
+      const res = await fetch(`${baseUrl}/dashboard`, {
+        method: 'POST',
+        headers: { ...MCP_HEADERS, 'x-frontmcp-dashboard-token': TOKEN },
+        body: initializeBody(),
+      });
+
       expect(res.status).toBe(200);
+      expect(res.headers.get('mcp-session-id')).toBeTruthy();
     });
   });
 
@@ -184,11 +193,23 @@ describe('Dashboard MCP scope inherits server auth (GHSA-rgxj-434m-vxh3)', () =>
     expect(JSON.stringify(body)).not.toContain('read-secret');
   });
 
-  it('serves the dashboard scope to an authenticated caller', async () => {
+  it('refuses a server-authenticated caller without the dashboard token', async () => {
     const token = await tokenFactory.createTestToken({ sub: 'operator', claims: {} });
     const res = await fetch(`${authServer.info.baseUrl}/dashboard`, {
       method: 'POST',
       headers: { ...MCP_HEADERS, Authorization: `Bearer ${token}` },
+      body: initializeBody(),
+    });
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get('mcp-session-id')).toBeNull();
+  });
+
+  it('serves the dashboard scope to an authenticated caller with the dashboard token', async () => {
+    const token = await tokenFactory.createTestToken({ sub: 'operator', claims: {} });
+    const res = await fetch(`${authServer.info.baseUrl}/dashboard`, {
+      method: 'POST',
+      headers: { ...MCP_HEADERS, Authorization: `Bearer ${token}`, 'x-frontmcp-dashboard-token': TOKEN },
       body: initializeBody(),
     });
 

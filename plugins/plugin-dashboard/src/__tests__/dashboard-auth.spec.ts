@@ -5,7 +5,12 @@
  * contract it should always have had: fail closed when enabled, accept the token
  * from either the header or the query, and compare it in constant time.
  */
-import { createDashboardAuthValidator } from '../auth/dashboard-auth';
+import {
+  createDashboardAuthValidator,
+  DASHBOARD_SESSION_COOKIE,
+  DASHBOARD_TOKEN_HEADER,
+  deriveDashboardCookieValue,
+} from '../auth/dashboard-auth';
 
 const TOKEN = 'super-secret-dash-token';
 
@@ -79,5 +84,59 @@ describe('createDashboardAuthValidator', () => {
     const authorize = createDashboardAuthValidator({ enabled: true } as never)!;
     expect(authorize({ query: { token: 'anything' } }).authorized).toBe(false);
     expect(authorize({}).authorized).toBe(false);
+  });
+});
+
+describe('createDashboardAuthValidator for the MCP endpoint', () => {
+  const authorize = createDashboardAuthValidator({ enabled: true, token: TOKEN }, 'mcp')!;
+  const cookie = `${DASHBOARD_SESSION_COOKIE}=${deriveDashboardCookieValue(TOKEN)}`;
+
+  it('accepts the token in the x-frontmcp-dashboard-token header', () => {
+    expect(authorize({ headers: { [DASHBOARD_TOKEN_HEADER]: TOKEN } }).authorized).toBe(true);
+  });
+
+  it('accepts a bearer header', () => {
+    expect(authorize({ headers: { authorization: `Bearer ${TOKEN}` } }).authorized).toBe(true);
+  });
+
+  it('accepts the session cookie the page sets, among other cookies', () => {
+    expect(authorize({ headers: { cookie: `theme=dark; ${cookie}; other=1` } }).authorized).toBe(true);
+  });
+
+  it('does not accept ?token= (a URL token lands in logs and Referer headers)', () => {
+    expect(authorize({ query: { token: TOKEN } }).authorized).toBe(false);
+  });
+
+  it('does not accept the raw token as the cookie', () => {
+    expect(authorize({ headers: { cookie: `${DASHBOARD_SESSION_COOKIE}=${TOKEN}` } }).authorized).toBe(false);
+  });
+
+  it('ignores malformed cookie pairs and other cookie names', () => {
+    expect(authorize({ headers: { cookie: `broken; x=${deriveDashboardCookieValue(TOKEN)}` } }).authorized).toBe(false);
+  });
+
+  it('refuses a wrong header token', () => {
+    expect(authorize({ headers: { [DASHBOARD_TOKEN_HEADER]: 'wrong' } }).authorized).toBe(false);
+  });
+});
+
+describe('the page surface', () => {
+  const authorize = createDashboardAuthValidator({ enabled: true, token: TOKEN })!;
+
+  it('accepts the session cookie, so a reload needs no token in the URL', () => {
+    const cookie = `${DASHBOARD_SESSION_COOKIE}=${deriveDashboardCookieValue(TOKEN)}`;
+    expect(authorize({ headers: { cookie } }).authorized).toBe(true);
+  });
+
+  it('does not take the MCP header (the page link uses ?token= or a bearer)', () => {
+    expect(authorize({ headers: { [DASHBOARD_TOKEN_HEADER]: TOKEN } }).authorized).toBe(false);
+  });
+});
+
+describe('deriveDashboardCookieValue', () => {
+  it('is stable for a token and never contains it', () => {
+    expect(deriveDashboardCookieValue(TOKEN)).toBe(deriveDashboardCookieValue(TOKEN));
+    expect(deriveDashboardCookieValue(TOKEN)).not.toContain(TOKEN);
+    expect(deriveDashboardCookieValue(TOKEN)).not.toBe(deriveDashboardCookieValue(`${TOKEN}x`));
   });
 });

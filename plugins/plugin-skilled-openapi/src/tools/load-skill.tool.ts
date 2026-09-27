@@ -1,7 +1,12 @@
 // file: plugins/plugin-skilled-openapi/src/tools/load-skill.tool.ts
 
+import { BundleStore } from '@frontmcp/adapters/skills';
 import { InternalMcpError, PublicMcpError, ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
 
+import { HiddenOpRegistry } from '../registry/hidden-op.registry';
+import { AuthorityGuard } from '../security/authority-guard';
+import { SkillVisibility } from '../security/skill-visibility';
+import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
   loadSkillDescription,
@@ -34,13 +39,31 @@ export default class LoadSkillTool extends ToolContext {
       // message instead of leaking implementation details.
       throw new InternalMcpError('SkillRegistry is not available on the active scope', 'SKILL_REGISTRY_UNAVAILABLE');
     }
+    const notFound = () =>
+      // Caller-visible: skill id was not registered, or the caller may not see it
+      // (the same answer, so a refused skill's existence isn't revealed). Map to a
+      // 404 with a stable code so MCP clients can branch on it.
+      new PublicMcpError(`Skill "${input.skillId}" not found`, 'SKILL_NOT_FOUND', 404);
     const result = await skillRegistry.loadSkill(input.skillId);
-    if (!result) {
-      // Caller-visible: skill id was not registered. Map to a 404 with a
-      // stable code so MCP clients can branch on it.
-      throw new PublicMcpError(`Skill "${input.skillId}" not found`, 'SKILL_NOT_FOUND', 404);
-    }
+    if (!result) throw notFound();
+
+    // The skill's own rules (bundle `requiredAuthorities`, `@Skill` authorities, the
+    // `skills:filter` flow) decide whether the caller may read it at all, and each
+    // action's rules whether it is listed.
+    const config = this.get(SkilledOpenApiConfig);
+    const visibility = new SkillVisibility({
+      scope,
+      guard: this.get(AuthorityGuard),
+      bundle: this.get(BundleStore).current(),
+      unprotectedOps: config.unprotectedOps,
+      authInfo: this.authInfo,
+    });
     const skill = result.skill;
+    if (!(await visibility.isVisible(input.skillId)) || !(await visibility.isVisible(skill.id))) throw notFound();
+    const actions = skill.actions
+      ? await visibility.visibleActions(skill.id, skill.actions, this.get(HiddenOpRegistry))
+      : undefined;
+
     return {
       skill: {
         id: skill.id,
@@ -48,7 +71,7 @@ export default class LoadSkillTool extends ToolContext {
         description: skill.description,
         instructions: skill.instructions,
         ...(skill.bundleVersion !== undefined && { bundleVersion: skill.bundleVersion }),
-        ...(skill.actions ? { actions: skill.actions } : {}),
+        ...(actions ? { actions } : {}),
       },
       isComplete: result.isComplete,
       ...(result.warning !== undefined && { warning: result.warning }),

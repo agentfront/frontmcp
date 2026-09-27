@@ -158,7 +158,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       expect(result.jwt).toBe('valid-token-string');
     });
 
-    it('should accept undefined return from authProviderMapper and fall back to authInfo.token', async () => {
+    it('should accept undefined return from authProviderMapper without forwarding authInfo.token', async () => {
       const tool = createMockTool('BearerAuth');
 
       // Should not throw - undefined is allowed
@@ -168,11 +168,11 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       });
 
-      // Falls back to authInfo.token when mapper returns undefined
-      expect(result.jwt).toBe('test-token');
+      // The caller's own token is never used implicitly (token passthrough)
+      expect(result.jwt).toBeUndefined();
     });
 
-    it('should accept null return from authProviderMapper and fall back to authInfo.token', async () => {
+    it('should accept null return from authProviderMapper without forwarding authInfo.token', async () => {
       const tool = createMockTool('BearerAuth');
 
       // Should not throw - null is allowed
@@ -182,11 +182,10 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       });
 
-      // Falls back to authInfo.token when mapper returns null
-      expect(result.jwt).toBe('test-token');
+      expect(result.jwt).toBeUndefined();
     });
 
-    it('should fall back to authInfo.token when mapper returns undefined', async () => {
+    it('should fall back to authInfo.token when mapper returns undefined only with passthroughCallerToken', async () => {
       const tool = createMockTool('BearerAuth');
 
       const result = await createSecurityContextFromAuth(
@@ -196,6 +195,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
           authProviderMapper: {
             BearerAuth: () => undefined,
           },
+          passthroughCallerToken: true,
         },
       );
 
@@ -269,11 +269,22 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       expect(createSecurityContext).toHaveBeenCalledWith({ jwt: 'static-token' });
     });
 
-    it('should use default authInfo.token when no configuration provided', async () => {
+    it('should not use authInfo.token when no configuration provided', async () => {
       const { createSecurityContext } = require('mcp-from-openapi');
       const tool = createMockTool('BearerAuth');
 
       await createSecurityContextFromAuth(tool, createMockContext({ ...mockAuthInfo, token: 'default-token' }), {});
+
+      expect(createSecurityContext).toHaveBeenCalledWith({});
+    });
+
+    it('should use authInfo.token when no configuration provided and passthroughCallerToken is true', async () => {
+      const { createSecurityContext } = require('mcp-from-openapi');
+      const tool = createMockTool('BearerAuth');
+
+      await createSecurityContextFromAuth(tool, createMockContext({ ...mockAuthInfo, token: 'default-token' }), {
+        passthroughCallerToken: true,
+      });
 
       expect(createSecurityContext).toHaveBeenCalledWith({ jwt: 'default-token' });
     });
@@ -464,6 +475,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
           authProviderMapper: {
             BearerAuth: () => undefined, // Returns undefined to trigger fallback
           },
+          passthroughCallerToken: true,
         }),
       ).rejects.toThrow(/authInfo\.token must be a string.*got: object/);
     });
@@ -480,6 +492,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
           authProviderMapper: {
             BearerAuth: () => undefined,
           },
+          passthroughCallerToken: true,
         }),
       ).rejects.toThrow(/authInfo\.token must be a string.*got: number/);
     });
@@ -494,6 +507,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
           authProviderMapper: {
             BearerAuth: () => undefined, // Returns undefined to trigger fallback
           },
+          passthroughCallerToken: true,
         },
       );
 

@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { SaasSourceOptions } from '../source-options';
 import { SaasPullSource } from '../sources/saas-pull.source';
+import { createSaasTokenIssuer, withSaasJwks, type SaasTokenIssuer } from './saas-token.fixture';
 
 const baseBundle = {
   schemaVersion: 1,
@@ -27,23 +28,34 @@ const fakeLogger = {
   child: jest.fn().mockReturnThis(),
 } as unknown as never;
 
+// The pull token is verified against the SaaS's JWKS before every pull, so these
+// sources serve the issuer's JWKS and pull with a token it signed.
+let issuer: SaasTokenIssuer;
+let pullToken: string;
+beforeAll(async () => {
+  issuer = await createSaasTokenIssuer();
+  pullToken = await issuer.token();
+});
+
+type Stub = (url: string, headers: Record<string, string>) => Promise<{ status: number; body: string }>;
+
 class FakeSaasSource extends SaasPullSource {
   constructor(
     options: SaasSourceOptions,
     cacheDir: string,
-    public stub: (url: string, headers: Record<string, string>) => Promise<{ status: number; body: string }>,
+    public stub: Stub,
   ) {
     super(options, cacheDir, fakeLogger);
   }
   protected override async httpGet(url: string, headers: Record<string, string>) {
-    return this.stub(url, headers);
+    return withSaasJwks(issuer, this.stub)(url, headers);
   }
 }
 
 const baseOptions = (overrides: Partial<SaasSourceOptions> = {}): SaasSourceOptions => ({
   type: 'saas',
   endpoint: 'https://cloud.example.dev/v1/bundles/acme',
-  authToken: 'tok',
+  authToken: pullToken,
   expectedAudience: 'acme:prod',
   pollIntervalMs: 60_000,
   enableWebhook: false,
@@ -87,7 +99,7 @@ describe('SaasPullSource', () => {
     source.onChange(() => {});
     await source.start();
     await source.stop();
-    expect(seenHeaders['Authorization']).toBe('Bearer tok');
+    expect(seenHeaders['Authorization']).toBe(`Bearer ${pullToken}`);
   });
 
   it('persists pulled bundle to cacheDir', async () => {
@@ -154,12 +166,14 @@ describe('SaasPullSource', () => {
       constructor() {
         super(baseOptions({ pollIntervalMs: 50 }), tmpDir, logger);
       }
-      protected override async httpGet() {
-        calls++;
-        if (calls === 1) {
-          return { status: 200, body: JSON.stringify(baseBundle) };
-        }
-        return { status: 502, body: '' };
+      protected override async httpGet(url: string, headers: Record<string, string>) {
+        return withSaasJwks(issuer, async () => {
+          calls++;
+          if (calls === 1) {
+            return { status: 200, body: JSON.stringify(baseBundle) };
+          }
+          return { status: 502, body: '' };
+        })(url, headers);
       }
     })();
     sourceLoggerInjected.onChange(() => {});
@@ -200,8 +214,8 @@ describe('SaasPullSource', () => {
       constructor() {
         super(baseOptions(), '/dev/null/badpath', logger);
       }
-      protected override async httpGet() {
-        return { status: 200, body: JSON.stringify(baseBundle) };
+      protected override async httpGet(url: string, headers: Record<string, string>) {
+        return withSaasJwks(issuer, async () => ({ status: 200, body: JSON.stringify(baseBundle) }))(url, headers);
       }
     })();
     sourceCustom.onChange(() => {});
