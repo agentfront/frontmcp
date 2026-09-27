@@ -43,6 +43,16 @@ export type {
 export { sealPendingLogin, openPendingLogin } from './pending-login';
 export type { PendingLoginState } from './pending-login';
 
+// Sign-in bound to the browser that started it
+export {
+  SIGNIN_BINDING_COOKIE_PREFIX,
+  SIGNIN_BINDING_MAX_AGE_SECONDS,
+  createSigninBinding,
+  signinBindingCookieName,
+  signinBindingMatches,
+} from './signin-binding';
+export type { SigninBinding } from './signin-binding';
+
 // Storage-backed Authorization Store (memory / Redis / SQLite via StorageAdapter)
 export { StorageAuthorizationStore } from './storage-authorization.store';
 export type { StorageAuthorizationStoreOptions } from './storage-authorization.store';

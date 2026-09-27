@@ -10,7 +10,20 @@
  *
  * @packageDocumentation
  */
-import { AUTH_WIRE_FIELDS, type AuthFlowState, type AuthProvider, type AuthTool } from './auth-ui.contract';
+import {
+  AUTH_WIRE_FIELDS,
+  type AuthFlowState,
+  type AuthProvider,
+  type AuthSubmitMethod,
+  type AuthTool,
+} from './auth-ui.contract';
+
+/**
+ * How an interactive page submits to the callback. POST, like the built-in
+ * pages (#263): the sign-in fields (a password too) and the CSRF token stay out
+ * of URLs, logs and history. `/oauth/callback` still accepts GET.
+ */
+const SUBMIT_METHOD: AuthSubmitMethod = 'POST';
 
 /** Common server-owned fields every interactive slot needs. */
 interface SlotCommon {
@@ -39,6 +52,7 @@ export function buildLoginState(
     redirectUri: data.redirectUri,
     csrfToken: common.csrfToken,
     submitUrl: common.submitUrl,
+    submitMethod: SUBMIT_METHOD,
     extraUrl: common.extraUrl,
     addedItems: common.addedItems,
     ...(data.logoUri ? { extras: { logoUri: data.logoUri } } : {}),
@@ -59,6 +73,7 @@ export function buildConsentState(
     tools: data.tools,
     csrfToken: common.csrfToken,
     submitUrl: common.submitUrl,
+    submitMethod: SUBMIT_METHOD,
     extraUrl: common.extraUrl,
     addedItems: common.addedItems,
   };
@@ -78,6 +93,7 @@ export function buildFederatedState(
     providers: data.providers,
     csrfToken: common.csrfToken,
     submitUrl: common.submitUrl,
+    submitMethod: SUBMIT_METHOD,
     extraUrl: common.extraUrl,
     addedItems: common.addedItems,
     // The federated form marks itself with `federated=true`.
@@ -96,6 +112,7 @@ export function buildIncrementalState(
     redirectUri: data.redirectUri,
     csrfToken: common.csrfToken,
     submitUrl: common.submitUrl,
+    submitMethod: SUBMIT_METHOD,
     extraUrl: common.extraUrl,
     addedItems: common.addedItems,
     extras: {

@@ -14,6 +14,7 @@ import { generatePkceChallenge } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
+import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
 import { HttpHtmlSchema, httpInputSchema, HttpRedirectSchema, type FlowMetadata } from '../../../common';
 import OauthCallbackFlow from '../oauth.callback.flow';
 
@@ -51,7 +52,7 @@ async function seedFederatedPendingAuth(scope: any, providerIds: string[]): Prom
       skippedProviderIds: undefined,
     },
   });
-  await store.storePendingAuthorization(pending);
+  await store.storePendingAuthorization(bindSignin(pending, pending.id));
   return pending.id;
 }
 
@@ -64,7 +65,13 @@ function runCallback(scope: any, pendingAuthId: string, selected: string[] | und
   if (selected !== undefined) {
     query['providers'] = selected;
   }
-  const input = createMockHttpRequest({ method: 'GET', path: '/oauth/callback', query: query as any });
+  const input = createMockHttpRequest({
+    method: 'GET',
+    path: '/oauth/callback',
+    query: query as any,
+    // The browser that started the sign-in.
+    headers: { cookie: signinCookie(String(query['pending_auth_id'])) },
+  });
   const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
 }

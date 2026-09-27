@@ -1,21 +1,9 @@
 // write-response.ts
 import { base64Decode } from '@frontmcp/utils';
 
-import { httpOutputSchema, type HttpCookie, type ServerResponse } from '../common';
+import { httpOutputSchema, serializeHttpCookie, type HttpCookie, type ServerResponse } from '../common';
 
 /* ----------------------- helpers ----------------------- */
-
-function serializeCookie(c: HttpCookie): string {
-  const parts: string[] = [`${c.name}=${encodeURIComponent(c.value)}`];
-  if (c.path) parts.push(`Path=${c.path}`);
-  if (c.domain) parts.push(`Domain=${c.domain}`);
-  if (c.maxAge != null) parts.push(`Max-Age=${Math.max(0, Math.floor(c.maxAge))}`);
-  if (c.expires) parts.push(`Expires=${c.expires.toUTCString()}`);
-  if (c.httpOnly) parts.push('HttpOnly');
-  if (c.secure) parts.push('Secure');
-  if (c.sameSite) parts.push(`SameSite=${c.sameSite[0].toUpperCase()}${c.sameSite.slice(1)}`);
-  return parts.join('; ');
-}
 
 function applyHeaders(res: ServerResponse, headers?: Record<string, string | string[]>) {
   if (!headers) return;
@@ -28,7 +16,7 @@ function applyCookies(res: ServerResponse, cookies?: Array<HttpCookie>) {
   if (!cookies || cookies.length === 0) return;
   const existing = typeof res.getHeader === 'function' ? res.getHeader('Set-Cookie') : undefined;
   const existingArr = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
-  const cookieStrings = cookies.map(serializeCookie);
+  const cookieStrings = cookies.map(serializeHttpCookie);
   res.setHeader('Set-Cookie', [...existingArr, ...cookieStrings]);
 }
 

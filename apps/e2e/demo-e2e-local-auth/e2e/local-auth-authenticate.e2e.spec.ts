@@ -17,6 +17,8 @@
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 import { base64urlDecode, generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.authenticate.ts';
 
 const REDIRECT_URI = 'http://127.0.0.1:9876/callback';
@@ -48,7 +50,7 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string, opts?: { scope?: 
 
 /** GET /oauth/authorize and extract the pending_auth_id from the custom login page. */
 async function startAuthorization(baseUrl: string, challenge: string, opts?: { scope?: string; state?: string }) {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge, opts), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge, opts), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
@@ -62,7 +64,7 @@ async function submitLogin(baseUrl: string, pendingAuthId: string, apiKey: strin
   url.searchParams.set('pending_auth_id', pendingAuthId);
   url.searchParams.set('apiKey', apiKey);
   if (opts?.state) url.searchParams.set('state', opts.state);
-  return fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
 }
 
 /** POST /oauth/token with an authorization_code grant (urlencoded). */
@@ -74,7 +76,7 @@ async function exchangeToken(baseUrl: string, params: { code: string; verifier: 
     client_id: CLIENT_ID,
     code_verifier: params.verifier,
   });
-  return fetch(`${baseUrl}/oauth/token`, {
+  return browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),

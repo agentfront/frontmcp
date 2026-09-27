@@ -83,7 +83,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
   </Step>
 
   <Step title="Set Expected Audience">
-    Validate the audience (`aud`) claim. In **transparent** mode set `expectedAudience`. In **local** and **remote** mode the tokens FrontMCP issues always name this server's resource URL as `aud` and name this server as `iss`, and are refused anywhere else, even by a server with the same `JWT_SECRET`; pin `FRONTMCP_PUBLIC_URL` so that URL doesn't come from the `Host` header.
+    Validate the audience (`aud`) claim. In **transparent** mode set `expectedAudience`. In **local** and **remote** mode the tokens FrontMCP issues always name this server's resource URL as `aud` and name this server as `iss`, and are refused anywhere else, even by a server with the same `JWT_SECRET`; pin `FRONTMCP_PUBLIC_URL` so that URL doesn't come from the `Host` header. Setting `expectedAudience` there too makes the server accept only tokens issued for the listed resource URLs, whatever URL the request arrived at.
 
     ```typescript
     auth: {
@@ -106,7 +106,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**Stable signing keys** - Provide keys via environment or secrets manager</Check>
 <Check>**PKCE enforcement** - OAuth 2.1 requires PKCE (S256 only)</Check>
 <Check>**Refresh token rotation** - Always rotate refresh tokens on use</Check>
-<Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` in transparent mode; local and remote tokens are bound to this server's resource URL automatically</Check>
+<Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` in transparent mode; local and remote tokens are bound to this server's resource URL automatically, or to the `expectedAudience` you list</Check>
 <Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the expected audience of a token — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers.</Check>
 
 ### Recommended

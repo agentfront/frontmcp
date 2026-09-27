@@ -192,7 +192,8 @@ export class SkillHttpAuthValidator {
    * Validate Bearer token (JWT) authentication.
    *
    * Uses JWKS from the configured issuer to validate the JWT.
-   * Validates issuer and optionally audience claims.
+   * Validates issuer and optionally audience claims. `exp` is required, as for
+   * every other bearer token FrontMCP accepts: a token without it never expires.
    */
   private async validateBearer(ctx: SkillHttpAuthContext): Promise<SkillHttpAuthResult> {
     const jwtConfig = this.skillsConfig.jwt;
@@ -228,6 +229,7 @@ export class SkillHttpAuthValidator {
       const { payload } = await jwtVerify(token, JWKS, {
         issuer: jwtConfig.issuer,
         audience: jwtConfig.audience,
+        requiredClaims: ['exp'],
       });
 
       this.logger?.verbose('JWT validated successfully', { sub: payload.sub });

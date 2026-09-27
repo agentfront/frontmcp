@@ -27,6 +27,8 @@
 import { expect, TestServer } from '@frontmcp/testing';
 import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.auth-ui.ts';
 const REDIRECT_URI = 'http://127.0.0.1:9876/callback';
 const CLIENT_ID = 'auth-ui-test-client';
@@ -49,7 +51,7 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string): string {
 
 /** GET /oauth/authorize → the custom-login page HTML + the injected state. */
 async function startAuthorization(baseUrl: string, challenge: string) {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   return { res, html };
@@ -65,11 +67,11 @@ function extractInjectedState(html: string): Record<string, unknown> {
 async function getCallback(baseUrl: string, params: Record<string, string>): Promise<Response> {
   const url = new URL(`${baseUrl}/oauth/callback`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  return fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
 }
 
 async function postExtra(baseUrl: string, body: Record<string, string>): Promise<Response> {
-  return fetch(`${baseUrl}/oauth/ui/extra`, {
+  return browserFetch(`${baseUrl}/oauth/ui/extra`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body).toString(),
@@ -158,7 +160,7 @@ describe('LOCAL-mode auth E2E — custom auth.ui / auth.extras (#469)', () => {
     it('does NOT serve a separate per-slot bundle route (the module is inlined now)', async () => {
       // The old `/oauth/ui/:slot.js` IIFE route is gone — the component is
       // inlined into the authorize page, so this path is not a served asset.
-      const res = await fetch(`${baseUrl}/oauth/ui/login.js`, { method: 'GET' });
+      const res = await browserFetch(`${baseUrl}/oauth/ui/login.js`, { method: 'GET' });
       expect(res.status).toBe(404);
     });
   });

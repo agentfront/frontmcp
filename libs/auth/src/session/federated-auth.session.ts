@@ -141,6 +141,13 @@ export interface FederatedAuthSession {
    */
   consentCsrf?: string;
 
+  /**
+   * SHA-256 of the sign-in binding cookie of the browser that started the
+   * sign-in, copied from the pending authorization. The provider callback
+   * refuses a browser that doesn't carry the matching cookie.
+   */
+  signinBinding?: string;
+
   /** Session creation timestamp */
   createdAt: number;
 
@@ -175,6 +182,7 @@ export interface FederatedAuthSessionRecord {
   currentProviderPkce?: ProviderPkce;
   currentProviderState?: string;
   consentCsrf?: string;
+  signinBinding?: string;
   createdAt: number;
   expiresAt: number;
 }
@@ -229,6 +237,8 @@ export interface FederatedAuthSessionCreateParams {
   userInfo: { email?: string; name?: string; sub?: string };
   frontmcpPkce: { challenge: string; method: 'S256' };
   providerIds: string[];
+  /** SHA-256 of the sign-in binding cookie, from the pending authorization. */
+  signinBinding?: string;
 }
 
 /**
@@ -325,6 +335,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
       providerQueue: [...params.providerIds],
       completedProviders: new Map(),
       skippedProviders: [],
+      signinBinding: params.signinBinding,
       createdAt: now,
       expiresAt: now + this.sessionTtlMs,
     };
@@ -372,6 +383,7 @@ export function createFederatedAuthSession(
     providerQueue: [...params.providerIds],
     completedProviders: new Map(),
     skippedProviders: [],
+    signinBinding: params.signinBinding,
     createdAt: now,
     expiresAt: now + ttlMs,
   };
