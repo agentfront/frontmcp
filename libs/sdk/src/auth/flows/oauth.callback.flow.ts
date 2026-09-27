@@ -13,20 +13,31 @@
 
 import {
   buildToolConsentPage,
+  builtInAuthPageHeaders,
   createFederatedAuthSession,
   escapeHtml,
+  openPendingLogin,
   renderLocalLoginPage,
+  sealPendingLogin,
   startNextProvider,
   type AuthenticateContext,
   type AuthenticateResult,
   type ConsentConfig,
-  type ConsentHiddenField,
   type LoginConfig,
   type LoginRenderContext,
+  type PendingAuthorizationRecord,
+  type PendingLoginState,
   type ProviderPkce,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { generateCodeVerifier, randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
+import {
+  base64urlEncode,
+  generateCodeVerifier,
+  randomBytes,
+  randomUUID,
+  sha256Base64url,
+  sha256Hex,
+} from '@frontmcp/utils';
 
 import {
   enforceIpFilter,
@@ -44,6 +55,7 @@ import {
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { parseFormBody } from './form-body.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -137,7 +149,8 @@ const Stage = StageHookOf(name);
   outputSchema,
   access: 'public',
   middleware: {
-    method: 'GET',
+    // No `method`: the built-in sign-in and consent forms POST here (so a
+    // password never lands in a URL); GET stays accepted for custom pages.
     path: '/oauth/callback',
   },
 })
@@ -165,10 +178,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
 
-    // Extract login form data from query params
-    const pendingAuthId = request.query['pending_auth_id'] as string | undefined;
-    const email = request.query['email'] as string | undefined;
-    const name = request.query['name'] as string | undefined;
+    // Extract login form data from the query (GET) or the form body (POST).
+    const pendingAuthId = this.readParam(request, 'pending_auth_id');
+    const email = this.readParam(request, 'email');
+    const name = this.readParam(request, 'name');
 
     // Checkpoint 3a — gather all submitted login fields (email/name + any custom
     // `login.fields`) for a configured authenticate() verifier. Values come from
@@ -186,9 +199,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // straight past `authenticate()`.
 
     // Federated Login Parameters
-    const isFederated = request.query['federated'] === 'true';
+    const isFederated = this.readParam(request, 'federated') === 'true';
     // providers can be array (multiple checkboxes) or string (single)
-    const providersParam = request.query['providers'];
+    const providersParam = request.query['providers'] ?? this.readBodyParam(request, 'providers');
     let selectedProviders: string[] | undefined;
     if (providersParam) {
       selectedProviders = Array.isArray(providersParam) ? providersParam : [providersParam];
@@ -239,12 +252,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, email, name, isFederated, selectedProviders, selectedTools, consentSubmitted, loginFields } =
-      this.state;
+    const { pendingAuthId, isFederated, selectedProviders, selectedTools, consentSubmitted, loginFields } = this.state;
+    let { email, name } = this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Missing pending_auth_id parameter'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Missing pending_auth_id parameter'), 400));
       return;
     }
 
@@ -263,7 +276,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (!pendingAuth) {
       this.logger.warn(`Pending authorization not found or expired: ${pendingAuthId}`);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
           400,
         ),
@@ -297,6 +310,22 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     };
     const authenticateFn = typeof localOptions.authenticate === 'function' ? localOptions.authenticate : undefined;
 
+    // #263 — a sign-in verified before the consent screen. The consent form
+    // carries no login fields: the verified sign-in is sealed on the pending
+    // record, and the consent submission completes it instead of running the
+    // credential gate again on fields round-tripped through the browser.
+    const verifiedLogin =
+      !isIncremental && pendingAuth.verifiedLogin
+        ? openPendingLogin(localAuth.secret, pendingAuth.id, pendingAuth.verifiedLogin)
+        : undefined;
+    if (verifiedLogin) {
+      email = verifiedLogin.email;
+      name = verifiedLogin.name;
+      this.state.set({ email, name });
+      if (verifiedLogin.claims) this.state.set('customClaims', verifiedLogin.claims);
+      if (verifiedLogin.credentials?.length) this.state.set('credentials', verifiedLogin.credentials);
+    }
+
     // #468 — email opt-out for single-operator local setups.
     // `requireEmail` defaults to true (historical behavior). When explicitly
     // false, a non-incremental login without an email is allowed and the code
@@ -304,22 +333,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // below). For incremental auth email was never required. A custom
     // `authenticate` verifier bypasses this check entirely.
     const requireEmail = localOptions.requireEmail ?? true;
-    if (!authenticateFn && !isIncremental && !email && requireEmail) {
+    if (!verifiedLogin && !authenticateFn && !isIncremental && !email && requireEmail) {
       this.logger.warn('Missing email in callback');
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Email is required'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Email is required'), 400));
       return;
     }
 
-    // CSRF gate (#469): a custom `@AuthUi` page persisted a CSRF token on the
-    // pending record. The submit MUST echo a matching token. This applies ONLY
-    // to the auth-UI form path — built-in pages set no `authUiCsrf`, so existing
-    // flows / e2es are unaffected. A consent re-render from a custom page keeps
-    // the SAME pending id + token, so the resubmit still validates.
+    // CSRF gate (#469): a custom `@AuthUi` page, or the built-in consent
+    // screen, persisted a CSRF token on the pending record. The submit MUST echo
+    // a matching token. A consent re-render keeps the SAME pending id + token,
+    // so the resubmit still validates.
     if (pendingAuth.authUiCsrf) {
       const submitted = this.state.csrf;
       if (!submitted || !timingSafeEqualStr(pendingAuth.authUiCsrf, submitted)) {
         this.logger.warn('Auth-UI CSRF token mismatch on callback');
-        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid or missing CSRF token'), 400));
+        this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Invalid or missing CSRF token'), 400));
         return;
       }
     }
@@ -337,7 +365,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // per-request token in the built-in login form — see security notes.)
     if (this.isCrossOriginSubmission()) {
       this.logger.warn('Cross-origin login submission rejected (CSRF)');
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Cross-origin request blocked'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Cross-origin request blocked'), 400));
       return;
     }
 
@@ -361,6 +389,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       // deriving it from a request parameter is what made the operator's
       // identity forgeable (GHSA-2c4g-9c8x-6m8g).
       userSub = pendingAuth.incrementalSub;
+    } else if (verifiedLogin) {
+      userSub = verifiedLogin.sub;
     } else if (email) {
       userSub = this.generateUserSub(email);
     } else if (!requireEmail) {
@@ -374,12 +404,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // On success, derive the subject (explicit `sub` → subject strategy → the
     // anonymous fallback) and stash custom claims for the minted token. On
     // failure, re-render the login page with the error instead of proceeding.
-    if (authenticateFn && !isIncremental) {
+    if (authenticateFn && !isIncremental && !verifiedLogin) {
       const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
       if (!result.ok) {
         // Keep the pending auth alive so the user can retry on the re-rendered page.
+        // A `login.render` page is the app's own markup: no CSP is imposed on it.
         this.respond(
-          httpRespond.html(this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result)),
+          httpRespond.html(
+            this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result),
+            200,
+            builtInAuthPageHeaders({ csp: !localOptions.login?.render }),
+          ),
         );
         return;
       }
@@ -408,7 +443,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // Validate federated login is enabled for this authorization request
     if (isFederated && !pendingAuth.federatedLogin) {
       this.logger.warn('Federated login not enabled for this authorization request');
-      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Federated login not enabled'), 400));
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Federated login not enabled'), 400));
       return;
     }
 
@@ -433,7 +468,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       if (selected.length < minProviders) {
         this.logger.warn(`Insufficient federated providers selected: ${selected.length} < ${minProviders}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage(
               'invalid_request',
               `At least ${minProviders} provider${minProviders === 1 ? '' : 's'} must be linked`,
@@ -450,7 +485,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       const invalidProviders = selected.filter((id) => !allProviders.includes(id));
       if (invalidProviders.length > 0) {
         this.logger.warn(`Invalid provider IDs: ${invalidProviders.join(', ')}`);
-        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid provider selection'), 400));
+        this.respond(this.htmlPage(this.renderErrorPage('invalid_request', 'Invalid provider selection'), 400));
         return;
       }
 
@@ -459,7 +494,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       if (missingRequired.length > 0) {
         this.logger.warn(`Missing required providers: ${missingRequired.join(', ')}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage('invalid_request', `Required provider(s) not linked: ${missingRequired.join(', ')}`),
             400,
           ),
@@ -491,6 +526,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // selection so a returning user is not re-prompted unless a NEW tool appeared.
     const rememberConsent = consentConfig?.rememberConsent ?? true;
 
+    // The sign-in this submission verified, kept server-side while the consent
+    // screen is shown (#263): the consent form itself carries no login fields.
+    const signIn: PendingLoginState | undefined = userSub
+      ? { sub: userSub, email, name, claims: this.state.customClaims, credentials: this.state.credentials }
+      : undefined;
+
     let finalSelectedTools = availableToolIds;
     // True when a remembered selection lets us skip the consent screen entirely
     // (it is already reconciled against the current available set, so Step 2
@@ -519,12 +560,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
           // remembered selection so the user decides about the new one (a newly
           // added tool is never silently granted).
           this.logger.info('rememberConsent: new tool detected — re-prompting pre-filled with prior selection');
+          if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
           this.respond(
-            httpRespond.html(
+            this.htmlPage(
               this.renderConsentScreen(
                 pendingAuth,
                 consentConfig,
-                { email, name, loginFields },
+                { email, name },
                 undefined,
                 remembered.selectedToolIds,
               ),
@@ -537,14 +579,14 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     // Step 1: consent enabled but the user has not yet submitted a selection →
     // render the consent screen. Do NOT delete the pending authorization; the
-    // consent form GETs back to this same endpoint with the identity + `tools=`.
+    // consent form POSTs back to this same endpoint with its token + `tools=`,
+    // and the sign-in verified here completes from the pending record.
     if (consentGateApplies && !rememberSkip && !consentSubmitted && selectedTools === undefined) {
       this.logger.info('Consent enabled and not yet submitted — rendering consent screen');
+      if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
       // Custom `@AuthUi({ slot: 'consent' })` renderer takes over when registered.
       if (await this.tryRenderCustomConsent(pendingAuth, consentConfig)) return;
-      this.respond(
-        httpRespond.html(this.renderConsentScreen(pendingAuth, consentConfig, { email, name, loginFields })),
-      );
+      this.respond(this.htmlPage(this.renderConsentScreen(pendingAuth, consentConfig, { email, name })));
       return;
     }
 
@@ -558,7 +600,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       if (invalidToolIds.length > 0) {
         this.logger.warn(`Invalid consent tool selection: ${invalidToolIds.join(', ')}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage(
               'invalid_request',
               'Invalid tool selection. Please restart authorization and choose from the available tools.',
@@ -575,12 +617,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       const requireSelection = consentConfig?.requireSelection ?? true;
       if (requireSelection && submitted.length === 0) {
         this.logger.info('Consent submitted with no tools selected — re-rendering with requireSelection error');
+        if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderConsentScreen(
               pendingAuth,
               consentConfig,
-              { email, name, loginFields },
+              { email, name },
               'Please select at least one tool to continue.',
             ),
           ),
@@ -775,16 +818,14 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       typeof sessionStore.delete !== 'function'
     ) {
       this.logger.error('Federated session store not configured');
-      this.respond(
-        httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),
-      );
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500));
       return;
     }
 
     // Validate required fields
     if (!codeChallenge || !clientId || !redirectUri) {
       this.logger.error('Missing required fields for federated auth');
-      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization request incomplete'), 500));
+      this.respond(this.htmlPage(this.renderErrorPage('server_error', 'Authorization request incomplete'), 500));
       return;
     }
 
@@ -857,7 +898,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       this.logger.error(`Failed to build authorize URL for provider: ${firstProviderId}`);
       await sessionStore.delete(federatedSession.id);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('server_error', `Failed to initiate auth with provider: ${firstProviderId}`),
           500,
         ),
@@ -909,7 +950,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       ].filter(Boolean);
       this.logger.error(`Missing required fields for authorization code: ${missingFields.join(', ')}`);
       this.respond(
-        httpRespond.html(
+        this.htmlPage(
           this.renderErrorPage('server_error', 'Authorization request is incomplete. Please try again.'),
           500,
         ),
@@ -988,10 +1029,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (!redirectUri || !authorizationCode) {
       this.logger.error('Missing redirectUri or authorizationCode for redirect');
       this.respond(
-        httpRespond.html(
-          this.renderErrorPage('server_error', 'Failed to complete authorization. Please try again.'),
-          500,
-        ),
+        this.htmlPage(this.renderErrorPage('server_error', 'Failed to complete authorization. Please try again.'), 500),
       );
       return;
     }
@@ -1057,22 +1095,27 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * to the verifier as if they were login fields. Only string values are kept.
    */
   /**
-   * Defensively read a single param from a urlencoded POST body (some adapters
-   * parse the body into `request.body`). The consent form uses a GET round-trip
-   * (mirroring the federated page) so query params are the primary source; this
-   * is a fallback for adapters that route a POST body instead. Multi-valued
-   * keys keep all values so checkbox groups (`tools`) survive a POST.
+   * Read a single param from the POSTed form body. The built-in sign-in and
+   * consent forms POST here; the Node host hands the body over parsed, the fetch
+   * handler as the raw urlencoded string. Multi-valued keys keep all values so
+   * checkbox groups (`tools`, `providers`) survive.
    */
   private readBodyParam(request: { body?: unknown }, key: string): string | string[] | undefined {
-    const body = request.body;
-    if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
-    const value = (body as Record<string, unknown>)[key];
+    const value = parseFormBody(request.body)[key];
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) {
       const strings = value.filter((v): v is string => typeof v === 'string');
       return strings.length > 0 ? strings : undefined;
     }
     return undefined;
+  }
+
+  /** A single-valued param from the query (GET) or the form body (POST). */
+  private readParam(request: { query?: Record<string, unknown>; body?: unknown }, key: string): string | undefined {
+    const fromQuery = request.query?.[key];
+    const value = fromQuery !== undefined ? fromQuery : this.readBodyParam(request, key);
+    if (typeof value === 'string') return value;
+    return Array.isArray(value) && typeof value[0] === 'string' ? value[0] : undefined;
   }
 
   /**
@@ -1130,10 +1173,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       }
     };
     absorb(request.query as Record<string, unknown> | undefined);
-    // Defensive: some adapters parse a urlencoded POST body into request.body.
-    if (request.body && typeof request.body === 'object' && !Array.isArray(request.body)) {
-      absorb(request.body as Record<string, unknown>);
-    }
+    // The built-in forms POST their fields (a parsed object on the Node host,
+    // a urlencoded string on the fetch handler).
+    absorb(parseFormBody(request.body));
     return fields;
   }
 
@@ -1287,7 +1329,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         const record = await localAuth.authorizationStore.getPendingAuthorization(pendingAuth.id);
         if (!record) {
           this.respond(
-            httpRespond.html(
+            this.htmlPage(
               this.renderErrorPage('invalid_request', 'Authorization request has expired. Please try again.'),
               400,
             ),
@@ -1299,7 +1341,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       } catch (err) {
         this.logger.error(`Failed to persist auth-UI CSRF for consent: ${err instanceof Error ? err.message : err}`);
         this.respond(
-          httpRespond.html(
+          this.htmlPage(
             this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
             500,
           ),
@@ -1340,12 +1382,53 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
+   * Keep the sign-in this request verified on the pending record while the
+   * consent screen is shown (#263), and give that screen a CSRF token.
+   *
+   * The consent form then needs only `pending_auth_id`, the token and the
+   * chosen tools: no login field (a password included) is written into the page
+   * or sent back through the browser. The sign-in is sealed with the server
+   * secret because it may carry `authenticate()` credentials and the record may
+   * live in a shared store. Fails closed: when the record can't be written the
+   * consent screen is not shown.
+   *
+   * @returns false when it already responded with an error.
+   */
+  private async keepSignInForConsent(
+    pendingAuth: PendingAuthorizationRecord,
+    signIn: PendingLoginState | undefined,
+  ): Promise<boolean> {
+    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    try {
+      if (signIn && !pendingAuth.verifiedLogin) {
+        pendingAuth.verifiedLogin = sealPendingLogin(localAuth.secret, pendingAuth.id, signIn);
+      }
+      if (!pendingAuth.authUiCsrf) {
+        // Mint through the auth-UI registry when there is one, so a custom
+        // consent page and its extras endpoint see the same token.
+        pendingAuth.authUiCsrf = this.scope.authUi?.mintCsrf(pendingAuth.id) ?? base64urlEncode(randomBytes(32));
+      }
+      await localAuth.authorizationStore.storePendingAuthorization(pendingAuth);
+      return true;
+    } catch (err) {
+      this.logger.error(`Failed to keep the sign-in for consent: ${err instanceof Error ? err.message : String(err)}`);
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage('server_error', 'Failed to initialize consent securely. Please try again.'),
+          500,
+        ),
+      );
+      return false;
+    }
+  }
+
+  /**
    * Render the tool-consent screen.
    *
-   * The form GETs back to `/oauth/callback` carrying `pending_auth_id`,
-   * `consent_submitted=1`, the resolved identity (`email`/`name` + any custom
-   * `login.fields`), and the chosen `tools=` checkboxes — so the resubmit
-   * re-derives the SAME subject and proceeds to mint.
+   * The form POSTs back to `/oauth/callback` carrying `pending_auth_id`, the
+   * CSRF token, `consent_submitted=1` and the chosen `tools=` checkboxes. It
+   * carries no sign-in fields: {@link keepSignInForConsent} kept the verified
+   * sign-in on the pending record, and the resubmit completes it from there.
    *
    * Honors the `auth.consent` flags: `groupByApp`, `showDescriptions`,
    * `customMessage`, `allowSelectAll`, `requireSelection`, `defaultSelectedTools`
@@ -1356,7 +1439,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   private renderConsentScreen(
     pendingAuth: { id: string; clientId: string; authUiCsrf?: string },
     consentConfig: ConsentConfig | undefined,
-    identity: { email?: string; name?: string; loginFields?: Record<string, string> },
+    /** Shown as "Signed in as"; never round-tripped. */
+    identity: { email?: string; name?: string },
     error?: string,
     /**
      * When supplied (rememberConsent prefill on a new-tool re-prompt), these tool
@@ -1373,31 +1457,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // `excludedTools` are removed here too).
     const { toolCards } = projectConsentTools(this.scope, consentConfig?.excludedTools);
 
-    // Round-trip the identity (and any custom login fields) so the resubmit
-    // re-derives the same subject. Reserved control params are never re-emitted
-    // as login fields. Only string values are carried; nothing sensitive is
-    // added by the framework — what the user submitted on the login form is
-    // round-tripped, mirroring `renderLoginRetryPage`.
-    const hiddenFields: ConsentHiddenField[] = [];
-    if (identity.email) hiddenFields.push({ name: 'email', value: identity.email });
-    if (identity.name) hiddenFields.push({ name: 'name', value: identity.name });
-    for (const [key, value] of Object.entries(identity.loginFields ?? {})) {
-      if (key === 'email' || key === 'name') continue; // already added above
-      if (OauthCallbackFlow.RESERVED_LOGIN_PARAMS.has(key)) continue;
-      hiddenFields.push({ name: key, value });
-    }
-    // When a custom `@AuthUi` login page set a CSRF token on the pending record
-    // (#469), the built-in consent form must round-trip it so the consent submit
-    // passes the CSRF gate. Built-in-only flows have no `authUiCsrf` → no field.
-    if (pendingAuth.authUiCsrf) {
-      hiddenFields.push({ name: 'csrf', value: pendingAuth.authUiCsrf });
-    }
-
     return buildToolConsentPage({
       tools: toolCards,
       clientName: pendingAuth.clientId,
       pendingAuthId: pendingAuth.id,
-      csrfToken: '',
+      csrfToken: pendingAuth.authUiCsrf ?? '',
       callbackPath,
       userName: identity.name,
       userEmail: identity.email,
@@ -1411,8 +1475,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       // previously consented to.
       defaultSelectedTools: preSelectedTools ?? consentConfig?.defaultSelectedTools,
       error,
-      hiddenFields,
     });
+  }
+
+  /** An HTML response with the built-in auth pages' security headers (#263). */
+  private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
+    return httpRespond.html(markup, status, builtInAuthPageHeaders());
   }
 
   /**

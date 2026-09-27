@@ -83,7 +83,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
   </Step>
 
   <Step title="Set Expected Audience">
-    Validate the audience (`aud`) claim. `expectedAudience` is supported in **transparent**, **local**, and **remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens.
+    Validate the audience (`aud`) claim. In **transparent** mode set `expectedAudience`. In **local** and **remote** mode the tokens FrontMCP issues always name this server's resource URL as `aud` and name this server as `iss`, and are refused anywhere else, even by a server with the same `JWT_SECRET`; pin `FRONTMCP_PUBLIC_URL` so that URL doesn't come from the `Host` header.
 
     ```typescript
     auth: {
@@ -106,13 +106,15 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**Stable signing keys** - Provide keys via environment or secrets manager</Check>
 <Check>**PKCE enforcement** - OAuth 2.1 requires PKCE (S256 only)</Check>
 <Check>**Refresh token rotation** - Always rotate refresh tokens on use</Check>
-<Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` (supported in transparent, local, and remote modes)</Check>
-<Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the transparent-mode expected audience — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers.</Check>
+<Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` in transparent mode; local and remote tokens are bound to this server's resource URL automatically</Check>
+<Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the expected audience of a token — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers.</Check>
 
 ### Recommended
 
 <Check>**Machine ID** - Set `MACHINE_ID` env var for multi-instance session portability</Check>
-<Check>**Require registered clients** - Set `auth.requireRegisteredClients: true` (local/remote) so every OAuth client must be registered (DCR / pre-registered) or use a CIMD client-id URL. This enforces exact `redirect_uri` matching and prevents auth-code interception via an unregistered client's attacker-chosen redirect_uri.</Check>
+<Check>**Require registered clients** - Keep `auth.requireRegisteredClients` at its default (`true`, local/remote) so every OAuth client must be registered (DCR / pre-registered) or use a CIMD client-id URL. This enforces exact `redirect_uri` matching and prevents auth-code interception via an unregistered client's attacker-chosen redirect_uri. In production, remote mode admits only CIMD clients (it has no pre-registered clients and DCR is off); see [MCP client registration](/frontmcp/authentication/remote#mcp-client-registration).</Check>
+
+<Check>**Grant only the scopes you mean to** - List your scopes in `auth.allowedScopes` (local/remote); a client that asks for anything else doesn't get it.</Check>
 <Check>**Confidential clients** - Clients registered with `client_secret_basic`/`client_secret_post` are authenticated with a constant-time secret check on both the code-exchange and refresh grants.</Check>
 <Check>**Rate limiting** - Protect token endpoints from brute force</Check>
 <Check>**Monitoring** - Alert on auth failures, unusual patterns</Check>

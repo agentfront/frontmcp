@@ -596,9 +596,10 @@ describe('buildToolConsentPage', () => {
     { toolId: 'tool2', toolName: 'List Issues', description: 'Lists issues', appId: 'github', appName: 'GitHub' },
   ] as ToolCard[];
 
-  it('GETs back to the callback path with a consent_submitted marker', () => {
+  it('POSTs back to the callback path with a consent_submitted marker', () => {
     const html = buildToolConsentPage(defaultParams);
-    expect(html).toContain('method="GET"');
+    expect(html).toContain('method="POST"');
+    expect(html).not.toContain('method="GET"');
     expect(html).toContain('action="/oauth/tools"');
     expect(html).toContain('name="consent_submitted"');
   });

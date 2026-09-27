@@ -344,7 +344,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     const authOptions = this.scope.auth?.options;
     if (isDefaultAuthProvider && body.code === 'anonymous' && !!authOptions && allowsPublicAccess(authOptions)) {
       const localAuth = this.scope.auth as LocalPrimaryAuth;
-      const accessToken = await localAuth.signAnonymousJwt();
+      const accessToken = await localAuth.signAnonymousJwt({ audience: this.canonicalResource() });
 
       this.state.set('tokenResponse', {
         access_token: accessToken,
@@ -363,6 +363,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       body.redirect_uri,
       body.code_verifier,
       body.client_secret,
+      this.canonicalResource(),
     );
 
     if ('error' in result) {
@@ -412,7 +413,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
         return;
       }
       const localAuth = this.scope.auth as LocalPrimaryAuth;
-      const accessToken = await localAuth.signAnonymousJwt();
+      const accessToken = await localAuth.signAnonymousJwt({ audience: this.canonicalResource() });
 
       this.state.set('tokenResponse', {
         access_token: accessToken,
@@ -425,7 +426,12 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     // Real refresh token exchange
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const result = await localAuth.refreshAccessToken(body.refresh_token, body.client_id, body.client_secret);
+    const result = await localAuth.refreshAccessToken(
+      body.refresh_token,
+      body.client_id,
+      body.client_secret,
+      this.canonicalResource(),
+    );
 
     if ('error' in result) {
       this.logger.warn(`Refresh token failed: ${result.error}`);
@@ -477,9 +483,8 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     }
 
     // Validate resource parameter against server's canonical URI (RFC 8707)
+    const canonicalResource = this.canonicalResource();
     if (body?.grant_type === 'anonymous' && body.resource) {
-      const { request } = this.rawInput;
-      const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
       if (!resourceUriMatches(body.resource, canonicalResource)) {
         this.logger.warn(`OAuth token: resource mismatch. Provided: ${body.resource}, canonical: ${canonicalResource}`);
         this.respond(
@@ -496,7 +501,8 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     }
 
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const accessToken = await localAuth.signAnonymousJwt();
+    const audience = body?.grant_type === 'anonymous' && body.resource ? body.resource : canonicalResource;
+    const accessToken = await localAuth.signAnonymousJwt({ audience });
 
     this.state.set('tokenResponse', {
       access_token: accessToken,
@@ -530,5 +536,13 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     // Schema handles output validation
+  }
+
+  /**
+   * This server's protected-resource URI (RFC 8707), the audience of the tokens
+   * it issues when the grant named none (#269).
+   */
+  private canonicalResource(): string {
+    return computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
   }
 }

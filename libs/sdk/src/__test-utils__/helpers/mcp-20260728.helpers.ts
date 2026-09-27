@@ -146,7 +146,8 @@ function parseMessages(text: string, contentType: string): JsonRpcMessage[] {
 export interface TestJwtIssuer {
   issuer: string;
   jwks: { keys: JWK[] };
-  sign(claims: Record<string, unknown>, subject: string): Promise<string>;
+  /** Sign a token that expires in 10 minutes (`{ exp: false }` leaves `exp` out). */
+  sign(claims: Record<string, unknown>, subject: string, options?: { exp?: boolean }): Promise<string>;
 }
 
 export async function createTestJwtIssuer(issuer = 'https://auth.example.com'): Promise<TestJwtIssuer> {
@@ -155,13 +156,13 @@ export async function createTestJwtIssuer(issuer = 'https://auth.example.com'): 
   return {
     issuer,
     jwks: { keys: [jwk] },
-    sign: (claims, subject) =>
-      new SignJWT(claims)
+    sign: (claims, subject, options = {}) => {
+      const jwt = new SignJWT(claims)
         .setProtectedHeader({ alg: 'RS256', kid: 'spec-key' })
         .setIssuer(issuer)
         .setSubject(subject)
-        .setIssuedAt()
-        .setExpirationTime('10m')
-        .sign(privateKey),
+        .setIssuedAt();
+      return (options.exp === false ? jwt : jwt.setExpirationTime('10m')).sign(privateKey);
+    },
   };
 }

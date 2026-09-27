@@ -87,13 +87,17 @@ describe('OAuth Callback Flow — consent gate', () => {
     expect(String(output?.body)).toContain('Select Tools to Enable');
     expect(String(output?.body)).toContain('Create Note');
     expect(String(output?.body)).toContain('List Notes');
-    // The form round-trips the identity so the resubmit re-derives the sub.
-    expect(String(output?.body)).toContain('name="email" value="user@example.com"');
+    // The form carries no login fields (#263): the verified sign-in is kept on
+    // the pending record, and the form carries that record's CSRF token.
+    expect(String(output?.body)).not.toContain('name="email"');
 
     // CRITICAL: the pending authorization must NOT have been deleted — the
     // consent form posts back to /oauth/callback using the same id.
     const stillPending = await scope.auth.authorizationStore.getPendingAuthorization(pendingAuthId);
     expect(stillPending).toBeTruthy();
+    expect(stillPending?.verifiedLogin).toEqual(expect.any(String));
+    expect(stillPending?.authUiCsrf).toEqual(expect.any(String));
+    expect(String(output?.body)).toContain(`name="csrf" value="${stillPending?.authUiCsrf}"`);
   });
 
   it('proceeds to mint with the submitted selection and deletes the pending authorization', async () => {

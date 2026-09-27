@@ -26,6 +26,8 @@ const port = Number.isNaN(parsedPort) ? 3171 : parsedPort;
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     tokenStorage: 'memory',
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],

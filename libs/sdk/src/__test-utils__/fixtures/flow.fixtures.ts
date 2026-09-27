@@ -9,6 +9,7 @@
 import 'reflect-metadata';
 
 import {
+  DcrClientRegistry,
   InMemoryAuthorizationStore,
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
@@ -117,6 +118,10 @@ export function createMockAuthorizationStore(): AuthorizationStore {
 /** Signing secret the mock auth uses for framework-signed URLs. */
 export const MOCK_SIGNING_SECRET = 'mock-signing-secret';
 
+/** The client the mock auth has registered (matches `createValidOAuthRequest`'s defaults). */
+export const MOCK_CLIENT_ID = 'test-client-id';
+export const MOCK_CLIENT_REDIRECT_URI = 'https://client.example.com/callback';
+
 export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
   const store = createMockAuthorizationStore();
   // Per-mock replay guard: a ticket jti can be claimed exactly once.
@@ -125,6 +130,12 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
 
   const base: Record<string, unknown> = {
     authorizationStore: store,
+    // Clients are refused unless registered (`requireRegisteredClients`
+    // defaults to true), so the mock server knows the fixture client
+    // (`createValidOAuthRequest`) the way a real one would after DCR.
+    dcrClientRegistry: new DcrClientRegistry({
+      clients: [{ clientId: MOCK_CLIENT_ID, redirectUris: [MOCK_CLIENT_REDIRECT_URI] }],
+    }),
     // Remembered-consent store (rememberConsent). A fresh in-memory store per
     // mock auth so flow tests can drive skip/prefill/persist behavior.
     consentStore: new InMemoryConsentStore(),
@@ -138,6 +149,9 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
     // replay guard (GHSA-2c4g-9c8x-6m8g), so flow tests can mint and claim a
     // real signed ticket instead of asserting on a forgeable query parameter.
     signingSecret: MOCK_SIGNING_SECRET,
+    // Stand in for LocalPrimaryAuth.secret (the HMAC key bytes), which also
+    // seals a verified sign-in onto the pending record during consent.
+    secret: new TextEncoder().encode(MOCK_SIGNING_SECRET),
     claimIncrementalTicket: jest.fn(async (jti: string) => {
       if (claimedTickets.has(jti)) return false;
       claimedTickets.add(jti);

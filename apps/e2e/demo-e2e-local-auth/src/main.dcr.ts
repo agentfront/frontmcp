@@ -61,6 +61,8 @@ if (process.env['DCR_PREREGISTERED'] === '1') {
   http: { port },
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     requireEmail: false,

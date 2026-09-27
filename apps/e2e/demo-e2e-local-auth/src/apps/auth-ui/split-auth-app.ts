@@ -19,6 +19,8 @@ import { addEnvExtra } from './auth-ui.entries';
   tools: [PingTool],
   auth: {
     mode: 'local',
+    // The e2e specs sign in with ad-hoc client ids that aren't registered.
+    requireRegisteredClients: false,
     tokenStorage: 'memory',
     requireEmail: false,
     anonymousSubject: 'local-operator',
