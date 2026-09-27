@@ -16,6 +16,8 @@
 import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
 
+import { browserFetch } from './browser-fetch';
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.consent.ts';
 const REDIRECT_URI = 'http://127.0.0.1:9876/callback';
 const CLIENT_ID = 'consent-test-client';
@@ -38,7 +40,7 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string): string {
 
 /** GET /oauth/authorize and extract `pending_auth_id` from the login page. */
 async function startAuthorization(baseUrl: string, challenge: string) {
-  const res = await fetch(buildAuthorizeUrl(baseUrl, challenge), { method: 'GET', redirect: 'manual' });
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge), { method: 'GET', redirect: 'manual' });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
@@ -53,7 +55,7 @@ async function getCallback(baseUrl: string, params: Record<string, string | stri
     if (Array.isArray(v)) v.forEach((vv) => url.searchParams.append(k, vv));
     else url.searchParams.set(k, v);
   }
-  return fetch(url.toString(), { method: 'GET', redirect: 'manual' });
+  return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
 }
 
 async function exchangeToken(baseUrl: string, code: string, verifier: string): Promise<Response> {
@@ -64,7 +66,7 @@ async function exchangeToken(baseUrl: string, code: string, verifier: string): P
     client_id: CLIENT_ID,
     code_verifier: verifier,
   });
-  return fetch(`${baseUrl}/oauth/token`, {
+  return browserFetch(`${baseUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),

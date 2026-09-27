@@ -57,6 +57,8 @@ const FilterSkillsHook = FlowHooksOf('skills:filter');
 @Plugin({
   name: 'feature-flags',
   description: 'Feature flag-based capability filtering for MCP',
+  // A server where an entry declares `featureFlag` and none of these gates reaches it refuses to start.
+  enforcesMetadata: ['featureFlag'],
   providers: [],
   contextExtensions: [
     {

@@ -9,6 +9,22 @@ import { AUTH_FLOW_GLOBAL_KEY, type AuthFlowState } from '../contract';
 import { useAddedItems, useAuthFlow, useExtraField } from '../hooks';
 import { setAuthNavigator } from '../vanilla/auth-flow';
 
+// jsdom has no Fetch API `Response`; browsers do, and `submitFinish` returns
+// one once a navigation has started.
+if (typeof globalThis.Response === 'undefined') {
+  class StandInResponse {
+    readonly status: number;
+    readonly ok: boolean;
+    readonly redirected = false;
+    readonly url = '';
+    constructor(_body: unknown, init: { status?: number } = {}) {
+      this.status = init.status ?? 200;
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+  }
+  (globalThis as unknown as { Response: unknown }).Response = StandInResponse;
+}
+
 function inject(state: AuthFlowState): void {
   (window as unknown as Record<string, unknown>)[AUTH_FLOW_GLOBAL_KEY] = state;
 }
@@ -45,12 +61,14 @@ function makeWrapper(s: AuthFlowState) {
 
 describe('react/hooks', () => {
   let fetchMock: jest.Mock;
+  let navigateMock: jest.Mock;
 
   beforeEach(() => {
     clearInjected();
     fetchMock = jest.fn();
     (globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
-    setAuthNavigator(jest.fn());
+    navigateMock = jest.fn();
+    setAuthNavigator(navigateMock);
   });
 
   afterEach(() => {
@@ -90,8 +108,7 @@ describe('react/hooks', () => {
       expect(result.current.error).toBe('boom');
     });
 
-    it('submitFinish serializes a form event and posts control fields', async () => {
-      fetchMock.mockResolvedValue({ redirected: false, url: '', ok: true });
+    it('submitFinish serializes a form event and navigates with the control fields', async () => {
       const { result } = renderHook(() => useAuthFlow(), { wrapper: makeWrapper(state) });
 
       // Build a fake form event.
@@ -108,7 +125,9 @@ describe('react/hooks', () => {
       });
 
       expect(preventDefault).toHaveBeenCalled();
-      const [url] = fetchMock.mock.calls[0];
+      // A real navigation (the browser follows the redirect), not fetch().
+      expect(fetchMock).not.toHaveBeenCalled();
+      const [url] = navigateMock.mock.calls[0];
       const parsed = new URL(url);
       expect(parsed.searchParams.get('email')).toBe('x@y.com');
       expect(parsed.searchParams.get('pending_auth_id')).toBe('pa-1');
@@ -116,22 +135,20 @@ describe('react/hooks', () => {
     });
 
     it('submitFinish accepts a plain data record (non-event)', async () => {
-      fetchMock.mockResolvedValue({ redirected: false, url: '', ok: true });
       const { result } = renderHook(() => useAuthFlow(), { wrapper: makeWrapper(state) });
       await act(async () => {
         await result.current.submitFinish({ email: 'plain@b.com' });
       });
-      const [url] = fetchMock.mock.calls[0];
+      const [url] = navigateMock.mock.calls[0];
       expect(new URL(url).searchParams.get('email')).toBe('plain@b.com');
     });
 
     it('submitFinish accepts no argument (submits control fields only)', async () => {
-      fetchMock.mockResolvedValue({ redirected: false, url: '', ok: true });
       const { result } = renderHook(() => useAuthFlow(), { wrapper: makeWrapper(state) });
       await act(async () => {
         await result.current.submitFinish();
       });
-      const [url] = fetchMock.mock.calls[0];
+      const [url] = navigateMock.mock.calls[0];
       expect(new URL(url).searchParams.get('pending_auth_id')).toBe('pa-1');
     });
 

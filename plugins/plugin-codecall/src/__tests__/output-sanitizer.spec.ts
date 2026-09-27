@@ -3,10 +3,10 @@
  */
 
 import {
-  sanitizeOutput,
+  DEFAULT_SANITIZER_CONFIG,
   needsSanitization,
   sanitizeLogMessage,
-  DEFAULT_SANITIZER_CONFIG,
+  sanitizeOutput,
 } from '../services/output-sanitizer';
 
 describe('DEFAULT_SANITIZER_CONFIG', () => {
@@ -80,6 +80,20 @@ describe('sanitizeOutput', () => {
       const result = sanitizeOutput('Error at C:\\Users\\test\\app\\file.ts');
       expect(result.value).toBe('Error at [path]');
       expect(result.wasModified).toBe(true);
+    });
+
+    it('should keep URLs and text lines that start with "at"', () => {
+      const text = 'See https://api.example.com/v1/users\n  at the top of the page';
+      const result = sanitizeOutput(text);
+      expect(result.value).toBe(text);
+      expect(result.wasModified).toBe(false);
+    });
+
+    it('should remove file paths from a long crafted string in linear time', () => {
+      const started = Date.now();
+      sanitizeOutput('/' + '-'.repeat(9_000) + '!', { maxStringLength: 20_000 });
+      sanitizeOutput('C:\\' + '-'.repeat(9_000), { maxStringLength: 20_000 });
+      expect(Date.now() - started).toBeLessThan(1_000);
     });
 
     it('should truncate long strings', () => {
@@ -374,5 +388,19 @@ describe('sanitizeLogMessage', () => {
   it('should trim whitespace', () => {
     const result = sanitizeLogMessage('  message with spaces  ');
     expect(result).toBe('message with spaces');
+  });
+
+  it('should keep URLs', () => {
+    expect(sanitizeLogMessage('GET https://api.example.com/v1/users failed')).toBe(
+      'GET https://api.example.com/v1/users failed',
+    );
+  });
+
+  it('should sanitize a long crafted message in linear time', () => {
+    const started = Date.now();
+    sanitizeLogMessage('/' + '-'.repeat(100_000) + '!');
+    sanitizeLogMessage('-/'.repeat(50_000));
+    sanitizeLogMessage('\n'.repeat(100_000));
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });

@@ -205,6 +205,22 @@ Tools can then use this metadata:
 export default class GetUserTool extends ToolContext { /* ... */ }
 ```
 
+When a field asks your plugin to protect the entry (a gate, not an optimization like `cache`), declare it with
+`enforcesMetadata` on the plugin class whose hooks enforce it:
+
+```typescript
+@Plugin({ name: 'require-mfa', enforcesMetadata: ['requireMfa'] })
+export default class RequireMfaPlugin {
+  @ToolHook.Will('execute', { appliesTo: 'uncovered-apps' })
+  async check(ctx: FlowCtxOf<'tools:call-tool'>) { /* refuse unless the caller passed MFA */ }
+}
+```
+
+A server where an entry declares `requireMfa` and no hook of such a plugin reaches it (in `tools/call` for tools and
+agents, `resources/read` for resources, `prompts/get` for prompts, `skills:filter` for skills) refuses to start with
+`UnenforcedMetadataError`. The key is known as soon as the plugin class is loaded. FrontMCP's own `approval` and
+`featureFlag` fields are checked even when their plugin is never loaded.
+
 ## Contributing Tools and Skills
 
 Plugins can contribute tools and skills via the `@Plugin` decorator:

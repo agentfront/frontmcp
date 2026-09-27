@@ -21,7 +21,14 @@ import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { AUTH_FLOW_GLOBAL_KEY, type AuthFlowState, type AuthUiFileSource } from '../auth-ui.contract';
 import { type AuthUiRegistry } from '../auth-ui.registry';
-import { AUTH_MOUNT_ID, authUiExtraPath, authUiSecurityHeaders, buildAuthUiPage } from '../auth-ui.render';
+import {
+  AUTH_MOUNT_ID,
+  authUiCsp,
+  authUiExtraPath,
+  authUiSecurityHeaders,
+  buildAuthUiPage,
+  formActionSource,
+} from '../auth-ui.render';
 
 const COMPONENT = `
 import React from 'react';
@@ -226,6 +233,48 @@ describe('auth-UI path + header helpers', () => {
     expect(h['Content-Security-Policy']).toContain("default-src 'self'");
     expect(h['Content-Security-Policy']).toContain("form-action 'self'");
     expect(h['Content-Security-Policy']).toContain("script-src 'self' 'unsafe-inline' https://esm.sh");
-    expect(h['Referrer-Policy']).toBe('no-referrer');
+    // same-origin, not no-referrer: a POST of the page's form must carry its Origin,
+    // which /oauth/callback checks (no-referrer sends `Origin: null`).
+    expect(h['Referrer-Policy']).toBe('same-origin');
+    expect(h['Cache-Control']).toBe('no-store');
+  });
+});
+
+describe('auth-UI form-action', () => {
+  it('names an http(s) target by its origin', () => {
+    expect(formActionSource('http://127.0.0.1:5555/cb?x=1')).toBe('http://127.0.0.1:5555');
+    expect(formActionSource('https://App.Example.com:443/oauth/cb')).toBe('https://app.example.com');
+  });
+
+  it("names a native app's private-use scheme by the scheme", () => {
+    expect(formActionSource('com.example.app:/oauth/cb')).toBe('com.example.app:');
+    expect(formActionSource('cursor://anysphere.cursor-retrieval/oauth/callback')).toBe('cursor:');
+  });
+
+  it('names nothing it cannot express exactly or must never allow', () => {
+    expect(formActionSource('not a url')).toBeUndefined();
+    expect(formActionSource('http://[::1]:5555/cb')).toBeUndefined();
+    expect(formActionSource('javascript:alert(1)')).toBeUndefined();
+    expect(formActionSource('data:text/html,hi')).toBeUndefined();
+    expect(formActionSource('file:///etc/passwd')).toBeUndefined();
+  });
+
+  it("allows this server plus each target's origin, once", () => {
+    const csp = authUiCsp(['http://127.0.0.1:5555/cb', 'http://127.0.0.1:5555/other', 'javascript:x']);
+
+    expect(csp.endsWith("; form-action 'self' http://127.0.0.1:5555")).toBe(true);
+    expect(authUiCsp().endsWith("; form-action 'self'")).toBe(true);
+  });
+
+  it('puts the targets of a page into its CSP', () => {
+    const page = buildAuthUiPage({
+      registry: stubRegistry({ source: { file } }),
+      slot: 'login',
+      state: baseState,
+      fullPath: '/mcp',
+      formTargets: ['https://client.example.com/cb'],
+    });
+
+    expect(page?.headers['Content-Security-Policy']).toContain("form-action 'self' https://client.example.com");
   });
 });

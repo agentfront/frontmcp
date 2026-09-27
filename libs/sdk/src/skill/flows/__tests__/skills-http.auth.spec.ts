@@ -106,6 +106,54 @@ describe('skills HTTP endpoints on a static-auth server', () => {
   });
 });
 
+describe('skills HTTP endpoints with auth "bearer"', () => {
+  const SKILLS_ISSUER = 'https://skills-idp.example.com';
+  const realFetch = globalThis.fetch;
+  let issuer: TestJwtIssuer;
+  let server: TestFetchServer;
+
+  beforeAll(async () => {
+    issuer = await createTestJwtIssuer(SKILLS_ISSUER);
+    // The endpoint fetches the issuer's JWKS from `<issuer>/.well-known/jwks.json`.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === `${SKILLS_ISSUER}/.well-known/jwks.json`) return Response.json(issuer.jwks);
+      return realFetch(input, init);
+    }) as typeof fetch;
+    server = await createTestFetchServer({
+      info: { name: 'skills-http-auth-bearer', version: '1.0.0' },
+      apps: [DeskApp],
+      auth: { mode: 'public' },
+      authorities,
+      skillsConfig: { enabled: true, auth: 'bearer', jwt: { issuer: SKILLS_ISSUER } },
+    });
+  });
+
+  afterAll(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('serves a request with a token from the configured issuer', async () => {
+    const token = await issuer.sign({}, 'ada');
+
+    const statuses = await Promise.all(
+      PATHS.map(async (path) => (await get(server, path, { authorization: `Bearer ${token}` })).status),
+    );
+
+    expect(statuses).toEqual([200, 200, 200]);
+  });
+
+  it('refuses a token without exp, which would never expire', async () => {
+    const token = await issuer.sign({}, 'ada', { exp: false });
+
+    const statuses = await Promise.all(
+      PATHS.map(async (path) => (await get(server, path, { authorization: `Bearer ${token}` })).status),
+    );
+
+    expect(statuses).toEqual([401, 401, 401]);
+  });
+});
+
 describe('skills HTTP endpoints on a transparent-auth server (default auth "inherit")', () => {
   let issuer: TestJwtIssuer;
   let server: TestFetchServer;

@@ -97,6 +97,13 @@ export interface TaskRecord {
   };
 
   /**
+   * The scope that created the task. A detached CLI worker runs the task through that scope, so a
+   * standalone app's task reaches that app's tools. Records written by earlier releases have none
+   * and run through the primary scope.
+   */
+  scopeId?: string;
+
+  /**
    * Populated once `status` reaches a terminal state. Undefined while the task
    * is `working` or `input_required`.
    */

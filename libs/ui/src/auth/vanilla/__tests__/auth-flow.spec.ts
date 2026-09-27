@@ -12,6 +12,22 @@ import {
   type AuthFlowState,
 } from '../index';
 
+// jsdom has no Fetch API `Response`; browsers do, and `submitFinish` returns
+// one once a navigation has started.
+if (typeof globalThis.Response === 'undefined') {
+  class StandInResponse {
+    readonly status: number;
+    readonly ok: boolean;
+    readonly redirected = false;
+    readonly url = '';
+    constructor(_body: unknown, init: { status?: number } = {}) {
+      this.status = init.status ?? 200;
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+  }
+  (globalThis as unknown as { Response: unknown }).Response = StandInResponse;
+}
+
 /** Install a flow state onto the injected global. */
 function inject(state: AuthFlowState): void {
   (window as unknown as Record<string, unknown>)[AUTH_FLOW_GLOBAL_KEY] = state;
@@ -154,30 +170,77 @@ describe('vanilla/auth-flow', () => {
       expect(new URL(url).searchParams.get('email')).toBe('form@b.com');
     });
 
-    it('follows the redirect via the navigator when navigate is on', async () => {
-      inject(baseState);
-      fetchMock.mockResolvedValue({ redirected: true, url: 'https://app.example.com/cb?code=xyz', ok: true });
+    // In a browser the finish submit is a real top-level navigation, so the
+    // browser itself follows the server's redirect to the client's
+    // redirect_uri (another origin, often a loopback or custom scheme), which
+    // fetch() cannot follow under the page's CSP and CORS.
+    describe('in a browser (navigate on)', () => {
+      let submitted: HTMLFormElement[];
 
-      await submitFinish({ email: 'a@b.com' }, { navigate: true });
-      expect(navigateMock).toHaveBeenCalledWith('https://app.example.com/cb?code=xyz');
-    });
+      beforeEach(() => {
+        submitted = [];
+        fetchMock.mockResolvedValue({ redirected: false, url: '', ok: true });
+        jest.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(function (this: HTMLFormElement) {
+          submitted.push(this);
+        });
+      });
 
-    it('does not navigate when the response is not a redirect', async () => {
-      inject(baseState);
-      fetchMock.mockResolvedValue({ redirected: false, url: '', ok: true });
-      await submitFinish({ email: 'a@b.com' }, { navigate: true });
-      expect(navigateMock).not.toHaveBeenCalled();
-    });
+      afterEach(() => {
+        document.body.innerHTML = '';
+      });
 
-    it('the DEFAULT navigator (window present) runs without throwing on a redirect', async () => {
-      // Reset to the built-in default navigator (covers its window-present
-      // branch). jsdom logs "Not implemented: navigation" — suppress that noise.
-      setAuthNavigator();
-      const warn = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-      inject(baseState);
-      fetchMock.mockResolvedValue({ redirected: true, url: 'https://app.example.com/cb?code=z', ok: true });
-      await expect(submitFinish({ email: 'a@b.com' }, { navigate: true })).resolves.toBeDefined();
-      warn.mockRestore();
+      it('submits a POST as a real form, not with fetch', async () => {
+        inject({ ...baseState, submitMethod: 'POST' });
+
+        await submitFinish({ email: 'a@b.com', tools: ['t1', 't2'] });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(submitted).toHaveLength(1);
+        const [form] = submitted;
+        expect(form.method).toBe('post');
+        expect(form.action).toBe('https://mcp.example.com/oauth/callback');
+        const fields = Array.from(form.querySelectorAll('input'), (input) => [input.name, input.value, input.type]);
+        expect(fields).toEqual([
+          ['email', 'a@b.com', 'hidden'],
+          ['tools', 't1', 'hidden'],
+          ['tools', 't2', 'hidden'],
+          ['pending_auth_id', 'pa-123', 'hidden'],
+          ['csrf', 'csrf-xyz', 'hidden'],
+        ]);
+      });
+
+      it('navigates to a GET submission, not with fetch', async () => {
+        inject(baseState);
+
+        await submitFinish({ email: 'a@b.com' }, { navigate: true });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(submitted).toHaveLength(0);
+        expect(navigateMock).toHaveBeenCalledTimes(1);
+        const url = new URL(navigateMock.mock.calls[0][0]);
+        expect(`${url.origin}${url.pathname}`).toBe('https://mcp.example.com/oauth/callback');
+        expect(url.searchParams.get('email')).toBe('a@b.com');
+        expect(url.searchParams.get('pending_auth_id')).toBe('pa-123');
+      });
+
+      it('resolves once the navigation has started', async () => {
+        inject({ ...baseState, submitMethod: 'POST' });
+
+        const response = await submitFinish({ email: 'a@b.com' });
+
+        expect(response.status).toBe(204);
+        expect(response.redirected).toBe(false);
+      });
+
+      it('the DEFAULT navigator (window present) runs without throwing', async () => {
+        // Reset to the built-in default navigator (covers its window-present
+        // branch). jsdom logs "Not implemented: navigation" — suppress that noise.
+        setAuthNavigator();
+        const warn = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        inject(baseState);
+        await expect(submitFinish({ email: 'a@b.com' }, { navigate: true })).resolves.toBeDefined();
+        warn.mockRestore();
+      });
     });
 
     it('does not clobber a caller-provided pending_auth_id', async () => {

@@ -51,6 +51,22 @@ export const HttpCookieSchema = z.object({
 });
 export type HttpCookie = z.infer<typeof HttpCookieSchema>;
 
+/**
+ * Serialize a cookie as a `Set-Cookie` header value. Shared by the Node writer
+ * and the Web `Response` renderer so both send the same cookie.
+ */
+export function serializeHttpCookie(c: z.input<typeof HttpCookieSchema>): string {
+  const parts: string[] = [`${c.name}=${encodeURIComponent(c.value)}`];
+  if (c.path) parts.push(`Path=${c.path}`);
+  if (c.domain) parts.push(`Domain=${c.domain}`);
+  if (c.maxAge != null) parts.push(`Max-Age=${Math.max(0, Math.floor(c.maxAge))}`);
+  if (c.expires) parts.push(`Expires=${c.expires.toUTCString()}`);
+  if (c.httpOnly) parts.push('HttpOnly');
+  if (c.secure) parts.push('Secure');
+  if (c.sameSite) parts.push(`SameSite=${c.sameSite[0].toUpperCase()}${c.sameSite.slice(1)}`);
+  return parts.join('; ');
+}
+
 export const HttpCookies = z.array(HttpCookieSchema).default([]);
 
 const HttpMeta = z.object({

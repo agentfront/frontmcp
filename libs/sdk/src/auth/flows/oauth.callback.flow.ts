@@ -56,6 +56,13 @@ import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, typ
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { parseFormBody } from './form-body.utils';
+import {
+  clearedSigninBindingCookie,
+  requestHoldsSigninBinding,
+  SIGNIN_BINDING_REFUSED,
+  signinCookiePath,
+  withCookie,
+} from './signin-binding.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -118,6 +125,9 @@ const stateSchema = z.object({
   // Anti-CSRF token echoed by a custom `@AuthUi` page (#469). Verified against
   // the token persisted on the pending record when present.
   csrf: z.string().optional(),
+  // Hash of the sign-in binding cookie on the pending record, carried into a
+  // federated session so the provider callback checks the same browser.
+  signinBinding: z.string().optional(),
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
@@ -283,6 +293,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       );
       return;
     }
+
+    // The sign-in continues only in the browser that started it (RFC 9700
+    // §4.7): the one `/oauth/authorize` gave the binding cookie of this pending
+    // authorization. Anyone may learn a `pending_auth_id` (they can start their
+    // own sign-in); only that browser holds the cookie.
+    if (!requestHoldsSigninBinding(this.rawInput.request, pendingAuth.id, pendingAuth.signinBinding)) {
+      this.logger.warn('Callback without the sign-in binding cookie of its pending authorization; refused');
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', SIGNIN_BINDING_REFUSED), 400));
+      return;
+    }
+    this.state.set('signinBinding', pendingAuth.signinBinding);
 
     // An incremental callback must ALSO carry the subject the ticket proved;
     // without it there is no verified identity to mint for, so treat the
@@ -847,6 +868,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         method: 'S256',
       },
       providerIds: selectedProviders,
+      // The provider callback checks the same browser binding.
+      signinBinding: this.state.signinBinding,
     });
 
     // Store the session
@@ -1058,7 +1081,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         isIncremental ? ` (incremental for app: ${targetAppId})` : ''
       }`,
     );
-    this.respond(httpRespond.redirect(url.toString()));
+    // The sign-in is over: remove its binding cookie.
+    const { pendingAuthId } = this.state;
+    const redirect = httpRespond.redirect(url.toString());
+    this.respond(
+      pendingAuthId
+        ? withCookie(
+            redirect,
+            clearedSigninBindingCookie(
+              this.rawInput.request,
+              pendingAuthId,
+              signinCookiePath(this.resolveIssuer() ?? '', this.scope.fullPath),
+            ),
+          )
+        : redirect,
+    );
   }
 
   /**
@@ -1305,10 +1342,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * custom page already set on the record, so a consent re-render keeps the same
    * token), builds the consent {@link AuthFlowState} from the SAME tool
    * projection the built-in screen uses, SSRs the component, and responds with
-   * the assembled page + CSP headers. Returns `true` when handled.
+   * the assembled page + CSP headers (its `form-action` allows the client's
+   * `redirect_uri`, where the submission is redirected). Returns `true` when handled.
    */
   private async tryRenderCustomConsent(
-    pendingAuth: { id: string; clientId: string; authUiCsrf?: string },
+    pendingAuth: { id: string; clientId: string; redirectUri: string; authUiCsrf?: string },
     consentConfig: ConsentConfig | undefined,
   ): Promise<boolean> {
     const authUi: AuthUiRegistry | undefined = this.scope.authUi;
@@ -1374,7 +1412,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       { clientId: pendingAuth.clientId, tools },
     );
 
-    const page = buildAuthUiPage({ registry: authUi, slot: 'consent', state, fullPath: this.scope.fullPath });
+    const page = buildAuthUiPage({
+      registry: authUi,
+      slot: 'consent',
+      state,
+      fullPath: this.scope.fullPath,
+      formTargets: [pendingAuth.redirectUri],
+    });
     if (!page) return false;
 
     this.respond(httpRespond.html(page.html, 200, page.headers));

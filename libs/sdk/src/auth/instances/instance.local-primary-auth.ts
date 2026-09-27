@@ -271,13 +271,17 @@ export function validateAuthorizationIssuer(
 }
 
 /**
- * Whether a token's `aud` (a string or a list) names the protected resource
- * `resource`, comparing RFC 8707 resource URIs (scheme/host case, default
- * ports and a trailing slash don't matter). A token without `aud` never does.
+ * Whether a token's `aud` (a string or a list) names one of the protected
+ * resources `expected`, comparing RFC 8707 resource URIs (scheme/host case,
+ * default ports and a trailing slash don't matter). A token without `aud` never
+ * does, and neither does any token when `expected` is empty.
  */
-function audienceMatchesResource(aud: unknown, resource: string): boolean {
+function audienceMatchesResource(aud: unknown, expected: string | readonly string[]): boolean {
   const audiences = typeof aud === 'string' ? [aud] : Array.isArray(aud) ? aud : [];
-  return audiences.some((value) => typeof value === 'string' && resourceUriMatches(value, resource));
+  const resources = typeof expected === 'string' ? [expected] : expected;
+  return audiences.some(
+    (value) => typeof value === 'string' && resources.some((resource) => resourceUriMatches(value, resource)),
+  );
 }
 
 /**
@@ -885,8 +889,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * with the same JWT_SECRET holds it. So a token must also (#269):
    * - name THIS instance as its issuer (`iss`, the boot-time issuer it signs
    *   with, never the request-derived base URL), and
-   * - when `expectedAudience` is given, be issued for that protected resource
-   *   (`aud`, compared as RFC 8707 resource URIs).
+   * - when `expectedAudience` is given, be issued for that protected resource,
+   *   or one of those resources (`aud`, compared as RFC 8707 resource URIs).
+   *   `session:verify` passes the request's resource URL, or the configured
+   *   `auth.expectedAudience` when there is one.
    *
    * Lifetime: `exp` is required (#272) and checked with `nbf` by `jose`. The
    * algorithm is pinned to HS256 to block `alg` confusion.
@@ -894,7 +900,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   override async verifyGatewayToken(
     token: string,
     requestBaseUrl: string,
-    expectedAudience?: string,
+    expectedAudience?: string | readonly string[],
   ): Promise<VerifyResult> {
     try {
       const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
