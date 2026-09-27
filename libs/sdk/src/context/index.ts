@@ -27,6 +27,7 @@ export type {
   RequestMetadata,
   TransportAccessor,
 } from './frontmcp-context';
+export { getRunningTool, runAsTool, type RunningTool } from './running-tool';
 
 // =====================
 // FrontMcpContextStorage - AsyncLocalStorage wrapper

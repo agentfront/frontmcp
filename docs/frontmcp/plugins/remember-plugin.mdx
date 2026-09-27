@@ -149,11 +149,14 @@ Memory is organized into four scopes with different visibility and lifetime:
 <Warning>
   **`session`, `tool`, and `user` scopes require a per-client identity.**
 
-A stateless HTTP transport injects the same session id (`__stateless__`) into every request,
-so it carries no session identity of its own. `session` and `tool` scope therefore fall back
-to the authenticated principal, and an **unauthenticated stateless request is refused** with
-a `RememberIdentityError` rather than being given a namespace it would share with every
-other client. `user` scope is likewise refused when there is no authenticated user.
+`session` and `tool` memory belong to the session the server verified for the request, never to
+an `mcp-session-id` the client merely sends. A request without a verified session has no session
+identity: a stateless HTTP transport injects the same session id (`__stateless__`) into every
+request, MCP 2026-07-28 has no sessions, and an `mcp-session-id` the server did not verify could be
+anyone's. `session` and `tool` scope then fall back to the authenticated principal (the memory
+lasts across that principal's requests), and an **unauthenticated request without a verified
+session is refused** with a `RememberIdentityError` rather than being given a namespace it would
+share with other clients. `user` scope is likewise refused when there is no authenticated user.
 
 If the data really is shared across clients, say so with `scope: 'global'`. Otherwise
 authenticate the request or use a stateful transport.

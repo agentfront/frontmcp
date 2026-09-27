@@ -286,12 +286,13 @@ class MyTool extends ToolContext {
 - `tool` -- Scoped to a specific tool + session combination. Isolated per tool.
 - `global` -- Shared across all sessions and users. Use carefully.
 
-**`session`, `tool`, and `user` scopes require a per-client identity.** A stateless HTTP
-transport injects the same session id (`__stateless__`) into every request, so it carries no
-session identity. `session` and `tool` scope fall back to the authenticated principal, and an
-unauthenticated stateless request is refused with a `RememberIdentityError` rather than given
-a namespace shared with every other client. `user` scope is refused with no authenticated
-user. If the data really is shared, use `scope: 'global'`.
+**`session`, `tool`, and `user` scopes require a per-client identity.** `session` and `tool`
+memory belong to the session the server verified, never to an `mcp-session-id` the client merely
+sends. A stateless HTTP transport (shared `__stateless__` id), MCP 2026-07-28 (no sessions) and an
+unverified `mcp-session-id` carry no session identity: `session` and `tool` scope fall back to the
+authenticated principal, and an unauthenticated request without a verified session is refused
+with a `RememberIdentityError` rather than given a namespace shared with other clients. `user`
+scope is refused with no authenticated user. If the data really is shared, use `scope: 'global'`.
 
 **Set `REMEMBER_SECRET` on every instance that shares a store.** All scopes, `session` and
 `tool` included, derive their encryption key from that secret plus the scope identity. A

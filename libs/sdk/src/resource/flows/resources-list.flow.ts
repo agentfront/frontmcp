@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
 
+import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
@@ -160,7 +161,11 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       const seenResourceIds = new Set<string>();
 
       // Get resources from scope's resource registry
-      const scopeResources = this.scope.resources.getResources();
+      // `availableWhen.surface`: leave out resources not offered to the surface this listing is for.
+      const callSurface = callSurfaceOf((this.rawInput as { ctx?: unknown } | undefined)?.ctx);
+      const scopeResources = this.scope.resources
+        .getResources()
+        .filter((resource) => isOfferedOnSurface(resource.metadata.availableWhen, callSurface));
       this.logger.verbose(`findResources: scope resources=${scopeResources.length}`);
 
       for (const resource of scopeResources) {

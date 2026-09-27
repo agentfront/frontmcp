@@ -123,11 +123,14 @@ export {
   parseTraceContext,
   generateTraceContext,
   createChildSpanContext,
+  // The tool whose execute() the calling code runs in
+  getRunningTool,
 } from './context';
 export type {
   FrontMcpContextArgs,
   FrontMcpContextConfig,
   RequestMetadata,
+  RunningTool,
   TransportAccessor,
   TraceContext,
 } from './context';

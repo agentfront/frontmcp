@@ -19,6 +19,7 @@ import {
   type ResourceTemplate,
 } from '@frontmcp/protocol';
 
+import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
@@ -163,7 +164,11 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
       const templates: Array<{ ownerName: string; template: ResourceEntry }> = [];
 
       // Get resource templates from scope's resource registry
-      const scopeTemplates = this.scope.resources.getResourceTemplates();
+      // `availableWhen.surface`: leave out templates not offered to the surface this listing is for.
+      const callSurface = callSurfaceOf((this.rawInput as { ctx?: unknown } | undefined)?.ctx);
+      const scopeTemplates = this.scope.resources
+        .getResourceTemplates()
+        .filter((template) => isOfferedOnSurface(template.metadata.availableWhen, callSurface));
       this.logger.verbose(`findTemplates: scope templates=${scopeTemplates.length}`);
 
       for (const template of scopeTemplates) {

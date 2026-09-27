@@ -100,6 +100,8 @@ These are fine for ergonomic branching. For tools that **shouldn't exist at all*
 
 This is the safest way to expose internal-only tools that you want an agent / job to call but don't want a user to invoke from a chat UI.
 
+An MCP client (and the in-process client of a CLI build, surface `'cli'`) never sees such a tool: it is absent from `tools/list`, and `tools/call` answers `Tool "rotate_secrets" not found`, exactly as for a tool that doesn't exist. Resources, resource templates, prompts and agents follow the same rule. In-process dispatch (`this.callTool()`, an agent's own tools) carries no surface and is not restricted. The process-wide axes (`os`, `runtime`, ...) answer `EntryUnavailableError` instead.
+
 ## See also
 
 - [`21-tool-with-availability-constraints`](../examples/21-tool-with-availability-constraints.md)

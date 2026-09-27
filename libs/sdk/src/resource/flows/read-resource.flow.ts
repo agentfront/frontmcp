@@ -17,6 +17,7 @@ import {
   type ResourceEntry,
   type ScopeEntry,
 } from '../../common';
+import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import {
   InvalidInputError,
   InvalidMethodError,
@@ -240,6 +241,25 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (!match) {
       this.logger.warn(`findResource: resource for URI "${uri}" not found`);
       throw new ResourceNotFoundError(uri);
+    }
+
+    // `availableWhen` gates reads by URI, not only the listings: a surface the resource isn't offered
+    // on answers like an unknown URI, and a process-wide axis answers EntryUnavailableError.
+    const { availableWhen } = match.instance.metadata;
+    const callSurface = callSurfaceOf(this.input.ctx);
+    const availability = availabilityForCall(availableWhen, callSurface);
+    if (availability === 'not-offered') {
+      this.logger.warn(`findResource: resource for URI "${uri}" is not offered on surface "${callSurface}"`);
+      throw new ResourceNotFoundError(uri);
+    }
+    if (availability === 'unavailable') {
+      this.logger.warn(`findResource: resource for URI "${uri}" is unavailable in this environment`);
+      throw entryUnavailableError(
+        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
+        uri,
+        availableWhen,
+        callSurface,
+      );
     }
 
     // Store resource owner ID in flow state for hook filtering

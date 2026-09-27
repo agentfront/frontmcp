@@ -129,13 +129,15 @@ Resolution order: `globalThis.FRONTMCP_BUILD_TARGET` (inlined by the adapter) �
 
 Per-call axis — set by the transport adapter / dispatcher on the request `ctx` to discriminate "who is calling this tool." Unlike the other axes (which are constant for the process lifetime), `surface` varies per request.
 
-| Value            | Source                                                   |
-| ---------------- | -------------------------------------------------------- |
-| `'mcp'`          | MCP `tools/call` (set by the MCP handler)                |
-| `'cli'`          | A `frontmcp <verb>` subcommand router (issue #409)       |
-| `'agent'`        | Agent-to-tool dispatch (`ExecutionContextBase.callTool`) |
-| `'job'`          | Job runner                                               |
-| `'http-trigger'` | `@Channel` HTTP triggers                                 |
+| Value            | Source                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'mcp'`          | Every MCP request: listings, `tools/call`, `resources/read`, `prompts/get`, `completion/complete` (also `connect()` and `createDirect()`)   |
+| `'cli'`          | The in-process client of a `frontmcp build --target cli` binary (issue #409). Its daemon and `--stdio` modes serve MCP, so they are `'mcp'` |
+| `'agent'`        | Agent-to-tool dispatch                                                                                                                      |
+| `'job'`          | Job runner                                                                                                                                  |
+| `'http-trigger'` | `@Channel` HTTP triggers                                                                                                                    |
+
+An entry whose `surface` excludes the caller's is left out of that caller's listings and answers like an entry that doesn't exist (`Tool "x" not found`, `Resource not found`, `Prompt not found`, no completions), so the caller can't tell it exists. In-process dispatch (`this.callTool()`, an agent running its own tools) carries no surface and isn't restricted by this axis.
 
 Example — block external MCP calls but allow agent dispatch:
 
@@ -159,7 +161,7 @@ Example — block external MCP calls but allow agent dispatch:
 
 ### Structured errors
 
-When a tool exists but its `availableWhen` constraint fails at call time, FrontMCP throws `EntryUnavailableError` with a `missingAxes` array in `data` (issue #417). Clients can surface "this tool isn't reachable because provider=vercel / surface=mcp / …" without parsing prose.
+When a tool, resource, resource template or prompt exists but a process-wide axis (`os`, `runtime`, `deployment`, `provider`, `target`, `env`) excludes it, `tools/call`, `resources/read` and `prompts/get` throw `EntryUnavailableError` with a `missingAxes` array in `data` (issue #417). Clients can surface "this tool isn't reachable because provider=vercel / …" without parsing prose. A `surface` mismatch answers like an unknown entry instead (see `surface` above).
 
 ```json
 {
