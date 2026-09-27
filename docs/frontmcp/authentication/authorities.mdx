@@ -73,7 +73,14 @@ If a user without the required role calls `delete_user`, the `checkEntryAuthorit
 The `authenticated` profile above admits only signed-in callers: an anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has no `user.sub` in the evaluation context, even when `claimsMapping.userId` points at another claim, so `exists` fails for it. A subject that is not a string counts as anonymous too. A caller whose identity carries no `sub` at all gets the string `claimsMapping.userId` resolves to as its `user.sub`, when there is one, and so passes `exists`. When `claimsMapping.userId` resolves to something other than a string, a signed-in caller keeps its own `sub`.
 
 <Note>
-**Boot-time fail-fast.** If any entry — a tool, resource, prompt, agent, **or skill** — declares `authorities` but the server has no authorities engine configured (no `@FrontMcp({ authorities: { … } })`), startup fails with an `AuthConfigurationError`. This prevents a silent bypass where an entry looks protected but is actually open to everyone. Either add the `authorities` config or remove `authorities` from the entry. Servers with **no** `authorities` config and **no** gated entries are unaffected.
+**Boot-time fail-fast.** If any entry — a tool, resource, resource template, prompt, agent, a tool of an agent, **or skill**, hidden ones included — declares `authorities` but the server has no authorities engine configured (no `@FrontMcp({ authorities: { … } })`), startup fails with an `AuthConfigurationError`. This prevents a silent bypass where an entry looks protected but is actually open to everyone. Either add the `authorities` config or remove `authorities` from the entry. Servers with **no** `authorities` config and **no** gated entries are unaffected.
+
+**A rule must check something.** Startup also fails (`Invalid authorities rule: …`) when a rule on an entry or in a profile checks nothing or isn't what it looks like: `{}`, `{ roles: {} }`, `{ roles: { all: [] } }`, `allOf: []`, a misspelled field such as `role:`, a profile name inside `allOf`/`anyOf`, an `operator` other than `"AND"`/`"OR"`, or an ABAC condition without a `value` the operator can use (see [Operator Reference](#operator-reference)). The engine denies such a rule if it is evaluated anyway. To leave an entry open, remove its `authorities`.
+
+**Guards admit only with `true`.** A guard in `guards` grants access only by returning `true`. A string is the denial reason; anything else (`false`, `undefined` from a guard that forgot to `return`, `null`, `0`, an object) denies.
+
+**`@Agent({ authorities })`** gates the agent's `invoke_<id>` tool like any tool: hidden from `tools/list` and refused on `tools/call` for callers the rule doesn't admit. The tools declared inside an agent are checked against the caller the agent runs for, also with `execution.useToolFlow: false`.
+
 </Note>
 
 ## JWT Claims Mapping
@@ -374,6 +381,8 @@ The `conditions` field supports a rich set of operators for more complex checks.
 | `matches`    | Regular expression match                           | string (regex) |
 
 An anonymous caller has no `user.sub`, so `{ path: 'user.sub', op: 'exists', value: true }` admits signed-in callers only. An expected value that resolves to nothing (for example a missing `fromInput` field) never satisfies `eq` or `match`, even when the actual value is missing too.
+
+Every condition needs a `value` the operator can use: `exists` takes `true` or `false`, `in`/`notIn` a non-empty list, `gt`/`gte`/`lt`/`lte` a number, and `startsWith`/`endsWith`/`matches` a string; a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`. A condition without one (for example `{ path: 'user.sub', op: 'exists' }`, which would admit every caller without a `sub`) fails startup with `Invalid authorities rule`, and the engine denies it.
 
 ### Dynamic Value References
 
@@ -709,7 +718,7 @@ Skills are filtered on **every** discovery surface so a caller never sees a skil
 </Warning>
 
 <Note>
-**HTTP skills discovery is fail-closed.** The Skills HTTP API (`GET /skills`) authenticates with a binary api-key/bearer gate that does not surface JWT claims, so authority-gated skills are hidden from HTTP discovery and denied on HTTP load (`GET /skills/{id}`) regardless of the bearer. Serve gated skills over an MCP transport (where the full claims context is available) for claims-based access. Skills **without** `authorities` are served over HTTP exactly as before.
+**HTTP skills discovery.** With `skillsConfig.auth: 'inherit'` (the default), the skills HTTP endpoints (`GET /skills`, `/llm.txt`, `/llm_full.txt`) run the server's own auth, and authority-gated skills are evaluated against the caller it verified. The `api-key`, `bearer` and `public` modes surface no claims, so there authority-gated skills are left out of every listing and `GET /skills/{id}` answers 404 for them. Skills **without** `authorities` are served over HTTP exactly as before.
 </Note>
 
 ## Hooking into Authority Checks
@@ -727,7 +736,7 @@ Authority enforcement runs as **native flow stages**, not plugin hooks. This mea
 | `prompts:get-prompt`       | `checkEntryAuthorities` | Enforce before prompt execution              |
 | `prompts:list-prompts`     | `filterByAuthorities`   | Filter unauthorized prompts from discovery   |
 
-Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
+Skills are enforced across multiple serving surfaces rather than a single flow stage (MCP custom-method handlers + SEP-2640 `skill://` resources + the HTTP Skills API), but the behaviour mirrors the table above: **deny** on direct load/read (`AuthorityDeniedError`, code `-32003`, over MCP; `GET /skills/{id}` answers 404) and **filter** on discovery. See [Skill Discovery Filtering](#skill-discovery-filtering).
 
 ### Will Hook — Run Before the Authority Check
 
@@ -944,4 +953,4 @@ interface ExtendFrontMcpSkillMetadata {
 }
 ```
 
-This means `authorities` is accepted on `@Tool()`, `@Resource()`, `@ResourceTemplate()`, `@Prompt()`, and `@Skill()` decorators without any additional configuration.
+This means `authorities` is accepted on `@Tool()`, `@Resource()`, `@ResourceTemplate()`, `@Prompt()`, and `@Skill()` decorators without any additional configuration. `@Agent()` accepts it too, through the tool metadata it extends.

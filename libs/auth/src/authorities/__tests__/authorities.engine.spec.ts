@@ -101,10 +101,11 @@ describe('AuthoritiesEngine', () => {
       expect(result.granted).toBe(true);
     });
 
-    it('should evaluate empty policy as granted (no restrictions)', async () => {
+    it('should deny an empty policy (a rule that checks nothing)', async () => {
       const engine = createEngine();
       const result = await engine.evaluate({}, createCtx());
-      expect(result.granted).toBe(true);
+      expect(result.granted).toBe(false);
+      expect(result.deniedBy).toBe('invalid authorities rule: checks nothing');
     });
   });
 

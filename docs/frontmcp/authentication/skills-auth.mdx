@@ -18,6 +18,8 @@ When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP support
 | `api-key`           | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality   | Machine-to-machine, server-to-server |
 | `bearer`            | `Authorization: Bearer <jwt>`                | JWT signature via JWKS | User-scoped access, IdP integration  |
 
+With `inherit`, a request to `/skills`, `/llm.txt` or `/llm_full.txt` must pass the same check as the MCP endpoint (a static key, a transparent token, a FrontMCP-issued token...); only a `public`-mode server lets everyone in. Skills with `authorities` are listed only for a caller whose verified claims satisfy them. In the other modes no claims are available, so those skills are never served over HTTP.
+
 ## Configuration
 
 ### Public Mode
@@ -94,16 +96,29 @@ interface SkillHttpAuthResult {
 }
 ```
 
-## Factory Function
+## Authorizing a Request
 
-Use `createSkillHttpAuthValidator()` to create a validator from skill config:
+Use `authorizeSkillHttpRequest()` to apply `skillsConfig.auth` to a request. It covers every mode, including `inherit` (the default), for which it runs the server's `session:verify` flow, and it returns the verified caller that skill `authorities` are evaluated against:
+
+```typescript
+import { authorizeSkillHttpRequest } from '@frontmcp/sdk';
+
+const access = await authorizeSkillHttpRequest(scope, skillsConfig, request, logger);
+if (!access.allowed) {
+  return new Response(access.error, { status: access.status, headers: access.headers });
+}
+// access.authInfo: the verified caller (empty for public, api-key and bearer)
+```
+
+## Header-Only Validator (`api-key`, `bearer`)
+
+`createSkillHttpAuthValidator()` builds a validator that checks the request headers for an explicit `auth: 'api-key'` or `auth: 'bearer'`. It returns `null` only for `auth: 'public'`. It can't run the server's auth, so for `inherit` or an unset `auth` it refuses every request (500); use `authorizeSkillHttpRequest()` there.
 
 ```typescript
 import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
 
+// skillsConfig.auth is 'api-key' or 'bearer'
 const validator = createSkillHttpAuthValidator(skillsConfig, logger);
-// Returns null when no validation is needed: `auth: 'public'`, `auth: 'inherit'`,
-// or when `skillsConfig.auth` is unset.
 
 if (validator) {
   const result = await validator.validate({ headers: request.headers });
@@ -112,6 +127,10 @@ if (validator) {
   }
 }
 ```
+
+<Warning>
+**Migrating from the `null` validator.** `createSkillHttpAuthValidator()` used to return `null` for `auth: 'inherit'` and for an unset `auth`, so code that skipped validation on `null` served those requests with no auth at all. For those modes it now refuses every request (500). Switch that code to `authorizeSkillHttpRequest()`, shown above.
+</Warning>
 
 ---
 
