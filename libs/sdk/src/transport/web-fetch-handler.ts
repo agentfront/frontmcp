@@ -389,8 +389,13 @@ async function toServerRequest(
   // A Web `Request` carries its address in its URL; runtimes don't always add a
   // `Host` header (and `new Request(url)` never does). The resource URL, the
   // issuer and the same-origin checks read `Host` and the scheme, so take both
-  // from the URL rather than build them from nothing (`http://undefined`).
-  if (!headers['host']) headers['host'] = url.host;
+  // from the URL rather than build them from nothing (`http://undefined`). The
+  // URL is the runtime's own address for the request, so it also wins over a
+  // `Host` header that disagrees with it: a header an intermediary or a caller
+  // set must not choose the issuer, the token audience or the discovery URLs.
+  // Behind a proxy that rewrites the URL, pin FRONTMCP_PUBLIC_URL (or trust the
+  // proxy's X-Forwarded-Host with FRONTMCP_TRUST_PROXY).
+  headers['host'] = url.host;
 
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {

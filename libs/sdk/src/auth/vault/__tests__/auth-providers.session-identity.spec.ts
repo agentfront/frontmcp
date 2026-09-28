@@ -9,12 +9,13 @@
  */
 import 'reflect-metadata';
 
-import type {
-  AppCredential,
-  AuthorizationVault,
-  AuthProvidersAccessor,
-  CredentialFactoryContext,
-  CredentialProviderConfig,
+import {
+  InMemoryAuthorizationVault,
+  type AppCredential,
+  type AuthorizationVault,
+  type AuthProvidersAccessor,
+  type CredentialFactoryContext,
+  type CredentialProviderConfig,
 } from '@frontmcp/auth';
 
 import { authInfoFromAuthorization } from '../../../common/utils/auth-info.utils';
@@ -126,6 +127,23 @@ describe('session-scoped auth-provider credentials of callers without a verified
     await tokenFor(accessorFor(await requestContext('alice'), vault), 'gh-alice');
 
     expect(await tokenFor(accessorFor(await requestContext('alice'), vault), 'unused')).toBe('gh-alice');
+  });
+
+  it('leave no vault record for an anonymous caller without a verified session', async () => {
+    // The real vault, not the stub above: it stores a credential only in an entry `create()` made,
+    // and nothing creates one for the per-request `unidentified:` id, so nothing is kept or grows.
+    const vault = new InMemoryAuthorizationVault();
+    const store = (vault as unknown as { memoryAdapter: { keys(pattern: string): Promise<string[]> } }).memoryAdapter;
+    const before = await store.keys('*');
+
+    const first = await tokenFor(accessorFor(await requestContext('anon:1'), vault), 'gh-first');
+    const second = await tokenFor(accessorFor(await requestContext('anon:2'), vault), 'gh-second');
+
+    expect([first, second]).toEqual(['gh-first', 'gh-second']);
+    expect(issued.sessions).toHaveLength(2);
+    expect(issued.sessions.every((session) => session.startsWith('unidentified:'))).toBe(true);
+    expect(new Set(issued.sessions).size).toBe(2);
+    expect(await store.keys('*')).toEqual(before);
   });
 
   it('are never shared between anonymous callers', async () => {

@@ -19,7 +19,7 @@ import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/re
 import { PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import {
   SkillValidationError,
   type SkillValidationReport,
@@ -182,6 +182,12 @@ export interface SkillRegistryInterface {
   servesSkills?(): boolean;
 
   /**
+   * Owner lineage (root → leaf) of a skill, including the app a plugin-contributed skill belongs to,
+   * or undefined when the registry doesn't hold it.
+   */
+  lineageOf?(entry: SkillEntry): EntryLineage | undefined;
+
+  /**
    * Get total skill count.
    * @param options - Count options
    */
@@ -322,6 +328,8 @@ export default class SkillRegistry
 
   /** O(1) indexes */
   private byQualifiedId = new Map<string, IndexedSkill>();
+  /** Owner lineage per skill instance, rebuilt with the index so `lineageOf` is O(1). */
+  private readonly lineages = new EntryLineageIndex<SkillEntry>();
   private byName = new Map<string, IndexedSkill[]>();
   private byOwnerAndName = new Map<string, IndexedSkill>();
 
@@ -853,6 +861,14 @@ export default class SkillRegistry
       // An empty page ends the read even if the provider still claims more, so it cannot loop forever.
       if (!page.hasMore || page.skills.length === 0) return all;
     }
+  }
+
+  /**
+   * Owner lineage (root → leaf) of a skill, or undefined when no row holds it. A skill a plugin
+   * contributes is owned by the plugin; its lineage names the app the plugin is installed on.
+   */
+  lineageOf(entry: SkillEntry): EntryLineage | undefined {
+    return this.lineages.lineageOf(entry);
   }
 
   /**
@@ -1402,6 +1418,7 @@ export default class SkillRegistry
 
   private reindex(): void {
     const effective = this.listAllIndexed();
+    this.lineages.rebuild(effective);
 
     this.byQualifiedId.clear();
     this.byName.clear();

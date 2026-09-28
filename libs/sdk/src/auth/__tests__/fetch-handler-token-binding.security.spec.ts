@@ -75,11 +75,15 @@ async function serverWith(auth: AuthConfig): Promise<TestFetchServer> {
 }
 
 /** `grant_type=anonymous` at `<origin>/oauth/token`, as a client reaches a Worker. */
-async function anonymousToken(server: TestFetchServer, origin: string): Promise<string> {
+async function anonymousToken(
+  server: TestFetchServer,
+  origin: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<string> {
   const response = await server.handler(
     new Request(`${origin}/oauth/token`, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      headers: { 'content-type': 'application/x-www-form-urlencoded', ...extraHeaders },
       body: new URLSearchParams({ grant_type: 'anonymous', client_id: 'desk-cli' }).toString(),
     }),
   );
@@ -170,6 +174,17 @@ describe('tokens issued through the fetch handler are bound to the address they 
 
     expect(claims['aud']).toBe(DESK);
     expect(claims['iss']).toBe(DESK);
+  });
+
+  it('binds a token to the request URL, not to a Host header that disagrees with it', async () => {
+    const server = await serverWith({ mode: 'public' });
+
+    const token = await anonymousToken(server, DESK, { host: 'evil.example' });
+    const claims = decodeJwtPayload(token);
+
+    expect(claims['aud']).toBe(DESK);
+    expect(claims['iss']).toBe(DESK);
+    expect(await callWhoAmI(server, DESK, token)).toBe(200);
   });
 
   it('serves an anonymous token at the address it was issued at, and refuses it at another', async () => {

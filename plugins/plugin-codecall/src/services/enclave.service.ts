@@ -56,6 +56,7 @@ export interface EnclaveExecutionResult {
  */
 interface ToolFailure {
   toolName: string;
+  name: string;
   message: string;
   code?: string;
 }
@@ -65,6 +66,16 @@ function toolFailureMessage(error: unknown, toolName: string): string {
   if (typeof error === 'string' && error) return error;
   const message = (error as { message?: unknown } | null | undefined)?.message;
   return typeof message === 'string' && message ? message : `Tool call failed: ${toolName}`;
+}
+
+/**
+ * The name the sandbox gives a script for an error the tool handler threw: the error's own `name`,
+ * else `ToolError` (as its tool bridge reads it). A script's own throw is named apart from it: a
+ * string or a nameless object is `DoubleVMExecutionError`, and AgentScript has no `Error`.
+ */
+function toolFailureName(error: unknown): string {
+  const name = error && typeof error === 'object' ? (error as { name?: unknown }).name : undefined;
+  return typeof name === 'string' && name ? name.slice(0, 128) : 'ToolError';
 }
 
 /** `@enclave-vm/ast`'s message for a script that doesn't parse. */
@@ -160,6 +171,7 @@ export default class EnclaveService {
         const code = (error as { code?: unknown } | null | undefined)?.code;
         toolFailures.push({
           toolName,
+          name: toolFailureName(error),
           message: toolFailureMessage(error, toolName),
           ...(typeof code === 'string' ? { code } : {}),
         });
@@ -274,8 +286,12 @@ export default class EnclaveService {
     }
 
     // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
-    // only the error's name and message, so it is matched to the failure the tool handler threw.
-    const toolFailure = [...toolFailures].reverse().find((failure) => failure.message === error.message);
+    // only the error's name and message, so it is matched to the failure the tool handler threw by
+    // both. A script that caught the failure and threw its own error with the same message is not
+    // matched: its error has the sandbox's own name, not the tool's.
+    const toolFailure = [...toolFailures]
+      .reverse()
+      .find((failure) => failure.message === error.message && failure.name === error.name);
     if (toolFailure) {
       return {
         success: false,

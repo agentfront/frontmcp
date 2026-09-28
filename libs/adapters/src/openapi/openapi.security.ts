@@ -125,7 +125,7 @@ export async function createSecurityContextFromAuth(
           }
           // Wrap other errors with context
           const errorMessage = err instanceof Error ? err.message : String(err);
-          throw new Error(`authProviderMapper['${scheme}'] threw an error: ${errorMessage}`);
+          throw new Error(`authProviderMapper['${scheme}'] threw an error: ${errorMessage}`, { cause: err });
         }
       }
     }
@@ -214,6 +214,35 @@ function describeSecuritySchemes(tools: McpOpenAPITool[]): Map<string, SecurityP
     }
   }
   return schemes;
+}
+
+/** The request parameter each security scheme's credential goes in (header, query or cookie), by scheme name. */
+function schemeParametersOf(tools: McpOpenAPITool[]): Map<string, ParameterMapper> {
+  const parameters = new Map<string, ParameterMapper>();
+  for (const tool of tools) {
+    for (const mapper of tool.mapper) {
+      const scheme = mapper.security?.scheme;
+      if (scheme && !parameters.has(scheme)) parameters.set(scheme, mapper);
+    }
+  }
+  return parameters;
+}
+
+/**
+ * How a scheme with no `authProviderMapper` entry gets its credential from the request's own headers:
+ * `'static'` when `additionalHeaders` carries it, `'per-request'` when `headersMapper` may set it (a
+ * header or cookie scheme; it cannot set a query parameter), or `undefined` when neither can.
+ * `assertRequestHasCredential` then checks each request as built.
+ */
+function headerCredentialSource(
+  parameter: ParameterMapper | undefined,
+  options: Pick<OpenApiAdapterOptions, 'additionalHeaders' | 'headersMapper'>,
+): 'static' | 'per-request' | undefined {
+  if (!parameter) return undefined;
+  const staticHeaders = new Headers(options.additionalHeaders ?? {});
+  if (carriesSchemeParameter(parameter, new URL('http://startup.invalid/'), staticHeaders)) return 'static';
+  if (options.headersMapper && (parameter.type === 'header' || parameter.type === 'cookie')) return 'per-request';
+  return undefined;
 }
 
 /**
@@ -363,6 +392,8 @@ export function validateSecurityConfiguration(
     | 'generateOptions'
     | 'securitySchemesInInput'
     | 'passthroughCallerToken'
+    | 'additionalHeaders'
+    | 'headersMapper'
   >,
 ): SecurityValidationResult {
   const result = validateCredentialSources(tools, options);
@@ -389,6 +420,8 @@ function validateCredentialSources(
     | 'generateOptions'
     | 'securitySchemesInInput'
     | 'passthroughCallerToken'
+    | 'additionalHeaders'
+    | 'headersMapper'
   >,
 ): SecurityValidationResult {
   const result: SecurityValidationResult = {
@@ -444,6 +477,11 @@ function validateCredentialSources(
     // only for an HTTP bearer scheme: the caller's token is sent as the bearer token, which an API
     // key, basic, OAuth2 or OpenID Connect scheme never reads.
     const passthroughFallback: string[] = [];
+    // A scheme with no mapper entry is also covered when the request's own headers carry its
+    // credential (`additionalHeaders`, or `headersMapper` for each request); the request-time check
+    // (`assertRequestHasCredential`) refuses an operation whose request ends up without it.
+    const perRequestHeaders: string[] = [];
+    const schemeParameters = schemeParametersOf(tools);
     for (const [scheme, security] of securitySchemes) {
       // Skip schemes that will be provided via input
       if (schemesInInput.has(scheme)) {
@@ -451,7 +489,12 @@ function validateCredentialSources(
       }
       // Check if there's a mapping for this scheme
       if (!options.authProviderMapper?.[scheme]) {
-        if (options.passthroughCallerToken === true && isBearerScheme(security)) {
+        const headerSource = headerCredentialSource(schemeParameters.get(scheme), options);
+        if (headerSource === 'static') {
+          continue;
+        } else if (headerSource === 'per-request') {
+          perRequestHeaders.push(scheme);
+        } else if (options.passthroughCallerToken === true && isBearerScheme(security)) {
           passthroughFallback.push(scheme);
         } else {
           result.valid = false;
@@ -463,6 +506,12 @@ function validateCredentialSources(
     if (!result.valid) {
       result.warnings.push(
         `ERROR: Missing auth provider mappings for security schemes: ${result.missingMappings.join(', ')}`,
+      );
+    }
+
+    if (perRequestHeaders.length > 0) {
+      result.warnings.push(
+        `INFO: Security schemes with no authProviderMapper entry (${perRequestHeaders.join(', ')}) take their credential from headersMapper. An operation that requires only them is refused when headersMapper sets none.`,
       );
     }
 
