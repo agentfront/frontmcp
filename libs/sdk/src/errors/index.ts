@@ -100,6 +100,7 @@ export {
 // Export elicitation errors
 export {
   ElicitationNotSupportedError,
+  ElicitationNotOwnedError,
   ElicitationTimeoutError,
   ElicitationFallbackRequired,
   ElicitationStoreNotInitializedError,

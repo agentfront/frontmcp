@@ -16,8 +16,74 @@
  * lifetime of the process — the OS, runtime, and deployment mode don't change.
  */
 
-import { getRuntimeContext, isEntryAvailable, type RuntimeContext, type EntryAvailability } from '@frontmcp/utils';
+import {
+  checkEntryAvailability,
+  getRuntimeContext,
+  isEntryAvailable,
+  type EntryAvailability,
+  type RuntimeContext,
+} from '@frontmcp/utils';
+
+import { EntryUnavailableError } from '../../errors/mcp.error';
 import type { FrontMcpLogger } from '../interfaces/logger.interface';
+
+/** Who is calling (`availableWhen.surface`): the one axis that varies per call. */
+export type CallSurface = NonNullable<EntryAvailability['surface']>[number];
+
+const CALL_SURFACES: readonly string[] = ['mcp', 'cli', 'http-trigger', 'job', 'agent'] satisfies CallSurface[];
+
+/**
+ * The surface a flow was called from, when its caller tagged one. The MCP request handlers tag
+ * every call (`'mcp'`, or `'cli'` for the in-process client of a CLI build). An in-process dispatch
+ * such as `this.callTool()` tags none.
+ */
+export function callSurfaceOf(ctx: unknown): CallSurface | undefined {
+  const surface = (ctx as { surface?: unknown } | null | undefined)?.surface;
+  return typeof surface === 'string' && CALL_SURFACES.includes(surface) ? (surface as CallSurface) : undefined;
+}
+
+/**
+ * Whether `availableWhen.surface` offers an entry to a call from `surface`. A call without a surface
+ * is not restricted by this axis (an empty `surface` list is refused by the process-wide check).
+ */
+export function isOfferedOnSurface(
+  availability: EntryAvailability | undefined,
+  surface: CallSurface | undefined,
+): boolean {
+  const offered = availability?.surface;
+  return offered === undefined || surface === undefined || offered.includes(surface);
+}
+
+/**
+ * How `availableWhen` answers a call that found an entry by name or URI.
+ *
+ * - `'not-offered'`: the call's surface is excluded. Answer as for an unknown entry, so a caller on
+ *   that surface cannot tell the entry exists (an agent-only tool over MCP, say).
+ * - `'unavailable'`: a process-wide axis (os, runtime, deployment, provider, target, env) excludes
+ *   it. Listings already leave such entries out; a call by name must not reach them either.
+ */
+export function availabilityForCall(
+  availability: EntryAvailability | undefined,
+  surface: CallSurface | undefined,
+): 'available' | 'not-offered' | 'unavailable' {
+  if (!isOfferedOnSurface(availability, surface)) return 'not-offered';
+  return isEntryAvailable(availability, getRuntimeContext()) ? 'available' : 'unavailable';
+}
+
+/**
+ * The structured error for an entry a process-wide `availableWhen` axis excludes (issue #417), as
+ * `tools/call` has answered since that issue.
+ */
+export function entryUnavailableError(
+  entryType: string,
+  entryName: string,
+  availability: EntryAvailability | undefined,
+  surface: CallSurface | undefined,
+): EntryUnavailableError {
+  const ctx = getRuntimeContext();
+  const { missingAxes } = checkEntryAvailability(availability, ctx, surface ? { surface } : undefined);
+  return new EntryUnavailableError(entryType, entryName, availability, { ...ctx, surface }, missingAxes);
+}
 
 /**
  * Log availability filtering results for a set of entries at registry boot time.

@@ -26,6 +26,8 @@
  */
 
 import type { ScopeEntry, SkillEntry } from '../common';
+import { callSurfaceOf } from '../common/availability';
+import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
 import { filterServableSkills } from './skill-filter.helper';
@@ -378,7 +380,9 @@ async function skillsVisibleTo(scope: InstructionsScope, ctx?: { authInfo?: unkn
   if (visible.length === 0) return [];
   const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
   const authorized = await filterSkillsByAuthorities(scope, visible, authInfo);
-  return filterServableSkills(scope, authorized, ctx);
+  // Instructions go to MCP clients only (initialize, server/discover), so they list what an MCP
+  // client (or a CLI build's in-process client) may reach.
+  return filterServableSkills(scope, authorized, ctx, callSurfaceOf(ctx) ?? mcpRequestSurface(scope));
 }
 
 function joinSections(sections: Array<string | undefined>): string {

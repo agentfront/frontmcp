@@ -27,8 +27,8 @@ import {
 } from './errors/skill-validation.error';
 import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
 import { MemorySkillProvider } from './providers/memory-skill.provider';
-import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
 import { SEP_2640_EXTENSION_ID, type SkillIndexEntry } from './sep-2640';
+import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -43,6 +43,9 @@ import { SkillEmitter, type SkillChangeEvent } from './skill.events';
 import { createSkillInstance, type SkillInstance } from './skill.instance';
 import { normalizeSkill, skillDiscoveryDeps } from './skill.utils';
 import type { SyncResult } from './sync/sync-state.interface';
+
+/** Page size of `listSkills` when the caller names no `limit` (the skill providers' default). */
+const DEFAULT_LIST_LIMIT = 50;
 
 /**
  * Indexed skill for efficient lookup.
@@ -800,35 +803,47 @@ export default class SkillRegistry
    * and `hasMore` stay correct.
    */
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
-    const baseResult = await this.storageProvider.list(options);
-    if (this.dynamicContents.size === 0) return baseResult;
+    if (this.dynamicContents.size === 0) return this.storageProvider.list(options);
+
+    // One list, paged as a whole: the provider's skills in its order (dynamic content replacing the
+    // rows it overrides), then the dynamic skills the provider doesn't hold. Merging per provider
+    // page compared the dynamic skills only with that page, so a skill held on another page was
+    // appended again, and `total` changed from page to page. As in `count()`, the provider is read
+    // whole to know which ids it holds.
+    const base = await this.listAllFromProvider(options);
     const baseIds = new Set<string>();
-    let rewrites = 0;
-    const rewrittenBase: SkillMetadata[] = baseResult.skills.map((meta) => {
+    const merged: SkillMetadata[] = base.map((meta) => {
       const id = meta.id ?? meta.name;
       baseIds.add(id);
       const dyn = this.dynamicContents.get(id);
-      if (!dyn) return meta;
-      rewrites++;
-      return this.dynamicSkillMetadata(dyn);
+      return dyn ? this.dynamicSkillMetadata(dyn) : meta;
     });
-    const overlay = this.collectDynamicMetadata(options).filter((m) => !baseIds.has(m.id ?? m.name));
-    if (overlay.length === 0 && rewrites === 0) return baseResult;
+    for (const meta of this.collectDynamicMetadata(options)) {
+      const id = meta.id ?? meta.name;
+      if (!baseIds.has(id)) {
+        baseIds.add(id);
+        merged.push(meta);
+      }
+    }
 
-    // Provider already applied pagination, so the additional overlay rows go
-    // at the tail; total is the union of the two sets, hasMore reflects whether
-    // ALL overlay rows could fit alongside the provider's offset/limit window.
-    // Honor the caller's offset into the combined set: if offset reaches past
-    // the provider's total, slice into the overlay accordingly.
-    const limit = options?.limit ?? Number.POSITIVE_INFINITY;
     const offset = options?.offset ?? 0;
-    const room = Math.max(0, limit - rewrittenBase.length);
-    const overlayStart = Math.max(0, offset - baseResult.total);
-    const fittedOverlay = overlay.slice(overlayStart, overlayStart + room);
-    const skills = [...rewrittenBase, ...fittedOverlay];
-    const total = baseResult.total + overlay.length;
-    const hasMore = baseResult.hasMore || overlayStart + fittedOverlay.length < overlay.length;
-    return { skills, total, hasMore };
+    const limit = options?.limit ?? DEFAULT_LIST_LIMIT;
+    const skills = merged.slice(offset, offset + limit);
+    return { skills, total: merged.length, hasMore: offset + skills.length < merged.length };
+  }
+
+  /**
+   * Every skill the storage provider lists for `options`, following its pages: a provider (an
+   * external read-only one, say) may cap `limit` and report the rest with `hasMore`.
+   */
+  private async listAllFromProvider(options?: SkillListOptions): Promise<SkillMetadata[]> {
+    const all: SkillMetadata[] = [];
+    for (;;) {
+      const page = await this.storageProvider.list({ ...options, offset: all.length, limit: Number.MAX_SAFE_INTEGER });
+      all.push(...page.skills);
+      // An empty page ends the read even if the provider still claims more, so it cannot loop forever.
+      if (!page.hasMore || page.skills.length === 0) return all;
+    }
   }
 
   /**

@@ -124,6 +124,8 @@ export interface ToolSearchOptions {
   topK?: number;
   appIds?: string[];
   excludeToolNames?: string[];
+  /** The caller's surface (`availableWhen.surface`): tools not offered on it are left out. */
+  surface?: string;
 }
 
 /**
@@ -136,14 +138,14 @@ export interface ToolSearch {
   search(query: string, options?: ToolSearchOptions): Promise<ToolSearchResult[]>;
 
   /**
-   * Check if a tool exists in the index
+   * Check if a tool exists in the index (for a caller on `surface`, when given)
    */
-  hasTool(toolName: string): boolean;
+  hasTool(toolName: string, surface?: string): boolean;
 
   /**
-   * Get the total number of indexed tools
+   * Get the total number of indexed tools (that a caller on `surface` may reach, when given)
    */
-  getTotalCount(): number;
+  getTotalCount(surface?: string): number;
 
   /**
    * Initialize the search index with tools

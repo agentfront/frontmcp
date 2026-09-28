@@ -1,6 +1,7 @@
 import { CompleteRequestSchema, type CompleteRequest, type CompleteResult } from '@frontmcp/protocol';
 
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function completeRequestHandler({
   scope,
@@ -13,7 +14,10 @@ export default function completeRequestHandler({
       logger.verbose('completion/complete requested');
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('completion:complete', { request, ctx });
+        const result = await scope.runFlowForOutput('completion:complete', {
+          request,
+          ctx: withMcpSurface(scope, ctx),
+        });
         logger.verbose('completion/complete completed', { durationMs: Date.now() - start });
         return result;
       } catch (e) {

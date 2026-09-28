@@ -15,6 +15,8 @@ import {
   type ResourceEntry,
   type ScopeEntry,
 } from '../../common';
+import { availabilityForCall, callSurfaceOf } from '../../common/availability';
+import { runOnSurface } from '../../context/call-surface';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { hasUIConfig } from '../../tool/ui';
@@ -190,7 +192,15 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     const { ref } = this.state.required;
     const { prompt, resource } =
       resolvedReferences.take(this.rawInput, referenceKeyOf(ref)) ?? findCompletionReference(this.scope, ref);
-    this.state.set({ prompt, resource });
+    // An entry `availableWhen` excludes from this call (its surface, or a process-wide axis) completes
+    // nothing, exactly like a reference to an entry that doesn't exist.
+    const callSurface = callSurfaceOf(this.input.ctx);
+    const isAvailable = (entry: PromptEntry | ResourceEntry | undefined) =>
+      entry !== undefined && availabilityForCall(entry.metadata.availableWhen, callSurface) === 'available';
+    this.state.set({
+      prompt: isAvailable(prompt) ? prompt : undefined,
+      resource: isAvailable(resource) ? resource : undefined,
+    });
     this.logger.verbose('findReference:done');
   }
 
@@ -258,7 +268,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
           const completer = instance.getArgumentCompleter(argName);
           if (completer) {
             try {
-              const result = await completer(argValue);
+              const result = await runOnSurface(callSurfaceOf(this.input.ctx), async () => completer(argValue));
               values = result.values || [];
               total = result.total;
               hasMore = result.hasMore;
@@ -295,7 +305,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         const completer = resource.getArgumentCompleter(argName);
         if (completer) {
           try {
-            const result = await completer(argValue);
+            const result = await runOnSurface(callSurfaceOf(this.input.ctx), async () => completer(argValue));
             values = result.values || [];
             total = result.total;
             hasMore = result.hasMore;

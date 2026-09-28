@@ -52,6 +52,8 @@ function createMockContext(overrides: Partial<FrontMcpContext> = {}): FrontMcpCo
   return {
     sessionId: 'test-session-123',
     authInfo: {
+      // The session the server verified for the request, as the transport records it.
+      sessionId: 'test-session-123',
       clientId: 'test-user',
       extra: {
         userId: 'user-456',

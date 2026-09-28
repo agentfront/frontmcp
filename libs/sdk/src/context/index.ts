@@ -27,6 +27,8 @@ export type {
   RequestMetadata,
   TransportAccessor,
 } from './frontmcp-context';
+export { getRunningTool, type RunningTool } from './running-tool';
+export { getCallSurface } from './call-surface';
 
 // =====================
 // FrontMcpContextStorage - AsyncLocalStorage wrapper
@@ -48,4 +50,3 @@ export type { TraceContext } from './trace-context';
 // Metadata Utilities
 // =====================
 export { extractMetadata, extractClientIp } from './metadata.utils';
-

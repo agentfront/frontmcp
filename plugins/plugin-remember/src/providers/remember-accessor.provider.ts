@@ -1,4 +1,5 @@
 import {
+  getRunningTool,
   Provider,
   ProviderScope,
   STATELESS_SESSION_ID,
@@ -263,6 +264,9 @@ export class RememberAccessor {
 
   /**
    * Get the session ID from context.
+   *
+   * This is the id the request carries, which under MCP 2026-07-28 the client chooses; it is not
+   * proof of identity. Session and tool memory are namespaced by the verified session instead.
    */
   get sessionId(): string {
     return this.ctx.sessionId;
@@ -294,19 +298,38 @@ export class RememberAccessor {
   }
 
   /**
-   * The identity that namespaces session- and tool-scoped storage
-   * (GHSA-225p-f8jh-f3rh).
+   * The session id the server verified for this request, or undefined when there is none.
    *
-   * In stateless mode the transport injects the literal session id `__stateless__` into every
-   * request, so using it as a namespace put every client's memory under the same keys. A
-   * stateless request carries no session identity: the authenticated principal is the only
-   * per-client identity available, and where there is none the request has no business
-   * reading or writing per-client memory at all.
+   * Read from the verified auth info (`authInfo.sessionId` from the transport, `extra.sessionId`
+   * from session verification), the same rule CONTEXT providers are cached by. Never
+   * `FrontMcpContext.sessionId` alone: under MCP 2026-07-28 that is whatever `mcp-session-id` the
+   * caller sent, including another caller's. The stateless transport's shared `__stateless__` id
+   * identifies no one.
+   */
+  private get verifiedSessionId(): string | undefined {
+    const authInfo = this.ctx.authInfo;
+    // The first usable id: a stateless transport's `__stateless__` must not hide a session that
+    // session verification recorded in `extra.sessionId`.
+    return [authInfo?.sessionId, authInfo?.extra?.['sessionId']].find(
+      (candidate): candidate is string =>
+        typeof candidate === 'string' && candidate.length > 0 && candidate !== STATELESS_SESSION_ID,
+    );
+  }
+
+  /**
+   * The identity that namespaces session- and tool-scoped storage.
+   *
+   * Only a session the server verified identifies one client across requests. Keying on the
+   * session id a request merely carries let a caller read or overwrite another caller's memory by
+   * sending that caller's `mcp-session-id` (MCP 2026-07-28), and put every stateless client under
+   * the shared `__stateless__` id (GHSA-225p-f8jh-f3rh). A request without a verified session
+   * (stateless transport, MCP 2026-07-28, or a session id the server did not verify) falls back to
+   * the authenticated principal, the only per-client identity it has; with neither, it has no
+   * business reading or writing per-client memory at all.
    */
   private resolveSessionIdentity(): string {
-    const sessionId = this.ctx.sessionId;
-
-    if (sessionId !== STATELESS_SESSION_ID) {
+    const sessionId = this.verifiedSessionId;
+    if (sessionId) {
       return sessionId;
     }
 
@@ -316,11 +339,21 @@ export class RememberAccessor {
     }
 
     throw new RememberIdentityError(
-      'Remember cannot use session or tool scope for an unauthenticated stateless request: ' +
-        `every such request shares the session id "${STATELESS_SESSION_ID}", so the data would be shared ` +
-        'across all clients. Authenticate the request, use a stateful transport, or choose ' +
-        "the 'global' scope if the data really is shared.",
+      'Remember cannot use session or tool scope for an unauthenticated request without a verified session: ' +
+        `a stateless request shares the session id "${STATELESS_SESSION_ID}", and an mcp-session-id the server ` +
+        'did not verify could belong to any caller, so the data would be shared across clients. Authenticate the ' +
+        "request, use a stateful transport, or choose the 'global' scope if the data really is shared.",
     );
+  }
+
+  /**
+   * The tool that tool-scoped memory belongs to: the tool whose `execute()` is running (its
+   * owner-qualified name). Read when the memory is used, not when this accessor was built (it can
+   * serve several calls), so a tool that calls other tools still gets its own. Outside a tool,
+   * `'unknown'`.
+   */
+  private get toolName(): string {
+    return getRunningTool()?.fullName ?? this.ctx.flow?.name ?? 'unknown';
   }
 
   /**
@@ -347,14 +380,11 @@ export class RememberAccessor {
         }
         return `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:user:${encodeKeyPart(userId)}:`;
       }
-      case 'tool': {
-        // Tool scope uses flow name if available
-        const toolName = this.ctx.flow?.name ?? 'unknown';
+      case 'tool':
         return (
           `${this.keyPrefix}${STORAGE_LAYOUT_VERSION}:tool:` +
-          `${encodeKeyPart(toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`
+          `${encodeKeyPart(this.toolName)}:${encodeKeyPart(this.resolveSessionIdentity())}:`
         );
-      }
       case 'global':
         return `${this.keyPrefix}global:`;
     }
@@ -371,7 +401,7 @@ export class RememberAccessor {
     return getKeySourceForScope(scope, {
       sessionId: needsSessionIdentity ? this.resolveSessionIdentity() : this.ctx.sessionId,
       userId: this.userId,
-      toolName: this.ctx.flow?.name,
+      toolName: scope === 'tool' ? this.toolName : undefined,
     });
   }
 

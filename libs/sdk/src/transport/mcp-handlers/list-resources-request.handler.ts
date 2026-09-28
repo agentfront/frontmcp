@@ -3,6 +3,7 @@
 import { ListResourcesRequestSchema, type ListResourcesRequest, type ListResourcesResult } from '@frontmcp/protocol';
 
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function listResourcesRequestHandler({
   scope,
@@ -15,7 +16,10 @@ export default function listResourcesRequestHandler({
       logger.verbose('resources/list requested');
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('resources:list-resources', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:list-resources', {
+          request,
+          ctx: withMcpSurface(scope, ctx),
+        });
         logger.verbose('resources/list completed', { durationMs: Date.now() - start });
         return result;
       } catch (e) {

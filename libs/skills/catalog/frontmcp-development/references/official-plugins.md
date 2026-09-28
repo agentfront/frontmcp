@@ -281,17 +281,21 @@ class MyTool extends ToolContext {
 
 ### Memory Scopes
 
-- `session` -- Valid only for the current session. Default scope. Cleared when the session ends.
+- `session` -- Default scope. With a verified session, valid only for that session and cleared
+  when it ends. Without one (stateless transport, MCP 2026-07-28), it belongs to the authenticated
+  principal and lasts across that principal's requests until its TTL, not per request.
 - `user` -- Persists for the user across sessions. Tied to user identity.
-- `tool` -- Scoped to a specific tool + session combination. Isolated per tool.
+- `tool` -- Scoped to a specific tool plus the same identity as `session` (the verified session,
+  else the authenticated principal). Isolated per tool.
 - `global` -- Shared across all sessions and users. Use carefully.
 
-**`session`, `tool`, and `user` scopes require a per-client identity.** A stateless HTTP
-transport injects the same session id (`__stateless__`) into every request, so it carries no
-session identity. `session` and `tool` scope fall back to the authenticated principal, and an
-unauthenticated stateless request is refused with a `RememberIdentityError` rather than given
-a namespace shared with every other client. `user` scope is refused with no authenticated
-user. If the data really is shared, use `scope: 'global'`.
+**`session`, `tool`, and `user` scopes require a per-client identity.** `session` and `tool`
+memory belong to the session the server verified, never to an `mcp-session-id` the client merely
+sends. A stateless HTTP transport (shared `__stateless__` id), MCP 2026-07-28 (no sessions) and an
+unverified `mcp-session-id` carry no session identity: `session` and `tool` scope fall back to the
+authenticated principal, and an unauthenticated request without a verified session is refused
+with a `RememberIdentityError` rather than given a namespace shared with other clients. `user`
+scope is refused with no authenticated user. If the data really is shared, use `scope: 'global'`.
 
 **Set `REMEMBER_SECRET` on every instance that shares a store.** All scopes, `session` and
 `tool` included, derive their encryption key from that secret plus the scope identity. A

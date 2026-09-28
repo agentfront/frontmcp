@@ -7,7 +7,8 @@
  * @module elicitation/helpers/fallback.helper
  */
 
-import { type CallToolResult } from '@frontmcp/protocol';
+import { isAnonymousSubject } from '@frontmcp/auth';
+import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 
 import { type FrontMcpLogger } from '../../common';
 import {
@@ -16,6 +17,7 @@ import {
   type ElicitationFallbackRequired,
 } from '../../errors';
 import { type Scope } from '../../scope';
+import { STATELESS_SESSION_ID } from '../../transport/transport.types';
 import { DEFAULT_FALLBACK_WAIT_TTL, type FallbackExecutionResult } from '../elicitation.types';
 
 /**
@@ -35,6 +37,38 @@ export interface FallbackHandlerDeps {
   sessionId: string;
   /** Logger for diagnostic output */
   logger: FrontMcpLogger;
+}
+
+/**
+ * The caller a pending elicitation fallback belongs to: the only one whose `sendElicitationResult`
+ * is accepted.
+ *
+ * The session the server verified for the request (`authInfo.sessionId` from the transport,
+ * `authInfo.extra.sessionId` from session verification, the same rule CONTEXT providers are cached
+ * by), else the signed-in principal. Never the session id a request merely carries: under MCP
+ * 2026-07-28 that is whatever `mcp-session-id` the caller sent, and the stateless transport gives
+ * every caller the same `__stateless__` id.
+ *
+ * @param requestContext - The request's `FrontMcpContext` (only its verified auth info is read)
+ * @returns `session:<id>` or `principal:<sub>`; undefined for an anonymous caller without a
+ *   verified session, whom no later request can be tied to
+ */
+export function resolveElicitationOwner(
+  requestContext: { readonly authInfo?: Partial<AuthInfo> } | undefined,
+): string | undefined {
+  const authInfo = requestContext?.authInfo;
+  // The first usable id: a stateless transport's `__stateless__` must not hide a session that
+  // session verification recorded in `extra.sessionId`.
+  const session = [authInfo?.sessionId, authInfo?.extra?.['sessionId']].find(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' && candidate.length > 0 && candidate !== STATELESS_SESSION_ID,
+  );
+  if (session !== undefined) {
+    return `session:${session}`;
+  }
+
+  const principal = authInfo?.clientId;
+  return isAnonymousSubject(principal) ? undefined : `principal:${principal}`;
 }
 
 /**
