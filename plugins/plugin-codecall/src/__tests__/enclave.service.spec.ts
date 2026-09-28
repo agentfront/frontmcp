@@ -2067,6 +2067,38 @@ describe('EnclaveService', () => {
       }
     });
 
+    // AgentScript refuses `new Error()`, so a script throws a string or a plain object. Either may carry
+    // the very message a tool failure it caught had; the sandbox names them apart (`DoubleVMExecutionError`,
+    // or the object's own `name`, against `ToolError` or the tool's error name).
+    it.each([
+      ['a string', `throw 'boom';`],
+      ['an object without a name', `throw { message: 'boom' };`],
+    ])(
+      "reports the script's own error with a caught tool failure's message, thrown as %s, as its own",
+      async (_label, own) => {
+        const failures: unknown[] = [Object.freeze({ code: 'EXECUTION', message: 'boom', toolName: 'x' }), 'boom'];
+        for (const failure of failures) {
+          const env: CodeCallVmEnvironment = { ...mockEnvironment, callTool: jest.fn().mockRejectedValue(failure) };
+
+          const result = await service.execute(`try { await callTool('x', {}); } catch (e) {}\n${own}`, env);
+          expect(result.success).toBe(false);
+          expect(result.error?.message).toBe('boom');
+          expect(result.error?.toolName).toBeUndefined();
+          expect(result.error?.code).not.toBe('EXECUTION');
+        }
+      },
+    );
+
+    it("still reports a caught tool failure the script rethrows as that tool's error", async () => {
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockRejectedValue(Object.freeze({ code: 'EXECUTION', message: 'boom', toolName: 'x' })),
+      };
+
+      const result = await service.execute(`try { await callTool('x', {}); } catch (e) { throw e; }`, env);
+      expect(result.error).toMatchObject({ message: 'boom', code: 'EXECUTION', toolName: 'x' });
+    });
+
     it("reports the script's own error after it caught a tool failure", async () => {
       const env: CodeCallVmEnvironment = {
         ...mockEnvironment,
