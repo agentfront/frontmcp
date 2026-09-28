@@ -532,6 +532,7 @@ export {
   // Authorization ID
   deriveAuthorizationId,
   // Scope grants
+  advertisedScopes,
   DEFAULT_ALLOWED_SCOPES,
   grantScopes,
   // Redirect URIs

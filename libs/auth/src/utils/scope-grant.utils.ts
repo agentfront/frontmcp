@@ -31,3 +31,20 @@ export function grantScopes(requested: readonly string[], allowed: readonly stri
   }
   return granted;
 }
+
+/**
+ * The scope values to advertise as `scopes_supported` (RFC 8414 §2, RFC 9728 §2)
+ * for a server that grants `allowed`: the literal entries, in order, without
+ * duplicates. A `*` glob such as `'tickets:*'` names no single scope a client
+ * could ask for, so it isn't advertised (RFC 8414 lets a server leave supported
+ * scopes out); list a scope literally to advertise it.
+ *
+ * @param allowed The configured allowlist; `undefined` means {@link DEFAULT_ALLOWED_SCOPES}.
+ */
+export function advertisedScopes(allowed: readonly string[] | undefined): string[] {
+  const scopes: string[] = [];
+  for (const scope of allowed ?? DEFAULT_ALLOWED_SCOPES) {
+    if (scope && !scope.includes('*') && !scopes.includes(scope)) scopes.push(scope);
+  }
+  return scopes;
+}

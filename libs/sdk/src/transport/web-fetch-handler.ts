@@ -379,6 +379,11 @@ async function toServerRequest(
   request.headers.forEach((v, k) => {
     headers[k] = v;
   });
+  // A Web `Request` carries its address in its URL; runtimes don't always add a
+  // `Host` header (and `new Request(url)` never does). The resource URL, the
+  // issuer and the same-origin checks read `Host` and the scheme, so take both
+  // from the URL rather than build them from nothing (`http://undefined`).
+  if (!headers['host']) headers['host'] = url.host;
 
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {
@@ -415,6 +420,8 @@ async function toServerRequest(
 
   const serverRequest = {
     method,
+    // The scheme the client used, as Express reports it (`req.protocol`).
+    protocol: url.protocol.slice(0, -1),
     path: url.pathname,
     url: url.pathname + url.search,
     headers,

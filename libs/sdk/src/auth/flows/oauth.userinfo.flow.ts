@@ -110,10 +110,11 @@ export default class OauthUserInfoFlow extends FlowBase<typeof name> {
     }
 
     // Verify the HS256 signature + lifetime using the auth instance's own
-    // secret (the sole holder of the signing key). Issuer is accepted for
-    // parity/logging only — proxy/tunnel deployments legitimately differ.
+    // secret (the sole holder of the signing key), and that this server issued
+    // it for a request like this one (`iss`, #269).
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const result = await localAuth.verifyGatewayToken(token, baseUrl);
+    const issuer = (localAuth as Partial<LocalPrimaryAuth>).issuerFor?.(this.rawInput.request);
+    const result = await localAuth.verifyGatewayToken(token, baseUrl, undefined, issuer);
 
     if (!result.ok) {
       this.logger.warn('userinfo: token verification failed', { error: result.error });
