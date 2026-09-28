@@ -1,12 +1,10 @@
 /**
- * LocalPrimaryAuth.issuerFor — the issuer (`iss`) a token names and must name.
- *
- * The token endpoint signs with it and every verifier checks it, so the two
- * derive the issuer the same way: a configured issuer wins; a pinned
- * FRONTMCP_PUBLIC_URL comes next; FRONTMCP_PUBLIC_HOST or `expectedAudience`
- * keep the boot-time issuer; a request through a Web fetch handler (which has
- * no listener address) gets its own origin; the Node server keeps the
- * boot-time issuer.
+ * LocalPrimaryAuth.issuerFor — the issuer this server names for a request: in
+ * discovery, on authorization responses and as the `iss` of its tokens, which
+ * every verifier then requires (#269, #629). One order for every entry point,
+ * the Node server and a Web fetch handler alike: a configured issuer, then a
+ * pinned FRONTMCP_PUBLIC_URL, then the FRONTMCP_PUBLIC_HOST boot-time issuer,
+ * then the request's own origin (the boot-time issuer without a request).
  */
 import 'reflect-metadata';
 
@@ -92,10 +90,10 @@ describe('LocalPrimaryAuth.issuerFor', () => {
     expect(auth.issuerFor(webRequest('https://desk.example.com/mcp'))).toBe('https://desk.example.com/mcp');
   });
 
-  it('is the boot-time issuer for a request the Node server hands in', async () => {
+  it("is a Node request's own origin plus the scope path, as for a Web request (#629)", async () => {
     const auth = await makeAuth({ mode: 'local' });
 
-    expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe('http://localhost:3001/mcp');
+    expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe('http://desk.example.com/mcp');
   });
 
   it.each([
@@ -114,19 +112,45 @@ describe('LocalPrimaryAuth.issuerFor', () => {
 
     expect(auth.issuerFor(webRequest('https://desk.example.com/mcp'))).toBe('https://mcp.example.com/mcp');
     expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe('https://mcp.example.com/mcp');
+    expect(auth.issuerFor()).toBe('https://mcp.example.com/mcp');
   });
 
-  it('keeps the boot-time issuer with FRONTMCP_PUBLIC_HOST', async () => {
+  it('puts FRONTMCP_PUBLIC_URL before FRONTMCP_PUBLIC_HOST (#629)', async () => {
+    process.env['FRONTMCP_PUBLIC_URL'] = 'https://mcp.example.com';
+    process.env['FRONTMCP_PUBLIC_HOST'] = 'boot.example.com';
+    const auth = await makeAuth({ mode: 'local' });
+
+    expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('keeps the boot-time issuer with FRONTMCP_PUBLIC_HOST, on both entry points', async () => {
     process.env['FRONTMCP_PUBLIC_HOST'] = 'mcp.example.com';
     const auth = await makeAuth({ mode: 'local' });
 
     expect(auth.issuerFor(webRequest('https://desk.example.com/mcp'))).toBe('http://mcp.example.com:3001/mcp');
+    expect(auth.issuerFor(nodeRequest('desk.example.com'))).toBe('http://mcp.example.com:3001/mcp');
   });
 
-  it('keeps the boot-time issuer with expectedAudience, so a token serves at every listed address', async () => {
+  it('follows the request with expectedAudience, and accepts the issuer of every listed address', async () => {
     const auth = await makeAuth({ mode: 'local', expectedAudience: ['https://a.example.com/mcp'] });
+    const atB = webRequest('https://b.example.com/mcp');
 
-    expect(auth.issuerFor(webRequest('https://b.example.com/mcp'))).toBe('http://localhost:3001/mcp');
+    expect(auth.issuerFor(atB)).toBe('https://b.example.com/mcp');
+    expect(auth.acceptedIssuersFor(atB)).toEqual(
+      expect.arrayContaining(['https://b.example.com/mcp', 'https://a.example.com/mcp', 'http://localhost:3001/mcp']),
+    );
+  });
+
+  it('accepts only the one issuer when nothing lists other addresses, or something pins it', async () => {
+    expect((await makeAuth({ mode: 'local' })).acceptedIssuersFor(nodeRequest('desk.example.com'))).toBe(
+      'http://desk.example.com/mcp',
+    );
+    const configured = await makeAuth({
+      mode: 'local',
+      local: { issuer: 'https://auth.example.com' },
+      expectedAudience: ['https://a.example.com/mcp'],
+    });
+    expect(configured.acceptedIssuersFor(nodeRequest('desk.example.com'))).toBe('https://auth.example.com');
   });
 
   it('signs and verifies with the same issuer for a Web request', async () => {

@@ -14,6 +14,7 @@ import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codeca
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
+import { withScriptLines } from '../utils/script-lines';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -27,7 +28,6 @@ export interface EnclaveExecutionResult {
     stack?: string;
     code?: string;
     toolName?: string;
-    toolInput?: unknown;
     details?: unknown;
     /** For a script that doesn't parse (`code: 'SYNTAX_ERROR'`): where, in the script's own lines. */
     location?: { line: number; column: number };
@@ -247,7 +247,7 @@ export default class EnclaveService {
     const enclave = createEnclave(options);
     try {
       const result = await enclave.run<unknown>(code);
-      return this.mapEnclaveResult(result, logs, toolFailures);
+      return this.mapEnclaveResult(result, logs, toolFailures, code);
     } finally {
       enclave.dispose();
     }
@@ -260,6 +260,7 @@ export default class EnclaveService {
     result: ExecutionResult<unknown>,
     logs: string[],
     toolFailures: readonly ToolFailure[] = [],
+    script = '',
   ): EnclaveExecutionResult {
     const stats = {
       duration: result.stats.duration,
@@ -317,7 +318,9 @@ export default class EnclaveService {
       return {
         success: false,
         error: {
-          message: error.message,
+          // The enclave names lines of the code it validated (the script wrapped and printed again),
+          // not the script's own.
+          message: withScriptLines(error.message, script),
           name: 'ValidationError',
           code: error.code,
           ...(blockedPatterns.length > 0 ? { blockedPatterns } : {}),

@@ -77,7 +77,11 @@ const runtimeErrorPayloadSchema = z.object({
 const toolErrorPayloadSchema = z.object({
   source: z.literal('tool'),
   toolName: z.string(),
-  toolInput: z.unknown(),
+  /**
+   * @deprecated Never set: the sandbox resolves sidecar references in a call's arguments before
+   * the tool sees them, so they may hold data the script itself never had.
+   */
+  toolInput: z.unknown().optional(),
   message: z.string(),
   code: z.string().optional(),
   /** @deprecated Never set: the enclave's error data is not sanitized for clients. */

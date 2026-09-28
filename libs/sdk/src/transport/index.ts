@@ -94,7 +94,13 @@ export type { InMemoryServerResult } from './in-memory-server';
  * straight into the MCP WebStandard transport (no Express/Node shim). The
  * runtime for V8-isolate targets (Cloudflare Workers, Deno, Bun).
  */
-export { createWebFetchHandler, runHttpRequestFlowWeb } from './web-fetch-handler';
+export {
+  createDeferredServerBuild,
+  createWebFetchHandler,
+  runHttpRequestFlowWeb,
+  startupFailureResponse,
+  type DeferredServerBuild,
+} from './web-fetch-handler';
 export type {
   WebFetchHandler,
   CreateWebFetchHandlerOptions,

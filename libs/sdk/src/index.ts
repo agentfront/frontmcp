@@ -444,7 +444,13 @@ export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
 
 // Web-standard fetch handler (Cloudflare Workers / Deno / Bun) — no Express/Node shim
-export { createWebFetchHandler, runHttpRequestFlowWeb } from './transport';
+export {
+  createDeferredServerBuild,
+  createWebFetchHandler,
+  runHttpRequestFlowWeb,
+  startupFailureResponse,
+  type DeferredServerBuild,
+} from './transport';
 export type {
   WebFetchHandler,
   CreateWebFetchHandlerOptions,

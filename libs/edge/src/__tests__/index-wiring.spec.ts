@@ -26,12 +26,18 @@ import {
 const createForGraph = jest.fn();
 const createWebFetchHandler = jest.fn();
 
-jest.mock('@frontmcp/sdk', () => ({
-  // The startup checks on the config (see index.spec.ts); none of these configs declares anything they refuse.
-  assertStaticStartupConfig: () => undefined,
-  FrontMcpInstance: { createForGraph: (...args: unknown[]) => createForGraph(...args) },
-  createWebFetchHandler: (...args: unknown[]) => createWebFetchHandler(...args),
-}));
+jest.mock('@frontmcp/sdk', () => {
+  // The deferred-build helpers are plain logic; use the real ones.
+  const { createDeferredServerBuild, startupFailureResponse } = jest.requireActual('@frontmcp/sdk');
+  return {
+    // The startup checks on the config (see index.spec.ts); none of these configs declares anything they refuse.
+    assertStaticStartupConfig: () => undefined,
+    FrontMcpInstance: { createForGraph: (...args: unknown[]) => createForGraph(...args) },
+    createWebFetchHandler: (...args: unknown[]) => createWebFetchHandler(...args),
+    createDeferredServerBuild,
+    startupFailureResponse,
+  };
+});
 
 // Lazily-imported optional peer. We capture init() args + return a fake plugin.
 const pluginInit = jest.fn(() => ({ __plugin: true }));
@@ -160,24 +166,44 @@ describe('createEdgeMcp — lazy build & memoization', () => {
     expect(createForGraph).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the memo on a failed build so the next request retries', async () => {
-    const boom = new Error('build failed');
-    createForGraph.mockRejectedValueOnce(boom).mockResolvedValueOnce(builtInstance(makeScope()));
-    const edge = createEdgeMcp(BASE);
+  it('answers a failed build, keeps it for its retry delay, then the next request retries', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(1_000_000);
+      createForGraph.mockRejectedValueOnce(new Error('build failed')).mockResolvedValueOnce(builtInstance(makeScope()));
+      const edge = createEdgeMcp(BASE);
 
-    await expect(edge.fetch(new Request('https://w/'))).rejects.toBe(boom);
-    expect(boom).toBeInstanceOf(Error);
+      const refused = await edge.fetch(new Request('https://w/'));
+      const refusedAgain = await edge.fetch(new Request('https://w/'));
+      expect([refused.status, refusedAgain.status]).toEqual([503, 503]);
+      expect(refused.headers.get('retry-after')).toBe('1');
+      expect(createForGraph).toHaveBeenCalledTimes(1);
 
-    const res = await edge.fetch(new Request('https://w/'));
-    expect(res.status).toBe(200);
-    expect(createForGraph).toHaveBeenCalledTimes(2);
+      now.mockReturnValue(1_001_000);
+      const res = await edge.fetch(new Request('https://w/'));
+      expect(res.status).toBe(200);
+      expect(createForGraph).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 
-  it('throws a descriptive error when the config produces no scope', async () => {
-    createForGraph.mockResolvedValue(builtInstance());
-    const edge = createEdgeMcp(BASE);
-    await expect(edge.fetch(new Request('https://w/'))).rejects.toBeInstanceOf(Error);
-    await expect(edge.fetch(new Request('https://w/'))).rejects.toThrow(/produced no scope/);
+  it('answers 503 and logs a descriptive error when the config produces no scope', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      createForGraph.mockResolvedValue(builtInstance());
+      const edge = createEdgeMcp(BASE);
+
+      const res = await edge.fetch(new Request('https://w/'));
+
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as { code: string }).code).toBe('SERVER_START_FAILED');
+      expect(String(consoleError.mock.calls[0]?.[1])).toMatch(/produced no scope/);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 

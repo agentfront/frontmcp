@@ -535,11 +535,13 @@ export {
   advertisedScopes,
   DEFAULT_ALLOWED_SCOPES,
   grantScopes,
+  resourceScopesFor,
   // Redirect URIs
   isLoopbackRedirectUri,
 } from './utils';
 export type {
   BearerErrorCode,
+  ResourceScopeOptions,
   WwwAuthenticateOptions,
   AudienceValidationResult,
   AudienceValidatorOptions,

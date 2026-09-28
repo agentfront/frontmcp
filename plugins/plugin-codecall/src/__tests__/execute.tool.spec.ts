@@ -307,7 +307,9 @@ describe('ExecuteTool', () => {
       expect(result.status).toBe('tool_error');
       expect(result.error.source).toBe('tool');
       expect(result.error.toolName).toBe('users:create');
-      expect(result.error.toolInput).toEqual({ name: 'Test' });
+      // Not the tool's arguments either: the sandbox resolves sidecar references in them before the
+      // tool handler sees them, so they may hold data the script itself never had.
+      expect(result.error).not.toHaveProperty('toolInput');
       expect(result.error.message).toContain('Database connection failed');
       expect(result.error.code).toBe('DB_ERROR');
       // The enclave's error data is not sanitized, so it never reaches the client.

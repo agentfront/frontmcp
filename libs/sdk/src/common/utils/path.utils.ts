@@ -65,6 +65,11 @@ export function isPublicUrlPinned(): boolean {
   return readPublicUrlPin() !== undefined;
 }
 
+/** The operator-pinned canonical public origin (`FRONTMCP_PUBLIC_URL`, no trailing slash), if any. */
+export function getPinnedPublicUrl(): string | undefined {
+  return readPublicUrlPin();
+}
+
 /**
  * Whether `X-Forwarded-Host` / `X-Forwarded-Proto` may be trusted.
  *

@@ -51,6 +51,12 @@ export interface RequestNotificationSinkRef {
  * module stays free of a dependency on the transport layer.
  */
 export interface MrtrExchangeRef {
+  /** Whether the client declared the revision itself, rather than the server defaulting to it. */
+  readonly clientDeclaredRevision?: boolean;
+
+  /** Whether the client declared support for elicitation in this request. */
+  supportsElicitation?(mode?: 'form' | 'url'): boolean;
+
   resolveElicitation(pending: {
     message: string;
     requestedSchema: Record<string, unknown>;

@@ -320,6 +320,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
       }
     }
     ```
+    The lines an issue names (`FORBIDDEN_LOOP (line 3): …`) are the script's own lines. A line that belongs to no line of the script is left out.
   </Accordion>
 
   <Accordion title="Runtime Error">
@@ -347,7 +348,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
       }
     }
     ```
-    A failing tool call the script didn't catch (or rethrew), through `callTool()` or a namespace method, including a call the access policy refused (`ACCESS_DENIED`). An error of the script's own, even after it caught a tool failure, is `runtime_error`.
+    A failing tool call the script didn't catch (or rethrew), through `callTool()` or a namespace method, including a call the access policy refused (`ACCESS_DENIED`). An error of the script's own, even after it caught a tool failure, is `runtime_error`. The result doesn't carry the call's arguments: the schema keeps `toolInput`, deprecated and never set, since the sandbox resolves sidecar references in them before the tool sees them.
   </Accordion>
 
   <Accordion title="Timeout">

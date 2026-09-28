@@ -12,6 +12,7 @@
 import type { SkillContent, SkillEntry, ToolEntry } from '../common';
 import type { SkillResources, SkillVisibility } from '../common/metadata/skill.metadata';
 import type ToolRegistry from '../tool/tool.registry';
+import { SKILLS_HTTP_SURFACE, skillToolsForCaller } from './skill-filter.helper';
 import type { SkillRegistryInterface as SkillRegistryInterfaceType } from './skill.registry';
 
 /**
@@ -109,7 +110,14 @@ export async function formatSkillsForLlmFull(
 
     const loaded = await registry.loadSkill(skill.name);
     if (loaded) {
-      parts.push(formatSkillForLLMWithSchemas(loaded.skill, loaded.availableTools, loaded.missingTools, toolRegistry));
+      // The document serves the MCP surface: a tool it doesn't offer is listed as missing, without its schema.
+      const { availableTools, missingTools } = skillToolsForCaller(
+        loaded,
+        toolRegistry,
+        undefined,
+        SKILLS_HTTP_SURFACE,
+      );
+      parts.push(formatSkillForLLMWithSchemas(loaded.skill, availableTools, missingTools, toolRegistry));
     }
   }
 

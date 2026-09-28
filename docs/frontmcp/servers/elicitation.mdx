@@ -573,7 +573,8 @@ Otherwise the same rules apply as in a session:
 
 - `elicitation.enabled: true` is required.
 - An accepted answer is validated against the schema. A mismatch fails the call with `INVALID_INPUT`, and an unknown `action` is rejected the same way.
-- A client that did not declare the `elicitation` capability (or the requested mode) gets error `-32021` instead of a question.
+- A client that declared 2026-07-28 but not the `elicitation` capability (or the requested mode) gets error `-32021` instead of a question.
+- An unversioned call that the server serves under 2026-07-28 (`transport.defaultProtocolVersion`, the default on Workers) comes from a client that never declared the revision, typically a 2025-03-26 one. Without the capability, `elicit()` throws `ElicitationNotSupportedError`, as for a legacy client without a session.
 - The `sendElicitationResult` fallback tool is not listed to 2026-07-28 clients.
 - Anonymous callers can answer across rounds: their `requestState` is bound to one shared anonymous principal, not to the per-request anonymous id.
 

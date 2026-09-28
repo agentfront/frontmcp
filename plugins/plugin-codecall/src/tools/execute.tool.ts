@@ -373,10 +373,10 @@ export default class ExecuteTool extends ToolContext {
             error: {
               source: 'tool',
               toolName: error.toolName,
-              toolInput: error.toolInput,
               message: toClientErrorMessage(error.message),
               code: error.code,
-              // No `details`: the enclave's error data is not sanitized for clients.
+              // No `details`: the enclave's error data is not sanitized for clients. No `toolInput`:
+              // the arguments the tool saw may hold sidecar-resolved data the script never had.
             },
           };
         }

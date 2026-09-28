@@ -573,7 +573,7 @@
               "features": [
                 "Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config",
                 "Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy",
-                "Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)"
+                "Knowing the issuer order: `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (host only), then the request"
               ]
             },
             {

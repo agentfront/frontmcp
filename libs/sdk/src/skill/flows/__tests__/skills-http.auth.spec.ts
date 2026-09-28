@@ -89,6 +89,41 @@ describe('skills HTTP endpoints on a static-auth server', () => {
     });
   });
 
+  describe('in production without MCP_SESSION_SECRET', () => {
+    // The skills HTTP endpoints are plain requests, not MCP sessions: verifying their caller must not
+    // mint a session id, which needs MCP_SESSION_SECRET in production.
+    const saved: Record<string, string | undefined> = {};
+    let server: TestFetchServer;
+
+    beforeAll(async () => {
+      for (const key of ['NODE_ENV', 'MCP_SESSION_SECRET']) saved[key] = process.env[key];
+      process.env['NODE_ENV'] = 'production';
+      delete process.env['MCP_SESSION_SECRET'];
+      server = await staticServer({ enabled: true });
+    });
+
+    afterAll(() => {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+
+    it('serves a request with the server key', async () => {
+      const responses = await Promise.all(
+        PATHS.map((path) => get(server, path, { authorization: `Bearer ${STATIC_KEY}` })),
+      );
+
+      expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
+    });
+
+    it('still refuses a request without the server key', async () => {
+      const statuses = await Promise.all(PATHS.map(async (path) => (await get(server, path)).status));
+
+      expect(statuses).toEqual([401, 401, 401]);
+    });
+  });
+
   describe('with auth "public"', () => {
     let server: TestFetchServer;
 

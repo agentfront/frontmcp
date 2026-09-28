@@ -417,13 +417,18 @@ export function validateSecurityConfiguration(
   >,
 ): SecurityValidationResult {
   const result = validateCredentialSources(tools, options);
-  // `securitySchemesInInput` lets the model choose the credential of the schemes it lists, as
-  // `includeSecurityInInput` does for every scheme: the same risk.
-  const schemesInInput = options.securitySchemesInInput ?? [];
-  if (options.generateOptions?.includeSecurityInInput !== true && schemesInInput.length > 0) {
+  // `securitySchemesInInput` and an `includeSecurityInInput` list let the model choose the credential
+  // of the schemes they name, as `includeSecurityInInput: true` does for every scheme: the same risk.
+  const schemesInInput = inputSecuritySchemes(options);
+  if (schemesInInput !== 'all' && schemesInInput.size > 0) {
+    const include = options.generateOptions?.includeSecurityInInput;
+    const sources = [
+      (options.securitySchemesInInput?.length ?? 0) > 0 ? 'securitySchemesInInput' : undefined,
+      Array.isArray(include) && include.length > 0 ? 'an includeSecurityInInput list' : undefined,
+    ].filter((source): source is string => source !== undefined);
     result.securityRiskScore = 'high';
     result.warnings.push(
-      `SECURITY WARNING: securitySchemesInInput is enabled. The model provides the credential for security schemes ${schemesInInput.join(', ')} in tool inputs, used when the server supplies none. Credentials may be logged or exposed, and the model chooses whose account a call uses.`,
+      `SECURITY WARNING: ${sources.join(' and ')} ${sources.length > 1 ? 'are' : 'is'} enabled. The model provides the credential for security schemes ${[...schemesInInput].join(', ')} in tool inputs, used when the server supplies none. Credentials may be logged or exposed, and the model chooses whose account a call uses.`,
     );
   }
   return result;
@@ -454,10 +459,11 @@ function validateCredentialSources(
   // Extract all security schemes used
   const securitySchemes = describeSecuritySchemes(tools);
 
-  // If includeSecurityInInput is true, auth is provided by user (high security risk)
-  const includeSecurityInInput = options.generateOptions?.includeSecurityInInput ?? false;
+  // If includeSecurityInInput is true, auth is provided by user for every scheme (high security risk).
+  // A list names only some schemes; the others still need a credential source (checked below).
+  const inputSchemes = inputSecuritySchemes(options);
 
-  if (includeSecurityInInput) {
+  if (inputSchemes === 'all') {
     result.securityRiskScore = 'high';
     result.warnings.push(
       'SECURITY WARNING: includeSecurityInInput is enabled. Users will provide authentication directly in tool inputs (used for a scheme when the server supplies none). This increases security risk as credentials may be logged or exposed.',
@@ -486,7 +492,7 @@ function validateCredentialSources(
   }
 
   // Get schemes that will be provided via input (don't need mapping)
-  const schemesInInput = new Set(options.securitySchemesInInput || []);
+  const schemesInInput = inputSchemes;
 
   // Check authProviderMapper (low risk - context-based auth)
   if (options.authProviderMapper || schemesInInput.size > 0) {
@@ -695,14 +701,26 @@ export async function resolveToolSecurity(
   };
 }
 
+/**
+ * The security schemes whose credential the tool input carries: `'all'` for
+ * `generateOptions.includeSecurityInInput: true`, otherwise the schemes an `includeSecurityInInput`
+ * list and `securitySchemesInInput` name (possibly none).
+ */
+export function inputSecuritySchemes(
+  options: Pick<OpenApiAdapterOptions, 'generateOptions' | 'securitySchemesInInput'>,
+): 'all' | ReadonlySet<string> {
+  const include = options.generateOptions?.includeSecurityInInput;
+  if (include === true) return 'all';
+  return new Set([...(Array.isArray(include) ? include : []), ...(options.securitySchemesInInput ?? [])]);
+}
+
 /** Whether the tool input carries the credential of a scheme (`includeSecurityInInput` / `securitySchemesInInput`). */
 function isInputScheme(
   scheme: string,
   options: Pick<OpenApiAdapterOptions, 'generateOptions' | 'securitySchemesInInput'>,
 ): boolean {
-  return (
-    options.generateOptions?.includeSecurityInInput === true || (options.securitySchemesInInput ?? []).includes(scheme)
-  );
+  const schemes = inputSecuritySchemes(options);
+  return schemes === 'all' || schemes.has(scheme);
 }
 
 /** The credential a scheme reads, for a value the tool input carries (a leading `Bearer ` / `Basic ` is dropped). */

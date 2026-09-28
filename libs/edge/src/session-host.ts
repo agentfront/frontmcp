@@ -15,7 +15,9 @@
  */
 import {
   buildPersistentWebStandardMcp,
+  createDeferredServerBuild,
   runHttpRequestFlowWeb,
+  startupFailureResponse,
   type WebFetchSessionRouter,
   type WebStandardMcpPair,
 } from '@frontmcp/sdk';
@@ -70,6 +72,14 @@ export function createEdgeSessionRouter(bindingName: string): WebFetchSessionRou
   };
 }
 
+/** Log a failed session build once per attempt: the request it refuses carries only a code. */
+function logStartFailure(error: unknown): void {
+  console.error(
+    '[frontmcp/edge] The session Durable Object failed to start; requests are refused until a retry succeeds.',
+    error,
+  );
+}
+
 /**
  * Build the Durable Object class for stateful MCP sessions. `buildScope(env)`
  * builds the FrontMCP scope inside the DO's isolate; `bridgeEnv(env)` mirrors the
@@ -84,8 +94,14 @@ export function createEdgeSessionDurableObject(
   // ES `#private` fields (not TS `private`) — an exported anonymous class type
   // may not carry `private`/`protected` members (TS4094).
   return class FrontMcpSessionDurableObject {
-    #scopePromise?: Promise<Scope>;
-    #pairPromise?: Promise<WebStandardMcpPair>;
+    // Built once per instance and shared by concurrent first requests. A failed build is kept and
+    // refuses requests until its retry delay passes (1 s, doubling up to 60 s), then the next
+    // request tries again, so one transient init error doesn't brick this instance.
+    readonly #scope = createDeferredServerBuild((env: unknown) => buildScope(env), { onFailure: logStartFailure });
+    readonly #pair = createDeferredServerBuild(
+      ({ scope, sessionId }: { scope: Scope; sessionId: string }) => this.#buildPair(scope, sessionId),
+      { onFailure: logStartFailure },
+    );
     readonly #doEnv: unknown;
     readonly #storage: DurableObjectStorageLike | undefined;
 
@@ -118,23 +134,17 @@ export function createEdgeSessionDurableObject(
       bridgeEnv(this.#doEnv);
       const sessionId = request.headers.get(SESSION_ID_HEADER) ?? request.headers.get('mcp-session-id') ?? randomUUID();
 
-      // Reset the memoized promise on failure so a transient init error doesn't
-      // permanently brick this Durable Object instance — the next request retries.
-      let scope;
+      // Build the scope, then the session's persistent server + transport, once; reuse them for
+      // every subsequent request so the GET notification stream survives. A failed build is
+      // answered, never thrown to the platform: a configuration fault as 500
+      // `server_misconfigured`, anything else as 503 `server_unavailable` with `Retry-After`.
+      let scope: Scope;
+      let pair: WebStandardMcpPair;
       try {
-        scope = await (this.#scopePromise ??= buildScope(this.#doEnv));
+        scope = await this.#scope.get(this.#doEnv);
+        pair = await this.#pair.get({ scope, sessionId });
       } catch (error) {
-        this.#scopePromise = undefined;
-        throw error;
-      }
-      // Build the session's persistent server + transport once; reuse it for
-      // every subsequent request so the GET notification stream survives.
-      let pair;
-      try {
-        pair = await (this.#pairPromise ??= this.#buildPair(scope, sessionId));
-      } catch (error) {
-        this.#pairPromise = undefined;
-        throw error;
+        return startupFailureResponse(error, Math.max(this.#scope.retryAfterSeconds(), this.#pair.retryAfterSeconds()));
       }
 
       // #536 — the DO's own bindings reach tools through the same request token

@@ -1,3 +1,8 @@
+import {
+  completionEventsOf,
+  completionOutputText,
+  type ScopeCompletionEvents,
+} from '../channel/sources/completion-events';
 import { type EntryOwnerRef } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
@@ -14,7 +19,7 @@ import JobRegistry, { type JobRegistryInterface } from './job.registry';
 import { createJobDefinitionStore, type JobDefinitionStoreOptions } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
 import { createJobStateStore, type JobStateStoreOptions } from './store/job-state-store.factory';
-import { type JobStateStore } from './store/job-state.interface';
+import { type JobStateStore, type WorkflowRunRecord } from './store/job-state.interface';
 import ExecuteJobTool from './tools/execute-job.tool';
 import GetJobStatusTool from './tools/get-job-status.tool';
 // Import tools
@@ -112,8 +117,13 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     workflowRegistry.registerDynamic(dynWf);
   }
 
-  // 4. Create execution manager
-  const executionManager = new JobExecutionManager(stateStore, logger, notifyFn);
+  // 4. Create execution manager. Its status notifications also publish finished job and workflow
+  // runs to the scope's completions, which `job-completion` channel sources subscribe to.
+  const completions = completionEventsOf(providers.getActiveScope());
+  const executionManager = new JobExecutionManager(stateStore, logger, async (data) => {
+    await notifyFn?.(data);
+    await publishJobCompletion(data, stateStore, completions);
+  });
 
   // 5. Collect management tools. The dynamic-registration pair is omitted
   // unless the operator opted in — an unregistered tool cannot be called at
@@ -149,4 +159,31 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     definitionStore,
     managementTools,
   };
+}
+
+/**
+ * Publish a finished job or workflow run (a `completed` or `failed` status notification) as a job
+ * completion, read from its run record. The event names the session that ran it, if any.
+ */
+async function publishJobCompletion(
+  data: Record<string, unknown>,
+  stateStore: JobStateStore,
+  completions: ScopeCompletionEvents,
+): Promise<void> {
+  const { type, state, runId } = data;
+  if (type !== 'job:status' && type !== 'workflow:status') return;
+  if ((state !== 'completed' && state !== 'failed') || typeof runId !== 'string') return;
+
+  const run = await stateStore.getRun(runId);
+  if (!run) return;
+  const workflowName = type === 'workflow:status' ? (run as Partial<WorkflowRunRecord>).workflowName : undefined;
+  completions.jobs.emit({
+    jobName: workflowName ?? run.jobName,
+    jobId: run.jobId,
+    status: state === 'completed' ? 'success' : 'error',
+    ...(run.completedAt !== undefined ? { durationMs: run.completedAt - run.startedAt } : {}),
+    ...(state === 'completed' ? { output: completionOutputText(run.result) } : { error: run.error?.message }),
+    attempt: run.attempt,
+    ...(run.sessionId ? { sessionId: run.sessionId } : {}),
+  });
 }
