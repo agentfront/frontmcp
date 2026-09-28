@@ -14,11 +14,13 @@
  * They refuse only what the full checks certainly refuse too:
  * - an entry declares `authorities` and the server has no `authorities` option;
  * - an entry declares a field only a plugin enforces (`approval`, `featureFlag`, ...) and no plugin
- *   that reaches it enforces it. The server's plugins reach every entry. An app's plugins reach its
- *   entries, and other apps' too when one of their hooks is `appliesTo: 'uncovered-apps'` or their
- *   hooks can't be read here. Skills, and entries outside every app, are reached by every plugin
- *   outside an agent. A tool declared inside an `@Agent` is reached only by that agent's plugins (by
- *   none with `execution.useToolFlow: false`), and an agent's plugins reach nothing else.
+ *   that reaches it enforces it. Outside an agent, a plugin enforces the fields it declares only
+ *   through its hooks, so one without hooks enforces none. The server's plugins reach every entry.
+ *   An app's plugins reach its entries, and other apps' too when one of their hooks is
+ *   `appliesTo: 'uncovered-apps'` or their hooks can't be read here. Skills, and entries outside
+ *   every app, are reached by every plugin outside an agent. A tool declared inside an `@Agent` is
+ *   reached only by that agent's plugins (by none with `execution.useToolFlow: false`), and an
+ *   agent's plugins reach nothing else.
  *
  * Entries the config names are read from their decorators. An entry whose `availableWhen` depends on
  * the process (os, runtime, env, ...) is left to the full checks, as are entries only the built server
@@ -27,7 +29,14 @@
 
 import { normalizeAgent } from '../agent/agent.utils';
 import { normalizeApp } from '../app/app.utils';
-import { AppKind, PluginKind, type FrontMcpConfigInput, type FrontMcpConfigType, type PluginRecord } from '../common';
+import {
+  AppKind,
+  PluginKind,
+  type FrontMcpConfigInput,
+  type FrontMcpConfigType,
+  type HookMetadata,
+  type PluginRecord,
+} from '../common';
 import { peekPendingTC39HooksForClass } from '../common/decorators/hook.decorator';
 import {
   describeMetadataEnforcer,
@@ -102,12 +111,11 @@ function pluginClassOf(record: PluginRecord): Function | undefined {
   }
 }
 
-/** Whether a plugin installed on an app may gate other apps' entries (`appliesTo: 'uncovered-apps'`). */
-function mayGateOtherApps(record: PluginRecord): boolean {
+/** The hooks a plugin's class declares, or undefined when its record does not name the class. */
+function pluginHooksOf(record: PluginRecord): HookMetadata[] | undefined {
   const pluginClass = pluginClassOf(record);
-  if (!pluginClass) return true;
-  const hooks = [...collectHook(pluginClass), ...peekPendingTC39HooksForClass(pluginClass)];
-  return hooks.length === 0 || hooks.some((hook) => hook.appliesTo === 'uncovered-apps');
+  if (!pluginClass) return undefined;
+  return [...collectHook(pluginClass), ...peekPendingTC39HooksForClass(pluginClass)];
 }
 
 /** The keys a plugin list enforces, nested plugins included. */
@@ -144,8 +152,12 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
     for (const plugin of plugins ?? []) {
       const record = tryNormalize(() => normalizePlugin(plugin as Parameters<typeof normalizePlugin>[0]));
       if (!record) continue;
-      const keys = app && !mayGateOtherApps(record) ? keysOfApp(app) : everyAppKeys;
-      for (const key of record.metadata.enforcesMetadata ?? []) keys.add(key);
+      const hooks = pluginHooksOf(record);
+      if (hooks === undefined || hooks.length > 0) {
+        const gatesOnlyItsApp = hooks !== undefined && !hooks.some((hook) => hook.appliesTo === 'uncovered-apps');
+        const keys = app && gatesOnlyItsApp ? keysOfApp(app) : everyAppKeys;
+        for (const key of record.metadata.enforcesMetadata ?? []) keys.add(key);
+      }
       visitEntries(record.metadata as EntryLists, app);
     }
   };

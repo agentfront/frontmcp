@@ -76,6 +76,10 @@ function wrappedGate(gate: new () => object) {
   return { provide: ApprovalSuitePlugin, useValue: new ApprovalSuitePlugin() };
 }
 
+/** Declares that it enforces `approval` but has no hook that does. */
+@Plugin({ name: 'hookless-approval', enforcesMetadata: ['approval'] })
+class HooklessApprovalPlugin {}
+
 /** Contributes a tool that asks for approval, and enforces nothing. */
 @Plugin({ name: 'queue-tools', tools: [tool('purge_queue', APPROVAL)] })
 class QueueToolsPlugin {}
@@ -167,6 +171,10 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)] })], plugins: [OwnAppApprovalPlugin] }),
   ],
   [
+    'an approval tool inside an agent whose own plugin declares approval without a hook',
+    server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })] }),
+  ],
+  [
     'an approval tool inside an agent whose own plugin enforces approval',
     server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
   ],
@@ -213,6 +221,13 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
         app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
         app('desk', { plugins: [wrappedGate(OwnAppApprovalPlugin)] }),
       ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and the only plugin declaring approval has no hook',
+    server({
+      apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)], plugins: [HooklessApprovalPlugin] })],
     }),
     UnenforcedMetadataError,
   ],
