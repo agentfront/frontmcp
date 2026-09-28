@@ -341,7 +341,21 @@ function requiredSecurityOf(tool: McpOpenAPITool): SecurityParameterInfo[] {
   return tool.mapper.flatMap((mapper) => (mapper.security && mapper.required === true ? [mapper.security] : []));
 }
 
-/** Whether a request carries the parameter a security scheme's credential goes in. */
+/**
+ * The `Authorization` scheme a security scheme's credential is sent with (lower case), or
+ * `undefined` for an API key, whose header holds the bare key.
+ */
+function authorizationSchemeOf(security: SecurityParameterInfo | undefined): string | undefined {
+  if (security?.type === 'http') return (security.httpScheme ?? 'bearer').toLowerCase();
+  if (security?.type === 'oauth2' || security?.type === 'openIdConnect') return 'bearer';
+  return undefined;
+}
+
+/**
+ * Whether a request carries the parameter a security scheme's credential goes in. A header for an
+ * HTTP, OAuth2 or OpenID Connect scheme must carry that scheme and a credential: `Bearer <token>` is
+ * no HTTP Basic credential. A header API key only has to be present.
+ */
 function carriesSchemeParameter(mapper: ParameterMapper, url: URL, headers: Headers): boolean {
   if (mapper.type === 'query') return !!url.searchParams.get(mapper.key);
   if (mapper.type === 'cookie') {
@@ -350,7 +364,13 @@ function carriesSchemeParameter(mapper: ParameterMapper, url: URL, headers: Head
       return name === mapper.key && value.join('=') !== '';
     });
   }
-  return mapper.type === 'header' && !!headers.get(mapper.key);
+  if (mapper.type !== 'header') return false;
+  const value = headers.get(mapper.key)?.trim();
+  if (!value) return false;
+  const scheme = authorizationSchemeOf(mapper.security);
+  if (!scheme) return true;
+  const space = value.indexOf(' ');
+  return space > 0 && value.slice(0, space).toLowerCase() === scheme && value.slice(space + 1).trim() !== '';
 }
 
 /**
