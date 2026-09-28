@@ -17,6 +17,7 @@ import {
   type ScopeEntry,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
+import { runOnSurface } from '../../context/call-surface';
 import {
   InvalidInputError,
   InvalidMethodError,
@@ -311,8 +312,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     promptContext.mark('execute');
 
     try {
-      // Use cached parsed arguments from createPromptContext stage
-      promptContext.output = await promptContext.execute(parsedArgs);
+      // Use cached parsed arguments from createPromptContext stage. What the prompt does for the
+      // caller is judged for this call's surface (`getCallSurface()`), as in a tool or resource read.
+      promptContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
+        promptContext.execute(parsedArgs),
+      );
       this.logger.verbose('execute:done');
     } catch (error) {
       if (error instanceof FlowControl || isClientFacingError(error)) throw error;

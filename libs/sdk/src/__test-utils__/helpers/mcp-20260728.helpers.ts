@@ -86,8 +86,10 @@ export async function rpc20260728(
       },
     },
   };
+  // A Web runtime puts the address the client used in the request URL, so a `host` header names it there too.
+  const host = options.headers?.['host'] ?? 'localhost';
   const response = await handler(
-    new Request(new URL(options.path ?? '/', 'http://localhost'), {
+    new Request(new URL(options.path ?? '/', `http://${host}`), {
       method: 'POST',
       body: JSON.stringify(body),
       headers: {

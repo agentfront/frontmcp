@@ -1,4 +1,4 @@
-import { fileExists, randomUUID, unlink } from '@frontmcp/utils';
+import { fileExists, isEdgeRuntime, randomUUID, unlink } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -31,6 +31,7 @@ import {
   type WebFetchHandler,
 } from '../transport/web-fetch-handler';
 import { createMcpGlobalProviders } from './front-mcp.providers';
+import { assertStaticStartupConfig } from './static-startup.check';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -276,25 +277,27 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * Express / Node `req`/`res` and runs on V8-isolate targets (Cloudflare
    * Workers, Deno Deploy, Bun).
    *
+   * A server the startup checks refuse (an entry whose `approval`, `featureFlag`
+   * or `authorities` nothing enforces, a missing secret, ...) rejects here, as
+   * with {@link createDirect}. On an edge isolate the server is built on its
+   * first request instead (see below).
+   *
    * @example
    * // worker entry
    * const handler = await FrontMcpInstance.createFetchHandler(config);
    * export default { fetch: (request) => handler(request) };
    */
   public static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler> {
-    // Defer ALL instance/scope construction to the first request. On V8 isolates
-    // (Cloudflare Workers) the @FrontMcp decorator runs this at module-eval
-    // (global) scope, where timers / random / I-O are forbidden — yet scope
-    // initialization legitimately does those (e.g. ProviderRegistry's session
-    // cleanup interval). Building lazily inside the returned handler moves that
-    // work into a request context, where it is allowed. The build runs once and
-    // is memoized; concurrent first requests share the same in-flight build.
-    let inner: WebFetchHandler | undefined;
-    let building: Promise<WebFetchHandler> | undefined;
-
-    const build = async (): Promise<WebFetchHandler> => {
+    const build = async (deferred: boolean): Promise<WebFetchHandler> => {
       const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
-      await frontMcp.ready;
+      try {
+        await frontMcp.ready;
+      } catch (err) {
+        // A deferred build fails on a request, which may only be answered with a code and a remedy:
+        // the server's own log is where its operator reads why it didn't start.
+        if (deferred) frontMcp.log?.error('FrontMCP failed to start; requests are refused until it does', err);
+        throw err;
+      }
       const scope = frontMcp.getPrimaryScope() as Scope | undefined;
       if (!scope) {
         throw new ServerNotFoundError();
@@ -302,6 +305,20 @@ export class FrontMcpInstance implements FrontMcpInterface {
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
       return createWebFetchHandler(scope);
     };
+
+    // Where the runtime allows it, build now, so a misconfigured server fails where it is created.
+    if (!isEdgeRuntime()) return build(false);
+
+    // On an edge isolate (Cloudflare Workers, Vercel Edge, Deno) the @FrontMcp decorator, or the
+    // worker module, runs this at module-eval (global) scope, where timers / random / I-O are
+    // forbidden — yet scope initialization legitimately does those (e.g. ProviderRegistry's session
+    // cleanup interval), and a Worker's secrets only arrive with its first request. So ALL
+    // instance/scope construction is deferred to the first request, and only the startup checks the
+    // config's metadata settles run here. The build runs once and is memoized; concurrent first
+    // requests share the same in-flight build.
+    assertStaticStartupConfig(options);
+    let inner: WebFetchHandler | undefined;
+    let building: Promise<WebFetchHandler> | undefined;
 
     // #536 — `ctx` and `env` must reach the inner handler: `ctx.waitUntil` keeps
     // the isolate alive for a streaming body, and `env` carries the Worker's
@@ -313,7 +330,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         // poison the isolate — without this, every later request would reuse the
         // rejected promise with no retry path.
         if (!building) {
-          building = build().catch((err) => {
+          building = build(true).catch((err) => {
             building = undefined;
             throw err;
           });
@@ -325,6 +342,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
           // constructed, i.e. before any flow exists to map it. Without this the
           // handler promise rejects and the platform answers its own opaque 500,
           // which is the very thing the structured body was added to replace.
+          // A server the startup checks refuse is answered the same way, on every request.
           const misconfigured = misconfigurationResponse(err);
           if (misconfigured) return misconfigured;
           throw err;

@@ -4,8 +4,8 @@
  * Registers the per-request {@link SecureStoreAccessor} (`this.secureStore`).
  * The backend is a GLOBAL singleton owned by LocalPrimaryAuth; the accessor is
  * CONTEXT-scoped because it must resolve the CURRENT request's namespace (the
- * authenticated `sub` for `user` scope, the transport `sessionId` for `session`
- * scope) before calling the backend.
+ * authenticated `sub` for `user` scope, the verified session, else the signed-in
+ * caller, for `session` scope) before calling the backend.
  */
 
 import {
@@ -19,7 +19,9 @@ import { ProviderScope, type Token } from '@frontmcp/di';
 import { FrontMcpLogger, type ProviderType } from '../../common';
 import { type FrontMcpContext } from '../../context/frontmcp-context';
 import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
+import { SessionIdentityRequiredError } from '../../errors/session-identity-required.error';
 import { resolveRequestSub } from '../credentials/credentials.providers';
+import { sessionScopeIdentity } from '../session-scope-identity';
 
 /**
  * GLOBAL DI token for the secure-store backend singleton. Provided by
@@ -28,12 +30,16 @@ import { resolveRequestSub } from '../credentials/credentials.providers';
 export const SECURE_STORE_BACKEND = Symbol.for('frontmcp:SECURE_STORE_BACKEND') as Token<SecureStoreBackend>;
 
 /**
- * Resolve the transport session id for the current request, or undefined when
- * there is no session. Used for `session`-scoped secrets.
+ * The identity `session`-scoped secrets of the current request belong to: the session the server
+ * verified, else the signed-in caller (see {@link sessionScopeIdentity}).
+ *
+ * @throws SessionIdentityRequiredError for an anonymous caller without a verified session, which no
+ *   later request could be matched to
  */
-export function resolveRequestSessionId(ctx: FrontMcpContext): string | undefined {
-  const sid = ctx.sessionId;
-  return typeof sid === 'string' && sid.length > 0 ? sid : undefined;
+export function resolveRequestSessionId(ctx: FrontMcpContext): string {
+  const identity = sessionScopeIdentity(ctx);
+  if (identity) return identity;
+  throw new SessionIdentityRequiredError("The secure store's session scope");
 }
 
 /**

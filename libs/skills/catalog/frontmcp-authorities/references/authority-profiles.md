@@ -62,7 +62,7 @@ export class MyServer {}
 
 ### Single Profile (String)
 
-The simplest form. The named profile's policy is evaluated. If the profile is not registered, the request is denied with `"profile 'name' is not registered"`.
+The simplest form. The named profile's policy is evaluated. A name no registered profile has stops the server at startup with `Invalid authorities rule: … names an unknown profile "name"`, alone or in a list of profiles.
 
 ```typescript
 @Tool({ name: 'delete_user', authorities: 'admin' })

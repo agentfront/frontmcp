@@ -60,8 +60,10 @@ if (result.success) {
 { success: true, data: { /* tool result */ } }
 
 // Failure
-{ success: false, error: { message: string, code?: string } }
+{ success: false, error: { name: string, message: string, code?: string, toolName: string } }
 ```
+
+A tool named `ns.method` can also be called as `ns.method(args, options)`, which is exactly `callTool('ns.method', args, options)`: same limits, same checks, and with `{ throwOnError: false }` the same result.
 
 ---
 

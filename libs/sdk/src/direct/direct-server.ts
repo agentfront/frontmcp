@@ -15,7 +15,7 @@ import {
   type ListToolsResult,
   type ReadResourceResult,
 } from '@frontmcp/protocol';
-import { randomUUID, sha256Hex } from '@frontmcp/utils';
+import { randomUUID, runRequestExclusive, sha256Hex } from '@frontmcp/utils';
 
 import { FlowControl } from '../common';
 import { type CallSurface } from '../common/availability';
@@ -131,7 +131,9 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       // Cast required: flowName is a string but runFlowForOutput expects specific flow type union.
       // The flow names used here are all valid MCP flow names from the SDK.
 
-      return await this.scope.runFlowForOutput(flowName as any, { request, ctx });
+      // Each call is its own request: in a browser build without AsyncContext, calls take turns so
+      // an overlapping call never reads this one's request context (a no-op on Node).
+      return await runRequestExclusive(() => this.scope.runFlowForOutput(flowName as any, { request, ctx }));
     } catch (e) {
       if (e instanceof FlowControl && e.type === 'respond') {
         return e.output as T;

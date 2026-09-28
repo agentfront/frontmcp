@@ -38,6 +38,7 @@
  * ```
  */
 import {
+  assertStaticStartupConfig,
   createWebFetchHandler,
   FrontMcpInstance,
   type FetchHandlerCtx,
@@ -263,10 +264,20 @@ export interface EdgeMcp {
  * scope initialization legitimately does those; deferring to the first `fetch`
  * runs that work inside a request context, where it is allowed.
  *
+ * The startup checks the config's metadata settles run here, at module
+ * evaluation: an `approval` or `featureFlag` field no plugin in the config
+ * enforces, or `authorities` without the `authorities` option, throws
+ * (`UnenforcedMetadataError`, `AuthConfigurationError`) as `createDirect()`
+ * would, so such a worker fails to deploy. The remaining checks run when the
+ * scope is built, and fail that request.
+ *
  * Durable Object classes (sessions/event store) are not part of this skeleton
  * yet — the handler is stateless. They arrive with `@frontmcp/adapters/cloudflare`.
  */
 export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
+  // A misconfigured server fails where it is created, not on its first request.
+  assertStaticStartupConfig(config);
+
   let handlerPromise: Promise<WebFetchHandler> | undefined;
 
   // In managed mode a controller carries the KV cache + `disablePolling` into

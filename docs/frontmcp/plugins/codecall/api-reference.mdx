@@ -303,7 +303,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "syntax_error",
       "error": {
-        "message": "Unexpected token at line 5",
+        "message": "Failed to parse AgentScript code: Unexpected token (5:12)",
         "location": {"line": 5, "column": 12}
       }
     }
@@ -342,11 +342,12 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
       "error": {
         "source": "tool",
         "toolName": "users:list",
-        "message": "Rate limit exceeded",
-        "code": "RATE_LIMIT"
+        "message": "Tool \"users:list\" execution failed",
+        "code": "EXECUTION"
       }
     }
     ```
+    A failing tool call the script didn't catch (or rethrew), through `callTool()` or a namespace method, including a call the access policy refused (`ACCESS_DENIED`). An error of the script's own, even after it caught a tool failure, is `runtime_error`.
   </Accordion>
 
   <Accordion title="Timeout">

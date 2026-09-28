@@ -12,6 +12,8 @@
  * routing, Host validation — which are not flow stages, and it supplies the
  * platform's peer address, which the flows' `checkIpFilter` stage decides on.
  */
+import { runRequestExclusive } from '@frontmcp/utils';
+
 import { FlowControl } from '../common';
 import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
 import { type HttpOutput } from '../common/schemas/http-output.schema';
@@ -317,10 +319,13 @@ export async function runHttpRequestFlowWeb(
   const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent, opts.env);
   let output: HttpOutput | undefined;
   try {
-    output = (await scope.runFlow('http:request', {
-      request: serverRequest,
-      response: {},
-    } as never)) as HttpOutput | undefined;
+    // One request at a time in a browser build without AsyncContext (a no-op on Node and Workers).
+    output = (await runRequestExclusive(() =>
+      scope.runFlow('http:request', {
+        request: serverRequest,
+        response: {},
+      } as never),
+    )) as HttpOutput | undefined;
   } catch (error) {
     output = flowErrorToHttpOutput(error);
   }
@@ -350,10 +355,12 @@ export async function runMatchingHttpFlowWeb(
   if (!flowName) return undefined;
   let output: HttpOutput | undefined;
   try {
-    output = (await scope.runFlow(flowName, {
-      request: serverRequest,
-      response: {},
-    } as never)) as HttpOutput | undefined;
+    output = (await runRequestExclusive(() =>
+      scope.runFlow(flowName, {
+        request: serverRequest,
+        response: {},
+      } as never),
+    )) as HttpOutput | undefined;
   } catch (error) {
     output = flowErrorToHttpOutput(error);
   }
@@ -379,6 +386,16 @@ async function toServerRequest(
   request.headers.forEach((v, k) => {
     headers[k] = v;
   });
+  // A Web `Request` carries its address in its URL; runtimes don't always add a
+  // `Host` header (and `new Request(url)` never does). The resource URL, the
+  // issuer and the same-origin checks read `Host` and the scheme, so take both
+  // from the URL rather than build them from nothing (`http://undefined`). The
+  // URL is the runtime's own address for the request, so it also wins over a
+  // `Host` header that disagrees with it: a header an intermediary or a caller
+  // set must not choose the issuer, the token audience or the discovery URLs.
+  // Behind a proxy that rewrites the URL, pin FRONTMCP_PUBLIC_URL (or trust the
+  // proxy's X-Forwarded-Host with FRONTMCP_TRUST_PROXY).
+  headers['host'] = url.host;
 
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {
@@ -415,6 +432,8 @@ async function toServerRequest(
 
   const serverRequest = {
     method,
+    // The scheme the client used, as Express reports it (`req.protocol`).
+    protocol: url.protocol.slice(0, -1),
     path: url.pathname,
     url: url.pathname + url.search,
     headers,
@@ -448,6 +467,15 @@ const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
     'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
     'not survive a restart or verify across instances.',
+  // The startup checks: a server whose entries ask for protection nothing gives them does not start.
+  UNENFORCED_METADATA:
+    'An entry declares a field only a plugin enforces (approval, featureFlag, ...) and no installed plugin that ' +
+    'enforces it reaches the entry, so the server refuses to start. Install the plugin or remove the field; ' +
+    'the server log names the entries.',
+  AUTH_CONFIGURATION_ERROR:
+    'The auth or authorities configuration is invalid (for example, entries declare authorities and the server ' +
+    'has no authorities option, or a rule checks nothing), so the server refuses to start. The server log names ' +
+    'the entries.',
 };
 
 /**

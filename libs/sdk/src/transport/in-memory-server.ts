@@ -6,7 +6,7 @@
  */
 
 import { type AuthInfo, type Transport } from '@frontmcp/protocol';
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
 import { buildScopedServerOptions } from './build-scoped-server-options';
@@ -125,7 +125,9 @@ export async function createInMemoryServer(
           sessionId,
         },
       };
-      return originalHandler(request, enrichedCtx);
+      // One request at a time in a browser build without AsyncContext, so overlapping requests
+      // never read each other's request context (a no-op on Node).
+      return runRequestExclusive(() => originalHandler(request, enrichedCtx));
     };
 
     mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);

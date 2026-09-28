@@ -1,6 +1,7 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
 
+import { advertisedScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
@@ -11,6 +12,7 @@ import {
   getRequestBaseUrl,
   httpInputSchema,
   HttpJsonSchema,
+  isOrchestratedMode,
   makeWellKnownPaths,
   StageHookOf,
   type FlowPlan,
@@ -89,11 +91,16 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
     const resource = computeResource(request, scope.entryPath, scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, scope.entryPath);
+    // Local and remote mode grant only `allowedScopes` (#262), so a scope
+    // outside it is not one a client can use here: advertise the granted set,
+    // as the authorization server metadata does.
+    const auth = scope.metadata.auth;
     this.state.set(
       stateSchema.parse({
         resource,
         baseUrl,
-        scopesSupported: scope.getAllSupportedScopes(),
+        scopesSupported:
+          auth && isOrchestratedMode(auth) ? advertisedScopes(auth.allowedScopes) : scope.getAllSupportedScopes(),
         isOrchestrated: false, //scope.orchestrated,// TODO: fix
       }),
     );

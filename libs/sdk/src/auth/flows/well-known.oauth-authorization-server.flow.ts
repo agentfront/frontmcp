@@ -1,6 +1,7 @@
 // auth/flows/well-known.oauth-authorization-server.flow.ts
 import 'reflect-metadata';
 
+import { advertisedScopes } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
@@ -156,7 +157,10 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
       wellKnownAsStateSchema.parse({
         baseUrl,
         oauthBaseUrl,
-        scopesSupported: [],
+        // The scopes this server grants (`allowedScopes`, #262): the literal
+        // entries; a `*` glob names no scope a client could ask for.
+        scopesSupported:
+          metadata.auth && isOrchestratedMode(metadata.auth) ? advertisedScopes(metadata.auth.allowedScopes) : [],
         tokenEndpointAuthMethods: [],
         // #462 — advertise registration_endpoint only when local-AS DCR is
         // actually active (explicit auth.dcr.enabled, else dev/prod default).

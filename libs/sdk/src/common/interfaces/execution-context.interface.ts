@@ -8,6 +8,7 @@ import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/ut
 import { ConfigService } from '../../builtin/config/providers/config.service';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
@@ -193,6 +194,11 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Authority/authorization checks still run — an internal call carries the
    * same `authInfo` as the surrounding request, so ABAC/RBAC guards apply.
    *
+   * `availableWhen.surface`: the call carries {@link callToolSurface}. From a tool, resource or
+   * prompt that is none (in-process dispatch, which no surface restricts); a job's call carries
+   * `'job'`, an agent's `'agent'`, and an HTTP trigger's `'http-trigger'`, so a tool whose `surface`
+   * leaves that caller out answers as an unknown tool.
+   *
    * @param name Tool name (or fully-qualified `owner.name`).
    * @param args Tool arguments — validated by the tool's input schema.
    * @param opts Optional progress token / abort signal forwarded into `_meta`.
@@ -219,10 +225,12 @@ export abstract class ExecutionContextBase<Out = unknown> {
         ...(Object.keys(requestMeta).length > 0 && { _meta: requestMeta }),
       },
     };
+    const surface = this.callToolSurface();
     const ctx = {
       authInfo: this.getAuthInfo(),
       requestId: this.tryGetContext()?.requestId ?? this.runId,
       internalCall: true as const,
+      ...(surface && { surface }),
       ...(opts?.signal && { signal: opts.signal }),
     };
     const result = await scope.runFlow('tools:call-tool', { request, ctx });
@@ -230,6 +238,15 @@ export abstract class ExecutionContextBase<Out = unknown> {
       throw new Error(`callTool("${name}") returned no result`);
     }
     return result;
+  }
+
+  /**
+   * The surface (`availableWhen.surface`) a {@link callTool} from this context calls on. None by
+   * default: a tool, resource or prompt composing with other tools is in-process dispatch. Contexts
+   * that are callers of their own (jobs, agents, HTTP triggers) name their surface.
+   */
+  protected callToolSurface(): CallSurface | undefined {
+    return undefined;
   }
 
   /**

@@ -12,8 +12,10 @@
  *
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
  */
+import { isAnonymousSubject } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
+import { runRequestExclusive } from '@frontmcp/utils';
 
 import {
   authInfoFromAuthorization,
@@ -180,6 +182,20 @@ async function* streamMessageResponse(
   yield frame({ jsonrpc: '2.0', id, result: outcome?.result });
 }
 
+/**
+ * Whether the caller did not authenticate, which is what lets a result be `cacheScope: 'public'`
+ * and keeps the caller from owning a task.
+ *
+ * Not "has no bearer token": a caller that presented a static key (`auth: { mode: 'static' }`)
+ * authenticated, though its authorization carries no token, only the key's subject. A caller is
+ * anonymous only when its subject is anonymous too, and it has no token or a public-mode session.
+ */
+function isAnonymousCaller(auth: Authorization | undefined): boolean {
+  if (!auth) return true;
+  if (!isAnonymousSubject(auth.user?.sub)) return false;
+  return !auth.token || auth.session?.payload?.isPublic === true;
+}
+
 /** Build the JSON-RPC error envelope for a failed 2026-07-28 request. */
 function errorResponse(status: number, error: JsonRpcErrorPayload, id: unknown) {
   return httpRespond.json(
@@ -211,11 +227,7 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const { request } = this.rawInput;
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
 
-    this.state.set(
-      stateSchema.parse({
-        isAnonymous: !auth?.token || auth.token.length === 0 || auth.session?.payload?.isPublic === true,
-      }),
-    );
+    this.state.set(stateSchema.parse({ isAnonymous: isAnonymousCaller(auth) }));
   }
 
   /**
@@ -298,8 +310,10 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     if (!context) return (fn) => fn();
 
     const storage = this.scope.providers.get(FrontMcpContextStorage);
+    // The deferred work runs after this request's turn ended, so in a browser build without
+    // AsyncContext it takes a turn of its own (a no-op on Node and Workers).
     return async (fn) => {
-      await storage.runWithContext(context, fn);
+      await runRequestExclusive(() => storage.runWithContext(context, fn));
     };
   }
 
@@ -442,10 +456,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       frontmcpContext: this.tryGetContext(),
       authInfo: auth
         ? {
+            // No session is presented: this revision has none, so the request has no verified
+            // session (`extra.sessionId`), and anything kept across requests falls back to the
+            // authenticated caller.
             ...authInfoFromAuthorization(auth),
-            // Sessions no longer exist at the protocol level, but the shared
-            // handlers key per-request state (memory, credentials) off an id.
-            // Derive a request-scoped one so nothing leaks between calls.
+            // The shared handlers still key per-request state (provider views, notifications)
+            // off an id. This one names the request only; the request context does not vouch for it.
             sessionId: auth.session?.id,
           }
         : undefined,

@@ -21,6 +21,7 @@ import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export type { ConfigOrServerClass } from './front-mcp';
+export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
 export {
   getServerlessHandler,
   getServerlessHandlerAsync,
@@ -338,6 +339,10 @@ export const AgentCallHook = FlowHooksOf('agents:call-agent');
 export const ChannelSendHook = FlowHooksOf('channels:send-notification');
 export const ChannelListHook = FlowHooksOf('channels:list');
 
+// Whether a plugin's hooks judge an entry, so its list hooks follow its own gate
+export { isEntryGatedBy } from './hooks/hook-coverage';
+export type { HookGatedEntry } from './hooks/hook-coverage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Built-in Plugins
 // ─────────────────────────────────────────────────────────────────────────────
@@ -464,7 +469,7 @@ export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable
 // Object) session builder, for the Cloudflare DO session host.
 export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport';
-export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport';
+export type { WebStandardMcpPair, RunWebStandardMcpOptions, PersistentSessionOwnerStore } from './transport';
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
@@ -522,3 +527,7 @@ export type {
 
 // Orchestrated token store for upstream provider tokens
 export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from '@frontmcp/auth';
+
+// Whether a subject names no signed-in caller (missing, empty, or an `anon:…` placeholder), for
+// plugins that key state by the caller the way the SDK does
+export { isAnonymousSubject } from '@frontmcp/auth';

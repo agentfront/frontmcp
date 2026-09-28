@@ -18,7 +18,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Session TTL is configured appropriately (not infinite)
 - [ ] Tool-level authorization is enforced where needed (ApprovalPlugin or custom)
 - [ ] OAuth redirect URIs are restricted to known domains
-- [ ] `FRONTMCP_PUBLIC_URL` is pinned to the canonical origin — issuer / resource / OAuth-discovery URLs and the transparent-mode expected audience derive from it, not from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are ignored by default; only set `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers
+- [ ] `FRONTMCP_PUBLIC_URL` is pinned to the canonical origin — issuer / resource / OAuth-discovery URLs and the transparent-mode expected audience derive from it, not from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are ignored by default; only set `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers. The Web fetch handler (`createFetchHandler`, Workers) takes the address from the request URL, never from a `Host` header that disagrees with it
 - [ ] `auth.requireRegisteredClients` left at its default `true` (local/remote) so unknown clients can't present an attacker-chosen `redirect_uri` (auth-code interception). Clients register via DCR / `dcr.clients` / CIMD; a production remote-mode server has neither DCR nor `dcr.clients`, so its MCP clients must use CIMD
 - [ ] `auth.allowedScopes` lists the scopes the server may grant (local/remote); anything else a client asks for is dropped
 - [ ] Transparent mode sets `auth.expectedAudience` (bind tokens to this resource) and validates issuer (`providerConfig.verifyIssuer`, default on)

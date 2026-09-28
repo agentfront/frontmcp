@@ -1,13 +1,19 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
-import { Enclave, type ExecutionResult, type ReferenceSidecarOptions, type ToolHandler } from '@enclave-vm/core';
+import {
+  Enclave,
+  type CreateEnclaveOptions,
+  type ExecutionResult,
+  type ReferenceSidecarOptions,
+  type ToolHandler,
+} from '@enclave-vm/core';
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
-import { wrapScriptWithToolNamespaces } from '../utils/build-tool-namespaces';
+import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -23,6 +29,8 @@ export interface EnclaveExecutionResult {
     toolName?: string;
     toolInput?: unknown;
     details?: unknown;
+    /** For a script that doesn't parse (`code: 'SYNTAX_ERROR'`): where, in the script's own lines. */
+    location?: { line: number; column: number };
     /**
      * Distinct AST-validation issue codes, for the `codecall:security:ast-blocked` audit event.
      *
@@ -39,6 +47,54 @@ export interface EnclaveExecutionResult {
     toolCallCount: number;
     iterationCount: number;
   };
+}
+
+/**
+ * A tool call the tool handler failed, kept to tell a script a failing tool ended from one that
+ * failed itself. Not its arguments: the sandbox resolves sidecar references in them before the
+ * handler sees them, so they may hold data the script itself never had.
+ */
+interface ToolFailure {
+  toolName: string;
+  name: string;
+  message: string;
+  code?: string;
+}
+
+/** The message the sandbox gives a script for an error the tool handler threw (as its tool bridge reads it). */
+function toolFailureMessage(error: unknown, toolName: string): string {
+  if (typeof error === 'string' && error) return error;
+  const message = (error as { message?: unknown } | null | undefined)?.message;
+  return typeof message === 'string' && message ? message : `Tool call failed: ${toolName}`;
+}
+
+/**
+ * The name the sandbox gives a script for an error the tool handler threw: the error's own `name`,
+ * else `ToolError` (as its tool bridge reads it). A script's own throw is named apart from it: a
+ * string or a nameless object is `DoubleVMExecutionError`, and AgentScript has no `Error`.
+ */
+function toolFailureName(error: unknown): string {
+  const name = error && typeof error === 'object' ? (error as { name?: unknown }).name : undefined;
+  return typeof name === 'string' && name ? name.slice(0, 128) : 'ToolError';
+}
+
+/** `@enclave-vm/ast`'s message for a script that doesn't parse. */
+const PARSE_FAILURE_PREFIX = 'Failed to parse AgentScript code: ';
+
+/** The `(line:column)` a parser message ends with. */
+const PARSE_POSITION_RE = /\((\d+):(\d+)\)$/;
+
+/**
+ * A parse failure's message and position, in the script's own lines. The parse attempt the sandbox
+ * reports reads the script inside an `async function` whose opening line comes first, so the line
+ * it names is one past the script's; the column is the script's.
+ */
+function parseFailureOf(message: string): { message: string; location?: { line: number; column: number } } {
+  const match = PARSE_POSITION_RE.exec(message);
+  const line = match ? Number(match[1]) - 1 : 0;
+  if (!match || line < 1) return { message };
+  const column = Number(match[2]);
+  return { message: `${message.slice(0, match.index)}(${line}:${column})`, location: { line, column } };
 }
 
 /**
@@ -104,9 +160,23 @@ export default class EnclaveService {
       }
     }
 
-    // Create tool handler that bridges to CodeCallVmEnvironment
+    // Create tool handler that bridges to CodeCallVmEnvironment. It always throws on a failing
+    // tool: the sandbox applies the script's `{ throwOnError: false }` itself, for `callTool()` and
+    // namespace methods alike. Failures are kept so a script a failing tool ended is a tool error.
+    const toolFailures: ToolFailure[] = [];
     const toolHandler: ToolHandler = async (toolName: string, args: Record<string, unknown>) => {
-      return environment.callTool(toolName, args);
+      try {
+        return await environment.callTool(toolName, args);
+      } catch (error: unknown) {
+        const code = (error as { code?: unknown } | null | undefined)?.code;
+        toolFailures.push({
+          toolName,
+          name: toolFailureName(error),
+          message: toolFailureMessage(error, toolName),
+          ...(typeof code === 'string' ? { code } : {}),
+        });
+        throw error;
+      }
     };
 
     // Build sidecar configuration if enabled
@@ -121,14 +191,39 @@ export default class EnclaveService {
         }
       : undefined;
 
-    // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are written into the
-    // script as AgentScript that calls `callTool()`, never injected as host functions: a host
-    // function reaches the tool pipeline without passing the enclave's tool-call cap, rate
-    // limit or suspicious-sequence checks, which only guard `callTool()`.
-    const source = wrapScriptWithToolNamespaces(code, environment.toolNamespaces);
+    const { mcpLog, mcpNotify } = environment;
+    const globals: Record<string, unknown> = {
+      // Provide getTool as a custom global
+      getTool: environment.getTool,
+      // Provide logging functions if available
+      ...(mcpLog
+        ? {
+            mcpLog: (
+              level: 'debug' | 'info' | 'warn' | 'error',
+              message: string,
+              metadata?: Record<string, unknown>,
+            ) => {
+              mcpLog(level, message, metadata);
+              logs.push(`[mcp:${level}] ${message}`);
+            },
+          }
+        : {}),
+      ...(mcpNotify
+        ? {
+            mcpNotify: (event: string, payload: Record<string, unknown>) => {
+              mcpNotify(event, payload);
+              logs.push(`[notify] ${event}`);
+            },
+          }
+        : {}),
+      // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
+      // and output size limits. Passing console in globals causes "Cannot redefine property"
+      // errors due to Double VM architecture. Console output from user scripts goes to stdout
+      // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
+    };
 
     // Create enclave with configuration from CodeCallConfig
-    const enclave = new Enclave({
+    const options: CreateEnclaveOptions = {
       timeout: this.vmOptions.timeoutMs,
       maxToolCalls: this.vmOptions.maxSteps || 100,
       maxIterations: 10000,
@@ -138,42 +233,21 @@ export default class EnclaveService {
       validate: true,
       transform: true,
       sidecar,
+      // Error stacks name no host file, whatever stage raised them.
+      sanitizeStackTraces: true,
       // Allow functions in globals since we intentionally provide getTool, mcpLog, mcpNotify, and console
       allowFunctionsInGlobals: true,
-      globals: {
-        // Provide getTool as a custom global
-        getTool: environment.getTool,
-        // Provide logging functions if available
-        ...(environment.mcpLog
-          ? {
-              mcpLog: (
-                level: 'debug' | 'info' | 'warn' | 'error',
-                message: string,
-                metadata?: Record<string, unknown>,
-              ) => {
-                environment.mcpLog!(level, message, metadata);
-                logs.push(`[mcp:${level}] ${message}`);
-              },
-            }
-          : {}),
-        ...(environment.mcpNotify
-          ? {
-              mcpNotify: (event: string, payload: Record<string, unknown>) => {
-                environment.mcpNotify!(event, payload);
-                logs.push(`[notify] ${event}`);
-              },
-            }
-          : {}),
-        // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
-        // and output size limits. Passing console in globals causes "Cannot redefine property"
-        // errors due to Double VM architecture. Console output from user scripts goes to stdout
-        // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
-      },
-    });
+      globals,
+      // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are built by the sandbox
+      // itself: a method call is exactly `callTool('acme.getUser', args, options)`, with the
+      // sandbox's tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
+      toolNamespaces: toSandboxToolNamespaces(environment.toolNamespaces, Object.keys(globals)),
+    };
 
+    const enclave = createEnclave(options);
     try {
-      const result = await enclave.run<unknown>(source);
-      return this.mapEnclaveResult(result, logs);
+      const result = await enclave.run<unknown>(code);
+      return this.mapEnclaveResult(result, logs, toolFailures);
     } finally {
       enclave.dispose();
     }
@@ -182,23 +256,57 @@ export default class EnclaveService {
   /**
    * Map Enclave ExecutionResult to EnclaveExecutionResult
    */
-  private mapEnclaveResult(result: ExecutionResult<unknown>, logs: string[]): EnclaveExecutionResult {
+  private mapEnclaveResult(
+    result: ExecutionResult<unknown>,
+    logs: string[],
+    toolFailures: readonly ToolFailure[] = [],
+  ): EnclaveExecutionResult {
+    const stats = {
+      duration: result.stats.duration,
+      toolCallCount: result.stats.toolCallCount,
+      iterationCount: result.stats.iterationCount,
+    };
     if (result.success) {
-      return {
-        success: true,
-        result: result.value,
-        logs,
-        timedOut: false,
-        stats: {
-          duration: result.stats.duration,
-          toolCallCount: result.stats.toolCallCount,
-          iterationCount: result.stats.iterationCount,
-        },
-      };
+      return { success: true, result: result.value, logs, timedOut: false, stats };
     }
 
     // Handle error cases
-    const error = result.error!;
+    const error = result.error ?? { name: 'Error', message: 'Script execution failed' };
+
+    // A script that doesn't parse: the sandbox reports it as a generic error of its own.
+    if (error.code === 'ENCLAVE_ERROR' && error.message?.startsWith(PARSE_FAILURE_PREFIX)) {
+      const { message, location } = parseFailureOf(error.message);
+      return {
+        success: false,
+        error: { message, name: 'SyntaxError', code: 'SYNTAX_ERROR', ...(location ? { location } : {}) },
+        logs,
+        timedOut: false,
+        stats,
+      };
+    }
+
+    // A script a failing tool ended, the tool's error uncaught (or rethrown): the sandbox hands back
+    // only the error's name and message, so it is matched to the failure the tool handler threw by
+    // both. A script that caught the failure and threw its own error with the same message is not
+    // matched: its error has the sandbox's own name, not the tool's.
+    const toolFailure = [...toolFailures]
+      .reverse()
+      .find((failure) => failure.message === error.message && failure.name === error.name);
+    if (toolFailure) {
+      return {
+        success: false,
+        error: {
+          message: error.message,
+          name: error.name,
+          ...(toolFailure.code ? { code: toolFailure.code } : {}),
+          toolName: toolFailure.toolName,
+        },
+        logs,
+        timedOut: false,
+        stats,
+      };
+    }
+
     const timedOut = error.message?.includes('timed out') || error.code === 'TIMEOUT';
 
     // Check if it's a validation error
@@ -216,31 +324,7 @@ export default class EnclaveService {
         },
         logs,
         timedOut: false,
-        stats: {
-          duration: result.stats.duration,
-          toolCallCount: result.stats.toolCallCount,
-          iterationCount: result.stats.iterationCount,
-        },
-      };
-    }
-
-    // Check if it's a tool error (has toolName in the error data)
-    const errorData = error.data as Record<string, unknown> | undefined;
-    const toolName = errorData?.['toolName'] as string | undefined;
-    if (toolName) {
-      return {
-        success: false,
-        error: {
-          message: error.message,
-          name: error.name,
-          stack: error.stack,
-          code: error.code,
-          toolName,
-          toolInput: errorData?.['toolInput'],
-          details: errorData?.['details'],
-        },
-        logs,
-        timedOut,
+        stats,
       };
     }
 
@@ -255,11 +339,27 @@ export default class EnclaveService {
       },
       logs,
       timedOut,
-      stats: {
-        duration: result.stats.duration,
-        toolCallCount: result.stats.toolCallCount,
-        iterationCount: result.stats.iterationCount,
-      },
+      stats,
     };
+  }
+}
+
+/**
+ * An enclave for these options. The sandbox refuses a whole `toolNamespaces` configuration over one
+ * name it can't bind; `toSandboxToolNamespaces` leaves such names out, and should one still get
+ * through, the script runs without namespaces rather than failing (`callTool()` always works).
+ */
+function createEnclave(options: CreateEnclaveOptions): Enclave {
+  try {
+    return new Enclave(options);
+  } catch (error: unknown) {
+    if (
+      !options.toolNamespaces ||
+      !(error instanceof TypeError) ||
+      !error.message.startsWith('Invalid toolNamespaces')
+    ) {
+      throw error;
+    }
+    return new Enclave({ ...options, toolNamespaces: undefined });
   }
 }
