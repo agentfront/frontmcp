@@ -16,6 +16,7 @@ import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../common';
+import { getCallSurface } from '../context/call-surface';
 import { ElicitationNotOwnedError } from '../errors';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 import { resolveElicitationOwner } from './helpers/fallback.helper';
@@ -146,8 +147,15 @@ export class SendElicitationResultTool extends ToolContext {
             arguments: pending.toolInput as Record<string, unknown> | undefined,
           },
         },
-        // Pass the context for auth info and request ID (used for elicitation routing)
-        ctx: this.tryGetContext() ?? { authInfo: this.getAuthInfo() },
+        // The call context of this call, whose caller is the owner: its auth info as its transport
+        // gave it (the tool reads it as `this.auth`), on the surface it was made from. Not the
+        // request context object, whose auth info is a getter a call context does not carry over.
+        ctx: {
+          authInfo: this.authInfo,
+          requestId: this.tryGetContext()?.requestId ?? this.runId,
+          surface: getCallSurface(),
+          ...(this.signal ? { signal: this.signal } : {}),
+        },
       });
 
       this.logger.info('sendElicitationResult: original tool completed', {

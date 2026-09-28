@@ -1095,8 +1095,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           elicitId: error.elicitId,
           sessionId,
           owner,
-          toolName: error.toolName,
-          toolInput: error.toolInput,
+          // The answer re-runs the call this flow ran: this tool, with these arguments. What asked
+          // may be an entry the tool runs, like the agent behind `invoke_<agent>`, whose own name
+          // no `tools/call` resolves.
+          toolName: tool.fullName,
+          toolInput: this.state.required.input.arguments,
           elicitMessage: error.elicitMessage,
           elicitSchema: error.schema,
           createdAt: Date.now(),

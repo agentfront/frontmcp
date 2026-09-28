@@ -1,5 +1,6 @@
 import {
   getRunningTool,
+  isAnonymousSubject,
   Provider,
   ProviderScope,
   STATELESS_SESSION_ID,
@@ -301,10 +302,10 @@ export class RememberAccessor {
    * The session id the server verified for this request, or undefined when there is none.
    *
    * Read from the verified auth info (`authInfo.sessionId` from the transport, `extra.sessionId`
-   * from session verification), the same rule CONTEXT providers are cached by. Never
-   * `FrontMcpContext.sessionId` alone: under MCP 2026-07-28 that is whatever `mcp-session-id` the
-   * caller sent, including another caller's. The stateless transport's shared `__stateless__` id
-   * identifies no one.
+   * from session verification, which records only a session the request presented), the same rule
+   * CONTEXT providers are cached by. Never `FrontMcpContext.sessionId` alone: under MCP 2026-07-28
+   * that is whatever `mcp-session-id` the caller sent, including another caller's. The stateless
+   * transport's shared `__stateless__` id identifies no one.
    */
   private get verifiedSessionId(): string | undefined {
     const authInfo = this.ctx.authInfo;
@@ -325,7 +326,8 @@ export class RememberAccessor {
    * the shared `__stateless__` id (GHSA-225p-f8jh-f3rh). A request without a verified session
    * (stateless transport, MCP 2026-07-28, or a session id the server did not verify) falls back to
    * the authenticated principal, the only per-client identity it has; with neither, it has no
-   * business reading or writing per-client memory at all.
+   * business reading or writing per-client memory at all. An anonymous subject (`anon:…`) is no
+   * principal: without a session, the server makes a new one up for each request.
    */
   private resolveSessionIdentity(): string {
     const sessionId = this.verifiedSessionId;
@@ -334,7 +336,7 @@ export class RememberAccessor {
     }
 
     const userId = this.userId;
-    if (userId) {
+    if (userId && !isAnonymousSubject(userId)) {
       return `stateless-user:${userId}`;
     }
 

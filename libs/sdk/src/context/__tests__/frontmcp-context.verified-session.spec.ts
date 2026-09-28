@@ -13,9 +13,10 @@ function authorization(verifiedSessionId?: string): Authorization {
   };
 }
 
+/** A request that presented `sessionId`, whose session verification resolved `verifiedSessionId`. */
 function contextFor(sessionId: string, verifiedSessionId?: string): FrontMcpContext {
   const context = new FrontMcpContext({ sessionId, scopeId: 'scope' });
-  context.updateAuthInfo(authInfoFromAuthorization(authorization(verifiedSessionId)));
+  context.updateAuthInfo(authInfoFromAuthorization(authorization(verifiedSessionId), sessionId));
   return context;
 }
 

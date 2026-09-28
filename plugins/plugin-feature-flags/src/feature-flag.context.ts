@@ -1,4 +1,4 @@
-import { STATELESS_SESSION_ID, type FrontMcpContext } from '@frontmcp/sdk';
+import { isAnonymousSubject, STATELESS_SESSION_ID, type FrontMcpContext } from '@frontmcp/sdk';
 
 import type { FeatureFlagContext, FeatureFlagPluginOptions } from './feature-flag.types';
 
@@ -8,14 +8,29 @@ import type { FeatureFlagContext, FeatureFlagPluginOptions } from './feature-fla
  * Not `ctx.sessionId`: under MCP 2026-07-28 that is whatever `mcp-session-id` the caller sent (or
  * a per-request placeholder), and adapters target by session id (LaunchDarkly and Split.io use it
  * as the key when there is no user), so a caller could name the session a rollout targets. The
- * verified id is the one the server's session check put in `authInfo`, the same rule the SDK uses
- * to share `CONTEXT` providers across a session's requests.
+ * verified id is the one the server's session check put in `authInfo` (only a session the request
+ * presented), the same rule the SDK uses to share `CONTEXT` providers across a session's requests.
  */
 function verifiedSessionId(ctx: FrontMcpContext): string | undefined {
   const verified = ctx.authInfo?.sessionId ?? ctx.authInfo?.extra?.['sessionId'];
   return typeof verified === 'string' && verified.length > 0 && verified !== STATELESS_SESSION_ID
     ? verified
     : undefined;
+}
+
+/**
+ * The signed-in user the caller authenticated as, or `undefined` for an anonymous caller.
+ *
+ * An anonymous caller's subject (`anon:…`) is made up by the server, for each request when the
+ * caller has no session, so targeting by it would put the caller in a new bucket on every request.
+ * Without a user, adapters target the verified session, else `anonymous`.
+ */
+function signedInUserId(ctx: FrontMcpContext): string | undefined {
+  const userId =
+    (ctx.authInfo?.extra?.['sub'] as string | undefined) ??
+    (ctx.authInfo?.extra?.['userId'] as string | undefined) ??
+    ctx.authInfo?.clientId;
+  return isAnonymousSubject(userId) ? undefined : userId;
 }
 
 /**
@@ -32,11 +47,7 @@ export function buildFeatureFlagContext(
 ): FeatureFlagContext {
   if (!ctx) return {};
 
-  const userId = config.userIdResolver
-    ? config.userIdResolver(ctx)
-    : ((ctx.authInfo?.extra?.['sub'] as string | undefined) ??
-      (ctx.authInfo?.extra?.['userId'] as string | undefined) ??
-      ctx.authInfo?.clientId);
+  const userId = config.userIdResolver ? config.userIdResolver(ctx) : signedInUserId(ctx);
 
   return {
     userId: userId ?? undefined,
