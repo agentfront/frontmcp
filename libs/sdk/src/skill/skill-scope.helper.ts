@@ -13,10 +13,11 @@
  * @module skill/skill-scope.helper
  */
 
-import type { FrontMcpLogger } from '../common';
+import type { FrontMcpLogger, PluginMetadata, PluginType } from '../common';
 import type { ResourceType } from '../common/interfaces';
 import type { SkillsConfigOptions } from '../common/types/options/skills-http';
 import type FlowRegistry from '../flows/flow.registry';
+import { normalizePlugin } from '../plugin/plugin.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import type ResourceRegistry from '../resource/resource.registry';
 import { FilterSkillsFlow, LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } from './flows';
@@ -42,6 +43,30 @@ export interface SkillScopeRegistrationOptions {
   skillsConfig?: SkillsConfigOptions;
   /** Logger instance for logging */
   logger: FrontMcpLogger;
+  /**
+   * A plugin registers skills at runtime (`@Plugin({ dynamicSkills: true })`): serve the skills
+   * capability and methods even when no skill exists yet.
+   */
+  dynamicSkills?: boolean;
+}
+
+/** Whether a plugin, or a plugin it installs, declares `@Plugin({ dynamicSkills: true })`. */
+function declaresDynamicSkills(metadata: PluginMetadata): boolean {
+  return (
+    metadata.dynamicSkills === true ||
+    (metadata.plugins ?? []).some((plugin) => declaresDynamicSkills(normalizePlugin(plugin).metadata))
+  );
+}
+
+/**
+ * Whether any of these plugins registers skills at runtime (`@Plugin({ dynamicSkills: true })`),
+ * counting the plugins they install.
+ */
+export function pluginsRegisterDynamicSkills(plugins: Iterable<PluginType>): boolean {
+  for (const plugin of plugins) {
+    if (declaresDynamicSkills(normalizePlugin(plugin).metadata)) return true;
+  }
+  return false;
 }
 
 /**
@@ -70,7 +95,7 @@ export interface SkillScopeRegistrationOptions {
  * ```
  */
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
-  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
+  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger, dynamicSkills } = options;
 
   // Register the skill audit writer first — registration is independent of
   // whether any skills are present at scope-init time. Plugins that mount
@@ -82,8 +107,14 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   // Every skill surface runs this flow, including for skills a plugin registers after boot.
   await flowRegistry.registryFlows([FilterSkillsFlow]);
 
-  // Early exit if no skills registered
-  if (!skillRegistry.hasAny()) {
+  // A plugin that registers skills at runtime (a skill bundle loaded after startup) needs the skills
+  // surfaces before its first skill exists: a session opened before then would never get them.
+  if (dynamicSkills) {
+    skillRegistry.expectDynamicSkills();
+  }
+
+  // Early exit if the scope serves no skills
+  if (!skillRegistry.servesSkills()) {
     return;
   }
 

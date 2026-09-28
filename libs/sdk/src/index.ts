@@ -339,6 +339,10 @@ export const AgentCallHook = FlowHooksOf('agents:call-agent');
 export const ChannelSendHook = FlowHooksOf('channels:send-notification');
 export const ChannelListHook = FlowHooksOf('channels:list');
 
+// Whether a plugin's hooks judge an entry, so its list hooks follow its own gate
+export { isEntryGatedBy } from './hooks/hook-coverage';
+export type { HookGatedEntry } from './hooks/hook-coverage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Built-in Plugins
 // ─────────────────────────────────────────────────────────────────────────────

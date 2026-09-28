@@ -3,10 +3,10 @@
  * Tests the internal execute function including HTTP requests, mappers, and error handling
  */
 
-import { createOpenApiTool } from '../openapi.tool';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
-import { createMockLogger, basicOpenApiSpec } from './fixtures';
-import { FrontMcpToolTokens } from '@frontmcp/sdk';
+
+import { createOpenApiTool } from '../openapi.tool';
+import { basicOpenApiSpec, createMockLogger } from './fixtures';
 
 // Mock mcp-from-openapi
 jest.mock('mcp-from-openapi', () => ({
@@ -34,6 +34,7 @@ jest.mock('../openapi.utils', () => ({
 // Mock the security resolver
 jest.mock('../openapi.security', () => ({
   resolveToolSecurity: jest.fn().mockResolvedValue({}),
+  assertRequestHasCredential: jest.fn(),
 }));
 
 // Mock global fetch

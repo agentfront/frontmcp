@@ -74,10 +74,11 @@ function Plugin(providedMetadata: PluginMetadata): ClassDecorator
 
 ### Extensions
 
-| Property            | Type                 | Description                                                                                                                                                      |
-| ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `contextExtensions` | `ContextExtension[]` | Add properties to context classes                                                                                                                                |
-| `enforcesMetadata`  | `string[]`           | Entry metadata keys this plugin's hooks enforce. A server where an entry declares one and no such plugin reaches it refuses to start (`UnenforcedMetadataError`) |
+| Property            | Type                 | Description                                                                                                                                                                                                                    |
+| ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `contextExtensions` | `ContextExtension[]` | Add properties to context classes                                                                                                                                                                                              |
+| `enforcesMetadata`  | `string[]`           | Entry metadata keys this plugin's hooks enforce. A server where an entry declares one and no such plugin reaches it refuses to start (`UnenforcedMetadataError`)                                                               |
+| `dynamicSkills`     | `boolean`            | The plugin registers skills at runtime (`scope.skills.registerSkillContent`). The server serves the skills methods, the SEP-2640 capability and `skill://` resources from startup, answering with the skills registered so far |
 
 ## Context Extensions
 

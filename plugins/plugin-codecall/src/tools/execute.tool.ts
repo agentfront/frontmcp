@@ -281,10 +281,10 @@ export default class ExecuteTool extends ToolContext {
 
     // Build namespaced bindings for AgentScript ergonomics. Tools named
     // `${ns}.${method}` become `await ns.method(args)` instead of
-    // `await callTool('ns.method', args)`. The bindings are AgentScript that calls
-    // `callTool()` inside the sandbox (see `wrapScriptWithToolNamespaces`), so they pass the
-    // enclave's call cap, rate limit and sequence checks, then this same `callTool` closure
-    // above, like any direct call. Only tools the policy allows get a binding, so the
+    // `await callTool('ns.method', args)`. The sandbox builds them (`toolNamespaces`): a method
+    // call is exactly a `callTool()` inside the sandbox, so it passes the enclave's call cap,
+    // rate limit and sequence checks, then this same `callTool` closure above, and returns the
+    // same `{ throwOnError: false }` results. Only tools the policy allows get a binding, so the
     // bindings do not enumerate withheld tool names.
     try {
       const policyConfig = readCodeCallPolicyConfig(this.get(CodeCallConfig));
@@ -340,6 +340,18 @@ export default class ExecuteTool extends ToolContext {
       if (!executionResult.success) {
         const error = executionResult.error!;
 
+        // A script that doesn't parse
+        if (error.code === 'SYNTAX_ERROR') {
+          audit?.logExecutionFailure(executionId, script, durationMs, error.message);
+          return {
+            status: 'syntax_error',
+            error: {
+              message: toClientErrorMessage(error.message) || 'Syntax error in script',
+              ...(error.location ? { location: error.location } : {}),
+            },
+          };
+        }
+
         // Check if it's a validation error (from AST validation)
         if (error.code === 'VALIDATION_ERROR' || error.name === 'ValidationError') {
           audit?.logSecurityAstBlocked(executionId, error.blockedPatterns?.join(', ') ?? 'UNKNOWN', error.message);
@@ -353,7 +365,7 @@ export default class ExecuteTool extends ToolContext {
           };
         }
 
-        // Check if it's a tool error
+        // A failing tool ended the script (its error uncaught or rethrown)
         if (error.toolName) {
           audit?.logExecutionFailure(executionId, script, durationMs, error.message);
           return {

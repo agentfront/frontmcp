@@ -3,7 +3,7 @@ import { normalizeSsrfOptions, OpenAPIToolGenerator, type McpOpenAPITool } from 
 import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import { OpenApiSpecPoller } from './openapi-spec-poller';
-import { validateSecurityConfiguration } from './openapi.security';
+import { formatMissingSecurityMappingsError, validateSecurityConfiguration } from './openapi.security';
 import { createOpenApiTool } from './openapi.tool';
 import {
   type ExtendedMcpOpenAPITool,
@@ -126,24 +126,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     // Fail if configuration is invalid and security is required
     if (!validation.valid) {
-      throw new Error(
-        `[OpenAPI Adapter: ${this.options.name}] Invalid security configuration.\n` +
-          `Missing auth provider mappings for security schemes: ${validation.missingMappings.join(', ')}\n\n` +
-          `Your OpenAPI spec requires these security schemes, but no auth configuration was provided.\n\n` +
-          `Add one of the following to your adapter configuration:\n\n` +
-          `1. authProviderMapper (recommended):\n` +
-          `   authProviderMapper: {\n` +
-          validation.missingMappings
-            .map((s) => `     '${s}': (authInfo) => authInfo.user?.${s.toLowerCase()}Token,`)
-            .join('\n') +
-          `\n   }\n\n` +
-          `2. securityResolver:\n` +
-          `   securityResolver: async (tool, ctx) => ({ jwt: await getApiToken(ctx) })\n\n` +
-          `3. staticAuth:\n` +
-          `   staticAuth: { jwt: process.env.API_TOKEN }\n\n` +
-          `4. Include security in input (NOT recommended for production):\n` +
-          `   generateOptions: { includeSecurityInInput: true }`,
-      );
+      throw new Error(formatMissingSecurityMappingsError(this.options.name, openapiTools, validation.missingMappings));
     }
 
     // Apply all transforms to tools

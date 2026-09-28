@@ -1186,16 +1186,16 @@ export default class ExpenseMcpApp {}
 
 The adapter automatically validates your security configuration and assigns a risk score:
 
-| Risk Level    | Configuration                                  | Description                                             |
-| ------------- | ---------------------------------------------- | ------------------------------------------------------- |
-| **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
-| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials, or no credentials at all            |
-| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
-| **HIGH** 🚨   | `passthroughCallerToken: true`                 | The MCP client's own token is sent to the API           |
+| Risk Level    | Configuration                                                               | Description                                             |
+| ------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`                                  | Auth resolved from user context, not exposed to clients |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default                               | Static credentials, or no credentials at all            |
+| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true`, or `securitySchemesInInput` | Auth fields exposed to MCP clients (not recommended)    |
+| **HIGH** 🚨   | `passthroughCallerToken: true`                                              | The MCP client's own token is sent to the API           |
 
 `passthroughCallerToken: true` scores HIGH whenever the caller's token can reach the API: on its own, and alongside an `authProviderMapper` (the token is sent when no mapper function returns a credential). A `securityResolver` or a non-empty `staticAuth` leaves it unused: `staticAuth` answers for every credential the mapper returns nothing for.
 
-Credential sources are tried in this order: `securityResolver`, then `authProviderMapper`, then `staticAuth` (which fills every credential no mapper function returned; a mapped value wins), then `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` or `passthroughCallerToken` covers it; with `passthroughCallerToken` it gets the caller's token, and a `SECURITY WARNING` names it.
+Credential sources are tried in this order: `securityResolver`, then `authProviderMapper`, then `staticAuth` (which fills every credential no mapper function returned; a mapped value wins), then `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` covers it, or `passthroughCallerToken` does for an HTTP bearer scheme; with `passthroughCallerToken` it gets the caller's token, and a `SECURITY WARNING` names it. The caller's token is only ever sent as a bearer token, so it never covers an API key, basic, OAuth2 or OpenID Connect scheme. An operation that requires authentication is sent only when the request carries a credential for one of its own schemes (in that scheme's header, query parameter or cookie), whatever supplied it: a credential option, the tool input (`securitySchemesInInput`, `includeSecurityInInput`), `additionalHeaders` or `headersMapper` (these two can set headers, including `Cookie`, but no query parameter); otherwise it fails with `Authentication required for tool '…'` before any request. A credential in the tool input is used for a scheme only when no other source supplies one: the model chooses it, so a server credential always wins.
 
 ## Built-in Security Protections
 
@@ -1234,8 +1234,8 @@ Beyond authentication, the adapter includes defense-in-depth protections:
 
   </Accordion>
 
-  <Accordion title="Error: Authentication required but no auth configuration found">
-    **Cause:** The tool requires authentication but no auth configuration was provided.
+  <Accordion title="Error: Authentication required for tool '…'">
+    **Cause:** The operation requires authentication, and no credential source gave the request a credential for any of its security schemes (for example, `passthroughCallerToken` alone for an API-key scheme).
 
     **Solution:** Choose one of the authentication strategies:
 
@@ -1243,7 +1243,7 @@ Beyond authentication, the adapter includes defense-in-depth protections:
     2. Add `securityResolver` (for custom logic)
     3. Add `staticAuth` (for server-to-server)
     4. Add `additionalHeaders` (for static API keys)
-    5. Set `passthroughCallerToken: true`, only if the API accepts the token clients present to your MCP server
+    5. Set `passthroughCallerToken: true`, only if the API accepts the token clients present to your MCP server (HTTP bearer schemes only)
 
     The adapter no longer sends the caller's own token when nothing is configured, or when an `authProviderMapper` function returns `undefined`.
 
