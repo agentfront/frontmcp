@@ -10,7 +10,14 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+import {
+  awaitOutsideRequest,
+  findNonFiniteNumber,
+  getRuntimeContext,
+  isDebug,
+  isDevelopment,
+  randomUUID,
+} from '@frontmcp/utils';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
@@ -1124,7 +1131,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             elicitId: error.elicitId,
           });
           const deps: FallbackHandlerDeps = { scope: this.scope as Scope, sessionId, logger: this.logger };
-          const result = await handleWaitingFallback(deps, error);
+          // The answer arrives in another request (sendElicitationResult); in a browser build this one
+          // steps aside so that request can run.
+          const result = await awaitOutsideRequest(handleWaitingFallback(deps, error));
           toolContext.output = result;
           this.logger.verbose('execute:done (elicitation waiting fallback)');
           return;

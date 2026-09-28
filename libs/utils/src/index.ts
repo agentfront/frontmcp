@@ -189,8 +189,16 @@ export {
 } from './crypto';
 export type { CryptoProvider, EncBlob, EncryptedBlob } from './crypto';
 
-// Async context (cross-platform AsyncLocalStorage)
-export { AsyncLocalStorage } from './async-context';
+// Async context (cross-platform AsyncLocalStorage; the browser build runs requests one at a time
+// unless the runtime has AsyncContext)
+export {
+  AsyncContextOverlapError,
+  AsyncLocalStorage,
+  awaitOutsideRequest,
+  getAsyncContextMode,
+  runRequestExclusive,
+  type AsyncContextMode,
+} from './async-context';
 
 // Event emitter (cross-platform)
 export { EventEmitter } from './event-emitter';

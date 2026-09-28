@@ -13,7 +13,7 @@ FrontMcpContext provides per-request state that flows through the entire async e
 
 Every HTTP request to your FrontMCP server creates a `FrontMcpContext` that:
 
-- Propagates through all stages, tools, resources, and prompts via AsyncLocalStorage
+- Propagates through all stages, tools, resources, and prompts via AsyncLocalStorage (in a browser without `AsyncContext`, requests run one at a time instead; see [Browser Compatibility](/frontmcp/deployment/browser-compatibility#request-context-in-the-browser))
 - Provides W3C Trace Context for distributed tracing
 - Stores authentication information after verification
 - Tracks timing marks for performance monitoring

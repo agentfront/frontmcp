@@ -8,6 +8,7 @@ import {
   type ProgressToken,
   type Root,
 } from '@frontmcp/protocol';
+import { awaitOutsideRequest } from '@frontmcp/utils';
 
 import type { AIPlatformType, FrontMcpLogger, PlatformDetectionConfig, PlatformMappingEntry } from '../common';
 import type { Scope } from '../scope';
@@ -1095,9 +1096,12 @@ export class NotificationService {
       this.logger.verbose(`Requesting roots from client for session ${sessionId.slice(0, 20)}...`);
 
       // Send roots/list request to client
-      const result = await registered.server.request({ method: 'roots/list' }, ListRootsResultSchema, {
-        timeout: options?.timeout ?? 30000,
-      });
+      // The client may call the server before it answers; in a browser build that means stepping aside.
+      const result = await awaitOutsideRequest(
+        registered.server.request({ method: 'roots/list' }, ListRootsResultSchema, {
+          timeout: options?.timeout ?? 30000,
+        }),
+      );
 
       // Cache the result
       registered.cachedRoots = result.roots as Root[];

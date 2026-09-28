@@ -12,6 +12,8 @@
  * routing, Host validation — which are not flow stages, and it supplies the
  * platform's peer address, which the flows' `checkIpFilter` stage decides on.
  */
+import { runRequestExclusive } from '@frontmcp/utils';
+
 import { FlowControl } from '../common';
 import { type HttpMethod, type ServerRequest } from '../common/interfaces/server.interface';
 import { type HttpOutput } from '../common/schemas/http-output.schema';
@@ -317,10 +319,13 @@ export async function runHttpRequestFlowWeb(
   const serverRequest = await toServerRequest(request, url, opts.ctx, opts.persistent, opts.env);
   let output: HttpOutput | undefined;
   try {
-    output = (await scope.runFlow('http:request', {
-      request: serverRequest,
-      response: {},
-    } as never)) as HttpOutput | undefined;
+    // One request at a time in a browser build without AsyncContext (a no-op on Node and Workers).
+    output = (await runRequestExclusive(() =>
+      scope.runFlow('http:request', {
+        request: serverRequest,
+        response: {},
+      } as never),
+    )) as HttpOutput | undefined;
   } catch (error) {
     output = flowErrorToHttpOutput(error);
   }
@@ -350,10 +355,12 @@ export async function runMatchingHttpFlowWeb(
   if (!flowName) return undefined;
   let output: HttpOutput | undefined;
   try {
-    output = (await scope.runFlow(flowName, {
-      request: serverRequest,
-      response: {},
-    } as never)) as HttpOutput | undefined;
+    output = (await runRequestExclusive(() =>
+      scope.runFlow(flowName, {
+        request: serverRequest,
+        response: {},
+      } as never),
+    )) as HttpOutput | undefined;
   } catch (error) {
     output = flowErrorToHttpOutput(error);
   }
