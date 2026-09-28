@@ -12,7 +12,7 @@
  */
 import 'reflect-metadata';
 
-import { App, LogLevel, Provider, ProviderScope, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { App, LogLevel, ProviderScope, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { createDeferredServerBuild } from '../../transport/web-fetch-handler';
 import { FrontMcpInstance } from '../front-mcp';
 
