@@ -941,7 +941,8 @@ describe('OAuth Authorize Flow', () => {
       const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
 
       const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
-      expectOAuthRedirect(output, { error: 'invalid_request', errorContains: 'client_id' });
+      // RFC 6749 §4.1.2.1: the client is not authorized to request a code.
+      expectOAuthRedirect(output, { error: 'unauthorized_client', errorContains: 'client_id' });
     });
 
     it('accepts an allowlisted client_id', async () => {

@@ -28,6 +28,9 @@ export const MCP_ERROR_CODES = {
 
 export type McpErrorCode = (typeof MCP_ERROR_CODES)[keyof typeof MCP_ERROR_CODES];
 
+/** Error ids issued where random values can't be generated (see `McpError.generateErrorId`). */
+let sequentialErrorIds = 0;
+
 /**
  * Base class for all MCP-related errors
  */
@@ -60,7 +63,14 @@ export abstract class McpError extends Error {
   }
 
   private generateErrorId(): string {
-    return `err_${bytesToHex(randomBytes(8))}`;
+    try {
+      return `err_${bytesToHex(randomBytes(8))}`;
+    } catch {
+      // An edge isolate refuses random values while its module evaluates, where a startup check can
+      // already throw; the error must still be the one thrown, so its id is a sequence number there.
+      sequentialErrorIds += 1;
+      return `err_${sequentialErrorIds.toString(16).padStart(16, '0')}`;
+    }
   }
 
   /**

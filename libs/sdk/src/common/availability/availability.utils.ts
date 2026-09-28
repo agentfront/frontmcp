@@ -34,8 +34,10 @@ const CALL_SURFACES: readonly string[] = ['mcp', 'cli', 'http-trigger', 'job', '
 
 /**
  * The surface a flow was called from, when its caller tagged one. The MCP request handlers tag
- * every call (`'mcp'`, or `'cli'` for the in-process client of a CLI build). An in-process dispatch
- * such as `this.callTool()` tags none.
+ * every call (`'mcp'`, or `'cli'` for the in-process client of a CLI build), an agent its model's
+ * tool calls (`'agent'`), and `this.callTool()` in a job, an agent or a channel handling a webhook
+ * tags `'job'`, `'agent'` or `'http-trigger'`. A tool's own `this.callTool()` is in-process dispatch
+ * and tags none.
  */
 export function callSurfaceOf(ctx: unknown): CallSurface | undefined {
   const surface = (ctx as { surface?: unknown } | null | undefined)?.surface;

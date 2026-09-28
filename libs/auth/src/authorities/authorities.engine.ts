@@ -59,11 +59,17 @@ export class AuthoritiesEngine {
   ) {}
 
   /**
-   * Problems with an `authorities` value declared on an entry (see {@link findAuthoritiesRuleProblems}).
-   * The server reports them when it starts; {@link evaluate} denies such a value.
+   * Problems with an `authorities` value declared on an entry (see {@link findAuthoritiesRuleProblems}),
+   * and each profile name it uses that no registered profile has. The server reports them when it
+   * starts; {@link evaluate} denies such a value (an unknown profile as `profile '…' is not registered`).
    */
   findRuleProblems(authorities: unknown): string[] {
-    return findAuthoritiesRuleProblems(authorities);
+    const problems = findAuthoritiesRuleProblems(authorities);
+    if (problems.length > 0) return problems;
+    const names = typeof authorities === 'string' ? [authorities] : Array.isArray(authorities) ? authorities : [];
+    return names
+      .filter((name): name is string => typeof name === 'string' && !this.profiles.has(name))
+      .map((name) => `names an unknown profile "${name}"`);
   }
 
   /**

@@ -98,6 +98,9 @@ export function buildPerSkillResourceRecord(
     mimeType: SKILL_MD_MIME_TYPE,
     annotations,
     _meta: meta,
+    // The skill's own `availableWhen`, so `resources/list` and `resources/read` offer its SKILL.md
+    // on the surfaces that offer the skill, and answer others as for an unknown resource.
+    ...(skill.metadata.availableWhen !== undefined && { availableWhen: skill.metadata.availableWhen }),
   };
 
   // The handler signature matches what the resource registry expects: a
@@ -209,7 +212,7 @@ function servedSkillsByPath(scope: ScopeEntry): Map<string, SkillEntry> {
   return served;
 }
 
-/** Copy the description and policy metadata of the skill now served at the resource's path. */
+/** Copy the description, availability and policy metadata of the skill now served at the resource's path. */
 function refreshFromSkill(resource: PerSkillResource, skill: SkillEntry): void {
   const extensions = skillExtensionMetadata(skill);
   for (const key of resource.extensionKeys) {
@@ -217,5 +220,7 @@ function refreshFromSkill(resource: PerSkillResource, skill: SkillEntry): void {
   }
   Object.assign(resource.metadata, extensions);
   resource.metadata['description'] = skill.metadata.description;
+  if (skill.metadata.availableWhen === undefined) Reflect.deleteProperty(resource.metadata, 'availableWhen');
+  else resource.metadata['availableWhen'] = skill.metadata.availableWhen;
   resource.extensionKeys = Object.keys(extensions);
 }

@@ -86,6 +86,7 @@ The two are designed to coexist in the same FrontMCP server. See [Coexistence](/
 - **Layered SSRF defenses**: scheme allowlist, host allowlist, post-DNS IPv4/IPv6 blocklist (RFC 1918, link-local incl. AWS/GCP/Azure metadata 169.254.169.254, loopback, ULA), cloud-metadata hostname blocklist.
 - **ABAC integration** via `@frontmcp/auth`'s `AuthoritiesEngine` (RBAC + ABAC + custom evaluators).
 - **`notifications/skills/list_changed`** broadcast on every bundle swap, with `bundleVersion` on every skill so polling clients can detect changes regardless of client `list_changed` support.
+- **Skills surfaces from startup**: `skills/list`, `skills/search`, `skills/load`, the SEP-2640 capability and `skill://index.json` are served even when the bundle is a server's only source of skills, answering with the skills loaded so far (none until the first bundle loads). Up to 1.8.3 such a server answered `skills/list` with `-32601 Method not found` for sessions opened before the load, and served no `skill://` resources.
 
 ---
 

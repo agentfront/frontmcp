@@ -57,6 +57,23 @@ Not all FrontMCP features are available in browser environments:
 | Crypto (`@frontmcp/utils`)  | Yes             | Uses WebCrypto API                        |
 | Direct client (`connect()`) | Yes             | In-memory connection                      |
 
+### Request context in the browser
+
+A browser has no `AsyncLocalStorage`. Unless the runtime provides TC39 `AsyncContext`
+(`getAsyncContextMode()` from `@frontmcp/utils` is then `'native'`), the browser build runs
+requests one at a time (`'serialized'`) so a request never reads another request's session, auth
+info or running tool:
+
+- `DirectMcpServer` calls, `connect()` clients and `createFetchHandler` requests take turns. A
+  request keeps its turn until it returns and everything it started has unwound; background jobs,
+  workflows and tasks take their own turn afterwards.
+- A request waiting on its client (elicitation, `roots/list`) steps aside while it waits.
+- Concurrent tool calls inside one request (`Promise.all`) are refused with
+  `AsyncContextOverlapError` once they overlap. Run them one after another.
+- A tool must not call its own server through a `DirectClient`/`DirectMcpServer` (it waits for its
+  own turn); use `this.scope` flows. A request that waits more than 10s for its turn logs why.
+- Timers and un-awaited promises must not read request context.
+
 ## Usage with @frontmcp/react
 
 The browser build is commonly paired with `@frontmcp/react` for React applications. `FrontMcpProvider` takes a pre-created `DirectMcpServer` (via the SDK's `create()` factory) — not a `serverUrl`. Hooks for listing/invoking are `useListTools` / `useCallTool`:
@@ -159,6 +176,8 @@ ls dist/browser/
 | CORS errors on tool calls   | MCP server missing CORS headers           | Configure CORS middleware on the MCP server                      |
 | Bundle too large            | All server-side code included             | Use `--target browser` and a dedicated client entry file         |
 | `@frontmcp/utils` fs throws | File system ops called in browser         | Remove fs calls; use API endpoints or in-memory alternatives     |
+| `AsyncContextOverlapError`  | Concurrent tool calls inside one request  | Await the calls one after another (no `AsyncContext` in browser) |
+| A call never returns        | A tool calls its own server via a client  | Call other tools through `this.scope` flows                      |
 
 ## Examples
 

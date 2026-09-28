@@ -14,6 +14,7 @@
 import type { CallToolResult, TaskStatus } from '@frontmcp/protocol';
 
 import type { RedisOptionsInput } from '../common';
+import type { CallSurface } from '../common/availability';
 
 /**
  * Default task configuration values, used when the server doesn't set them
@@ -102,6 +103,13 @@ export interface TaskRecord {
    * and run through the primary scope.
    */
   scopeId?: string;
+
+  /**
+   * The surface (`availableWhen.surface`) of the call that created the task. A detached CLI worker
+   * runs the task on it, so the tool and what it does for the caller are judged as in that call.
+   * Records written by earlier releases have none and run as in-process dispatch.
+   */
+  surface?: CallSurface;
 
   /**
    * Populated once `status` reaches a terminal state. Undefined while the task

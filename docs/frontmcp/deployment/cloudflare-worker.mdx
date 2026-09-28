@@ -177,6 +177,10 @@ Because `[vars]` now reach `process.env`, `wrangler dev` sees the same `NODE_ENV
 
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
+### Startup checks
+
+The server is built on its first request, but the startup checks the config's metadata settles run when the module evaluates: an `approval` or `featureFlag` field no plugin in the config enforces, or `authorities` without the `authorities` option. `createEdgeMcp` throws there, so the worker fails to deploy; the decorator build logs the error and refuses every request. The remaining checks run when the first request builds the server, and a server they refuse fails every request.
+
 ---
 
 ## Endpoint path, CORS & SSE — all config-driven
@@ -341,6 +345,8 @@ MCP_SESSION_SECRET = "..." # or `wrangler secret put MCP_SESSION_SECRET`
 
 The worker routes a request to its session DO by `Mcp-Session-Id` (minting one on `initialize`); the router falls back to stateless handling if the binding isn't present. Without `sessions`, the worker stays stateless (request/response tools work; no server push). A session-based (2025-06-18) client then gets no `Mcp-Session-Id` from `initialize` and each of its requests is served on its own.
 
+A session belongs to the caller that opened it. Its `Mcp-Session-Id` only addresses the Durable Object, so the flow's `checkPersistentSessionOwner` stage binds the session to the caller of its first request and answers any other caller as MCP answers an unknown session (`404`, `Session not found`) on `POST`, `GET` and `DELETE`, before the transport sees the request. The check runs before every protocol handler, MCP 2026-07-28 included. The caller is its verified issuer and subject, which a token refresh keeps, else its token (an anonymous grant). The owner is kept in the Durable Object's storage, so an instance rebuilt after eviction still refuses everyone else (its owner re-initializes the session). An anonymous caller without a token has neither, so on a public server the unguessable session id is the only credential, as for any anonymous session. The owner can end its session with `DELETE`.
+
 <Note>
 `MCP_SESSION_SECRET` is required on a production isolate (`NODE_ENV=production`) — the flow's `session:verify` stage encrypts session IDs with it. `createEdgeMcp` bridges Worker `env` vars/secrets into `process.env` so FrontMCP's config resolution sees them.
 </Note>
@@ -408,6 +414,7 @@ FrontMCP-on-Cloudflare is **v1.3 in progress**. What works vs what's still missi
 - **`createEdgeMcp` also deploys + serves on real Cloudflare** — bundled with esbuild + a small set of stubs (see the next bullet). Verified end-to-end (initialize / tools/list / tools/call). The KV last-good cache + the Cron `scheduled` refresh wiring are unit/integration-tested.
 - **The worker runs the real `http:request` flow** — the same hookable pipeline every transport runs: `session:verify` (auth), router, audit, metrics + plugin/user hooks all execute on the worker. The MCP response is produced by the SDK's web-standard Streamable HTTP transport (`WebStandardStreamableHTTPServerTransport`) — which **is** the standard transport (the Node `StreamableHTTPServerTransport` is a thin `req`/`res` wrapper over it). Configure transparent auth and the flow's `checkAuthorization` stage returns `401` + `WWW-Authenticate` on the worker, just like Node.
 - **Stateful sessions via a Durable Object** (`sessions: {}` + the bound `SessionDurableObject`): the Streamable HTTP standalone `GET` notification stream stays open across requests and requests for a session route back to the same DO — so server→client notifications work. Verified live.
+- **OAuth sign-in endpoints**, including a federated provider's redirect to `/oauth/provider/:providerId/callback` and the federated consent screen's submission: the worker matches path parameters like Express, so remote mode and local `providers` finish a sign-in on the worker.
 - `CloudflareKvStorageAdapter` (KV only, with the honest limits above).
 
 **Deploying `createEdgeMcp` today needs two things:**

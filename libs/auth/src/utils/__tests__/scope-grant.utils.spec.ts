@@ -1,4 +1,4 @@
-import { DEFAULT_ALLOWED_SCOPES, grantScopes } from '../scope-grant.utils';
+import { advertisedScopes, DEFAULT_ALLOWED_SCOPES, grantScopes } from '../scope-grant.utils';
 
 describe('grantScopes', () => {
   it('grants only the standard OpenID scopes when nothing is configured', () => {
@@ -22,5 +22,22 @@ describe('grantScopes', () => {
 
   it('does not let a glob cross into a longer name it was not written for', () => {
     expect(grantScopes(['tickets', 'ticketsadmin'], ['tickets'])).toEqual(['tickets']);
+  });
+});
+
+describe('advertisedScopes', () => {
+  it('advertises the default grant when nothing is configured', () => {
+    expect(advertisedScopes(undefined)).toEqual(['openid', 'profile', 'email', 'offline_access']);
+  });
+
+  it('advertises the literal entries, in order, and leaves globs out', () => {
+    expect(advertisedScopes(['openid', 'tickets:*', 'reports:read', '*', 'openid'])).toEqual([
+      'openid',
+      'reports:read',
+    ]);
+  });
+
+  it('advertises nothing for an allowlist of globs only', () => {
+    expect(advertisedScopes(['tickets:*'])).toEqual([]);
   });
 });

@@ -30,6 +30,27 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 | **Redis/TCP storage**     | `ioredis` requires TCP sockets                                         |
 | **CLI and Nx Plugin**     | Node-only tooling                                                      |
 
+## Request Context in the Browser
+
+Every request runs in its own `FrontMcpContext` (auth info, session, request-scoped providers), and tools see the tool they run as and the surface they were called on. On Node and Workers, `AsyncLocalStorage` keeps these apart for overlapping requests. A browser has no `AsyncLocalStorage`, so the browser build of `@frontmcp/utils` picks one of two modes (`getAsyncContextMode()`):
+
+| Mode           | When                                                               | Behavior                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'native'`     | The runtime provides TC39 `AsyncContext` (`AsyncContext.Variable`) | Requests overlap freely, as on Node.                                                                                                                                       |
+| `'serialized'` | Otherwise (today's browsers)                                       | Requests take turns: `DirectMcpServer` calls, `connect()` clients and `createFetchHandler` requests run one at a time, so a request never reads another request's context. |
+
+In `'serialized'` mode:
+
+- A request keeps its turn until it returns **and** everything it started has unwound. Background jobs, workflows and tasks take a turn of their own after the request that started them.
+- A request that waits on its client (an elicitation answer, a `roots/list` reply, the elicitation fallback) steps aside while it waits, so the client can call the server before answering.
+- Concurrent calls **inside one request** (a tool that starts two tool calls with `Promise.all`) cannot be told apart once they overlap. They are refused with `AsyncContextOverlapError` instead of reading each other's context. Run such calls one after another.
+- A tool must not call its own server through a `DirectClient` or `DirectMcpServer`; it would wait for its own turn. Call other tools through `this.scope` flows instead. A request that waits more than 10 seconds for its turn logs a warning that says so.
+- Timers and promises a tool starts without awaiting run in whichever request holds the turn, so they must not read request context.
+
+<Note>
+Up to 1.8.3, the browser build shared one context stack between all requests, so a request that awaited could continue with another request's session, auth info and running tool.
+</Note>
+
 ---
 
 ## Key Persistence in Browser

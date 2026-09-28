@@ -152,6 +152,9 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
     "Serve a customer's OpenAPI spec as signed skill bundles with hidden per-operation tools mediated by 3 meta-tools.",
   providers: [],
   tools: [SearchSkillTool, LoadSkillTool, RunWorkflowTool],
+  // The bundle's skills are registered after startup: serve the skills capability and methods from
+  // startup, answering with the skills loaded so far.
+  dynamicSkills: true,
 })
 export default class SkilledOpenApiPlugin extends DynamicPlugin<
   SkilledOpenApiPluginOptions,

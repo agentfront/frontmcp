@@ -23,6 +23,7 @@ Target-specific checklist for publishing FrontMCP as a browser-compatible SDK.
 - [ ] All file operations removed or polyfilled
 - [ ] Fetch API used instead of Node http/https modules
 - [ ] Works in major browsers (Chrome, Firefox, Safari, Edge)
+- [ ] Without `AsyncContext` requests run one at a time: tools don't start concurrent tool calls inside one request, don't call their own server through a client, and don't read request context from timers
 
 ## Security
 

@@ -698,15 +698,27 @@ describe('validateSecurityConfiguration', () => {
   });
 
   describe('securitySchemesInInput handling', () => {
-    it('should return MEDIUM risk when schemes are provided via input', () => {
+    it('should return HIGH risk when schemes are provided via input, as includeSecurityInInput does', () => {
       const tools = [createMockToolWithSecurity('BearerAuth')];
 
       const result = validateSecurityConfiguration(tools, {
         securitySchemesInInput: ['BearerAuth'],
       });
 
-      expect(result.securityRiskScore).toBe('medium');
+      expect(result.securityRiskScore).toBe('high');
       expect(result.valid).toBe(true);
+      expect(result.warnings.some((w) => w.includes('securitySchemesInInput is enabled'))).toBe(true);
+    });
+
+    it('should return HIGH risk for schemes in input alongside staticAuth', () => {
+      const tools = [createMockToolWithSecurity('BearerAuth')];
+
+      const result = validateSecurityConfiguration(tools, {
+        securitySchemesInInput: ['BearerAuth'],
+        staticAuth: { apiKey: 'server-key' },
+      });
+
+      expect(result.securityRiskScore).toBe('high');
     });
   });
 

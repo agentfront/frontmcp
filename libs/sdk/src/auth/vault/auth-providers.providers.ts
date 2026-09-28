@@ -5,22 +5,26 @@
  * These providers are registered at scope initialization when AuthProviders is enabled.
  */
 
-import type { Token } from '@frontmcp/di';
-import { ProviderScope } from '@frontmcp/di';
-import type { AuthorizationVault, AuthProvidersVaultOptions, CredentialFactoryContext } from '@frontmcp/auth';
 import {
-  CredentialCache,
-  AuthProvidersRegistry,
-  AUTH_PROVIDERS_REGISTRY,
-  AuthProvidersVault,
-  AUTH_PROVIDERS_VAULT,
   AUTH_PROVIDERS_ACCESSOR,
+  AUTH_PROVIDERS_REGISTRY,
+  AUTH_PROVIDERS_VAULT,
   AuthProvidersAccessorImpl,
+  AuthProvidersRegistry,
+  AuthProvidersVault,
+  CredentialCache,
   LazyCredentialLoader,
+  type AuthorizationVault,
+  type AuthProvidersVaultOptions,
+  type CredentialFactoryContext,
 } from '@frontmcp/auth';
-import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
-import type { FrontMcpContext } from '../../context/frontmcp-context';
+import { ProviderScope, type Token } from '@frontmcp/di';
+import { randomUUID } from '@frontmcp/utils';
+
 import { FrontMcpLogger } from '../../common';
+import type { FrontMcpContext } from '../../context/frontmcp-context';
+import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
+import { sessionScopeIdentity } from '../session-scope-identity';
 import { CREDENTIAL_CACHE } from './credential-cache';
 
 /**
@@ -36,7 +40,7 @@ interface AuthProvidersProviderDef {
   provide: Token;
   scope: ProviderScope;
   name?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   useFactory?: (...args: any[]) => any;
   useValue?: unknown;
   inject?: () => readonly Token[];
@@ -103,9 +107,12 @@ export function createAuthProvidersProviders(
       ctx: FrontMcpContext,
       logger: FrontMcpLogger,
     ) => {
-      // Build factory context from FrontMcpContext
+      // Build factory context from FrontMcpContext. `sessionId` keys `session`-scoped credentials:
+      // the verified session, else the signed-in caller; an anonymous caller without a verified
+      // session gets an id of its own that no other request has, so nothing is shared or kept.
+      // Never `ctx.sessionId`, which under MCP 2026-07-28 is the `mcp-session-id` the client sent.
       const factoryContext: CredentialFactoryContext = {
-        sessionId: ctx.sessionId,
+        sessionId: sessionScopeIdentity(ctx) ?? `unidentified:${randomUUID()}`,
         userSub: ctx.authInfo?.extra?.['sub'] as string | undefined,
         userEmail: ctx.authInfo?.extra?.['email'] as string | undefined,
         userName: ctx.authInfo?.extra?.['name'] as string | undefined,

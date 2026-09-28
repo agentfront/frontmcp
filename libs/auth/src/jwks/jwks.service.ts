@@ -40,6 +40,19 @@ const MAX_JWKS_FETCH_BYTES = 1_048_576; // 1 MiB
 /** Max redirect hops followed during a discovery/JWKS fetch (each re-validated). */
 const MAX_JWKS_FETCH_HOPS = 3;
 
+/** The refusal of a provider-signed token without `exp`, worded as the gateway path (`jose`) words it. */
+const MISSING_EXP_ERROR = 'missing required "exp" claim';
+
+/**
+ * Whether `error` is `jose` refusing a token that has no `exp`. `jose` checks
+ * claims only once the signature verified, so the token is the provider's.
+ */
+function isMissingExpError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, claim, reason } = error as { code?: unknown; claim?: unknown; reason?: unknown };
+  return code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' && claim === 'exp' && reason === 'missing';
+}
+
 // Warning message for weak RSA keys (shown only once per provider)
 const WEAK_KEY_WARNING = `
 ⚠️  SECURITY WARNING: OAuth provider is using an RSA key smaller than 2048 bits.
@@ -130,6 +143,11 @@ export class JwksService {
       /* empty */
     }
 
+    // Set when a provider's key verified the signature but the token has no
+    // `exp` (#272): then the refusal says so. Any other failure keeps the
+    // generic reason, so a forged token learns nothing from the message.
+    let missingExp = false;
+
     for (const p of candidates) {
       let jwks: JSONWebKeySet | undefined;
       try {
@@ -166,13 +184,16 @@ export class JwksService {
             if (fallbackResult.ok) {
               return fallbackResult;
             }
+            if (fallbackResult.error === 'missing_exp') missingExp = true;
           }
         }
+        if (isMissingExpError(e)) missingExp = true;
         this.logger.debug('[JwksService] Failed to verify token for provider: %s', p.id, e);
         // try next provider
       }
     }
 
+    if (missingExp) return { ok: false, error: MISSING_EXP_ERROR };
     return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
   }
 
@@ -365,7 +386,10 @@ export class JwksService {
    *   1) inline jwks (if provided) → cache & return
    *   2) cached & fresh (TTL)      → return
    *   3) explicit jwksUri          → fetch, cache, return
-   *   4) discover jwks_uri via AS  → fetch AS metadata, then jwks_uri, cache, return
+   *   4) discover jwks_uri         → the issuer's OAuth authorization server
+   *      metadata (RFC 8414), else its OpenID configuration (OpenID Connect
+   *      Discovery 1.0 §4, where Google, Okta, Auth0 and Entra publish it),
+   *      then fetch jwks_uri, cache, return
    */
   async getJwksForProvider(ref: ProviderVerifyRef): Promise<JSONWebKeySet | undefined> {
     // Inline keys win
@@ -386,13 +410,16 @@ export class JwksService {
       if (fromUri?.keys?.length) return fromUri;
     }
 
-    // Discover via AS .well-known
+    // Discover via the issuer's .well-known documents. Every URL goes through
+    // the same scheme and SSRF checks (`fetchJson`), `jwks_uri` included.
     const issuer = trimSlash(ref.issuerUrl);
-    const meta = await this.tryFetchAsMeta(`${issuer}/.well-known/oauth-authorization-server`);
-    const uri = meta && typeof meta === 'object' && meta['jwks_uri'] ? String(meta['jwks_uri']) : undefined;
-    if (uri) {
-      const fromMeta = await this.tryFetchJwks(ref.id, uri);
-      if (fromMeta?.keys?.length) return fromMeta;
+    for (const document of ['oauth-authorization-server', 'openid-configuration']) {
+      const meta = await this.tryFetchAsMeta(`${issuer}/.well-known/${document}`);
+      const uri = meta && typeof meta === 'object' && meta['jwks_uri'] ? String(meta['jwks_uri']) : undefined;
+      if (uri) {
+        const fromMeta = await this.tryFetchJwks(ref.id, uri);
+        if (fromMeta?.keys?.length) return fromMeta;
+      }
     }
 
     // Bounded stale-serving: when a refetch fails, keep serving the cached keys

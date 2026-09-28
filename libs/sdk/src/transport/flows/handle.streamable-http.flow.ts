@@ -23,6 +23,7 @@ import { InternalMcpError, TransportServiceNotAvailableError } from '../../error
 import { createExtAppsMessageHandler, type ExtAppsHostCapabilities, type ExtAppsJsonRpcRequest } from '../../ext-apps';
 import { DEFAULT_FRONTMCP_MACHINE_ID_HEADER, DEFAULT_FRONTMCP_NODE_COOKIE } from '../../ha/ha.constants';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
+import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -763,7 +764,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
         sessionId: session.id,
         logger: this.scope.logger,
         callTool: async (name, args) => {
-          // Route through CallToolFlow with session's authInfo
+          // Route through CallToolFlow with session's authInfo. The widget runs in the MCP client,
+          // so its call is on that client's surface, as the client's own `tools/call` is.
           const result = await this.scope.runFlow('tools:call-tool', {
             request: { method: 'tools/call', params: { name, arguments: args } },
             ctx: {
@@ -772,6 +774,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
                 sessionIdPayload: session.payload,
                 token,
               },
+              surface: mcpRequestSurface(this.scope),
             },
           });
           // Parse and return the tool result

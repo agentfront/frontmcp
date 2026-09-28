@@ -68,6 +68,7 @@ import {
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
+  isPublicMode,
   resourceUriMatches,
   StageHookOf,
   type FlowPlan,
@@ -202,7 +203,9 @@ type TokenRequest = z.infer<typeof tokenRequestSchema>;
 const stateSchema = z.object({
   body: tokenRequestSchema.optional(),
   grantType: z.enum(['authorization_code', 'refresh_token', 'anonymous']).optional(),
-  isDefaultAuthProvider: z.boolean().describe('If FrontMcp initialized without auth options'),
+  isDefaultAuthProvider: z
+    .boolean()
+    .describe('No sign-in to run: no auth options, or public mode (the same configuration, written out)'),
   isOrchestrated: z.boolean().describe('If auth mode is orchestrated'),
   // Token response data
   tokenResponse: z
@@ -266,8 +269,10 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     const { metadata } = this.scope;
     const { request } = this.rawInput;
 
-    // Determine if we're using default (anonymous) auth or orchestrated
-    const isDefaultAuthProvider = !metadata.auth;
+    // Determine if we're using default (anonymous) auth or orchestrated. An
+    // explicit `auth: { mode: 'public' }` is the default configuration written
+    // out, so it redeems the anonymous code `/oauth/authorize` hands out too.
+    const isDefaultAuthProvider = !metadata.auth || isPublicMode(metadata.auth);
     const isOrchestrated = !isDefaultAuthProvider;
 
     // #473 — tolerate hybrid Content-Type headers. The Express adapter now
@@ -344,7 +349,10 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     const authOptions = this.scope.auth?.options;
     if (isDefaultAuthProvider && body.code === 'anonymous' && !!authOptions && allowsPublicAccess(authOptions)) {
       const localAuth = this.scope.auth as LocalPrimaryAuth;
-      const accessToken = await localAuth.signAnonymousJwt({ audience: this.canonicalResource() });
+      const accessToken = await localAuth.signAnonymousJwt({
+        audience: this.canonicalResource(),
+        issuer: localAuth.issuerFor(this.rawInput.request),
+      });
 
       this.state.set('tokenResponse', {
         access_token: accessToken,
@@ -364,6 +372,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       body.code_verifier,
       body.client_secret,
       this.canonicalResource(),
+      localAuth.issuerFor(this.rawInput.request),
     );
 
     if ('error' in result) {
@@ -413,7 +422,10 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
         return;
       }
       const localAuth = this.scope.auth as LocalPrimaryAuth;
-      const accessToken = await localAuth.signAnonymousJwt({ audience: this.canonicalResource() });
+      const accessToken = await localAuth.signAnonymousJwt({
+        audience: this.canonicalResource(),
+        issuer: localAuth.issuerFor(this.rawInput.request),
+      });
 
       this.state.set('tokenResponse', {
         access_token: accessToken,
@@ -431,6 +443,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       body.client_id,
       body.client_secret,
       this.canonicalResource(),
+      localAuth.issuerFor(this.rawInput.request),
     );
 
     if ('error' in result) {
@@ -502,7 +515,10 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
 
     const localAuth = this.scope.auth as LocalPrimaryAuth;
     const audience = body?.grant_type === 'anonymous' && body.resource ? body.resource : canonicalResource;
-    const accessToken = await localAuth.signAnonymousJwt({ audience });
+    const accessToken = await localAuth.signAnonymousJwt({
+      audience,
+      issuer: localAuth.issuerFor(this.rawInput.request),
+    });
 
     this.state.set('tokenResponse', {
       access_token: accessToken,

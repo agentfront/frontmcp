@@ -215,11 +215,13 @@ export class AgentExecutionLoop {
     let iterations = 0;
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
+    // Cleared when the run ends, so a finished run doesn't keep a timer (and the process) alive.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
       // Set up timeout
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
+        timeout = setTimeout(
           () => reject(new Error(`Agent execution timed out after ${this.config.timeout}ms`)),
           this.config.timeout,
         );
@@ -266,6 +268,8 @@ export class AgentExecutionLoop {
         error: error as Error,
         durationMs: Date.now() - startTime,
       };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

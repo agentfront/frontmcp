@@ -19,7 +19,7 @@ import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/re
 import { PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import {
   SkillValidationError,
   type SkillValidationReport,
@@ -176,6 +176,18 @@ export interface SkillRegistryInterface {
   hasAny(): boolean;
 
   /**
+   * Whether the scope serves skills: it has some, or a plugin registers them at runtime
+   * (`@Plugin({ dynamicSkills: true })`), so the skills capability and methods exist from startup.
+   */
+  servesSkills?(): boolean;
+
+  /**
+   * Owner lineage (root → leaf) of a skill, including the app a plugin-contributed skill belongs to,
+   * or undefined when the registry doesn't hold it.
+   */
+  lineageOf?(entry: SkillEntry): EntryLineage | undefined;
+
+  /**
    * Get total skill count.
    * @param options - Count options
    */
@@ -305,6 +317,9 @@ export default class SkillRegistry
    */
   private dynamicGenerations = new Map<string, number>();
 
+  /** Whether a plugin registers skills at runtime ({@link expectDynamicSkills}). */
+  private dynamicSkillsExpected = false;
+
   /** Adopted skills from child registries */
   private adopted = new Map<SkillRegistry, IndexedSkill[]>();
 
@@ -313,6 +328,8 @@ export default class SkillRegistry
 
   /** O(1) indexes */
   private byQualifiedId = new Map<string, IndexedSkill>();
+  /** Owner lineage per skill instance, rebuilt with the index so `lineageOf` is O(1). */
+  private readonly lineages = new EntryLineageIndex<SkillEntry>();
   private byName = new Map<string, IndexedSkill[]>();
   private byOwnerAndName = new Map<string, IndexedSkill>();
 
@@ -847,10 +864,32 @@ export default class SkillRegistry
   }
 
   /**
+   * Owner lineage (root → leaf) of a skill, or undefined when no row holds it. A skill a plugin
+   * contributes is owned by the plugin; its lineage names the app the plugin is installed on.
+   */
+  lineageOf(entry: SkillEntry): EntryLineage | undefined {
+    return this.lineages.lineageOf(entry);
+  }
+
+  /**
    * Check if any skills exist.
    */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0;
+  }
+
+  /**
+   * Record that a plugin registers skills at runtime ({@link registerSkillContent}), such as a
+   * skill bundle loaded after the server starts. The scope then serves the skills capability and
+   * methods from startup, answering with the skills registered so far.
+   */
+  expectDynamicSkills(): void {
+    this.dynamicSkillsExpected = true;
+  }
+
+  /** Whether the scope serves skills: it has some, or a plugin registers them at runtime. */
+  servesSkills(): boolean {
+    return this.dynamicSkillsExpected || this.hasAny();
   }
 
   /**
@@ -1020,7 +1059,7 @@ export default class SkillRegistry
    * of the schema cutover see the declaration.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    if (!this.hasAny()) return {};
+    if (!this.servesSkills()) return {};
     return {
       experimental: {
         [SEP_2640_EXTENSION_ID]: {},
@@ -1379,6 +1418,7 @@ export default class SkillRegistry
 
   private reindex(): void {
     const effective = this.listAllIndexed();
+    this.lineages.rebuild(effective);
 
     this.byQualifiedId.clear();
     this.byName.clear();

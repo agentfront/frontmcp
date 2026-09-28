@@ -19,6 +19,7 @@
  */
 
 import type { CallToolResult } from '@frontmcp/protocol';
+import { runRequestExclusive } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
 import { InputRequiredSignal } from '../../errors';
@@ -52,8 +53,9 @@ export interface RunTaskParams {
  */
 export function runTaskInBackground(params: RunTaskParams): Promise<void> {
   // Use microtask dispatch so the outer flow can finish responding with
-  // CreateTaskResult before background work kicks off.
-  return Promise.resolve().then(() => executeTask(params));
+  // CreateTaskResult before background work kicks off. The task is its own request: in a browser
+  // build without AsyncContext it takes its turn after the one that created it (a no-op on Node).
+  return Promise.resolve().then(() => runRequestExclusive(() => executeTask(params)));
 }
 
 async function executeTask(params: RunTaskParams): Promise<void> {

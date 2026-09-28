@@ -110,6 +110,7 @@ export type {
  */
 export { runWebStandardMcp, buildPersistentWebStandardMcp } from './web-standard-mcp';
 export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './web-standard-mcp';
+export type { PersistentSessionOwnerStore } from './persistent-session-owner';
 
 /** Shared MCP server-options/capability builder used across transports. */
 export { buildScopedServerOptions } from './build-scoped-server-options';

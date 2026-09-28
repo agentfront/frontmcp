@@ -153,7 +153,8 @@ export async function executeTaskWorker(options: FrontMcpConfigInput, taskId: st
     await runTaskInBackground({
       record,
       cleanedRequestParams: record.request.params,
-      ctx: { authInfo: { sessionId } },
+      // On the surface of the call that created the task, as the in-process runner runs it.
+      ctx: { authInfo: { sessionId }, ...(record.surface !== undefined && { surface: record.surface }) },
       scope: scope as unknown as Parameters<typeof runTaskInBackground>[0]['scope'],
       store: taskStore,
       registry,

@@ -51,6 +51,7 @@ import {
   httpRespond,
   HttpTextSchema,
   isOrchestratedMode,
+  isPublicMode,
   isRemoteMode,
   resourceUriMatches,
   StageHookOf,
@@ -58,6 +59,7 @@ import {
   type FlowPlan,
   type FlowRunOptions,
   type HttpCookie,
+  type ServerRequest,
 } from '../../common';
 import {
   authUiExtraPath,
@@ -163,7 +165,9 @@ export type AnonymousAuthorizeRequest = z.infer<typeof anonymousAuthorizeRequest
 const inputSchema = httpInputSchema;
 
 const stateSchema = z.object({
-  isDefaultAuthProvider: z.boolean().describe('If FrontMcp initialized without auth options'),
+  isDefaultAuthProvider: z
+    .boolean()
+    .describe('No sign-in to run: no auth options, or public mode (the same configuration, written out)'),
   isOrchestrated: z.boolean().describe('If FrontMcp is orchestrated (local oauth proxy, remote oauth proxy)'),
   allowAnonymous: z.boolean().describe('Allow anonymous access, force orchestrated mode'),
   // Validated OAuth request (after validation)
@@ -273,9 +277,13 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
    * Returns `undefined` when the configured auth instance has no issuer, so the
    * parameter is simply omitted rather than emitted empty — a client validating
    * `iss` treats absence as "not supported" and proceeds.
+   *
+   * With `request`, the issuer the tokens redeemed for this request name
+   * (`LocalPrimaryAuth.issuerFor`); without it, the boot-time issuer.
    */
-  private resolveIssuer(): string | undefined {
-    const issuer = (this.scope.auth as { issuer?: unknown } | undefined)?.issuer;
+  private resolveIssuer(request?: ServerRequest): string | undefined {
+    const auth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
+    const issuer: unknown = request && auth?.issuerFor ? auth.issuerFor(request) : auth?.issuer;
     return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
   }
   private logger = this.scope.logger.child('OauthAuthorizeFlow');
@@ -350,7 +358,9 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // Retained for the record only; never used as an authentication signal.
     const existingSessionId = request.query['session_id'] as string | undefined;
 
-    const isDefaultAuthProvider = !metadata.auth;
+    // No `auth` is public mode (AuthRegistry's default): an explicit
+    // `auth: { mode: 'public' }` is the same server and answers the same way.
+    const isDefaultAuthProvider = !metadata.auth || isPublicMode(metadata.auth);
 
     // Check if orchestrated mode requires federated login. Two triggers:
     // 1. Top-level `auth.providers` declared (local-mode multi-provider
@@ -450,9 +460,28 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468): name ourselves
       // on the authorization response so the client can detect an AS mix-up before
       // it redeems the code.
-      const issuer = this.resolveIssuer();
+      const issuer = this.resolveIssuer(this.rawInput.request);
       if (issuer) url.searchParams.set('iss', issuer);
       this.respond(httpRespond.redirect(url.toString()));
+      return;
+    }
+
+    // A mode that signs no one in (static: a pre-shared token) has no
+    // authorization to grant, and no client whose redirect_uri could be
+    // checked: an error page, never a redirect.
+    const authConfig = this.scope.metadata.auth;
+    if (!authConfig || !isOrchestratedMode(authConfig)) {
+      const mode = authConfig?.mode ?? 'public';
+      this.logger.warn(`Authorization request refused: auth mode ${mode} does not sign users in`);
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage(
+            'unsupported_response_type',
+            `This server does not sign users in (auth mode: ${mode}). Present its access token instead.`,
+          ),
+          400,
+        ),
+      );
       return;
     }
 
@@ -514,17 +543,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     let redirectVerified = redirectAllowlisted;
 
     // Local-AS DCR allowlist enforcement (#462). When `auth.dcr` declares a
-    // redirect_uri and/or client_id allowlist, reject requests that fall
-    // outside it BEFORE a pending authorization is created. CIMD client ids
-    // (URLs) are validated by the CIMD layer below and are exempt from the
-    // client_id allowlist, but the redirect_uri allowlist still applies to
-    // everyone as defense in depth. No-op when no allowlist is configured, so
-    // the default behavior is unchanged.
+    // redirect_uri allowlist, a redirect_uri outside it is refused BEFORE a
+    // pending authorization is created, for every client (CIMD included, as
+    // defense in depth), with an error page: that redirect_uri is not one
+    // this server may send anything to. No-op when no allowlist is configured.
     const isCimdClientId = !!cimdService?.enabled && cimdService.isCimdClientId(client_id);
-    const dcrError = this.checkDcrAllowlist(client_id, redirect_uri, isCimdClientId);
-    if (dcrError) {
-      this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${dcrError}`);
-      this.respondWithError([dcrError], redirectVerified ? redirect_uri : undefined, rawState);
+    const redirectError = this.checkDcrRedirectAllowlist(redirect_uri);
+    if (redirectError) {
+      this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${redirectError}`);
+      this.respondWithError([redirectError], undefined, rawState);
       return;
     }
 
@@ -566,31 +593,49 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // (registered) client_id + the attacker's OWN redirect_uri and receive the
     // victim's code. Reject with an error PAGE (never redirect an unvalidated
     // redirect_uri — open-redirect guard).
-    if (!isCimdClientId) {
-      const registered = registry?.get?.(client_id);
-      if (registered) {
-        if (!registered.redirect_uris.includes(redirect_uri)) {
-          this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
-          this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
-          return;
-        }
-        redirectVerified = true;
-      } else if (authOptions?.requireRegisteredClients !== false) {
-        // SECURITY: an UNREGISTERED, non-CIMD client id has no trusted
-        // `redirect_uris` to validate against, so accepting its attacker-chosen
-        // redirect_uri lets a real authorization code be delivered to an
-        // attacker. Refused unless the operator explicitly opted out with
-        // `requireRegisteredClients: false` (the default is true). A
-        // `dcr.allowedRedirectUris` match does NOT register a client. Show an
-        // error PAGE — never redirect an unvalidated redirect_uri.
-        this.logger.warn(`OAuth authorize: rejecting unregistered client_id "${client_id}" (requireRegisteredClients)`);
-        this.respondWithError(
-          ['Unknown client_id: register the client (DCR / pre-registered) or use a CIMD client-id URL'],
-          undefined,
-          rawState,
-        );
+    const registered = isCimdClientId ? undefined : registry?.get?.(client_id);
+    if (registered) {
+      if (!registered.redirect_uris.includes(redirect_uri)) {
+        this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
+        this.respondWithError(['redirect_uri is not registered for this client'], undefined, rawState);
         return;
       }
+      redirectVerified = true;
+    }
+
+    // `dcr.allowedClientIds` (#462): a client the operator didn't list may not
+    // start a sign-in. Checked once `redirect_uri` is validated for the client,
+    // so a registered client learns why at its own redirect_uri
+    // (`unauthorized_client`, RFC 6749 §4.1.2.1); an error page when nothing
+    // validated the redirect_uri. CIMD client ids are validated by the CIMD
+    // layer and exempt.
+    const clientIdError = isCimdClientId ? undefined : this.checkDcrClientIdAllowlist(client_id);
+    if (clientIdError) {
+      this.logger.warn(`OAuth authorize: DCR allowlist rejection — ${clientIdError}`);
+      this.respondWithError(
+        [clientIdError],
+        redirectVerified ? redirect_uri : undefined,
+        rawState,
+        'unauthorized_client',
+      );
+      return;
+    }
+
+    if (!isCimdClientId && !registered && authOptions?.requireRegisteredClients !== false) {
+      // SECURITY: an UNREGISTERED, non-CIMD client id has no trusted
+      // `redirect_uris` to validate against, so accepting its attacker-chosen
+      // redirect_uri lets a real authorization code be delivered to an
+      // attacker. Refused unless the operator explicitly opted out with
+      // `requireRegisteredClients: false` (the default is true). A
+      // `dcr.allowedRedirectUris` match does NOT register a client. Show an
+      // error PAGE — never redirect an unvalidated redirect_uri.
+      this.logger.warn(`OAuth authorize: rejecting unregistered client_id "${client_id}" (requireRegisteredClients)`);
+      this.respondWithError(
+        ['Unknown client_id: register the client (DCR / pre-registered) or use a CIMD client-id URL'],
+        undefined,
+        rawState,
+      );
+      return;
     }
 
     // Validate resource parameter against server's canonical URI (RFC 8707).
@@ -1171,31 +1216,31 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Enforce the local-AS DCR allowlists (#462) at authorize time. Returns a
-   * human-readable rejection reason, or `undefined` when the request is allowed
-   * (including when no allowlist is configured, or the auth instance does not
-   * expose a DCR registry — e.g. non-local modes).
-   *
-   * - `allowedRedirectUris`: applies to ALL clients (CIMD or not) as an
-   *   open-redirect / lateral-movement guard.
-   * - `allowedClientIds`: applies only to non-CIMD client ids; CIMD URLs are
-   *   validated by the CIMD layer instead.
+   * Enforce the local-AS DCR `allowedRedirectUris` (#462) at authorize time,
+   * for ALL clients (CIMD or not) as an open-redirect / lateral-movement guard.
+   * Returns a human-readable rejection reason, or `undefined` when the
+   * redirect_uri is allowed (including when no allowlist is configured, or the
+   * auth instance does not expose a DCR registry — e.g. non-local modes).
    */
-  private checkDcrAllowlist(clientId: string, redirectUri: string, isCimdClientId: boolean): string | undefined {
-    const auth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
-    const registry = auth?.dcrClientRegistry;
-    if (!registry) {
-      return undefined;
-    }
-
-    if (registry.hasRedirectAllowlist() && !registry.isRedirectUriAllowed(redirectUri)) {
+  private checkDcrRedirectAllowlist(redirectUri: string): string | undefined {
+    const registry = (this.scope.auth as Partial<LocalPrimaryAuth> | undefined)?.dcrClientRegistry;
+    if (registry?.hasRedirectAllowlist() && !registry.isRedirectUriAllowed(redirectUri)) {
       return `redirect_uri "${redirectUri}" is not in the configured allowlist`;
     }
+    return undefined;
+  }
 
-    if (!isCimdClientId && registry.hasClientIdAllowlist() && !registry.isClientIdAllowed(clientId)) {
+  /**
+   * Enforce the local-AS DCR `allowedClientIds` (#462) at authorize time, for
+   * non-CIMD client ids (the caller skips CIMD URLs, which the CIMD layer
+   * validates). Returns a human-readable rejection reason, or `undefined` when
+   * the client is allowed or no allowlist is configured.
+   */
+  private checkDcrClientIdAllowlist(clientId: string): string | undefined {
+    const registry = (this.scope.auth as Partial<LocalPrimaryAuth> | undefined)?.dcrClientRegistry;
+    if (registry?.hasClientIdAllowlist() && !registry.isClientIdAllowed(clientId)) {
       return `client_id "${clientId}" is not in the configured allowlist`;
     }
-
     return undefined;
   }
 
@@ -1210,9 +1255,12 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Respond with OAuth error - redirect if possible, otherwise show error page
+   * Respond with OAuth error - redirect if possible, otherwise show error page.
+   *
+   * @param redirectUri A redirect_uri validated for the client; omit it for an error page.
+   * @param error       The RFC 6749 §4.1.2.1 error code. Default `invalid_request`.
    */
-  private respondWithError(errors: string[], redirectUri?: string, state?: string): void {
+  private respondWithError(errors: string[], redirectUri?: string, state?: string, error = 'invalid_request'): void {
     const errorDescription = errors.join('; ');
 
     // Try to redirect with error if we have a valid and safe redirect_uri
@@ -1221,7 +1269,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const safe = safeRedirectUriSchema.safeParse(redirectUri);
       if (safe.success) {
         const url = new URL(safe.data);
-        url.searchParams.set('error', 'invalid_request');
+        url.searchParams.set('error', error);
         url.searchParams.set('error_description', errorDescription);
         if (state) {
           url.searchParams.set('state', state);
@@ -1232,7 +1280,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // Unsafe redirect_uri (javascript:, data:, etc.), fall through to error page
     }
 
-    this.respond(this.htmlPage(this.renderErrorPage('invalid_request', errorDescription), 400));
+    this.respond(this.htmlPage(this.renderErrorPage(error, errorDescription), 400));
   }
 
   /**

@@ -166,6 +166,15 @@ export interface PluginMetadata {
    * field that looks protective never silently does nothing.
    */
   enforcesMetadata?: string[];
+
+  /**
+   * The plugin registers skills at runtime (`scope.skills.registerSkillContent`), after the server
+   * starts, such as skills from a bundle it loads. The server then serves the skills capability and
+   * methods (`skills/list`, `skills/search`, `skills/load`, the SEP-2640 `skill://` resources and,
+   * when enabled, the skills HTTP endpoints) from startup, answering with the skills registered so
+   * far, even when no other skill exists.
+   */
+  dynamicSkills?: boolean;
 }
 
 // Schema for context extensions (uses passthrough since token is a Symbol)
@@ -193,5 +202,6 @@ export const frontMcpPluginMetadataSchema = z
     scope: z.enum(['app', 'server']).optional().default('app'),
     contextExtensions: z.array(contextExtensionSchema).optional(),
     enforcesMetadata: z.array(z.string().min(1)).optional(),
+    dynamicSkills: z.boolean().optional(),
   } satisfies RawZodShape<PluginMetadata>)
   .passthrough();
