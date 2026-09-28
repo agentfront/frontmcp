@@ -14,7 +14,9 @@
  * They refuse only what the full checks certainly refuse too:
  * - an entry declares `authorities` and the server has no `authorities` option;
  * - an entry declares a field only a plugin enforces (`approval`, `featureFlag`, ...) and no plugin
- *   anywhere in the config (on the server, an app, an agent, or inside another plugin) enforces it.
+ *   that can reach it enforces it: for a tool declared inside an `@Agent`, one of that agent's plugins
+ *   (none when it sets `execution.useToolFlow: false`); for any other entry, a plugin on the server, an
+ *   app, or inside another of those plugins. An agent's plugins serve only that agent's tools.
  *
  * Entries the config names are read from their decorators. An entry whose `availableWhen` depends on
  * the process (os, runtime, env, ...) is left to the full checks, as are entries only the built server
@@ -40,6 +42,8 @@ import { normalizeTool } from '../tool/tool.utils';
 interface StaticEntry {
   label: string;
   metadata: Record<string, unknown>;
+  /** The keys the plugins that reach the entry enforce, when only some of the config's plugins do. */
+  enforcedBy?: ReadonlySet<string>;
 }
 
 /** The entry lists of a server, an app or a plugin. */
@@ -74,7 +78,18 @@ function isServedEverywhere(metadata: Record<string, unknown>): boolean {
   );
 }
 
-/** The entries the config names, and every metadata key a plugin in it enforces. */
+/** The keys a plugin list enforces, nested plugins included. */
+function keysEnforcedByPlugins(plugins: readonly unknown[] | undefined, into = new Set<string>()): Set<string> {
+  for (const plugin of plugins ?? []) {
+    const record = tryNormalize(() => normalizePlugin(plugin as Parameters<typeof normalizePlugin>[0]));
+    if (!record) continue;
+    for (const key of record.metadata.enforcesMetadata ?? []) into.add(key);
+    keysEnforcedByPlugins(record.metadata.plugins, into);
+  }
+  return into;
+}
+
+/** The entries the config names, and every metadata key a plugin outside an agent enforces. */
 function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType): {
   entries: StaticEntry[];
   enforcedKeys: Set<string>;
@@ -82,21 +97,19 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
   const entries: StaticEntry[] = [];
   const enforcedKeys = new Set<string>();
 
-  const add = (label: string, metadata: unknown): boolean => {
+  const add = (label: string, metadata: unknown, enforcedBy?: ReadonlySet<string>): boolean => {
     const fields = asMetadata(metadata);
     if (!fields || !isServedEverywhere(fields)) return false;
-    entries.push({ label, metadata: fields });
+    entries.push({ label, metadata: fields, enforcedBy });
     return true;
   };
 
-  const visitPlugins = (plugins: readonly unknown[] | undefined, withEntries: boolean): void => {
+  const visitPlugins = (plugins: readonly unknown[] | undefined): void => {
     for (const plugin of plugins ?? []) {
       const record = tryNormalize(() => normalizePlugin(plugin as Parameters<typeof normalizePlugin>[0]));
       if (!record) continue;
       for (const key of record.metadata.enforcesMetadata ?? []) enforcedKeys.add(key);
-      // An agent's plugins serve only that agent, whose own tools the full checks judge by those plugins alone.
-      if (withEntries) visitEntries(record.metadata as EntryLists);
-      else visitPlugins(record.metadata.plugins, false);
+      visitEntries(record.metadata as EntryLists);
     }
   };
 
@@ -123,17 +136,21 @@ function collectStaticEntries(config: FrontMcpConfigInput | FrontMcpConfigType):
       if (!record) continue;
       const agentName = record.metadata.id ?? record.metadata.name;
       if (!add(`Agent "${agentName}"`, record.metadata)) continue;
+      // The agent's own tools run in its private scope, which holds only its plugins' hooks.
+      const agentEnforcedKeys =
+        record.metadata.execution?.useToolFlow === false
+          ? new Set<string>()
+          : keysEnforcedByPlugins(record.metadata.plugins);
       for (const toolItem of record.metadata.tools ?? []) {
         const toolRecord = tryNormalize(() => normalizeTool(toolItem));
-        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata);
+        if (toolRecord) add(`Tool "${agentName}:${toolRecord.metadata.name}"`, toolRecord.metadata, agentEnforcedKeys);
       }
-      visitPlugins(record.metadata.plugins, false);
     }
     for (const item of owner.skills ?? []) {
       const record = tryNormalize(() => normalizeSkill(item));
       if (record) add(`Skill "${record.metadata.id ?? record.metadata.name}"`, record.metadata);
     }
-    visitPlugins(owner.plugins, true);
+    visitPlugins(owner.plugins);
   };
 
   // The server's own entries: its skills and its plugins' entries (its `tools` and `resources` lists
@@ -176,10 +193,9 @@ export function assertStaticStartupConfig(config: FrontMcpConfigInput | FrontMcp
     }
   }
 
-  const unenforced = getEnforcedMetadataKeys().filter((key) => !enforcedKeys.has(key));
-  const problems = entries.flatMap(({ label, metadata }) =>
-    unenforced
-      .filter((key) => isEnforcementRequested(metadata[key]))
+  const problems = entries.flatMap(({ label, metadata, enforcedBy = enforcedKeys }) =>
+    getEnforcedMetadataKeys()
+      .filter((key) => isEnforcementRequested(metadata[key]) && !enforcedBy.has(key))
       .map((key) => {
         const enforcer = describeMetadataEnforcer(key);
         return `${label} declares '${key}'${enforcer ? ` (enforced by ${enforcer})` : ''}`;

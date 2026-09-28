@@ -178,6 +178,10 @@ Because `[vars]` reach `process.env`, `npx wrangler dev` sees the same `NODE_ENV
 
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
+### Startup checks
+
+The server is built on its first request, but the checks the config's metadata settles run when the module evaluates, so `createEdgeMcp` throws and the worker fails to deploy: an `approval` or `featureFlag` field no plugin that reaches the entry enforces (`UnenforcedMetadataError`), or `authorities` without the `authorities` option (`AuthConfigurationError`). A tool declared inside an `@Agent` is reached only by that agent's plugins (none with `execution.useToolFlow: false`), and an agent's plugins reach nothing else. The remaining checks run when the first request builds the server.
+
 ## Step 5: Deploy
 
 ```bash

@@ -67,6 +67,20 @@ const llm = { adapter: { completion: async () => ({ content: 'done', finishReaso
 @Agent({ name: 'refunds', inputSchema: {}, llm, authorities: 'admin' })
 class RefundsAgent extends AgentContext {}
 
+/** An agent whose own tool asks for approval, with the given agent options. */
+function refundDeskAgent(extra: Record<string, unknown> = {}) {
+  @Agent({ name: 'refund-desk', inputSchema: {}, llm, tools: [tool('issue_refund', APPROVAL)], ...extra })
+  class RefundDeskAgent extends AgentContext {}
+  return RefundDeskAgent;
+}
+
+/** An agent with a plugin that enforces approval, with the given agent options. */
+function approvingTriageAgent(extra: Record<string, unknown> = {}) {
+  @Agent({ name: 'triage', inputSchema: {}, llm, plugins: [AnyAppApprovalPlugin], ...extra })
+  class ApprovingTriageAgent extends AgentContext {}
+  return ApprovingTriageAgent;
+}
+
 function app(id: string, entries: Record<string, unknown>) {
   @App({ id, name: id, ...entries })
   class NamedApp {}
@@ -113,6 +127,10 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     'an approval tool in the server-level tools list, which no scope registers',
     server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)] }),
   ],
+  [
+    'an approval tool inside an agent whose own plugin enforces approval',
+    server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
+  ],
 ];
 
 /** Servers the full checks refuse, and the metadata alone shows why. */
@@ -137,6 +155,32 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
     server({
       apps: [app('billing', { tools: [tool('agent_refund', { ...APPROVAL, availableWhen: { surface: ['agent'] } })] })],
     }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent, and only its app has a plugin that enforces approval',
+    server({ apps: [app('desk', { plugins: [AnyAppApprovalPlugin], agents: [refundDeskAgent()] })] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent whose own plugin enforces approval, but the agent skips the tool flow',
+    server({
+      apps: [
+        app('desk', {
+          agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin], execution: { useToolFlow: false } })],
+        }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only an agent has a plugin that enforces approval',
+    server({ apps: [app('desk', { tools: [tool('refund_invoice', APPROVAL)], agents: [approvingTriageAgent()] })] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an agent asks for approval, and only its own plugin enforces approval',
+    server({ apps: [app('desk', { agents: [approvingTriageAgent(APPROVAL)] })] }),
     UnenforcedMetadataError,
   ],
 ];

@@ -179,7 +179,7 @@ Background tasks need a store that outlives a single request and is shared betwe
 
 ### Startup checks
 
-The server is built on its first request, but the startup checks the config's metadata settles run when the module evaluates: an `approval` or `featureFlag` field no plugin in the config enforces, or `authorities` without the `authorities` option. `createEdgeMcp` throws there, so the worker fails to deploy; the decorator build logs the error and refuses every request. The remaining checks run when the first request builds the server, and a server they refuse fails every request.
+The server is built on its first request, but the startup checks the config's metadata settles run when the module evaluates: an `approval` or `featureFlag` field no plugin that reaches the entry enforces, or `authorities` without the `authorities` option. A tool declared inside an `@Agent` is reached only by that agent's plugins (none with `execution.useToolFlow: false`), and an agent's plugins reach nothing else. `createEdgeMcp` throws there, so the worker fails to deploy; the decorator build logs the error and refuses every request. The remaining checks run when the first request builds the server, and a server they refuse fails every request.
 
 ---
 
