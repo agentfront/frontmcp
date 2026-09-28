@@ -43,20 +43,20 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 
 ### Optional Properties
 
-| Property            | Type                               | Default    | Description                             |
-| ------------------- | ---------------------------------- | ---------- | --------------------------------------- |
-| `description`       | `string`                           | —          | Workflow description                    |
-| `id`                | `string`                           | `name`     | Stable identifier for tracking          |
-| `trigger`           | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered           |
-| `webhook`           | `WorkflowWebhookConfig`            | —          | Webhook configuration                   |
-| `timeout`           | `number`                           | `600000`   | Max total execution time in ms (10 min) |
-| `maxConcurrency`    | `number`                           | `5`        | Max parallel step concurrency           |
-| `tags`              | `string[]`                         | —          | Categorization tags                     |
-| `labels`            | `Record<string, string>`           | —          | Key-value labels                        |
-| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list_workflows`              |
-| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                   |
-| `inputSchema`       | `ToolInputType` (Zod raw shape)    | —          | Workflow-level input schema             |
-| `outputSchema`      | `ToolOutputType`                   | —          | Workflow-level output schema            |
+| Property            | Type                               | Default    | Description                                                                 |
+| ------------------- | ---------------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `description`       | `string`                           | —          | Workflow description                                                        |
+| `id`                | `string`                           | `name`     | Stable identifier for tracking                                              |
+| `trigger`           | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered                                               |
+| `webhook`           | `WorkflowWebhookConfig`            | —          | Webhook configuration                                                       |
+| `timeout`           | `number`                           | `600000`   | Max total execution time in ms (10 min)                                     |
+| `maxConcurrency`    | `number`                           | `5`        | Max parallel step concurrency (1 in a browser build without `AsyncContext`) |
+| `tags`              | `string[]`                         | —          | Categorization tags                                                         |
+| `labels`            | `Record<string, string>`           | —          | Key-value labels                                                            |
+| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list_workflows`                                                  |
+| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                                                       |
+| `inputSchema`       | `ToolInputType` (Zod raw shape)    | —          | Workflow-level input schema                                                 |
+| `outputSchema`      | `ToolOutputType`                   | —          | Workflow-level output schema                                                |
 
 ### WorkflowStep
 

@@ -56,7 +56,7 @@ describe('authorizeSkillHttpRequest', () => {
       const access = await authorizeSkillHttpRequest(scope, undefined, requestWith());
 
       expect(access).toMatchObject({ allowed: true, authInfo: { user, clientId: 'ada' } });
-      expect(scope.runFlow).toHaveBeenCalledWith('session:verify', { request: expect.anything() });
+      expect(scope.runFlow).toHaveBeenCalledWith('session:verify', { request: expect.anything(), sessionless: true });
     });
 
     it.each([

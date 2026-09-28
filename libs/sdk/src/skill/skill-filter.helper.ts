@@ -8,8 +8,10 @@
  * treated as absent: left out of listings and not found when named.
  */
 
+import type { EntryAvailability } from '@frontmcp/utils';
+
 import type { ScopeEntry, SkillEntry } from '../common';
-import { availabilityForCall, callSurfaceOf, type CallSurface } from '../common/availability';
+import { availabilityForCall, callSurfaceOf, isOfferedOnSurface, type CallSurface } from '../common/availability';
 import { getCallSurface } from '../context/call-surface';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
 import { createSkillEntryResolver, skillResultId, type SkillEntryLookup } from './skill-entry.resolver';
@@ -104,4 +106,60 @@ export async function filterDiscoverableSkillResults<T extends { metadata: { id?
     const entry = entries[index];
     return entry === undefined || servable.has(entry);
   });
+}
+
+/** The part of a tool registry a skill load needs to judge its tools' `availableWhen.surface`. */
+export interface SkillToolLookup {
+  getTools(includeHidden?: boolean): ReadonlyArray<{ name: string; metadata?: { availableWhen?: EntryAvailability } }>;
+}
+
+/**
+ * A loaded skill's tools as the current caller sees them (the caller's surface is resolved as in
+ * {@link filterServableSkills}). A tool `availableWhen.surface` doesn't offer the caller is one
+ * `tools/list` leaves out and `tools/call` answers as unknown, so it is reported as missing, as a
+ * tool that doesn't exist is, and neither its availability nor its schema reaches that caller.
+ */
+export function skillToolsForCaller<
+  T extends {
+    availableTools: string[];
+    missingTools: string[];
+    isComplete: boolean;
+    warning?: string;
+    skill?: { name?: string };
+  },
+>(loaded: T, tools: SkillToolLookup | null | undefined, ctx?: unknown, surface?: CallSurface): T {
+  const caller = callerSurface(ctx, surface);
+  if (!tools || caller === undefined || loaded.availableTools.length === 0) return loaded;
+  const availability = new Map(tools.getTools(true).map((tool) => [tool.name, tool.metadata?.availableWhen]));
+  const notOffered = loaded.availableTools.filter((name) => !isOfferedOnSurface(availability.get(name), caller));
+  if (notOffered.length === 0) return loaded;
+  return {
+    ...loaded,
+    availableTools: loaded.availableTools.filter((name) => !notOffered.includes(name)),
+    missingTools: [...loaded.missingTools, ...notOffered],
+    isComplete: false,
+    warning: warningWithMissingTools(loaded.warning, loaded.skill?.name, notOffered),
+  };
+}
+
+const WARNING_PREFIX = /^Skill "(.*)" references /;
+const WARNING_SUFFIX = '. Some functionality may be limited.';
+const MISSING_PART = 'missing tools: ';
+
+/**
+ * The load warning with `names` among its missing tools, in `SkillToolValidator.formatWarning`'s
+ * shape (`Skill "<name>" references missing tools: a, b; hidden tools: c. Some functionality may be
+ * limited.`). A tool the caller's surface hides is reported as missing, like a tool that doesn't exist.
+ */
+function warningWithMissingTools(warning: string | undefined, skillName: string | undefined, names: string[]): string {
+  const prefix = warning?.match(WARNING_PREFIX);
+  if (warning && prefix && warning.endsWith(WARNING_SUFFIX)) {
+    const parts = warning.slice(prefix[0].length, -WARNING_SUFFIX.length).split('; ');
+    const missing = parts.findIndex((part) => part.startsWith(MISSING_PART));
+    if (missing === -1) parts.unshift(`${MISSING_PART}${names.join(', ')}`);
+    else parts[missing] = `${parts[missing]}, ${names.join(', ')}`;
+    return `${prefix[0]}${parts.join('; ')}${WARNING_SUFFIX}`;
+  }
+  const sentence = `Skill "${skillName ?? 'skill'}" references ${MISSING_PART}${names.join(', ')}${WARNING_SUFFIX}`;
+  return warning ? `${warning} ${sentence}` : sentence;
 }

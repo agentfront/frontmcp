@@ -25,8 +25,9 @@ import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
 import {
+  createDeferredServerBuild,
   createWebFetchHandler,
-  misconfigurationResponse,
+  startupFailureResponse,
   type FetchHandlerCtx,
   type WebFetchHandler,
 } from '../transport/web-fetch-handler';
@@ -289,13 +290,19 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   public static async createFetchHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<WebFetchHandler> {
     const build = async (deferred: boolean): Promise<WebFetchHandler> => {
-      const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
+      let frontMcp: FrontMcpInstance | undefined;
       try {
+        frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
         await frontMcp.ready;
       } catch (err) {
         // A deferred build fails on a request, which may only be answered with a code and a remedy:
-        // the server's own log is where its operator reads why it didn't start.
-        if (deferred) frontMcp.log?.error('FrontMCP failed to start; requests are refused until it does', err);
+        // the server's own log is where its operator reads why it didn't start. A config the schema
+        // refuses fails before there is a logger.
+        if (deferred) {
+          const message = 'FrontMCP failed to start; requests are refused until a retry succeeds';
+          if (frontMcp?.log) frontMcp.log.error(message, err);
+          else console.error(`[frontmcp] ${message}`, err);
+        }
         throw err;
       }
       const scope = frontMcp.getPrimaryScope() as Scope | undefined;
@@ -314,39 +321,29 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // forbidden — yet scope initialization legitimately does those (e.g. ProviderRegistry's session
     // cleanup interval), and a Worker's secrets only arrive with its first request. So ALL
     // instance/scope construction is deferred to the first request, and only the startup checks the
-    // config's metadata settles run here. The build runs once and is memoized; concurrent first
+    // config's metadata settles run here. The build runs once and is kept; concurrent first
     // requests share the same in-flight build.
     assertStaticStartupConfig(options);
-    let inner: WebFetchHandler | undefined;
-    let building: Promise<WebFetchHandler> | undefined;
+    // A failed build is kept and refuses requests until its retry delay passes (1 s, doubling up to
+    // 60 s), so a transient failure doesn't brick the isolate and a permanent one isn't rebuilt by
+    // every request.
+    const server = createDeferredServerBuild(() => build(true));
 
     // #536 — `ctx` and `env` must reach the inner handler: `ctx.waitUntil` keeps
     // the isolate alive for a streaming body, and `env` carries the Worker's
     // bindings (KV, D1, R2, Durable Objects). The memoizing wrapper used to drop
     // both, which made them unreachable through the decorator-build path.
     return async (request: Request, ctx?: FetchHandlerCtx, env?: unknown): Promise<Response> => {
-      if (!inner) {
-        // Reset the memo if build() rejects, so one transient init error doesn't
-        // poison the isolate — without this, every later request would reuse the
-        // rejected promise with no retry path.
-        if (!building) {
-          building = build(true).catch((err) => {
-            building = undefined;
-            throw err;
-          });
-        }
-        try {
-          inner = await building;
-        } catch (err) {
-          // #546 — a missing JWT_SECRET is thrown while the auth instance is
-          // constructed, i.e. before any flow exists to map it. Without this the
-          // handler promise rejects and the platform answers its own opaque 500,
-          // which is the very thing the structured body was added to replace.
-          // A server the startup checks refuse is answered the same way, on every request.
-          const misconfigured = misconfigurationResponse(err);
-          if (misconfigured) return misconfigured;
-          throw err;
-        }
+      let inner: WebFetchHandler;
+      try {
+        inner = await server.get();
+      } catch (err) {
+        // #546 — a build failure happens before any flow exists to map it. Thrown out of the handler,
+        // the platform would answer its own opaque 500. Every failure is answered with a code and a
+        // remedy instead: a configuration fault (a missing secret, a startup check, an invalid config)
+        // as 500 `server_misconfigured`, anything else (a remote that refused the connection, a package
+        // that failed to load) as 503 `server_unavailable` with `Retry-After`.
+        return startupFailureResponse(err, server.retryAfterSeconds());
       }
       return inner(request, ctx, env);
     };

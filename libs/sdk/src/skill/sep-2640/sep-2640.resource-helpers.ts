@@ -33,6 +33,11 @@ export function getSepVisibleSkills(scope: ScopeEntry): SkillEntry[] {
  * Falls back to lookup-by-name when no skill matches the full path —
  * supporting clients that pass `skill://my-skill/SKILL.md` for skills
  * registered without an explicit `metadata.skillPath`.
+ *
+ * A single-segment path may also be the id of such a skill: `skills/list`, `skills/search` and the
+ * Skilled OpenAPI meta-tools report skills by id, and a bundle skill's id (`invoices`) is not its
+ * name (`Invoices`). The canonical URI, the one `skill://index.json` and `resources/list` list,
+ * stays the name form SEP-2640 requires; the id form is only accepted.
  */
 export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntry | undefined {
   const registry = scope.skills;
@@ -48,7 +53,12 @@ export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntr
   const segments = skillPath.split('/').filter((s) => s.length > 0);
   if (segments.length === 0) return undefined;
   const lastSegment = segments[segments.length - 1];
-  return visible.find((s) => s.name === lastSegment && s.getSkillPath() === lastSegment);
+  const byName = visible.find((s) => s.name === lastSegment && s.getSkillPath() === lastSegment);
+  if (byName) return byName;
+
+  // Last: a single segment naming the id of a skill addressed by its name (no explicit skillPath).
+  if (segments.length !== 1) return undefined;
+  return visible.find((s) => s.metadata.id === lastSegment && s.getSkillPath() === s.metadata.name);
 }
 
 /**

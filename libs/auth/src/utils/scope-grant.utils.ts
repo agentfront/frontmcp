@@ -48,3 +48,41 @@ export function advertisedScopes(allowed: readonly string[] | undefined): string
   }
   return scopes;
 }
+
+/** The auth option fields {@link resourceScopesFor} reads, whichever mode they belong to. */
+export interface ResourceScopeOptions {
+  mode?: string;
+  allowedScopes?: readonly string[];
+  anonymousScopes?: readonly string[];
+  scopes?: readonly string[];
+  requiredScopes?: readonly string[];
+}
+
+/**
+ * The scope values a protected resource advertises as `scopes_supported`
+ * (RFC 9728 §2) for its auth mode: the scopes a client can actually be given
+ * for it, not a fixed OpenID Connect list (#629).
+ *
+ * - `local` / `remote`: the literal entries of `allowedScopes` ({@link advertisedScopes});
+ * - `public` (and no auth at all): `anonymousScopes`, what the anonymous grant gives;
+ * - `static`: `scopes`, what the static credential carries;
+ * - `transparent`: `requiredScopes`, then `scopes` (what the upstream provider is
+ *   asked for), the scopes a token for this resource needs.
+ *
+ * An empty result means the server names no scopes; leave `scopes_supported` out then.
+ *
+ * @param options The scope's auth options (parsed or as configured); `undefined` means public mode.
+ */
+export function resourceScopesFor(options: ResourceScopeOptions | undefined): string[] {
+  const mode = options?.mode ?? 'public';
+  if (mode === 'local' || mode === 'remote') return advertisedScopes(options?.allowedScopes);
+  const listed =
+    mode === 'public'
+      ? (options?.anonymousScopes ?? ['anonymous'])
+      : mode === 'static'
+        ? (options?.scopes ?? ['static'])
+        : mode === 'transparent'
+          ? [...(options?.requiredScopes ?? []), ...(options?.scopes ?? [])]
+          : [];
+  return advertisedScopes(listed);
+}

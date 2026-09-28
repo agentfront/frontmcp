@@ -39,8 +39,10 @@
  */
 import {
   assertStaticStartupConfig,
+  createDeferredServerBuild,
   createWebFetchHandler,
   FrontMcpInstance,
+  startupFailureResponse,
   type FetchHandlerCtx,
   type SkillIndexCache,
   type WebFetchHandler,
@@ -278,8 +280,6 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   // A misconfigured server fails where it is created, not on its first request.
   assertStaticStartupConfig(config);
 
-  let handlerPromise: Promise<WebFetchHandler> | undefined;
-
   // In managed mode a controller carries the KV cache + `disablePolling` into
   // the plugin and captures the live source for Cron-driven refresh. It's
   // created inside `build(env)` — not here — because the cache may be a factory
@@ -288,7 +288,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   let controller: EdgeRefreshController | undefined;
 
   // `env` from the first request (fetch or scheduled) is what buildScope() uses
-  // to resolve the cache; the handler is memoized via `handlerPromise`, so it
+  // to resolve the cache; the handler is built once (see `server` below), so it
   // runs once. `buildScope` is ALSO called by the Durable Object (in its own
   // isolate) to build a session-local scope.
   const buildScope = async (env: unknown): Promise<Scope> => {
@@ -355,25 +355,31 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     return createWebFetchHandler(scope, sessionRouter ? { sessionRouter } : {});
   };
 
-  // Build (memoized) on the first request, resolving the cache from that
-  // request's `env`. A FAILED build clears the memo so the next request/cron
-  // retries — a transient blip during the boot pull shouldn't permanently brick
-  // the worker (a request-handler error, by contrast, is per-request and does
-  // not invalidate the built scope).
-  const ensureHandler = async (env: unknown): Promise<WebFetchHandler> => {
-    if (!handlerPromise) handlerPromise = build(env);
-    try {
-      return await handlerPromise;
-    } catch (e) {
-      handlerPromise = undefined;
-      throw e;
-    }
-  };
+  // Build (once) on the first request, resolving the cache from that request's
+  // `env`. A FAILED build is kept and refuses requests until its retry delay
+  // passes (1 s, doubling up to 60 s); the first request or cron after that
+  // retries, so a transient blip during the boot pull doesn't permanently brick
+  // the worker and a permanent fault isn't rebuilt by every request (a
+  // request-handler error, by contrast, is per-request and does not invalidate
+  // the built scope).
+  const server = createDeferredServerBuild(build, {
+    onFailure: (error) =>
+      console.error('[frontmcp/edge] The server failed to start; requests are refused until a retry succeeds.', error),
+  });
+  const ensureHandler = (env: unknown): Promise<WebFetchHandler> => server.get(env);
 
   const mcp: EdgeMcp = {
     async fetch(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
       bridgeEnvToProcessEnv(env);
-      const handler = await ensureHandler(env);
+      let handler: WebFetchHandler;
+      try {
+        handler = await ensureHandler(env);
+      } catch (error) {
+        // A failed build is answered, never thrown to the platform (whose own 500 says nothing):
+        // a configuration fault as 500 `server_misconfigured`, anything else as 503
+        // `server_unavailable` with `Retry-After`.
+        return startupFailureResponse(error, server.retryAfterSeconds());
+      }
       // Forward the Worker ExecutionContext (for `waitUntil` on SSE bodies) and
       // `env` (so the session router can resolve its Durable Object binding).
       // Deno and Bun call `fetch(request, info | server)`: that second argument is where the handler reads the peer IP.

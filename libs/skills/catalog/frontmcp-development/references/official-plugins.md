@@ -178,6 +178,7 @@ CodeCallPlugin.init({
 - `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
 - Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
 - `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.
+- `illegal_access` messages name the script's own lines (`FORBIDDEN_LOOP (line 3): …`), whatever the enclave's transform printed; a line that is none of the script's is left out. `tool_error` results carry no `toolInput` (deprecated in the schema, never set).
 
 ### Power Features
 

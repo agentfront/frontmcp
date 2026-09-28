@@ -159,10 +159,10 @@ To keep bindings out of `process.env` entirely, add `nodejs_compat_do_not_popula
 
 `NODE_ENV = "production"` in `[vars]` makes this a production deployment, where FrontMCP refuses its development fallbacks:
 
-| Secret               | Required when                                                        | Failure without it                                                                                               |
-| -------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `MCP_SESSION_SECRET` | always in production — `session:verify` encrypts session IDs with it | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}`                                          |
-| `JWT_SECRET`         | `auth.mode` is `local` or `remote` (these mint tokens)               | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
+| Secret               | Required when                                                                                                                                                                 | Failure without it                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `MCP_SESSION_SECRET` | in production, for session clients (Durable Object sessions, protocol before 2026-07-28) — `session:verify` encrypts their session IDs with it; 2026-07-28 requests need none | `500 {"error":"server_misconfigured","code":"SESSION_SECRET_REQUIRED"}`                                          |
+| `JWT_SECRET`         | `auth.mode` is `local` or `remote` (these mint tokens)                                                                                                                        | the server refuses to start; requests answer `500 {"error":"server_misconfigured","code":"JWT_SECRET_REQUIRED"}` |
 
 ```bash
 npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
@@ -171,6 +171,13 @@ npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 # never mint local JWTs and do not read this.
 npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 ```
+
+**When the server fails to start.** The Worker builds the server on its first request. A failed build is answered, never thrown to the platform, and the error's message is not echoed:
+
+- A configuration fault (missing or weak secret, a startup check, a config the schema refuses): `500 {"error":"server_misconfigured","code":"…"}` — codes `SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, `JWT_SECRET_INVALID`, `UNENFORCED_METADATA`, `AUTH_CONFIGURATION_ERROR`, `CONFIG_INVALID`.
+- Anything else (a remote that refused the connection, a package that failed to load): `503 {"error":"server_unavailable","code":"SERVER_START_FAILED"}` with `Retry-After`.
+
+The failure is kept until a retry delay passes (1 s, doubling up to 60 s); the first request after it builds again. The cause is logged once per attempt (`wrangler tail`). Same for `createEdgeMcp()`, `createFetchHandler()` on an edge isolate, and each session Durable Object.
 
 Because `[vars]` reach `process.env`, `npx wrangler dev` sees the same `NODE_ENV=production` the deployment does, so a missing secret fails locally rather than only after a successful deploy.
 
@@ -266,7 +273,8 @@ class_name = "FrontMcpSession"
 [[migrations]]
 tag = "v1"
 new_classes = ["FrontMcpSession"]
-# MCP_SESSION_SECRET is required on production isolates. Set it as a SECRET, not
+# MCP_SESSION_SECRET is required on production isolates that serve session clients
+# (Durable Object sessions, protocol before 2026-07-28). Set it as a SECRET, not
 # a var — `[vars]` is committed plaintext:
 #   npx wrangler secret put MCP_SESSION_SECRET   # openssl rand -hex 32
 ```

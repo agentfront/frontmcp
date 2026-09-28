@@ -45,6 +45,11 @@ export interface DispatchOptions {
   body: Record<string, unknown>;
   /** Capabilities the client declared in this request's `_meta`. */
   clientCapabilities: Record<string, unknown>;
+  /**
+   * Whether the client declared 2026-07-28 itself (default `true`). `false` when the server served
+   * an unversioned call under it, which `elicit()` answers as a legacy client's.
+   */
+  clientDeclaredRevision?: boolean;
   /** Ambient request context, used to carry the MRTR exchange to `elicit()`. */
   frontmcpContext?: FrontMcpContext;
   /** Auth info forwarded to the shared handlers. */
@@ -261,6 +266,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
     scope,
     body,
     clientCapabilities,
+    clientDeclaredRevision,
     frontmcpContext,
     authInfo,
     isAnonymous,
@@ -361,6 +367,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
     carriedResponses: carried.ok ? carried.responses : {},
     clientCapabilities,
     binding,
+    clientDeclaredRevision,
   });
   frontmcpContext?.setMrtrExchange(exchange);
   if (notificationSink) frontmcpContext?.setRequestNotificationSink(notificationSink);

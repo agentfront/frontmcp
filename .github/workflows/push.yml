@@ -208,9 +208,17 @@ jobs:
             exit 1
           fi
           echo "Found $(echo "$PROJECTS_JSON" | jq 'length') unit-test projects"
-          # Round-robin (sorted → deterministic) into 5 balanced chunks; keeps the
-          # two heaviest projects (sdk, auth) in separate chunks.
-          CHUNKS=$(echo "$PROJECTS_JSON" | jq -c 'to_entries | group_by(.key % 5) | to_entries | map({ index: .key, projects: (.value | map(.value)) })')
+          # 5 chunks: the two heaviest projects (sdk, auth) run alone, each in its own
+          # chunk, and the rest are split round-robin (sorted -> deterministic) over the
+          # other three. A plain round-robin by index put sdk and auth in one chunk,
+          # which outgrew the job timeout.
+          CHUNKS=$(echo "$PROJECTS_JSON" | jq -c --argjson heavy '["sdk","auth"]' '
+            [.[] | select(. as $p | $heavy | index($p))] as $solo_names
+            | [.[] | select(. as $p | $heavy | index($p) | not)] as $rest
+            | ($solo_names | map([.])) as $solo
+            | (5 - ($solo | length)) as $n
+            | ($rest | to_entries | group_by(.key % $n) | map(map(.value))) as $groups
+            | ($solo + $groups) | to_entries | map({ index: .key, projects: .value })')
           echo "Created $(echo "$CHUNKS" | jq 'length') chunks"
           echo "chunks=$CHUNKS" >> "$GITHUB_OUTPUT"
 
@@ -222,7 +230,7 @@ jobs:
     name: "Unit Tests (chunk ${{ matrix.chunk.index }})"
     needs: [setup, build, discover-unit]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

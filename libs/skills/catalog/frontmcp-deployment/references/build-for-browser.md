@@ -70,6 +70,8 @@ info or running tool:
 - A request waiting on its client (elicitation, `roots/list`) steps aside while it waits.
 - Concurrent tool calls inside one request (`Promise.all`) are refused with
   `AsyncContextOverlapError` once they overlap. Run them one after another.
+- A workflow runs its ready steps one at a time, whatever its `maxConcurrency`, so each step runs
+  once instead of overlapping and being retried.
 - A tool must not call its own server through a `DirectClient`/`DirectMcpServer` (it waits for its
   own turn); use `this.scope` flows. A request that waits more than 10s for its turn logs why.
 - Timers and un-awaited promises must not read request context.

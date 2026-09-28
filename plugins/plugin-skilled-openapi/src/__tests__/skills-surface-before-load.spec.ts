@@ -114,4 +114,34 @@ describe('Skilled OpenAPI: skills surfaces before the bundle has loaded', () => 
     );
     expect(index.contents[0]?.text).toContain('invoices');
   });
+
+  it("serves a bundle skill's SKILL.md at the URI index.json lists, and at the same URI with its id", async () => {
+    await client.listTools();
+    const index = await client.request(
+      { method: 'resources/read', params: { uri: 'skill://index.json' } },
+      readResourceSchema,
+    );
+    const listed = JSON.parse(index.contents[0]?.text ?? '{}') as { skills?: Array<{ url?: string }> };
+    const url = listed.skills?.[0]?.url;
+    expect(url).toBe('skill://Invoices/SKILL.md');
+
+    const read = (uri: string) =>
+      client.request({ method: 'resources/read', params: { uri } }, readResourceSchema).then((r) => r.contents[0]);
+    const byName = await read('skill://Invoices/SKILL.md');
+    const byId = await read('skill://invoices/SKILL.md');
+
+    expect(byName?.text).toContain('Use getInvoice.');
+    expect(byId?.text).toBe(byName?.text);
+    expect(byId?.uri).toBe('skill://invoices/SKILL.md');
+  });
+
+  it('does not resolve an id-shaped URI that names no skill', async () => {
+    await client.listTools();
+    await expect(
+      client.request(
+        { method: 'resources/read', params: { uri: 'skill://no-such-skill/SKILL.md' } },
+        readResourceSchema,
+      ),
+    ).rejects.toThrow();
+  });
 });

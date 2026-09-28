@@ -1274,6 +1274,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         if (state) {
           url.searchParams.set('state', state);
         }
+        // RFC 9207 §2: an error response names the issuer too, so a client can tell which
+        // authorization server refused before it acts on the error.
+        const issuer = this.resolveIssuer(this.rawInput.request);
+        if (issuer) url.searchParams.set('iss', issuer);
         this.respond(httpRespond.redirect(url.toString()));
         return;
       }

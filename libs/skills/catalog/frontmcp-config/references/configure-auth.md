@@ -94,7 +94,9 @@ Local mode runs a built-in OAuth 2.1 authorization server and signs its own JWT 
 class Server {}
 ```
 
-- `local.issuer` -- the `iss` claim set in generated tokens (defaults to a request-host-derived URL if omitted).
+- `local.issuer` -- the issuer named everywhere: discovery's `issuer` and `authorization_servers`, the RFC 9207 `iss` on every authorization response (errors included), and the tokens' `iss`. Without it: `FRONTMCP_PUBLIC_URL` (plus the entry path) when pinned, else the `FRONTMCP_PUBLIC_HOST` boot-time issuer (`http://<host>:<port>`), else the request's origin -- the same on the Node server and under `createFetchHandler()`.
+- The protected resource metadata's `scopes_supported` is what the mode grants: `allowedScopes` (local/remote), `anonymousScopes` (public), `scopes` (static), `requiredScopes` then `scopes` (transparent), plus `authProviders` scopes outside local/remote mode.
+- An MCP 2026-07-28 request has no session: anonymous and static-key callers get none minted, so `MCP_SESSION_SECRET` is needed only for session clients; `this.context.verifiedSessionId` is `undefined` there.
 
 Token signing uses **HS256, a symmetric secret** read from the `JWT_SECRET` environment variable -- there is **no RSA/EC key pair** and no key store. Generate a stable secret (`JWT_SECRET=$(openssl rand -hex 32)`); if it is unset, FrontMCP falls back to a random per-process secret and all tokens are invalidated on restart.
 

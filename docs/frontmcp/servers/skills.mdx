@@ -285,7 +285,7 @@ Best for dependency tracking and version control:
 
 ### File Path
 
-Load from a markdown file at runtime:
+Load from a markdown file:
 
 ```ts
 @Skill({
@@ -296,7 +296,7 @@ Load from a markdown file at runtime:
 
 ### URL
 
-Fetch from a remote source at load time:
+Fetch from a remote source:
 
 ```ts
 @Skill({
@@ -304,6 +304,8 @@ Fetch from a remote source at load time:
   instructions: { url: 'https://docs.example.com/workflows/deploy.md' },
 })
 ```
+
+File and URL instructions are read **when the server starts**, for every skill: the server indexes each skill for `skills/search` and checks its tools then. So a URL is fetched at every start, whether or not a client reads the skill. A read that fails is logged (`Failed to load skill <name>: …`) and tried again the first time the skill is loaded; the content is kept once a read succeeds.
 
 <Tip>
 Inline instructions are recommended because they enable static analysis, type checking, and ensure the skill definition is complete and self-contained.
@@ -641,8 +643,8 @@ Load a skill's full content:
 
 When loading a skill, FrontMCP validates tool availability:
 
-- **Available tools**: Tools registered in the current scope
-- **Missing tools**: Referenced tools that don't exist
+- **Available tools**: Tools registered in the current scope and offered to the caller
+- **Missing tools**: Referenced tools that don't exist, or that `availableWhen.surface` doesn't offer the caller (an agent-only tool, for an MCP client). Like a tool that doesn't exist, such a tool is reported without its input schema, through `skills/load`, the `skills:load` flow, `GET /skills/{id}` and `/llm_full.txt` (which serve the `'mcp'` surface)
 - **Hidden tools**: Tools that exist but are hidden from discovery
 
 ### Handling Missing Tools

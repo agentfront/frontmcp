@@ -1022,3 +1022,225 @@ A client that shares one session between users, or signs in as a different user 
 ```
 
 **Codemod available:** no
+
+## BC-047: OAuth: one issuer for every entry point, and on every authorization response
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+Discovery (`/.well-known/oauth-authorization-server` `issuer`, protected resource metadata `authorization_servers`), the RFC 9207 `iss` on every authorization response, and token `iss` all use one order, on FrontMCP's Node server and under `createFetchHandler()` alike: `issuer` / `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (the boot-time issuer), then the request's origin. `FRONTMCP_PUBLIC_URL` now wins over `FRONTMCP_PUBLIC_HOST`; on the Node server with nothing pinned, the issuer follows the request instead of `http://localhost:<port>`; discovery names a configured `local.issuer`; and `expectedAudience` no longer pins the boot-time issuer (tokens name the address they were issued at, and any listed address's issuer, or the 1.8.4 boot-time one, is accepted). Error redirects now carry `iss` too, and the authorization server metadata advertises `authorization_response_iss_parameter_supported: true`.
+
+Tokens minted by 1.8.4 on a Node server reached at another host than `localhost:<port>` carry the boot-time `iss` and are refused unless `expectedAudience` is set; clients re-authorize or refresh. In production, pin `FRONTMCP_PUBLIC_URL` or set `local.issuer`.
+
+**Before:**
+
+```typescript
+// Node server: iss = http://localhost:3001 whatever the request; FRONTMCP_PUBLIC_HOST beat FRONTMCP_PUBLIC_URL; error redirects had no iss
+```
+
+**After:**
+
+```typescript
+// one order everywhere: issuer/local.issuer > FRONTMCP_PUBLIC_URL > FRONTMCP_PUBLIC_HOST > request origin; iss on every authorization response
+```
+
+**Codemod available:** no
+
+## BC-048: Protected resource metadata lists the scopes each auth mode grants
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+`scopes_supported` in the protected resource metadata no longer lists `openid`, `profile` and `email` in public, static and transparent mode. Public mode (or no `auth`) lists `anonymousScopes`, static mode `scopes`, transparent mode `requiredScopes` then `scopes`, each plus the `authProviders` scopes; local and remote mode list `allowedScopes` as before. An empty list leaves the field out. `ScopeEntry.getAllSupportedScopes()` now returns only the `authProviders` scopes.
+
+**Before:**
+
+```typescript
+// scopes_supported: ['openid', 'profile', 'email', ...] in every mode
+```
+
+**After:**
+
+```typescript
+// scopes_supported: what the mode grants (anonymousScopes / scopes / requiredScopes + scopes / allowedScopes)
+```
+
+**Codemod available:** no
+
+## BC-049: MCP 2026-07-28 anonymous and static-key callers get no session
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+`session:verify` no longer mints an encrypted session for an MCP 2026-07-28 request, or for a skills HTTP request (`/skills`, `/llm.txt`, `/llm_full.txt` with `auth: 'inherit'`): it identifies the caller for that request only. `MCP_SESSION_SECRET` is therefore needed only for session clients (Durable Object sessions, protocol before 2026-07-28); before, an anonymous or static-key 2026-07-28 call, or a static-mode skills HTTP request, answered `500 SESSION_SECRET_REQUIRED` in production without it. Under 2026-07-28, `this.authInfo.sessionId` is the same per-request id as `this.context.sessionId`, and `verifiedSessionId` stays `undefined`; key state that must outlive a request on the caller, not on the session id.
+
+**Before:**
+
+```typescript
+// production, no MCP_SESSION_SECRET: anonymous / static-key 2026-07-28 call -> 500 SESSION_SECRET_REQUIRED
+```
+
+**After:**
+
+```typescript
+// served; no session is minted for 2026-07-28 requests or skills HTTP requests
+```
+
+**Codemod available:** no
+
+## BC-050: `invoke_<agent>` runs the `agents:call-agent` flow
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+Calling `invoke_<agent>` now runs the `agents:call-agent` flow after `tools:call-tool`, so `AgentCallHook` hooks and an agent class's own hooks on that flow run; before, the flow never ran. The agent's authorities, rate limit, concurrency and timeout are still applied once, by the tool flow. `this.context` now works inside an agent's own `execute()`.
+
+**Before:**
+
+```typescript
+// invoke_<agent> called execute() directly: AgentCallHook hooks never ran, this.context threw in execute()
+```
+
+**After:**
+
+```typescript
+// invoke_<agent> runs tools:call-tool, then agents:call-agent (hooks run; gates applied once)
+```
+
+**Codemod available:** no
+
+## BC-051: Channel sources: webhooks are served, completions are delivered
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+Channel `webhook` sources are served as `POST` routes on the HTTP server, guarded like `http.routes` (`throttle.ipFilter`). A webhook path on a FrontMCP path, or one shared by two channels, now fails startup. `createDirect`, stdio and `createFetchHandler` serve no webhook route. `agent-completion` and `job-completion` sources now deliver their events, only to the session that ran the agent or job; a run with no session is delivered to no one. Before, none of the three sources did anything.
+
+**Before:**
+
+```typescript
+// webhook, agent-completion and job-completion channel sources never fired
+```
+
+**After:**
+
+```typescript
+// webhook: POST route (ipFilter-guarded); completions: delivered to the originating session
+```
+
+**Codemod available:** no
+
+## BC-052: Elicitation on a server-defaulted 2026-07-28 call without the capability
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+An unversioned call that is served as MCP 2026-07-28 only by default (`transport.defaultProtocolVersion`, the Worker default), from a client without the elicitation capability, now gets `ElicitationNotSupportedError` from `elicit()`, as a legacy-protocol call does, instead of `-32021` (missing elicitation capability). A client that declares 2026-07-28 itself still gets `-32021`.
+
+**Before:**
+
+```typescript
+// header-less 2025-03-26 client via createFetchHandler: elicit() -> -32021
+```
+
+**After:**
+
+```typescript
+// ElicitationNotSupportedError, as for a legacy-protocol call
+```
+
+**Codemod available:** no
+
+## BC-053: Edge isolates answer a failed server build instead of throwing
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+On an edge isolate (`createEdgeMcp()`, `createFetchHandler()` / `@FrontMcp`, session Durable Objects), a server that fails to build no longer throws out of `fetch`. A configuration fault, now including a config the schema refuses (`CONFIG_INVALID`), answers `500 {"error":"server_misconfigured","code":...}`; anything else answers `503 {"error":"server_unavailable","code":"SERVER_START_FAILED"}` with `Retry-After`, without echoing the error. A failed build is kept, and refuses requests, for 1 s after the first failure, doubling up to 60 s, instead of being rebuilt by every request. Code that caught the rejected `fetch` promise should read the response status instead.
+
+**Before:**
+
+```typescript
+// a build failure other than a startup check or missing secret: fetch() rejected, and every request rebuilt
+```
+
+**After:**
+
+```typescript
+// 500 server_misconfigured or 503 server_unavailable (Retry-After); rebuilds back off from 1 s to 60 s
+```
+
+**Codemod available:** no
+
+## BC-054: Browser builds run a workflow's ready steps one at a time
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+In a browser build without `AsyncContext`, a workflow runs its ready steps one at a time whatever its `maxConcurrency`. Before, steps started together overlapped, failed the request-context overlap check and were retried, and a workflow could end `failed`. Node and Workers still run steps concurrently.
+
+**Before:**
+
+```typescript
+// browser, no AsyncContext: parallel steps overlapped, failed and were retried
+```
+
+**After:**
+
+```typescript
+// browser, no AsyncContext: ready steps run one at a time
+```
+
+**Codemod available:** no
+
+## BC-055: skills/load reports tools the caller's surface hides as missing
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+A skill's tool that `availableWhen.surface` doesn't offer the caller is reported in `missingTools`, with `available: false` and no input schema, from `skills/load`, the `skills:load` flow, `GET /skills/{id}` and `/llm_full.txt`; `isComplete` is then false. Before, it was reported as available, with its schema.
+
+**Before:**
+
+```typescript
+// skills/load: a surface-hidden tool was listed as available, with its input schema
+```
+
+**After:**
+
+```typescript
+// listed in missingTools, available: false, no schema
+```
+
+**Codemod available:** no
+
+## BC-056: OpenAPI adapter: includeSecurityInInput as a list sends the listed credentials
+
+**Package:** `@frontmcp/adapters` | **Category:** change | **Severity:** low
+
+`generateOptions.includeSecurityInInput` as a list of scheme names now works like `securitySchemesInInput`: the listed schemes' values from the tool input are sent (before, they were added to the input schema and dropped). The schemes the list leaves out now need a credential source at startup (`authProviderMapper`, `staticAuth`, `additionalHeaders` / `headersMapper`, or `passthroughCallerToken` for bearer); before, a list skipped that check entirely. The startup warning names the listed schemes. Give the other schemes a credential source, or use `includeSecurityInInput: true`.
+
+**Before:**
+
+```typescript
+// includeSecurityInInput: ['ApiKey'] -> argument in the schema, value never sent
+```
+
+**After:**
+
+```typescript
+// the listed schemes' input values are sent; the others need a credential source
+```
+
+**Codemod available:** no
+
+## BC-057: CodeCall reports the script's own lines, and tool_error has no toolInput
+
+**Package:** `@frontmcp/plugin-codecall` | **Category:** change | **Severity:** low
+
+`illegal_access` messages name the script's own lines; before, they named lines of the enclave's transformed code (2 or more past the script's line). A line that is none of the script's is omitted. `tool_error` results never include `toolInput`; the schema field is optional and deprecated.
+
+**Before:**
+
+```typescript
+// illegal_access at line 6 for a script's line 2; tool_error schema declared toolInput
+```
+
+**After:**
+
+```typescript
+// illegal_access at the script's own line; no toolInput
+```
+
+**Codemod available:** no

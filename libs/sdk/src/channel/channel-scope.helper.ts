@@ -1,11 +1,22 @@
 // file: libs/sdk/src/channel/channel-scope.helper.ts
 
-import { type EntryOwnerRef, type FrontMcpLogger } from '../common';
+import { type EntryOwnerRef, type FrontMcpLogger, type FrontMcpServer, type ServerRequestHandler } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
-import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
+import {
+  type ChannelAgentCompletionSource,
+  type ChannelJobCompletionSource,
+  type ChannelsConfigOptions,
+  type ChannelWebhookSource,
+} from '../common/metadata/channel.metadata';
 import type FlowRegistry from '../flows/flow.registry';
 import type { NotificationService } from '../notification/notification.service';
 import type ProviderRegistry from '../provider/provider.registry';
+import {
+  assertNotReserved,
+  computeReservedPaths,
+  wrapWithIpFilter,
+  type CheckClientIpFn,
+} from '../server/custom-routes.helper';
 import { ToolInstance } from '../tool/tool.instance';
 import type ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
@@ -14,9 +25,14 @@ import ChannelRegistry from './channel.registry';
 import ListChannelsFlow from './flows/list-channels.flow';
 import SendChannelNotificationFlow from './flows/send-channel-notification.flow';
 import { ChannelReplyTool } from './reply/channel-reply.tool';
-import { wireAgentCompletionSource } from './sources/agent-completion.source';
+import { wireAgentCompletionSource, type AgentCompletionEvent } from './sources/agent-completion.source';
 import { ChannelEventBus, wireAppEventSource } from './sources/app-event.source';
-import { wireJobCompletionSource } from './sources/job-completion.source';
+import { completionEventsOf } from './sources/completion-events';
+import { wireJobCompletionSource, type JobCompletionEvent } from './sources/job-completion.source';
+import { createWebhookMiddleware } from './sources/webhook.source';
+
+/** Subscribe to one kind of completion event; returns the unsubscribe function. */
+type CompletionSubscribe<T> = (cb: (event: T) => void) => () => void;
 
 export interface RegisterChannelCapabilitiesArgs {
   providers: ProviderRegistry;
@@ -30,6 +46,17 @@ export interface RegisterChannelCapabilitiesArgs {
   agentEmitterSubscribe?: (cb: (event: unknown) => void) => () => void;
   /** Optional job emitter subscribe function for job-completion sources */
   jobEmitterSubscribe?: (cb: (event: unknown) => void) => () => void;
+  /**
+   * Where `webhook` sources get their HTTP route: the scope's server, with the same reserved-path
+   * guard and `throttle.ipFilter` check as custom `http.routes`. Without it, webhook sources get
+   * no route.
+   */
+  http?: {
+    server: FrontMcpServer;
+    checkClientIp: CheckClientIpFn;
+    entryPath: string;
+    routeBase: string;
+  };
   logger: FrontMcpLogger;
 }
 
@@ -56,12 +83,21 @@ export async function registerChannelCapabilities(
     notificationService,
     flowRegistry,
     toolRegistry,
-    agentEmitterSubscribe,
-    jobEmitterSubscribe,
+    http,
     logger,
   } = args;
 
+  // Agent and job completions come from the scope's completion events (published by the
+  // agents:call-agent flow and the job execution manager) unless the caller supplies its own.
+  const completions = completionEventsOf(providers.getActiveScope());
+  const agentEmitterSubscribe =
+    args.agentEmitterSubscribe ?? ((cb: (event: unknown) => void) => completions.agents.subscribe(cb));
+  const jobEmitterSubscribe =
+    args.jobEmitterSubscribe ?? ((cb: (event: unknown) => void) => completions.jobs.subscribe(cb));
+
   const unsubscribers: (() => void)[] = [];
+  const reservedPaths = http ? computeReservedPaths(http.entryPath, http.routeBase) : undefined;
+  const webhookPaths = new Map<string, string>();
 
   // 1. Initialize channel registry
   const channelRegistry = new ChannelRegistry(providers, channelsList, owner);
@@ -88,31 +124,23 @@ export async function registerChannelCapabilities(
 
     switch (sourceType) {
       case 'agent-completion': {
-        if (agentEmitterSubscribe) {
-          const unsub = wireAgentCompletionSource(
-            instance,
-            instance.metadata.source as any,
-            agentEmitterSubscribe as any,
-            logger,
-          );
-          unsubscribers.push(unsub);
-        } else {
-          logger.warn(`Channel "${instance.name}" has agent-completion source but no agent emitter available`);
-        }
+        const unsub = wireAgentCompletionSource(
+          instance,
+          instance.metadata.source as ChannelAgentCompletionSource,
+          agentEmitterSubscribe as CompletionSubscribe<AgentCompletionEvent>,
+          logger,
+        );
+        unsubscribers.push(unsub);
         break;
       }
       case 'job-completion': {
-        if (jobEmitterSubscribe) {
-          const unsub = wireJobCompletionSource(
-            instance,
-            instance.metadata.source as any,
-            jobEmitterSubscribe as any,
-            logger,
-          );
-          unsubscribers.push(unsub);
-        } else {
-          logger.warn(`Channel "${instance.name}" has job-completion source but no job emitter available`);
-        }
+        const unsub = wireJobCompletionSource(
+          instance,
+          instance.metadata.source as ChannelJobCompletionSource,
+          jobEmitterSubscribe as CompletionSubscribe<JobCompletionEvent>,
+          logger,
+        );
+        unsubscribers.push(unsub);
         break;
       }
       case 'app-event': {
@@ -121,9 +149,28 @@ export async function registerChannelCapabilities(
         unsubscribers.push(unsub);
         break;
       }
-      case 'webhook':
+      case 'webhook': {
+        const source = instance.metadata.source as ChannelWebhookSource;
+        if (!http || !reservedPaths) {
+          logger.warn(`Channel "${instance.name}" has a webhook source but no HTTP server to serve ${source.path}`);
+          break;
+        }
+        // Same guards as a custom http.route: never on a FrontMCP path, never two channels on one path.
+        assertNotReserved('POST', source.path, reservedPaths);
+        const claimedBy = webhookPaths.get(source.path);
+        if (claimedBy) {
+          throw new Error(
+            `Channels "${claimedBy}" and "${instance.name}" both declare the webhook path ${source.path}. ` +
+              `Give each webhook channel its own path.`,
+          );
+        }
+        webhookPaths.set(source.path, instance.name);
+        const handler = createWebhookMiddleware(instance, source, logger) as unknown as ServerRequestHandler;
+        await http.server.registerRoute('POST', source.path, wrapWithIpFilter(handler, http.checkClientIp));
+        logger.info(`Registered webhook route for channel "${instance.name}": POST ${source.path}`);
+        break;
+      }
       case 'manual':
-        // Webhook sources are wired via HTTP middleware (handled by transport layer)
         // Manual sources have no automatic wiring
         break;
       case 'service':

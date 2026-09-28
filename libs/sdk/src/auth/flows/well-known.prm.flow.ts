@@ -1,7 +1,7 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
 
-import { advertisedScopes } from '@frontmcp/auth';
+import { resourceScopesFor, type ResourceScopeOptions } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
@@ -12,7 +12,6 @@ import {
   getRequestBaseUrl,
   httpInputSchema,
   HttpJsonSchema,
-  isOrchestratedMode,
   makeWellKnownPaths,
   StageHookOf,
   type FlowPlan,
@@ -27,7 +26,9 @@ const inputSchema = httpInputSchema;
 const stateSchema = z.object({
   resource: z.string().min(1),
   baseUrl: z.string().min(1),
-  scopesSupported: z.array(z.string()).default(['openid', 'profile', 'email']),
+  // The authorization server to name: the issuer this server names for the request (#629).
+  authorizationServer: z.string().min(1).optional(),
+  scopesSupported: z.array(z.string()),
   isOrchestrated: z.boolean(),
 });
 
@@ -36,7 +37,7 @@ const outputSchema = HttpJsonSchema.extend({
     .object({
       resource: z.string().min(1),
       authorization_servers: z.array(z.string().min(1)).min(1),
-      scopes_supported: z.array(z.string()).default(['openid', 'profile', 'email']),
+      scopes_supported: z.array(z.string()).optional(),
       bearer_methods_supported: z.array(z.string()).default(['header']),
     })
     .passthrough(),
@@ -91,16 +92,27 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
     const resource = computeResource(request, scope.entryPath, scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, scope.entryPath);
-    // Local and remote mode grant only `allowedScopes` (#262), so a scope
-    // outside it is not one a client can use here: advertise the granted set,
-    // as the authorization server metadata does.
-    const auth = scope.metadata.auth;
+    // A server that issues its own tokens names the issuer it names everywhere else for this
+    // request (`LocalPrimaryAuth.issuerFor`, #629): its authorization server metadata, the RFC 9207
+    // `iss` of its authorization responses and its tokens' `iss` all say the same.
+    const authorizationServer = (
+      scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined
+    )?.issuerFor?.(request);
+    // Advertise the scopes a client can actually be given here, by mode (#262, #629): `allowedScopes`
+    // in local and remote mode, `anonymousScopes` in public mode, the static credential's `scopes`,
+    // transparent mode's `requiredScopes` and upstream `scopes`.
+    // Outside local and remote mode, the scopes entries' `authProviders` declare are advertised too, so
+    // clients know to request them.
+    const authOptions = (scope.auth?.options ?? scope.metadata.auth) as ResourceScopeOptions | undefined;
+    const granted = resourceScopesFor(authOptions);
+    const orchestrated = authOptions?.mode === 'local' || authOptions?.mode === 'remote';
+    const scopesSupported = orchestrated ? granted : [...new Set([...granted, ...scope.getAllSupportedScopes()])];
     this.state.set(
       stateSchema.parse({
         resource,
         baseUrl,
-        scopesSupported:
-          auth && isOrchestratedMode(auth) ? advertisedScopes(auth.allowedScopes) : scope.getAllSupportedScopes(),
+        authorizationServer,
+        scopesSupported,
         isOrchestrated: false, //scope.orchestrated,// TODO: fix
       }),
     );
@@ -108,6 +120,9 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
   @Stage('collectData') async collectData() {
     const { resource, baseUrl, scopesSupported, isOrchestrated } = this.state.required;
+    const { authorizationServer } = this.state;
+    // RFC 9728 §2: `scopes_supported` is optional; a server that names no scopes leaves it out.
+    const scopes = scopesSupported.length > 0 ? { scopes_supported: scopesSupported } : {};
 
     if (isOrchestrated) {
       this.respond({
@@ -120,8 +135,8 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
         headers: { 'cache-control': 'no-store' },
         body: {
           resource,
-          authorization_servers: [baseUrl],
-          scopes_supported: scopesSupported,
+          authorization_servers: [authorizationServer ?? baseUrl],
+          ...scopes,
           bearer_methods_supported: ['header'],
         },
       });
@@ -140,8 +155,8 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       headers: { 'cache-control': 'no-store' },
       body: {
         resource,
-        authorization_servers: [baseUrl],
-        scopes_supported: scopesSupported,
+        authorization_servers: [authorizationServer ?? baseUrl],
+        ...scopes,
         bearer_methods_supported: ['header'],
       },
     });

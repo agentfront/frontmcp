@@ -875,8 +875,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     }
     // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468): name ourselves
     // on the authorization response so the client can detect an AS mix-up before
-    // it redeems the code.
-    url.searchParams.set('iss', this.getLocalAuth().issuer);
+    // it redeems the code. The issuer discovery and the tokens name for this
+    // request (#629), not the boot-time one.
+    url.searchParams.set('iss', this.getLocalAuth().issuerFor(this.rawInput.request));
 
     this.logger.info(
       `Federated auth complete: ${selectedProviderIds.length} providers authenticated, redirecting to client`,

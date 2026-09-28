@@ -54,6 +54,8 @@ export abstract class ToolContext<
   _toolNameInternal?: string;
   /** @internal Tool input for fallback elicitation - set by CallToolFlow */
   _toolInputInternal?: unknown;
+  /** @internal JSON-RPC id of the tools/call request - set by CallToolFlow, for flows the call is handed on to */
+  _jsonRpcRequestIdInternal?: string | number;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -91,6 +93,11 @@ export abstract class ToolContext<
     this._input = input;
     this._progressToken = progressToken;
     this.signal = signal;
+  }
+
+  /** @internal The request's progress token, for flows the call is handed on to (the agent tool). */
+  get _progressTokenInternal(): string | number | undefined {
+    return this._progressToken;
   }
 
   abstract execute(input: In): Promise<Out>;

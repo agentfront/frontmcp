@@ -49,9 +49,11 @@
     }
   },
   "dependencies": {
+    "@enclave-vm/ast": "^2.15.3",
     "@enclave-vm/core": "^2.15.3",
     "@frontmcp/protocol": "1.8.4",
     "@frontmcp/sdk": "1.8.4",
+    "acorn": "^8.15.0",
     "vectoriadb": "^2.3.2"
   },
   "peerDependencies": {
