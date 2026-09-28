@@ -32,6 +32,11 @@ export function resolvePendingTC39HooksForClass(ctor: Function): HookMetadata[] 
   return pendingHookRegistry.resolveForClass(ctor);
 }
 
+/** The pending TC39 hooks of a class, left pending for the flow registration that resolves them. */
+export function peekPendingTC39HooksForClass(ctor: Function): HookMetadata[] {
+  return pendingHookRegistry.resolveForClass(ctor, false);
+}
+
 /**
  * Store a pending hook for TC39 mode
  * @internal

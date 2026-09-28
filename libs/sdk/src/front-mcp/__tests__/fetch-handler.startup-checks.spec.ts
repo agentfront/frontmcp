@@ -82,10 +82,17 @@ const MISCONFIGURED: Array<[string, FrontMcpConfigInput, new (...args: never[]) 
   ['a tool declares approval', serverWith({ tools: [tool('refund_invoice', APPROVAL)] }), UnenforcedMetadataError],
   ['a tool declares a feature flag', serverWith({ tools: [tool('bulk_export', BETA_FLAG)] }), UnenforcedMetadataError],
   ['a resource template declares authorities', serverWith({ resources: [TicketTemplate] }), AuthConfigurationError],
+  [
+    'a tool of an agent asks for approval, and the plugin that enforces it is on the app, not the agent',
+    serverWith({ agents: [TriageAgent], plugins: [DeskApprovalPlugin] }),
+    UnenforcedMetadataError,
+  ],
 ];
 
-/** A tool of an agent asks for approval, and the plugin that enforces it is on the app, not the agent. */
-const AGENT_TOOL_UNCOVERED = serverWith({ agents: [TriageAgent], plugins: [DeskApprovalPlugin] });
+/** A tool asks for approval and no plugin enforces it, but only the process it runs in says it is served. */
+const NEEDS_BUILT_SERVER = serverWith({
+  tools: [tool('refund_in_tests', { ...APPROVAL, availableWhen: { env: ['test'] } })],
+});
 
 function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
   return promise.then(
@@ -133,10 +140,10 @@ describe('createFetchHandler() startup checks', () => {
   });
 
   it('refuses a check that needs the built server too', async () => {
-    const fetch = await rejectionOf(FrontMcpInstance.createFetchHandler(AGENT_TOOL_UNCOVERED));
+    const fetch = await rejectionOf(FrontMcpInstance.createFetchHandler(NEEDS_BUILT_SERVER));
 
     expect(fetch).toBeInstanceOf(UnenforcedMetadataError);
-    expect((fetch as Error).message).toContain(`Tool "triage:close_ticket" declares 'approval'`);
+    expect((fetch as Error).message).toContain(`Tool "refund_in_tests" declares 'approval'`);
   });
 
   it('creates and serves a server that passes them', async () => {
@@ -155,7 +162,7 @@ describe('createFetchHandler() startup checks', () => {
     });
 
     it('answers every request with server_misconfigured when a check needs the built server', async () => {
-      const handler = await createOnEdge(AGENT_TOOL_UNCOVERED);
+      const handler = await createOnEdge(NEEDS_BUILT_SERVER);
 
       const answers: Array<{ status: number; body: Record<string, string> }> = [];
       for (let i = 0; i < 2; i++) {
