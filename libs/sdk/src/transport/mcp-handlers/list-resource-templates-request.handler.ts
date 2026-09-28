@@ -7,6 +7,7 @@ import {
 } from '@frontmcp/protocol';
 
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function listResourceTemplatesRequestHandler({
   scope,
@@ -19,7 +20,10 @@ export default function listResourceTemplatesRequestHandler({
       logger.verbose('resources/listTemplates requested');
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('resources:list-resource-templates', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:list-resource-templates', {
+          request,
+          ctx: withMcpSurface(scope, ctx),
+        });
         logger.verbose('resources/listTemplates completed', { durationMs: Date.now() - start });
         return result;
       } catch (e) {

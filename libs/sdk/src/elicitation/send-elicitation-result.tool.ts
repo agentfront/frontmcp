@@ -16,7 +16,9 @@ import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../common';
+import { ElicitationNotOwnedError } from '../errors';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
+import { resolveElicitationOwner } from './helpers/fallback.helper';
 
 const inputSchema = {
   elicitId: z.string().describe('The elicitation ID from the pending request'),
@@ -82,6 +84,16 @@ export class SendElicitationResultTool extends ToolContext {
         ],
         isError: true,
       };
+    }
+
+    // Only the caller whose tool call asked may answer. Anyone else would complete that call with
+    // an answer of their choosing (and receive its result), so the record is left for its owner.
+    const caller = resolveElicitationOwner(this.tryGetContext());
+    if (!pending.owner || pending.owner !== caller) {
+      this.logger.warn('sendElicitationResult: refused a result from a caller the elicitation was not asked of', {
+        elicitId,
+      });
+      throw new ElicitationNotOwnedError(elicitId);
     }
 
     // Check expiration

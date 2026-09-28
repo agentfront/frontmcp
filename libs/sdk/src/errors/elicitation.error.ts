@@ -4,7 +4,7 @@
  * Errors related to MCP elicitation requests.
  */
 
-import { PublicMcpError, InternalMcpError } from './mcp.error';
+import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from './mcp.error';
 
 /**
  * Elicitation not supported error.
@@ -49,6 +49,31 @@ export class ElicitationFallbackRequired extends PublicMcpError {
 
   override getPublicMessage(): string {
     return this.elicitMessage;
+  }
+}
+
+/**
+ * Elicitation result refused: the caller answering is not the one the elicitation was asked of.
+ *
+ * A pending elicitation belongs to the session the server verified when the tool asked, or to the
+ * authenticated caller when there was no session. A result from anyone else is refused, so one
+ * caller cannot answer, and so complete, another caller's tool call.
+ *
+ * Mapped to JSON-RPC -32003 (FORBIDDEN).
+ */
+export class ElicitationNotOwnedError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+
+  /** The elicitation the caller tried to answer */
+  readonly elicitId: string;
+
+  constructor(elicitId: string) {
+    super(`Elicitation "${elicitId}" was not requested by this caller`, 'ELICITATION_NOT_OWNED', 403);
+    this.elicitId = elicitId;
+  }
+
+  toJsonRpcError(): { code: number; message: string; data: { elicitId: string } } {
+    return { code: this.mcpErrorCode, message: this.getPublicMessage(), data: { elicitId: this.elicitId } };
   }
 }
 

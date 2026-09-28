@@ -28,7 +28,12 @@ import type ToolRegistry from '../../../tool/tool.registry';
 import { authorizeSkillHttpRequest } from '../../auth';
 import { filterSkillsByAuthorities, getSkillAuthorities } from '../../skill-authorities.helper';
 import { createSkillEntryResolver } from '../../skill-entry.resolver';
-import { filterDiscoverableSkillResults, filterServableSkills, isSkillServable } from '../../skill-filter.helper';
+import {
+  filterDiscoverableSkillResults,
+  filterServableSkills,
+  isSkillServable,
+  SKILLS_HTTP_SURFACE,
+} from '../../skill-filter.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
 import { formatSkillForLLM } from '../../skill.utils';
@@ -314,7 +319,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     const skillEntry = createSkillEntryResolver(skillRegistry)(skillId, skill.id);
     if (skillEntry) {
       // A skill the `skills:filter` flow drops gets the nonexistent-skill answer, so its existence does not leak.
-      if (!(await isSkillServable(this.scope, skillEntry))) {
+      if (!(await isSkillServable(this.scope, skillEntry, undefined, SKILLS_HTTP_SURFACE))) {
         respondNotFound();
         return;
       }
@@ -461,6 +466,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     // metadata does not carry `authorities`, so each result's live entry is judged.
     filteredResults = await filterDiscoverableSkillResults(this.scope, skillRegistry, filteredResults, {
       authInfo: this.httpAuthInfo(),
+      surface: SKILLS_HTTP_SURFACE,
     });
 
     // Optional new filters — additive, no-op when absent.
@@ -567,6 +573,8 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     let filteredSkills = await filterServableSkills(
       this.scope,
       await filterSkillsByAuthorities(this.scope, allSkills, this.httpAuthInfo()),
+      undefined,
+      SKILLS_HTTP_SURFACE,
     );
     if (options.tags && options.tags.length > 0) {
       filteredSkills = filteredSkills.filter((s) => {

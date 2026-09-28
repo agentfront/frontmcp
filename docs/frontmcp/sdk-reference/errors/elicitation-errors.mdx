@@ -33,6 +33,25 @@ import { ElicitationNotSupportedError } from '@frontmcp/sdk';
 throw new ElicitationNotSupportedError('Client does not support elicitation');
 ```
 
+The fallback also throws it for an anonymous caller without a verified session: no later `sendElicitationResult` call could be matched to that caller.
+
+---
+
+### ElicitationNotOwnedError
+
+Thrown by `sendElicitationResult` when the caller answering is not the one the elicitation was asked of. A pending fallback elicitation belongs to the session the server verified when the tool asked, or to the authenticated caller when there was no session. Mapped to JSON-RPC `-32003`.
+
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `ELICITATION_NOT_OWNED`   |
+| `statusCode` | `number`  | `403`                     |
+| `isPublic`   | `boolean` | `true`                    |
+| `elicitId`   | `string`  | The elicitation requested |
+
+```typescript
+new ElicitationNotOwnedError(elicitId: string)
+```
+
 ---
 
 ### ElicitationTimeoutError

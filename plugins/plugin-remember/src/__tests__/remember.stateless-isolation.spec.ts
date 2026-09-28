@@ -135,11 +135,56 @@ describe('Remember — stateless isolation (GHSA-225p-f8jh-f3rh, GHSA-h6f4-jg8x-
     });
 
     it('still namespaces an ordinary session normally', async () => {
-      const { accessor, values } = createAccessor('session-abc');
+      // A session the server verified: the transport records it in the auth info.
+      const { accessor, values } = createAccessor('session-abc', { sessionId: 'session-abc' });
 
       await accessor.set('theme', 'dark', { scope: 'session' });
 
       expect([...values.keys()]).toEqual(['remember:v2:session:session-abc:theme']);
+    });
+
+    it('namespaces a verified session that arrived outside mcp-session-id (legacy SSE) by that session', async () => {
+      const { accessor, values } = createAccessor('anon:placeholder', { extra: { sessionId: 'sse-session' } });
+
+      await accessor.set('theme', 'dark', { scope: 'session' });
+
+      expect([...values.keys()]).toEqual(['remember:v2:session:sse-session:theme']);
+    });
+
+    it('namespaces by the verified session when the transport only carries the stateless placeholder', async () => {
+      const shared = createStore();
+      const first = createAccessor(
+        STATELESS_SESSION_ID,
+        { sessionId: STATELESS_SESSION_ID, clientId: 'alice', extra: { sessionId: 'sse-1' } },
+        shared,
+      );
+      const second = createAccessor(
+        STATELESS_SESSION_ID,
+        { sessionId: STATELESS_SESSION_ID, clientId: 'alice', extra: { sessionId: 'sse-2' } },
+        shared,
+      );
+
+      await first.accessor.set('draft', 'first-session', { scope: 'session' });
+
+      await expect(second.accessor.get('draft', { scope: 'session' })).resolves.toBeUndefined();
+      expect([...shared.values.keys()]).toEqual(['remember:v2:session:sse-1:draft']);
+    });
+
+    it('does not namespace by a session id the server did not verify', async () => {
+      const shared = createStore();
+      const victim = createAccessor('session-victim', { sessionId: 'session-victim' }, shared);
+      const intruder = createAccessor('session-victim', { extra: { sub: 'mallory' } }, shared);
+
+      await victim.accessor.set('card', '4242', { scope: 'session' });
+
+      await expect(intruder.accessor.get('card', { scope: 'session' })).resolves.toBeUndefined();
+      expect([...shared.values.keys()]).toEqual(['remember:v2:session:session-victim:card']);
+    });
+
+    it('refuses session scope for an unauthenticated request whose session id is not verified', async () => {
+      const { accessor } = createAccessor('session-victim');
+
+      await expect(accessor.get('card', { scope: 'session' })).rejects.toThrow(/without a verified session/);
     });
   });
 

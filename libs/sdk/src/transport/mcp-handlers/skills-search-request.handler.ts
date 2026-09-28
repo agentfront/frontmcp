@@ -2,6 +2,7 @@ import { extractToolNames } from '../../common/metadata/skill.metadata';
 import { PublicMcpError } from '../../errors';
 import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 import {
   SkillsSearchRequestSchema,
   SkillsSearchResultSchema,
@@ -51,7 +52,7 @@ export default function skillsSearchRequestHandler({
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
       const servableResults = await filterDiscoverableSkillResults(scope, skillRegistry, mcpVisibleResults, {
         authInfo,
-        ctx,
+        ctx: withMcpSurface(scope, ctx),
       });
 
       // Transform results to response format

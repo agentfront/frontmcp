@@ -1,14 +1,14 @@
 // file: libs/plugins/src/codecall/tools/search.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 
 import { ToolSearchService } from '../services';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
   searchToolDescription,
-  SearchToolInput,
   searchToolInputSchema,
-  SearchToolOutput,
   searchToolOutputSchema,
+  type SearchToolInput,
+  type SearchToolOutput,
 } from './search.schema';
 
 /** Internal type for tracking tool matches across queries */
@@ -49,8 +49,14 @@ export default class SearchTool extends ToolContext {
     const executionId = audit ? audit.generateExecutionId() : '';
     const startedAt = Date.now();
 
+    // Search what the caller of this tool could reach: a tool its surface isn't offered on is
+    // reported like one that isn't indexed at all.
+    const surface = getCallSurface();
+
     // Check for excluded tools that don't exist in the index
-    const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !searchService.hasTool(toolName));
+    const nonExistentExcludedTools = excludeToolNames.filter(
+      (toolName: string) => !searchService.hasTool(toolName, surface),
+    );
 
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
@@ -70,6 +76,7 @@ export default class SearchTool extends ToolContext {
         topK,
         appIds,
         excludeToolNames,
+        surface,
       });
 
       for (const result of searchResults) {
@@ -132,7 +139,7 @@ export default class SearchTool extends ToolContext {
     return {
       tools,
       warnings,
-      totalAvailableTools: searchService.getTotalCount(),
+      totalAvailableTools: searchService.getTotalCount(surface),
     };
   }
 }

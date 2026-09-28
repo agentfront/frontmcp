@@ -10,6 +10,7 @@ Agents are **autonomous AI units** that have their own LLM provider, can execute
 
 <Info>
 Agents build on the MCP Tools specification—each agent is automatically exposed as an `invoke_<agent-id>` tool that any MCP client can call.
+Everything the agent declares that gates a tool (`availableWhen`, `rateLimit`, `concurrency`, `timeout`, `authorities`, and plugin fields such as `approval` or `featureFlag`) applies to that tool.
 </Info>
 
 <Tip>

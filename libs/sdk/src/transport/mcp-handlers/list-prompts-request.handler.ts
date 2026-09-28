@@ -1,6 +1,7 @@
 import { ListPromptsRequestSchema, type ListPromptsRequest, type ListPromptsResult } from '@frontmcp/protocol';
 
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function listPromptsRequestHandler({
   scope,
@@ -13,7 +14,10 @@ export default function listPromptsRequestHandler({
       logger.verbose('prompts/list requested');
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('prompts:list-prompts', { request, ctx });
+        const result = await scope.runFlowForOutput('prompts:list-prompts', {
+          request,
+          ctx: withMcpSurface(scope, ctx),
+        });
         logger.verbose('prompts/list completed', { durationMs: Date.now() - start });
         return result;
       } catch (e) {
