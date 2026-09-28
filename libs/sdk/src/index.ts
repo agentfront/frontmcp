@@ -256,6 +256,7 @@ export type {
 } from './skill';
 export type {
   SkillRegistryInterface,
+  RegisterSkillContentOptions,
   IndexedSkill,
   SkillChangeEvent,
   SkillChangeKind,

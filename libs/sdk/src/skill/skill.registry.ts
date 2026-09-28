@@ -153,6 +153,21 @@ export interface GetSkillsOptions {
 }
 
 /**
+ * Options for {@link SkillRegistryInterface.registerSkillContent}.
+ */
+export interface RegisterSkillContentOptions {
+  /** Where the skill came from, for diagnostics. */
+  source?: string;
+
+  /**
+   * Ids of skills registered through `registerSkillContent` that the caller replaces or removes as
+   * part of the same change. The id/path collision check treats them as already gone; they stay
+   * registered until the caller re-registers or unregisters them. Other skills are not affected.
+   */
+  supersedes?: readonly string[];
+}
+
+/**
  * Interface for SkillRegistry consumers.
  */
 export interface SkillRegistryInterface {
@@ -284,13 +299,21 @@ export interface SkillRegistryInterface {
    * {@link listSkills}, {@link count}, and {@link getSkills}. They participate
    * in `notifications/skills/list_changed` broadcasts.
    *
+   * A skill whose id is another skill's `skill://` path (or whose path is another skill's id) is
+   * refused, since `skill://<id>/SKILL.md` would serve one for the other. `opts.supersedes` names
+   * the dynamically-registered skills that the caller replaces or removes as part of the same change,
+   * such as a bundle sync that registers the new bundle before dropping the old one's skills. The
+   * check treats them as already gone, so a change whose end state is free of collisions is not
+   * refused over a skill it is about to drop. Until the caller removes them they stay registered.
+   *
    * @param content - The skill content to register
-   * @param opts - Optional registration metadata (e.g. source identifier for diagnostics)
+   * @param opts - Optional registration metadata: `source` (identifier for diagnostics) and
+   *   `supersedes` (ids of dynamically-registered skills the same change replaces or removes)
    * @returns Handle exposing `unregister()` and the resolved skill id
    */
   registerSkillContent(
     content: SkillContent,
-    opts?: { source?: string },
+    opts?: RegisterSkillContentOptions,
   ): Promise<{ id: string; unregister: () => Promise<void> }>;
 
   /**
@@ -586,19 +609,35 @@ export default class SkillRegistry
   }
 
   /**
-   * Every skill whose `skill://` URIs share a namespace with this registry's: its own and, through
-   * each registry that adopts it (and theirs), everything those serve, sibling registries included.
+   * The `skill://` namespaces this registry's skills are served in: its own, and that of every
+   * registry that adopts it, directly or through another, sibling registries included.
    */
-  private skillsSharingUris(): SkillEntry[] {
+  private namespacesServingThis(): SkillEntry[][] {
     const registries = new Set<SkillRegistry>();
-    const skills = new Set<SkillEntry>();
-    const visit = (registry: SkillRegistry): void => {
+    const climb = (registry: SkillRegistry): void => {
       if (registries.has(registry)) return;
       registries.add(registry);
-      for (const row of registry.listAllIndexed()) skills.add(row.instance);
-      for (const adopter of registry.adopters) visit(adopter);
+      for (const adopter of registry.adopters) climb(adopter);
     };
-    visit(this);
+    climb(this);
+    return [...registries].map((registry) => registry.liveSkills());
+  }
+
+  /**
+   * This registry's skills and those of every registry it adopted, read from each registry's own rows.
+   * An adopter's copy of a child's rows is refreshed only on the child's change event, which a
+   * registration emits after it has committed its row and awaited the storage provider.
+   */
+  private liveSkills(): SkillEntry[] {
+    const registries = new Set<SkillRegistry>();
+    const skills = new Set<SkillEntry>();
+    const descend = (registry: SkillRegistry): void => {
+      if (registries.has(registry)) return;
+      registries.add(registry);
+      for (const row of [...registry.localRows, ...registry.dynamicRows]) skills.add(row.instance);
+      for (const child of registry.children) descend(child);
+    };
+    descend(this);
     return [...skills];
   }
 
@@ -1310,7 +1349,7 @@ export default class SkillRegistry
    */
   async registerSkillContent(
     content: SkillContent,
-    opts?: { source?: string },
+    opts?: RegisterSkillContentOptions,
   ): Promise<{ id: string; unregister: () => Promise<void> }> {
     if (!content || typeof content.id !== 'string' || content.id.length === 0) {
       throw new PublicMcpError('registerSkillContent: SkillContent.id is required', 'INVALID_PARAMS');
@@ -1367,13 +1406,17 @@ export default class SkillRegistry
 
     // From here to the commit below nothing is awaited, so two registrations can't both pass the
     // check. Refused before anything changes, so the version this would replace stays registered.
-    // Replace if already registered with the same id.
+    // The version this replaces and the skills the caller supersedes are left out of the check.
     const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
-    const replaced = existingIdx === -1 ? undefined : this.dynamicRows[existingIdx].instance;
-    const others = this.skillsSharingUris().filter((other) => other !== replaced);
-    const collision = findIdPathCollision([...others, instance]);
-    if (collision) {
-      throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
+    const superseded = new Set(opts?.supersedes);
+    const leaving = new Set<SkillEntry>(
+      this.dynamicRows.filter((r) => r.instance.name === id || superseded.has(r.instance.name)).map((r) => r.instance),
+    );
+    for (const skills of this.namespacesServingThis()) {
+      const collision = findIdPathCollision([...skills.filter((other) => !leaving.has(other)), instance]);
+      if (collision) {
+        throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
+      }
     }
     if (existingIdx !== -1) {
       this.dynamicRows.splice(existingIdx, 1);
