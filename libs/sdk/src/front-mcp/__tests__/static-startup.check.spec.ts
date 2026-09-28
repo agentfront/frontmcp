@@ -18,7 +18,9 @@ import {
   Tool,
   ToolContext,
   type FrontMcpConfigInput,
+  type HookMetadata,
 } from '../../common';
+import { registerPendingTC39Hook, resolvePendingTC39HooksForClass } from '../../common/decorators/hook.decorator';
 import { AuthConfigurationError, UnenforcedMetadataError } from '../../errors';
 import { FrontMcpInstance } from '../front-mcp';
 import { assertStaticStartupConfig } from '../static-startup.check';
@@ -58,6 +60,26 @@ class AnyAppApprovalPlugin {
   }
 }
 
+/** Enforces `approval` on the tools of the app it is installed on only (the default `appliesTo`). */
+@Plugin({ name: 'own-app-approval', enforcesMetadata: ['approval'] })
+class OwnAppApprovalPlugin {
+  @ToolHook.Will('execute')
+  gate() {
+    // enforcement itself is not under test here
+  }
+}
+
+/** Wraps an approval gate and is installed as a value, as `ApprovalPlugin.init()` installs its check plugin. */
+function wrappedGate(gate: new () => object) {
+  @Plugin({ name: 'approval-suite', plugins: [gate] })
+  class ApprovalSuitePlugin {}
+  return { provide: ApprovalSuitePlugin, useValue: new ApprovalSuitePlugin() };
+}
+
+/** Declares that it enforces `approval` but has no hook that does. */
+@Plugin({ name: 'hookless-approval', enforcesMetadata: ['approval'] })
+class HooklessApprovalPlugin {}
+
 /** Contributes a tool that asks for approval, and enforces nothing. */
 @Plugin({ name: 'queue-tools', tools: [tool('purge_queue', APPROVAL)] })
 class QueueToolsPlugin {}
@@ -66,6 +88,20 @@ const llm = { adapter: { completion: async () => ({ content: 'done', finishReaso
 
 @Agent({ name: 'refunds', inputSchema: {}, llm, authorities: 'admin' })
 class RefundsAgent extends AgentContext {}
+
+/** An agent whose own tool asks for approval, with the given agent options. */
+function refundDeskAgent(extra: Record<string, unknown> = {}) {
+  @Agent({ name: 'refund-desk', inputSchema: {}, llm, tools: [tool('issue_refund', APPROVAL)], ...extra })
+  class RefundDeskAgent extends AgentContext {}
+  return RefundDeskAgent;
+}
+
+/** An agent with a plugin that enforces approval, with the given agent options. */
+function approvingTriageAgent(extra: Record<string, unknown> = {}) {
+  @Agent({ name: 'triage', inputSchema: {}, llm, plugins: [AnyAppApprovalPlugin], ...extra })
+  class ApprovingTriageAgent extends AgentContext {}
+  return ApprovingTriageAgent;
+}
 
 function app(id: string, entries: Record<string, unknown>) {
   @App({ id, name: id, ...entries })
@@ -113,6 +149,35 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     'an approval tool in the server-level tools list, which no scope registers',
     server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)] }),
   ],
+  [
+    'an approval tool on an app, and a gate for uncovered apps nested in a plugin value on another app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [wrappedGate(AnyAppApprovalPlugin)] }),
+      ],
+    }),
+  ],
+  [
+    'an approval tool on an app whose own plugin gates only that app',
+    server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)], plugins: [OwnAppApprovalPlugin] })] }),
+  ],
+  [
+    'an approval tool a plugin contributes to an app whose other plugin gates only that app',
+    server({ apps: [app('ops', { plugins: [QueueToolsPlugin, OwnAppApprovalPlugin] })] }),
+  ],
+  [
+    'an approval tool on an app, and a server-level plugin that gates only its own apps',
+    server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)] })], plugins: [OwnAppApprovalPlugin] }),
+  ],
+  [
+    'an approval tool inside an agent whose own plugin declares approval without a hook',
+    server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })] }),
+  ],
+  [
+    'an approval tool inside an agent whose own plugin enforces approval',
+    server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
+  ],
 ];
 
 /** Servers the full checks refuse, and the metadata alone shows why. */
@@ -137,6 +202,59 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
     server({
       apps: [app('billing', { tools: [tool('agent_refund', { ...APPROVAL, availableWhen: { surface: ['agent'] } })] })],
     }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only another app has a plugin, which gates only that other app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [OwnAppApprovalPlugin] }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only a gate for its own app nested in a plugin value on another app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [wrappedGate(OwnAppApprovalPlugin)] }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and the only plugin declaring approval has no hook',
+    server({
+      apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)], plugins: [HooklessApprovalPlugin] })],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent, and only its app has a plugin that enforces approval',
+    server({ apps: [app('desk', { plugins: [AnyAppApprovalPlugin], agents: [refundDeskAgent()] })] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool inside an agent whose own plugin enforces approval, but the agent skips the tool flow',
+    server({
+      apps: [
+        app('desk', {
+          agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin], execution: { useToolFlow: false } })],
+        }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only an agent has a plugin that enforces approval',
+    server({ apps: [app('desk', { tools: [tool('refund_invoice', APPROVAL)], agents: [approvingTriageAgent()] })] }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an agent asks for approval, and only its own plugin enforces approval',
+    server({ apps: [app('desk', { agents: [approvingTriageAgent(APPROVAL)] })] }),
     UnenforcedMetadataError,
   ],
 ];
@@ -171,5 +289,31 @@ describe('assertStaticStartupConfig', () => {
 
     expect(full).toBeInstanceOf(E);
     expect(fast).toBeInstanceOf(E);
+  });
+
+  it('reads the hooks of a plugin compiled with TC39 decorators without taking them from the build', () => {
+    @Plugin({ name: 'tc39-own-app-approval', enforcesMetadata: ['approval'] })
+    class Tc39OwnAppApprovalPlugin {
+      gate() {
+        // enforcement itself is not under test here
+      }
+    }
+    const pendingHook: HookMetadata = {
+      type: 'will',
+      flow: 'tools:call-tool',
+      stage: 'execute',
+      target: null,
+      method: 'gate',
+    };
+    registerPendingTC39Hook(Tc39OwnAppApprovalPlugin.prototype.gate, pendingHook);
+    const config = server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [Tc39OwnAppApprovalPlugin] }),
+      ],
+    });
+
+    expect(errorOf(() => assertStaticStartupConfig(config))).toBeInstanceOf(UnenforcedMetadataError);
+    expect(resolvePendingTC39HooksForClass(Tc39OwnAppApprovalPlugin)).toEqual([pendingHook]);
   });
 });
