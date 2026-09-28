@@ -1,8 +1,9 @@
 // file: libs/sdk/src/channel/sources/webhook.source.ts
 
 import type { FrontMcpLogger } from '../../common';
-import type { ChannelInstance } from '../channel.instance';
 import type { ChannelWebhookSource } from '../../common/metadata/channel.metadata';
+import { runOnSurface } from '../../context/call-surface';
+import type { ChannelInstance } from '../channel.instance';
 
 /**
  * Webhook request context passed to channel handlers.
@@ -58,7 +59,8 @@ export function createWebhookMiddleware(
     logger.verbose(`Webhook received for channel "${channel.name}" at ${sourceConfig.path}`);
 
     try {
-      const notification = await channel.handleEvent(payload);
+      // An HTTP trigger: the channel's handler calls tools on the 'http-trigger' surface.
+      const notification = await runOnSurface('http-trigger', () => channel.handleEvent(payload));
       if (notification) {
         res.status(200).json({ ok: true, channel: channel.name });
       } else {

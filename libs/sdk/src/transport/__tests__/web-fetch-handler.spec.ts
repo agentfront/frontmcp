@@ -342,15 +342,25 @@ describe('createFetchHandler misconfiguration boundary (#546)', () => {
     else process.env['JWT_SECRET'] = ORIGINAL_JWT_SECRET;
   });
 
-  it('answers server_misconfigured when the scope build itself fails on a missing secret', async () => {
+  const config = {
+    info: { name: 'lazy-misconfig', version: '1.0.0' },
+    apps: [WebFetchApp],
+    auth: { mode: 'local' },
+  } as never;
+
+  it('answers server_misconfigured when the deferred scope build fails on a missing secret', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['JWT_SECRET'];
 
-    const handler = await FrontMcpInstance.createFetchHandler({
-      info: { name: 'lazy-misconfig', version: '1.0.0' },
-      apps: [WebFetchApp],
-      auth: { mode: 'local' },
-    } as never);
+    // On an edge isolate the scope is built on the first request, after the module created the handler.
+    const globals = globalThis as Record<string, unknown>;
+    globals['EdgeRuntime'] = 'edge-runtime';
+    let handler: Awaited<ReturnType<typeof FrontMcpInstance.createFetchHandler>>;
+    try {
+      handler = await FrontMcpInstance.createFetchHandler(config);
+    } finally {
+      delete globals['EdgeRuntime'];
+    }
 
     const res = await handler(mcpRequestAt('/', INITIALIZE));
 
@@ -359,6 +369,13 @@ describe('createFetchHandler misconfiguration boundary (#546)', () => {
     expect(body['error']).toBe('server_misconfigured');
     expect(body['code']).toBe('JWT_SECRET_REQUIRED');
     expect(body['message']).toContain('JWT_SECRET');
+  });
+
+  it('refuses to create the handler where the runtime lets it build the scope right away', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['JWT_SECRET'];
+
+    await expect(FrontMcpInstance.createFetchHandler(config)).rejects.toMatchObject({ code: 'JWT_SECRET_REQUIRED' });
   });
 });
 
