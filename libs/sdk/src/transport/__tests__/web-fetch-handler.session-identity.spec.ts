@@ -8,8 +8,9 @@ import { resolveElicitationOwner } from '../../elicitation/helpers/fallback.help
  * The stateless web-standard transport (Workers, `createFetchHandler`) gives each request's fresh
  * MCP server a `web:<uuid>` id, which reaches the handlers' `authInfo.sessionId`. It identifies one
  * request, not a caller, so it must never stand in for a verified session: the request context
- * (which Remember and elicitation ownership read) carries only the verified session from
- * `session:verify` in `extra.sessionId`.
+ * (which Remember and elicitation ownership read) carries in `extra.sessionId` only a session the
+ * request presented and `session:verify` accepted. Neither is the session `session:verify` mints
+ * for an anonymous request that presents none.
  */
 
 @Tool({ name: 'identity', inputSchema: {} })
@@ -74,9 +75,7 @@ describe('stateless web transport session identity', () => {
     const result = await callIdentity();
 
     expect(result.transportSessionId).toMatch(/^web:/);
-    expect(result.contextSessionId).toBeNull();
-    expect(result.owner).not.toContain('web:');
-    expect(result.owner).toBe(result.verifiedSessionId ? `session:${result.verifiedSessionId}` : null);
+    expect(result).toMatchObject({ contextSessionId: null, verifiedSessionId: null, owner: null });
   });
 
   it('gives each request a fresh web: id without changing who the caller is', async () => {
@@ -84,7 +83,6 @@ describe('stateless web transport session identity', () => {
     const second = await callIdentity();
 
     expect(first.transportSessionId).not.toBe(second.transportSessionId);
-    expect(first.owner).not.toContain('web:');
-    expect(second.owner).not.toContain('web:');
+    expect([first.owner, second.owner]).toEqual([null, null]);
   });
 });

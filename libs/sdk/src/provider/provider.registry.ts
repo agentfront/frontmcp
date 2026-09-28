@@ -1190,9 +1190,9 @@ const REQUEST_PROVIDER_STORES = Symbol('frontmcp:request-provider-stores');
 /**
  * The session id the server verified for this request, if any (the stateless placeholder is not one).
  *
- * Read from the verified auth info rather than `FrontMcpContext.verifiedSessionId`, which also requires
- * the context's own `sessionId` to match: a legacy SSE request carries its session in `?sessionId=`, so
- * its context gets a per-request id while its entry flows key their providers by the verified session.
+ * Read from the verified auth info: session verification records only a session the request presented
+ * (`extra.sessionId`, a legacy SSE session included), and an in-process transport names its own
+ * (`sessionId`). It agrees with `FrontMcpContext.verifiedSessionId`.
  */
 function verifiedSessionOf(requestContext: FrontMcpContext): string | undefined {
   const { authInfo } = requestContext;

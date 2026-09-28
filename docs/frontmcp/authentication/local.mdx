@@ -586,8 +586,10 @@ hashed into the namespace — never stored raw):
 - **`user`** (default): keyed by the authenticated `sub`. Survives a reconnect
   for the same user. Anonymous requests get no namespace (reads return empty,
   writes are skipped).
-- **`session`**: keyed by the transport `sessionId`. Disappears when the session
-  ends.
+- **`session`**: keyed by the session the server verified. Disappears when the
+  session ends. A request without one (MCP 2026-07-28, stateless transports) is
+  keyed by the signed-in caller instead, never by an `mcp-session-id` the client
+  sends; an anonymous caller without a session gets `SessionIdentityRequiredError`.
 - **`global`**: a single server-wide namespace. Use for operator-level secrets
   not tied to any one user/session.
 

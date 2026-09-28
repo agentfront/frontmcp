@@ -527,3 +527,7 @@ export type {
 
 // Orchestrated token store for upstream provider tokens
 export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from '@frontmcp/auth';
+
+// Whether a subject names no signed-in caller (missing, empty, or an `anon:…` placeholder), for
+// plugins that key state by the caller the way the SDK does
+export { isAnonymousSubject } from '@frontmcp/auth';

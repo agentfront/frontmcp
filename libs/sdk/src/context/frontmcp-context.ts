@@ -343,11 +343,24 @@ export class FrontMcpContext {
     this._authInfo = { ...this._authInfo, ...authInfo };
   }
 
-  /** `sessionId` when the server verified it; undefined for stateless and per-request placeholder ids. */
+  /**
+   * The session the server verified for this request; undefined for a request without one (MCP
+   * 2026-07-28, the stateless transports, an `mcp-session-id` the server did not accept).
+   *
+   * Over HTTP that is the session session verification recorded (`authInfo.extra.sessionId`),
+   * which it records only for a session the request presented: its `mcp-session-id` header, or the
+   * `?sessionId=` a legacy SSE client posts its messages with. Over an in-process transport (stdio,
+   * `connect()`, `createDirect()`) it is the session the transport runs the request in.
+   */
   get verifiedSessionId(): string | undefined {
-    if (this.sessionId === STATELESS_SESSION_ID) return undefined;
-    const verified = this._authInfo.sessionId ?? this._authInfo.extra?.['sessionId'];
-    return verified === this.sessionId ? this.sessionId : undefined;
+    const recorded = this._authInfo.extra?.['sessionId'];
+    const verified =
+      typeof recorded === 'string' && recorded.length > 0
+        ? recorded
+        : this._authInfo.sessionId === this.sessionId
+          ? this.sessionId
+          : undefined;
+    return verified === STATELESS_SESSION_ID ? undefined : verified;
   }
 
   /**

@@ -356,14 +356,14 @@ When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false
 </ParamField>
 
 <ParamField path="userIdResolver" type="(ctx: FrontMcpContext) => string | undefined">
-  Custom function to extract the user ID from the request context. By default, the plugin reads `authInfo.extra.sub`, `authInfo.extra.userId`, or `authInfo.clientId`.
+  Custom function to extract the user ID from the request context. By default, the plugin reads `authInfo.extra.sub`, `authInfo.extra.userId`, or `authInfo.clientId`, and passes none for an anonymous caller (an `anon:` subject, which the server makes up for each request of a caller without a session).
 </ParamField>
 
 <ParamField path="attributesResolver" type="(ctx: FrontMcpContext) => Record<string, unknown>">
   Custom function to extract targeting attributes from the request context. Attributes are passed to the adapter for per-user targeting rules.
 </ParamField>
 
-The evaluation context's `sessionId` is the session the server verified (`authInfo.sessionId`). A caller without one gets none, so session-targeted rules fall back to the user or to anonymous. This includes an MCP 2026-07-28 client, whose `mcp-session-id` the server does not verify. Releases up to 1.8.2 passed whatever `mcp-session-id` the client sent, so a client could pick its own bucket. For the same reason, don't build identity in these resolvers from `ctx.sessionId` or from request headers.
+The evaluation context's `sessionId` is the session the server verified (`authInfo.sessionId`). A caller without one gets none, so session-targeted rules fall back to the user or to anonymous. This includes an MCP 2026-07-28 client, which has no session: neither the `mcp-session-id` it sends nor the id the server makes up for each of its requests is one. Releases up to 1.8.2 passed whatever `mcp-session-id` the client sent, so a client could pick its own bucket. For the same reason, don't build identity in these resolvers from `ctx.sessionId` or from request headers.
 
 ---
 

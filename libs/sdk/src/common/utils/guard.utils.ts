@@ -39,6 +39,8 @@ export const GLOBAL_RATE_LIMIT_CHECKED = Symbol.for('frontmcp:guard:global-rate-
  */
 export interface PartitionSource {
   sessionId: string;
+  /** The session the server verified for the request (`FrontMcpContext.verifiedSessionId`). */
+  verifiedSessionId?: string;
   metadata?: { clientIp?: string };
   authInfo?: { clientId?: unknown; sessionId?: unknown; extra?: { sessionId?: unknown } };
 }
@@ -55,13 +57,23 @@ export function buildPartitionContext(source: PartitionSource | undefined): Part
   if (!source) return undefined;
   const clientId = source.authInfo?.clientId;
   const userId = isAnonymousSubject(clientId) ? undefined : String(clientId);
-  const verifiedSessionId = source.authInfo?.sessionId ?? source.authInfo?.extra?.sessionId;
   const callerKey = userId ? `user:${userId}` : 'anonymous';
   return {
-    sessionId: verifiedSessionId === source.sessionId ? source.sessionId : callerKey,
+    sessionId: verifiedSessionOf(source) ?? callerKey,
     clientIp: source.metadata?.clientIp,
     userId,
   };
+}
+
+/**
+ * The request's verified session: the request context's own rule when the source is one (it also
+ * covers a legacy SSE session, whose id arrives in `?sessionId=`), else a session id the auth info
+ * confirms for the id the request runs under.
+ */
+function verifiedSessionOf(source: PartitionSource): string | undefined {
+  if ('verifiedSessionId' in source) return source.verifiedSessionId;
+  const confirmed = source.authInfo?.sessionId ?? source.authInfo?.extra?.sessionId;
+  return confirmed === source.sessionId ? source.sessionId : undefined;
 }
 
 /**
