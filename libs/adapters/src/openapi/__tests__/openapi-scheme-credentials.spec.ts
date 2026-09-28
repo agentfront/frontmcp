@@ -174,6 +174,8 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
   const callerContext = { authInfo: { token: CLIENT_TOKEN, user: { sub: 'sam' } } };
   const warningsOf = (logger: ReturnType<typeof createMockLogger>) =>
     (logger.warn as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n');
+  const infosOf = (logger: ReturnType<typeof createMockLogger>) =>
+    (logger.info as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n');
 
   describe('passthroughCallerToken: true', () => {
     it('refuses an API-key operation instead of sending it with no key', async () => {
@@ -359,6 +361,62 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
         /Authentication required for tool 'getTicket'/,
       );
       expect(received).toHaveLength(0);
+    });
+
+    // Startup takes the same sources: a scheme an authProviderMapper leaves out is not missing when the
+    // request's own headers carry its credential.
+    const mapperWithoutReportsKey = {
+      DeskToken: () => 'desk-token',
+      DeskOAuth: () => 'oauth-token',
+      ExportKey: () => 'export-key',
+      DeskSession: () => 'session-key',
+    };
+
+    it('starts with an authProviderMapper when additionalHeaders carries the scheme it leaves out', async () => {
+      const { tool } = await startAdapter({
+        authProviderMapper: mapperWithoutReportsKey,
+        additionalHeaders: { 'X-Reports-Key': 'reports-key-4' },
+      });
+
+      await tool('weeklyReport')({}, callerContext);
+      expect(received).toEqual([{ path: '/reports/weekly', authorization: undefined, reportsKey: 'reports-key-4' }]);
+    });
+
+    it('starts with an authProviderMapper when headersMapper may set the scheme it leaves out', async () => {
+      const { tool, logger } = await startAdapter({
+        authProviderMapper: mapperWithoutReportsKey,
+        headersMapper: (_ctx, headers) => {
+          headers.set('X-Reports-Key', 'reports-key-5');
+          return headers;
+        },
+      });
+
+      expect(warningsOf(logger) + '\n' + infosOf(logger)).toMatch(/ReportsKey.*headersMapper/);
+      await tool('weeklyReport')({}, callerContext);
+      expect(received).toEqual([{ path: '/reports/weekly', authorization: undefined, reportsKey: 'reports-key-5' }]);
+    });
+
+    it('still refuses at call time when that headersMapper sets nothing for the scheme', async () => {
+      const { tool } = await startAdapter({
+        authProviderMapper: mapperWithoutReportsKey,
+        headersMapper: (_ctx, headers) => headers,
+      });
+
+      await expect(tool('weeklyReport')({}, callerContext)).rejects.toThrow(
+        /Authentication required for tool 'weeklyReport'/,
+      );
+      expect(received).toHaveLength(0);
+    });
+
+    it('still refuses to start when the scheme it leaves out takes its key in the query', async () => {
+      const { ExportKey: _exportKey, ...mapperWithoutExportKey } = mapperWithoutReportsKey;
+      await expect(
+        startAdapter({
+          authProviderMapper: { ...mapperWithoutExportKey, ReportsKey: () => 'reports-key' },
+          headersMapper: (_ctx, headers) => headers,
+          additionalHeaders: { export_key: 'export-key' },
+        }),
+      ).rejects.toThrow(/Missing auth provider mappings for security schemes: ExportKey\n/);
     });
 
     it('does not take a header for an API key that goes in the query', async () => {
