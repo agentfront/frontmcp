@@ -1,16 +1,16 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
 import type { CallToolResult } from '@frontmcp/protocol';
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 
 import CodeCallConfig from '../providers/code-call.config';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
   invokeToolDescription,
-  InvokeToolInput,
   invokeToolInputSchema,
-  InvokeToolOutput,
   invokeToolOutputSchema,
+  type InvokeToolInput,
+  type InvokeToolOutput,
 } from './invoke.schema';
 
 /**
@@ -68,7 +68,12 @@ export default class InvokeTool extends ToolContext {
     // an operator configured is bypassed by invoking the tool directly.
     // One message for "denied" and for "no such tool": distinguishing them would turn this
     // tool into an existence oracle for the tools the policy hides from codecall:search.
-    const decision = checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), toolName, { directCall: true });
+    // CodeCall acts for the client that called this tool: that call's surface applies to the target.
+    const surface = getCallSurface();
+    const decision = checkCodeCallToolAccess(this.scope, this.get(CodeCallConfig), toolName, {
+      directCall: true,
+      surface,
+    });
     if (!decision.allowed) {
       // The real reason is audited server-side even though the response deliberately does not
       // carry it -- the generic message above is what keeps this from being an existence oracle.
@@ -86,8 +91,10 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
+    // The caller's surface goes along, so the flow judges the target for that caller as well.
     const ctx = {
       authInfo: this.authInfo,
+      surface,
     };
 
     // runFlow returns CallToolResult directly - no transformation needed

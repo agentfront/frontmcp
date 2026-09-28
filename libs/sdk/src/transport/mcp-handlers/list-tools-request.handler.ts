@@ -1,6 +1,7 @@
 import { ListToolsRequestSchema, type ListToolsRequest, type ListToolsResult } from '@frontmcp/protocol';
 
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function listToolsRequestHandler({
   scope,
@@ -13,7 +14,7 @@ export default function listToolsRequestHandler({
       logger.verbose('tools/list requested');
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('tools:list-tools', { request, ctx });
+        const result = await scope.runFlowForOutput('tools:list-tools', { request, ctx: withMcpSurface(scope, ctx) });
         logger.verbose('tools/list completed', { durationMs: Date.now() - start });
         return result;
       } catch (e) {

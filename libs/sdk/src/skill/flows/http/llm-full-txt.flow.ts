@@ -26,7 +26,7 @@ import { normalizeSkillsConfigOptions } from '../../../common/types/options/skil
 import { authorizeSkillHttpRequest } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
 import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
-import { filterServableSkills } from '../../skill-filter.helper';
+import { filterServableSkills, SKILLS_HTTP_SURFACE } from '../../skill-filter.helper';
 import { formatSkillsForLlmFull } from '../../skill-http.utils';
 
 const inputSchema = httpInputSchema;
@@ -163,6 +163,8 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
     const skills = await filterServableSkills(
       this.scope,
       await filterSkillsByAuthorities(this.scope, allSkills, this.state.required.authInfo),
+      undefined,
+      SKILLS_HTTP_SURFACE,
     );
     const cache = skills.length === allSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {

@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
-import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
+import { getCallSurface, Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -80,12 +80,16 @@ export default class ExecuteTool extends ToolContext {
    * otherwise it would skip every metadata-driven check and reach `tools:call-tool`
    * unexamined.
    */
-  private checkToolPolicy(name: string): CodeCallToolAccess<ToolEntry> {
-    return checkCodeCallToolAccess<ToolEntry>(this.scope, this.get(CodeCallConfig), name);
+  private checkToolPolicy(name: string, surface: string | undefined): CodeCallToolAccess<ToolEntry> {
+    return checkCodeCallToolAccess<ToolEntry>(this.scope, this.get(CodeCallConfig), name, { surface });
   }
 
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
+
+    // The script acts for the client that called this tool, so every tool it reaches is judged,
+    // and run, for that call's surface. Read now: the script's callbacks run later.
+    const callerSurface = getCallSurface();
 
     // `tryGet`, not `get`: audit must never be load-bearing. An unregistered service leaves the
     // execution path untouched rather than failing the call.
@@ -127,7 +131,7 @@ export default class ExecuteTool extends ToolContext {
         // discovery: a script names a tool as a bare string, so a tool merely
         // hidden from search results is still reachable by name.
         // ============================================================
-        const decision = this.checkToolPolicy(name);
+        const decision = this.checkToolPolicy(name, callerSurface);
         if (!decision.allowed) {
           audit?.logSecurityAccessDenied(executionId, name, decision.reason);
           const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name, decision.reason);
@@ -171,9 +175,10 @@ export default class ExecuteTool extends ToolContext {
             },
           };
 
-          // Build context with auth info
+          // Build context with auth info and the caller's surface
           const ctx = {
             authInfo: this.authInfo,
+            surface: callerSurface,
           };
 
           // Execute through the flow system - this runs all stages:
@@ -240,7 +245,7 @@ export default class ExecuteTool extends ToolContext {
           // (GHSA-6w3j-82v5-6qrr) — describe is a discovery surface like search.
           // Denials are audited here too: a script sweeping getTool across many names is
           // reconnaissance, and it is the one place that pattern is visible.
-          const introspectionAccess = this.checkToolPolicy(name);
+          const introspectionAccess = this.checkToolPolicy(name, callerSurface);
           if (!introspectionAccess.allowed) {
             audit?.logSecurityAccessDenied(executionId, name, introspectionAccess.reason);
             return undefined;

@@ -3,6 +3,7 @@ import { GetPromptRequestSchema, type GetPromptRequest, type GetPromptResult } f
 import { ErrorHandler, isMrtrSignal } from '../../errors';
 import { errorBehindFlowControl, toReportedError, toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
+import { withMcpSurface } from './mcp-surface';
 
 export default function getPromptRequestHandler({
   scope,
@@ -17,7 +18,7 @@ export default function getPromptRequestHandler({
       logger.info(`prompts/get: ${promptName}`);
       const start = Date.now();
       try {
-        const result = await scope.runFlowForOutput('prompts:get-prompt', { request, ctx });
+        const result = await scope.runFlowForOutput('prompts:get-prompt', { request, ctx: withMcpSurface(scope, ctx) });
         logger.verbose('prompts/get completed', { prompt: promptName, durationMs: Date.now() - start });
         return result;
       } catch (e) {

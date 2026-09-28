@@ -46,7 +46,23 @@ export interface CodeCallPolicyEntry {
     visibility?: string;
     codecall?: CodeCallToolMetadata;
     annotations?: CodeCallFilterToolAnnotations;
+    availableWhen?: { surface?: readonly string[] };
   };
+}
+
+/**
+ * Whether the caller CodeCall acts for may reach a tool, by its `availableWhen.surface`.
+ *
+ * CodeCall runs tools on behalf of the client that called `codecall:*`, so a tool that client's own
+ * `tools/call` would not find (an agent-only tool, for an MCP client) must not be reachable, or
+ * even visible, through CodeCall. A caller with no surface (in-process dispatch) is not restricted.
+ */
+export function isOfferedToCaller(
+  availableWhen: { surface?: readonly string[] } | undefined,
+  surface: string | undefined,
+): boolean {
+  const offered = availableWhen?.surface;
+  return offered === undefined || surface === undefined || offered.includes(surface);
 }
 
 /** The policy's view of one tool. Build it with `toCodeCallPolicyTool`. */
@@ -374,15 +390,22 @@ export function readCodeCallPolicyConfig(config: PolicyConfigReader): CodeCallPo
  *
  * An allow decision carries the resolved entry. Callers describe or run that entry rather than
  * looking the name up again, which could land on a different tool than the one judged.
+ *
+ * Pass `surface`, the surface of the call CodeCall is serving (`getCallSurface()`), so a
+ * tool that caller could not call directly is denied here too.
  */
 export function checkCodeCallToolAccess<T extends CodeCallPolicyEntry = CodeCallPolicyEntry>(
   scope: unknown,
   config: PolicyConfigReader,
   name: string,
-  options: { directCall?: boolean } = {},
+  options: { directCall?: boolean; surface?: string } = {},
 ): CodeCallToolAccess<T> {
   const entry = resolveCodeCallTool<T>(scope, name);
   if (!entry) return denyUnknownTool(name);
+
+  if (!isOfferedToCaller(entry.metadata?.availableWhen, options.surface)) {
+    return deny(`Tool "${name}" is not offered on the caller's surface "${options.surface}"`);
+  }
 
   const policyTool = toCodeCallPolicyTool(entry, name, scope);
 

@@ -20,6 +20,7 @@ import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@f
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 
+import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
@@ -285,7 +286,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const supportsElicitation = usesInputRequests || authInfo.sessionIdPayload?.supportsElicitation;
 
       // Get tools appropriate for this client's elicitation support
-      const scopeTools = this.scope.tools.getToolsForListing(supportsElicitation);
+      // `availableWhen.surface`: leave out tools not offered to the surface this listing is for.
+      const callSurface = callSurfaceOf((this.rawInput as { ctx?: unknown } | undefined)?.ctx);
+      const scopeTools = this.scope.tools
+        .getToolsForListing(supportsElicitation)
+        .filter((tool) => isOfferedOnSurface(tool.metadata.availableWhen, callSurface));
       this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
 
       for (const tool of scopeTools) {
