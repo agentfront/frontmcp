@@ -11,6 +11,8 @@
  */
 import 'reflect-metadata';
 
+import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
+
 import {
   createTestFetchServer,
   createTestJwtIssuer,
@@ -20,6 +22,7 @@ import {
 import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { type Scope } from '../../scope/scope.instance';
+import { persistentSessionCallerKey, type PersistentSessionOwnerStore } from '../persistent-session-owner';
 import { runHttpRequestFlowWeb } from '../web-fetch-handler';
 import { buildPersistentWebStandardMcp, type WebStandardMcpPair } from '../web-standard-mcp';
 
@@ -44,6 +47,7 @@ afterAll(async () => {
 async function persistentSession(
   auth: FrontMcpConfigInput['auth'] | undefined,
   sessionId: string,
+  owner?: PersistentSessionOwnerStore,
 ): Promise<{ scope: Scope; pair: WebStandardMcpPair }> {
   const server = await createTestFetchServer({
     info: { name: 'persistent-session-owner', version: '1.0.0' },
@@ -52,7 +56,7 @@ async function persistentSession(
   });
   servers.push(server);
   const scope = server.instance.getScopes()[0] as Scope;
-  return { scope, pair: await buildPersistentWebStandardMcp(scope, { sessionId }) };
+  return { scope, pair: await buildPersistentWebStandardMcp(scope, { sessionId, owner }) };
 }
 
 type Send = (method: 'GET' | 'POST' | 'DELETE', token: string | undefined, body?: unknown) => Promise<Response>;
@@ -97,6 +101,47 @@ async function open(send: Send, token: string | undefined): Promise<void> {
 
 async function listTools(send: Send, token: string | undefined): Promise<Response> {
   return send('POST', token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+}
+
+/** A `tools/call` of `ping` under MCP 2026-07-28, which carries no session of its own, sent with the session's id. */
+async function callPing2026(
+  scope: Scope,
+  pair: WebStandardMcpPair,
+  sessionId: string,
+  token: string,
+): Promise<Response> {
+  const response = await runHttpRequestFlowWeb(
+    scope,
+    new Request('http://localhost/', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': PROTOCOL_2026_07_28,
+        'mcp-method': 'tools/call',
+        'mcp-name': 'ping',
+        'mcp-session-id': sessionId,
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: {
+          name: 'ping',
+          arguments: {},
+          _meta: {
+            [MCP_20260728_META.protocolVersion]: PROTOCOL_2026_07_28,
+            [MCP_20260728_META.clientInfo]: { name: 'caller', version: '1.0.0' },
+            [MCP_20260728_META.clientCapabilities]: {},
+          },
+        },
+      }),
+    }),
+    { persistent: pair },
+  );
+  if (!response) throw new Error('the flow produced no response');
+  return response;
 }
 
 async function expectSessionNotFound(response: Response): Promise<void> {
@@ -169,6 +214,53 @@ describe('persistent session ownership', () => {
     expect(response.status).toBe(200);
   });
 
+  it('answers another caller as an unknown session under MCP 2026-07-28 too', async () => {
+    const { scope, pair } = await persistentSession(transparent(), 'sess-2026');
+    const send = sender(scope, pair, 'sess-2026');
+    const nour = await issuer.sign({}, 'nour');
+    const mallory = await issuer.sign({}, 'mallory');
+    await open(send, nour);
+
+    await expectSessionNotFound(await callPing2026(scope, pair, 'sess-2026', mallory));
+
+    const owner = await callPing2026(scope, pair, 'sess-2026', nour);
+    expect(owner.status).toBe(200);
+  });
+
+  it('records the owner in the session store when the session is claimed', async () => {
+    const save = jest.fn(async () => undefined);
+    const { scope, pair } = await persistentSession(transparent(), 'sess-store', { initial: undefined, save });
+    const nour = await issuer.sign({}, 'nour');
+
+    await open(sender(scope, pair, 'sess-store'), nour);
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(
+      persistentSessionCallerKey({ token: nour, user: { iss: issuer.issuer, sub: 'nour' } } as never),
+    );
+  });
+
+  it('keeps the recorded owner when the session is rebuilt, as after a Durable Object eviction', async () => {
+    const nourKey = persistentSessionCallerKey({ token: 'x', user: { iss: issuer.issuer, sub: 'nour' } } as never);
+    const { scope, pair } = await persistentSession(transparent(), 'sess-rebuilt', {
+      initial: nourKey,
+      save: async () => undefined,
+    });
+    const send = sender(scope, pair, 'sess-rebuilt');
+
+    // A stranger reaching the rebuilt instance first can't claim the session.
+    const strangerInit = await send('POST', await issuer.sign({}, 'mallory'), {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: 'mallory', version: '1.0.0' } },
+    });
+    await expectSessionNotFound(strangerInit);
+
+    // Its owner can open it again.
+    await open(send, await issuer.sign({}, 'nour'));
+  });
+
   it('in public mode, has no caller identity to bind, so the session id stays the credential', async () => {
     const { scope, pair } = await persistentSession(undefined, 'sess-public');
     const send = sender(scope, pair, 'sess-public');
@@ -177,5 +269,28 @@ describe('persistent session ownership', () => {
     const response = await listTools(send, undefined);
 
     expect(response.status).toBe(200);
+  });
+});
+
+describe('persistentSessionCallerKey', () => {
+  const as = (user: Record<string, unknown> | undefined, token = 't') => ({ token, user }) as never;
+
+  it('tells apart the same subject from two issuers', () => {
+    expect(persistentSessionCallerKey(as({ iss: 'https://a.example', sub: 'nour' }))).not.toBe(
+      persistentSessionCallerKey(as({ iss: 'https://b.example', sub: 'nour' })),
+    );
+  });
+
+  it('keeps one key for a user across tokens', () => {
+    expect(persistentSessionCallerKey(as({ iss: 'https://a.example', sub: 'nour' }, 'first'))).toBe(
+      persistentSessionCallerKey(as({ iss: 'https://a.example', sub: 'nour' }, 'second')),
+    );
+  });
+
+  it('keys a caller without a real subject by its token, and one without either as nobody', () => {
+    const anonymous = persistentSessionCallerKey(as({ sub: 'anon:1' }, 'token-1'));
+    expect(anonymous).toMatch(/^token:/);
+    expect(anonymous).not.toBe(persistentSessionCallerKey(as({ sub: 'anon:1' }, 'token-2')));
+    expect(persistentSessionCallerKey({ token: '', user: undefined } as never)).toBeNull();
   });
 });

@@ -30,8 +30,22 @@ interface DurableObjectNamespaceLike {
   get(id: unknown): { fetch(request: Request): Promise<Response> };
 }
 
+/** Minimal structural view of a Durable Object's `state.storage`. */
+interface DurableObjectStorageLike {
+  get(key: string): Promise<unknown>;
+  put(key: string, value: unknown): Promise<void>;
+}
+
 /** Header the worker stamps so the DO binds its transport to the routed session id. */
 const SESSION_ID_HEADER = 'x-frontmcp-session-id';
+
+/** Storage key of the caller that owns the session (see the `http:request` flow's owner check). */
+const SESSION_OWNER_KEY = 'frontmcp:session-owner';
+
+/** A stored owner: a caller key, `null` for a caller with no identity, `undefined` for none yet. */
+function storedOwner(value: unknown): string | null | undefined {
+  return typeof value === 'string' || value === null ? value : undefined;
+}
 
 /**
  * Build the {@link WebFetchSessionRouter} that forwards an MCP request to its
@@ -71,11 +85,33 @@ export function createEdgeSessionDurableObject(
   // may not carry `private`/`protected` members (TS4094).
   return class FrontMcpSessionDurableObject {
     #scopePromise?: Promise<Scope>;
-    #pair?: WebStandardMcpPair;
+    #pairPromise?: Promise<WebStandardMcpPair>;
     readonly #doEnv: unknown;
+    readonly #storage: DurableObjectStorageLike | undefined;
 
-    constructor(_state: unknown, env: unknown) {
+    constructor(state: unknown, env: unknown) {
       this.#doEnv = env;
+      const storage = (state as { storage?: Partial<DurableObjectStorageLike> } | undefined)?.storage;
+      this.#storage =
+        storage && typeof storage.get === 'function' && typeof storage.put === 'function'
+          ? (storage as DurableObjectStorageLike)
+          : undefined;
+    }
+
+    /**
+     * The session's persistent server + transport, built once (concurrent first requests share it).
+     * Its owner is loaded from storage first, so an instance rebuilt after eviction keeps the caller
+     * that opened the session; the `http:request` flow decides, the storage only remembers.
+     */
+    async #buildPair(scope: Scope, sessionId: string): Promise<WebStandardMcpPair> {
+      const storage = this.#storage;
+      const owner = storage
+        ? {
+            initial: storedOwner(await storage.get(SESSION_OWNER_KEY)),
+            save: (callerKey: string | null) => storage.put(SESSION_OWNER_KEY, callerKey),
+          }
+        : undefined;
+      return buildPersistentWebStandardMcp(scope, { sessionId, owner });
     }
 
     async fetch(request: Request): Promise<Response> {
@@ -93,13 +129,17 @@ export function createEdgeSessionDurableObject(
       }
       // Build the session's persistent server + transport once; reuse it for
       // every subsequent request so the GET notification stream survives.
-      if (!this.#pair) {
-        this.#pair = await buildPersistentWebStandardMcp(scope, { sessionId });
+      let pair;
+      try {
+        pair = await (this.#pairPromise ??= this.#buildPair(scope, sessionId));
+      } catch (error) {
+        this.#pairPromise = undefined;
+        throw error;
       }
 
       // #536 — the DO's own bindings reach tools through the same request token
       // the stateless path uses.
-      const response = await runHttpRequestFlowWeb(scope, request, { env: this.#doEnv, persistent: this.#pair });
+      const response = await runHttpRequestFlowWeb(scope, request, { env: this.#doEnv, persistent: pair });
       return (
         response ??
         new Response(JSON.stringify({ error: 'Not Found' }), {

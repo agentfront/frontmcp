@@ -41,6 +41,7 @@ import {
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
+import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
 import { headersForLog } from './request-log.redaction';
 
@@ -60,15 +61,16 @@ const plan = {
     'router',
   ],
   execute: [
+    // A Durable Object's persistent session serves only the caller that opened
+    // it: anyone else presenting its id is answered as an unknown session. First,
+    // before every protocol handler (2026-07-28 included), so none can serve it.
+    'checkPersistentSessionOwner',
     // Protocol 2026-07-28. Runs before EVERY session-era handler — including
     // `handleWebFetch`, which answers any request carrying a Web `Request`
     // regardless of intent and would otherwise swallow 2026 traffic on a
     // Cloudflare Worker. Its output (`json` / `text` / `sse`) renders on both
     // the Node writer and the Web response renderer.
     'handleMcp2026',
-    // A Durable Object's persistent session serves only the caller that opened
-    // it: anyone else presenting its id is answered as an unknown session.
-    'checkPersistentSessionOwner',
     // Web-fetch (V8-isolate / Cloudflare Worker) MCP handling for every OTHER
     // revision. In web mode it responds with a Web `Response`, short-circuiting
     // the Node handle stages below; on the Node/Express path it's a no-op.
@@ -666,6 +668,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
    * before the transport sees the request. The caller is its verified subject,
    * else its token; an anonymous caller without a token has neither, and the
    * unguessable id is then the only credential, as for any anonymous session.
+   * The owner is also recorded in the session's owner store (a Durable Object's
+   * storage), so an instance rebuilt after eviction keeps refusing strangers.
    * No-op outside that path.
    */
   @Stage('checkPersistentSessionOwner')
@@ -678,7 +682,16 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       '../../transport/persistent-session-owner.js'
     );
     const authorization = req[ServerRequestTokens.auth] as Authorization | undefined;
-    if (claimPersistentSession(persistent, persistentSessionCallerKey(authorization))) return;
+    const callerKey = persistentSessionCallerKey(authorization);
+    // A Durable Object keeps the owner in its storage, so an instance rebuilt after eviction still
+    // knows it (the decision stays here; the store only remembers it).
+    const store = (persistent as { owner?: PersistentSessionOwnerStore }).owner;
+    const claim = claimPersistentSession(persistent, callerKey, store);
+    if (claim === 'claimed') {
+      await store?.save(callerKey);
+      return;
+    }
+    if (claim === 'owner') return;
 
     this.logger.warn(`[${this.requestId}] Persistent session refused: it was opened by another caller`);
     // What MCP answers for a session it doesn't know: the client starts a new one.

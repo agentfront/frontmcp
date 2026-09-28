@@ -53,14 +53,33 @@ beforeAll(async () => {
   } as never);
 });
 
-/** A Worker `env` whose Durable Object namespace keeps one real instance per session name. */
-function workerEnv(): { SESSIONS: unknown } {
+/** A Durable Object's `state`, with the storage a real one keeps across instances of the same object. */
+function durableState(): {
+  storage: { get(key: string): Promise<unknown>; put(key: string, value: unknown): Promise<void> };
+} {
+  const values = new Map<string, unknown>();
+  return {
+    storage: {
+      get: async (key) => (values.has(key) ? structuredClone(values.get(key)) : undefined),
+      put: async (key, value) => {
+        values.set(key, structuredClone(value));
+      },
+    },
+  };
+}
+
+/**
+ * A Worker `env` whose Durable Object namespace keeps one real instance per session name, with
+ * storage per name. `evict()` drops every instance, as Cloudflare does, and keeps their storage.
+ */
+function workerEnv(): { SESSIONS: unknown; evict(): void } {
   const scope = instance.getScopes()[0] as unknown as Scope;
   const SessionObject = createEdgeSessionDurableObject(
     async () => scope,
     () => undefined,
   );
   const objects = new Map<string, InstanceType<typeof SessionObject>>();
+  const states = new Map<string, ReturnType<typeof durableState>>();
   const env = {
     SESSIONS: {
       idFromName: (name: string) => name,
@@ -68,12 +87,18 @@ function workerEnv(): { SESSIONS: unknown } {
         const name = String(id);
         let object = objects.get(name);
         if (!object) {
-          object = new SessionObject(undefined, env);
+          let state = states.get(name);
+          if (!state) {
+            state = durableState();
+            states.set(name, state);
+          }
+          object = new SessionObject(state, env);
           objects.set(name, object);
         }
         return object;
       },
     },
+    evict: () => objects.clear(),
   };
   return env;
 }
@@ -148,6 +173,30 @@ describe('Durable Object session ownership', () => {
     const ownerCall = await send(env, nour, { method: 'POST', sessionId, body: toolsList });
     expect(ownerCall.status).toBe(200);
     expect(await ownerCall.text()).toContain('"ping"');
+  });
+
+  it('keeps refusing another caller after the Durable Object is evicted and rebuilt', async () => {
+    const env = workerEnv();
+    const nour = await signToken('nour');
+    const mallory = await signToken('mallory');
+    const sessionId = await openSession(env, nour);
+
+    env.evict();
+
+    // The rebuilt instance has a fresh transport; a stranger's initialize with the id must not claim it.
+    const initialize = (name: string) => ({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name, version: '1.0.0' } },
+    });
+    const stranger = await send(env, mallory, { method: 'POST', sessionId, body: initialize('mallory') });
+    expect(stranger.status).toBe(404);
+    expect(((await stranger.json()) as { error?: { message?: string } }).error?.message).toBe('Session not found');
+
+    const owner = await send(env, nour, { method: 'POST', sessionId, body: initialize('nour') });
+    expect(owner.status).not.toBe(404);
+    await owner.body?.cancel();
   });
 
   it('lets the owner end its session', async () => {
