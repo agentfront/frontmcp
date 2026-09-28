@@ -17,6 +17,8 @@ const createForGraph = jest.fn();
 const createWebFetchHandler = jest.fn();
 
 jest.mock('@frontmcp/sdk', () => ({
+  // The startup checks on the config (see index.spec.ts); none of these configs declares anything they refuse.
+  assertStaticStartupConfig: () => undefined,
   FrontMcpInstance: { createForGraph: (...args: unknown[]) => createForGraph(...args) },
   createWebFetchHandler: (...args: unknown[]) => createWebFetchHandler(...args),
 }));

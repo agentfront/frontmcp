@@ -4,6 +4,7 @@ import { AgentExecutionLoop, type ToolExecutor } from '../../agent/agent-executi
 import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { AgentMethodNotAvailableError } from '../../errors';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import { type CallSurface } from '../availability';
 import { type AgentInputOf, type AgentOutputOf } from '../decorators';
 import type { AgentMetadata, AgentType, ToolInputType, ToolOutputType } from '../metadata';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
@@ -439,6 +440,11 @@ export class AgentContext<
   protected async invokeAgent(agentId: string, input: unknown): Promise<unknown> {
     // This will be implemented by AgentInstance which has access to AgentRegistry
     throw new AgentMethodNotAvailableError('invokeAgent', agentId);
+  }
+
+  /** An agent calls tools on the `'agent'` surface, as its model's tool calls do. */
+  protected override callToolSurface(): CallSurface {
+    return 'agent';
   }
 
   // ============================================================================

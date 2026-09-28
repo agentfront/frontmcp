@@ -4,6 +4,7 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobRetryConfig } from '../../common/metadata/job.metadata';
 import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
+import { runOnSurface } from '../../context/call-surface';
 import { InvalidEntityError } from '../../errors';
 import { JobNotAuthorizedError } from '../../errors/job.errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
@@ -104,7 +105,8 @@ export class WorkflowStepExecutor {
         reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
-      Promise.resolve(ctx.execute(parsedInput))
+      // The step's job runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
+      runOnSurface('job', async () => ctx.execute(parsedInput))
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

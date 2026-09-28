@@ -28,7 +28,9 @@ import {
   type ToolMetadata,
   type ToolOutputType,
 } from '../common';
+import { isOfferedOnSurface, type CallSurface } from '../common/availability';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
+import { runOnSurface } from '../context/call-surface';
 import { runAsTool } from '../context/running-tool';
 import {
   AgentConfigKeyNotFoundError,
@@ -53,6 +55,9 @@ import { agentToolName, canAgentSeeSwarm, getVisibleAgentIds, isAgentVisibleToSw
 
 /** Valid flow names for agent hooks */
 const VALID_AGENT_HOOK_FLOWS = ['agents:call-agent', 'agents:list-agents'] as const;
+
+/** The surface (`availableWhen.surface`) an agent's model calls its tools on. */
+const AGENT_SURFACE: CallSurface = 'agent';
 
 /**
  * Agent configuration that is not tool metadata, so it is never copied onto the agent's
@@ -596,11 +601,19 @@ export class AgentInstance<
 
   /**
    * Get tool definitions available to this agent.
-   * Returns only the agent's own tools (from @Agent({ tools: [...] })).
+   * Returns only the agent's own tools (from @Agent({ tools: [...] })) that are offered to it.
    */
   private getToolDefinitions(): AgentToolDefinition[] {
     // Use only the agent's own tools (not scope tools)
-    return buildAgentToolDefinitions(this.agentTools);
+    return buildAgentToolDefinitions(this.getOfferedTools());
+  }
+
+  /**
+   * The agent's tools its model may call: those whose `availableWhen.surface` offers them on the
+   * `'agent'` surface. The others are neither shown to the model nor run for it.
+   */
+  private getOfferedTools(): ToolEntry[] {
+    return this.agentTools.filter((tool) => isOfferedOnSurface(tool.metadata.availableWhen, AGENT_SURFACE));
   }
 
   /**
@@ -625,13 +638,15 @@ export class AgentInstance<
     const useToolFlow = this.record.metadata.execution?.useToolFlow !== false;
 
     return async (toolName: string, args: Record<string, unknown>): Promise<unknown> => {
-      const tool = this.agentTools.find((t) => t.name === toolName || t.fullName === toolName);
+      // A tool whose `surface` leaves out agents answers the model as a tool the agent doesn't have.
+      const offeredTools = this.getOfferedTools();
+      const tool = offeredTools.find((t) => t.name === toolName || t.fullName === toolName);
 
       if (!tool) {
         throw new AgentToolNotFoundError(
           this.name,
           toolName,
-          this.agentTools.map((t) => t.name),
+          offeredTools.map((t) => t.name),
         );
       }
 
@@ -646,6 +661,7 @@ export class AgentInstance<
           ctx: {
             authInfo: ctx.authInfo,
             _skipUI: true, // Skip UI rendering - agent returns structured data
+            surface: AGENT_SURFACE,
           },
         });
 
@@ -656,8 +672,11 @@ export class AgentInstance<
       // Direct execution - faster but bypasses plugins/hooks, never the tool's `authorities`
       await this.assertToolAuthorized(tool, ctx.authInfo, args);
       const runningTool = { name: tool.name, fullName: tool.fullName };
-      const toolContext = runAsTool(runningTool, () => tool.create(args, ctx));
-      return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
+      // The tool's code sees the agent's surface as `getCallSurface()`, as it would through the flow.
+      return runOnSurface(AGENT_SURFACE, () => {
+        const toolContext = runAsTool(runningTool, () => tool.create(args, ctx));
+        return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
+      });
     };
   }
 

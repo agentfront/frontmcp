@@ -446,6 +446,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       request: { method: 'tools/call', params: cleanedParams },
       scopeId: this.scope.id,
     };
+    // A detached worker re-runs the call on the surface it arrived on (see `TaskRecord.surface`).
+    const callSurface = callSurfaceOf(this.input.ctx);
+    if (callSurface !== undefined) record.surface = callSurface;
     if (this.state.progressToken !== undefined) {
       record.progressToken = this.state.progressToken;
     }

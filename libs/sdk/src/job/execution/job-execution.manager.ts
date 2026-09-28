@@ -5,6 +5,7 @@ import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
+import { runOnSurface } from '../../context/call-surface';
 import { JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { JobPermissionGuard } from '../job-permission.guard';
@@ -242,7 +243,8 @@ export class JobExecutionManager {
           authInfo: opts.authInfo ?? {},
           contextProviders: opts.contextProviders,
         });
-        const result = await ctx.execute(parsedInput);
+        // The job's code runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
+        const result = await runOnSurface('job', async () => ctx.execute(parsedInput));
         const logs = ctx.getLogs();
 
         await this.updateState(runId, {

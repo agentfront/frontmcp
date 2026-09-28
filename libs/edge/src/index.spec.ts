@@ -158,3 +158,44 @@ describe('createEdgeMcp', () => {
     expect(typeof managed.scheduled).toBe('function');
   });
 });
+
+/**
+ * The server is built on its first request, but a config whose entries ask for protection nothing
+ * gives them (an `approval` or `featureFlag` field no plugin enforces, `authorities` without the
+ * `authorities` option) is refused where the module creates it, as `createDirect()` refuses it.
+ */
+describe('createEdgeMcp startup checks', () => {
+  // The plugin field is declared by the approval plugin's type augmentation, which this test does not load.
+  const APPROVAL: Record<string, unknown> = { approval: true };
+
+  @Tool({ name: 'refund_invoice', inputSchema: {}, ...APPROVAL })
+  class RefundInvoiceTool extends ToolContext {
+    async execute() {
+      return { refunded: true };
+    }
+  }
+
+  @Tool({ name: 'lookup_order', inputSchema: {}, authorities: 'admin' })
+  class LookupOrderTool extends ToolContext {
+    async execute() {
+      return { order: 'o-1' };
+    }
+  }
+
+  @App({ id: 'billing', name: 'billing', tools: [RefundInvoiceTool] })
+  class BillingApp {}
+
+  @App({ id: 'orders', name: 'orders', tools: [LookupOrderTool] })
+  class OrdersApp {}
+
+  const edge = (apps: unknown[]) =>
+    createEdgeMcp({ info: { name: 'edge-startup', version: '1.0.0' }, apps: apps as never, tasks: { enabled: false } });
+
+  it('refuses an approval field no plugin enforces', () => {
+    expect(() => edge([BillingApp])).toThrow(`Tool "refund_invoice" declares 'approval'`);
+  });
+
+  it('refuses authorities without the authorities option', () => {
+    expect(() => edge([OrdersApp])).toThrow(/Authorities configuration required: Tool "lookup_order"/);
+  });
+});
