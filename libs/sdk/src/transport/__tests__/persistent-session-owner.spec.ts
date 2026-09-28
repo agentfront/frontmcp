@@ -11,6 +11,7 @@
  */
 import 'reflect-metadata';
 
+import { deriveTypedUser } from '@frontmcp/auth';
 import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 import {
@@ -279,6 +280,17 @@ describe('persistentSessionCallerKey', () => {
     expect(persistentSessionCallerKey(as({ iss: 'https://a.example', sub: 'nour' }))).not.toBe(
       persistentSessionCallerKey(as({ iss: 'https://b.example', sub: 'nour' })),
     );
+  });
+
+  it('binds the issuer session:verify derives from the verified token', () => {
+    // `session:verify` builds `authorization.user` with `deriveTypedUser(jwtPayload)`, which keeps the
+    // token's `iss`: two issuers' tokens for the same subject must not share a session.
+    const fromIssuer = (iss: string) =>
+      persistentSessionCallerKey({ token: `${iss}-token`, user: deriveTypedUser({ iss, sub: 'nour' }) } as never);
+
+    expect(deriveTypedUser({ iss: 'https://a.example', sub: 'nour' }).iss).toBe('https://a.example');
+    expect(fromIssuer('https://a.example')).not.toBe(fromIssuer('https://b.example'));
+    expect(fromIssuer('https://a.example')).toBe(fromIssuer('https://a.example'));
   });
 
   it('keeps one key for a user across tokens', () => {
