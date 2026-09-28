@@ -122,6 +122,45 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
     });
   });
 
+  describe('registerSkillContent across calls and registries', () => {
+    it('refuses one of two concurrent registrations that would collide', async () => {
+      const registry = await emptyRegistry();
+
+      const results = await Promise.allSettled([
+        registry.registerSkillContent(content('reports-v1', 'target')),
+        registry.registerSkillContent(content('target', 'other')),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(registry.getSkills()).toHaveLength(1);
+    });
+
+    it("refuses a child registry's skill whose id is a path in the registry that adopts it", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await parent.registerSkillContent(content('reports-v1', 'target'));
+
+      await expect(child.registerSkillContent(content('target', 'other'))).rejects.toThrow(
+        /id "target" of skill "other" is the skill:\/\/ path of skill "target"/,
+      );
+      expect(child.getSkills()).toHaveLength(0);
+      expect(findSkillByPath(scopeOf(parent), 'target')?.metadata.id).toBe('reports-v1');
+    });
+
+    it("refuses a child registry's skill that collides with a sibling registry's", async () => {
+      const parent = await emptyRegistry();
+      const first = await emptyRegistry();
+      const second = await emptyRegistry();
+      await parent.adoptFromChild(first, owner());
+      await parent.adoptFromChild(second, owner());
+      await first.registerSkillContent(content('reports-v1', 'target'));
+
+      await expect(second.registerSkillContent(content('target', 'other'))).rejects.toThrow(PublicMcpError);
+      expect(second.getSkills()).toHaveLength(0);
+    });
+  });
+
   describe('skills declared at startup', () => {
     it("fail to start when one skill's id is another's path", async () => {
       @Skill({ name: 'target', description: 'Addressed by its name', instructions: '# target' })
