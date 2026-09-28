@@ -269,6 +269,10 @@ new_classes = ["FrontMcpSession"]
 
 One DO per session holds a persistent transport so the `GET` notification stream stays open and `tools/call` notifications reach it. It runs the **same `http:request` flow** (auth/session:verify/router/audit/metrics + hooks) as the stateless path — so transparent auth returns `401` + `WWW-Authenticate` on the worker too.
 
+A session belongs to the caller that opened it: the `Mcp-Session-Id` only addresses the DO, so the flow's `checkPersistentSessionOwner` stage binds the session to the caller of its first request (verified subject, else its token) and answers anyone else with `404 Session not found` on `POST`, `GET` and `DELETE`. On a public server (anonymous callers, no token) the unguessable session id is the only credential. The owner ends its session with `DELETE`.
+
+OAuth sign-in works on the worker too, including `/oauth/provider/:providerId/callback` (a federated provider's redirect and the federated consent submission): path parameters are matched like Express.
+
 ## Storage Options
 
 | Storage       | Use Case                      | Notes                             |
