@@ -113,7 +113,7 @@ export default class OauthUserInfoFlow extends FlowBase<typeof name> {
     // secret (the sole holder of the signing key), and that this server issued
     // it for a request like this one (`iss`, #269).
     const localAuth = this.scope.auth as LocalPrimaryAuth;
-    const issuer = (localAuth as Partial<LocalPrimaryAuth>).issuerFor?.(this.rawInput.request);
+    const issuer = (localAuth as Partial<LocalPrimaryAuth>).acceptedIssuersFor?.(this.rawInput.request);
     const result = await localAuth.verifyGatewayToken(token, baseUrl, undefined, issuer);
 
     if (!result.ok) {

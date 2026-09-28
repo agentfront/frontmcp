@@ -113,6 +113,13 @@ export class MrtrExchange {
 
   readonly clientCapabilities: Record<string, unknown>;
 
+  /**
+   * Whether the client itself declared this revision. `false` when the SERVER served an
+   * unversioned call as 2026-07-28 (`transport.defaultProtocolVersion`, the Worker default): such a
+   * client, typically a 2025-03-26 one, never agreed to the revision's input-request contract.
+   */
+  readonly clientDeclaredRevision: boolean;
+
   private readonly binding: RequestStateBinding;
 
   constructor(params: {
@@ -124,11 +131,14 @@ export class MrtrExchange {
     clientCapabilities: Record<string, unknown>;
     /** Principal + request digest that new state will be bound to. */
     binding: RequestStateBinding;
+    /** Whether the client declared this revision itself (default `true`). */
+    clientDeclaredRevision?: boolean;
   }) {
     // Fresh `inputResponses` win over carried ones for the same key: the client
     // is answering the question we just asked.
     this.responses = { ...(params.carriedResponses ?? {}), ...(params.inputResponses ?? {}) };
     this.clientCapabilities = params.clientCapabilities;
+    this.clientDeclaredRevision = params.clientDeclaredRevision ?? true;
     this.binding = params.binding;
   }
 

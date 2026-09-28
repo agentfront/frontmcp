@@ -80,6 +80,8 @@ export const stateSchema = z.object({
   version: z.string().optional(),
   requestType: z.enum(['notification', 'subscriptions', 'message']).optional(),
   isAnonymous: z.boolean().default(true),
+  /** Whether the client declared this revision itself (not served under it by default). */
+  clientDeclaredRevision: z.boolean().optional(),
 });
 
 const name = 'handle:mcp-202607280728' as const;
@@ -282,6 +284,7 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     }
 
     this.state.set('version', result.version);
+    this.state.set('clientDeclaredRevision', strictHeaders);
   }
 
   /**
@@ -461,11 +464,13 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
             // authenticated caller.
             ...authInfoFromAuthorization(auth),
             // The shared handlers still key per-request state (provider views, notifications)
-            // off an id. This one names the request only; the request context does not vouch for it.
-            sessionId: auth.session?.id,
+            // off an id. It names the request only, the same per-request id as the request
+            // context's `sessionId`; the request context does not vouch for it (#629).
+            sessionId: auth.session?.id ?? this.tryGetContext()?.sessionId,
           }
         : undefined,
       isAnonymous: this.state.required.isAnonymous,
+      clientDeclaredRevision: this.state.clientDeclaredRevision !== false,
       composeInstructions: () => this.scope.metadata.instructions,
       notificationSink: sink,
       traceContext: extractTraceContext(meta),

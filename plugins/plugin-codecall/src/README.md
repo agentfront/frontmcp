@@ -737,13 +737,12 @@ export type CodeCallExecuteResult =
   | {
       /**
        * Error thrown while calling a specific tool via callTool().
-       * Includes tool name + input so the agent/LLM can reason about it.
+       * Includes the tool name and its error so the agent/LLM can reason about it.
        */
       status: 'tool_error';
       error: {
         source: 'tool';
         toolName: string;
-        toolInput: unknown;
         message: string;
         code?: string;
       };
@@ -814,8 +813,7 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
   - Thrown while executing a specific `callTool(toolName, input)`.
   - Include:
     - `toolName`
-    - `toolInput`
-    - `message` (+ optional `code`). No `details`: the enclave's error data is not sanitized for clients.
+    - `message` (+ optional `code`). No `details`: the enclave's error data is not sanitized for clients. No `toolInput`: the arguments the tool saw may hold sidecar-resolved data the script never had (the schema keeps the field, deprecated and never set).
 
 The LLM can also wrap `callTool` in `try/catch` inside the plan. If it doesn’t, CodeCall surfaces failures as `tool_error` with enough context for retries.
 
@@ -859,9 +857,8 @@ Output:
   - If the tool throws:
     - Return a `tool_error`-like shape including:
       - `toolName`
-      - `toolInput`
       - `message`
-      - optional `code` / `details`.
+      - optional `code`.
 
 ---
 

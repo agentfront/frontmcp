@@ -2558,9 +2558,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-codecall@workspace:plugins/plugin-codecall"
   dependencies:
+    "@enclave-vm/ast": "npm:^2.15.3"
     "@enclave-vm/core": "npm:^2.15.3"
     "@frontmcp/protocol": "npm:1.8.4"
     "@frontmcp/sdk": "npm:1.8.4"
+    acorn: "npm:^8.15.0"
     reflect-metadata: "npm:^0.2.2"
     vectoriadb: "npm:^2.3.2"
   peerDependencies:

@@ -195,6 +195,27 @@ describe('codecall:execute result kinds', () => {
       expect(viaNamespace.error?.['message']).toEqual(viaCallTool.error?.['message']);
     });
 
+    it.each([
+      ['on its own lines', 'const x = 1;\nlet page = 1;\nwhile (page < 3) { page++; }\nreturn x;', 3],
+      ['after a block written on one line', 'if (1) { const u = 1; const v = 2; }\nwhile (true) { break; }', 2],
+      ['after statements written on one line', 'const q = 1; const r = 2; const s = 3;\nwhile (true) { break; }', 2],
+      ['after comments and blank lines', '// count the pages\n\n\nwhile (true) { break; }', 4],
+      [
+        'in a script that uses a namespace',
+        'const a = await mail.list({});\nlet p = 1;\nwhile (p < 3) { p++; }\nreturn a;',
+        3,
+      ],
+      ['on the first line', 'while (true) { break; }', 1],
+    ])('report illegal_access at the line of the script itself: a loop %s', async (_label, script, line) => {
+      const outcome = await run(script);
+
+      expect(outcome.status).toBe('illegal_access');
+      const message = String(outcome.error?.['message']);
+      const lines = [...message.matchAll(/\(line (\d+)\)/g)].map((match) => Number(match[1]));
+      expect(lines.length).toBeGreaterThan(0);
+      expect(new Set(lines)).toEqual(new Set([line]));
+    });
+
     it('keep working when other tools have names the sandbox refuses as namespaces', async () => {
       const outcome = await run(
         "const listed = await mail.list();\nconst fetched = await callTool('mail.fetch', {});\n" +

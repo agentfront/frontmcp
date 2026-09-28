@@ -5,6 +5,7 @@ import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@front
 import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
+import { completionEventsOf, completionOutputText } from '../../channel/sources/completion-events';
 import {
   acquireConcurrencySlots,
   AgentContext,
@@ -26,6 +27,7 @@ import {
   RateLimitError,
 } from '../../errors';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type SdkAuthInfo } from '../../server/server.types';
 
 // ============================================================================
@@ -36,6 +38,13 @@ const inputSchema = z.object({
   request: CallToolRequestSchema,
   // z.any() used because ctx is the MCP SDK's ToolCallExtra type which varies by SDK version
   ctx: z.any(),
+  /**
+   * Set when the agent's `invoke_<agent>` tool runs this flow. That tool's `tools:call-tool` flow
+   * has already applied the agent's authorities, rate limit, concurrency and timeout (they are
+   * copied onto the tool), so this flow's stages for them leave the checks to it instead of
+   * counting the call twice. Their hooks still run.
+   */
+  gatedBy: z.literal('tools:call-tool').optional(),
 });
 
 const outputSchema = CallToolResultSchema;
@@ -75,6 +84,9 @@ const stateSchema = z.object({
   semaphoreTicket: z.any().optional(),
   // A timed-out execute() that is still running; its concurrency slot is released when it settles
   abandonedExecution: z.instanceof(Promise).optional(),
+  // When execute() started, and the error it ended with (for the completion event)
+  executionStartedAt: z.number().optional(),
+  executionError: z.any().optional(),
 });
 
 // ============================================================================
@@ -92,7 +104,7 @@ const plan = {
     'acquireSemaphore',
   ],
   execute: ['validateInput', 'execute', 'validateOutput'],
-  finalize: ['releaseSemaphore', 'releaseQuota', 'finalize'],
+  finalize: ['releaseSemaphore', 'releaseQuota', 'emitCompletion', 'finalize'],
 } as const satisfies FlowPlan<string>;
 
 // ============================================================================
@@ -127,6 +139,11 @@ const { Stage } = FlowHooksOf<'agents:call-agent'>(name);
 })
 export default class CallAgentFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('CallAgentFlow');
+
+  /** Whether the `invoke_<agent>` tool's flow already applied the agent's gates. */
+  private get gatedByToolFlow(): boolean {
+    return this.input.gatedBy === 'tools:call-tool';
+  }
 
   /**
    * Parse and validate the incoming request.
@@ -237,6 +254,10 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
+    if (this.gatedByToolFlow) {
+      this.logger.verbose('checkEntryAuthorities:skip (checked by the invoke tool flow)');
+      return;
+    }
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
     if (!engine || !ctxBuilder) {
@@ -342,7 +363,12 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const authInfo = this.state.authInfo;
 
     try {
-      const context = agent.create(input.arguments, { ...ctx, progressToken });
+      // The agent's own provider hierarchy wins over the scope-level instances in the flow deps, as
+      // for a tool: `this.context` and CONTEXT-scoped providers then resolve inside the agent.
+      const sessionKey = authInfo?.sessionId ?? 'anonymous';
+      const agentViews = await agent.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
+      const contextProviders = new FlowContextProviders(agent.providers, agentViews.context);
+      const context = agent.create(input.arguments, { ...ctx, progressToken, contextProviders });
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(agent.record.provide), context));
       context.mark('createAgentContext');
 
@@ -378,7 +404,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.logger.verbose('acquireQuota:start');
 
     const manager = this.scope.rateLimitManager;
-    if (!manager) {
+    if (!manager || this.gatedByToolFlow) {
       this.state.agentContext?.mark('acquireQuota');
       this.logger.verbose('acquireQuota:done (no rate limit manager)');
       return;
@@ -414,7 +440,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.logger.verbose('acquireSemaphore:start');
 
     const manager = this.scope.rateLimitManager;
-    if (!manager) {
+    if (!manager || this.gatedByToolFlow) {
       this.state.agentContext?.mark('acquireSemaphore');
       this.logger.verbose('acquireSemaphore:done (no rate limit manager)');
       return;
@@ -474,10 +500,13 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     agentContext.mark('execute');
 
     const startTime = Date.now();
-    const timeoutMs =
-      agent.metadata.timeout?.executeMs ??
-      agent.metadata.execution?.timeout ??
-      this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
+    this.state.set('executionStartedAt', startTime);
+    // Under the invoke tool, its flow already runs the agent under the same timeout.
+    const timeoutMs = this.gatedByToolFlow
+      ? undefined
+      : (agent.metadata.timeout?.executeMs ??
+        agent.metadata.execution?.timeout ??
+        this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs);
 
     const running = (async () => {
       agentContext.output = await agentContext.execute(agentContext.input);
@@ -493,6 +522,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
       this.logger.verbose('execute:done');
     } catch (error) {
+      this.state.set('executionError', error);
       if (error instanceof ExecutionTimeoutError) {
         this.logger.warn('execute: agent execution timed out', {
           agent: agent.metadata.name,
@@ -501,6 +531,9 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
         this.state.set('abandonedExecution', running);
         throw error;
       }
+      // Under the invoke tool, its flow reports the agent's error as it reports any tool's, and
+      // must see errors it acts on (the elicitation fallback, authority denials) as they are.
+      if (this.gatedByToolFlow) throw error;
       throw new AgentExecutionError(agent.metadata.name, error instanceof Error ? error : undefined);
     }
   }
@@ -557,6 +590,32 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     // Sliding window counters expire naturally — no release needed
     this.state.agentContext?.mark('releaseQuota');
     this.logger.verbose('releaseQuota:done');
+  }
+
+  /**
+   * Publish the run's outcome to the scope's agent completions, which `agent-completion` channel
+   * sources subscribe to. Runs for every run that reached execute(), whether it succeeded or not.
+   * The event names the session that ran the agent, so a channel delivers it only to that session.
+   */
+  @Stage('emitCompletion')
+  async emitCompletion() {
+    const { agent, agentContext, executionStartedAt, executionError, authInfo } = this.state;
+    if (!agent || executionStartedAt === undefined) return;
+
+    const failed = executionError !== undefined;
+    const requestId = this.tryGetContext()?.requestId;
+    const sessionId = typeof authInfo?.sessionId === 'string' && authInfo.sessionId ? authInfo.sessionId : undefined;
+    completionEventsOf(this.scope).agents.emit({
+      agentId: agent.id,
+      agentName: agent.name,
+      status: failed ? 'error' : 'success',
+      durationMs: Date.now() - executionStartedAt,
+      ...(failed
+        ? { error: executionError instanceof Error ? executionError.message : String(executionError) }
+        : { output: completionOutputText(agentContext?.output) }),
+      ...(requestId ? { runId: requestId } : {}),
+      ...(sessionId ? { sessionId } : {}),
+    });
   }
 
   /**

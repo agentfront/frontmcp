@@ -1,8 +1,8 @@
 // file: libs/sdk/src/channel/sources/job-completion.source.ts
 
 import type { FrontMcpLogger } from '../../common';
-import type { ChannelInstance } from '../channel.instance';
 import type { ChannelJobCompletionSource } from '../../common/metadata/channel.metadata';
+import type { ChannelInstance } from '../channel.instance';
 
 /**
  * Event payload from job completion.
@@ -44,9 +44,17 @@ export function wireJobCompletionSource(
       }
     }
 
+    // Session-scoped: a job's result goes only to the session that ran it. A run with no session
+    // (a background or in-process run) is delivered to no one, never broadcast.
+    if (!event.sessionId) {
+      logger.verbose(
+        `Skipping job completion for channel "${channel.name}": no sessionId (prevents cross-session leak)`,
+      );
+      return;
+    }
+
     logger.verbose(`Job completion event for channel "${channel.name}": job=${event.jobName}, status=${event.status}`);
 
-    // If sessionId is present, deliver only to that session (prevents data leak)
     channel.handleEvent(event, event.sessionId).catch((err) => {
       logger.error(`Failed to handle job completion event in channel "${channel.name}"`, { error: err });
     });

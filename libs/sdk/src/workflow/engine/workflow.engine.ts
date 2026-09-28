@@ -1,3 +1,5 @@
+import { getAsyncContextMode } from '@frontmcp/utils';
+
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type WorkflowExecutionResult } from '../../common/interfaces/workflow.interface';
 import {
@@ -119,8 +121,10 @@ export class WorkflowEngine {
         continue;
       }
 
-      // Execute ready steps in parallel, bounded by maxConcurrency
-      const batch = ready.slice(0, this.maxConcurrency);
+      // Execute ready steps in parallel, bounded by maxConcurrency. Without native async context (a
+      // browser build) two steps running at once share one request's context stacks, which can't tell
+      // them apart and refuse to answer (`AsyncContextOverlapError`), so there they run one at a time.
+      const batch = ready.slice(0, getAsyncContextMode() === 'serialized' ? 1 : this.maxConcurrency);
       await Promise.allSettled(
         batch.map(async (step) => {
           // Evaluate condition

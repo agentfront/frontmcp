@@ -17,16 +17,23 @@ import { createEdgeSessionDurableObject, createEdgeSessionRouter } from '../sess
 let uuidCounter = 0;
 
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   randomUUID: jest.fn(() => `uuid-${++uuidCounter}`),
 }));
 
 const buildPersistentWebStandardMcp = jest.fn();
 const runHttpRequestFlowWeb = jest.fn();
 
-jest.mock('@frontmcp/sdk', () => ({
-  buildPersistentWebStandardMcp: (...args: unknown[]) => buildPersistentWebStandardMcp(...args),
-  runHttpRequestFlowWeb: (...args: unknown[]) => runHttpRequestFlowWeb(...args),
-}));
+jest.mock('@frontmcp/sdk', () => {
+  // The deferred-build helpers are plain logic; use the real ones.
+  const { createDeferredServerBuild, startupFailureResponse } = jest.requireActual('@frontmcp/sdk');
+  return {
+    buildPersistentWebStandardMcp: (...args: unknown[]) => buildPersistentWebStandardMcp(...args),
+    runHttpRequestFlowWeb: (...args: unknown[]) => runHttpRequestFlowWeb(...args),
+    createDeferredServerBuild,
+    startupFailureResponse,
+  };
+});
 
 const SESSION_ID_HEADER = 'x-frontmcp-session-id';
 
@@ -198,23 +205,36 @@ describe('createEdgeSessionDurableObject', () => {
     expect(await res.json()).toEqual({ error: 'Not Found' });
   });
 
-  it('resets the memoized scope and rethrows when buildScope fails, retrying on the next request', async () => {
-    const boom = new Error('scope build failed');
-    const buildScope = jest.fn().mockRejectedValueOnce(boom).mockResolvedValueOnce(makeScope());
-    buildPersistentWebStandardMcp.mockResolvedValue({ __pair: true });
-    runHttpRequestFlowWeb.mockResolvedValue(new Response('ok', { status: 200 }));
+  it('answers a failed buildScope, keeps it for its retry delay, then the next request retries', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(1_000_000);
+      const buildScope = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('scope build failed'))
+        .mockResolvedValueOnce(makeScope());
+      buildPersistentWebStandardMcp.mockResolvedValue({ __pair: true });
+      runHttpRequestFlowWeb.mockResolvedValue(new Response('ok', { status: 200 }));
 
-    const DO = createEdgeSessionDurableObject(buildScope, jest.fn());
-    const instance = new DO({}, {});
+      const DO = createEdgeSessionDurableObject(buildScope, jest.fn());
+      const instance = new DO({}, {});
+      const request = () => new Request('https://w/mcp', { headers: { [SESSION_ID_HEADER]: 's' } });
 
-    await expect(instance.fetch(new Request('https://w/mcp', { headers: { [SESSION_ID_HEADER]: 's' } }))).rejects.toBe(
-      boom,
-    );
-    expect(boom).toBeInstanceOf(Error);
+      // Answered, not thrown to the platform, and not rebuilt within the retry delay.
+      const refused = await instance.fetch(request());
+      const refusedAgain = await instance.fetch(request());
+      expect([refused.status, refusedAgain.status]).toEqual([503, 503]);
+      expect(buildScope).toHaveBeenCalledTimes(1);
 
-    // The memo was cleared → the next request retries buildScope and succeeds.
-    const res = await instance.fetch(new Request('https://w/mcp', { headers: { [SESSION_ID_HEADER]: 's' } }));
-    expect(res.status).toBe(200);
-    expect(buildScope).toHaveBeenCalledTimes(2);
+      // After the delay the next request retries buildScope and succeeds.
+      now.mockReturnValue(1_001_000);
+      const res = await instance.fetch(request());
+      expect(res.status).toBe(200);
+      expect(buildScope).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 });

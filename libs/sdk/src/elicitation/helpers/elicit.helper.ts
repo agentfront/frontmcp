@@ -102,6 +102,16 @@ export async function performElicit<S extends ZodType>(
   // Checked BEFORE the session guard: 2026-07-28 has no protocol-level
   // sessions, so `sessionId` is not meaningful on that path.
   const mrtr = ctx?.getMrtrExchange?.();
+  // An unversioned call the server served as 2026-07-28 (the Worker default) comes from a client
+  // that never declared the revision, typically a 2025-03-26 one. Without the capability it gets
+  // what a legacy client gets: there is no session to hold a fallback, and the fallback tool is not
+  // listed under this revision, so it is refused up front rather than with a 2026-only `-32021`.
+  if (mrtr && mrtr.clientDeclaredRevision === false && mrtr.supportsElicitation?.(options?.mode ?? 'form') !== true) {
+    throw new ElicitationNotSupportedError(
+      'This client does not support elicitation: it declared no elicitation capability, and without a ' +
+        'session the elicitation fallback has no one to answer it',
+    );
+  }
   if (mrtr) {
     const zodSchema =
       requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);

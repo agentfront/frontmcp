@@ -3,7 +3,11 @@ import { normalizeSsrfOptions, OpenAPIToolGenerator, type McpOpenAPITool } from 
 import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import { OpenApiSpecPoller } from './openapi-spec-poller';
-import { formatMissingSecurityMappingsError, validateSecurityConfiguration } from './openapi.security';
+import {
+  formatMissingSecurityMappingsError,
+  inputSecuritySchemes,
+  validateSecurityConfiguration,
+} from './openapi.security';
 import { createOpenApiTool } from './openapi.tool';
 import {
   type ExtendedMcpOpenAPITool,
@@ -77,10 +81,11 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // Determine if we need security in input
-    // If securitySchemesInInput is set, we need all security in input first, then filter
-    const hasPerSchemeControl = this.options.securitySchemesInInput && this.options.securitySchemesInInput.length > 0;
-    const includeSecurityInInput =
-      hasPerSchemeControl || (this.options.generateOptions?.includeSecurityInInput ?? false);
+    // If some schemes are named (securitySchemesInInput, or an includeSecurityInInput list), we need all
+    // security in input first, then filter to the named ones
+    const inputSchemes = inputSecuritySchemes(this.options);
+    const hasPerSchemeControl = inputSchemes !== 'all' && inputSchemes.size > 0;
+    const includeSecurityInInput = inputSchemes === 'all' || hasPerSchemeControl;
 
     // Generate tools from OpenAPI spec
     let openapiTools = await this.generator.generateTools({
@@ -100,7 +105,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     // If per-scheme control is enabled, filter security inputs
     if (hasPerSchemeControl) {
-      openapiTools = openapiTools.map((tool) => this.filterSecuritySchemes(tool));
+      openapiTools = openapiTools.map((tool) => this.filterSecuritySchemes(tool, inputSchemes));
     }
 
     // Validate security configuration
@@ -485,12 +490,12 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   /**
-   * Filter security schemes in tool input based on securitySchemesInInput option.
-   * Removes security inputs that should be resolved from context instead of user input.
+   * Filter security schemes in tool input to the ones named for it (`securitySchemesInInput`, or an
+   * `includeSecurityInInput` list). Removes security inputs that should be resolved from context
+   * instead of user input.
    * @private
    */
-  private filterSecuritySchemes(tool: McpOpenAPITool): McpOpenAPITool {
-    const allowedSchemes = new Set(this.options.securitySchemesInInput || []);
+  private filterSecuritySchemes(tool: McpOpenAPITool, allowedSchemes: ReadonlySet<string>): McpOpenAPITool {
     if (allowedSchemes.size === 0) return tool;
 
     // Find security mappers that should NOT be in input (resolved from context)

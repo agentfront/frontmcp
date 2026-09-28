@@ -95,9 +95,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get authoritiesScopeMapping(): AuthoritiesScopeMapping | undefined;
 
   /**
-   * Collect all supported OAuth scopes from base OIDC scopes and
-   * tool-level authProvider scope declarations.
-   * Used by PRM endpoint to populate `scopes_supported`.
+   * Collect the OAuth scopes entries declare on their `authProviders`.
+   * The PRM endpoint advertises them in `scopes_supported`.
    */
   abstract getAllSupportedScopes(): string[];
 

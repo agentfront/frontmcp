@@ -312,7 +312,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         });
         return;
       }
-      const issuer = auth instanceof LocalPrimaryAuth ? auth.issuerFor(this.rawInput.request) : undefined;
+      const issuer = auth instanceof LocalPrimaryAuth ? auth.acceptedIssuersFor(this.rawInput.request) : undefined;
       verifyResult = await auth.verifyGatewayToken(token, baseUrl, undefined, issuer);
     } else {
       // Transparent: verify against upstream provider

@@ -241,7 +241,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     this.logger.verbose(`[${this.requestId}] checkAuthorization: verifying session`);
 
     try {
-      const result = await this.scope.runFlow('session:verify', { request });
+      // MCP 2026-07-28 has no sessions: its anonymous and static-key callers get none minted (#629).
+      const result = await this.scope.runFlow('session:verify', {
+        request,
+        sessionless: this.servesProtocol20260728(),
+      });
       if (!result) {
         this.logger.error(`[${this.requestId}] failed to verify session`);
         throw new SessionVerificationFailedError();

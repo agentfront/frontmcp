@@ -33,6 +33,7 @@ import {
   filterServableSkills,
   isSkillServable,
   SKILLS_HTTP_SURFACE,
+  skillToolsForCaller,
 } from '../../skill-filter.helper';
 import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
@@ -313,7 +314,13 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
+    // The endpoints serve the MCP surface: a tool it doesn't offer is reported as missing, without its schema.
+    const { skill, availableTools, missingTools, isComplete, warning } = skillToolsForCaller(
+      loadResult,
+      toolRegistry,
+      undefined,
+      SKILLS_HTTP_SURFACE,
+    );
 
     // Resolve the backing entry the same way every skill surface does (requested id, then loaded content id)
     const skillEntry = createSkillEntryResolver(skillRegistry)(skillId, skill.id);

@@ -509,9 +509,103 @@ function findMisconfiguration(error: unknown): { code: string; remedy: string } 
     if (typeof code === 'string' && MISCONFIGURATION_REMEDIES[code]) {
       return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
     }
+    // The config itself failed validation (the server's schema, not the request's).
+    if (current.name === 'ZodError') return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;
+}
+
+const CONFIG_INVALID_REMEDY =
+  'The FrontMCP configuration failed validation, so the server refuses to start. The server log names the ' +
+  'invalid fields.';
+
+/** The first retry of a failed deferred server build waits this long; each failure doubles it. */
+const STARTUP_RETRY_MIN_MS = 1_000;
+/** Longest wait between two attempts of a failed deferred server build. */
+const STARTUP_RETRY_MAX_MS = 60_000;
+
+/**
+ * A server built on its first request (an edge isolate, a Durable Object), shared by every request
+ * that arrives while it builds.
+ *
+ * A failed build is not retried by every request: the failure is kept, and requests are refused
+ * with it, until a retry delay has passed (1 s after the first failure, doubling up to 60 s). The
+ * first request after that tries again. A successful build is kept for the isolate's lifetime.
+ */
+export interface DeferredServerBuild<T, A = void> {
+  /**
+   * The built server. Starts a build when none has succeeded and none is due to wait; otherwise
+   * joins the build in flight, or rejects with the last failure while its retry delay lasts.
+   */
+  get(arg: A): Promise<T>;
+  /** Seconds until a refused request may try again (at least 1), or 0 when nothing has failed. */
+  retryAfterSeconds(): number;
+}
+
+/**
+ * Create a {@link DeferredServerBuild}. `onFailure` sees each failed attempt once (to log its cause),
+ * not each request refused with it. `arg` is what the request that starts a build passes to it (a
+ * Worker's `env`, say).
+ */
+export function createDeferredServerBuild<T, A = void>(
+  build: (arg: A) => Promise<T>,
+  options: { onFailure?: (error: unknown) => void; now?: () => number } = {},
+): DeferredServerBuild<T, A> {
+  const now = options.now ?? Date.now;
+  let built: { value: T } | undefined;
+  let inFlight: Promise<T> | undefined;
+  let failure: { error: unknown; retryAt: number; count: number } | undefined;
+
+  return {
+    get(arg: A): Promise<T> {
+      if (built) return Promise.resolve(built.value);
+      if (inFlight) return inFlight;
+      if (failure && now() < failure.retryAt) return Promise.reject(failure.error);
+      const failures = failure?.count ?? 0;
+      inFlight = build(arg).then(
+        (value) => {
+          built = { value };
+          failure = undefined;
+          inFlight = undefined;
+          return value;
+        },
+        (error: unknown) => {
+          const delay = Math.min(STARTUP_RETRY_MAX_MS, STARTUP_RETRY_MIN_MS * 2 ** failures);
+          failure = { error, retryAt: now() + delay, count: failures + 1 };
+          inFlight = undefined;
+          options.onFailure?.(error);
+          throw error;
+        },
+      );
+      return inFlight;
+    },
+    retryAfterSeconds(): number {
+      if (!failure) return 0;
+      return Math.max(1, Math.ceil((failure.retryAt - now()) / 1000));
+    },
+  };
+}
+
+/**
+ * The answer to a request a server that could not be built refuses: a recognized configuration
+ * fault as `500 server_misconfigured` (see {@link misconfigurationResponse}), anything else (a
+ * remote that refused the connection, a package that failed to load) as `503 server_unavailable`
+ * with `Retry-After`. Neither echoes the error, whose cause only the server log shows.
+ */
+export function startupFailureResponse(error: unknown, retryAfterSeconds = 1): Response {
+  const misconfigured = misconfigurationResponse(error);
+  if (misconfigured) return misconfigured;
+  return Response.json(
+    {
+      error: 'server_unavailable',
+      code: 'SERVER_START_FAILED',
+      message:
+        'The server failed to start, so it refuses requests. Its log has the cause; a request after the ' +
+        'Retry-After delay tries to start it again.',
+    },
+    { status: 503, headers: { 'Retry-After': String(Math.max(1, retryAfterSeconds)) } },
+  );
 }
 
 /**

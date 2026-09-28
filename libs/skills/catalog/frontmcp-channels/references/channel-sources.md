@@ -37,6 +37,8 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
+The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHandler()`), guarded like a custom `http.routes` entry: `throttle.ipFilter` runs first, the path may not be a FrontMCP path (MCP endpoint, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`), and one channel per path (either mistake fails startup). The route does not authenticate the sender: verify signatures (e.g. `X-Hub-Signature-256`) in `onEvent()`. `createDirect()`, stdio and `createFetchHandler()` serve no webhook route.
+
 ## App Event Source
 
 Subscribes to the in-process `ChannelEventBus`. Your application code emits events, and the channel transforms them into notifications.
@@ -96,9 +98,11 @@ class AgentDoneChannel extends ChannelContext {
 }
 ```
 
+The event is `{ agentId, agentName, status: 'success' | 'error', durationMs, output?, error?, runId?, sessionId }`, published after every `invoke_<agent>` call and delivered only to the session that called the agent.
+
 ## Job Completion Source
 
-Pushes when background jobs or workflows complete. Optionally filter by job names.
+Pushes when background jobs or workflows complete. Optionally filter by job names. The event is `{ jobName, jobId, status: 'success' | 'error', durationMs?, output?, error?, attempt, sessionId }` (for a workflow, `jobName` is its name). It goes only to the session that ran the job; a run with no session is delivered to no one.
 
 ```typescript
 @Channel({

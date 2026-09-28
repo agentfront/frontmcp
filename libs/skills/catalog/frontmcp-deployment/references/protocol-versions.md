@@ -122,7 +122,7 @@ before the first `elicit()`/`sample()`/`listRoots()` call.
 and a 10-minute expiry — a tampered or replayed blob is discarded and the
 exchange restarts.
 
-The client MUST declare the matching capability, or the server answers `-32021`:
+The client MUST declare the matching capability, or the server answers `-32021`. (An unversioned call the server only defaulted to 2026-07-28 comes from a client that never declared it; `elicit()` answers that one with `ElicitationNotSupportedError`, as for a legacy client without a session.)
 
 ```json
 "io.modelcontextprotocol/clientCapabilities": { "elicitation": { "form": {} } }
