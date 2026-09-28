@@ -137,3 +137,59 @@ describe('the agents:call-agent flow under the invoke_<agent> tool', () => {
     }
   });
 });
+
+describe('the agents:call-agent flow keeps the tools/call request correlation', () => {
+  // The JSON-RPC id routes an elicitation through the request's stream, and the progress token
+  // tags progress notifications. Both belong to the tools/call request that invoked the agent.
+  const seen: { relatedRequestId?: unknown; progressToken?: unknown } = {};
+
+  @Agent({ name: 'correlated_helper', inputSchema: {}, llm: { adapter: answeringAdapter } })
+  class CorrelatedHelperAgent extends AgentContext {
+    override async execute(_input: Record<string, never>) {
+      await this.tryGetContext()?.transport?.elicit('Continue?', { type: 'object', properties: {} });
+      await this.progress(1, 2, 'half way');
+      return 'correlated';
+    }
+  }
+
+  @App({ id: 'correlated', name: 'Correlated', agents: [CorrelatedHelperAgent] })
+  class CorrelatedApp {}
+
+  it('routes elicitation with the tools/call request id and sends progress with its token', async () => {
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'agent-call-flow-correlation', version: '1.0.0' },
+      apps: [CorrelatedApp],
+      logging: { level: LogLevel.Off },
+    });
+    const [scope] = instance.getScopes() as unknown as Array<{
+      runFlowForOutput: (name: string, input: unknown) => Promise<unknown>;
+      notifications: { sendProgressNotification: (...args: unknown[]) => Promise<boolean> };
+    }>;
+    const sendProgress = jest
+      .spyOn(scope.notifications, 'sendProgressNotification')
+      .mockImplementation(async (_sessionId, token) => {
+        seen.progressToken = token;
+        return true;
+      });
+    const transport = {
+      type: 'test',
+      sendElicitRequest: jest.fn(async (relatedRequestId: unknown) => {
+        seen.relatedRequestId = relatedRequestId;
+        return { action: 'accept', content: {} };
+      }),
+    };
+
+    const result = await scope.runFlowForOutput('tools:call-tool', {
+      request: {
+        method: 'tools/call',
+        params: { name: 'invoke_correlated_helper', arguments: {}, _meta: { progressToken: 'progress-7' } },
+      },
+      ctx: { authInfo: { token: '', clientId: 'c', scopes: [], sessionId: 'session-1', transport }, requestId: 42 },
+    });
+
+    expect(JSON.stringify(result)).toContain('correlated');
+    expect(seen.relatedRequestId).toBe(42);
+    expect(seen.progressToken).toBe('progress-7');
+    sendProgress.mockRestore();
+  });
+});

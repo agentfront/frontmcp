@@ -475,13 +475,26 @@ export class AgentInstance<
       // Cast is safe because by the time we reach execute, auth has been validated in the flow
       const authInfo = toolCtx.authInfo as import('@frontmcp/protocol').AuthInfo;
 
+      // The agent answers the same tools/call request: its JSON-RPC id routes an elicitation through
+      // that request's stream, and its progress token tags the agent's progress notifications.
+      const progressToken = toolCtx._progressTokenInternal;
+      const requestId = toolCtx._jsonRpcRequestIdInternal;
+
       // A CallToolResult, which the tool flow passes through as it is.
       return this.scope.runFlowForOutput('agents:call-agent', {
         request: {
           method: 'tools/call',
-          params: { name: this.id, arguments: input },
+          params: {
+            name: this.id,
+            arguments: input,
+            ...(progressToken !== undefined ? { _meta: { progressToken } } : {}),
+          },
         },
-        ctx: { authInfo, ...(toolCtx.signal ? { signal: toolCtx.signal } : {}) },
+        ctx: {
+          authInfo,
+          ...(requestId !== undefined ? { requestId } : {}),
+          ...(toolCtx.signal ? { signal: toolCtx.signal } : {}),
+        },
         gatedBy: 'tools:call-tool',
       });
     };

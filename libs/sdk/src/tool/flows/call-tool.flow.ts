@@ -829,6 +829,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // These are used by the elicit() method when throwing ElicitationFallbackRequired
       context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
       context._toolInputInternal = input.arguments;
+      context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter

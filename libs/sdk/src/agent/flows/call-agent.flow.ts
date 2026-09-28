@@ -376,11 +376,13 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       // The transport is stored in authInfo.transport by the local adapter
       const frontmcpContext = context.tryGetContext();
       const sdkAuthInfo = authInfo as SdkAuthInfo | undefined;
-      if (frontmcpContext && sdkAuthInfo?.transport?.sendElicitRequest) {
+      // Without a JSON-RPC request id this transport can't route an elicitation, so the one the
+      // caller's flow (tools:call-tool for the agent tool) set on the context stays in place.
+      const jsonRpcRequestId = this.state.jsonRpcRequestId;
+      if (frontmcpContext && sdkAuthInfo?.transport?.sendElicitRequest && jsonRpcRequestId !== undefined) {
         const transport = sdkAuthInfo.transport;
         // Pass the JSON-RPC request ID for proper elicitation routing
         // The MCP SDK uses this to route messages through the correct SSE stream
-        const jsonRpcRequestId = this.state.jsonRpcRequestId;
         frontmcpContext.setTransport({
           sendElicitRequest: transport.sendElicitRequest.bind(transport),
           type: (transport as { type?: string }).type ?? 'unknown',
