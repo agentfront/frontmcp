@@ -1,4 +1,4 @@
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
@@ -104,8 +104,8 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      // Spawn background execution
-      this.executeJobBackground(job, input, runId, opts).catch(async (err) => {
+      // Spawn background execution, as its own request (it outlives this one; a no-op on Node)
+      runRequestExclusive(() => this.executeJobBackground(job, input, runId, opts)).catch(async (err) => {
         this.logger.error(`Background job execution failed: ${err}`);
         try {
           await this.updateState(runId, {
@@ -156,18 +156,20 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      this.executeWorkflowBackground(workflow, jobRegistry, runId, opts).catch(async (err) => {
-        this.logger.error(`Background workflow execution failed: ${err}`);
-        try {
-          await this.updateState(runId, {
-            state: 'failed',
-            error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
-            completedAt: Date.now(),
-          });
-        } catch (updateErr) {
-          this.logger.error(`Failed to update run state after error: ${updateErr}`);
-        }
-      });
+      runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, opts)).catch(
+        async (err) => {
+          this.logger.error(`Background workflow execution failed: ${err}`);
+          try {
+            await this.updateState(runId, {
+              state: 'failed',
+              error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
+              completedAt: Date.now(),
+            });
+          } catch (updateErr) {
+            this.logger.error(`Failed to update run state after error: ${updateErr}`);
+          }
+        },
+      );
       return { runId, state: 'pending' };
     }
 

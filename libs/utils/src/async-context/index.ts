@@ -1,1 +1,8 @@
-export { AsyncLocalStorage } from '#async-context';
+export {
+  AsyncContextOverlapError,
+  AsyncLocalStorage,
+  awaitOutsideRequest,
+  getAsyncContextMode,
+  runRequestExclusive,
+  type AsyncContextMode,
+} from '#async-context';

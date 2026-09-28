@@ -471,5 +471,16 @@
     "new": "// 2026-07-28: no session; session-scoped memory belongs to the signed-in caller (or refuses anonymous ones)",
     "migration": "A session counts as verified only when the request presented it (`mcp-session-id`, or a legacy SSE `sessionId`) and the server accepted it. Under MCP 2026-07-28, no request is in a session, even one that sends back an id the server issued. The id the server makes up for a request that has none is no longer a session.\n\nState kept per session therefore falls back to the caller's identity: Remember `session` and `tool` memory, feature-flag targeting, approval session records, `CONTEXT` providers, elicitation owners, the secure store's `session` scope, and session-scoped auth-provider credentials. An unauthenticated caller without a session gets `RememberIdentityError` from Remember's session-scoped memory, and `SessionIdentityRequiredError` from the secure store's `session` scope. Legacy SSE sessions now count as verified, so approvals and rate-limit partitions apply per SSE session. A static-key caller is no longer anonymous: its results are cached `private`, and it can own 2026-07-28 tasks. `authInfoFromAuthorization(authorization, presentedSessionId?)` takes the presented id; without it, `extra.sessionId` isn't set.\n\nFor state that must outlive a request under 2026-07-28, sign callers in or use `user` scope.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-046",
+    "title": "Durable Object sessions serve only the caller that opened them",
+    "package": "@frontmcp/sdk",
+    "category": "change",
+    "severity": "low",
+    "old": "// any caller presenting a Durable Object session's Mcp-Session-Id reached its persistent transport",
+    "new": "// only the caller that opened the session; anyone else gets 404 Session not found",
+    "migration": "A Durable Object's stateful MCP session (`createEdgeMcp({ sessions })`) serves only the caller that opened it. Its `Mcp-Session-Id` addresses the Durable Object but is not an id `session:verify` can check against the caller's token, so the `http:request` flow's new `checkPersistentSessionOwner` stage binds the session to the caller of its first request, before every protocol handler (MCP 2026-07-28 included): its verified issuer and subject (a token refresh keeps them), else its token (an anonymous grant). The owner is kept in the Durable Object's storage, so an instance rebuilt after eviction keeps it. Any other caller that presents the id gets `404` with JSON-RPC error `-32001 Session not found` on `POST`, `GET` and `DELETE`, and the owner's session is untouched. On a public server, an anonymous caller without a token has no identity to bind, so the unguessable session id remains the only credential. The owner can now end its session with `DELETE`; before, every `DELETE` of a Durable Object session answered 404.\n\nA client that shares one session between users, or signs in as a different user mid-session, must `initialize` a new session.",
+    "codemod": "no"
   }
 ]

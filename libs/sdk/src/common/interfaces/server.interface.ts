@@ -10,6 +10,8 @@ export class ServerRequest extends IncomingMessage {
   declare url: string;
   declare headers: Record<string, string>;
   query: Record<string, string | string[]>;
+  /** Path parameters of the matched route (`:providerId` in `/oauth/provider/:providerId/callback`). */
+  params?: Record<string, string>;
   body?: any;
   authSession?: Authorization;
 }

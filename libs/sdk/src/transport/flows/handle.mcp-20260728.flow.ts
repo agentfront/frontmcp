@@ -15,6 +15,7 @@
 import { isAnonymousSubject } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
+import { runRequestExclusive } from '@frontmcp/utils';
 
 import {
   authInfoFromAuthorization,
@@ -309,8 +310,10 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     if (!context) return (fn) => fn();
 
     const storage = this.scope.providers.get(FrontMcpContextStorage);
+    // The deferred work runs after this request's turn ended, so in a browser build without
+    // AsyncContext it takes a turn of its own (a no-op on Node and Workers).
     return async (fn) => {
-      await storage.runWithContext(context, fn);
+      await runRequestExclusive(() => storage.runWithContext(context, fn));
     };
   }
 

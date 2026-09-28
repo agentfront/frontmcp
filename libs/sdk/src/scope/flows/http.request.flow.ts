@@ -41,6 +41,7 @@ import {
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
 import { SessionVerificationFailedError } from '../../errors';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
+import { type PersistentSessionOwnerStore } from '../../transport/persistent-session-owner';
 import { type Scope } from '../scope.instance';
 import { headersForLog } from './request-log.redaction';
 
@@ -60,6 +61,10 @@ const plan = {
     'router',
   ],
   execute: [
+    // A Durable Object's persistent session serves only the caller that opened
+    // it: anyone else presenting its id is answered as an unknown session. First,
+    // before every protocol handler (2026-07-28 included), so none can serve it.
+    'checkPersistentSessionOwner',
     // Protocol 2026-07-28. Runs before EVERY session-era handler — including
     // `handleWebFetch`, which answers any request carrying a Web `Request`
     // regardless of intent and would otherwise swallow 2026 traffic on a
@@ -482,6 +487,14 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           (request.headers['mcp-session-id'] as string | undefined) ??
           (request.query?.['sessionId'] as string | undefined);
         const deleteAuthz = authorizeSessionTermination(deleteVerify, requestedSessionId);
+        // A Durable Object's persistent session has an id `session:verify` cannot check, so
+        // `authorizeSessionTermination` never finds it owned. Who may end it is decided by who
+        // opened it, in `checkPersistentSessionOwner`; the request only has to be authenticated.
+        if (request[ServerRequestTokens.webTransport] && deleteAuthz.kind !== 'unauthorized') {
+          request[ServerRequestTokens.auth] = (deleteVerify as { authorization: unknown }).authorization;
+          this.state.set('intent', decision.intent);
+          return;
+        }
         if (deleteAuthz.kind === 'unauthorized') {
           this.logger.warn(`[${this.requestId}] DELETE session denied: request is not authenticated`);
           this.respond(
@@ -645,6 +658,51 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
    * Auth has already been enforced by `router` (a 401/403 short-circuits before
    * execute), and the verified authorization is read from the request token.
    */
+  /**
+   * A Durable Object's persistent MCP session (the web-fetch request carries its
+   * server + transport under {@link ServerRequestTokens.webTransport}) belongs to
+   * the caller that opened it. Its `mcp-session-id` is a plain id the worker's
+   * router chose, which `session:verify` cannot check against the caller's
+   * token, so the first request to reach the session claims it for its caller
+   * and any other caller is answered as MCP answers an unknown session (404),
+   * before the transport sees the request. The caller is its verified subject,
+   * else its token; an anonymous caller without a token has neither, and the
+   * unguessable id is then the only credential, as for any anonymous session.
+   * The owner is also recorded in the session's owner store (a Durable Object's
+   * storage), so an instance rebuilt after eviction keeps refusing strangers.
+   * No-op outside that path.
+   */
+  @Stage('checkPersistentSessionOwner')
+  async checkPersistentSessionOwner() {
+    const req = this.rawInput.request as unknown as Record<PropertyKey, unknown>;
+    const persistent = req[ServerRequestTokens.webTransport];
+    if (!req[ServerRequestTokens.webRequest] || !persistent || typeof persistent !== 'object') return;
+
+    const { claimPersistentSession, persistentSessionCallerKey } = await import(
+      '../../transport/persistent-session-owner.js'
+    );
+    const authorization = req[ServerRequestTokens.auth] as Authorization | undefined;
+    const callerKey = persistentSessionCallerKey(authorization);
+    // A Durable Object keeps the owner in its storage, so an instance rebuilt after eviction still
+    // knows it (the decision stays here; the store only remembers it).
+    const store = (persistent as { owner?: PersistentSessionOwnerStore }).owner;
+    const claim = claimPersistentSession(persistent, callerKey, store);
+    if (claim === 'claimed') {
+      await store?.save(callerKey);
+      return;
+    }
+    if (claim === 'owner') return;
+
+    this.logger.warn(`[${this.requestId}] Persistent session refused: it was opened by another caller`);
+    // What MCP answers for a session it doesn't know: the client starts a new one.
+    this.respond(
+      httpRespond.json(
+        { jsonrpc: '2.0', error: { code: -32001, message: 'Session not found' }, id: null },
+        { status: 404 },
+      ),
+    );
+  }
+
   @Stage('handleWebFetch')
   async handleWebFetch() {
     const { request } = this.rawInput;

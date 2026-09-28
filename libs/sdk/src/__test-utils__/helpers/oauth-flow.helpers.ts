@@ -3,9 +3,10 @@
  * Drive FrontMCP's built-in OAuth endpoints the way a browser and an OAuth
  * client do: plain Web `Request`s through the fetch handler, no port.
  *
- * `/oauth/provider/:providerId/callback` has a path parameter the fetch handler
- * cannot route, so {@link runProviderCallback} runs that flow directly with the
- * same request shape the Node server hands it.
+ * `/oauth/provider/:providerId/callback` is reachable through the fetch handler
+ * too ({@link httpGet} / {@link postForm}); {@link runProviderCallback} runs that
+ * flow directly, with the request shape the Node server hands it, for specs that
+ * seed the state it needs.
  */
 import 'reflect-metadata';
 

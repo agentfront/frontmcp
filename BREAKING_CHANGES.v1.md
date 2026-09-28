@@ -1000,3 +1000,25 @@ For state that must outlive a request under 2026-07-28, sign callers in or use `
 ```
 
 **Codemod available:** no
+
+## BC-046: Durable Object sessions serve only the caller that opened them
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+A Durable Object's stateful MCP session (`createEdgeMcp({ sessions })`) serves only the caller that opened it. Its `Mcp-Session-Id` addresses the Durable Object but is not an id `session:verify` can check against the caller's token, so the `http:request` flow's new `checkPersistentSessionOwner` stage binds the session to the caller of its first request, before every protocol handler (MCP 2026-07-28 included): its verified issuer and subject (a token refresh keeps them), else its token (an anonymous grant). The owner is kept in the Durable Object's storage, so an instance rebuilt after eviction keeps it. Any other caller that presents the id gets `404` with JSON-RPC error `-32001 Session not found` on `POST`, `GET` and `DELETE`, and the owner's session is untouched. On a public server, an anonymous caller without a token has no identity to bind, so the unguessable session id remains the only credential. The owner can now end its session with `DELETE`; before, every `DELETE` of a Durable Object session answered 404.
+
+A client that shares one session between users, or signs in as a different user mid-session, must `initialize` a new session.
+
+**Before:**
+
+```typescript
+// any caller presenting a Durable Object session's Mcp-Session-Id reached its persistent transport
+```
+
+**After:**
+
+```typescript
+// only the caller that opened the session; anyone else gets 404 Session not found
+```
+
+**Codemod available:** no

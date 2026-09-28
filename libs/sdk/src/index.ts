@@ -469,7 +469,7 @@ export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable
 // Object) session builder, for the Cloudflare DO session host.
 export { runWebStandardMcp, buildPersistentWebStandardMcp } from './transport';
-export type { WebStandardMcpPair, RunWebStandardMcpOptions } from './transport';
+export type { WebStandardMcpPair, RunWebStandardMcpOptions, PersistentSessionOwnerStore } from './transport';
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
