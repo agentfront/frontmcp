@@ -143,6 +143,8 @@ const handle = await scope.skills.registerSkillContent({
 await handle.unregister();
 ```
 
+Registering again with the same `id` replaces the skill. A skill whose `id` is another skill's `<skill-path>` (its name, for a skill without a `skillPath`), or whose path is another skill's `id`, is refused with `INVALID_PARAMS` and nothing changes: `skill://<id>/SKILL.md` also addresses a skill by its id, so the two would share one URI. Skills declared at startup are held to the same rule and the server refuses to start (`InvalidSkillError`).
+
 ### `SkillContent.actions[]` and `bundleVersion`
 
 `SkillContent` carries optional `actions[]` (the per-skill executable operations) and `bundleVersion` (for change detection without `notifications/skills/list_changed`).

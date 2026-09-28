@@ -1,6 +1,7 @@
 // session/utils/auth-token.utils.ts
-import { UserClaim } from '../../common/session.types';
 import { sha256Base64url } from '@frontmcp/utils';
+
+import { type UserClaim } from '../../common/session.types';
 
 export function isJwt(token: string | undefined): boolean {
   if (!token) return false;
@@ -51,6 +52,36 @@ export function deriveTypedUser(claims: Record<string, unknown>): UserClaim {
     username: extractClaimValue(claims, 'username', isString),
     name: extractClaimValue(claims, 'name', isString),
     picture: extractClaimValue(claims, 'picture', isString),
+  };
+}
+
+/** What identifies an anonymous or static-key caller in its claims. */
+export interface AnonymousCallerClaimsOptions {
+  /** Issuer of the claims (the server that identifies the caller). */
+  issuer: string;
+  /** Scopes granted to the caller. Default: `['anonymous']`. */
+  scopes?: string[];
+  /**
+   * Explicit subject. Static mode names the configured token that was presented; without it the
+   * caller is anonymous and gets `anon:<anonymousId>`.
+   */
+  subject?: string;
+}
+
+/**
+ * The claims of an anonymous or static-key caller (public mode, transparent anonymous access, a
+ * static key): `sub` is the given subject or `anon:<anonymousId>`, and `scope` the granted scopes.
+ */
+export function anonymousCallerClaims(
+  options: AnonymousCallerClaimsOptions,
+  anonymousId: string,
+): { sub: string; iss: string; name: string; scope: string } {
+  const { issuer, scopes = ['anonymous'], subject } = options;
+  return {
+    sub: subject ?? `anon:${anonymousId}`,
+    iss: issuer,
+    name: subject ? 'Static token' : 'Anonymous',
+    scope: scopes.join(' '),
   };
 }
 

@@ -1,7 +1,13 @@
 /**
  * Auth Token Utils Tests
  */
-import { isJwt, getTokenSignatureFingerprint, deriveTypedUser, extractBearerToken } from '../auth-token.utils';
+import {
+  anonymousCallerClaims,
+  deriveTypedUser,
+  extractBearerToken,
+  getTokenSignatureFingerprint,
+  isJwt,
+} from '../auth-token.utils';
 
 describe('auth-token.utils', () => {
   // ------------------------------------------
@@ -218,6 +224,36 @@ describe('auth-token.utils', () => {
     it('should extract token with dots (JWT)', () => {
       const jwt = 'eyJ.eyJ.sig';
       expect(extractBearerToken(`Bearer ${jwt}`)).toBe(jwt);
+    });
+  });
+
+  // ------------------------------------------
+  // anonymousCallerClaims
+  // ------------------------------------------
+  describe('anonymousCallerClaims', () => {
+    it('names an anonymous caller anon:<id> with the anonymous scope by default', () => {
+      expect(anonymousCallerClaims({ issuer: 'https://mcp.example.com' }, 'abc')).toEqual({
+        sub: 'anon:abc',
+        iss: 'https://mcp.example.com',
+        name: 'Anonymous',
+        scope: 'anonymous',
+      });
+    });
+
+    it('keeps an explicit subject (a static key) and joins the granted scopes', () => {
+      expect(
+        anonymousCallerClaims(
+          { issuer: 'https://mcp.example.com', subject: 'static:1a2b', scopes: ['read', 'write'] },
+          'abc',
+        ),
+      ).toEqual({ sub: 'static:1a2b', iss: 'https://mcp.example.com', name: 'Static token', scope: 'read write' });
+    });
+
+    it('is recognised as anonymous by deriveTypedUser consumers only through its anon: subject', () => {
+      const user = deriveTypedUser(anonymousCallerClaims({ issuer: 'https://mcp.example.com' }, 'xyz'));
+
+      expect(user.sub).toBe('anon:xyz');
+      expect(user.iss).toBe('https://mcp.example.com');
     });
   });
 });
