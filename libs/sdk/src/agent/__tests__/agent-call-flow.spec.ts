@@ -10,7 +10,11 @@
  */
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
+
+import { completionEventsOf } from '../../channel/sources/completion-events';
 import { type DirectMcpServer } from '../../direct/direct.types';
+import { ElicitationFallbackRequired } from '../../errors/elicitation.error';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { Agent, AgentCallHook, AgentContext, App, LogLevel, Plugin, type FlowCtxOf } from '../../index';
 
@@ -191,5 +195,95 @@ describe('the agents:call-agent flow keeps the tools/call request correlation', 
     expect(seen.relatedRequestId).toBe(42);
     expect(seen.progressToken).toBe('progress-7');
     sendProgress.mockRestore();
+  });
+});
+
+describe('agents:call-agent under the invoke tool: timeout and completion events', () => {
+  const events: Array<{ agentName: string; status: string }> = [];
+
+  @Agent({ name: 'slow_helper', inputSchema: {}, llm: { adapter: answeringAdapter }, execution: { timeout: 50 } })
+  class SlowHelperAgent extends AgentContext {
+    override async execute(_input: Record<string, never>) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return 'late';
+    }
+  }
+
+  @Agent({
+    name: 'bad_output',
+    inputSchema: {},
+    outputSchema: z.object({ count: z.number() }),
+    llm: { adapter: answeringAdapter },
+  })
+  class BadOutputAgent extends AgentContext {
+    override async execute(_input: Record<string, never>) {
+      return 'not an object' as never;
+    }
+  }
+
+  @Agent({ name: 'asks_first', inputSchema: {}, llm: { adapter: answeringAdapter } })
+  class AsksFirstAgent extends AgentContext {
+    override async execute(_input: Record<string, never>): Promise<string> {
+      throw new ElicitationFallbackRequired(
+        'elicit-1',
+        'Continue?',
+        { type: 'object' },
+        'invoke_asks_first',
+        {},
+        60_000,
+      );
+    }
+  }
+
+  @App({ id: 'outcomes', name: 'Outcomes', agents: [SlowHelperAgent, BadOutputAgent, AsksFirstAgent] })
+  class OutcomesApp {}
+
+  let server: DirectMcpServer;
+  let unsubscribe: () => void;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'agent-call-flow-outcomes', version: '1.0.0' },
+      apps: [OutcomesApp],
+      logging: { level: LogLevel.Off },
+    });
+    const scope = (server as unknown as { scope?: object }).scope;
+    if (!scope) throw new Error('direct server exposes no scope');
+    unsubscribe = completionEventsOf(scope).agents.subscribe((event) =>
+      events.push({ agentName: event.agentName, status: event.status }),
+    );
+  });
+
+  afterAll(async () => {
+    unsubscribe?.();
+    await server.dispose();
+  });
+
+  beforeEach(() => {
+    events.length = 0;
+  });
+
+  it("enforces the agent's execution.timeout", async () => {
+    let outcome: string;
+    try {
+      const result = (await server.callTool('invoke_slow_helper', {})) as { isError?: boolean };
+      outcome = result.isError ? 'error' : JSON.stringify(result);
+    } catch {
+      outcome = 'refused';
+    }
+
+    expect(outcome).not.toContain('late');
+  });
+
+  it('publishes an error, not a success, when the output fails validation', async () => {
+    await server.callTool('invoke_bad_output', {}).catch(() => undefined);
+
+    expect(events).toEqual([{ agentName: 'bad_output', status: 'error' }]);
+  });
+
+  it('publishes nothing while the call waits for an elicitation', async () => {
+    await server.callTool('invoke_asks_first', {}).catch(() => undefined);
+
+    expect(events).toEqual([]);
   });
 });

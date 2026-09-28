@@ -163,7 +163,7 @@ class AgentDoneChannel extends ChannelContext { /* ... */ }
 class JobDoneChannel extends ChannelContext { /* ... */ }
 ```
 
-- An agent completion is published after every `invoke_<agent>` call: `{ agentId, agentName, status: 'success' | 'error', durationMs, output?, error?, runId?, sessionId }`.
+- An agent completion is published once an `invoke_<agent>` call has finished: `{ agentId, agentName, status: 'success' | 'error', durationMs, output?, error?, runId?, sessionId }`. `success` means the agent's output also passed its `outputSchema`; output that fails it is an `error`. A call that is waiting for the client's answer to an elicitation hasn't finished and publishes nothing yet.
 - A job completion is published when a job or workflow run completes or fails: `{ jobName, jobId, status: 'success' | 'error', durationMs?, output?, error?, attempt, sessionId }`. For a workflow, `jobName` is the workflow's name.
 - Both go only to the session that ran the agent or job. A run with no session (started in-process, or by a 2026-07-28 caller) is delivered to no one.
 

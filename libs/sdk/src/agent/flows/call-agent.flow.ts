@@ -13,6 +13,7 @@ import {
   buildPartitionContext,
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   type FlowPlan,
@@ -21,6 +22,7 @@ import {
 import {
   AgentExecutionError,
   AgentNotFoundError,
+  ElicitationFallbackRequired,
   InvalidInputError,
   InvalidMethodError,
   InvalidOutputError,
@@ -87,6 +89,9 @@ const stateSchema = z.object({
   // When execute() started, and the error it ended with (for the completion event)
   executionStartedAt: z.number().optional(),
   executionError: z.any().optional(),
+  // The MCP result built from rawOutput (parseOutput), or why it could not be built
+  parsedOutput: z.any().optional(),
+  outputError: z.any().optional(),
 });
 
 // ============================================================================
@@ -104,7 +109,7 @@ const plan = {
     'acquireSemaphore',
   ],
   execute: ['validateInput', 'execute', 'validateOutput'],
-  finalize: ['releaseSemaphore', 'releaseQuota', 'emitCompletion', 'finalize'],
+  finalize: ['releaseSemaphore', 'releaseQuota', 'parseOutput', 'emitCompletion', 'finalize'],
 } as const satisfies FlowPlan<string>;
 
 // ============================================================================
@@ -503,9 +508,12 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     const startTime = Date.now();
     this.state.set('executionStartedAt', startTime);
-    // Under the invoke tool, its flow already runs the agent under the same timeout.
+    // Under the invoke tool, its flow already applies `timeout.executeMs` (copied onto the tool) and the
+    // scope default. It can't see `execution.timeout`, the agent's own setting, so that one is applied here.
     const timeoutMs = this.gatedByToolFlow
-      ? undefined
+      ? agent.metadata.timeout?.executeMs === undefined
+        ? agent.metadata.execution?.timeout
+        : undefined
       : (agent.metadata.timeout?.executeMs ??
         agent.metadata.execution?.timeout ??
         this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs);
@@ -599,12 +607,29 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
    * sources subscribe to. Runs for every run that reached execute(), whether it succeeded or not.
    * The event names the session that ran the agent, so a channel delivers it only to that session.
    */
+  /**
+   * Build the MCP result from the agent's output, before the completion event and the response,
+   * so both report the same outcome. A failure is recorded, and `finalize` answers it.
+   */
+  @Stage('parseOutput')
+  async parseOutput() {
+    const { agent, rawOutput } = this.state;
+    if (!agent || rawOutput === undefined) return;
+    const parseResult = agent.safeParseOutput(rawOutput);
+    if (parseResult.success) this.state.set('parsedOutput', parseResult.data);
+    else this.state.set('outputError', parseResult.error);
+  }
+
   @Stage('emitCompletion')
   async emitCompletion() {
-    const { agent, agentContext, executionStartedAt, executionError, authInfo } = this.state;
+    const { agent, agentContext, executionStartedAt, executionError, outputError, authInfo } = this.state;
     if (!agent || executionStartedAt === undefined) return;
+    // The call isn't over: it waits for the client's answer (the elicitation fallback) or was ended by
+    // a flow's own control signal, and its outcome is published when it is.
+    if (executionError instanceof ElicitationFallbackRequired || executionError instanceof FlowControl) return;
 
-    const failed = executionError !== undefined;
+    const failure = executionError ?? (outputError !== undefined ? new InvalidOutputError() : undefined);
+    const failed = failure !== undefined;
     const requestId = this.tryGetContext()?.requestId;
     const sessionId = typeof authInfo?.sessionId === 'string' && authInfo.sessionId ? authInfo.sessionId : undefined;
     completionEventsOf(this.scope).agents.emit({
@@ -613,7 +638,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       status: failed ? 'error' : 'success',
       durationMs: Date.now() - executionStartedAt,
       ...(failed
-        ? { error: executionError instanceof Error ? executionError.message : String(executionError) }
+        ? { error: failure instanceof Error ? failure.message : String(failure) }
         : { output: completionOutputText(agentContext?.output) }),
       ...(requestId ? { runId: requestId } : {}),
       ...(sessionId ? { sessionId } : {}),
@@ -633,7 +658,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { agent, rawOutput, executionMeta } = this.state;
+    const { agent, rawOutput, parsedOutput, outputError, executionMeta } = this.state;
 
     if (!agent) {
       // No agent found - this is an early failure, just skip finalization
@@ -648,18 +673,16 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Parse and construct the MCP-compliant output using safeParseOutput
-    const parseResult = agent.safeParseOutput(rawOutput);
-
-    if (!parseResult.success) {
+    // The MCP-compliant output, built by parseOutput
+    if (outputError !== undefined || parsedOutput === undefined) {
       this.logger.error('finalize: output validation failed', {
         agent: agent.metadata.name,
-        errors: parseResult.error,
+        errors: outputError,
       });
       throw new InvalidOutputError();
     }
 
-    const result = parseResult.data;
+    const result = parsedOutput;
 
     // Add execution metadata
     if (executionMeta) {

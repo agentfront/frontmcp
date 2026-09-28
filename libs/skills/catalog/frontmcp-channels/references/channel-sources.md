@@ -71,6 +71,8 @@ scope.channelEventBus.emit('app:error', {
 
 Automatically pushes when registered agents finish execution. Optionally filter by agent IDs.
 
+An event is published once an `invoke_<agent>` call has finished: `status: 'success'` only when the agent's output also passed its `outputSchema` (output that fails it is an `'error'`), and a call waiting for the client's answer to an elicitation publishes nothing until it finishes.
+
 ```typescript
 @Channel({
   name: 'agent-done',
