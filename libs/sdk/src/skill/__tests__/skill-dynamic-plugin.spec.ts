@@ -40,6 +40,23 @@ class DeskApp {}
 @App({ id: 'empty', name: 'Empty' })
 class EmptyApp {}
 
+/** Reports whether the scope wired the skill session manager, which `activateSession` and the skill tool guard need. */
+@Tool({ name: 'skill_session_wired', inputSchema: {} })
+class SkillSessionWiredTool extends ToolContext {
+  async execute() {
+    const scope = this.get(ScopeEntry) as ScopeEntry & { skillSession?: unknown };
+    return { wired: scope.skillSession !== undefined };
+  }
+}
+
+@App({ id: 'probe', name: 'Probe', tools: [SkillSessionWiredTool] })
+class ProbeApp {}
+
+async function skillSessionWired(client: DirectClient): Promise<unknown> {
+  const result = (await client.callTool('skill_session_wired', {})) as { structuredContent?: { wired?: unknown } };
+  return result.structuredContent?.wired;
+}
+
 function skillsErrorOf(promise: Promise<unknown>): Promise<string> {
   return promise.then(
     () => 'answered',
@@ -83,6 +100,22 @@ describe('@Plugin({ dynamicSkills: true })', () => {
       const client = await connectTo(config);
       expect(await skillsErrorOf(client.listSkills())).toBe('answered');
     }
+  });
+
+  it('wires the skill session manager and tool guard before the first skill exists', async () => {
+    const client = await connectTo({
+      info: { name: 'late-skills-session', version: '1.0.0' },
+      apps: [ProbeApp],
+      plugins: [LateSkillsPlugin],
+    });
+
+    expect(await skillSessionWired(client)).toBe(true);
+  });
+
+  it('leaves a server with no skills and no such plugin without a skill session manager', async () => {
+    const client = await connectTo({ info: { name: 'no-skills-session', version: '1.0.0' }, apps: [ProbeApp] });
+
+    expect(await skillSessionWired(client)).toBe(false);
   });
 
   it('leaves a server with no skills and no such plugin without the skills methods', async () => {

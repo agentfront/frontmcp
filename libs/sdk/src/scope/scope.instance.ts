@@ -768,8 +768,15 @@ export class Scope extends ScopeEntry {
       await this.buildAuthUiRegistry();
     }
 
-    // Initialize skill session manager if skills are available
-    if (this.scopeSkills.hasAny()) {
+    // A plugin that registers skills at runtime (`@Plugin({ dynamicSkills: true })`) serves skills from
+    // startup, before its first skill exists, so it gets the skill session manager and tool guard too.
+    const dynamicSkills = pluginsRegisterDynamicSkills([
+      ...serverPlugins,
+      ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
+    ]);
+
+    // Initialize skill session manager if skills are available, or a plugin registers them at runtime
+    if (this.scopeSkills.hasAny() || dynamicSkills) {
       const store = createSkillSessionStore({ type: 'memory' });
 
       this._skillSession = new SkillSessionManager(
@@ -829,10 +836,7 @@ export class Scope extends ScopeEntry {
       providers: this.scopeProviders,
       skillsConfig: this.metadata.skillsConfig,
       logger: this.logger,
-      dynamicSkills: pluginsRegisterDynamicSkills([
-        ...serverPlugins,
-        ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
-      ]),
+      dynamicSkills,
     });
 
     // Initialize jobs and workflows (issue #408).
