@@ -25,6 +25,7 @@ import {
 import 'reflect-metadata';
 
 import {
+  anonymousCallerClaims,
   buildInsufficientScopeHeader,
   buildInvalidTokenHeader,
   buildUnauthorizedHeader,
@@ -189,17 +190,6 @@ interface AnonymousSessionOptions {
   sessionIdHeader?: string;
 }
 
-/** The claims of an anonymous or static-key caller. */
-function anonymousUser(options: AnonymousSessionOptions, anonymousId: string) {
-  const { issuer, scopes = ['anonymous'], subject } = options;
-  return {
-    sub: subject ?? `anon:${anonymousId}`,
-    iss: issuer,
-    name: subject ? 'Static token' : 'Anonymous',
-    scope: scopes.join(' '),
-  };
-}
-
 @Flow({
   name,
   plan,
@@ -229,7 +219,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     if (this.rawInput.sessionless) {
       this.respond({
         kind: 'authorized',
-        authorization: { token: '', user: anonymousUser(options, randomUUID()) },
+        authorization: { token: '', user: anonymousCallerClaims(options, randomUUID()) },
       });
       return;
     }
@@ -264,7 +254,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         // one-second `iat`, which collided for sessions minted in the same
         // second and shared a `sub`-keyed partition, e.g. the rate limiter).
         const anonId = existingPayload.uuid ?? `${existingPayload.iat * 1000}`;
-        const user = anonymousUser(options, anonId);
+        const user = anonymousCallerClaims(options, anonId);
         this.respond({
           kind: 'authorized',
           authorization: {
@@ -282,7 +272,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Create new anonymous session
     const now = Date.now();
-    const user = anonymousUser(options, randomUUID());
+    const user = anonymousCallerClaims(options, randomUUID());
     const uuid = randomUUID();
 
     // Detect platform from User-Agent header for UI rendering support

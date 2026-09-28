@@ -16,7 +16,7 @@ import { logAvailabilityFiltering } from '../common/availability';
 import { type SkillContent } from '../common/interfaces';
 import type { SkillMetadata } from '../common/metadata';
 import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/records';
-import { PublicMcpError } from '../errors';
+import { InvalidSkillError, PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
@@ -46,6 +46,43 @@ import type { SyncResult } from './sync/sync-state.interface';
 
 /** Page size of `listSkills` when the caller names no `limit` (the skill providers' default). */
 const DEFAULT_LIST_LIMIT = 50;
+
+/** A skill whose id is another skill's `<skill-path>`, and that other skill. */
+interface IdPathCollision {
+  idOwner: SkillEntry;
+  pathOwner: SkillEntry;
+}
+
+/**
+ * The first skill whose id is another skill's `<skill-path>`.
+ *
+ * `skill://<id>/SKILL.md` also addresses a skill by its id (`findSkillByPath`), the form
+ * `skills/list` and the Skilled OpenAPI meta-tools report. When the id is another skill's path, the
+ * URI resolves to the path's owner while `loadSkill(<id>)` finds the id's owner, so the URI serves,
+ * or is judged as, the other skill. An id that is its own path addresses only that skill.
+ */
+function findIdPathCollision(skills: readonly SkillEntry[]): IdPathCollision | undefined {
+  const byPath = new Map<string, SkillEntry>();
+  for (const skill of skills) {
+    const path = skill.getSkillPath();
+    if (!byPath.has(path)) byPath.set(path, skill);
+  }
+  for (const idOwner of skills) {
+    const id = idOwner.metadata.id;
+    if (!id || id === idOwner.getSkillPath()) continue;
+    const pathOwner = byPath.get(id);
+    if (pathOwner) return { idOwner, pathOwner };
+  }
+  return undefined;
+}
+
+function describeIdPathCollision({ idOwner, pathOwner }: IdPathCollision): string {
+  const id = idOwner.metadata.id;
+  return (
+    `id "${id}" of skill "${idOwner.metadata.name}" is the skill:// path of skill "${pathOwner.metadata.name}", ` +
+    `so skill://${id}/SKILL.md would serve one for the other. Give one of them another id or name.`
+  );
+}
 
 /**
  * Indexed skill for efficient lookup.
@@ -474,6 +511,11 @@ export default class SkillRegistry
       if (child !== this) {
         await this.adoptFromChild(child as SkillRegistry, child.owner);
       }
+    }
+
+    const collision = findIdPathCollision(this.listAllInstances());
+    if (collision) {
+      throw new InvalidSkillError(collision.idOwner.metadata.name, describeIdPathCollision(collision));
     }
 
     // Build indexes
@@ -1261,9 +1303,7 @@ export default class SkillRegistry
 
     // Replace if already registered with the same id
     const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
-    if (existingIdx !== -1) {
-      this.dynamicRows.splice(existingIdx, 1);
-    }
+    const replaced = existingIdx === -1 ? undefined : this.dynamicRows[existingIdx];
 
     // Synthesize a SkillValueRecord from the SkillContent
     const metadata: SkillMetadata = {
@@ -1296,6 +1336,19 @@ export default class SkillRegistry
     };
 
     const instance = createSkillInstance(record, this.providers, this.owner);
+
+    // Refused before anything changes, so the version this would replace stays registered.
+    const others = this.listAllIndexed()
+      .filter((r) => r !== replaced)
+      .map((r) => r.instance);
+    const collision = findIdPathCollision([...others, instance]);
+    if (collision) {
+      throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
+    }
+    if (existingIdx !== -1) {
+      this.dynamicRows.splice(existingIdx, 1);
+    }
+
     // Pre-load instructions so subsequent loads return the same content (no file/URL
     // resolution: instructions came in as an inline string).
     try {

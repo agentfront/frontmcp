@@ -37,7 +37,8 @@ export function getSepVisibleSkills(scope: ScopeEntry): SkillEntry[] {
  * A single-segment path may also be the id of such a skill: `skills/list`, `skills/search` and the
  * Skilled OpenAPI meta-tools report skills by id, and a bundle skill's id (`invoices`) is not its
  * name (`Invoices`). The canonical URI, the one `skill://index.json` and `resources/list` list,
- * stays the name form SEP-2640 requires; the id form is only accepted.
+ * stays the name form SEP-2640 requires; the id form is only accepted. The registry refuses a skill
+ * whose id is another skill's path, so the id form names one skill.
  */
 export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntry | undefined {
   const registry = scope.skills;

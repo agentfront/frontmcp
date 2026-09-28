@@ -178,8 +178,10 @@ async function resumeTask(params: {
   authInfo: Record<string, unknown>;
   clientCapabilities: Record<string, unknown>;
   frontmcpContext?: FrontMcpContext;
+  /** Whether the `tasks/update` that resumes the task declared the 2026-07-28 revision itself. */
+  clientDeclaredRevision?: boolean;
 }): Promise<void> {
-  const { scope, record, authInfo, clientCapabilities, frontmcpContext } = params;
+  const { scope, record, authInfo, clientCapabilities, frontmcpContext, clientDeclaredRevision } = params;
   const registry = scope.tasks;
   const runner = registry?.runner;
   if (!runner) {
@@ -195,6 +197,8 @@ async function resumeTask(params: {
     new MrtrExchange({
       carriedResponses: record.inputResponses ?? {},
       clientCapabilities,
+      // A caller that never declared the revision is refused an elicitation as a legacy caller is.
+      clientDeclaredRevision,
       binding: {
         principal: resolveTaskPrincipal(authInfo),
         binding: computeRequestBinding('tasks/resume', { name: record.taskId }),
@@ -322,6 +326,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
           authInfo: { ...(authInfo ?? {}), sessionId: ownership.owner },
           clientCapabilities,
           frontmcpContext,
+          clientDeclaredRevision,
         }),
     });
 
