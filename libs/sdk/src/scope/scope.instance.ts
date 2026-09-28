@@ -66,7 +66,7 @@ import { registerCustomHttpRoutes } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import { createSkillToolGuardHook } from '../skill/hooks';
 import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
-import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
 import {
   CliTaskRunner,
@@ -768,8 +768,15 @@ export class Scope extends ScopeEntry {
       await this.buildAuthUiRegistry();
     }
 
-    // Initialize skill session manager if skills are available
-    if (this.scopeSkills.hasAny()) {
+    // A plugin that registers skills at runtime (`@Plugin({ dynamicSkills: true })`) serves skills from
+    // startup, before its first skill exists, so it gets the skill session manager and tool guard too.
+    const dynamicSkills = pluginsRegisterDynamicSkills([
+      ...serverPlugins,
+      ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
+    ]);
+
+    // Initialize skill session manager if skills are available, or a plugin registers them at runtime
+    if (this.scopeSkills.hasAny() || dynamicSkills) {
       const store = createSkillSessionStore({ type: 'memory' });
 
       this._skillSession = new SkillSessionManager(
@@ -821,7 +828,7 @@ export class Scope extends ScopeEntry {
       }
     }
 
-    // Register skill flows and resources if any skills are available
+    // Register skill flows and resources if any skills are available, or a plugin registers them at runtime
     await registerSkillCapabilities({
       skillRegistry: this.scopeSkills,
       flowRegistry: this.scopeFlows,
@@ -829,6 +836,7 @@ export class Scope extends ScopeEntry {
       providers: this.scopeProviders,
       skillsConfig: this.metadata.skillsConfig,
       logger: this.logger,
+      dynamicSkills,
     });
 
     // Initialize jobs and workflows (issue #408).

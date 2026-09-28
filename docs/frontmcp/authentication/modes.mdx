@@ -215,7 +215,7 @@ the same signing keys, FrontMCP enforces two claims on top of the signature:
   claim are accepted for IdP compatibility; set `expectedAudience` and issue
   audience-bound tokens for the strictest posture.
 - **Expiry (`exp`)** — required. A token without `exp` would never expire, so it
-  is refused.
+  is refused (`401` whose `error_description` says `exp` is missing).
 
 <Warning>
   **`providerConfig.verifyIssuer: false` disables issuer validation entirely.**
@@ -369,7 +369,8 @@ sequenceDiagram
 
 The upstream identity comes from the IdP's `id_token` only when it verifies:
 signed by a key the provider publishes (`providerConfig.jwks`, else
-`providerConfig.jwksUri`, else `<provider>/.well-known/jwks.json`), issued by
+`providerConfig.jwksUri`, else `<provider>/.well-known/jwks.json`, else the
+`jwks_uri` of the provider's OAuth metadata or `/.well-known/openid-configuration`), issued by
 `provider` (or `providerConfig.additionalIssuers`), for `clientId`, and not
 expired. Otherwise FrontMCP asks the userinfo endpoint. A callback whose RFC 9207
 `iss` names another server, and a sign-in the user declined at the IdP

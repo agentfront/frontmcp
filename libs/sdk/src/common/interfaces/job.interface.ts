@@ -1,5 +1,6 @@
 import { type FuncType, type Type } from '@frontmcp/di';
 
+import { type CallSurface } from '../availability';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolInputType, type ToolOutputType } from '../metadata';
 import { type JobMetadata } from '../metadata/job.metadata';
@@ -87,5 +88,10 @@ export abstract class JobContext<
   /** Get all logs recorded during execution. */
   getLogs(): readonly string[] {
     return this._logs;
+  }
+
+  /** A job (or a workflow step running it) calls tools on the `'job'` surface. */
+  protected override callToolSurface(): CallSurface {
+    return 'job';
   }
 }

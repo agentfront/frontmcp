@@ -8,7 +8,7 @@
  */
 
 import { toJSONSchema, z, type ZodType } from '@frontmcp/lazy-zod';
-import { randomUUID } from '@frontmcp/utils';
+import { awaitOutsideRequest, randomUUID } from '@frontmcp/utils';
 
 import { type FrontMcpContext } from '../../context';
 import {
@@ -162,7 +162,8 @@ export async function performElicit<S extends ZodType>(
   }
 
   // 6. Send elicit request (timeout throws ElicitationTimeoutError)
-  return transport.elicit(message, requestedSchema, options);
+  // The client may call the server before it answers; in a browser build that means stepping aside.
+  return awaitOutsideRequest(transport.elicit(message, requestedSchema, options));
 }
 
 /**

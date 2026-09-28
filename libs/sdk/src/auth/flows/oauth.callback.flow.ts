@@ -51,6 +51,7 @@ import {
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
+  type ServerRequest,
 } from '../../common';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { projectConsentTools } from '../consent-tools.helper';
@@ -173,9 +174,13 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * Returns `undefined` when the configured auth instance has no issuer, so the
    * parameter is simply omitted rather than emitted empty — a client validating
    * `iss` treats absence as "not supported" and proceeds.
+   *
+   * With `request`, the issuer the tokens redeemed for this request name
+   * (`LocalPrimaryAuth.issuerFor`); without it, the boot-time issuer.
    */
-  private resolveIssuer(): string | undefined {
-    const issuer = (this.scope.auth as { issuer?: unknown } | undefined)?.issuer;
+  private resolveIssuer(request?: ServerRequest): string | undefined {
+    const auth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
+    const issuer: unknown = request && auth?.issuerFor ? auth.issuerFor(request) : auth?.issuer;
     return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
   }
 
@@ -1066,7 +1071,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // RFC 9207 issuer identification (MCP 2026-07-28, SEP-2468): name ourselves
     // on the authorization response so the client can detect an AS mix-up before
     // it redeems the code.
-    const issuer = this.resolveIssuer();
+    const issuer = this.resolveIssuer(this.rawInput.request);
     if (issuer) url.searchParams.set('iss', issuer);
 
     // For incremental auth, include the app ID in the redirect

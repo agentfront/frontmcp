@@ -10,7 +10,14 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+import {
+  awaitOutsideRequest,
+  findNonFiniteNumber,
+  getRuntimeContext,
+  isDebug,
+  isDevelopment,
+  randomUUID,
+} from '@frontmcp/utils';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
@@ -446,6 +453,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       request: { method: 'tools/call', params: cleanedParams },
       scopeId: this.scope.id,
     };
+    // A detached worker re-runs the call on the surface it arrived on (see `TaskRecord.surface`).
+    const callSurface = callSurfaceOf(this.input.ctx);
+    if (callSurface !== undefined) record.surface = callSurface;
     if (this.state.progressToken !== undefined) {
       record.progressToken = this.state.progressToken;
     }
@@ -1095,8 +1105,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           elicitId: error.elicitId,
           sessionId,
           owner,
-          toolName: error.toolName,
-          toolInput: error.toolInput,
+          // The answer re-runs the call this flow ran: this tool, with these arguments. What asked
+          // may be an entry the tool runs, like the agent behind `invoke_<agent>`, whose own name
+          // no `tools/call` resolves.
+          toolName: tool.fullName,
+          toolInput: this.state.required.input.arguments,
           elicitMessage: error.elicitMessage,
           elicitSchema: error.schema,
           createdAt: Date.now(),
@@ -1118,7 +1131,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             elicitId: error.elicitId,
           });
           const deps: FallbackHandlerDeps = { scope: this.scope as Scope, sessionId, logger: this.logger };
-          const result = await handleWaitingFallback(deps, error);
+          // The answer arrives in another request (sendElicitationResult); in a browser build this one
+          // steps aside so that request can run.
+          const result = await awaitOutsideRequest(handleWaitingFallback(deps, error));
           toolContext.output = result;
           this.logger.verbose('execute:done (elicitation waiting fallback)');
           return;

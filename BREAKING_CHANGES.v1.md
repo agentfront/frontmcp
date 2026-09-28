@@ -831,3 +831,194 @@ Install the plugin that enforces the field, or remove the field. A custom plugin
 ```
 
 **Codemod available:** no
+
+## BC-039: createFetchHandler() rejects a misconfigured server when it's called
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+On Node and Bun, `FrontMcpInstance.createFetchHandler()` now builds the server when it's called, so a misconfigured server (for example `approval` without its plugin, `authorities` without the `authorities` option, or a missing `JWT_SECRET` in production) rejects there with the same error `createDirect()` throws. Previously the handler was returned and its first request threw.
+
+On edge isolates (Cloudflare Workers, Vercel Edge, Deno), the server is still built on the first request, because module evaluation there forbids timers, randomness and I/O. What the config settles on its own is checked when the handler is created (`assertStaticStartupConfig()`, which `createEdgeMcp()` also runs), and a build that fails later answers every request with a structured `500 server_misconfigured` and logs the error.
+
+Let the awaited `createFetchHandler()` fail your startup (or catch it) instead of expecting the first request to report configuration errors.
+
+**Before:**
+
+```typescript
+const handler = await FrontMcpInstance.createFetchHandler(config); // misconfigured: the first request threw
+```
+
+**After:**
+
+```typescript
+const handler = await FrontMcpInstance.createFetchHandler(config); // misconfigured: rejects here, like createDirect()
+```
+
+**Codemod available:** no
+
+## BC-040: availableWhen.surface holds for agents, jobs and HTTP triggers
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+`availableWhen.surface` now applies to every caller the docs list, not only MCP clients. The model an agent runs, and `this.callTool()` in an agent's own code, call on the `'agent'` surface; job and workflow steps on `'job'`; webhook handlers on `'http-trigger'`. A tool whose `surface` leaves one of them out is no longer offered to, or run for, that caller. A tool's own `this.callTool()` stays unrestricted. MCP Apps' `ui/callServerTool` counts as `'mcp'`, and a task keeps the surface of the call that created it. `getCallSurface()` now also works inside prompts.
+
+List every surface that should reach an entry, for example `surface: ['mcp', 'agent']`.
+
+**Before:**
+
+```typescript
+@Tool({ name: 'lookup', availableWhen: { surface: ['mcp'] } }) // an agent's model could still call it
+```
+
+**After:**
+
+```typescript
+@Tool({ name: 'lookup', availableWhen: { surface: ['mcp', 'agent'] } }) // reachable by MCP clients and agents
+```
+
+**Codemod available:** no
+
+## BC-041: An authorities rule that names an unknown profile stops the server
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+An `authorities` rule that names a profile not defined in `@FrontMcp({ authorities: { profiles } })`, alone or in a list, now stops the server at startup with `AuthConfigurationError: Invalid authorities rule: … names an unknown profile "admn"`, on every entry kind the startup check covers (tools, resources, resource templates, prompts, agents, tools inside agents and skills). Previously the server started and refused every caller at call time.
+
+Fix the name, or define the profile.
+
+**Before:**
+
+```typescript
+@Tool({ name: 'purge', authorities: 'admn' }) // started, then refused everyone
+```
+
+**After:**
+
+```typescript
+@Tool({ name: 'purge', authorities: 'admin' }) // an unknown name now stops the server at startup
+```
+
+**Codemod available:** no
+
+## BC-042: OAuth: tokens name the server's real address; public-mode and allowlist fixes
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+- Through `createFetchHandler()`, the resource URL and a token's `iss` come from the request's URL; they were `http://undefined` and the boot-time issuer. A configured `issuer` or `local.issuer`, else `FRONTMCP_PUBLIC_URL`, takes precedence on every entry point. A deployment that sets `FRONTMCP_PUBLIC_URL` without `local.issuer` now issues tokens with that `iss`, so tokens issued before the upgrade are refused once and clients refresh or sign in again.
+- An explicit `auth: { mode: 'public' }` answers `/oauth/authorize` and `/oauth/token` like a server without `auth` (an anonymous code to loopback redirect URIs only) instead of 500. Static mode answers 400.
+- A `dcr.allowedClientIds` refusal of a registered client using its own `redirect_uri` redirects there with `error=unauthorized_client`; it was a 400 page.
+- `scopes_supported` in both discovery documents lists the literal `allowedScopes` entries. `*` globs are granted but not advertised.
+
+**Before:**
+
+```typescript
+// createFetchHandler: tokens carried aud "http://undefined" and the boot-time iss
+```
+
+**After:**
+
+```typescript
+// createFetchHandler: aud and iss from the request URL, unless issuer/local.issuer or FRONTMCP_PUBLIC_URL is set
+```
+
+**Codemod available:** no
+
+## BC-043: OpenAPI adapter: a secured call needs a credential for its scheme on the request as sent
+
+**Package:** `@frontmcp/adapters` | **Category:** change | **Severity:** medium
+
+A secured operation is refused before any request, with `Authentication required for tool '…'`, unless the request as sent carries a credential for one of its schemes. Credentials can come from `staticAuth`, `authProviderMapper`, `securityResolver`, a header set by `additionalHeaders` or `headersMapper` (an API key in its named header, `Authorization` for bearer and OAuth2), or the tool input with `securitySchemesInInput` or `includeSecurityInInput`.
+
+`passthroughCallerToken` fills only HTTP bearer schemes: an API-key or OAuth2 operation it can't satisfy is refused. Before, it was sent with no credential. When the server and the tool input both give a credential for a scheme, the server's wins. `securitySchemesInInput` is rated HIGH at startup, like `includeSecurityInInput`. `inputTransforms` and `headersMapper` also run for calls that are then refused.
+
+Supply each scheme's credential from a server-side option.
+
+**Before:**
+
+```typescript
+OpenapiAdapter.init({ ..., passthroughCallerToken: true }) // an API-key operation went out with no key
+```
+
+**After:**
+
+```typescript
+OpenapiAdapter.init({ ..., authProviderMapper: { ApiKeyAuth: (ctx) => keyFor(ctx) } }) // refused without a key
+```
+
+**Codemod available:** no
+
+## BC-044: CodeCall reports syntax_error and tool_error
+
+**Package:** `@frontmcp/plugin-codecall` | **Category:** change | **Severity:** low
+
+CodeCall runs scripts with the tool namespaces and `throwOnError` of `@enclave-vm/core` 2.15.3. A parse error is now `syntax_error`, with the line and column in the script. A failing tool is `tool_error`, with the tool's error code (a time-out is `TIMEOUT`) and without the tool's arguments. The script's own errors stay `runtime_error`. Before, all three were `runtime_error`, and a tool time-out ended the script with status `timeout`.
+
+A namespace call with `{ throwOnError: false }` returns the same `{ success, error }` shape as `callTool`. Namespaces whose tool names start with `_` aren't offered; call those tools with `callTool`.
+
+Check `status` for the new kinds.
+
+**Before:**
+
+```typescript
+if (result.status === 'runtime_error') {
+  /* parse errors, tool failures and script errors */
+}
+```
+
+**After:**
+
+```typescript
+switch (result.status) {
+  case 'syntax_error':
+  case 'tool_error':
+  case 'runtime_error': /* ... */
+}
+```
+
+**Codemod available:** no
+
+## BC-045: A request is in a session only if it presented one
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+A session counts as verified only when the request presented it (`mcp-session-id`, or a legacy SSE `sessionId`) and the server accepted it. Under MCP 2026-07-28, no request is in a session, even one that sends back an id the server issued. The id the server makes up for a request that has none is no longer a session.
+
+State kept per session therefore falls back to the caller's identity: Remember `session` and `tool` memory, feature-flag targeting, approval session records, `CONTEXT` providers, elicitation owners, the secure store's `session` scope, and session-scoped auth-provider credentials. An unauthenticated caller without a session gets `RememberIdentityError` from Remember's session-scoped memory, and `SessionIdentityRequiredError` from the secure store's `session` scope. Legacy SSE sessions now count as verified, so approvals and rate-limit partitions apply per SSE session. A static-key caller is no longer anonymous: its results are cached `private`, and it can own 2026-07-28 tasks. `authInfoFromAuthorization(authorization, presentedSessionId?)` takes the presented id; without it, `extra.sessionId` isn't set.
+
+For state that must outlive a request under 2026-07-28, sign callers in or use `user` scope.
+
+**Before:**
+
+```typescript
+// 2026-07-28: every request got a new session id, so session-scoped memory lasted one request
+```
+
+**After:**
+
+```typescript
+// 2026-07-28: no session; session-scoped memory belongs to the signed-in caller (or refuses anonymous ones)
+```
+
+**Codemod available:** no
+
+## BC-046: Durable Object sessions serve only the caller that opened them
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+A Durable Object's stateful MCP session (`createEdgeMcp({ sessions })`) serves only the caller that opened it. Its `Mcp-Session-Id` addresses the Durable Object but is not an id `session:verify` can check against the caller's token, so the `http:request` flow's new `checkPersistentSessionOwner` stage binds the session to the caller of its first request, before every protocol handler (MCP 2026-07-28 included): its verified issuer and subject (a token refresh keeps them), else its token (an anonymous grant). The owner is kept in the Durable Object's storage, so an instance rebuilt after eviction keeps it. Any other caller that presents the id gets `404` with JSON-RPC error `-32001 Session not found` on `POST`, `GET` and `DELETE`, and the owner's session is untouched. On a public server, an anonymous caller without a token has no identity to bind, so the unguessable session id remains the only credential. The owner can now end its session with `DELETE`; before, every `DELETE` of a Durable Object session answered 404.
+
+A client that shares one session between users, or signs in as a different user mid-session, must `initialize` a new session.
+
+**Before:**
+
+```typescript
+// any caller presenting a Durable Object session's Mcp-Session-Id reached its persistent transport
+```
+
+**After:**
+
+```typescript
+// only the caller that opened the session; anyone else gets 404 Session not found
+```
+
+**Codemod available:** no

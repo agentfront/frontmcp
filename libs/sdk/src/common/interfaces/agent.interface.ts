@@ -1,9 +1,12 @@
 import { type ZodType } from '@frontmcp/lazy-zod';
 
 import { AgentExecutionLoop, type ToolExecutor } from '../../agent/agent-execution-loop';
+import { type FrontMcpContext } from '../../context/frontmcp-context';
+import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
 import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { AgentMethodNotAvailableError } from '../../errors';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import { type CallSurface } from '../availability';
 import { type AgentInputOf, type AgentOutputOf } from '../decorators';
 import type { AgentMetadata, AgentType, ToolInputType, ToolOutputType } from '../metadata';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
@@ -441,6 +444,11 @@ export class AgentContext<
     throw new AgentMethodNotAvailableError('invokeAgent', agentId);
   }
 
+  /** An agent calls tools on the `'agent'` surface, as its model's tool calls do. */
+  protected override callToolSurface(): CallSurface {
+    return 'agent';
+  }
+
   // ============================================================================
   // Notification Methods
   // ============================================================================
@@ -570,7 +578,9 @@ export class AgentContext<
       {
         sessionId: this.authInfo.sessionId,
         getClientCapabilities: (sid) => this.scope.notifications.getClientCapabilities(sid),
-        tryGetContext: () => this.tryGetContext(),
+        // The request holds what answers this question: a fallback answer the owner already sent
+        // (the re-run of its call), or the 2026-07-28 exchange.
+        tryGetContext: () => this.tryGetContext() ?? this.runningRequestContext(),
         entryName: this._agentNameInternal ?? this.agentName,
         entryInput: this._agentInputInternal ?? this.input,
         elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
@@ -579,6 +589,18 @@ export class AgentContext<
       requestedSchema,
       options,
     );
+  }
+
+  /**
+   * The context of the request this agent runs in. An agent is built with its own provider registry,
+   * which holds no request-scoped instances, so the context is read from the running request.
+   */
+  private runningRequestContext(): FrontMcpContext | undefined {
+    try {
+      return this.scope.providers.get(FrontMcpContextStorage).getStore();
+    } catch {
+      return undefined;
+    }
   }
 
   /**

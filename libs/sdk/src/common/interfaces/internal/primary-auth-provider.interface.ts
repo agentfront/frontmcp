@@ -93,11 +93,16 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
    * @param _expectedAudience  The protected resource(s) the token must be for
    *                           (`aud` names at least one), when the caller is a
    *                           resource endpoint.
+   * @param _expectedIssuer    The issuer the token must name: the one this
+   *                           instance issues tokens under for the request
+   *                           (`LocalPrimaryAuth.issuerFor`). Default: its
+   *                           boot-time issuer.
    */
   verifyGatewayToken(
     _token: string,
     _requestBaseUrl: string,
     _expectedAudience?: string | readonly string[],
+    _expectedIssuer?: string,
   ): Promise<VerifyResult> {
     return Promise.resolve({
       ok: false,

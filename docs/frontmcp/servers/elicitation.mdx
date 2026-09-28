@@ -724,7 +724,7 @@ This system tool is **automatically registered** for session clients (protocol r
 - Is hidden from clients that support standard elicitation
 - Accepts the `elicitId`, user `action`, and `content`
 - Accepts a result only from the caller whose tool call asked: the same verified session, or the same authenticated user when there is no session. Anyone else gets `ElicitationNotOwnedError` (`-32003`). An anonymous caller without a verified session cannot use the fallback (`ElicitationNotSupportedError`)
-- Re-invokes the original tool with the result pre-injected
+- Re-invokes the original tool with the result pre-injected, with the answering caller's auth (for an agent that asked, its `invoke_<agent>` tool)
 - Returns the original tool's final result
 
 **Input Schema:**

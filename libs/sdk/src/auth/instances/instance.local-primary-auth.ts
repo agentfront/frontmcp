@@ -41,9 +41,12 @@ import {
 } from '@frontmcp/utils';
 
 import {
+  computeIssuer,
   FrontMcpAuth,
+  isPublicUrlPinned,
   ProviderScope,
   resourceUriMatches,
+  ServerRequestTokens,
   type FrontMcpLogger,
   type JWK,
   type ScopeEntry,
@@ -51,7 +54,6 @@ import {
 } from '../../common';
 import {
   isLocalMode,
-  isOrchestratedLocal,
   isOrchestratedMode,
   isPublicMode,
   isRemoteMode,
@@ -296,7 +298,10 @@ function isUnsupportedOperation(error: unknown): boolean {
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly host: string;
   readonly port: number;
+  /** The boot-time issuer: the configured one, else this server's listener address (see {@link issuerFor}). */
   readonly issuer: string;
+  /** Whether the operator named the issuer (`issuer` / `local.issuer`, or its host with `FRONTMCP_PUBLIC_HOST`). */
+  private readonly issuerIsConfigured: boolean;
   readonly keys: JWK[] = [];
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
@@ -471,6 +476,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // source of truth — this only affects boot-time defaults.
     this.host = getEnv('FRONTMCP_PUBLIC_HOST')?.trim() || 'localhost';
     this.issuer = this.deriveIssuer(options);
+    this.issuerIsConfigured = this.configuredIssuer(options) !== undefined || !!getEnv('FRONTMCP_PUBLIC_HOST')?.trim();
 
     // A whitespace-only value is not a secret; treat it as absent so it takes
     // the branches below rather than silently becoming the signing key. The key
@@ -551,22 +557,38 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * supported knob for aligning the issuer with discovery.
    */
   private deriveIssuer(options: LocalPrimaryAuthOptions): string {
-    const basePath = `http://${this.host}:${this.port}${this.scope.fullPath}`;
+    return this.configuredIssuer(options) ?? `http://${this.host}:${this.port}${this.scope.fullPath}`;
+  }
 
-    if (isPublicMode(options)) {
-      return options.issuer ?? basePath;
-    }
+  /** The issuer the options name: `issuer` in public mode, `local.issuer` in local and remote mode. */
+  private configuredIssuer(options: LocalPrimaryAuthOptions): string | undefined {
+    if (isPublicMode(options)) return options.issuer;
+    if (isOrchestratedMode(options)) return options.local?.issuer;
+    return undefined;
+  }
 
-    if (isOrchestratedMode(options)) {
-      if (isOrchestratedLocal(options)) {
-        return options.local?.issuer ?? basePath;
-      } else {
-        // Orchestrated remote
-        return options.local?.issuer ?? basePath;
-      }
-    }
-
-    return basePath;
+  /**
+   * The issuer (`iss`) this server names on the tokens it issues in answer to
+   * `request`, and requires on the tokens it accepts there (#269). Issuing and
+   * verifying both ask this, so they can't disagree:
+   *
+   * - a configured issuer (`issuer` / `local.issuer`) is the issuer;
+   * - with `FRONTMCP_PUBLIC_URL` pinned, the issuer is that URL plus this
+   *   scope's path, the address discovery advertises;
+   * - with `FRONTMCP_PUBLIC_HOST` or `expectedAudience` set, the boot-time
+   *   issuer, so a token serves at every address the server answers to;
+   * - a request that came through a Web fetch handler (a Worker, Deno, Bun, a
+   *   Durable Object) has no listener the boot-time issuer could describe, so
+   *   the issuer is the request's own origin plus this scope's path;
+   * - otherwise (the Node server) the boot-time issuer.
+   */
+  issuerFor(request?: ServerRequest): string {
+    if (!request || this.issuerIsConfigured) return this.issuer;
+    if (isPublicUrlPinned()) return computeIssuer(request, this.scope.entryPath, this.scope.routeBase);
+    const options = this.options;
+    if (isOrchestratedMode(options) && options.expectedAudience !== undefined) return this.issuer;
+    const webRequest = (request as unknown as Record<PropertyKey, unknown>)[ServerRequestTokens.webRequest];
+    return webRequest === undefined ? this.issuer : computeIssuer(request, this.scope.entryPath, this.scope.routeBase);
   }
 
   /**
@@ -861,12 +883,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * user, and its scopes are the configured `anonymousScopes`, never a role.
    *
    * @param options.audience The protected resource the token is for (`aud`, #269).
+   * @param options.issuer   The issuer to name (`iss`): {@link issuerFor} the request. Default: the boot-time issuer.
    */
-  async signAnonymousJwt(options: { audience?: string } = {}) {
+  async signAnonymousJwt(options: { audience?: string; issuer?: string } = {}) {
     const jwt = new SignJWT({ sub: `anon:${randomUUID()}`, anonymous: true, scope: this.anonymousScopes().join(' ') })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
-      .setIssuer(this.issuer)
+      .setIssuer(options.issuer ?? this.issuer)
       .setExpirationTime('1d')
       .setJti(randomUUID());
     if (options.audience) jwt.setAudience(options.audience);
@@ -887,8 +910,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    *
    * The secret alone doesn't make a token this server's: every server started
    * with the same JWT_SECRET holds it. So a token must also (#269):
-   * - name THIS instance as its issuer (`iss`, the boot-time issuer it signs
-   *   with, never the request-derived base URL), and
+   * - name THIS instance as its issuer (`iss`): `expectedIssuer`, which callers
+   *   take from {@link issuerFor} the request, as the token endpoint does when
+   *   it signs; the boot-time issuer when not given. Never the token's own
+   *   claim; and
    * - when `expectedAudience` is given, be issued for that protected resource,
    *   or one of those resources (`aud`, compared as RFC 8707 resource URIs).
    *   `session:verify` passes the request's resource URL, or the configured
@@ -901,11 +926,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     token: string,
     requestBaseUrl: string,
     expectedAudience?: string | readonly string[],
+    expectedIssuer?: string,
   ): Promise<VerifyResult> {
     try {
       const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
         algorithms: ['HS256'],
-        issuer: this.issuer,
+        issuer: expectedIssuer ?? this.issuer,
         requiredClaims: ['exp'],
       });
       if (expectedAudience !== undefined && !audienceMatchesResource(payload.aud, expectedAudience)) {
@@ -932,6 +958,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     scopes: string[],
     audience?: string,
     consentMetadata?: ConsentMetadata,
+    /** The issuer to name (`iss`): {@link issuerFor} the request. Default: the boot-time issuer. */
+    issuer?: string,
   ): Promise<string> {
     const claims: Record<string, unknown> = {
       sub: user.sub,
@@ -985,7 +1013,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const jwt = new SignJWT(claims)
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
-      .setIssuer(this.issuer)
+      .setIssuer(issuer ?? this.issuer)
       .setExpirationTime(`${this.accessTokenTtlSeconds}s`)
       .setJti(randomUUID());
 
@@ -1007,6 +1035,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     clientSecret?: string,
     /** The protected resource the token is for when the grant recorded none (#269). */
     defaultAudience?: string,
+    /** The issuer the access token names: {@link issuerFor} the token request. */
+    issuer?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients (RFC 6749 §2.3 / §3.2.1). Public and
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
@@ -1109,7 +1139,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // Every token names the resource it is for (#269); the authorize flow
     // records one, `defaultAudience` covers a grant that predates that.
     const resource = codeRecord.resource ?? defaultAudience;
-    const accessToken = await this.signAccessToken(user, codeRecord.scopes, resource, consentMetadata);
+    const accessToken = await this.signAccessToken(user, codeRecord.scopes, resource, consentMetadata, issuer);
 
     // Migrate tokens from pending to real authorization ID (for federated auth)
     if (codeRecord.pendingAuthId && codeRecord.federatedLoginUsed) {
@@ -1172,6 +1202,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     clientSecret?: string,
     /** The protected resource the token is for when the grant recorded none (#269). */
     defaultAudience?: string,
+    /** The issuer the access token names: {@link issuerFor} the token request. */
+    issuer?: string,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
@@ -1224,7 +1256,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         : undefined;
     // A refresh token issued before tokens named their resource gets one now (#269).
     const resource = tokenRecord.resource ?? defaultAudience;
-    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata);
+    const accessToken = await this.signAccessToken(user, tokenRecord.scopes, resource, consentMetadata, issuer);
 
     // Rotate refresh token — forward the same grant metadata to the new record.
     const newRefreshRecord = this.authorizationStore.createRefreshTokenRecord({

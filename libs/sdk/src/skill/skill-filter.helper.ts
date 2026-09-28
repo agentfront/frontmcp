@@ -9,7 +9,7 @@
  */
 
 import type { ScopeEntry, SkillEntry } from '../common';
-import { callSurfaceOf, isOfferedOnSurface, type CallSurface } from '../common/availability';
+import { availabilityForCall, callSurfaceOf, type CallSurface } from '../common/availability';
 import { getCallSurface } from '../context/call-surface';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
 import { createSkillEntryResolver, skillResultId, type SkillEntryLookup } from './skill-entry.resolver';
@@ -37,8 +37,12 @@ type SkillDiscoveryScope = SkillFilterScope &
   Pick<ScopeEntry, 'authoritiesEngine' | 'authoritiesContextBuilder' | 'authoritiesScopeMapping'>;
 
 /**
- * The skills, in their order, that the current caller may see: those `availableWhen.surface` offers
- * on the caller's surface, less any the `skills:filter` flow drops.
+ * The skills, in their order, that the current caller may see: those `availableWhen` offers to the
+ * caller (its `surface` and every process-wide axis: `os`, `runtime`, `env`, ...), less any the
+ * `skills:filter` flow drops.
+ *
+ * Every skill surface goes through here, so each applies the same availability rule, whatever list
+ * it starts from (a registry listing, a search index, a name).
  *
  * `ctx` is the MCP handler context (`{ authInfo }`) of a surface that runs outside a flow, so the
  * filter judges that caller. Surfaces already inside a flow (resource reads, tool calls, HTTP) omit it.
@@ -51,7 +55,7 @@ export async function filterServableSkills<T extends SkillEntry>(
   surface?: CallSurface,
 ): Promise<T[]> {
   const caller = callerSurface(ctx, surface);
-  const offered = skills.filter((skill) => isOfferedOnSurface(skill.metadata.availableWhen, caller));
+  const offered = skills.filter((skill) => availabilityForCall(skill.metadata.availableWhen, caller) === 'available');
   if (offered.length === 0) return [];
   const { skills: servable } = await scope.runFlowForOutput('skills:filter', { skills: [...offered], ctx });
   const servableSkills = new Set<SkillEntry>(servable);

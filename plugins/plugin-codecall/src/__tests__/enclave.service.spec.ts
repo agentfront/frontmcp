@@ -1944,9 +1944,9 @@ describe('EnclaveService', () => {
 
   // ── Tool namespaces ──────────────────────────────────────────────────────
   //
-  // Namespaces are written into the script as AgentScript over `callTool()`, never injected
-  // as host globals: a host function would reach the tool pipeline without the enclave's
-  // tool-call cap, rate limit and suspicious-sequence checks.
+  // Namespaces are the sandbox's own `toolNamespaces`, never host globals: a method call is a
+  // `callTool()` inside the sandbox, with the enclave's tool-call cap, rate limit and
+  // suspicious-sequence checks.
 
   describe('tool namespaces', () => {
     it('never lets a namespace shadow the reserved getTool global', async () => {
@@ -1983,9 +1983,9 @@ describe('EnclaveService', () => {
       expect(result.stats?.toolCallCount).toBe(1);
     });
 
-    it('reports a failed namespace call with { throwOnError: false } as { message, toolName }', async () => {
-      // The enclave hands a script only the name and message of a tool error, so the sanitized
-      // error's `code` never reaches the namespace helper; a direct `callTool()` sees the same.
+    it('reports a failed namespace call with { throwOnError: false } as callTool() does', async () => {
+      // The sandbox applies `throwOnError` for both, so the error is the same plain data:
+      // `{ name, message, code, toolName }`. A caught error carries only the name and message.
       const env: CodeCallVmEnvironment = {
         ...mockEnvironment,
         callTool: jest.fn().mockRejectedValue(
@@ -1999,10 +1999,22 @@ describe('EnclaveService', () => {
       };
 
       const viaNamespace = await service.execute(`return await acme.echo({}, { throwOnError: false });`, env);
-      expect(viaNamespace.result).toEqual({
+      const expected = {
         success: false,
-        error: { message: 'Access denied for tool "acme.echo"', toolName: 'acme.echo' },
-      });
+        error: {
+          name: 'ToolError',
+          message: 'Access denied for tool "acme.echo"',
+          toolName: 'acme.echo',
+          code: 'ACCESS_DENIED',
+        },
+      };
+      expect(viaNamespace.result).toEqual(expected);
+
+      const viaCallTool = await service.execute(
+        `return await callTool('acme.echo', {}, { throwOnError: false });`,
+        env,
+      );
+      expect(viaCallTool.result).toEqual(expected);
 
       const direct = await service.execute(
         `try { await callTool('acme.echo', {}); } catch (e) { return { code: e.code, message: e.message }; }`,
@@ -2022,6 +2034,81 @@ describe('EnclaveService', () => {
       const result = await limited.execute(`await acme.ping({});\nawait acme.ping({});\nreturn 2;`, env);
       expect(result.success).toBe(false);
       expect(env.callTool).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Result kinds ─────────────────────────────────────────────────────────
+
+  describe('result kinds', () => {
+    it("reports a script that doesn't parse as SYNTAX_ERROR, at its own line", async () => {
+      const result = await service.execute('const a = ;\nreturn a;', mockEnvironment);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatchObject({
+        name: 'SyntaxError',
+        code: 'SYNTAX_ERROR',
+        message: 'Failed to parse AgentScript code: Unexpected token (1:10)',
+        location: { line: 1, column: 10 },
+      });
+    });
+
+    it('reports the tool behind an uncaught tool failure, whatever the tool threw', async () => {
+      const thrown: unknown[] = ['plain failure', {}];
+      for (const failure of thrown) {
+        const env: CodeCallVmEnvironment = {
+          ...mockEnvironment,
+          callTool: jest.fn().mockRejectedValue(failure),
+        };
+
+        const result = await service.execute(`return await callTool('acme.echo', { n: 1 });`, env);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatchObject({ toolName: 'acme.echo' });
+        expect(result.error).not.toHaveProperty('code');
+      }
+    });
+
+    // AgentScript refuses `new Error()`, so a script throws a string or a plain object. Either may carry
+    // the very message a tool failure it caught had; the sandbox names them apart (`DoubleVMExecutionError`,
+    // or the object's own `name`, against `ToolError` or the tool's error name).
+    it.each([
+      ['a string', `throw 'boom';`],
+      ['an object without a name', `throw { message: 'boom' };`],
+    ])(
+      "reports the script's own error with a caught tool failure's message, thrown as %s, as its own",
+      async (_label, own) => {
+        const failures: unknown[] = [Object.freeze({ code: 'EXECUTION', message: 'boom', toolName: 'x' }), 'boom'];
+        for (const failure of failures) {
+          const env: CodeCallVmEnvironment = { ...mockEnvironment, callTool: jest.fn().mockRejectedValue(failure) };
+
+          const result = await service.execute(`try { await callTool('x', {}); } catch (e) {}\n${own}`, env);
+          expect(result.success).toBe(false);
+          expect(result.error?.message).toBe('boom');
+          expect(result.error?.toolName).toBeUndefined();
+          expect(result.error?.code).not.toBe('EXECUTION');
+        }
+      },
+    );
+
+    it("still reports a caught tool failure the script rethrows as that tool's error", async () => {
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockRejectedValue(Object.freeze({ code: 'EXECUTION', message: 'boom', toolName: 'x' })),
+      };
+
+      const result = await service.execute(`try { await callTool('x', {}); } catch (e) { throw e; }`, env);
+      expect(result.error).toMatchObject({ message: 'boom', code: 'EXECUTION', toolName: 'x' });
+    });
+
+    it("reports the script's own error after it caught a tool failure", async () => {
+      const env: CodeCallVmEnvironment = {
+        ...mockEnvironment,
+        callTool: jest.fn().mockRejectedValue(Object.freeze({ code: 'EXECUTION', message: 'boom', toolName: 'x' })),
+      };
+
+      const result = await service.execute(`try { await callTool('x', {}); } catch (e) {}\nthrow 'mine';`, env);
+      expect(result.success).toBe(false);
+      expect(result.error?.toolName).toBeUndefined();
+      expect(result.error?.message).toBe('mine');
     });
   });
 });

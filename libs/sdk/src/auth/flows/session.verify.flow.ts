@@ -42,6 +42,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { getMachineId, randomUUID, sha256, sha256Hex, timingSafeEqual } from '@frontmcp/utils';
 
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
 
 const inputSchema = httpRequestInputSchema;
@@ -608,7 +609,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // transparent mode (so the check doesn't depend on the Host header).
       const configuredAudience = isOrchestratedMode(authOptions) ? authOptions.expectedAudience : undefined;
       const resource = computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
-      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, configuredAudience ?? resource);
+      // The issuer the token endpoint named for a request like this one (`LocalPrimaryAuth.issuerFor`).
+      const issuer = (auth as Partial<LocalPrimaryAuth>).issuerFor?.(this.rawInput.request);
+      verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, configuredAudience ?? resource, issuer);
     }
 
     const result = await verify;

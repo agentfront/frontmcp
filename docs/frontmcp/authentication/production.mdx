@@ -107,7 +107,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 <Check>**PKCE enforcement** - OAuth 2.1 requires PKCE (S256 only)</Check>
 <Check>**Refresh token rotation** - Always rotate refresh tokens on use</Check>
 <Check>**Audience validation** - Validate the `aud` claim via `expectedAudience` in transparent mode; local and remote tokens are bound to this server's resource URL automatically, or to the `expectedAudience` you list</Check>
-<Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the expected audience of a token — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers.</Check>
+<Check>**Pinned public URL** - Set `FRONTMCP_PUBLIC_URL` to a fixed origin. The issuer / resource / OAuth-discovery URLs — and the expected audience of a token — are otherwise derived from request headers. `X-Forwarded-Host`/`X-Forwarded-Proto` are **ignored by default**; only enable them with `FRONTMCP_TRUST_PROXY=1` behind a proxy that strips client-supplied forwarded headers. The Web fetch handler (`createFetchHandler`, Workers, Deno, Bun) takes the address from the request URL the runtime hands it, never from a `Host` header that disagrees with it.</Check>
 
 ### Recommended
 

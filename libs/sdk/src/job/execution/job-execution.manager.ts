@@ -1,10 +1,11 @@
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
+import { runOnSurface } from '../../context/call-surface';
 import { JobNotAuthorizedError } from '../../errors';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { JobPermissionGuard } from '../job-permission.guard';
@@ -103,8 +104,8 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      // Spawn background execution
-      this.executeJobBackground(job, input, runId, opts).catch(async (err) => {
+      // Spawn background execution, as its own request (it outlives this one; a no-op on Node)
+      runRequestExclusive(() => this.executeJobBackground(job, input, runId, opts)).catch(async (err) => {
         this.logger.error(`Background job execution failed: ${err}`);
         try {
           await this.updateState(runId, {
@@ -155,18 +156,20 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      this.executeWorkflowBackground(workflow, jobRegistry, runId, opts).catch(async (err) => {
-        this.logger.error(`Background workflow execution failed: ${err}`);
-        try {
-          await this.updateState(runId, {
-            state: 'failed',
-            error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
-            completedAt: Date.now(),
-          });
-        } catch (updateErr) {
-          this.logger.error(`Failed to update run state after error: ${updateErr}`);
-        }
-      });
+      runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, opts)).catch(
+        async (err) => {
+          this.logger.error(`Background workflow execution failed: ${err}`);
+          try {
+            await this.updateState(runId, {
+              state: 'failed',
+              error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
+              completedAt: Date.now(),
+            });
+          } catch (updateErr) {
+            this.logger.error(`Failed to update run state after error: ${updateErr}`);
+          }
+        },
+      );
       return { runId, state: 'pending' };
     }
 
@@ -242,7 +245,8 @@ export class JobExecutionManager {
           authInfo: opts.authInfo ?? {},
           contextProviders: opts.contextProviders,
         });
-        const result = await ctx.execute(parsedInput);
+        // The job's code runs on the 'job' surface, which `getCallSurface()` reports and its tool calls carry.
+        const result = await runOnSurface('job', async () => ctx.execute(parsedInput));
         const logs = ctx.getLogs();
 
         await this.updateState(runId, {

@@ -3,8 +3,9 @@
  */
 
 import 'reflect-metadata';
+
+import { AgentCompletion, AgentLlmAdapter } from '../../common';
 import { AgentExecutionLoop, AgentMaxIterationsError, ToolExecutor } from '../agent-execution-loop';
-import { AgentLlmAdapter, AgentCompletion } from '../../common';
 
 // Mock LLM adapter factory
 function createMockAdapter(responses: AgentCompletion[]): AgentLlmAdapter {
@@ -28,6 +29,42 @@ function createMockToolExecutor(results: Record<string, unknown>): ToolExecutor 
 }
 
 describe('AgentExecutionLoop', () => {
+  describe('Timeout', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('clears its timeout timer when a run finishes', async () => {
+      jest.useFakeTimers();
+      const loop = new AgentExecutionLoop({
+        adapter: createMockAdapter([{ content: 'Done', finishReason: 'stop' }]),
+        systemInstructions: 'You are a helpful assistant.',
+        tools: [],
+        timeout: 60_000,
+      });
+
+      const result = await loop.run('Hi', jest.fn());
+
+      expect(result.success).toBe(true);
+      // A timer left behind keeps the process (or a test worker) alive for the whole timeout.
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('clears its timeout timer when a run fails', async () => {
+      jest.useFakeTimers();
+      const adapter: AgentLlmAdapter = {
+        completion: jest.fn().mockRejectedValue(new Error('model down')),
+        streamCompletion: undefined,
+      };
+      const loop = new AgentExecutionLoop({ adapter, systemInstructions: 'x', tools: [], timeout: 60_000 });
+
+      const result = await loop.run('Hi', jest.fn());
+
+      expect(result.success).toBe(false);
+      expect(jest.getTimerCount()).toBe(0);
+    });
+  });
+
   describe('Basic Execution', () => {
     it('should execute a simple prompt without tool calls', async () => {
       const adapter = createMockAdapter([

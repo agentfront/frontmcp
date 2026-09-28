@@ -2,9 +2,10 @@
  * OpenAPI Adapter security tests
  */
 
-import OpenapiAdapter from '../openapi.adapter';
-import { bearerAuthSpec, multiAuthSpec, spyOnConsole, createMockLogger } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import OpenapiAdapter from '../openapi.adapter';
+import { bearerAuthSpec, createMockLogger, multiAuthSpec, spyOnConsole } from './fixtures';
 
 // Mock the OpenAPIToolGenerator and security
 jest.mock('mcp-from-openapi');
@@ -511,8 +512,8 @@ describe('OpenapiAdapter - Security', () => {
         }),
       );
 
-      // Should log info about per-scheme control
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Per-scheme security control enabled'));
+      // Should warn that the model provides the schemes in input
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('securitySchemesInInput is enabled'));
     });
 
     it('should validate only non-input schemes have mappings', async () => {
@@ -633,8 +634,8 @@ describe('OpenapiAdapter - Security', () => {
       const result = await adapter.fetch();
       expect(result.tools).toHaveLength(1);
 
-      // Security risk should be MEDIUM (per-scheme control)
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: MEDIUM'));
+      // Security risk is HIGH: the model chooses the credential of the schemes in input, as with includeSecurityInInput
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: HIGH'));
     });
   });
 });

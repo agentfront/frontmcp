@@ -1,6 +1,8 @@
 import { type FuncType, type Type } from '@frontmcp/di';
 
+import { getCallSurface } from '../../context/call-surface';
 import { PublicMcpError } from '../../errors/mcp.error';
+import { type CallSurface } from '../availability';
 import { type ChannelMetadata, type ChannelNotification } from '../metadata/channel.metadata';
 import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 
@@ -170,5 +172,13 @@ export abstract class ChannelContext extends ExecutionContextBase<ChannelNotific
     } else {
       this.logger.warn(`Channel "${this.channelName}": pushIncoming called but no handler is wired`);
     }
+  }
+
+  /**
+   * While it handles an HTTP trigger (a webhook source's request), a channel calls tools on the
+   * `'http-trigger'` surface. Handling any other event, it dispatches in-process.
+   */
+  protected override callToolSurface(): CallSurface | undefined {
+    return getCallSurface() === 'http-trigger' ? 'http-trigger' : undefined;
   }
 }

@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/build-tool-namespaces.spec.ts
 
-import { buildToolNamespaces, wrapScriptWithToolNamespaces } from '../utils/build-tool-namespaces';
+import { buildToolNamespaces, toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 
 describe('buildToolNamespaces', () => {
   describe('happy path', () => {
@@ -259,55 +259,66 @@ describe('buildToolNamespaces — prototype keys (GHSA-cmrw-xhcg-6gf9)', () => {
   });
 });
 
-describe('wrapScriptWithToolNamespaces', () => {
+describe('buildToolNamespaces — names the sandbox cannot bind', () => {
+  it('skips methods AgentScript refuses as property names, and tool names the sandbox cannot carry', () => {
+    const { namespaces, skipped } = buildToolNamespaces([
+      { name: 'mail.list' },
+      { name: 'mail.fetch' },
+      { name: 'mail.__secret' },
+      { name: 'mail.$raw' },
+      { name: '_internal.sync' },
+    ]);
+
+    expect(Object.keys(namespaces)).toEqual(['mail']);
+    expect({ ...namespaces['mail'] }).toEqual({ list: 'mail.list' });
+    expect(skipped).toEqual([
+      { name: 'mail.fetch', reason: 'unsupported-name' },
+      { name: 'mail.__secret', reason: 'unsupported-name' },
+      { name: 'mail.$raw', reason: 'unsupported-name' },
+      { name: '_internal.sync', reason: 'unsupported-name' },
+    ]);
+  });
+});
+
+describe('toSandboxToolNamespaces', () => {
   const { namespaces } = buildToolNamespaces([{ name: 'mail.list' }, { name: 'mail.send' }, { name: 'crm.get' }]);
 
-  it('returns the script unchanged when it uses no namespace', () => {
-    const script = "return await callTool('mail.list', {});";
+  it('hands the namespaces to the sandbox as data', () => {
+    const bindable = toSandboxToolNamespaces(namespaces);
 
-    expect(wrapScriptWithToolNamespaces(script, namespaces)).toBe(script);
-    expect(wrapScriptWithToolNamespaces(script, undefined)).toBe(script);
+    expect(JSON.parse(JSON.stringify(bindable))).toEqual({
+      mail: { list: 'mail.list', send: 'mail.send' },
+      crm: { get: 'crm.get' },
+    });
+    expect(bindable && Object.getPrototypeOf(bindable)).toBeNull();
   });
 
-  it('declares only the namespaces the script mentions, with callTool() on a literal tool name', () => {
-    const wrapped = wrapScriptWithToolNamespaces('return await mail.list({});', namespaces);
-
-    expect(wrapped).toContain('const mail = {');
-    expect(wrapped).toContain('callTool("mail.list", input === undefined ? {} : input)');
-    expect(wrapped).toContain('callTool("mail.send", input === undefined ? {} : input)');
-    expect(wrapped).not.toContain('const crm');
+  it('returns undefined when there is nothing to bind', () => {
+    expect(toSandboxToolNamespaces(undefined)).toBeUndefined();
+    expect(toSandboxToolNamespaces({})).toBeUndefined();
   });
 
-  it('does not treat a longer identifier or a property as a mention', () => {
-    expect(wrapScriptWithToolNamespaces('const mailbox = 1; return mailbox;', namespaces)).toBe(
-      'const mailbox = 1; return mailbox;',
-    );
+  it('leaves out a namespace that collides with a custom global', () => {
+    const bindable = toSandboxToolNamespaces({ ...namespaces, getTool: { x: 'getTool.x' }, audit: { x: 'audit.x' } }, [
+      'getTool',
+      'audit',
+    ]);
+
+    expect(Object.keys(bindable ?? {})).toEqual(['mail', 'crm']);
   });
 
-  it('keeps the script on the first line so parse-error line numbers do not move', () => {
-    const script = 'const a = 1;\nreturn await mail.list({ a });';
-    const wrapped = wrapScriptWithToolNamespaces(script, namespaces);
-
-    expect(wrapped.split('\n')).toHaveLength(script.split('\n').length + 1);
-    expect(wrapped.split('\n')[1]).toBe('return await mail.list({ a });');
-    expect(wrapped.endsWith('\n})();')).toBe(true);
+  it('never binds an entry whose tool name does not match its namespace and method', () => {
+    expect(toSandboxToolNamespaces({ mail: { list: 'admin.deleteAll' } })).toBeUndefined();
   });
 
-  it('never emits an entry whose tool name does not match its namespace and method', () => {
-    const forged = { mail: { list: 'admin.deleteAll' } };
-
-    expect(wrapScriptWithToolNamespaces('return await mail.list({});', forged)).toBe('return await mail.list({});');
-  });
-
-  it('never emits a namespace or method it could not safely bind', () => {
+  it('never binds a namespace or method the sandbox would refuse', () => {
     const unsafe = {
       process: { exit: 'process.exit' },
       __proto__x: { a: '__proto__x.a' },
       'bad-name': { a: 'bad-name.a' },
-      ok: { __proto__: 'ok.__proto__', 'x"); callTool("admin.x': 'ok.x"); callTool("admin.x' },
+      ok: { __proto__: 'ok.__proto__', fetch: 'ok.fetch', 'x"); callTool("admin.x': 'ok.x"); callTool("admin.x' },
     } as Record<string, Record<string, string>>;
 
-    const script = 'return [process, __proto__x, ok];';
-    expect(wrapScriptWithToolNamespaces(script, unsafe)).toBe(script);
+    expect(toSandboxToolNamespaces(unsafe)).toBeUndefined();
   });
 });

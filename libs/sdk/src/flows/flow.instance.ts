@@ -26,6 +26,7 @@ import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } fro
 import type HookRegistry from '../hooks/hook.registry';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
+import { matchMountedPath } from './flow.http-path';
 import { cloneStageMap, collectFlowHookMap, mergeHookMetasIntoStageMap, type StageMap } from './flow.stages';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
@@ -188,12 +189,20 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const hasMwCanActivate = (mw.canActivate?.length ?? 0) > 0;
     if (!path && !hasStaticCanActivate && !hasMwCanActivate) return false;
     if (this.method && request.method !== this.method) return false;
-    if (path) {
-      const reqPath = request.path;
-      const prefix = path.endsWith('/') ? path : `${path}/`;
-      if (reqPath !== path && !reqPath.startsWith(prefix)) return false;
+    const captured = path ? matchMountedPath(path, request.path) : {};
+    if (!captured) return false;
+
+    // As Express does on a route match, the path's parameters become the request's `params`
+    // (`/oauth/provider/:providerId/callback`). Values the adapter already set win, and a flow that
+    // turns the request down leaves `params` as it found it for the next flow to try.
+    const previous = request.params;
+    if (Object.keys(captured).length > 0) request.params = { ...captured, ...previous };
+    const activated = await this.canActivate(request);
+    if (!activated) {
+      if (previous === undefined) delete request.params;
+      else request.params = previous;
     }
-    return this.canActivate(request);
+    return activated;
   }
 
   /**

@@ -11,12 +11,24 @@
  */
 import 'reflect-metadata';
 
+import {
+  buildManagedOpenApiPluginOptions,
+  createEdgeMcp,
+  createKvBundleCache,
+  createKvSkillIndexCache,
+  kvBundleCacheFromEnv,
+  kvSkillIndexCacheFromEnv,
+  type EdgeMcpConfig,
+} from '../index';
+
 // ---- mocks -----------------------------------------------------------------
 
 const createForGraph = jest.fn();
 const createWebFetchHandler = jest.fn();
 
 jest.mock('@frontmcp/sdk', () => ({
+  // The startup checks on the config (see index.spec.ts); none of these configs declares anything they refuse.
+  assertStaticStartupConfig: () => undefined,
   FrontMcpInstance: { createForGraph: (...args: unknown[]) => createForGraph(...args) },
   createWebFetchHandler: (...args: unknown[]) => createWebFetchHandler(...args),
 }));
@@ -36,16 +48,6 @@ jest.mock('../session-host', () => ({
   createEdgeSessionRouter: (...args: unknown[]) => createEdgeSessionRouter(...args),
   createEdgeSessionDurableObject: (...args: unknown[]) => createEdgeSessionDurableObject(...args),
 }));
-
-import {
-  buildManagedOpenApiPluginOptions,
-  createEdgeMcp,
-  createKvBundleCache,
-  createKvSkillIndexCache,
-  type EdgeMcpConfig,
-  kvBundleCacheFromEnv,
-  kvSkillIndexCacheFromEnv,
-} from '../index';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -317,7 +319,9 @@ describe('createEdgeMcp — skill-index cache wiring', () => {
     // scope.skills present but missing setIndexCache/warmIndex → graceful skip.
     mockScopeBuild({ skills: {} });
     const edge = createEdgeMcp({ ...BASE, skillIndex: { binding: 'IDX' } } as EdgeMcpConfig);
-    await expect(edge.fetch(new Request('https://w/'), { IDX: { get: jest.fn(), put: jest.fn() } })).resolves.toBeDefined();
+    await expect(
+      edge.fetch(new Request('https://w/'), { IDX: { get: jest.fn(), put: jest.fn() } }),
+    ).resolves.toBeDefined();
   });
 
   it('swallows a warmIndex failure so a KV hiccup never bricks boot', async () => {

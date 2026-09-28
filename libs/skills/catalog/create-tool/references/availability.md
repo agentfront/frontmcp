@@ -26,15 +26,15 @@ On Linux / Windows servers, this tool simply doesn't exist — it's not in `tool
 
 ## Axes
 
-| Axis         | Values                                                                                                                          | Source                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `os`         | `'darwin'`, `'linux'`, `'win32'`                                                                                                | `process.platform` (since #417 — was previously `platform`)                                        |
-| `runtime`    | `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`                                                                              | Detected at boot                                                                                   |
-| `deployment` | `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`                                                                    | Detected from `frontmcp.config` / env                                                              |
-| `provider`   | `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'` | Auto-detected; override with `FRONTMCP_PROVIDER=<name>`                                            |
-| `target`     | `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`                      | Set by `frontmcp build --target <x>`; `'unknown'` in dev                                           |
-| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`                                                                          | Per-call axis — which entry point is invoking the tool (only `'mcp'` and `'cli'` are tagged today) |
-| `env`        | `'production'`, `'development'`, `'test'`                                                                                       | `process.env.NODE_ENV`                                                                             |
+| Axis         | Values                                                                                                                          | Source                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `os`         | `'darwin'`, `'linux'`, `'win32'`                                                                                                | `process.platform` (since #417 — was previously `platform`) |
+| `runtime`    | `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`                                                                              | Detected at boot                                            |
+| `deployment` | `'serverless'`, `'standalone'`, `'distributed'`, `'browser'`                                                                    | Detected from `frontmcp.config` / env                       |
+| `provider`   | `'bare'`, `'docker'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'netlify'`, `'azure'`, `'gcp'`, `'fly'`, `'render'`, `'railway'` | Auto-detected; override with `FRONTMCP_PROVIDER=<name>`     |
+| `target`     | `'cli'`, `'node'`, `'vercel'`, `'lambda'`, `'cloudflare'`, `'browser'`, `'sdk'`, `'mcpb'`, `'distributed'`                      | Set by `frontmcp build --target <x>`; `'unknown'` in dev    |
+| `surface`    | `'mcp'`, `'cli'`, `'agent'`, `'job'`, `'http-trigger'`                                                                          | Per-call axis — which entry point is invoking the tool      |
+| `env`        | `'production'`, `'development'`, `'test'`                                                                                       | `process.env.NODE_ENV`                                      |
 
 ## Semantics
 
@@ -100,7 +100,7 @@ These are fine for ergonomic branching. For tools that **shouldn't exist at all*
 
 This is the safest way to expose internal-only tools that you want an agent / job to call but don't want a user to invoke from a chat UI.
 
-An MCP client (and the in-process client of a CLI build, surface `'cli'`) never sees such a tool: it is absent from `tools/list`, and `tools/call` answers `Tool "rotate_secrets" not found`, exactly as for a tool that doesn't exist. Resources, resource templates, prompts, agents and skills (including the skills HTTP endpoints, which count as `'mcp'`) follow the same rule, and CodeCall applies its caller's surface to the tools it reaches. In-process dispatch (`this.callTool()`, an agent's own tools) carries no surface and is not restricted. `'agent'`, `'job'` and `'http-trigger'` are reserved: nothing tags them yet, so agents, jobs and HTTP triggers (all in-process) pass every `surface` check. The process-wide axes (`os`, `runtime`, ...) answer `EntryUnavailableError` instead.
+An MCP client (and the in-process client of a CLI build, surface `'cli'`) never sees such a tool: it is absent from `tools/list`, and `tools/call` answers `Tool "rotate_secrets" not found`, exactly as for a tool that doesn't exist. Resources, resource templates, prompts, agents and skills (including the skills HTTP endpoints, which count as `'mcp'`) follow the same rule, and CodeCall applies its caller's surface to the tools it reaches. An agent's model calls its tools on `'agent'` (and is only offered those its `surface` allows), a job's or workflow step's `this.callTool()` on `'job'`, and a `@Channel` handling a webhook on `'http-trigger'`. A tool, resource or prompt calling `this.callTool()` is in-process dispatch: that call carries no surface and is not restricted. Code reads its call's surface with `getCallSurface()`. The process-wide axes (`os`, `runtime`, ...) answer `EntryUnavailableError` instead.
 
 ## See also
 

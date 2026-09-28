@@ -21,6 +21,7 @@ import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
+import { type PersistentSessionOwnerStore } from './persistent-session-owner';
 
 /** A persistent MCP server + transport bound to one session (Durable Object). */
 export interface WebStandardMcpPair {
@@ -29,6 +30,8 @@ export interface WebStandardMcpPair {
     handleRequest(request: Request, options?: { authInfo?: AuthInfo }): Promise<Response>;
     onclose?: () => void;
   };
+  /** Where a persistent session keeps its owner across instances (a Durable Object's storage). */
+  owner?: PersistentSessionOwnerStore;
 }
 
 export interface RunWebStandardMcpOptions {
@@ -86,10 +89,11 @@ async function wireServer(
  */
 export async function buildPersistentWebStandardMcp(
   scope: Scope,
-  options: { sessionId: string },
+  options: { sessionId: string; owner?: PersistentSessionOwnerStore },
 ): Promise<WebStandardMcpPair> {
   const serverOptions = buildScopedServerOptions(scope);
-  return wireServer(scope, serverOptions, options.sessionId, () => options.sessionId, false);
+  const pair = await wireServer(scope, serverOptions, options.sessionId, () => options.sessionId, false);
+  return options.owner ? { ...pair, owner: options.owner } : pair;
 }
 
 export async function runWebStandardMcp(
@@ -110,13 +114,7 @@ export async function runWebStandardMcp(
   const accept = request.headers.get('accept') ?? '';
   const wantsStream = request.method === 'GET' || (options.sse && accept.includes('text/event-stream'));
 
-  const { mcpServer, transport } = await wireServer(
-    scope,
-    options.serverOptions,
-    sessionId,
-    undefined,
-    !wantsStream,
-  );
+  const { mcpServer, transport } = await wireServer(scope, options.serverOptions, sessionId, undefined, !wantsStream);
   const response = await transport.handleRequest(request, {
     authInfo: options.authInfo as AuthInfo | undefined,
   });

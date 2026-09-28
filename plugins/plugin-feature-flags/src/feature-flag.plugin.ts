@@ -3,13 +3,17 @@ import {
   FlowHooksOf,
   FRONTMCP_CONTEXT,
   FrontMcpContextStorage,
+  isEntryGatedBy,
   ListResourcesHook,
   ListResourceTemplatesHook,
   ListToolsHook,
   Plugin,
   ProviderScope,
+  ScopeEntry,
   ToolHook,
   type FlowCtxOf,
+  type HookGatedEntry,
+  type PromptEntry,
   type ProviderType,
 } from '@frontmcp/sdk';
 
@@ -184,7 +188,9 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const { tools } = flowCtx.state;
     if (!tools || tools.length === 0) return;
 
-    const flaggedTools = this.collectFlagRefs(tools, (item) => (item.tool.metadata as any)?.featureFlag);
+    // Only the tools this plugin's own gate judges, so a tool is listed and called on one answer.
+    const judged = this.judgedItems(tools, (item) => ({ tool: item.tool }));
+    const flaggedTools = this.collectFlagRefs(judged, (item) => item.tool.metadata.featureFlag);
     if (flaggedTools.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -192,7 +198,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     const filtered = tools.filter((item) => {
       const ref = (item.tool.metadata as any)?.featureFlag as FeatureFlagRef | undefined;
-      if (!ref) return true;
+      if (!ref || !judged.has(item)) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
@@ -207,7 +213,8 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const { resources } = flowCtx.state;
     if (!resources || resources.length === 0) return;
 
-    const flaggedResources = this.collectFlagRefs(resources, (item) => (item.resource.metadata as any)?.featureFlag);
+    const judged = this.judgedItems(resources, (item) => ({ resource: item.resource }));
+    const flaggedResources = this.collectFlagRefs(judged, (item) => item.resource.metadata.featureFlag);
     if (flaggedResources.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -215,7 +222,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     const filtered = resources.filter((item) => {
       const ref = (item.resource.metadata as any)?.featureFlag as FeatureFlagRef | undefined;
-      if (!ref) return true;
+      if (!ref || !judged.has(item)) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
@@ -232,7 +239,8 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const { templates } = flowCtx.state;
     if (!templates || templates.length === 0) return;
 
-    const flaggedTemplates = this.collectFlagRefs(templates, (item) => item.template.metadata.featureFlag);
+    const judged = this.judgedItems(templates, (item) => ({ resource: item.template }));
+    const flaggedTemplates = this.collectFlagRefs(judged, (item) => item.template.metadata.featureFlag);
     if (flaggedTemplates.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -240,7 +248,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     const filtered = templates.filter((item) => {
       const ref = item.template.metadata.featureFlag;
-      if (!ref) return true;
+      if (!ref || !judged.has(item)) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
@@ -255,7 +263,10 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
     const { prompts } = flowCtx.state;
     if (!prompts || prompts.length === 0) return;
 
-    const flaggedPrompts = this.collectFlagRefs(prompts, (item: any) => (item.prompt.metadata as any)?.featureFlag);
+    const judged = this.judgedItems(prompts as ReadonlyArray<{ prompt: PromptEntry }>, (item) => ({
+      prompt: item.prompt,
+    }));
+    const flaggedPrompts = this.collectFlagRefs(judged, (item) => item.prompt.metadata.featureFlag);
     if (flaggedPrompts.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -263,7 +274,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     const filtered = prompts.filter((item: any) => {
       const ref = (item.prompt.metadata as any)?.featureFlag as FeatureFlagRef | undefined;
-      if (!ref) return true;
+      if (!ref || !judged.has(item)) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
@@ -279,12 +290,15 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
    * GHSA-gf7p-j3hr-h5h4: the only skill hook sat on `skills:search`, which the `skills/search`
    * handler never ran and whose results carry no `featureFlag`, so no skill surface was gated.
    */
-  @FilterSkillsHook.Did('filterSkills', { priority: 50 })
+  @FilterSkillsHook.Did('filterSkills', { priority: 50, appliesTo: 'uncovered-apps' })
   async filterSkills(flowCtx: FlowCtxOf<'skills:filter'>) {
     const { skills } = flowCtx.state;
     if (!skills || skills.length === 0) return;
 
-    const flaggedSkills = this.collectFlagRefs(skills, (skill) => skill.metadata.featureFlag);
+    // This flow runs every plugin's hook for every skill, so each plugin judges the skills of the
+    // app it covers: its own, and (`appliesTo: 'uncovered-apps'`) those of apps without the plugin.
+    const judged = this.judgedItems(skills, (skill) => ({ skill }));
+    const flaggedSkills = this.collectFlagRefs(judged, (skill) => skill.metadata.featureFlag);
     if (flaggedSkills.size === 0) return;
 
     const adapter = this.get(FeatureFlagAdapterToken) as FeatureFlagAdapter;
@@ -292,7 +306,7 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
 
     const filtered = skills.filter((skill) => {
       const ref = skill.metadata.featureFlag;
-      if (!ref) return true;
+      if (!ref || !judged.has(skill)) return true;
       return this.isRefEnabled(ref, flagResults);
     });
 
@@ -382,9 +396,33 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
+   * The listed items this plugin instance judges: those whose gate (tools/call, resources/read,
+   * prompts/get, or `skills:filter` for skills) runs this instance's hook when the entry is served.
+   *
+   * List flows run every app's plugin over every app's entries, while a call is judged only by the
+   * plugin that covers the entry's app. With a FeatureFlagPlugin on each of two apps, filtering
+   * everything let one app's flags hide the other app's entries, which its own plugin still served
+   * by name. When the scope can't be read (a plugin used outside a server), every item is judged.
+   */
+  private judgedItems<T>(items: readonly T[], entryOf: (item: T) => HookGatedEntry): Set<T> {
+    let scope: ScopeEntry | undefined;
+    try {
+      scope = this.get(ScopeEntry) as ScopeEntry | undefined;
+    } catch {
+      scope = undefined;
+    }
+    if (!scope?.hooks) return new Set(items);
+    const judgingScope = scope;
+    return new Set(items.filter((item) => isEntryGatedBy(judgingScope, entryOf(item), this)));
+  }
+
+  /**
    * Collect unique flag keys from items that have a featureFlag metadata.
    */
-  private collectFlagRefs<T>(items: T[], getRef: (item: T) => FeatureFlagRef | undefined): Map<string, FeatureFlagRef> {
+  private collectFlagRefs<T>(
+    items: Iterable<T>,
+    getRef: (item: T) => FeatureFlagRef | undefined,
+  ): Map<string, FeatureFlagRef> {
     const refs = new Map<string, FeatureFlagRef>();
     for (const item of items) {
       const ref = getRef(item);

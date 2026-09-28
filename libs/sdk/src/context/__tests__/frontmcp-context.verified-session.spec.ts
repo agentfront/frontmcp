@@ -13,9 +13,10 @@ function authorization(verifiedSessionId?: string): Authorization {
   };
 }
 
+/** A request that presented `sessionId`, whose session verification resolved `verifiedSessionId`. */
 function contextFor(sessionId: string, verifiedSessionId?: string): FrontMcpContext {
   const context = new FrontMcpContext({ sessionId, scopeId: 'scope' });
-  context.updateAuthInfo(authInfoFromAuthorization(authorization(verifiedSessionId)));
+  context.updateAuthInfo(authInfoFromAuthorization(authorization(verifiedSessionId), sessionId));
   return context;
 }
 
@@ -41,6 +42,15 @@ describe('FrontMcpContext.verifiedSessionId', () => {
 
     expect(context.sessionId).toMatch(/^anon:/);
     expect(context.verifiedSessionId).toBeUndefined();
+  });
+
+  it('is a legacy SSE session, which the request presents in ?sessionId= while it runs under a per-request id', async () => {
+    const storage = new FrontMcpContextStorage();
+    const context = await storage.runForHttpRequest({ headers: {} }, 'scope', () => storage.getStoreOrThrow());
+    context.updateAuthInfo(authInfoFromAuthorization(authorization('sse-session-1'), 'sse-session-1'));
+
+    expect(context.sessionId).toMatch(/^anon:/);
+    expect(context.verifiedSessionId).toBe('sse-session-1');
   });
 
   it('is undefined when the id the client sent is not the session the server verified', () => {

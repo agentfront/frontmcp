@@ -66,11 +66,14 @@ export function createMcpHandlers(options: McpHandlerOptions) {
   // Per MCP 2025-11-25 spec, servers MAY provide logging capability
   const loggingHandler = options.serverOptions?.capabilities?.logging ? [loggingSetLevelRequestHandler(options)] : [];
 
-  // Skills handlers are available when skill registry has skills
+  // Skills handlers are available when the scope serves skills: it has some, or a plugin registers
+  // them at runtime (a session opened before they load still gets the methods).
   // Skills is a FrontMCP extension to MCP (custom methods: skills/search, skills/load, skills/list)
-  const skillsHandler = options.scope?.skills?.hasAny()
-    ? [skillsSearchRequestHandler(options), skillsLoadRequestHandler(options), skillsListRequestHandler(options)]
-    : [];
+  const skillRegistry = options.scope?.skills;
+  const skillsHandler =
+    (skillRegistry?.servesSkills?.() ?? skillRegistry?.hasAny())
+      ? [skillsSearchRequestHandler(options), skillsLoadRequestHandler(options), skillsListRequestHandler(options)]
+      : [];
 
   // Tasks handlers per MCP 2025-11-25 tasks spec. Only registered when the
   // `tasks` capability is advertised (driven by tool-level `execution.taskSupport`).

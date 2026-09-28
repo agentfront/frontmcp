@@ -312,7 +312,8 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         });
         return;
       }
-      verifyResult = await auth.verifyGatewayToken(token, baseUrl);
+      const issuer = auth instanceof LocalPrimaryAuth ? auth.issuerFor(this.rawInput.request) : undefined;
+      verifyResult = await auth.verifyGatewayToken(token, baseUrl, undefined, issuer);
     } else {
       // Transparent: verify against upstream provider
       const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
