@@ -66,6 +66,9 @@ const plan = {
     // Cloudflare Worker. Its output (`json` / `text` / `sse`) renders on both
     // the Node writer and the Web response renderer.
     'handleMcp2026',
+    // A Durable Object's persistent session serves only the caller that opened
+    // it: anyone else presenting its id is answered as an unknown session.
+    'checkPersistentSessionOwner',
     // Web-fetch (V8-isolate / Cloudflare Worker) MCP handling for every OTHER
     // revision. In web mode it responds with a Web `Response`, short-circuiting
     // the Node handle stages below; on the Node/Express path it's a no-op.
@@ -482,6 +485,14 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           (request.headers['mcp-session-id'] as string | undefined) ??
           (request.query?.['sessionId'] as string | undefined);
         const deleteAuthz = authorizeSessionTermination(deleteVerify, requestedSessionId);
+        // A Durable Object's persistent session has an id `session:verify` cannot check, so
+        // `authorizeSessionTermination` never finds it owned. Who may end it is decided by who
+        // opened it, in `checkPersistentSessionOwner`; the request only has to be authenticated.
+        if (request[ServerRequestTokens.webTransport] && deleteAuthz.kind !== 'unauthorized') {
+          request[ServerRequestTokens.auth] = (deleteVerify as { authorization: unknown }).authorization;
+          this.state.set('intent', decision.intent);
+          return;
+        }
         if (deleteAuthz.kind === 'unauthorized') {
           this.logger.warn(`[${this.requestId}] DELETE session denied: request is not authenticated`);
           this.respond(
@@ -645,6 +656,40 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
    * Auth has already been enforced by `router` (a 401/403 short-circuits before
    * execute), and the verified authorization is read from the request token.
    */
+  /**
+   * A Durable Object's persistent MCP session (the web-fetch request carries its
+   * server + transport under {@link ServerRequestTokens.webTransport}) belongs to
+   * the caller that opened it. Its `mcp-session-id` is a plain id the worker's
+   * router chose, which `session:verify` cannot check against the caller's
+   * token, so the first request to reach the session claims it for its caller
+   * and any other caller is answered as MCP answers an unknown session (404),
+   * before the transport sees the request. The caller is its verified subject,
+   * else its token; an anonymous caller without a token has neither, and the
+   * unguessable id is then the only credential, as for any anonymous session.
+   * No-op outside that path.
+   */
+  @Stage('checkPersistentSessionOwner')
+  async checkPersistentSessionOwner() {
+    const req = this.rawInput.request as unknown as Record<PropertyKey, unknown>;
+    const persistent = req[ServerRequestTokens.webTransport];
+    if (!req[ServerRequestTokens.webRequest] || !persistent || typeof persistent !== 'object') return;
+
+    const { claimPersistentSession, persistentSessionCallerKey } = await import(
+      '../../transport/persistent-session-owner.js'
+    );
+    const authorization = req[ServerRequestTokens.auth] as Authorization | undefined;
+    if (claimPersistentSession(persistent, persistentSessionCallerKey(authorization))) return;
+
+    this.logger.warn(`[${this.requestId}] Persistent session refused: it was opened by another caller`);
+    // What MCP answers for a session it doesn't know: the client starts a new one.
+    this.respond(
+      httpRespond.json(
+        { jsonrpc: '2.0', error: { code: -32001, message: 'Session not found' }, id: null },
+        { status: 404 },
+      ),
+    );
+  }
+
   @Stage('handleWebFetch')
   async handleWebFetch() {
     const { request } = this.rawInput;
