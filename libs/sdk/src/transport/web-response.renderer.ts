@@ -8,7 +8,7 @@
  * Returns `undefined` for outputs that mean "no response produced" (`next`,
  * `consumed`) so the caller can fall through (e.g. to a 404).
  */
-import { type HttpOutput } from '../common/schemas/http-output.schema';
+import { serializeHttpCookie, type HttpCookie, type HttpOutput } from '../common/schemas/http-output.schema';
 
 const encoder = new TextEncoder();
 
@@ -60,8 +60,12 @@ function buildHeaders(out: Record<string, unknown>, contentType?: string): Heade
   if (contentType) headers.set('Content-Type', contentType);
   const extra = out['headers'] as Record<string, string> | undefined;
   if (extra) for (const [k, v] of Object.entries(extra)) headers.set(k, v);
-  const cookies = out['cookies'] as string[] | undefined;
-  if (Array.isArray(cookies)) for (const c of cookies) headers.append('Set-Cookie', c);
+  // `cookies` holds HttpCookie objects (as the Node writer reads them); a
+  // string is taken as an already serialized `Set-Cookie` value.
+  const cookies = out['cookies'] as Array<HttpCookie | string> | undefined;
+  if (Array.isArray(cookies)) {
+    for (const c of cookies) headers.append('Set-Cookie', typeof c === 'string' ? c : serializeHttpCookie(c));
+  }
   return headers;
 }
 

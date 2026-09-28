@@ -748,28 +748,36 @@ http: {
 
 **Codemod available:** no
 
-## BC-036: Dashboard auth.enabled now requires auth.token
+## BC-036: Dashboard auth requires a token, and enabled/auth cover its MCP endpoint
 
-**Package:** `@frontmcp/plugin-dashboard` | **Category:** change | **Severity:** low
+**Package:** `@frontmcp/plugin-dashboard` | **Category:** change | **Severity:** medium
 
-`dashboardAuthSchema` now rejects `auth.enabled: true` without a non-empty `auth.token`, so a half-configured dashboard fails at startup instead of serving. Previously the combination parsed cleanly and the token was never checked at all (GHSA-rgxj-434m-vxh3), so a dashboard an operator believed was protected was public.
+`dashboardAuthSchema` now rejects `auth.enabled: true` without a non-empty `auth.token`, so a half-configured dashboard fails at startup instead of serving. Previously the combination parsed cleanly and the token was never checked at all (GHSA-rgxj-434m-vxh3), so a dashboard an operator believed was protected was public. Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one.
 
-Set a token, or set `auth.enabled: false` if the dashboard is meant to be reachable without one. Note the token gates the dashboard PAGE; the dashboard's MCP scope inherits the server's own authentication (previously it declared `auth: { mode: 'public' }` unconditionally, which is what GHSA-rgxj-434m-vxh3 exposed).
+`enabled` and `auth` now cover the dashboard's MCP endpoint and its tools (`dashboard:graph`, `dashboard:list-tools`, `dashboard:list-resources`), not only the page. With `enabled: false`, or with `NODE_ENV=production` and no `enabled`, the page and the MCP endpoint answer `404` and the tools refuse with `DASHBOARD_DISABLED` on every transport. To keep the dashboard in production, set `enabled: true` together with `auth`.
 
-Consequence to plan for: the bundled browser client sends no `Authorization` header, so on a server with non-public auth the page loads but its in-page graph and SSE stream get `401`. Run the dashboard on a public/development server, or front it with a proxy that injects a credential — scoped to the dashboard's own routes (`<basePath>/sse` and `<basePath>/message`) and holding no grant beyond the dashboard scope. Injecting a server credential across the MCP endpoint instead would let any page on that origin issue arbitrary authenticated JSON-RPC.
+With `auth` on, the MCP endpoint needs the token too, in addition to the server's own authentication, which still applies first. An MCP client sends it as `Authorization: Bearer <token>` or, when `Authorization` carries the server's own token, as `x-frontmcp-dashboard-token: <token>`. `?token=` is accepted for the page only. The page, opened with the token, sets an HttpOnly, `SameSite=Strict` cookie (`frontmcp_dashboard`, `Secure` on https) that its own client uses. `createDirect` and stdio have no way to send the token, so with `auth` on the tools refuse there.
+
+`basePath` moves only the page. The MCP endpoint stays at the dashboard app's route (`/dashboard`, after `http.entryPath`), and the page's client now uses it; it used `<basePath>/sse` before.
+
+Consequence to plan for: on a server with non-public auth, the page's client carries the dashboard cookie but no server credential, so its graph and SSE stream get `401` from the server's authentication. Run the dashboard on a public/development server, or front it with a proxy that injects a credential, scoped to the dashboard's own routes (`/dashboard`, `/dashboard/sse` and `/dashboard/message`) and holding no grant beyond the dashboard scope. Injecting a server credential across the MCP endpoint instead would let any page on that origin issue arbitrary authenticated JSON-RPC.
+
+Only the Node server (`bootstrap`, `createHandler`) serves the dashboard's route. `createFetchHandler`, `createDirect`, `connect()` and stdio serve the server's own apps; up to 1.8.2 they served the dashboard's scope instead whenever `DashboardApp` was in `apps`. They still serve it when `DashboardApp` is the only app.
+
+Signature changes: `generateDashboardHtml(options, mcpPath?)` and `createDashboardAuthValidator(auth, surface = 'page')`.
 
 Related: dashboard options are process-wide, and a second, CONFLICTING auth configuration in the same process now throws rather than silently replacing the first — accepting it would make one server's token valid on another's dashboard. Call `resetDashboardOptions()` between constructions if you build several servers serially.
 
 **Before:**
 
 ```typescript
-DashboardPlugin.init({ auth: { enabled: true } }); // parsed, and served the dashboard unauthenticated
+DashboardPlugin.init({ auth: { enabled: true } }); // parsed; neither the page nor the MCP endpoint checked a token
 ```
 
 **After:**
 
 ```typescript
-DashboardPlugin.init({ auth: { enabled: true, token: process.env.DASHBOARD_TOKEN } });
+DashboardPlugin.init({ enabled: true, auth: { enabled: true, token: process.env.DASHBOARD_TOKEN } }); // MCP clients send it as Bearer or x-frontmcp-dashboard-token
 ```
 
 **Codemod available:** no
@@ -794,6 +802,32 @@ The other management tools (`list_jobs`, `execute_job`, `get_job_status`, `remov
 
 ```typescript
 @FrontMcp({ jobs: { enabled: true, allowDynamicRegistration: true } })
+```
+
+**Codemod available:** no
+
+## BC-038: approval and featureFlag without a plugin that enforces them stop the server
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** medium
+
+A server now refuses to start with `UnenforcedMetadataError`, naming the entries, when a tool, resource, resource template, prompt, skill or agent declares metadata that only a plugin enforces and no plugin that enforces it reaches the entry. That metadata is `approval` (`@frontmcp/plugin-approval`), `featureFlag` (`@frontmcp/plugin-feature-flags`), and any key a plugin declares with `@Plugin({ enforcesMetadata })`. Previously the field did nothing: an `approval: true` tool ran for anyone, and a flagged-off entry was listed and served.
+
+A plugin reaches an entry when it is installed on the server, on the entry's app, or on another app of the same server (the approval and feature-flag gates also cover apps that have no plugin of their own). With `splitByApp`, every app is a server of its own and needs its own plugin. A tool declared inside an `@Agent` is reached only by plugins installed on that agent.
+
+`@Agent({ approval })` and `@Agent({ featureFlag })` now reach the agent's `invoke_<agent>` tool, so an installed plugin gates the agent like a tool. They were ignored before.
+
+Install the plugin that enforces the field, or remove the field. A custom plugin that enforces a metadata key of its own declares it with `enforcesMetadata` on the plugin class whose hooks enforce it.
+
+**Before:**
+
+```typescript
+@Tool({ name: 'wipe_disk', approval: true }) // no ApprovalPlugin installed: the tool ran without approval
+```
+
+**After:**
+
+```typescript
+@FrontMcp({ apps: [OpsApp], plugins: [ApprovalPlugin.init()] }) // or remove `approval` from the tool
 ```
 
 **Codemod available:** no

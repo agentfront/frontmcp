@@ -61,6 +61,13 @@ import { InternalMcpError } from '../../errors';
 import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
 import { parseFormBody } from './form-body.utils';
+import {
+  clearedSigninBindingCookie,
+  requestHoldsSigninBinding,
+  SIGNIN_BINDING_REFUSED,
+  signinCookiePath,
+  withCookie,
+} from './signin-binding.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -239,6 +246,8 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
+    if (!this.fromBrowserThatStarted(session)) return;
+
     // The session id is no secret (it travels in every upstream `state`), so a
     // submission counts only with the token of the consent screen this server
     // showed for the session. No token on the session means no screen was shown.
@@ -332,7 +341,26 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // RFC 9700 §4.7: the provider must return the browser that started this
+    // sign-in. The `state` is no proof of that: whoever started the sign-in has
+    // it, and could send someone else's browser to the provider with it, which
+    // would come back with a code for that person's provider account. The
+    // binding cookie `/oauth/authorize` gave the starting browser is.
+    if (!this.fromBrowserThatStarted(session)) return;
+
     this.state.set('federatedSession', session);
+  }
+
+  /**
+   * Whether this request comes from the browser that started the sign-in of
+   * `session` (it carries the session's binding cookie). Responds with a 400
+   * page, and returns false, when it doesn't.
+   */
+  private fromBrowserThatStarted(session: FederatedAuthSession): boolean {
+    if (requestHoldsSigninBinding(this.rawInput.request, session.pendingAuthId, session.signinBinding)) return true;
+    this.logger.warn('Provider callback without the sign-in binding cookie of its federated session; refused');
+    this.respond(this.htmlPage(this.renderErrorPage('invalid_request', SIGNIN_BINDING_REFUSED), 400));
+    return false;
   }
 
   @Stage('validateProviderCallback')
@@ -853,7 +881,17 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     this.logger.info(
       `Federated auth complete: ${selectedProviderIds.length} providers authenticated, redirecting to client`,
     );
-    this.respond(httpRespond.redirect(url.toString()));
+    // The sign-in is over: remove its binding cookie.
+    this.respond(
+      withCookie(
+        httpRespond.redirect(url.toString()),
+        clearedSigninBindingCookie(
+          this.rawInput.request,
+          session.pendingAuthId,
+          signinCookiePath(localAuth.issuer, this.scope.fullPath),
+        ),
+      ),
+    );
   }
 
   /**

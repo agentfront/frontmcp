@@ -56,12 +56,21 @@ describe('decorateResult', () => {
 });
 
 describe('resolveCacheScope', () => {
-  it('marks anonymous traffic public', () => {
-    expect(resolveCacheScope(true)).toBe('public');
+  it('marks anonymous traffic that nothing shaped per caller public', () => {
+    expect(resolveCacheScope(true, false)).toBe('public');
+  });
+
+  it('marks anonymous traffic shaped per caller private', () => {
+    expect(resolveCacheScope(true, true)).toBe('private');
+  });
+
+  it('treats anonymous traffic as shaped per caller unless told otherwise', () => {
+    expect(resolveCacheScope(true)).toBe('private');
   });
 
   it('marks authenticated traffic private', () => {
     expect(resolveCacheScope(false)).toBe('private');
+    expect(resolveCacheScope(false, false)).toBe('private');
   });
 });
 

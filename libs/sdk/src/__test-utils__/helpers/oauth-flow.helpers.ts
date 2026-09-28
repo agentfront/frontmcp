@@ -9,6 +9,7 @@
  */
 import 'reflect-metadata';
 
+import { createSigninBinding } from '@frontmcp/auth';
 import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 import { type HttpOutput } from '../../common';
@@ -41,35 +42,132 @@ export function authorizePath(params: Record<string, string | undefined>): strin
   return `/oauth/authorize?${query.toString()}`;
 }
 
-/** GET a path on `host`, as a browser navigation would. */
-export function httpGet(
+/**
+ * A browser's cookies: the helpers below send the ones that apply to a request
+ * (host and `Path`), and keep what each response sets (`Max-Age=0` removes).
+ * Every helper uses {@link defaultBrowser} unless given another jar, so a spec
+ * that walks the sign-in behaves like one browser; pass a new `CookieJar` to act
+ * as a different browser.
+ */
+export class CookieJar {
+  private readonly cookies = new Map<string, { host: string; path: string; name: string; value: string }>();
+
+  /** The `Cookie` header for a request to `path` on `host`, or undefined when none applies. */
+  header(host: string, path: string): string | undefined {
+    const pathname = path.split('?')[0] || '/';
+    const matching = [...this.cookies.values()].filter(
+      (c) =>
+        c.host === host &&
+        (c.path === '/' || pathname === c.path || pathname.startsWith(c.path.endsWith('/') ? c.path : `${c.path}/`)),
+    );
+    return matching.length > 0 ? matching.map((c) => `${c.name}=${c.value}`).join('; ') : undefined;
+  }
+
+  /** Keep the cookies a response to `host` sets. */
+  store(host: string, response: Response): void {
+    for (const setCookie of response.headers.getSetCookie()) {
+      const [pair, ...attributes] = setCookie.split(';').map((part) => part.trim());
+      const eq = pair.indexOf('=');
+      if (eq <= 0) continue;
+      const name = pair.slice(0, eq);
+      const value = pair.slice(eq + 1);
+      const attr = (key: string) =>
+        attributes.find((a) => a.toLowerCase().startsWith(`${key.toLowerCase()}=`))?.split('=')[1];
+      const path = attr('Path') ?? '/';
+      const key = `${host}|${path}|${name}`;
+      if (attr('Max-Age') === '0') this.cookies.delete(key);
+      else this.cookies.set(key, { host, path, name, value });
+    }
+  }
+
+  /** Forget every cookie. */
+  clear(): void {
+    this.cookies.clear();
+  }
+}
+
+/** The browser the helpers act as by default. */
+export const defaultBrowser = new CookieJar();
+
+const signinCookies = new Map<string, string>();
+
+/**
+ * For a spec that seeds a pending authorization (or a federated session)
+ * itself: give it the sign-in binding `/oauth/authorize` would, and remember
+ * the cookie of the browser that holds it (see {@link signinCookie}).
+ *
+ * @param record - the pending authorization, or a federated session
+ * @param pendingAuthId - the pending authorization's id (a federated session's `pendingAuthId`)
+ */
+export function bindSignin<T extends { signinBinding?: string }>(record: T, pendingAuthId: string): T {
+  const binding = createSigninBinding(pendingAuthId);
+  record.signinBinding = binding.hash;
+  signinCookies.set(pendingAuthId, `${binding.cookieName}=${binding.value}`);
+  return record;
+}
+
+/** The `Cookie` header of the browser that started the sign-in `pendingAuthId` (bound with {@link bindSignin}). */
+export function signinCookie(pendingAuthId: string): string {
+  const cookie = signinCookies.get(pendingAuthId);
+  if (!cookie) throw new Error(`no sign-in binding for ${pendingAuthId}: call bindSignin() when seeding it`);
+  return cookie;
+}
+
+/** `headers` plus the jar's `Cookie` header for `path` on `host` (an explicit `cookie` header wins). */
+function withCookies(
+  jar: CookieJar,
+  host: string,
+  path: string,
+  headers: Record<string, string>,
+): Record<string, string> {
+  const cookie = jar.header(host, path);
+  return cookie && headers['cookie'] === undefined ? { ...headers, cookie } : headers;
+}
+
+/** GET a path on `host`, as a browser navigation would (with the browser's cookies). */
+export async function httpGet(
   handler: WebFetchHandler,
   pathAndQuery: string,
   host = 'localhost',
   headers: Record<string, string> = {},
+  browser: CookieJar = defaultBrowser,
 ): Promise<Response> {
-  return handler(new Request(`http://${host}${pathAndQuery}`, { method: 'GET', headers: { host, ...headers } }));
+  const response = await handler(
+    new Request(`http://${host}${pathAndQuery}`, {
+      method: 'GET',
+      headers: { host, ...withCookies(browser, host, pathAndQuery, headers) },
+    }),
+  );
+  browser.store(host, response);
+  return response;
 }
 
 /** POST an `application/x-www-form-urlencoded` body, as an HTML form or an OAuth client would. */
-export function postForm(
+export async function postForm(
   handler: WebFetchHandler,
   path: string,
   form: Record<string, string | string[]>,
   host = 'localhost',
   headers: Record<string, string> = {},
+  browser: CookieJar = defaultBrowser,
 ): Promise<Response> {
   const body = new URLSearchParams();
   for (const [key, value] of Object.entries(form)) {
     for (const item of Array.isArray(value) ? value : [value]) body.append(key, item);
   }
-  return handler(
+  const response = await handler(
     new Request(`http://${host}${path}`, {
       method: 'POST',
-      headers: { host, 'content-type': 'application/x-www-form-urlencoded', ...headers },
+      headers: {
+        host,
+        'content-type': 'application/x-www-form-urlencoded',
+        ...withCookies(browser, host, path, headers),
+      },
       body: body.toString(),
     }),
   );
+  browser.store(host, response);
+  return response;
 }
 
 /** Read a hidden (or any) input's value out of a rendered form. */
@@ -124,14 +222,21 @@ export async function runProviderCallback(
   host = 'localhost',
   /** A POSTed form (the federated consent screen): sent as the parsed body the Node server hands the flow. */
   form?: Record<string, string | string[]>,
+  browser: CookieJar = defaultBrowser,
 ): Promise<Response> {
   const path = `/oauth/provider/${providerId}/callback`;
   const search = new URLSearchParams(query).toString();
+  const headers = withCookies(
+    browser,
+    host,
+    path,
+    form ? { host, 'content-type': 'application/x-www-form-urlencoded' } : { host },
+  );
   const request = {
     method: form ? 'POST' : 'GET',
     path,
     url: search ? `${path}?${search}` : path,
-    headers: form ? { host, 'content-type': 'application/x-www-form-urlencoded' } : { host },
+    headers,
     query,
     params: { providerId },
     body: form,
@@ -141,6 +246,7 @@ export async function runProviderCallback(
     | undefined;
   const response = output ? renderHttpOutputToWebResponse(output) : undefined;
   if (!response) throw new Error('provider callback produced no response');
+  browser.store(host, response);
   return response;
 }
 

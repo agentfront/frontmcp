@@ -32,6 +32,8 @@ const passedApprovalStores = new WeakMap<object, WeakSet<ApprovalStore>>();
 @Plugin({
   name: 'approval:check',
   description: 'Checks tool approval state before execution',
+  // A server where a tool or agent declares `approval` and this gate does not reach it refuses to start.
+  enforcesMetadata: ['approval'],
 })
 export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, never>> {
   /**

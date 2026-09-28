@@ -54,8 +54,10 @@ import {
   isRemoteMode,
   resourceUriMatches,
   StageHookOf,
+  type FlowOutputOf,
   type FlowPlan,
   type FlowRunOptions,
+  type HttpCookie,
 } from '../../common';
 import {
   authUiExtraPath,
@@ -70,6 +72,7 @@ import {
 import { CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
 
 /**
  * Quick checklist (security & correctness)
@@ -276,6 +279,21 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
   }
   private logger = this.scope.logger.child('OauthAuthorizeFlow');
+
+  /** The sign-in binding cookie, once the pending authorization exists (see `prepareAuthorizationRequest`). */
+  private signinCookie: HttpCookie | undefined;
+  /** Its hash, kept on the pending authorization and on remote mode's federated session. */
+  private signinBindingHash: string | undefined;
+
+  /**
+   * Respond, giving the browser the sign-in binding cookie once a pending
+   * authorization was created: the sign-in page, the provider-selection and
+   * incremental pages, a custom `auth.ui` page and remote mode's redirect to the
+   * upstream provider all carry it.
+   */
+  override respond(output: FlowOutputOf<typeof name>): void {
+    super.respond(this.signinCookie ? withCookie(output, this.signinCookie) : output);
+  }
 
   @Stage('checkIpFilter')
   async checkIpFilter() {
@@ -770,6 +788,17 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       consent,
     });
 
+    // Tie the sign-in to this browser (RFC 9700 §4.7): the callbacks that
+    // resume it require the cookie every response from here on sets.
+    const binding = createRequestSigninBinding(this.rawInput.request, pendingRecord.id);
+    pendingRecord.signinBinding = binding.hash;
+    this.signinBindingHash = binding.hash;
+    this.signinCookie = signinBindingCookie(
+      this.rawInput.request,
+      binding,
+      signinCookiePath(localAuth.issuer, this.scope.fullPath),
+    );
+
     await localAuth.authorizationStore.storePendingAuthorization(pendingRecord);
     this.logger.info(
       `Pending authorization created: ${pendingRecord.id}${
@@ -818,14 +847,18 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const appDescription = app?.metadata?.description;
 
       // Custom `@AuthUi({ slot: 'incremental' })` renderer takes over when registered.
-      const customIncremental = await this.tryRenderCustomSlot('incremental', pendingAuthId, (common) =>
-        buildIncrementalState(common, {
-          appId: targetAppId,
-          appName,
-          appDescription,
-          toolId: targetToolId,
-          redirectUri: validatedRequest.redirect_uri,
-        }),
+      const customIncremental = await this.tryRenderCustomSlot(
+        'incremental',
+        pendingAuthId,
+        (common) =>
+          buildIncrementalState(common, {
+            appId: targetAppId,
+            appName,
+            appDescription,
+            toolId: targetToolId,
+            redirectUri: validatedRequest.redirect_uri,
+          }),
+        [validatedRequest.redirect_uri],
       );
       if (customIncremental) return;
 
@@ -902,22 +935,27 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       };
 
       // Custom `@AuthUi({ slot: 'federated' })` renderer takes over when registered.
-      const customFederated = await this.tryRenderCustomSlot('federated', pendingAuthId, (common) =>
-        buildFederatedState(common, {
-          clientId: validatedRequest.client_id,
-          clientName: clientDisplayName,
-          redirectUri: validatedRequest.redirect_uri,
-          providers: [...detection.providers.values()].map(
-            (p): AuthProvider => ({
-              id: p.id,
-              name: p.id,
-              url: p.providerUrl,
-              mode: p.mode,
-              appIds: p.appIds.filter((id) => id !== '__parent__'),
-              primary: p.isParentProvider,
-            }),
-          ),
-        }),
+      const customFederated = await this.tryRenderCustomSlot(
+        'federated',
+        pendingAuthId,
+        (common) =>
+          buildFederatedState(common, {
+            clientId: validatedRequest.client_id,
+            clientName: clientDisplayName,
+            redirectUri: validatedRequest.redirect_uri,
+            providers: [...detection.providers.values()].map(
+              (p): AuthProvider => ({
+                id: p.id,
+                name: p.id,
+                url: p.providerUrl,
+                mode: p.mode,
+                appIds: p.appIds.filter((id) => id !== '__parent__'),
+                primary: p.isParentProvider,
+              }),
+            ),
+          }),
+        // The selection is answered with a redirect to the first chosen provider.
+        [validatedRequest.redirect_uri, ...this.providerAuthorizationEndpoints(detection.providers.keys())],
       );
       if (customFederated) return;
 
@@ -933,14 +971,18 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     }
 
     // Custom `@AuthUi({ slot: 'login' })` renderer takes over when registered.
-    const customLogin = await this.tryRenderCustomSlot('login', pendingAuthId, (common) =>
-      buildLoginState(common, {
-        clientId: validatedRequest.client_id,
-        clientName: clientDisplayName,
-        scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
-        redirectUri: validatedRequest.redirect_uri,
-        logoUri: cimdMetadata?.logo_uri,
-      }),
+    const customLogin = await this.tryRenderCustomSlot(
+      'login',
+      pendingAuthId,
+      (common) =>
+        buildLoginState(common, {
+          clientId: validatedRequest.client_id,
+          clientName: clientDisplayName,
+          scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
+          redirectUri: validatedRequest.redirect_uri,
+          logoUri: cimdMetadata?.logo_uri,
+        }),
+      [validatedRequest.redirect_uri],
     );
     if (customLogin) return;
 
@@ -969,8 +1011,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
    * pending authorization record (so the callback can verify it across nodes),
    * builds the {@link AuthFlowState} via `buildState`, SSRs the registered
    * component, and responds with the assembled page + CSP / anti-clickjacking
-   * headers. Returns `true` when it handled the slot (caller should `return`),
-   * `false` to fall through to the built-in page (no renderer / build failed).
+   * headers. `formTargets` are where the callback may redirect a submission of
+   * the page (the validated `redirect_uri`, upstream authorization endpoints):
+   * the page's CSP `form-action` allows their origins. Returns `true` when it
+   * handled the slot (caller should `return`), `false` to fall through to the
+   * built-in page (no renderer / build failed).
    */
   private async tryRenderCustomSlot(
     slot: 'login' | 'consent' | 'incremental' | 'federated' | 'error',
@@ -982,6 +1027,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       csrfToken: string;
       addedItems?: Record<string, unknown[]>;
     }) => AuthFlowState,
+    formTargets: readonly string[],
   ): Promise<boolean> {
     const authUi: AuthUiRegistry | undefined = this.scope.authUi;
     if (!authUi || !authUi.hasSlot(slot)) return false;
@@ -1009,11 +1055,23 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       addedItems: authUi.getAddedItems(pendingAuthId),
     });
 
-    const page = buildAuthUiPage({ registry: authUi, slot, state, fullPath: this.scope.fullPath });
+    const page = buildAuthUiPage({ registry: authUi, slot, state, fullPath: this.scope.fullPath, formTargets });
     if (!page) return false; // build failed → fall back to the built-in page
 
     this.respond(httpRespond.html(page.html, 200, page.headers));
     return true;
+  }
+
+  /** The authorization endpoints of the upstream providers among `providerIds` (others have none). */
+  private providerAuthorizationEndpoints(providerIds: Iterable<string>): string[] {
+    const localAuth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
+    if (typeof localAuth?.getProviderConfig !== 'function') return [];
+    const endpoints: string[] = [];
+    for (const id of providerIds) {
+      const endpoint = localAuth.getProviderConfig(id)?.authorizationEndpoint;
+      if (endpoint) endpoints.push(endpoint);
+    }
+    return endpoints;
   }
 
   /**
@@ -1065,6 +1123,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       userInfo: {},
       frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
       providerIds: [providerId],
+      signinBinding: this.signinBindingHash,
     });
 
     // Fresh PKCE + state for the upstream authorization-code exchange.

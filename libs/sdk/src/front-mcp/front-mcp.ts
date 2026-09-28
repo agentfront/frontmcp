@@ -147,6 +147,15 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   /**
+   * The scope that holds the server's own apps, which `createDirect`, `createFetchHandler`,
+   * `runStdio` and `connect()` serve. Not simply the first scope: a `standalone` app such as
+   * `DashboardApp` gets a scope of its own, created first. See `ScopeRegistry.getPrimaryScope`.
+   */
+  getPrimaryScope(): ScopeEntry | undefined {
+    return this.scopes.getPrimaryScope();
+  }
+
+  /**
    * Wire the health service from the first scope into the server instance.
    * Called before server.start() or server.prepare() to register health routes.
    */
@@ -170,10 +179,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
           composite.registerProbe(probe);
         }
       }
-      // Use first scope's catalog view (catalog is scope-level; probes are aggregated)
-      const firstScope = scopes[0];
-      if (firstScope) {
-        composite.setScopeView(firstScope);
+      // Use the primary scope's catalog view (catalog is scope-level; probes are aggregated)
+      const primaryScope = this.getPrimaryScope() as Scope | undefined;
+      if (primaryScope) {
+        composite.setScopeView(primaryScope);
       }
       serverInstance.setHealthService(composite, healthConfig);
     } else {
@@ -286,7 +295,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const build = async (): Promise<WebFetchHandler> => {
       const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
       await frontMcp.ready;
-      const scope = frontMcp.getScopes()[0] as Scope | undefined;
+      const scope = frontMcp.getPrimaryScope() as Scope | undefined;
       if (!scope) {
         throw new ServerNotFoundError();
       }
@@ -419,15 +428,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    // Get the primary scope
-    const scopes = frontMcp.getScopes();
-    if (scopes.length === 0) {
+    // The scope holding the server's own apps, not a standalone app's
+    const scope = frontMcp.getPrimaryScope();
+    if (!scope) {
       throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
     }
 
-    // Return a DirectMcpServer wrapping the first scope
     frontMcp.log?.info('FrontMCP direct server created');
-    return new DirectMcpServerImpl(scopes[0] as Scope);
+    return new DirectMcpServerImpl(scope as Scope);
   }
 
   /**
@@ -642,12 +650,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
       });
 
-      // Get the primary scope
-      const scopes = frontMcp.getScopes();
-      if (scopes.length === 0) {
+      // The scope holding the server's own apps, not a standalone app's
+      const primaryScope = frontMcp.getPrimaryScope();
+      if (!primaryScope) {
         throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
       }
-      const scope = scopes[0] as Scope;
+      const scope = primaryScope as Scope;
 
       // Import the MCP handlers creator
       const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');

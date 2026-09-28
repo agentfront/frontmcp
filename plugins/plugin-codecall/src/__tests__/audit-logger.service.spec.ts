@@ -2,7 +2,7 @@
  * Tests for audit-logger.service.ts
  */
 
-import { AuditLoggerService, AUDIT_EVENT_TYPES, AuditEvent } from '../services/audit-logger.service';
+import { AUDIT_EVENT_TYPES, AuditLoggerService, type AuditEvent } from '../services/audit-logger.service';
 
 describe('AUDIT_EVENT_TYPES', () => {
   it('should have all execution event types', () => {
@@ -383,6 +383,35 @@ describe('AuditLoggerService', () => {
       const data = receivedEvents[0].data as any;
       expect(data.error).toContain('[path]');
       expect(data.error).not.toContain('C:\\Users');
+    });
+
+    it('keeps URLs while removing paths', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      logger.logExecutionFailure(
+        'exec_123',
+        'code',
+        50,
+        'GET https://api.example.com/v1/users failed in /srv/app/x.js',
+      );
+
+      const data = receivedEvents[0].data as any;
+      expect(data.error).toBe('GET https://api.example.com/v1/users failed in [path]');
+    });
+
+    // Errors and denial reasons come from scripts and tools, so a crafted one must not make
+    // sanitizing slow.
+    it.each([
+      ['a POSIX path of dashes', '/' + '-'.repeat(100_000) + '!'],
+      ['a Windows path of dashes', 'C:\\' + '-'.repeat(100_000)],
+      ['alternating dashes and slashes', '-/'.repeat(50_000)],
+      ['repeated drive prefixes', 'a:\\-'.repeat(25_000)],
+      ['blank lines', '\n'.repeat(100_000)],
+    ])('sanitizes a long error of %s in linear time', (_label, error) => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      const started = Date.now();
+      logger.logExecutionFailure('exec_123', 'code', 50, error);
+      logger.logSecurityAccessDenied('exec_123', 'tool', error);
+      expect(Date.now() - started).toBeLessThan(1_000);
     });
   });
 

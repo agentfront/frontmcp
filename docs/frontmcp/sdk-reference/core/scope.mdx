@@ -339,10 +339,11 @@ class MyTool extends ToolContext {
 
 ```typescript
 const instance = await FrontMcpInstance.createForGraph(config);
-const scopes = instance.getScopes();
 
-const scope = scopes[0];
-console.log('Tools:', scope.tools.getTools().length);
+// The scope of the server's own apps. A standalone app (such as DashboardApp) has its own
+// scope in instance.getScopes(), listed first.
+const scope = instance.getPrimaryScope();
+console.log('Tools:', scope?.tools.getTools().length);
 ```
 
 ### From DirectClient

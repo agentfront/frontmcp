@@ -445,6 +445,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       pollIntervalMs,
       expiresAt,
       request: { method: 'tools/call', params: cleanedParams },
+      scopeId: this.scope.id,
     };
     if (this.state.progressToken !== undefined) {
       record.progressToken = this.state.progressToken;

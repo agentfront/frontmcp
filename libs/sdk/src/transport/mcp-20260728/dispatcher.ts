@@ -29,7 +29,7 @@ import { buildInputRequiredResult, MrtrExchange } from './mrtr';
 import { type RequestNotificationSink } from './request-notifications';
 import { computeRequestBinding, decodeRequestState, type RequestStateBinding } from './request-state';
 import { type JsonRpcErrorPayload } from './request-validation';
-import { decorateResult, orderListResult, resolveCacheScope } from './result-decorator';
+import { decorateResult, isShapedPerCaller, orderListResult, resolveCacheScope } from './result-decorator';
 import {
   buildCreateTaskResult,
   clientSupportsTasks,
@@ -272,7 +272,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
 
   const method = body['method'] as string;
   const params = (body['params'] as Record<string, unknown> | undefined) ?? {};
-  const cacheScope = resolveCacheScope(isAnonymous);
+  const cacheScope = resolveCacheScope(isAnonymous, isShapedPerCaller(scope, method));
   const serverInfo = scope.metadata.info as Implementation;
   const decorate = (raw: Record<string, unknown>): Record<string, unknown> =>
     decorateResult(orderListResult(method, raw), { method, serverInfo, cacheScope, traceContext });

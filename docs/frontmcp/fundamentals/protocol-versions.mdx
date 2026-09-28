@@ -143,8 +143,12 @@ results additionally carry caching hints:
 }
 ```
 
-`cacheScope` is `public` for anonymous traffic and `private` whenever the result
-could vary by caller.
+`cacheScope` is `private` whenever the result could vary by caller: every
+authenticated request, and anonymous ones on a server that evaluates `authorities`
+or has a plugin hook on the flow that builds the result (feature flags, skill
+visibility, custom list filters). Only an anonymous result nothing shapes per caller
+is `public`. Up to 1.8.2 every anonymous result was `public`, so a shared cache could
+serve one caller's filtered list to another.
 
 ### Multi Round-Trip Requests (MRTR)
 
