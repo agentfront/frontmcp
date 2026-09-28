@@ -176,6 +176,12 @@ export interface SkillRegistryInterface {
   hasAny(): boolean;
 
   /**
+   * Whether the scope serves skills: it has some, or a plugin registers them at runtime
+   * (`@Plugin({ dynamicSkills: true })`), so the skills capability and methods exist from startup.
+   */
+  servesSkills?(): boolean;
+
+  /**
    * Get total skill count.
    * @param options - Count options
    */
@@ -304,6 +310,9 @@ export default class SkillRegistry
    * caller cannot remove a replacement registration.
    */
   private dynamicGenerations = new Map<string, number>();
+
+  /** Whether a plugin registers skills at runtime ({@link expectDynamicSkills}). */
+  private dynamicSkillsExpected = false;
 
   /** Adopted skills from child registries */
   private adopted = new Map<SkillRegistry, IndexedSkill[]>();
@@ -854,6 +863,20 @@ export default class SkillRegistry
   }
 
   /**
+   * Record that a plugin registers skills at runtime ({@link registerSkillContent}), such as a
+   * skill bundle loaded after the server starts. The scope then serves the skills capability and
+   * methods from startup, answering with the skills registered so far.
+   */
+  expectDynamicSkills(): void {
+    this.dynamicSkillsExpected = true;
+  }
+
+  /** Whether the scope serves skills: it has some, or a plugin registers them at runtime. */
+  servesSkills(): boolean {
+    return this.dynamicSkillsExpected || this.hasAny();
+  }
+
+  /**
    * Get total skill count.
    *
    * Sums the provider count with overlay rows the provider does not know
@@ -1020,7 +1043,7 @@ export default class SkillRegistry
    * of the schema cutover see the declaration.
    */
   getCapabilities(): Partial<ServerCapabilities> {
-    if (!this.hasAny()) return {};
+    if (!this.servesSkills()) return {};
     return {
       experimental: {
         [SEP_2640_EXTENSION_ID]: {},

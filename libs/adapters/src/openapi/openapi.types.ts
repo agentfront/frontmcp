@@ -760,8 +760,10 @@ interface BaseOptions {
    * service is token passthrough, which the MCP specification forbids. Without this option an
    * operation that requires authentication fails when the adapter has no credential for it.
    * Enable it only when the API is meant to accept the same token (same issuer and audience).
-   * It also covers a security scheme with no `authProviderMapper` entry, which is otherwise refused
-   * at startup.
+   * The token is sent as the bearer token (`jwt`), so it fills only HTTP bearer schemes: it also
+   * covers such a scheme when it has no `authProviderMapper` entry (otherwise refused at startup),
+   * and an operation whose schemes are all of other types (API key, basic, OAuth2, OpenID
+   * Connect) still fails with `Authentication required for tool '…'`.
    *
    * @default false
    */

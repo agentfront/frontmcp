@@ -397,7 +397,7 @@ The adapter resolves authentication in this order:
 2. **`authProviderMapper`** with `securitySchemesInInput` - Hybrid: some from input, some from context
 3. **`authProviderMapper`** - Map security schemes to auth providers
 4. **`staticAuth`** - Static credentials; with an `authProviderMapper`, fills every credential no mapper function returned (a mapped value wins)
-5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent). Never reached when `staticAuth` is set. It also covers a security scheme that has no `authProviderMapper` entry, which is otherwise refused at startup
+5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent). Never reached when `staticAuth` is set. It fills only HTTP bearer schemes: it also covers such a scheme when it has no `authProviderMapper` entry (otherwise refused at startup), never an API key, basic, OAuth2 or OpenID Connect scheme. An operation is sent only with a credential for one of its own schemes, from any of these, the tool input, `additionalHeaders` or `headersMapper`. A tool-input credential is used for a scheme only when none of the others supplies one: the model chooses it
 
 **Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
 
@@ -1308,13 +1308,13 @@ When the adapter loads, it:
 
 ### Security Risk Scores
 
-| Score         | Configuration                                      | Description                                   |
-| ------------- | -------------------------------------------------- | --------------------------------------------- |
-| **LOW** ✅    | `authProviderMapper` or `securityResolver`         | Auth from context - Production ready          |
-| **MEDIUM** ⚠️ | `securitySchemesInInput` with `authProviderMapper` | Hybrid: some user-provided, some from context |
-| **MEDIUM** ⚠️ | `staticAuth` or default                            | Static credentials - Secure but less flexible |
-| **HIGH** ❌   | `includeSecurityInInput: true`                     | User provides auth - High security risk       |
-| **HIGH** ❌   | `passthroughCallerToken: true`                     | The MCP client's own token is sent to the API |
+| Score         | Configuration                                     | Description                                   |
+| ------------- | ------------------------------------------------- | --------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`        | Auth from context - Production ready          |
+| **HIGH** ❌   | `securitySchemesInInput` (with or without others) | The model provides those schemes' credentials |
+| **MEDIUM** ⚠️ | `staticAuth` or default                           | Static credentials - Secure but less flexible |
+| **HIGH** ❌   | `includeSecurityInInput: true`                    | User provides auth - High security risk       |
+| **HIGH** ❌   | `passthroughCallerToken: true`                    | The MCP client's own token is sent to the API |
 
 `passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.
 
@@ -1348,24 +1348,24 @@ const adapter = new OpenapiAdapter({
 [OpenAPI Adapter: my-api] Invalid security configuration.
 Missing auth provider mappings for security schemes: GitHubAuth, SlackAuth
 
-Your OpenAPI spec requires these security schemes, but no auth configuration was provided.
+Your OpenAPI spec requires these security schemes, but no credential option covers them.
 
 Add one of the following to your adapter configuration:
 
-1. authProviderMapper (recommended):
+1. authProviderMapper (recommended): a function per scheme that returns the credential issued for the API:
    authProviderMapper: {
-     'GitHubAuth': (authInfo) => authInfo.user?.githubauthToken,
-     'SlackAuth': (authInfo) => authInfo.user?.slackauthToken,
+     'GitHubAuth': (ctx) => getApiCredential(ctx), // the jwt
+     'SlackAuth': (ctx) => getApiCredential(ctx), // the jwt
    }
 
 2. securityResolver:
-   securityResolver: async (tool, ctx) => ({ jwt: await getApiToken(ctx) })
+   securityResolver: async (tool, ctx) => ({ jwt: await getApiCredential(ctx) })
 
-3. staticAuth:
-   staticAuth: { jwt: process.env.API_TOKEN }
+3. staticAuth (one credential for every caller):
+   staticAuth: { jwt: process.env.API_CREDENTIAL }
 
-4. Include security in input (NOT recommended for production):
-   generateOptions: { includeSecurityInInput: true }
+4. passthroughCallerToken: true, for the HTTP bearer schemes (GitHubAuth, SlackAuth) only, and only if the API
+   accepts the MCP client's own token (same issuer and audience). It sends nothing for other schemes.
 ```
 
 ### Example: Valid Configuration
@@ -1409,8 +1409,8 @@ await tool.execute(
 );
 
 // Error:
-// Authentication required for tool 'github_getRepos' but no auth configuration found.
-// Required security schemes: GitHubAuth
+// Authentication required for tool 'github_getRepos': no credential for its security schemes.
+// Required security schemes: GitHubAuth (http)
 ```
 
 ### Bypassing Validation (Not Recommended)

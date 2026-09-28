@@ -5,7 +5,7 @@ import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
 import { isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
-import { resolveToolSecurity } from './openapi.security';
+import { assertRequestHasCredential, resolveToolSecurity } from './openapi.security';
 import type {
   ExtendedToolMetadata,
   InputTransform,
@@ -140,8 +140,13 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       transformContext,
     );
 
-    // 2. Resolve security from context
-    const security = await resolveToolSecurity(openapiTool, ctx, options);
+    // 2. Resolve security from context, and from the input for the schemes it carries. Whether the
+    // operation is authenticated is decided on the request as built (step 5b), after
+    // `additionalHeaders` and `headersMapper`, which may supply the credential.
+    const security = await resolveToolSecurity(openapiTool, ctx, options, {
+      input: injectedInput,
+      deferCredentialCheck: true,
+    });
 
     // 3. Build request from mapper (now uses injectedInput)
     const { url, headers, body: requestBody } = buildRequest(openapiTool, injectedInput, security, options.baseUrl);
@@ -163,6 +168,11 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         throw new Error(`headersMapper failed for tool '${openapiTool.name}': ${errorMessage}`, { cause: err });
       }
     }
+
+    // 5b. An operation that requires authentication is sent only with a credential for one of its
+    // own security schemes, from any source (a bearer token does not make an API-key operation
+    // authenticated, a key `additionalHeaders` or `headersMapper` sets does).
+    assertRequestHasCredential(openapiTool, url, headers);
 
     // 6. Apply custom body mapper with error handling
     let finalBody = requestBody;

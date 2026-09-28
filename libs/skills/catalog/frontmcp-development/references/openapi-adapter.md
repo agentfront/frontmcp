@@ -128,16 +128,16 @@ OpenapiAdapter.init({
 
 With no `authProviderMapper`, `securityResolver` or `staticAuth`, the adapter sends **no** credentials: operations that require auth fail with `Authentication required for tool '…'` and a `SECURITY WARNING` is logged at startup. The caller's MCP token (`ctx.authInfo.token`) is never forwarded implicitly — not by default, and not when an `authProviderMapper` function returns `undefined` — because passing it to another API is token passthrough, which the MCP specification forbids. `passthroughCallerToken: true` is the explicit opt-in, used only after every other credential source came up empty.
 
-| Risk Level | Strategy                                   | Description                                          |
-| ---------- | ------------------------------------------ | ---------------------------------------------------- |
-| LOW        | `authProviderMapper` or `securityResolver` | Auth from user context, not exposed to clients       |
-| MEDIUM     | `staticAuth`, `additionalHeaders`, or none | Static credentials, or no credentials at all         |
-| HIGH       | `includeSecurityInInput: true`             | Auth fields exposed to MCP clients (not recommended) |
-| HIGH       | `passthroughCallerToken: true`             | The MCP client's own token is sent to the API        |
+| Risk Level | Strategy                                                    | Description                                          |
+| ---------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| LOW        | `authProviderMapper` or `securityResolver`                  | Auth from user context, not exposed to clients       |
+| MEDIUM     | `staticAuth`, `additionalHeaders`, or none                  | Static credentials, or no credentials at all         |
+| HIGH       | `includeSecurityInInput: true`, or `securitySchemesInInput` | Auth fields exposed to MCP clients (not recommended) |
+| HIGH       | `passthroughCallerToken: true`                              | The MCP client's own token is sent to the API        |
 
 `passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver` or a non-empty `staticAuth` leaves it unused.
 
-Resolution order: `securityResolver` → `authProviderMapper` → `staticAuth` (fills every credential no mapper function returned; a mapped value wins) → `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` or `passthroughCallerToken` covers it (the latter sends the caller's token for it and logs a `SECURITY WARNING`).
+Resolution order: `securityResolver` → `authProviderMapper` → `staticAuth` (fills every credential no mapper function returned; a mapped value wins) → `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` covers it, or `passthroughCallerToken` does for an HTTP bearer scheme (it sends the caller's token for it and logs a `SECURITY WARNING`; the caller's token never fills an API key, basic, OAuth2 or OpenID Connect scheme). An operation that requires auth is sent only with a credential for one of its own schemes, from a credential option, the tool input (`securitySchemesInInput`, `includeSecurityInInput`), `additionalHeaders` or `headersMapper`; otherwise it fails with `Authentication required for tool '…'`. A tool-input credential is used for a scheme only when no other source supplies one (a server credential always wins).
 
 ## Spec Polling
 

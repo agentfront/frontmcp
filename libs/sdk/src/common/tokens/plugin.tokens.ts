@@ -18,4 +18,5 @@ export const FrontMcpPluginTokens = {
   scope: tokenFactory.meta('scope'),
   contextExtensions: tokenFactory.meta('contextExtensions'),
   enforcesMetadata: tokenFactory.meta('enforcesMetadata'),
+  dynamicSkills: tokenFactory.meta('dynamicSkills'),
 } as const satisfies RawMetadataShape<PluginMetadata>;

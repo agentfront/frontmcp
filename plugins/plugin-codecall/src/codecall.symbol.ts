@@ -67,6 +67,9 @@ export interface CodeCallVmEnvironment {
    * @param options - Optional behavior configuration
    * @param options.throwOnError - When true (default), throws on error.
    *                               When false, returns { success, data, error }.
+   *                               The sandbox calls it without options: it applies a script's
+   *                               `{ throwOnError: false }` itself, for `callTool()` and
+   *                               namespace methods alike, so it needs the throw.
    *
    * SECURITY NOTES:
    * - Cannot call 'codecall:*' tools (self-reference blocked)
@@ -97,12 +100,11 @@ export interface CodeCallVmEnvironment {
   /**
    * Optional dotted-tool-name namespaces, as data: `{ acme: { getUser: 'acme.getUser' } }`.
    *
-   * The enclave service writes them into the script as AgentScript objects whose methods
-   * call `callTool('acme.getUser', input)` inside the sandbox, so AgentScript can call
-   * `await acme.getUser({...})` and every such call still passes the sandbox's tool-call
-   * cap, rate limit and suspicious-sequence checks (they are never host functions). Tools
-   * whose names cannot be expressed as `{validIdent}.{validIdent}` remain reachable only
-   * via `callTool`.
+   * The enclave service hands them to the sandbox as its `toolNamespaces`, which builds the
+   * objects itself, so AgentScript can call `await acme.getUser({...})` and every such call is a
+   * `callTool('acme.getUser', …)` inside the sandbox: it passes the tool-call cap, rate limit
+   * and suspicious-sequence checks (they are never host functions). Tools whose names the
+   * sandbox can't bind remain reachable only via `callTool`.
    */
   toolNamespaces?: Record<string, Record<string, string>>;
 }

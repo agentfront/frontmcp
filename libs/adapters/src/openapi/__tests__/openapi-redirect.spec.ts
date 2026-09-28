@@ -44,6 +44,7 @@ jest.mock('../openapi.utils', () => ({
 
 jest.mock('../openapi.security', () => ({
   resolveToolSecurity: jest.fn().mockResolvedValue({}),
+  assertRequestHasCredential: jest.fn(),
 }));
 
 const mockFetch = jest.fn();

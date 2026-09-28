@@ -66,7 +66,7 @@ import { registerCustomHttpRoutes } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import { createSkillToolGuardHook } from '../skill/hooks';
 import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
-import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
 import {
   CliTaskRunner,
@@ -821,7 +821,7 @@ export class Scope extends ScopeEntry {
       }
     }
 
-    // Register skill flows and resources if any skills are available
+    // Register skill flows and resources if any skills are available, or a plugin registers them at runtime
     await registerSkillCapabilities({
       skillRegistry: this.scopeSkills,
       flowRegistry: this.scopeFlows,
@@ -829,6 +829,10 @@ export class Scope extends ScopeEntry {
       providers: this.scopeProviders,
       skillsConfig: this.metadata.skillsConfig,
       logger: this.logger,
+      dynamicSkills: pluginsRegisterDynamicSkills([
+        ...serverPlugins,
+        ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
+      ]),
     });
 
     // Initialize jobs and workflows (issue #408).
