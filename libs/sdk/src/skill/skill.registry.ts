@@ -362,6 +362,8 @@ export default class SkillRegistry
 
   /** Children registries */
   private children = new Set<SkillRegistry>();
+  /** The registries that adopted this one: a skill registered here is served through them too. */
+  private readonly adopters = new Set<SkillRegistry>();
 
   /** O(1) indexes */
   private byQualifiedId = new Map<string, IndexedSkill>();
@@ -546,6 +548,7 @@ export default class SkillRegistry
 
     this.adopted.set(child, adoptedRows);
     this.children.add(child);
+    child.adopters.add(this);
 
     // Subscribe to child changes
     child.subscribe({ immediate: false }, () => {
@@ -580,6 +583,23 @@ export default class SkillRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Every skill whose `skill://` URIs share a namespace with this registry's: its own and, through
+   * each registry that adopts it (and theirs), everything those serve, sibling registries included.
+   */
+  private skillsSharingUris(): SkillEntry[] {
+    const registries = new Set<SkillRegistry>();
+    const skills = new Set<SkillEntry>();
+    const visit = (registry: SkillRegistry): void => {
+      if (registries.has(registry)) return;
+      registries.add(registry);
+      for (const row of registry.listAllIndexed()) skills.add(row.instance);
+      for (const adopter of registry.adopters) visit(adopter);
+    };
+    visit(this);
+    return [...skills];
   }
 
   /* -------------------- Public API -------------------- */
@@ -1301,10 +1321,6 @@ export default class SkillRegistry
 
     const id = content.id;
 
-    // Replace if already registered with the same id
-    const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
-    const replaced = existingIdx === -1 ? undefined : this.dynamicRows[existingIdx];
-
     // Synthesize a SkillValueRecord from the SkillContent
     const metadata: SkillMetadata = {
       id,
@@ -1337,18 +1353,6 @@ export default class SkillRegistry
 
     const instance = createSkillInstance(record, this.providers, this.owner);
 
-    // Refused before anything changes, so the version this would replace stays registered.
-    const others = this.listAllIndexed()
-      .filter((r) => r !== replaced)
-      .map((r) => r.instance);
-    const collision = findIdPathCollision([...others, instance]);
-    if (collision) {
-      throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
-    }
-    if (existingIdx !== -1) {
-      this.dynamicRows.splice(existingIdx, 1);
-    }
-
     // Pre-load instructions so subsequent loads return the same content (no file/URL
     // resolution: instructions came in as an inline string).
     try {
@@ -1359,6 +1363,20 @@ export default class SkillRegistry
           (error as Error).message
         }`,
       );
+    }
+
+    // From here to the commit below nothing is awaited, so two registrations can't both pass the
+    // check. Refused before anything changes, so the version this would replace stays registered.
+    // Replace if already registered with the same id.
+    const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
+    const replaced = existingIdx === -1 ? undefined : this.dynamicRows[existingIdx].instance;
+    const others = this.skillsSharingUris().filter((other) => other !== replaced);
+    const collision = findIdPathCollision([...others, instance]);
+    if (collision) {
+      throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
+    }
+    if (existingIdx !== -1) {
+      this.dynamicRows.splice(existingIdx, 1);
     }
 
     const lineage: EntryLineage = this.owner ? [this.owner] : [];
