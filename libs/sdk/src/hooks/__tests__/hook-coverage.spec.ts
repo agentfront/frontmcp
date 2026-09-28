@@ -26,6 +26,7 @@ function scopeWith(targetsFor: Record<string, object[]>, lineage: EntryLineage) 
     tools: { lineageOf },
     resources: { lineageOf },
     prompts: { lineageOf },
+    skills: { lineageOf },
   } as unknown as ScopeEntry;
   return { scope, getFlowHooksForOwner };
 }
@@ -69,6 +70,19 @@ describe('isEntryGatedBy', () => {
 
     expect(isEntryGatedBy(scope, { prompt }, plugin)).toBe(false);
     expect(isEntryGatedBy(scope, { prompt }, otherPlugin)).toBe(true);
+  });
+
+  it("reads a plugin-contributed skill's skills:filter hooks for the app in its lineage", () => {
+    const lineage: EntryLineage = [owner('scope', 'gw'), owner('app', 'billing'), owner('plugin', 'playbooks')];
+    const { scope, getFlowHooksForOwner } = scopeWith(
+      { 'skills:filter|billing': [plugin], 'skills:filter|undefined': [plugin, otherPlugin] },
+      lineage,
+    );
+    const skill = { owner: owner('plugin', 'playbooks') } as unknown as SkillEntry;
+
+    expect(isEntryGatedBy(scope, { skill }, plugin)).toBe(true);
+    expect(isEntryGatedBy(scope, { skill }, otherPlugin)).toBe(false);
+    expect(getFlowHooksForOwner).toHaveBeenCalledWith('skills:filter', 'billing');
   });
 
   it("reads a skill's skills:filter hooks for its app", () => {

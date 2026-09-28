@@ -20,7 +20,8 @@ export type HookGatedEntry =
 /**
  * The flow that serves an entry by name or URI, and the hook owner it resolves for the entry: the
  * one `CallToolFlow`, `ReadResourceFlow` and `GetPromptFlow` resolve (completion follows the prompt
- * or resource it completes for). Skills are served through `skills:filter`, owned by their app.
+ * or resource it completes for). Skills are served through `skills:filter`, owned by the app in their
+ * registry lineage (a plugin-contributed skill is owned by its plugin, installed on that app).
  */
 function gateOf(scope: ScopeEntry, entry: HookGatedEntry): { flow: FlowName; ownerId: string | undefined } {
   if ('tool' in entry) {
@@ -41,7 +42,10 @@ function gateOf(scope: ScopeEntry, entry: HookGatedEntry): { flow: FlowName; own
       ownerId: appOwnerIdOf(scope.prompts.lineageOf(entry.prompt) ?? [], entry.prompt.owner),
     };
   }
-  return { flow: 'skills:filter', ownerId: appOwnerIdOf([], entry.skill.owner) };
+  return {
+    flow: 'skills:filter',
+    ownerId: appOwnerIdOf(scope.skills.lineageOf?.(entry.skill) ?? [], entry.skill.owner),
+  };
 }
 
 /**
