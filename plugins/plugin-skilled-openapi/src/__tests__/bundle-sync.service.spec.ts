@@ -1,5 +1,5 @@
 import { BundleStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
-import { type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+import { type RegisterSkillContentOptions, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
 
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { BundleSyncService } from '../sync/bundle-sync.service';
@@ -19,15 +19,20 @@ const loggerMocks = fakeLogger as unknown as { error: jest.Mock; warn: jest.Mock
 
 class FakeRegistry implements Partial<SkillRegistryInterface> {
   public registered: SkillContent[] = [];
+  public registeredOptions: (RegisterSkillContentOptions | undefined)[] = [];
   public unregistered: string[] = [];
   public failNext = false;
 
-  async registerSkillContent(content: SkillContent): Promise<{ id: string; unregister: () => Promise<void> }> {
+  async registerSkillContent(
+    content: SkillContent,
+    opts?: RegisterSkillContentOptions,
+  ): Promise<{ id: string; unregister: () => Promise<void> }> {
     if (this.failNext) {
       this.failNext = false;
       throw new Error('synthetic registration failure');
     }
     this.registered.push(content);
+    this.registeredOptions.push(opts);
     return {
       id: content.id,
       unregister: async () => {
@@ -223,6 +228,52 @@ describe('BundleSyncService', () => {
     expect(result.applied).toBe(true);
     expect(fakeReg.unregistered).toContain('invoices');
     expect(hiddenOps.size).toBe(0);
+  });
+
+  it("names the previous bundle's skills it has not registered again as superseded", async () => {
+    // The registry refuses a skill whose id is another skill's path. Every new skill is registered
+    // before the dropped ones are removed, so without `supersedes` a bundle that gives a new skill
+    // the path a dropped (or renamed) skill holds now would be refused and rolled back.
+    const fakeReg = new FakeRegistry();
+    const sync = new BundleSyncService(
+      fakeReg as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    const skill = (id: string, name: string) => ({
+      id,
+      name,
+      description: `${name} skill`,
+      instructions: `# ${name}`,
+      operationIds: [],
+    });
+
+    // `invoices` holds the path `target`; the next bundle drops it and adds a skill with id `target`.
+    await sync.apply(
+      buildBundle({ skills: [skill('invoices', 'target'), skill('reports', 'reports')], operations: {} }),
+    );
+    expect(fakeReg.registeredOptions.map((opts) => opts?.supersedes)).toEqual([[], []]);
+
+    fakeReg.registered = [];
+    fakeReg.registeredOptions = [];
+    const result = await sync.apply(
+      buildBundle({ skills: [skill('target', 'other'), skill('reports', 'quarterly')], operations: {}, version: '2' }),
+    );
+
+    expect(result.applied).toBe(true);
+    const supersededById = new Map(
+      fakeReg.registered.map((content, i) => [content.id, fakeReg.registeredOptions[i]?.supersedes] as const),
+    );
+    // Each registration names the prior skills not registered again before it, whatever the load order.
+    const [first, second] = fakeReg.registered.map((content) => content.id);
+    expect([...(supersededById.get(first) ?? [])].sort()).toEqual(['invoices', 'reports']);
+    expect([...(supersededById.get(second) ?? [])].sort()).toEqual(
+      ['invoices', 'reports'].filter((id) => id !== first),
+    );
+    expect(supersededById.get('target')).toContain('invoices');
+    expect(fakeReg.unregistered).toEqual(['invoices']);
   });
 
   it('rolls back hidden-op state if registration fails mid-apply', async () => {

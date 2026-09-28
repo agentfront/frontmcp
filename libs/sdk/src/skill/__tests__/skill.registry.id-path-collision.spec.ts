@@ -159,6 +159,79 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
       await expect(second.registerSkillContent(content('target', 'other'))).rejects.toThrow(PublicMcpError);
       expect(second.getSkills()).toHaveLength(0);
     });
+
+    it('refuses one of two concurrent registrations in sibling registries that would collide', async () => {
+      const parent = await emptyRegistry();
+      const first = await emptyRegistry();
+      const second = await emptyRegistry();
+      await parent.adoptFromChild(first, owner());
+      await parent.adoptFromChild(second, owner());
+
+      const results = await Promise.allSettled([
+        first.registerSkillContent(content('reports-v1', 'target')),
+        second.registerSkillContent(content('target', 'other')),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(parent.getSkills()).toHaveLength(1);
+    });
+  });
+
+  // A bundle sync registers every skill of the new bundle, then unregisters the ones it drops, and
+  // names in `supersedes` the previous bundle's skills it has not registered again yet.
+  describe('registerSkillContent with supersedes', () => {
+    it('accepts a new skill whose id is the path of a skill the same change drops', async () => {
+      const registry = await emptyRegistry();
+      const previous = await registry.registerSkillContent(content('reports-v1', 'target'));
+
+      await expect(
+        registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports-v1'] }),
+      ).resolves.toMatchObject({ id: 'target' });
+      await previous.unregister();
+
+      expect(findSkillByPath(scopeOf(registry), 'target')?.metadata.name).toBe('other');
+    });
+
+    it('accepts a change that renames a kept skill off the path a new id takes', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('reports', 'target'));
+
+      await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports'] });
+      await registry.registerSkillContent(content('reports', 'quarterly'), { supersedes: ['reports'] });
+
+      expect(findSkillByPath(scopeOf(registry), 'quarterly')?.metadata.id).toBe('reports');
+      expect(findSkillByPath(scopeOf(registry), 'target')?.metadata.name).toBe('other');
+    });
+
+    it('refuses the registration that brings a superseded skill back to the colliding path', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('reports', 'target'));
+      await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports'] });
+
+      await expect(registry.registerSkillContent(content('reports', 'target'))).rejects.toThrow(PublicMcpError);
+    });
+
+    it('still refuses a collision with a skill the change does not supersede', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('reports-v1', 'target'));
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+
+      await expect(
+        registry.registerSkillContent(content('target', 'other'), { supersedes: ['ledger'] }),
+      ).rejects.toThrow(/id "target" of skill "other" is the skill:\/\/ path of skill "target"/);
+    });
+
+    it('cannot supersede a skill declared at startup', async () => {
+      @Skill({ id: 'target-skill', name: 'target', description: 'Declared', instructions: '# target' })
+      class TargetSkill extends SkillContext {}
+
+      const registry = new SkillRegistry(await createProviderRegistryWithScope(), [TargetSkill], owner());
+      await registry.ready;
+
+      await expect(
+        registry.registerSkillContent(content('target', 'other'), { supersedes: ['target-skill'] }),
+      ).rejects.toThrow(PublicMcpError);
+    });
   });
 
   describe('skills declared at startup', () => {
