@@ -9,6 +9,7 @@ import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../../scope/scope.instance';
+import { skillToolsForCaller } from '../skill-filter.helper';
 
 /**
  * A skill names its tools, and loading it reports which of them the caller can use, with their
@@ -179,5 +180,65 @@ describe('loading a skill reports the tools the caller can use', () => {
       expect(body).toContain('orderId');
       expect(body).not.toContain(AGENT_ONLY_FIELD);
     });
+  });
+});
+
+describe('skillToolsForCaller warning', () => {
+  const tools = {
+    getTools: () => [
+      { name: 'orders.lookup', metadata: {} },
+      { name: 'refunds.issue', metadata: { availableWhen: { surface: ['agent' as const] } } },
+    ],
+  };
+  const loaded = (warning?: string) => ({
+    skill: { name: 'refunds' },
+    availableTools: ['orders.lookup', 'refunds.issue'],
+    missingTools: warning?.includes('missing tools') ? ['ledger.close'] : [],
+    isComplete: !warning,
+    warning,
+  });
+
+  it('adds a tool the caller cannot use to the warning, as a missing tool', () => {
+    const result = skillToolsForCaller(loaded(), tools, undefined, 'mcp');
+
+    expect(result.missingTools).toEqual(['refunds.issue']);
+    expect(result.warning).toBe(
+      'Skill "refunds" references missing tools: refunds.issue. Some functionality may be limited.',
+    );
+  });
+
+  it('extends the missing tools the warning already names', () => {
+    const result = skillToolsForCaller(
+      loaded(
+        'Skill "refunds" references missing tools: ledger.close; hidden tools: audit.trail. Some functionality may be limited.',
+      ),
+      tools,
+      undefined,
+      'mcp',
+    );
+
+    expect(result.warning).toBe(
+      'Skill "refunds" references missing tools: ledger.close, refunds.issue; hidden tools: audit.trail. Some functionality may be limited.',
+    );
+  });
+
+  it('adds a missing-tools part to a warning that names only hidden tools', () => {
+    const result = skillToolsForCaller(
+      loaded('Skill "refunds" references hidden tools: audit.trail. Some functionality may be limited.'),
+      tools,
+      undefined,
+      'mcp',
+    );
+
+    expect(result.warning).toBe(
+      'Skill "refunds" references missing tools: refunds.issue; hidden tools: audit.trail. Some functionality may be limited.',
+    );
+  });
+
+  it('leaves the warning alone for a caller that can use every tool', () => {
+    const result = skillToolsForCaller(loaded(), tools, undefined, 'agent');
+
+    expect(result.warning).toBeUndefined();
+    expect(result.missingTools).toEqual([]);
   });
 });

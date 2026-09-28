@@ -120,7 +120,13 @@ export interface SkillToolLookup {
  * tool that doesn't exist is, and neither its availability nor its schema reaches that caller.
  */
 export function skillToolsForCaller<
-  T extends { availableTools: string[]; missingTools: string[]; isComplete: boolean },
+  T extends {
+    availableTools: string[];
+    missingTools: string[];
+    isComplete: boolean;
+    warning?: string;
+    skill?: { name?: string };
+  },
 >(loaded: T, tools: SkillToolLookup | null | undefined, ctx?: unknown, surface?: CallSurface): T {
   const caller = callerSurface(ctx, surface);
   if (!tools || caller === undefined || loaded.availableTools.length === 0) return loaded;
@@ -132,5 +138,28 @@ export function skillToolsForCaller<
     availableTools: loaded.availableTools.filter((name) => !notOffered.includes(name)),
     missingTools: [...loaded.missingTools, ...notOffered],
     isComplete: false,
+    warning: warningWithMissingTools(loaded.warning, loaded.skill?.name, notOffered),
   };
+}
+
+const WARNING_PREFIX = /^Skill "(.*)" references /;
+const WARNING_SUFFIX = '. Some functionality may be limited.';
+const MISSING_PART = 'missing tools: ';
+
+/**
+ * The load warning with `names` among its missing tools, in `SkillToolValidator.formatWarning`'s
+ * shape (`Skill "<name>" references missing tools: a, b; hidden tools: c. Some functionality may be
+ * limited.`). A tool the caller's surface hides is reported as missing, like a tool that doesn't exist.
+ */
+function warningWithMissingTools(warning: string | undefined, skillName: string | undefined, names: string[]): string {
+  const prefix = warning?.match(WARNING_PREFIX);
+  if (warning && prefix && warning.endsWith(WARNING_SUFFIX)) {
+    const parts = warning.slice(prefix[0].length, -WARNING_SUFFIX.length).split('; ');
+    const missing = parts.findIndex((part) => part.startsWith(MISSING_PART));
+    if (missing === -1) parts.unshift(`${MISSING_PART}${names.join(', ')}`);
+    else parts[missing] = `${parts[missing]}, ${names.join(', ')}`;
+    return `${prefix[0]}${parts.join('; ')}${WARNING_SUFFIX}`;
+  }
+  const sentence = `Skill "${skillName ?? 'skill'}" references ${MISSING_PART}${names.join(', ')}${WARNING_SUFFIX}`;
+  return warning ? `${warning} ${sentence}` : sentence;
 }
