@@ -18,7 +18,9 @@ import {
   Tool,
   ToolContext,
   type FrontMcpConfigInput,
+  type HookMetadata,
 } from '../../common';
+import { registerPendingTC39Hook, resolvePendingTC39HooksForClass } from '../../common/decorators/hook.decorator';
 import { AuthConfigurationError, UnenforcedMetadataError } from '../../errors';
 import { FrontMcpInstance } from '../front-mcp';
 import { assertStaticStartupConfig } from '../static-startup.check';
@@ -56,6 +58,22 @@ class AnyAppApprovalPlugin {
   gate() {
     // enforcement itself is not under test here
   }
+}
+
+/** Enforces `approval` on the tools of the app it is installed on only (the default `appliesTo`). */
+@Plugin({ name: 'own-app-approval', enforcesMetadata: ['approval'] })
+class OwnAppApprovalPlugin {
+  @ToolHook.Will('execute')
+  gate() {
+    // enforcement itself is not under test here
+  }
+}
+
+/** Wraps an approval gate and is installed as a value, as `ApprovalPlugin.init()` installs its check plugin. */
+function wrappedGate(gate: new () => object) {
+  @Plugin({ name: 'approval-suite', plugins: [gate] })
+  class ApprovalSuitePlugin {}
+  return { provide: ApprovalSuitePlugin, useValue: new ApprovalSuitePlugin() };
 }
 
 /** Contributes a tool that asks for approval, and enforces nothing. */
@@ -128,6 +146,27 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     server({ apps: [app('desk', {})], tools: [tool('shared_refund', APPROVAL)] }),
   ],
   [
+    'an approval tool on an app, and a gate for uncovered apps nested in a plugin value on another app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [wrappedGate(AnyAppApprovalPlugin)] }),
+      ],
+    }),
+  ],
+  [
+    'an approval tool on an app whose own plugin gates only that app',
+    server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)], plugins: [OwnAppApprovalPlugin] })] }),
+  ],
+  [
+    'an approval tool a plugin contributes to an app whose other plugin gates only that app',
+    server({ apps: [app('ops', { plugins: [QueueToolsPlugin, OwnAppApprovalPlugin] })] }),
+  ],
+  [
+    'an approval tool on an app, and a server-level plugin that gates only its own apps',
+    server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)] })], plugins: [OwnAppApprovalPlugin] }),
+  ],
+  [
     'an approval tool inside an agent whose own plugin enforces approval',
     server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
   ],
@@ -154,6 +193,26 @@ const REFUSED: Array<[string, FrontMcpConfigInput, new (...args: never[]) => Err
     'an approval tool offered only to agents',
     server({
       apps: [app('billing', { tools: [tool('agent_refund', { ...APPROVAL, availableWhen: { surface: ['agent'] } })] })],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only another app has a plugin, which gates only that other app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [OwnAppApprovalPlugin] }),
+      ],
+    }),
+    UnenforcedMetadataError,
+  ],
+  [
+    'an approval tool on an app, and only a gate for its own app nested in a plugin value on another app',
+    server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [wrappedGate(OwnAppApprovalPlugin)] }),
+      ],
     }),
     UnenforcedMetadataError,
   ],
@@ -215,5 +274,31 @@ describe('assertStaticStartupConfig', () => {
 
     expect(full).toBeInstanceOf(E);
     expect(fast).toBeInstanceOf(E);
+  });
+
+  it('reads the hooks of a plugin compiled with TC39 decorators without taking them from the build', () => {
+    @Plugin({ name: 'tc39-own-app-approval', enforcesMetadata: ['approval'] })
+    class Tc39OwnAppApprovalPlugin {
+      gate() {
+        // enforcement itself is not under test here
+      }
+    }
+    const pendingHook: HookMetadata = {
+      type: 'will',
+      flow: 'tools:call-tool',
+      stage: 'execute',
+      target: null,
+      method: 'gate',
+    };
+    registerPendingTC39Hook(Tc39OwnAppApprovalPlugin.prototype.gate, pendingHook);
+    const config = server({
+      apps: [
+        app('billing', { tools: [tool('refund_invoice', APPROVAL)] }),
+        app('desk', { plugins: [Tc39OwnAppApprovalPlugin] }),
+      ],
+    });
+
+    expect(errorOf(() => assertStaticStartupConfig(config))).toBeInstanceOf(UnenforcedMetadataError);
+    expect(resolvePendingTC39HooksForClass(Tc39OwnAppApprovalPlugin)).toEqual([pendingHook]);
   });
 });
