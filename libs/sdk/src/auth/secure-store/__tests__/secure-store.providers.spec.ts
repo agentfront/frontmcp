@@ -2,8 +2,8 @@
  * Secure-store providers — resolveRequestSessionId + createSecureStoreProviders
  * (#470).
  *
- * Asserts the request-session resolution (used by `this.secureStore` for the
- * `session` scope) and the DI provider wiring (backend GLOBAL value + accessor
+ * Asserts the session-scope identity resolution (used by `this.secureStore` for
+ * the `session` scope) and the DI provider wiring (backend GLOBAL value + accessor
  * CONTEXT factory). The accessor factory is invoked to prove it constructs a
  * working SecureStoreAccessorImpl bound to the request.
  */
@@ -12,6 +12,7 @@ import 'reflect-metadata';
 import { SECURE_STORE_ACCESSOR, type SecureStoreAccessor, type SecureStoreBackend } from '@frontmcp/auth';
 
 import type { FrontMcpContext } from '../../../context/frontmcp-context';
+import { SessionIdentityRequiredError } from '../../../errors';
 import { createSecureStoreProviders, resolveRequestSessionId, SECURE_STORE_BACKEND } from '../secure-store.providers';
 
 function ctxWith(partial: Partial<FrontMcpContext>): FrontMcpContext {
@@ -19,13 +20,21 @@ function ctxWith(partial: Partial<FrontMcpContext>): FrontMcpContext {
 }
 
 describe('resolveRequestSessionId', () => {
-  it('returns a non-empty sessionId', () => {
-    expect(resolveRequestSessionId(ctxWith({ sessionId: 'sess-1' }))).toBe('sess-1');
+  it('is the session the server verified', () => {
+    expect(resolveRequestSessionId(ctxWith({ sessionId: 'sess-1', verifiedSessionId: 'sess-1' }))).toBe('sess-1');
   });
 
-  it('returns undefined for an empty/missing sessionId', () => {
-    expect(resolveRequestSessionId(ctxWith({ sessionId: '' }))).toBeUndefined();
-    expect(resolveRequestSessionId(ctxWith({}))).toBeUndefined();
+  it('is the signed-in caller for a request without a verified session, never the id it sent', () => {
+    const ctx = ctxWith({ sessionId: 'sent-by-the-client', authInfo: { extra: { user: { sub: 'user-9' } } } as never });
+
+    expect(resolveRequestSessionId(ctx)).toBe('principal:user-9');
+  });
+
+  it('refuses an anonymous caller without a verified session', () => {
+    const anonymous = ctxWith({ sessionId: 'sent', authInfo: { extra: { user: { sub: 'anon:1f2e' } } } as never });
+
+    expect(() => resolveRequestSessionId(anonymous)).toThrow(SessionIdentityRequiredError);
+    expect(() => resolveRequestSessionId(ctxWith({}))).toThrow(SessionIdentityRequiredError);
   });
 });
 

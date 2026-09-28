@@ -171,7 +171,12 @@ describe('Remember for an anonymous client with a session on the Node server', (
   });
 
   afterAll(async () => {
-    await new Promise<void>((resolve) => node.close(() => resolve()));
+    await new Promise<void>((resolve) => {
+      node.close(() => resolve());
+      node.closeAllConnections();
+    });
+    // Let the server finish closing the sessions of the connections it just dropped.
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   function post(body: Record<string, unknown>, sessionId?: string): Promise<Response> {

@@ -8,6 +8,9 @@
  */
 import 'reflect-metadata';
 
+import * as http from 'node:http';
+import { type AddressInfo } from 'node:net';
+
 import { z } from '@frontmcp/lazy-zod';
 import { App, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 import { createMemoryStorage } from '@frontmcp/utils';
@@ -128,5 +131,128 @@ describe('session approval of a static-key caller over MCP 2026-07-28', () => {
     await callTool(handler, 'deploy_service', { service: 'api' });
 
     expect(executedDeployments).toEqual(['api']);
+  });
+});
+
+/**
+ * A legacy SSE session is a session: its approvals stay with it. The request context never counted
+ * it as verified (its id arrives in `?sessionId=`), so a session approval of a static-key caller
+ * was keyed by the key instead, and every other SSE session of that key used it.
+ */
+describe('session approval of a static-key caller over legacy SSE sessions', () => {
+  let node: http.Server;
+  let base: string;
+  const open: AbortController[] = [];
+  let sseRequestId = 1;
+
+  beforeAll(async () => {
+    const storage = createMemoryStorage();
+    await storage.connect();
+
+    @App({
+      id: 'ops',
+      name: 'Ops',
+      plugins: [ApprovalPlugin.init({ storageInstance: storage })],
+      tools: [DeployServiceTool, ApproveDeployTool],
+    })
+    class OpsApp {}
+
+    const app = (await FrontMcpInstance.createHandler({
+      info: { name: 'approval-sse-session', version: '1.0.0' },
+      apps: [OpsApp],
+      auth: { mode: 'static', tokens: [STATIC_KEY] },
+      logging: { level: LogLevel.Off },
+    })) as http.RequestListener;
+    node = http.createServer(app);
+    await new Promise<void>((resolve) => node.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${(node.address() as AddressInfo).port}`;
+  });
+
+  beforeEach(() => {
+    executedDeployments.length = 0;
+  });
+
+  afterAll(async () => {
+    for (const controller of open) controller.abort();
+    await new Promise<void>((resolve) => {
+      node.close(() => resolve());
+      node.closeAllConnections();
+    });
+    // Let the server finish closing the sessions of the connections it just dropped.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  /** A legacy SSE session: responses arrive on the stream, requests go to the endpoint it names. */
+  async function openSseSession(): Promise<(name: string, args?: Record<string, unknown>) => Promise<string>> {
+    const abort = new AbortController();
+    open.push(abort);
+    const authorization = `Bearer ${STATIC_KEY}`;
+    const stream = await fetch(`${base}/sse`, {
+      headers: { accept: 'text/event-stream', authorization },
+      signal: abort.signal,
+    });
+    if (!stream.body) throw new Error(`the SSE stream has no body (HTTP ${stream.status})`);
+    const reader = stream.body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = '';
+
+    async function nextData(): Promise<string> {
+      for (;;) {
+        const end = buffered.indexOf('\n\n');
+        if (end >= 0) {
+          const raw = buffered.slice(0, end);
+          buffered = buffered.slice(end + 2);
+          return raw
+            .split('\n')
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice('data:'.length).trim())
+            .join('');
+        }
+        const { value, done } = await reader.read();
+        if (done) throw new Error('the SSE stream ended');
+        buffered += decoder.decode(value, { stream: true });
+      }
+    }
+
+    const endpoint = new URL(await nextData(), base);
+    const send = (body: Record<string, unknown>) =>
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization },
+        body: JSON.stringify(body),
+      });
+
+    async function request(method: string, params: Record<string, unknown>): Promise<string> {
+      const id = sseRequestId++;
+      await (await send({ jsonrpc: '2.0', id, method, params })).text();
+      for (;;) {
+        const data = await nextData();
+        if (data && (JSON.parse(data) as { id?: number }).id === id) return data;
+      }
+    }
+
+    const clientInfo = { name: 'approval-spec', version: '1' };
+    await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo });
+    await (await send({ jsonrpc: '2.0', method: 'notifications/initialized' })).text();
+    return (name, args = {}) => request('tools/call', { name, arguments: args });
+  }
+
+  it('is used by a later request of the same session', async () => {
+    const call = await openSseSession();
+    await call('approve_deploy');
+
+    await call('deploy_service', { service: 'from-session' });
+
+    expect(executedDeployments).toEqual(['from-session']);
+  });
+
+  it('is not used by another SSE session of the same key', async () => {
+    const [granting, other] = [await openSseSession(), await openSseSession()];
+    await granting('approve_deploy');
+
+    const response = await other('deploy_service', { service: 'from-other-session' });
+
+    expect(response).toContain('requires approval');
+    expect(executedDeployments).toEqual([]);
   });
 });
