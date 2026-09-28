@@ -123,6 +123,15 @@ const EchoAgent = agent({
 })(({ message }) => ({ echoed: `Echo: ${message}` }));
 ```
 
+### Invocation, Hooks and Request Context
+
+Calling `invoke_<agent-id>` runs two flows:
+
+1. `tools:call-tool` for the agent's tool, which applies everything the agent declares: `authorities`, `rateLimit`, `concurrency`, `timeout`, and plugin fields such as `approval` or `featureFlag`.
+2. `agents:call-agent`, which runs the agent. Hooks registered for agent invocation run here: `AgentCallHook` in a plugin, or `@AgentCallHook.Will(...)` / `.Did(...)` methods on the agent class itself.
+
+Inside the agent, including a custom `execute()`, `this.context` (request id, session, auth info) and `CONTEXT`-scoped providers are available, as in a tool.
+
 ---
 
 ## Registering Agents

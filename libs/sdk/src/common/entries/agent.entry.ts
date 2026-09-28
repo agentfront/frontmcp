@@ -11,8 +11,10 @@ import type {
   Tool,
 } from '@frontmcp/protocol';
 
+import type ProviderRegistry from '../../provider/provider.registry';
 import type { AgentInputOf, AgentOutputOf } from '../decorators';
 import type { AgentContext } from '../interfaces';
+import type { ProviderRegistryInterface } from '../interfaces/internal';
 import type { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
 import type { AgentRecord } from '../records';
 import { BaseEntry, type EntryOwnerRef } from './base.entry';
@@ -38,6 +40,13 @@ export type AgentCallExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
+  /**
+   * The request's context-aware providers, built by the `agents:call-agent` flow. When set, the
+   * agent's context resolves through them instead of the agent's default providers, so
+   * `this.context` and CONTEXT-scoped providers are available inside the agent.
+   * @internal
+   */
+  contextProviders?: ProviderRegistryInterface;
 };
 
 /**
@@ -83,6 +92,12 @@ export abstract class AgentEntry<
    * The unique ID of the agent.
    */
   id: string;
+
+  /**
+   * Get the provider registry for this agent.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  abstract get providers(): ProviderRegistry;
 
   /**
    * Input schema for the agent (Zod shape or object).

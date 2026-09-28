@@ -44,6 +44,7 @@ In `'serialized'` mode:
 - A request keeps its turn until it returns **and** everything it started has unwound. Background jobs, workflows and tasks take a turn of their own after the request that started them.
 - A request that waits on its client (an elicitation answer, a `roots/list` reply, the elicitation fallback) steps aside while it waits, so the client can call the server before answering.
 - Concurrent calls **inside one request** (a tool that starts two tool calls with `Promise.all`) cannot be told apart once they overlap. They are refused with `AsyncContextOverlapError` instead of reading each other's context. Run such calls one after another.
+- A workflow runs its ready steps **one at a time**, whatever its `maxConcurrency`: steps running at once would overlap in the workflow's turn. Each step runs once, and the workflow takes about the sum of its steps.
 - A tool must not call its own server through a `DirectClient` or `DirectMcpServer`; it would wait for its own turn. Call other tools through `this.scope` flows instead. A request that waits more than 10 seconds for its turn logs a warning that says so.
 - Timers and promises a tool starts without awaiting run in whichever request holds the turn, so they must not read request context.
 

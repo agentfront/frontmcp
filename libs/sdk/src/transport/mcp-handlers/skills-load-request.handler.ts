@@ -1,7 +1,7 @@
 import { PublicMcpError } from '../../errors';
 import { assertSkillAuthorized } from '../../skill/skill-authorities.helper';
 import { createSkillEntryResolver } from '../../skill/skill-entry.resolver';
-import { isSkillServable } from '../../skill/skill-filter.helper';
+import { isSkillServable, skillToolsForCaller } from '../../skill/skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
 import { toSdkMcpError } from './mcp-error.utils';
@@ -97,7 +97,13 @@ export default function skillsLoadRequestHandler({
           }
         }
 
-        const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
+        // Only the tools this caller's surface can reach count as available (and get schemas): an
+        // agent-only tool is missing to an MCP client, as `tools/list` and `tools/call` treat it.
+        const { skill, availableTools, missingTools, isComplete, warning } = skillToolsForCaller(
+          loadResult,
+          toolRegistry,
+          withMcpSurface(scope, ctx),
+        );
 
         if (warning) {
           warnings.push(warning);

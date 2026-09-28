@@ -23,6 +23,7 @@ import {
   type ParsedAgentResult,
   type SafeTransformResult,
   type ScopeEntry,
+  type ToolCallExtra,
   type ToolEntry,
   type ToolInputType,
   type ToolMetadata,
@@ -124,7 +125,7 @@ export class AgentInstance<
   In = AgentInputOf<{ inputSchema: InSchema }>,
   Out = AgentOutputOf<{ outputSchema: OutSchema }>,
 > extends AgentEntry<InSchema, OutSchema, In, Out> {
-  private readonly providers: ProviderRegistry;
+  private readonly providerRegistry: ProviderRegistry;
   readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
@@ -147,11 +148,11 @@ export class AgentInstance<
   constructor(record: AgentRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
-    this.providers = providers;
+    this.providerRegistry = providers;
     this.name = record.metadata.id ?? record.metadata.name;
     this.id = record.metadata.id ?? record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
-    this.scope = this.providers.getActiveScope();
+    this.scope = this.providerRegistry.getActiveScope();
     this.hooks = this.scope.hooks;
 
     // inputSchema is always a ZodRawShape
@@ -244,11 +245,11 @@ export class AgentInstance<
     const adapterOptions: CreateAdapterOptions = {
       providerResolver: {
         get: <T>(token: Token<T>): T => {
-          return this.providers.get(token);
+          return this.providerRegistry.get(token);
         },
         tryGet: <T>(token: Token<T>) => {
           try {
-            return this.providers.get(token);
+            return this.providerRegistry.get(token);
           } catch {
             return undefined;
           }
@@ -263,7 +264,7 @@ export class AgentInstance<
 
     // Try to get ConfigService for config resolution
     try {
-      const configService = this.providers.get(ConfigService);
+      const configService = this.providerRegistry.get(ConfigService);
       if (configService) {
         adapterOptions.configResolver = this.createConfigResolver(configService);
       }
@@ -399,7 +400,7 @@ export class AgentInstance<
       const toolRecord = normalizeTool(agentToolFunction);
 
       // Create ToolInstance with parent scope's providers
-      this.agentToolInstance = new ToolInstance(toolRecord, this.providers, this.owner);
+      this.agentToolInstance = new ToolInstance(toolRecord, this.providerRegistry, this.owner);
       await this.agentToolInstance.ready;
 
       this.scope.logger.debug(`Created agent tool instance: ${this.agentToolInstance.name} for agent ${this.name}`);
@@ -459,28 +460,43 @@ export class AgentInstance<
   /**
    * Create the execute handler for the agent tool.
    *
-   * This handler is called when the tool is invoked through the standard
-   * tools:call-tool flow. It creates an AgentContext and runs the LLM loop.
+   * The tool's `tools:call-tool` flow has already applied everything the agent declares
+   * (authorities, rate limit, concurrency, timeout and plugin gates, copied onto the tool). The
+   * handler then runs the agent through the `agents:call-agent` flow, so the hooks registered for
+   * agent invocation (`AgentCallHook`, and the agent class's own hooks on that flow) run and the
+   * agent's context gets the request's context providers. The flow's own gates are left to the
+   * tool flow (`gatedBy`), so nothing is counted twice.
    */
   private createAgentToolExecuteHandler(): (
     input: Record<string, unknown>,
     ctx: import('../common').ToolContext,
   ) => Promise<unknown> {
     return async (input, toolCtx) => {
-      // Get auth info from tool context
       // Cast is safe because by the time we reach execute, auth has been validated in the flow
       const authInfo = toolCtx.authInfo as import('@frontmcp/protocol').AuthInfo;
 
-      // Create agent context with minimal AgentCallExtra
-      // Note: buildAgentCtorArgs only accesses ctx.authInfo, so we construct a minimal object
-      // The RequestHandlerExtra properties are not used in the agent execution path
-      const agentCallExtra: Pick<AgentCallExtra, 'authInfo'> = { authInfo };
-      const agentContext = this.create(input as AgentCallArgs, agentCallExtra as AgentCallExtra);
+      // The agent answers the same tools/call request: its JSON-RPC id routes an elicitation through
+      // that request's stream, and its progress token tags the agent's progress notifications.
+      const progressToken = toolCtx._progressTokenInternal;
+      const requestId = toolCtx._jsonRpcRequestIdInternal;
 
-      // Execute the agent's LLM loop
-      const result = await agentContext.execute(input as In);
-
-      return result;
+      // A CallToolResult, which the tool flow passes through as it is.
+      return this.scope.runFlowForOutput('agents:call-agent', {
+        request: {
+          method: 'tools/call',
+          params: {
+            name: this.id,
+            arguments: input,
+            ...(progressToken !== undefined ? { _meta: { progressToken } } : {}),
+          },
+        },
+        ctx: {
+          authInfo,
+          ...(requestId !== undefined ? { requestId } : {}),
+          ...(toolCtx.signal ? { signal: toolCtx.signal } : {}),
+        },
+        gatedBy: 'tools:call-tool',
+      });
     };
   }
 
@@ -494,6 +510,11 @@ export class AgentInstance<
    */
   getToolInstance(): ToolInstance | null {
     return this.agentToolInstance;
+  }
+
+  /** The provider registry this agent was registered with (its app's). */
+  get providers(): ProviderRegistry {
+    return this.providerRegistry;
   }
 
   /**
@@ -557,7 +578,7 @@ export class AgentInstance<
         return this.record.useValue as AgentContext<InSchema, OutSchema, In, Out>;
 
       case AgentKind.FACTORY:
-        return this.record.useFactory(this.providers) as AgentContext<InSchema, OutSchema, In, Out>;
+        return this.record.useFactory(this.providerRegistry) as AgentContext<InSchema, OutSchema, In, Out>;
 
       case AgentKind.ESM:
         throw new AgentNotConfiguredError(`ESM agent "${this.name}" cannot be created via AgentInstance.create()`);
@@ -584,12 +605,14 @@ export class AgentInstance<
     ctx: AgentCallExtra,
     llmAdapter: AgentLlmAdapter,
   ): AgentCtorArgs<In> {
-    const scope = this.providers.getActiveScope();
+    const scope = this.providerRegistry.getActiveScope();
 
     return {
       metadata: this.metadata,
       input: input as In,
-      providers: this.providers,
+      // The request's context-aware providers when the agents:call-agent flow built them, so
+      // `this.context` and CONTEXT-scoped providers resolve inside the agent.
+      providers: ctx.contextProviders ?? this.providerRegistry,
       logger: scope.logger,
       authInfo: ctx.authInfo,
       llmAdapter,
@@ -674,7 +697,9 @@ export class AgentInstance<
       const runningTool = { name: tool.name, fullName: tool.fullName };
       // The tool's code sees the agent's surface as `getCallSurface()`, as it would through the flow.
       return runOnSurface(AGENT_SURFACE, () => {
-        const toolContext = runAsTool(runningTool, () => tool.create(args, ctx));
+        // The agent's context providers are the agent's, not the tool's: the tool builds its own.
+        const { contextProviders: _agentProviders, ...toolCtx } = ctx;
+        const toolContext = runAsTool(runningTool, () => tool.create(args, toolCtx as ToolCallExtra));
         return runAsTool(runningTool, () => Promise.resolve(toolContext.execute(args)));
       });
     };

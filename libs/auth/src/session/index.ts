@@ -235,6 +235,7 @@ export {
   isJwt,
   getTokenSignatureFingerprint,
   deriveTypedUser,
+  anonymousCallerClaims,
   extractBearerToken,
   getKey,
   encryptJson,
@@ -243,6 +244,7 @@ export {
   resetCachedKey,
   TinyTtlCache,
 } from './utils';
+export type { AnonymousCallerClaimsOptions } from './utils';
 
 // Storage-backed implementations (using @frontmcp/utils/storage)
 export {

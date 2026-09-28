@@ -176,6 +176,7 @@ export {
   isJwt,
   getTokenSignatureFingerprint,
   deriveTypedUser,
+  anonymousCallerClaims,
   extractBearerToken,
   getKey,
   encryptJson,
@@ -239,6 +240,8 @@ export {
   createSecureStore,
 } from './session';
 export type {
+  // Anonymous / static-key caller claims
+  AnonymousCallerClaimsOptions,
   // OAuth Authorization Store types
   AuthorizationStore,
   PkceChallenge,
@@ -535,11 +538,13 @@ export {
   advertisedScopes,
   DEFAULT_ALLOWED_SCOPES,
   grantScopes,
+  resourceScopesFor,
   // Redirect URIs
   isLoopbackRedirectUri,
 } from './utils';
 export type {
   BearerErrorCode,
+  ResourceScopeOptions,
   WwwAuthenticateOptions,
   AudienceValidationResult,
   AudienceValidatorOptions,

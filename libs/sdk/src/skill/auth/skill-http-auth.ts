@@ -299,7 +299,12 @@ export async function authorizeSkillHttpRequest(
     const authOptions = scope.auth?.options;
     if (!authOptions || isPublicMode(authOptions)) return { allowed: true, authInfo: {} };
 
-    const verified = await scope.runFlow('session:verify', { request: request as unknown as Record<string, unknown> });
+    // A skills HTTP request is not an MCP session: identify the caller for this request only, so no
+    // session id is minted (which needs MCP_SESSION_SECRET in production).
+    const verified = await scope.runFlow('session:verify', {
+      request: request as unknown as Record<string, unknown>,
+      sessionless: true,
+    });
     if (verified?.kind === 'authorized') {
       return { allowed: true, authInfo: { ...authInfoFromAuthorization(verified.authorization) } };
     }

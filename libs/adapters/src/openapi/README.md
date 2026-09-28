@@ -125,7 +125,7 @@ const adapter = new OpenapiAdapter({
     includeAllResponses: true, // Include all response schemas (default: true)
 
     // Security (see Authentication section)
-    includeSecurityInInput: false, // Add auth to input schema (default: false)
+    includeSecurityInInput: false, // Add auth to input schema: true for every scheme, or a list of scheme names (default: false)
 
     // Naming strategy
     namingStrategy: {
@@ -400,6 +400,8 @@ The adapter resolves authentication in this order:
 5. **`passthroughCallerToken: true`** - Uses `ctx.authInfo.token` when nothing above supplied a credential (off by default: no credentials are sent). Never reached when `staticAuth` is set. It fills only HTTP bearer schemes: it also covers such a scheme when it has no `authProviderMapper` entry (otherwise refused at startup, unless `additionalHeaders` carries its credential or `headersMapper` may set it for a header or cookie scheme), never an API key, basic, OAuth2 or OpenID Connect scheme. An operation is sent only with a credential for one of its own schemes, from any of these, the tool input, `additionalHeaders` or `headersMapper`. A tool-input credential is used for a scheme only when none of the others supplies one: the model chooses it
 
 **Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
+
+`generateOptions.includeSecurityInInput` also takes a list of scheme names (`includeSecurityInInput: ['BearerAuth']`), which works the same way: the named schemes are in the input and their values are sent, and the others still need a credential source.
 
 ## Real-World Examples
 
@@ -1313,7 +1315,7 @@ When the adapter loads, it:
 | **LOW** ✅    | `authProviderMapper` or `securityResolver`        | Auth from context - Production ready          |
 | **HIGH** ❌   | `securitySchemesInInput` (with or without others) | The model provides those schemes' credentials |
 | **MEDIUM** ⚠️ | `staticAuth` or default                           | Static credentials - Secure but less flexible |
-| **HIGH** ❌   | `includeSecurityInInput: true`                    | User provides auth - High security risk       |
+| **HIGH** ❌   | `includeSecurityInInput` (`true` or a list)       | User provides auth - High security risk       |
 | **HIGH** ❌   | `passthroughCallerToken: true`                    | The MCP client's own token is sent to the API |
 
 `passthroughCallerToken: true` scores HIGH alongside an `authProviderMapper` too (the token is sent when no mapper function returns a credential); only a `securityResolver`, or a `staticAuth` without an `authProviderMapper`, leaves it unused.

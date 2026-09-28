@@ -43,10 +43,9 @@ import {
 import {
   computeIssuer,
   FrontMcpAuth,
-  isPublicUrlPinned,
+  getPinnedPublicUrl,
   ProviderScope,
   resourceUriMatches,
-  ServerRequestTokens,
   type FrontMcpLogger,
   type JWK,
   type ScopeEntry,
@@ -295,13 +294,23 @@ function isUnsupportedOperation(error: unknown): boolean {
   return error instanceof StorageNotSupportedError;
 }
 
+/** The origin of an absolute URL, or `undefined` for anything that isn't one. */
+function originOf(value: string): string | undefined {
+  try {
+    const origin = new URL(value).origin;
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly host: string;
   readonly port: number;
   /** The boot-time issuer: the configured one, else this server's listener address (see {@link issuerFor}). */
   readonly issuer: string;
-  /** Whether the operator named the issuer (`issuer` / `local.issuer`, or its host with `FRONTMCP_PUBLIC_HOST`). */
-  private readonly issuerIsConfigured: boolean;
+  /** Whether `FRONTMCP_PUBLIC_HOST` names the boot-time issuer's host, pinning it for every request. */
+  private readonly publicHostPinned: boolean;
   readonly keys: JWK[] = [];
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
@@ -476,7 +485,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // source of truth — this only affects boot-time defaults.
     this.host = getEnv('FRONTMCP_PUBLIC_HOST')?.trim() || 'localhost';
     this.issuer = this.deriveIssuer(options);
-    this.issuerIsConfigured = this.configuredIssuer(options) !== undefined || !!getEnv('FRONTMCP_PUBLIC_HOST')?.trim();
+    this.publicHostPinned = !!getEnv('FRONTMCP_PUBLIC_HOST')?.trim();
 
     // A whitespace-only value is not a secret; treat it as absent so it takes
     // the branches below rather than silently becoming the signing key. The key
@@ -568,27 +577,59 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   /**
-   * The issuer (`iss`) this server names on the tokens it issues in answer to
-   * `request`, and requires on the tokens it accepts there (#269). Issuing and
-   * verifying both ask this, so they can't disagree:
+   * The issuer this server names in answer to `request`: in its discovery
+   * documents (`/.well-known/oauth-authorization-server`'s `issuer`, the
+   * protected resource metadata's `authorization_servers`), on its
+   * authorization responses (the RFC 9207 `iss`, errors included), and as the
+   * `iss` of the tokens it issues; the tokens it accepts there must name it
+   * (#269, and see {@link acceptedIssuersFor}). Every entry point asks this, so
+   * none of them can disagree, on the Node server and under a Web fetch
+   * handler alike (#629). In order:
    *
-   * - a configured issuer (`issuer` / `local.issuer`) is the issuer;
-   * - with `FRONTMCP_PUBLIC_URL` pinned, the issuer is that URL plus this
-   *   scope's path, the address discovery advertises;
-   * - with `FRONTMCP_PUBLIC_HOST` or `expectedAudience` set, the boot-time
-   *   issuer, so a token serves at every address the server answers to;
-   * - a request that came through a Web fetch handler (a Worker, Deno, Bun, a
-   *   Durable Object) has no listener the boot-time issuer could describe, so
-   *   the issuer is the request's own origin plus this scope's path;
-   * - otherwise (the Node server) the boot-time issuer.
+   * 1. a configured issuer (`issuer` / `local.issuer`);
+   * 2. with `FRONTMCP_PUBLIC_URL` pinned, that URL plus this scope's path;
+   * 3. with `FRONTMCP_PUBLIC_HOST` set, the boot-time issuer it names the host
+   *    of (`http://<host>:<http.port><path>`);
+   * 4. the request's own origin plus this scope's path;
+   * 5. without a request, the boot-time issuer.
    */
   issuerFor(request?: ServerRequest): string {
-    if (!request || this.issuerIsConfigured) return this.issuer;
-    if (isPublicUrlPinned()) return computeIssuer(request, this.scope.entryPath, this.scope.routeBase);
+    const configured = this.configuredIssuer(this.options);
+    if (configured !== undefined) return configured;
+    const pinned = getPinnedPublicUrl();
+    if (pinned !== undefined) {
+      return request
+        ? computeIssuer(request, this.scope.entryPath, this.scope.routeBase)
+        : `${pinned}${this.scope.fullPath}`;
+    }
+    if (this.publicHostPinned || !request) return this.issuer;
+    return computeIssuer(request, this.scope.entryPath, this.scope.routeBase);
+  }
+
+  /**
+   * The issuers a token presented with `request` may name: {@link issuerFor}
+   * the request. When the issuer follows the request (nothing pins it) and
+   * local or remote mode lists `expectedAudience`, a token for any listed
+   * address was issued under that address's issuer, so each listed address's
+   * issuer is accepted too, and so is the boot-time issuer that 1.8.4 named on
+   * those tokens. The token's `aud` must still name a listed resource.
+   */
+  acceptedIssuersFor(request?: ServerRequest): string | string[] {
+    const issuer = this.issuerFor(request);
     const options = this.options;
-    if (isOrchestratedMode(options) && options.expectedAudience !== undefined) return this.issuer;
-    const webRequest = (request as unknown as Record<PropertyKey, unknown>)[ServerRequestTokens.webRequest];
-    return webRequest === undefined ? this.issuer : computeIssuer(request, this.scope.entryPath, this.scope.routeBase);
+    const followsRequest =
+      !!request &&
+      this.configuredIssuer(options) === undefined &&
+      getPinnedPublicUrl() === undefined &&
+      !this.publicHostPinned;
+    if (!followsRequest || !isOrchestratedMode(options) || options.expectedAudience === undefined) return issuer;
+    const listed = Array.isArray(options.expectedAudience) ? options.expectedAudience : [options.expectedAudience];
+    const accepted = new Set<string>([issuer, this.issuer]);
+    for (const audience of listed) {
+      const origin = originOf(audience);
+      if (origin) accepted.add(`${origin}${this.scope.fullPath}`);
+    }
+    return [...accepted];
   }
 
   /**
@@ -910,10 +951,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    *
    * The secret alone doesn't make a token this server's: every server started
    * with the same JWT_SECRET holds it. So a token must also (#269):
-   * - name THIS instance as its issuer (`iss`): `expectedIssuer`, which callers
-   *   take from {@link issuerFor} the request, as the token endpoint does when
-   *   it signs; the boot-time issuer when not given. Never the token's own
-   *   claim; and
+   * - name THIS instance as its issuer (`iss`): `expectedIssuer` (one issuer or
+   *   several), which callers take from {@link acceptedIssuersFor} the request,
+   *   matching what the token endpoint names when it signs ({@link issuerFor});
+   *   the boot-time issuer when not given. Never the token's own claim; and
    * - when `expectedAudience` is given, be issued for that protected resource,
    *   or one of those resources (`aud`, compared as RFC 8707 resource URIs).
    *   `session:verify` passes the request's resource URL, or the configured
@@ -926,12 +967,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     token: string,
     requestBaseUrl: string,
     expectedAudience?: string | readonly string[],
-    expectedIssuer?: string,
+    expectedIssuer?: string | readonly string[],
   ): Promise<VerifyResult> {
     try {
       const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
         algorithms: ['HS256'],
-        issuer: expectedIssuer ?? this.issuer,
+        issuer:
+          typeof expectedIssuer === 'string' ? expectedIssuer : expectedIssuer ? [...expectedIssuer] : this.issuer,
         requiredClaims: ['exp'],
       });
       if (expectedAudience !== undefined && !audienceMatchesResource(payload.aud, expectedAudience)) {

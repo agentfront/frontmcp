@@ -45,6 +45,11 @@ export interface DispatchOptions {
   body: Record<string, unknown>;
   /** Capabilities the client declared in this request's `_meta`. */
   clientCapabilities: Record<string, unknown>;
+  /**
+   * Whether the client declared 2026-07-28 itself (default `true`). `false` when the server served
+   * an unversioned call under it, which `elicit()` answers as a legacy client's.
+   */
+  clientDeclaredRevision?: boolean;
   /** Ambient request context, used to carry the MRTR exchange to `elicit()`. */
   frontmcpContext?: FrontMcpContext;
   /** Auth info forwarded to the shared handlers. */
@@ -173,8 +178,10 @@ async function resumeTask(params: {
   authInfo: Record<string, unknown>;
   clientCapabilities: Record<string, unknown>;
   frontmcpContext?: FrontMcpContext;
+  /** Whether the `tasks/update` that resumes the task declared the 2026-07-28 revision itself. */
+  clientDeclaredRevision?: boolean;
 }): Promise<void> {
-  const { scope, record, authInfo, clientCapabilities, frontmcpContext } = params;
+  const { scope, record, authInfo, clientCapabilities, frontmcpContext, clientDeclaredRevision } = params;
   const registry = scope.tasks;
   const runner = registry?.runner;
   if (!runner) {
@@ -190,6 +197,8 @@ async function resumeTask(params: {
     new MrtrExchange({
       carriedResponses: record.inputResponses ?? {},
       clientCapabilities,
+      // A caller that never declared the revision is refused an elicitation as a legacy caller is.
+      clientDeclaredRevision,
       binding: {
         principal: resolveTaskPrincipal(authInfo),
         binding: computeRequestBinding('tasks/resume', { name: record.taskId }),
@@ -261,6 +270,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
     scope,
     body,
     clientCapabilities,
+    clientDeclaredRevision,
     frontmcpContext,
     authInfo,
     isAnonymous,
@@ -316,6 +326,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
           authInfo: { ...(authInfo ?? {}), sessionId: ownership.owner },
           clientCapabilities,
           frontmcpContext,
+          clientDeclaredRevision,
         }),
     });
 
@@ -361,6 +372,7 @@ export async function dispatch20260728(options: DispatchOptions): Promise<Dispat
     carriedResponses: carried.ok ? carried.responses : {},
     clientCapabilities,
     binding,
+    clientDeclaredRevision,
   });
   frontmcpContext?.setMrtrExchange(exchange);
   if (notificationSink) frontmcpContext?.setRequestNotificationSink(notificationSink);

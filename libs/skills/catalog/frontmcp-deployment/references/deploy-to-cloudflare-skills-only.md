@@ -34,6 +34,13 @@ leaves out actions the caller can never run. When the server configures
 `authorities`, bundle rules are evaluated with the server's engine (its
 `claimsMapping`, resolvers and custom evaluators).
 
+A bundle skill's `SKILL.md` is listed in `skill://index.json` at its name
+(`skill://Invoices/SKILL.md`, as SEP-2640 requires) and is also served at the
+same URI with its id (`skill://invoices/SKILL.md`), the id the meta-tools and
+`skills/list` report, with the same gating. A skill whose id is another
+skill's name is refused, so an id names one skill: a bundle with one is not
+applied and the previous bundle stays active.
+
 For the conceptual picture, see [Skills-Only Deployment](https://docs.agentfront.dev/frontmcp/features/skills-only-deployment).
 For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
 

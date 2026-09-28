@@ -170,6 +170,8 @@ class StrictWorkflowSkill extends SkillContext {}
 | `'warn'`   | Logs a warning for missing tools but continues. Use during development when tools may not all be available yet.                  |
 | `'ignore'` | Silently ignores missing tools. Use for optional tool references or cross-server skills.                                         |
 
+When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
+
 ## Instruction Sources
 
 Skills support three ways to provide instructions.

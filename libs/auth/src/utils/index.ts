@@ -23,5 +23,11 @@ export type { AudienceValidationResult, AudienceValidatorOptions } from './audie
 
 export { deriveAuthorizationId } from './authorization-id.utils';
 
-export { advertisedScopes, DEFAULT_ALLOWED_SCOPES, grantScopes } from './scope-grant.utils';
+export {
+  advertisedScopes,
+  DEFAULT_ALLOWED_SCOPES,
+  grantScopes,
+  resourceScopesFor,
+  type ResourceScopeOptions,
+} from './scope-grant.utils';
 export { isLoopbackRedirectUri } from './redirect-uri.utils';

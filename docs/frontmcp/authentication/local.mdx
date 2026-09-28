@@ -277,28 +277,39 @@ class GitHubReposTool extends ToolContext {
 
 ## Behind a Tunnel or Reverse Proxy
 
-OAuth discovery (`/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`) is **derived from the incoming request host** at runtime, and the OAuth endpoints are advertised at the root (`/oauth/authorize`, `/oauth/token`, …). This means discovery works correctly behind a tunnel (e.g. `ngrok`, Cloudflare Tunnel) or when the server is mounted under an `http.entryPath` — no extra configuration needed for discovery itself.
+OAuth discovery (`/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`) is derived from the incoming request at runtime, and the OAuth endpoints are advertised at the root (`/oauth/authorize`, `/oauth/token`, …). Discovery works behind a tunnel (e.g. `ngrok`, Cloudflare Tunnel) or under an `http.entryPath` with no extra configuration.
 
-Two knobs affect the **boot-time issuer** (the `iss` claim baked into tokens before any request arrives):
+### The issuer
 
-- **`FRONTMCP_PUBLIC_HOST`** — sets only the discovery **host** for the boot-time issuer. The scheme stays `http` and the port stays the configured HTTP port.
-- **`local.issuer`** — sets the full issuer string. Use this when you need a different scheme/port (e.g. advertise `https://mcp.example.com` with no explicit port behind a TLS-terminating proxy).
+A client meets the issuer in four places, and FrontMCP names the same one in all of them for a given request, on its Node server and under `createFetchHandler()` (Workers, Deno, Bun) alike:
+
+- the `issuer` of `/.well-known/oauth-authorization-server`, and `authorization_servers` in the protected resource metadata;
+- the RFC 9207 `iss` on every authorization response, the error redirects included (the metadata says so with `authorization_response_iss_parameter_supported: true`);
+- the `iss` of the tokens it issues;
+- the `iss` it requires on the tokens it accepts.
+
+It is, in this order:
+
+1. **`local.issuer`** (`issuer` in public mode) when set — the full issuer string. Use it when clients reach the server at a different scheme or port (e.g. `https://mcp.example.com` behind a TLS-terminating proxy).
+2. **`FRONTMCP_PUBLIC_URL`** plus the entry path, when pinned.
+3. **`FRONTMCP_PUBLIC_HOST`**, when set: the boot-time issuer with that host. The scheme stays `http` and the port stays the configured HTTP port.
+4. Otherwise, **the request's own origin** plus the entry path.
 
 ```typescript
 auth: {
   mode: 'local',
   local: {
-    // Aligns the token `iss` with what clients reach through the proxy.
+    // Aligns every issuer with what clients reach through the proxy.
     issuer: 'https://mcp.example.com',
   },
 }
 ```
 
-<Info>
-  Token verification accepts the issuer, so tokens minted under a different scheme/port are still tolerated behind a TLS proxy. `local.issuer` is the supported way to make the boot-time issuer match what discovery advertises.
-</Info>
+The resource URL a token is bound to (`aud`) comes from `FRONTMCP_PUBLIC_URL` when pinned, else from the request, and `expectedAudience` replaces it when set. With nothing pinned the issuer follows the request, so a token is accepted at the address it was issued at; with `expectedAudience` listing several addresses, a token issued at any of them is accepted at the others (its `iss` names the address it was issued at, and its `aud` must name a listed one).
 
-A token's `iss` is `local.issuer` when set, else `FRONTMCP_PUBLIC_URL` (plus the entry path) when pinned, else the boot-time issuer. Under `createFetchHandler()` (Workers, Deno, Bun) there is no listener for a boot-time issuer to name, so a server without `FRONTMCP_PUBLIC_HOST` or `expectedAudience` uses the request's own origin, as its discovery documents do; the resource URL a token is bound to (`aud`) comes from the request's URL there too. A token is accepted only with the `iss` and `aud` these rules give for the request it arrives on.
+<Info>
+  Pin `FRONTMCP_PUBLIC_URL` (or set `local.issuer`) in production. With neither, the issuer and the audience come from the `Host` header, so a server reached at two hostnames names two issuers.
+</Info>
 
 ---
 
@@ -976,7 +987,7 @@ export class Server {}
     Ensure you're using S256 challenge method and the code_verifier matches the original code_challenge.
   </Accordion>
   <Accordion title="Discovery / issuer wrong behind a tunnel">
-    Discovery is request-host-derived, so it usually works behind a proxy automatically. If the token `iss` must match a public HTTPS URL, set `local.issuer` (full URL) or `FRONTMCP_PUBLIC_HOST` (host only). See [Behind a Tunnel](#behind-a-tunnel-or-reverse-proxy).
+    Discovery, authorization responses and tokens all name the same issuer, derived from the request unless pinned. If it must be a public HTTPS URL, set `local.issuer` (full URL) or pin `FRONTMCP_PUBLIC_URL`; `FRONTMCP_PUBLIC_HOST` sets the host only. See [The issuer](#the-issuer).
   </Accordion>
   <Accordion title="Session not found across instances">
     When running multiple server instances, use `tokenStorage: { redis }` to share auth state.

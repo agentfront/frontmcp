@@ -78,6 +78,9 @@ export const outputSchema = z.union([AuthServerMetadataSchema, HttpRedirectSchem
 
 export const wellKnownAsStateSchema = z.object({
   baseUrl: z.string().min(1), // baseUrl + entryPrefix (unsuffixed)
+  // The issuer this server names in answer to the request (`LocalPrimaryAuth.issuerFor`, #629): the
+  // one on its authorization responses and tokens. Without it, `baseUrl`.
+  issuer: z.string().min(1).optional(),
   // Root origin (proto://host WITHOUT the entryPath prefix). The OAuth
   // endpoints (/oauth/authorize, /oauth/token, /oauth/register, …) are
   // registered at literal root paths by their flows, NOT under entryPath, so
@@ -144,6 +147,11 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
     const { metadata } = this.scope;
     const baseUrl = getRequestBaseUrl(request, this.scope.entryPath);
+    // The issuer every entry point names for this request (#629): the RFC 9207 `iss` of the
+    // authorization responses and the `iss` of the tokens have to match what discovery says.
+    const issuer = (this.scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(
+      request,
+    );
     // Root origin (no entryPath) — OAuth endpoints are mounted at root.
     const oauthBaseUrl = getRequestBaseUrl(request);
 
@@ -156,6 +164,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     this.state.set(
       wellKnownAsStateSchema.parse({
         baseUrl,
+        issuer,
         oauthBaseUrl,
         // The scopes this server grants (`allowedScopes`, #262): the literal
         // entries; a `*` glob names no scope a client could ask for.
@@ -173,6 +182,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
   @Stage('collectData')
   async collectData() {
+    const { issuer } = this.state;
     const {
       baseUrl,
       oauthBaseUrl,
@@ -184,7 +194,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     } = this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
-      const baseIssuer = `${baseUrl}`;
+      const baseIssuer = issuer ?? baseUrl;
       // OAuth endpoints live at the ROOT origin (oauthBaseUrl), not under the
       // entryPath-carrying issuer base — their flows register literal
       // `/oauth/*` paths at root (#467). The issuer + jwks_uri stay on
@@ -215,6 +225,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           grant_types_supported: ['authorization_code', 'refresh_token'],
           scopes_supported: scopesSupported,
           code_challenge_methods_supported: ['S256'],
+          // Every authorization response, error responses included, carries `iss` (RFC 9207 §2, §3).
+          authorization_response_iss_parameter_supported: true,
           // CIMD support advertisement per draft-ietf-oauth-client-id-metadata-document-00
           client_id_metadata_document_supported: cimdEnabled,
         },

@@ -145,7 +145,7 @@ export default skill({
 
 ### URL Reference
 
-Load instructions from a remote URL. Fetched at build time when the skill is loaded.
+Load instructions from a remote URL.
 
 ```typescript
 @Skill({
@@ -155,6 +155,8 @@ Load instructions from a remote URL. Fetched at build time when the skill is loa
 })
 class ApiStandardsSkill extends SkillContext {}
 ```
+
+> **When file and URL instructions are read:** when the server starts, for every skill — the server indexes each skill for `skills/search` and checks its tools then, so a URL is fetched at every start whether or not a client reads the skill. A read that fails is logged (`Failed to load skill <name>: …`) and tried again the first time the skill is loaded; the content is kept once a read succeeds.
 
 ## SkillContext: loadInstructions() and build()
 

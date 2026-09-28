@@ -251,4 +251,10 @@ describe("the SDK's skill surfaces hide a bundle skill the caller may not use", 
     await expect(server.readResource(ADMIN_SKILL_MD, { authContext: MALLORY })).rejects.toThrow(/not found/i);
     expect(text(await server.readResource(ADMIN_SKILL_MD, { authContext: ALICE }))).toContain('Secret runbook');
   });
+
+  it('is refused the same way at the URI with its id', async () => {
+    const byId = 'skill://billing-admin/SKILL.md';
+    await expect(server.readResource(byId, { authContext: MALLORY })).rejects.toThrow(/not found/i);
+    expect(text(await server.readResource(byId, { authContext: ALICE }))).toContain('Secret runbook');
+  });
 });

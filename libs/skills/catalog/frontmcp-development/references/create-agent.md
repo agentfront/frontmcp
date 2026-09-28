@@ -127,6 +127,10 @@ llm: {
 },
 ```
 
+## Invocation and Hooks
+
+Calling `invoke_<agent>` runs `tools:call-tool` for the agent's tool (the agent's `authorities`, `rateLimit`, `concurrency`, `timeout` and plugin fields apply there), then `agents:call-agent`, which runs the agent. Hooks on agent invocation run in that flow: `AgentCallHook` in a plugin, or `@AgentCallHook.Will(...)` / `.Did(...)` methods on the agent class. `this.context` and `CONTEXT`-scoped providers are available inside the agent, including a custom `execute()`.
+
 ## Custom execute() vs Default Agent Loop
 
 By default, calling `execute()` runs the full agent loop: the LLM receives the input plus system instructions, decides which inner tools to call, processes results, and iterates until it produces a final answer.

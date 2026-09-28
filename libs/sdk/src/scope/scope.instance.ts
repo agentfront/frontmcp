@@ -986,9 +986,9 @@ export class Scope extends ScopeEntry {
         if (Array.isArray(appMeta['channels'])) appChannels.push(...(appMeta['channels'] as ChannelType[]));
       }
 
-      // TODO: Pass agentEmitterSubscribe/jobEmitterSubscribe when agent/job registries
-      // expose completion event subscriptions. Currently agent-completion and job-completion
-      // channel sources are not wired (the helper logs a warning and skips them).
+      // agent-completion and job-completion sources subscribe to this scope's completion events
+      // (published by agents:call-agent and the job execution manager); webhook sources get an
+      // HTTP route guarded like a custom http.route.
       const channelResult = await registerChannelCapabilities({
         providers: this.scopeProviders,
         owner: scopeRef,
@@ -997,6 +997,16 @@ export class Scope extends ScopeEntry {
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
         toolRegistry: this.scopeTools,
+        http: {
+          server: this.server,
+          checkClientIp: (request, response) =>
+            this.runFlow('http:ip-filter', {
+              request: request as unknown as Record<string, unknown>,
+              response: response as unknown as Record<string, unknown>,
+            }),
+          entryPath: this.entryPath,
+          routeBase: this.routeBase,
+        },
         logger: this.logger,
       });
 
@@ -1469,12 +1479,12 @@ export class Scope extends ScopeEntry {
   }
 
   /**
-   * Collect all supported OAuth scopes from base OIDC scopes and
-   * tool-level authProvider scope declarations.
-   * Used by PRM endpoint to populate `scopes_supported` (RFC 9728).
+   * Collect the OAuth scopes entries declare on their `authProviders`. The PRM
+   * endpoint advertises them in `scopes_supported` (RFC 9728) next to the scopes
+   * the auth mode grants (`resourceScopesFor`), not a fixed OIDC list (#629).
    */
   getAllSupportedScopes(): string[] {
-    const scopes = new Set<string>(['openid', 'profile', 'email']);
+    const scopes = new Set<string>();
 
     // Helper to extract scopes from any entry's authProviders metadata
     const collectScopes = (metadata: unknown) => {

@@ -7,7 +7,7 @@ tags: [config, auth, local, tunnel, proxy, issuer, auth-modes]
 features:
   - 'Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config'
   - 'Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy'
-  - 'Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)'
+  - 'Knowing the issuer order: `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (host only), then the request'
 ---
 
 # Local Mode Behind a Tunnel
@@ -20,12 +20,13 @@ Expose a local-mode server through a tunnel or TLS proxy by aligning the token i
 // src/server.ts
 // OAuth discovery (.well-known/*) is derived from the incoming request host at
 // runtime and advertises /oauth/* at the root, so it works behind a tunnel or
-// reverse proxy with no extra config. `local.issuer` only aligns the boot-time
-// `iss` claim with the public HTTPS URL clients reach.
+// reverse proxy with no extra config. The issuer is the same in discovery, on
+// authorization responses (RFC 9207 `iss`) and in tokens: `local.issuer`, else
+// FRONTMCP_PUBLIC_URL, else FRONTMCP_PUBLIC_HOST, else the request's origin.
 //
-// `FRONTMCP_PUBLIC_HOST=mcp.example.com` would set only the discovery HOST
-// (scheme stays http, port stays the HTTP port) — use `local.issuer` when you
-// need a different scheme/port, as below.
+// `FRONTMCP_PUBLIC_HOST=mcp.example.com` would set only the HOST (scheme stays
+// http, port stays the HTTP port) — use `local.issuer` when you need a
+// different scheme/port, as below.
 import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
@@ -65,7 +66,7 @@ class Server {}
 
 - Relying on request-host-derived OAuth discovery, which works behind a tunnel or under an http.entryPath without extra config
 - Setting `local.issuer` to a full public HTTPS URL so the token `iss` matches what clients reach through the proxy
-- Knowing `FRONTMCP_PUBLIC_HOST` overrides only the discovery host (scheme/port still come from the HTTP config or local.issuer)
+- Knowing the issuer order: `local.issuer`, then `FRONTMCP_PUBLIC_URL`, then `FRONTMCP_PUBLIC_HOST` (host only), then the request
 
 ## Related
 

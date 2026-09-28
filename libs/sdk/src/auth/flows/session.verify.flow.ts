@@ -25,6 +25,7 @@ import {
 import 'reflect-metadata';
 
 import {
+  anonymousCallerClaims,
   buildInsufficientScopeHeader,
   buildInvalidTokenHeader,
   buildUnauthorizedHeader,
@@ -45,7 +46,14 @@ import { detectPlatformFromUserAgent } from '../../notification/notification.ser
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
 
-const inputSchema = httpRequestInputSchema;
+const inputSchema = httpRequestInputSchema.extend({
+  /**
+   * The request is served without a session (MCP 2026-07-28): an anonymous or static-key caller is
+   * identified for this request only, and no session is minted for it (#629). Minting one needs
+   * `MCP_SESSION_SECRET`, for a session id the client would never present.
+   */
+  sessionless: z.boolean().optional(),
+});
 
 const stateSchema = z.object({
   baseUrl: z.string().min(1),
@@ -203,8 +211,19 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
-    const { authMode, issuer, scopes = ['anonymous'], subject, sessionIdHeader } = options;
+    const { authMode, subject, sessionIdHeader } = options;
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
+
+    // A sessionless request (MCP 2026-07-28) has no session to resume or to start: the caller is
+    // identified for this request only, and nothing is encrypted for it (#629).
+    if (this.rawInput.sessionless) {
+      this.respond({
+        kind: 'authorized',
+        authorization: { token: '', user: anonymousCallerClaims(options, randomUUID()) },
+      });
+      return;
+    }
+
     const machineId = getMachineId();
 
     // `authSig` is documented as "the signature of the token used to create the
@@ -235,12 +254,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         // one-second `iat`, which collided for sessions minted in the same
         // second and shared a `sub`-keyed partition, e.g. the rate limiter).
         const anonId = existingPayload.uuid ?? `${existingPayload.iat * 1000}`;
-        const user = {
-          sub: subject ?? `anon:${anonId}`,
-          iss: issuer,
-          name: subject ? 'Static token' : 'Anonymous',
-          scope: scopes.join(' '),
-        };
+        const user = anonymousCallerClaims(options, anonId);
         this.respond({
           kind: 'authorized',
           authorization: {
@@ -258,12 +272,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Create new anonymous session
     const now = Date.now();
-    const user = {
-      sub: subject ?? `anon:${randomUUID()}`,
-      iss: issuer,
-      name: subject ? 'Static token' : 'Anonymous',
-      scope: scopes.join(' '),
-    };
+    const user = anonymousCallerClaims(options, randomUUID());
     const uuid = randomUUID();
 
     // Detect platform from User-Agent header for UI rendering support
@@ -609,8 +618,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // transparent mode (so the check doesn't depend on the Host header).
       const configuredAudience = isOrchestratedMode(authOptions) ? authOptions.expectedAudience : undefined;
       const resource = computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
-      // The issuer the token endpoint named for a request like this one (`LocalPrimaryAuth.issuerFor`).
-      const issuer = (auth as Partial<LocalPrimaryAuth>).issuerFor?.(this.rawInput.request);
+      // The issuer the token endpoint named for a request like this one, or one of the issuers of the
+      // other `expectedAudience` addresses (`LocalPrimaryAuth.acceptedIssuersFor`).
+      const issuer = (auth as Partial<LocalPrimaryAuth>).acceptedIssuersFor?.(this.rawInput.request);
       verify = auth.verifyGatewayToken(token, this.state.required.baseUrl, configuredAudience ?? resource, issuer);
     }
 

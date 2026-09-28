@@ -458,6 +458,44 @@ describe('OpenAPI adapter - a credential for the operation’s own scheme (regre
       expect(cookies[4]).toBe('desk_session=session-from-input');
     });
 
+    it('sends the credentials the input carries for the schemes an includeSecurityInInput list names', async () => {
+      const { tool } = await startAdapter(
+        { generateOptions: { includeSecurityInInput: ['ReportsKey'] } },
+        reportsOnlySpec(baseUrl),
+      );
+
+      await tool('weeklyReport')({ ReportsKey: 'key-from-input' }, callerContext);
+      expect(received).toEqual([{ path: '/reports/weekly', authorization: undefined, reportsKey: 'key-from-input' }]);
+    });
+
+    it('still needs a server credential for the schemes an includeSecurityInInput list leaves out', async () => {
+      // The list puts DeskToken in the input; ReportsKey has no credential source at all.
+      await expect(
+        startAdapter({ generateOptions: { includeSecurityInInput: ['DeskToken'] } }, hybridSpec(baseUrl)),
+      ).rejects.toThrow(/ReportsKey/);
+
+      const { tool } = await startAdapter(
+        {
+          generateOptions: { includeSecurityInInput: ['DeskToken'] },
+          authProviderMapper: { ReportsKey: () => 'server-key' },
+        },
+        hybridSpec(baseUrl),
+      );
+      await tool('hybridReport')({ DeskToken: 'user-token' }, callerContext);
+      expect(received).toEqual([
+        { path: '/reports/hybrid', authorization: 'Bearer user-token', reportsKey: 'server-key' },
+      ]);
+    });
+
+    it('warns that the model chooses the credential of the schemes an includeSecurityInInput list names', async () => {
+      const { logger } = await startAdapter(
+        { generateOptions: { includeSecurityInInput: ['ReportsKey'] } },
+        reportsOnlySpec(baseUrl),
+      );
+      expect(warningsOf(logger)).toMatch(/SECURITY WARNING:.*ReportsKey/);
+      expect(infosOf(logger)).toContain('Security Risk Score: HIGH');
+    });
+
     it('combines an input credential with one the server resolves (the README hybrid setup)', async () => {
       const { tool } = await startAdapter(
         { securitySchemesInInput: ['DeskToken'], authProviderMapper: { ReportsKey: () => 'server-key' } },
