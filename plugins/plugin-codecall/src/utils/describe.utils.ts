@@ -284,6 +284,12 @@ function getSampleValue(schema: JsonSchema, key: string): unknown {
   }
 }
 
+const PAGINATION_PROPERTIES = ['limit', 'offset', 'page', 'pagesize', 'cursor'];
+
+function isPaginationProperty(name: string): boolean {
+  return PAGINATION_PROPERTIES.includes(name.toLowerCase());
+}
+
 /**
  * Check if a schema has pagination parameters.
  */
@@ -292,8 +298,47 @@ export function hasPaginationParams(schema?: JsonSchema): boolean {
     return false;
   }
 
-  const props = Object.keys(schema.properties);
-  return props.some((p) => ['limit', 'offset', 'page', 'pageSize', 'cursor'].includes(p.toLowerCase()));
+  return Object.keys(schema.properties).some(isPaginationProperty);
+}
+
+/**
+ * The object properties of an input schema; none when it is not an object schema.
+ */
+function inputProperties(schema?: JsonSchema): Record<string, JsonSchema> {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return {};
+  }
+
+  const properties: Record<string, JsonSchema> = {};
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    if (typeof propSchema !== 'boolean') properties[key] = propSchema;
+  }
+  return properties;
+}
+
+/**
+ * Arguments for a generated example call: the given properties, then every required one, each
+ * with a sample value (`values` overrides it). Only properties the schema declares, so an example
+ * never passes an argument the tool does not take (#647).
+ */
+function buildExampleArgs(
+  schema: JsonSchema | undefined,
+  keys: string[],
+  values: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const properties = inputProperties(schema);
+  const args: Record<string, unknown> = {};
+
+  for (const key of [...keys, ...(schema?.required ?? [])]) {
+    const propSchema = properties[key];
+    if (!propSchema || key in args) continue;
+    args[key] = key in values ? values[key] : getSampleValue(propSchema, key);
+  }
+  return args;
+}
+
+function formatExampleArgs(args: Record<string, unknown>): string {
+  return Object.keys(args).length > 0 ? JSON.stringify(args, null, 2) : '{}';
 }
 
 /**
@@ -336,29 +381,53 @@ export function getFilterProperties(schema?: JsonSchema): string[] {
 }
 
 /**
- * Generate a pagination example for a tool.
+ * Generate a pagination example for a tool, paging with the pagination properties its schema
+ * declares (two pages when it takes `limit` and `offset`, one otherwise).
  */
-export function generatePaginationExample(toolName: string): ToolUsageExample {
-  return {
-    description: `Pagination example for ${toolName}`,
-    code: `// Fetch first page
-const page1 = await callTool('${toolName}', { limit: 10, offset: 0 });
+export function generatePaginationExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const description = `Pagination example for ${toolName}`;
+  const props = Object.keys(inputProperties(inputSchema));
+  const limitKey = props.find((p) => p.toLowerCase() === 'limit');
+  const offsetKey = props.find((p) => p.toLowerCase() === 'offset');
+
+  if (limitKey && offsetKey) {
+    const firstPage = buildExampleArgs(inputSchema, [limitKey, offsetKey], { [limitKey]: 10, [offsetKey]: 0 });
+    const secondPage = { ...firstPage, [offsetKey]: 10 };
+    return {
+      description,
+      code: `// Fetch first page
+const page1 = await callTool('${toolName}', ${formatExampleArgs(firstPage)});
 
 // Fetch second page
-const page2 = await callTool('${toolName}', { limit: 10, offset: 10 });
+const page2 = await callTool('${toolName}', ${formatExampleArgs(secondPage)});
 
 // Combine results
 return [...page1.items, ...page2.items];`,
+    };
+  }
+
+  const args = buildExampleArgs(inputSchema, props.filter(isPaginationProperty));
+  return {
+    description,
+    code: `const page = await callTool('${toolName}', ${formatExampleArgs(args)});
+return page.items || page;`,
   };
 }
 
 /**
- * Generate a filter example for a tool.
+ * Generate a filter example for a tool, with a value the property's schema accepts.
  */
-export function generateFilterExample(toolName: string, filterProp: string): ToolUsageExample {
+export function generateFilterExample(
+  toolName: string,
+  filterProp: string,
+  inputSchema?: JsonSchema,
+): ToolUsageExample {
+  const described = filterProp in inputProperties(inputSchema);
+  const args = described ? buildExampleArgs(inputSchema, [filterProp]) : { [filterProp]: 'value' };
+
   return {
     description: `Filter by ${filterProp}`,
-    code: `const filtered = await callTool('${toolName}', { ${filterProp}: 'value' });
+    code: `const filtered = await callTool('${toolName}', ${formatExampleArgs(args)});
 return filtered.items || filtered;`,
   };
 }
@@ -490,22 +559,28 @@ return result;`,
 
 /**
  * Generate a search example for a tool.
+ *
+ * Searches by the tool's query-like property, else by its first filter property (`status`, `type`,
+ * ...), with the required properties alongside. Never a `query` the schema does not declare: a tool
+ * searched by `status` and `priority` was shown `callTool('<tool>', { query: 'search term' })`.
  */
 export function generateSearchExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
   const entity = extractEntityName(toolName);
-  const queryParam = findQueryParameter(inputSchema);
-
-  if (queryParam) {
-    return {
-      description: `Search for ${entity}s`,
-      code: `const results = await callTool('${toolName}', { ${queryParam}: 'search term' });
-return results.items || results;`,
-    };
-  }
+  const searchParam = findQueryParameter(inputSchema) ?? getFilterProperties(inputSchema)[0];
+  const searchSchema = searchParam ? inputProperties(inputSchema)[searchParam] : undefined;
+  // Free text gets a search term; an enum, a default or a non-string type gets a value it accepts.
+  const isFreeText =
+    searchSchema?.type === 'string' &&
+    searchSchema.enum === undefined &&
+    searchSchema.const === undefined &&
+    searchSchema.default === undefined;
+  const args = searchParam
+    ? buildExampleArgs(inputSchema, [searchParam], isFreeText ? { [searchParam]: 'search term' } : {})
+    : buildExampleArgs(inputSchema, []);
 
   return {
     description: `Search for ${entity}s`,
-    code: `const results = await callTool('${toolName}', { query: 'search term' });
+    code: `const results = await callTool('${toolName}', ${formatExampleArgs(args)});
 return results.items || results;`,
   };
 }
@@ -602,7 +677,7 @@ export function generateSmartExample(
     case 'list':
       // For list tools, still use pagination example if available
       return hasPaginationParams(inputSchema)
-        ? generatePaginationExample(toolName)
+        ? generatePaginationExample(toolName, inputSchema)
         : generateListExample(toolName, inputSchema);
     case 'update':
       return generateUpdateExample(toolName, inputSchema);

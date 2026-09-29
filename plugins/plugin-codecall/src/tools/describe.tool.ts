@@ -227,7 +227,9 @@ export default class DescribeTool extends ToolContext {
    *
    * Priority:
    * 1. User-provided examples from @Tool decorator metadata (up to 5)
-   * 2. Smart intent-based generation to fill remaining slots
+   * 2. Without any, one smart intent-based example built from the input schema. It is never added
+   *    next to the tool's own examples: those show how the tool is called, and a generated one
+   *    only guesses (#647).
    * 3. Returns at least 1 example
    */
   private generateExamples(
@@ -248,8 +250,8 @@ return result;`,
       }
     }
 
-    // Priority 2: If fewer than 5 user examples, add smart-generated example
-    if (result.length < 5) {
+    // Priority 2: Without user examples, add a smart-generated example
+    if (result.length === 0) {
       result.push(generateSmartExample(tool.name, inputSchema, tool.metadata?.description));
     }
 

@@ -458,7 +458,7 @@ const CreateUserTool = tool({
 </CardGroup>
 
 <Tip>
-If you don't provide examples, FrontMCP auto-generates smart examples based on tool intent (create, list, get, update, delete, search). User-provided examples always take priority.
+If you don't provide examples, `codecall:describe` generates one from the tool's intent (create, list, get, update, delete, search). Its arguments come only from the properties your input schema declares: a query-like property (or else the first filter property such as `status`) for a search, the pagination properties the tool really has for a list, the required properties always, and the first value of an enum. With nothing to go on the example passes `{}`; it never invents an argument like `query`. When you provide examples, `codecall:describe` returns only yours (up to 5), with no generated example next to them.
 </Tip>
 
 ---

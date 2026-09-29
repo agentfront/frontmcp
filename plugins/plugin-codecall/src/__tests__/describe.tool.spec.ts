@@ -1,5 +1,7 @@
 // file: libs/plugins/src/codecall/__tests__/describe.tool.spec.ts
 
+import { runInNewContext } from 'node:vm';
+
 import { z } from '@frontmcp/lazy-zod';
 
 import { describeToolInputSchema } from '../tools/describe.schema';
@@ -64,6 +66,18 @@ function createMockTool(overrides: {
     },
     owner: overrides.owner,
   };
+}
+
+/** Runs an example's code with a stand-in `callTool`, and answers the arguments of every call it made. */
+async function argumentsOfExample(code: string): Promise<Array<Record<string, unknown>>> {
+  const calls: Array<Record<string, unknown>> = [];
+  const callTool = async (_name: string, args: Record<string, unknown>) => {
+    calls.push(args);
+    return { items: [] };
+  };
+  const run = runInNewContext(`(async (callTool) => {\n${code}\n})`) as (fn: typeof callTool) => Promise<unknown>;
+  await run(callTool);
+  return calls;
 }
 
 // Helper to create a configured DescribeTool instance
@@ -606,7 +620,7 @@ describe('DescribeTool', () => {
       expect(result.tools[0].usageExamples[0].code).toContain('Admin User');
     });
 
-    it('should include all user-provided examples plus smart-generated when < 5', async () => {
+    it('should include only the user-provided examples when the tool has some', async () => {
       const mockTools = [
         createMockTool({
           name: 'users:create',
@@ -632,13 +646,12 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['users:create'] });
 
-      // 3 user examples + 1 smart-generated = 4
-      expect(result.tools[0].usageExamples.length).toBe(4);
-      expect(result.tools[0].usageExamples[0].description).toBe('First example');
-      expect(result.tools[0].usageExamples[1].description).toBe('Second example');
-      expect(result.tools[0].usageExamples[2].description).toBe('Third example');
-      // Fourth is smart-generated
-      expect(result.tools[0].usageExamples[3].description).toContain('Create');
+      // The tool's own examples show how it is called; a generated one would only guess
+      expect(result.tools[0].usageExamples.map((example: { description: string }) => example.description)).toEqual([
+        'First example',
+        'Second example',
+        'Third example',
+      ]);
     });
 
     it('should fall back to smart generation when examples is empty array', async () => {
@@ -679,7 +692,7 @@ describe('DescribeTool', () => {
       expect(result.tools[0].usageExamples[0].description).toContain('Delete');
     });
 
-    it('should add smart-generated example when fewer than 5 user examples', async () => {
+    it('should not add a smart-generated example next to user examples', async () => {
       const mockTools = [
         createMockTool({
           name: 'users:create',
@@ -701,12 +714,101 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['users:create'] });
 
-      // Should have 2 user examples + 1 smart-generated
-      expect(result.tools[0].usageExamples.length).toBe(3);
-      expect(result.tools[0].usageExamples[0].description).toBe('User example 1');
-      expect(result.tools[0].usageExamples[1].description).toBe('User example 2');
-      // Third should be smart-generated
-      expect(result.tools[0].usageExamples[2].description).toContain('Create');
+      expect(result.tools[0].usageExamples.map((example: { description: string }) => example.description)).toEqual([
+        'User example 1',
+        'User example 2',
+      ]);
+    });
+  });
+
+  describe('Example arguments (#647)', () => {
+    const toolsUnderTest = [
+      createMockTool({
+        name: 'tickets:search',
+        rawInputSchema: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['open', 'closed'] },
+            priority: { type: 'string', enum: ['low', 'high'] },
+          },
+        },
+      }),
+      createMockTool({
+        name: 'tickets:find',
+        rawInputSchema: { type: 'object', properties: { id: { type: 'string' } } },
+      }),
+      createMockTool({
+        name: 'tickets:list',
+        rawInputSchema: {
+          type: 'object',
+          properties: { page: { type: 'number' }, pageSize: { type: 'number' } },
+          required: ['pageSize'],
+        },
+      }),
+      createMockTool({
+        name: 'orders:list',
+        rawInputSchema: {
+          type: 'object',
+          properties: { limit: { type: 'number' }, offset: { type: 'number' }, region: { type: 'string' } },
+          required: ['region'],
+        },
+      }),
+      createMockTool({
+        name: 'tickets:create',
+        rawInputSchema: {
+          type: 'object',
+          properties: { title: { type: 'string' }, body: { type: 'string' } },
+          required: ['title'],
+        },
+      }),
+      createMockTool({
+        name: 'tickets:get',
+        rawInputSchema: { type: 'object', properties: { ticketId: { type: 'string' } }, required: ['ticketId'] },
+      }),
+      createMockTool({
+        name: 'tickets:update',
+        rawInputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, title: { type: 'string' } },
+          required: ['id'],
+        },
+      }),
+      createMockTool({
+        name: 'tickets:delete',
+        rawInputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      }),
+      createMockTool({
+        name: 'tickets:escalate',
+        rawInputSchema: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] },
+      }),
+      createMockTool({
+        name: 'tickets:query',
+        rawInputSchema: { type: 'object', properties: { status: { type: 'string' } } },
+        metadata: { examples: [{ description: 'Open tickets', input: { status: 'open' } }] },
+      }),
+    ];
+
+    it.each(toolsUnderTest.map((mockTool) => [mockTool.name, mockTool] as const))(
+      'passes %s only arguments its input schema declares',
+      async (name, mockTool) => {
+        const tool = createDescribeTool([mockTool]);
+        const result = await tool.execute({ toolNames: [name] });
+        const declared = Object.keys((mockTool.rawInputSchema as { properties: object }).properties);
+
+        const passed: string[] = [];
+        for (const example of result.tools[0].usageExamples as Array<{ code: string }>) {
+          for (const args of await argumentsOfExample(example.code)) passed.push(...Object.keys(args));
+        }
+
+        expect(passed.filter((key) => !declared.includes(key))).toEqual([]);
+      },
+    );
+
+    it('builds a search example from the enum filters the tool has, not from a made-up query', async () => {
+      const tool = createDescribeTool([toolsUnderTest[0]]);
+      const result = await tool.execute({ toolNames: ['tickets:search'] });
+
+      expect(await argumentsOfExample(result.tools[0].usageExamples[0].code)).toEqual([{ status: 'open' }]);
     });
   });
 

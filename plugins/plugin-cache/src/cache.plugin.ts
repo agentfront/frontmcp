@@ -49,10 +49,13 @@ function matchesToolPattern(toolName: string, patterns: string[]): boolean {
   providers: [
     /* add providers that always loaded with the plugin or default providers */
     {
-      // this is a default provider for cache, will be overridden if dynamicProviders based on config
+      // this is a default provider for cache, will be overridden if dynamicProviders based on config.
+      // A factory, so each server gets its own store: a value built here is one store for every
+      // server in the process, created when this module loads.
       name: 'cache:memory',
       provide: CacheStoreToken,
-      useValue: new CacheMemoryProvider(60 * 60 * 24),
+      inject: () => [] as const,
+      useFactory: () => new CacheMemoryProvider(60 * 60 * 24),
     },
   ],
 })
@@ -105,7 +108,9 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         providers.push({
           name: 'cache:memory',
           provide: CacheStoreToken,
-          useValue: new CacheMemoryProvider(options.defaultTTL),
+          // Built per server: `init()` runs once, so a value here would be shared by every server using it.
+          inject: () => [] as const,
+          useFactory: () => new CacheMemoryProvider(options.defaultTTL),
         });
         break;
     }
@@ -132,6 +137,12 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     toolName: string,
     cacheMetadata?: boolean | { ttl?: number; slideWindow?: boolean },
   ): boolean {
+    // `ttl: 0` (or less) turns caching off, over the tool patterns too. It used to count as
+    // "cache this", and a TTL of 0 is an entry that never expires (#647).
+    if (typeof cacheMetadata === 'object' && cacheMetadata.ttl !== undefined && cacheMetadata.ttl <= 0) {
+      return false;
+    }
+
     // If metadata explicitly enables cache, use it
     if (cacheMetadata) return true;
 
@@ -217,36 +228,20 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       }
 
       /**
-       * Add cache metadata to response.
-       * Only add _meta if cached value is a plain object (not primitive/array).
+       * Mark the hit on the result's own _meta. Merging it into the cached value made it part
+       * of the tool's data: without an outputSchema it reached structuredContent and the text.
        */
-      const isPlainObject = typeof cached === 'object' && cached !== null && !Array.isArray(cached);
-      let cachedWithMeta: unknown;
-
-      if (isPlainObject) {
-        const cachedRecord = cached as Record<string, unknown>;
-        const existingMeta = (cachedRecord['_meta'] as Record<string, unknown>) || {};
-        cachedWithMeta = {
-          ...cachedRecord,
-          _meta: {
-            ...existingMeta,
-            cache: 'hit',
-          },
-        };
-      } else {
-        // For primitives and arrays, return as-is (cannot attach _meta)
-        cachedWithMeta = cached;
-      }
+      flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, cache: 'hit' });
 
       /**
        * cache hit, set output to the main flow context
        */
-      flowCtx.state.rawOutput = cachedWithMeta;
+      flowCtx.state.set('rawOutput', cached);
 
       /**
        * call respond to bypass tool execution
        */
-      toolContext.respond(cachedWithMeta);
+      toolContext.respond(cached);
     }
   }
 

@@ -14,7 +14,7 @@ features:
 
 Tool with the `examples: [...]` field on `@Tool({...})` — concrete input (and optional expected output) examples consumed by the CodeCall `codecall:describe` tool to give agents accurate usage examples.
 
-The `examples` field is purely advisory — the CodeCall `describe` tool uses it as the highest-priority source of usage examples (user-provided examples take precedence over auto-generated ones, up to 5). It is **not** emitted in the `tools/list` MCP response. Use it for any tool that benefits from concrete usage hints when CodeCall is enabled.
+The `examples` field is purely advisory — the CodeCall `describe` tool uses it as the source of usage examples: when a tool declares examples, `codecall:describe` returns only those (up to 5) and adds no auto-generated one. It is **not** emitted in the `tools/list` MCP response. Use it for any tool that benefits from concrete usage hints when CodeCall is enabled.
 
 ## Code
 
@@ -74,7 +74,8 @@ export class ConvertCurrencyTool extends ToolContext {
 
 ## Where examples show up
 
-- **`codecall:describe`** — the CodeCall plugin's `describe` tool uses these as its top-priority source of usage examples (user-provided examples win over auto-generated ones, capped at 5). This is the one place `examples` is actually read.
+- **`codecall:describe`** — the CodeCall plugin's `describe` tool returns these as the tool's usage examples (capped at 5), with no auto-generated example next to them. This is the one place `examples` is actually read.
+- **Without `examples`** — `codecall:describe` generates one example from the tool's intent, with arguments built only from the input schema's properties (required ones, the query-like or first filter property for a search, the real pagination properties for a list, the first enum value), or `{}` when none fits. It never shows an argument the schema does not declare, such as a made-up `query`.
 - **Not in `tools/list`** — the `tools/list` MCP response does not include `examples`; clients never see them there.
 
 ## When to include `output?`

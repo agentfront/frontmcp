@@ -62,11 +62,14 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
 
   /**
    * Static init() method to create a plugin provider.
-   * @param options - Input options (with optional fields for defaults)
+   * @param options - Input options (with optional fields for defaults). Omitted, the plugin is
+   *   built with `{}`, as `ApprovalPlugin.init()` is documented.
    */
   static init<TThis extends PluginClassWithOptions<any, any>>(
     this: TThis,
-    options: InitOptions<TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never>,
+    options: InitOptions<
+      TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never
+    > = {} as InitOptions<TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never>,
   ): PluginReturn<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> {
     const extraProviders = (options as any).providers as readonly ProviderType[] | undefined;
     const typedOptions = options as any;

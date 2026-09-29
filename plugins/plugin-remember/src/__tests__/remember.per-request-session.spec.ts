@@ -18,12 +18,12 @@ import { App, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sd
 import RememberPlugin from '../remember.plugin';
 import { RememberAccessorToken } from '../remember.symbols';
 
-const scopeSchema = z.enum(['session', 'tool']);
+const scopeSchema = z.enum(['session', 'tool', 'user']);
 
 /** Stores `card` when given, and answers the card remembered in `scope`. */
 @Tool({ name: 'card', inputSchema: { card: z.string().optional(), scope: scopeSchema } })
 class CardTool extends ToolContext {
-  async execute(input: { card?: string; scope: 'session' | 'tool' }) {
+  async execute(input: { card?: string; scope: 'session' | 'tool' | 'user' }) {
     const remember = this.get(RememberAccessorToken);
     if (input.card !== undefined) await remember.set('card', input.card, { scope: input.scope });
     return { card: (await remember.get<string>('card', { scope: input.scope })) ?? null };
@@ -148,10 +148,15 @@ describe.each([
     },
   );
 
-  it.each(['session', 'tool'] as const)('refuses %s memory to an anonymous caller', async (scope) => {
+  it.each([
+    ['session', 'without a verified session'],
+    ['tool', 'without a verified session'],
+    // The caller's `anon:` subject is made up for the request, so it names no user (#647)
+    ['user', 'without an authenticated user'],
+  ] as const)('refuses %s memory to an anonymous caller', async (scope, refusal) => {
     const result = await call(publicHandler, { card: '1111', scope });
 
-    expect(result).toEqual(expect.stringContaining('without a verified session'));
+    expect(result).toEqual(expect.stringContaining(refusal));
   });
 });
 

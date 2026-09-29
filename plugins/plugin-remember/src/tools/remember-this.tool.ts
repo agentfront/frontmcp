@@ -2,6 +2,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
+import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 
 /**
  * Input schema for the remember_this tool.
@@ -9,12 +10,7 @@ import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols'
 export const rememberThisInputSchema = {
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
-  scope: z
-    .enum(['session', 'user', 'tool', 'global'])
-    .optional()
-    .describe(
-      'How long to remember: session (until disconnect), user (forever), tool (for this tool), global (shared)',
-    ),
+  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
   ttl: z.number().positive().optional().describe('Forget after this many seconds'),
   brand: z
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
@@ -43,7 +39,9 @@ export type RememberThisOutput = z.infer<typeof rememberThisOutputSchema>;
 @Tool({
   name: 'remember_this',
   description:
-    'Remember something for later. Store a value that can be recalled in future conversations. ' +
+    'Remember something for later: store a value under a key that recall can read back, in the scope you choose ' +
+    '(this session by default; user scope for the signed-in user across sessions). It lasts until it is forgotten ' +
+    'or its ttl runs out. ' +
     'Use this when the user asks you to remember preferences, settings, or any information they want to persist.',
   inputSchema: rememberThisInputSchema,
   outputSchema: rememberThisOutputSchema,

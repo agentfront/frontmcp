@@ -331,7 +331,14 @@ export default class PluginRegistry
           dynamicProviders: rec.providers,
         };
       case PluginKind.VALUE:
-        return { pluginInstance: rec.useValue as PluginEntry, dynamicProviders: rec.providers };
+        // One value record can be installed by several registries (an app class used by two servers,
+        // `SomePlugin.init()` shared by two apps). Each gets an instance of its own over the configured
+        // one, so `get` and anything the plugin keeps on `this` belong to that registry, not to
+        // whichever registered last.
+        return {
+          pluginInstance: Object.create(rec.useValue as object) as PluginEntry,
+          dynamicProviders: rec.providers,
+        };
       case PluginKind.FACTORY: {
         const args: unknown[] = [];
         for (const d of rec.inject()) args.push(await this.providers.resolveBootstrapDep(d));

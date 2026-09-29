@@ -174,7 +174,7 @@ Get detailed schemas and documentation for specific tools.
 ```
 
 <Note>
-`usageExamples` returns up to 5 entries per tool. Each entry has a `description` and a `code` snippet that calls the tool via `callTool(...)` so the LLM can copy the pattern directly into a `codecall:execute` script.
+`usageExamples` returns up to 5 entries per tool. Each entry has a `description` and a `code` snippet that calls the tool via `callTool(...)` so the LLM can copy the pattern directly into a `codecall:execute` script. They are the tool's own `examples` when it declares any, and nothing else. A tool without examples gets one generated example whose arguments are built only from its input schema's properties (required properties, the query-like or first filter property for a search, the real pagination properties for a list, the first value of an enum), or `{}` when none fits; an argument the schema does not declare is never shown.
 </Note>
 
 ### Example

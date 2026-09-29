@@ -131,7 +131,7 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 CodeCall contributes 4 tools to your server:
 
 - `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Input: `{ queries: string[] }` (array of atomic action phrases, max 10). Decompose complex requests into simple actions (e.g., "delete users and send email" becomes `queries: ["delete user", "send email"]`). Returns ranked tool names, descriptions, and relevance scores.
-- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries.
+- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries. Results are cached for 60 seconds per server and per caller.
 - `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
@@ -244,7 +244,9 @@ class GlobalStoreServer {}
 
 ### Storage Types
 
-- `memory` -- In-process Map. Fastest, no persistence. Good for development.
+- `memory` -- In-process Map. Fastest, no persistence. Good for development. One store per server: servers built in the
+  same process (even from the same app class or `RememberPlugin.init()` result) never see each other's memory, `global`
+  scope included.
 - `redis` -- Dedicated Redis connection. Plugin manages the client lifecycle.
 - `redis-client` -- Bring your own ioredis client instance.
 - `vercel-kv` -- Vercel KV (Redis-compatible). Uses `@vercel/kv` package.
@@ -285,7 +287,8 @@ class MyTool extends ToolContext {
 - `session` -- Default scope. With a verified session, valid only for that session and cleared
   when it ends. Without one (stateless transport, MCP 2026-07-28), it belongs to the authenticated
   principal and lasts across that principal's requests until its TTL, not per request.
-- `user` -- Persists for the user across sessions. Tied to user identity.
+- `user` -- Persists for the signed-in user across sessions. Tied to user identity; refused for an
+  anonymous caller, whose `anon:<id>` subject names no user.
 - `tool` -- Scoped to a specific tool plus the same identity as `session` (the verified session,
   else the authenticated principal). Isolated per tool.
 - `global` -- Shared across all sessions and users. Use carefully.
@@ -296,7 +299,10 @@ sends. A stateless HTTP transport (shared `__stateless__` id), MCP 2026-07-28 (n
 unverified `mcp-session-id` carry no session identity: `session` and `tool` scope fall back to the
 authenticated principal, and an unauthenticated request without a verified session is refused
 with a `RememberIdentityError` rather than given a namespace shared with other clients. `user`
-scope is refused with no authenticated user. If the data really is shared, use `scope: 'global'`.
+scope is refused with no authenticated user, and an anonymous subject (`anon:<id>`, which the SDK
+makes up for one session or for each request without one) counts as none. `RememberIdentityError`
+is a public MCP error (code `REMEMBER_IDENTITY_REQUIRED`), so the client reads the refusal as
+written, in production too. If the data really is shared, use `scope: 'global'`.
 
 **Set `REMEMBER_SECRET` on every instance that shares a store.** All scopes, `session` and
 `tool` included, derive their encryption key from that secret plus the scope identity. A
@@ -339,6 +345,14 @@ clear the legacy prefixes manually if you want the storage back.
 - `recall` -- Retrieve a previously stored value by key
 - `forget` -- Remove a stored value by key
 - `list_memories` -- List all stored keys, optionally filtered by pattern
+
+All four take an optional `scope` (default `session`) and describe it to the model the same way:
+`session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
+across its requests; `user` is the signed-in caller across all of its sessions; `tool` is the tool
+running the call, for the same caller as `session` -- each memory tool has its own, so `recall`
+does not see what `remember_this` stored in `tool` scope; `global` is shared by every caller. An
+anonymous caller cannot use `user`, nor `session` or `tool` without a session. No scope lasts
+"until disconnect" or "forever": entries last until forgotten or until their `ttl` runs out.
 
 ---
 
@@ -424,7 +438,12 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
    `maxTtlMs`, however it was stored.
 6. Otherwise refused with state `pending` (or `expired`).
 
-A refused call throws `ApprovalRequiredError`; the client receives an error result.
+A refused call throws `ApprovalRequiredError`; the client receives an error result whose text is
+exactly the tool's `approvalMessage` (or the default `Tool "<full name>" requires approval to
+execute. Allow?`, or `Tool "<full name>" execution denied.` for a denial) and whose `_meta.code` is
+`APPROVAL_REQUIRED`. The approval errors extend `PublicMcpError`, so this holds in production too:
+the message is never replaced by `Internal FrontMCP error` and never carries a stack trace (releases
+up to 1.8.5 wrapped refusals as internal server errors).
 
 Approvals are looked up by the tool's full name, `<owner id>:<tool name>`, so pass that name to
 `this.approval` grant and check methods. The owner is the app that declares the tool, or the
@@ -480,6 +499,22 @@ class DangerousActionTool extends ToolContext {
     return { content: [{ type: 'text', text: 'Action completed' }] };
   }
 }
+```
+
+Each grant records its grantor in `grantedBy`. Without one, it is the signed-in caller whose tool
+made the grant: `userGrantor(<user id>)`, i.e. `{ source: 'user', identifier: '<user id>', method:
+'interactive' }`. Without a signed-in user (no principal, or an anonymous `anon:` subject) it is
+`{ source: 'user' }` with no identifier. `revokeApproval()` records `revokedBy` the same way
+(`userRevoker(<user id>)`). Releases up to 1.8.5 recorded both as `'policy'`. Pass `grantedBy` to
+record anything else; `userGrantor`'s third argument is an options object, not the method:
+
+```typescript
+import { policyGrantor, userGrantor } from '@frontmcp/plugin-approval';
+
+await this.approval.grantSessionApproval('my-app:file_write', { grantedBy: policyGrantor('safe-list') });
+await this.approval.grantUserApproval('my-app:file_write', {
+  grantedBy: userGrantor('user-123', 'Jane Doe', { method: 'interactive' }),
+});
 ```
 
 ### Per-Tool Approval Metadata
@@ -581,7 +616,8 @@ class GlobalCacheServer {}
 
 ### Storage Types
 
-- `memory` -- In-process Map with automatic eviction. No external dependencies.
+- `memory` -- In-process Map with automatic eviction. No external dependencies. One store per server: servers built in
+  the same process (even from the same app class or `CachePlugin.init()` result) never share entries.
 - `redis` -- Dedicated Redis connection with native TTL support. Plugin manages the client.
 - `redis-client` -- Bring your own ioredis client instance.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
@@ -626,7 +662,7 @@ CachePlugin.init({
 });
 ```
 
-A tool is cached if it matches any pattern OR has `cache: true` (or a cache object) in its metadata.
+A tool is cached if it matches any pattern OR has `cache: true` (or a cache object) in its metadata. `cache: { ttl: 0 }` (or a negative TTL) turns caching off for the tool, even when it matches a pattern; up to 1.8.5 it cached the first result with no expiry.
 
 ### Cache Bypass
 
@@ -645,6 +681,21 @@ identity. Two calls share an entry only when all three match.
 
 Set `keyByIdentity: false` to drop identity from the key, and only for output that is identical for every caller. See
 "Cache keys include the caller's identity" above.
+
+### What a Cache Hit Returns
+
+A hit skips `execute()` and answers with the cached output unchanged: its `content` and `structuredContent` are the
+same as the call that filled the cache. The hit is marked on the result's own `_meta` (`result._meta.cache === 'hit'`),
+never inside the data, so a tool without an `outputSchema` does not see `_meta` in its `structuredContent` or text.
+A miss has no `cache` key in `_meta`. A plugin hook that wants to add result metadata the same way sets the
+`tools:call-tool` flow state's `resultMeta`:
+
+```typescript
+@ToolHook.Did('execute')
+tagResult(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+  flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, traced: true });
+}
+```
 
 ---
 
