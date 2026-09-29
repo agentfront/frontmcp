@@ -13,6 +13,41 @@ import type { BuildOptions, TransformOptions } from 'esbuild';
 import { isFrontmcpUiResolvable } from './ui-availability';
 
 /**
+ * Load esbuild, an optional peer dependency, on demand.
+ *
+ * It is required lazily (never imported) so browser builds and servers without
+ * `.tsx` widgets don't need it. When it isn't installed, throw an error naming
+ * the widget and saying how to install it; any other load failure (a broken
+ * platform binary, a missing `@esbuild/*` package) is rethrown unchanged.
+ *
+ * @param filename - The widget file being built, named in the error
+ */
+function loadEsbuild(filename: string | undefined): typeof import('esbuild') {
+  try {
+    return require('esbuild') as typeof import('esbuild');
+  } catch (err) {
+    if (!isMissingEsbuild(err)) throw err;
+    const subject = filename ? `FileSource widget "${filename}"` : 'A FileSource widget';
+    throw new Error(
+      `${subject} needs esbuild, which is not installed. ` +
+        `@frontmcp/uipack loads esbuild on demand to bundle FileSource widgets (.tsx/.jsx) when the tool is called, ` +
+        `so it must be installed where the server runs: \`npm install esbuild\` ` +
+        `(in "dependencies", not "devDependencies"). ` +
+        `Projects created with \`frontmcp create\` already get it through the \`frontmcp\` package.`,
+      { cause: err },
+    );
+  }
+}
+
+/** Whether `err` is Node's "Cannot find module 'esbuild'" (not a module esbuild itself failed to load). */
+function isMissingEsbuild(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    (err as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND' && /Cannot find module ['"]esbuild['"]/.test(err.message)
+  );
+}
+
+/**
  * Transpile React TSX/JSX source code into browser-ready ES module code.
  *
  * Converts JSX syntax to React.createElement calls and strips TypeScript types.
@@ -24,8 +59,7 @@ import { isFrontmcpUiResolvable } from './ui-availability';
  */
 export function transpileReactSource(source: string, filename?: string): string {
   // Lazy-require esbuild to avoid import errors in browser builds
-
-  const esbuild = require('esbuild') as typeof import('esbuild');
+  const esbuild = loadEsbuild(filename);
 
   const loader: TransformOptions['loader'] = filename?.endsWith('.tsx') ? 'tsx' : 'jsx';
 
@@ -91,7 +125,7 @@ export function bundleFileSource(
     );
   }
 
-  const esbuild = require('esbuild') as typeof import('esbuild');
+  const esbuild = loadEsbuild(filename);
 
   const mountCode = `
 // --- Auto-generated mount ---
@@ -200,6 +234,7 @@ if (__root) {
     throw new Error(
       `Failed to bundle FileSource "${filename}": ${message}. ` +
         `If the error mentions @frontmcp/ui or @frontmcp/uipack, ensure both packages are installed in the consuming project.`,
+      { cause: err },
     );
   }
 }
