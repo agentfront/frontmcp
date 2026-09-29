@@ -55,6 +55,26 @@ describe('createGuardManager — storage key format', () => {
     }
   });
 
+  it('drops every trailing colon of a custom prefix', async () => {
+    const keys = await keysWrittenFor({ keyPrefix: 'acme:rl:::' });
+
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(key.startsWith('acme:rl:export_tickets:')).toBe(true);
+    }
+  });
+
+  // Trimming with /:+$/ backtracked quadratically on a run of colons that doesn't end the prefix
+  // (CodeQL js/polynomial-redos): 150k colons took about 8 s. The trim is a linear scan. The
+  // regex blocks the event loop, so a jest timeout can't catch it; the time is measured instead.
+  it('trims a prefix made of a long run of colons in linear time', async () => {
+    const started = performance.now();
+    const keys = await keysWrittenFor({ keyPrefix: `${':'.repeat(150_000)}x` });
+
+    expect(keys.length).toBeGreaterThan(0);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it('keeps the keys of a prefix written without a trailing colon', async () => {
     const keys = await keysWrittenFor({ keyPrefix: 'acme:rl' });
 

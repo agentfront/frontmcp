@@ -21,6 +21,16 @@ import type { CreateGuardManagerArgs } from './types';
  * {@link GuardStorageUnavailableError}: rate limits fail closed unless
  * `storage.fallback: 'memory'` allows per-instance counters.
  */
+/**
+ * `prefix` without its trailing colons. A scan, not `/:+$/`, which backtracks
+ * quadratically on a long run of colons that doesn't end the string.
+ */
+function withoutTrailingColons(prefix: string): string {
+  let end = prefix.length;
+  while (end > 0 && prefix.charCodeAt(end - 1) === 58 /* ':' */) end--;
+  return prefix.slice(0, end);
+}
+
 export async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardManager> {
   const { config, logger } = args;
   const keyPrefix = config.keyPrefix ?? 'mcp:guard:';
@@ -44,7 +54,7 @@ export async function createGuardManager(args: CreateGuardManagerArgs): Promise<
 
   // `namespace()` appends its own separator, so a trailing one here would write
   // `mcp:guard::<entity>:…`.
-  const namespacedStorage = storage.namespace(keyPrefix.replace(/:+$/, ''));
+  const namespacedStorage = storage.namespace(withoutTrailingColons(keyPrefix));
 
   if (config.ipFilter?.trustProxy === true || (config.ipFilter?.trustedProxyDepth ?? 1) !== 1) {
     logger?.warn(
