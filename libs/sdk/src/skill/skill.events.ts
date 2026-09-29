@@ -95,7 +95,13 @@ export class SkillEmitter {
    */
   emit(event: SkillChangeEvent): void {
     for (const listener of [...this.listeners]) {
-      listener(event);
+      try {
+        listener(event);
+      } catch (err) {
+        // A failing listener must not stop the others, or the registry work after the notification
+        // (its storage-provider writes). Safe logging, as in PromptEmitter.
+        console.error('SkillEmitter listener error:', err instanceof Error ? err.message : 'Unknown error');
+      }
     }
   }
 
