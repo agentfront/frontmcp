@@ -285,7 +285,9 @@ export class BundleSyncService {
       //    dropped by the end of this apply, so they are named in `supersedes`:
       //    the registry's id/path collision check leaves them out, and a
       //    bundle free of collisions applies even when a new skill takes the
-      //    path or id a dropped or renamed skill holds until then.
+      //    path or id a dropped or renamed skill holds until then. The registry
+      //    removes such a skill in the same commit and reports it in `removed`;
+      //    it counts as removed here, so rollback restores it.
       const pendingPriorIds = new Set(priorHandles.keys());
       for (const skill of orderedSkills) {
         const content = this.toSkillContent(skill, bundle);
@@ -294,6 +296,10 @@ export class BundleSyncService {
           supersedes: [...pendingPriorIds],
         });
         pendingPriorIds.delete(content.id);
+        for (const removedId of handle.removed ?? []) {
+          pendingPriorIds.delete(removedId);
+          successfullyRemovedIds.push(removedId);
+        }
         newHandles.push(handle);
       }
 
@@ -302,7 +308,7 @@ export class BundleSyncService {
       //    those skills via `priorContents`.
       for (const removedId of diff.removedSkillIds) {
         const handle = priorHandles.get(removedId);
-        if (handle) {
+        if (handle && !successfullyRemovedIds.includes(removedId)) {
           await handle();
           successfullyRemovedIds.push(removedId);
         }

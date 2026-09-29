@@ -145,7 +145,7 @@ await handle.unregister();
 
 Registering again with the same `id` replaces the skill. A skill whose `id` is another skill's `<skill-path>` (its name, for a skill without a `skillPath`), or whose path is another skill's `id`, is refused with `INVALID_PARAMS` and nothing changes: `skill://<id>/SKILL.md` also addresses a skill by its id, so the two would share one URI. Skills declared at startup are held to the same rule and the server refuses to start (`InvalidSkillError`).
 
-`opts.source` labels the registration in logs. `opts.supersedes` lists the ids of skills registered this way that the same change replaces or removes: the collision check treats them as already gone, so a change whose end state has no collision is not refused over a skill it is about to drop. They stay registered until you register them again or unregister them. The bundle sync passes the previous bundle's skills that it has not registered again yet, so a new skill can take the name of a skill the bundle drops or renames.
+`opts.source` labels the registration in logs. `opts.supersedes` lists the ids of skills registered this way that the same change replaces or removes: the collision check treats them as already gone, so a change whose end state has no collision is not refused over a skill it is about to drop. A superseded skill that the new one collides with is removed in the same step, so the two are never served together, and the handle's `removed` lists it. The others stay registered until you register them again or unregister them. The bundle sync passes the previous bundle's skills that it has not registered again yet, so a new skill can take the name of a skill the bundle drops or renames.
 
 ### `SkillContent.actions[]` and `bundleVersion`
 
