@@ -15,6 +15,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Authentication is enabled (`auth` config in `@FrontMcp` or `@frontmcp/auth`)
 - [ ] API keys/tokens are loaded from environment variables, never hardcoded
 - [ ] Session storage uses Redis or platform-native store (not in-memory) for multi-instance
+- [ ] `MCP_SESSION_SECRET` is the same on every instance — a session id minted under another secret is answered 404 (the client re-initializes), in every auth mode including `public`
 - [ ] Session TTL is configured appropriately (not infinite)
 - [ ] Tool-level authorization is enforced where needed (ApprovalPlugin or custom)
 - [ ] OAuth redirect URIs are restricted to known domains
@@ -54,12 +55,15 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Production secrets are managed via secret manager (AWS SSM, Vault, etc.)
 - [ ] API keys have minimum required permissions
 - [ ] Secrets are rotated on a schedule
+- [ ] Multi-instance: `VAULT_SECRET` (or `JWT_SECRET`) is set to the same value on every instance — it signs MCP 2026-07-28 `requestState`, and without it a multi-round tool (`elicit()` / `sample()`) whose next round lands on another instance starts over. Startup logs show no `requestState is signed with a per-process key` warning
 
 ### Rate Limiting
 
 - [ ] Rate limiting is configured for public-facing endpoints
 - [ ] Per-client/per-IP limits are set
 - [ ] Throttle configuration uses `@FrontMcp({ throttle: {...} })`
+- [ ] Multi-instance: `throttle.storage` uses the storage shape `{ type: 'redis', redis: { config: { host, port } } }` (not the top-level `redis` shape, which silently falls back to auto-detection)
+- [ ] Decided what happens when the throttle Redis is down at startup: the default fails closed (`GuardStorageUnavailableError`); `throttle.storage.fallback: 'memory'` starts with per-instance counters instead
 - [ ] Large payload limits are set to prevent memory exhaustion
 
 ### Dependencies

@@ -244,6 +244,22 @@ throttle: {
 }
 ```
 
+`storage` is a `StorageConfig` from `@frontmcp/utils` -- `type` picks the backend, and its options go under the matching key (`redis: { config }` or `redis: { url }`, `vercelKv: { url, token }`, `upstash: { url, token }`). It is NOT the top-level `redis` shape: `{ provider: 'redis', host, port }` has no `type`, so it is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
+
+**Rate limits fail closed.** If the store is unreachable at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: ...`), the default in production. To start with per-instance counters instead, opt in:
+
+```typescript
+storage: {
+  type: 'redis',
+  redis: { url: process.env['REDIS_URL'] },
+  fallback: 'memory',
+},
+```
+
+The top-level `redis` and `transport.persistence` behave differently: they fall back to in-memory storage with an error log.
+
+Keys are `<keyPrefix><entity>:<partition>:<kind>:...` (`mcp:guard:export_tickets:global:rl:...`); a trailing `:` on `keyPrefix` is dropped. Before 1.8.6 the default prefix wrote `mcp:guard::...`, so counters briefly split between versions during a rolling deploy.
+
 ## Verification
 
 ```bash
@@ -297,13 +313,15 @@ done
 
 ## Troubleshooting
 
-| Problem                                         | Cause                                                                                                                                                                                                     | Solution                                                                                                                                     |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                                                               |
-| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries, or the runtime reports no client IP (a custom fetch wrapper that drops the second handler argument on Deno/Bun)                 | Add the allowed IP ranges to `allowList`, pass the platform's second argument through to the handler, or change `defaultAction` to `'allow'` |
-| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                                                                   |
-| `X-Forwarded-For` header ignored                | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead                                         |
-| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                                                               |
+| Problem                                           | Cause                                                                                                                                                                                                     | Solution                                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances         | In-memory storage used with multiple server replicas                                                                                                                                                      | Configure `storage: { type: 'redis' }` in the throttle block to share counters                                                               |
+| Startup fails with `GuardStorageUnavailableError` | The `throttle.storage` backend is unreachable; rate limits fail closed                                                                                                                                    | Bring the store up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters                                         |
+| Redis-backed limits still per-instance            | `storage` written in the top-level `redis` shape (`{ provider: 'redis', host }`) with no `type`, so it was auto-detected as memory                                                                        | Use `{ type: 'redis', redis: { config: { host, port } } }`                                                                                   |
+| All requests rejected with 403                    | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries, or the runtime reports no client IP (a custom fetch wrapper that drops the second handler argument on Deno/Bun)                 | Add the allowed IP ranges to `allowList`, pass the platform's second argument through to the handler, or change `defaultAction` to `'allow'` |
+| Tools timing out unexpectedly                     | `defaultTimeout.executeMs` too low for the tool's normal execution time                                                                                                                                   | Increase the global default or set a per-tool `timeout.executeMs` override                                                                   |
+| `X-Forwarded-For` header ignored                  | No trusted proxy declared. `ipFilter.trustProxy` / `trustedProxyDepth` are accepted by the schema but NOT read -- client-IP extraction happens in the SDK context layer, before guard config is reachable | Set the `FRONTMCP_TRUST_PROXY=true` and `FRONTMCP_TRUSTED_PROXY_DEPTH` environment variables instead                                         |
+| Rate limit resets not aligned with expectations   | `windowMs` misunderstood as a sliding window when it is a fixed window                                                                                                                                    | The window is fixed; all counters reset at the end of each `windowMs` interval                                                               |
 
 ## Examples
 

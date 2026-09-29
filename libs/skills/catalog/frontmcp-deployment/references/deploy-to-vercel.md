@@ -58,7 +58,7 @@ This produces a Vercel Build Output API v3 structure:
 vercel.json                                # version, buildCommand, installCommand
 ```
 
-The adapter detects your package manager from the lockfile and writes the matching `buildCommand`/`installCommand` into `vercel.json`. No `api/` directory is involved.
+The adapter detects your package manager from the lockfile and writes the matching `installCommand` and a `buildCommand` that builds the **vercel target** through it: `npx frontmcp build --target vercel` (npm), `yarn frontmcp build --target vercel`, `pnpm exec frontmcp build --target vercel`, or `bunx frontmcp build --target vercel`. An existing `vercel.json` is left as it is — including one from `frontmcp create --target vercel`, which writes the same commands. Never set `buildCommand` to `<pm> run build`: the `build` script is `frontmcp build`, which builds the config's deployments (typically `node`) and never writes `.vercel/output`. No `api/` directory is involved.
 
 ## Step 2: Configure the Server for Vercel KV
 

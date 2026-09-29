@@ -237,19 +237,28 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const authSignature = subject ? `${authMode}:${subject}` : authMode;
 
     // If the client sent a session id, ONLY honor it when it decrypts to a
-    // payload THIS server minted for THIS node (valid AES-256-GCM tag). All
-    // anonymous sessions share `token: ''`, so the transport registry separates
-    // them by session id alone — echoing an arbitrary client-supplied id back
-    // verbatim let an attacker fixate a chosen id or, by presenting a victim's
-    // leaked id, resolve the victim's live transport (notifications/elicitations).
-    // An unrecognized / forged id is IGNORED and a fresh server-minted id is
-    // issued below, so the client cannot choose its own anonymous identity.
+    // payload this deployment minted (valid AES-256-GCM tag under
+    // MCP_SESSION_SECRET). All anonymous sessions share `token: ''`, so the
+    // transport registry separates them by session id alone — echoing an
+    // arbitrary client-supplied id back verbatim let an attacker fixate a chosen
+    // id or, by presenting a victim's leaked id, resolve the victim's live
+    // transport (notifications/elicitations). An unrecognized / forged id is
+    // IGNORED and a fresh server-minted id is issued below, so the client cannot
+    // choose its own anonymous identity; the transport flows then answer the
+    // unverified id with 404 rather than looking it up.
+    //
+    // The payload's `nodeId` is deliberately NOT compared with this instance:
+    // an id minted by a peer with the same secret, or before a restart, is still
+    // this deployment's. Which instance serves it is the transport registry's
+    // decision — it relays over the bus or recreates the transport from the
+    // stored session (taking it over in HA mode), keyed on the STORED session's
+    // `nodeId`.
     if (sessionIdHeader) {
       const existingPayload = decryptPublicSession(sessionIdHeader, authSignature);
       // `decryptPublicSession` already rejects any payload not signed with this
       // exact signature, so a session issued for one mode — or, in static mode,
       // for a DIFFERENT token — never reaches here.
-      if (existingPayload && existingPayload.nodeId === machineId) {
+      if (existingPayload) {
         // Derive the anonymous `sub` from the session's unique `uuid` (not its
         // one-second `iat`, which collided for sessions minted in the same
         // second and shared a `sub`-keyed partition, e.g. the rate limiter).

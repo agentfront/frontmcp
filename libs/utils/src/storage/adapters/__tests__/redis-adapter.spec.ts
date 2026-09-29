@@ -4,8 +4,8 @@
  * Comprehensive tests for RedisStorageAdapter with mocked ioredis.
  */
 
-import { RedisStorageAdapter } from '../redis';
 import { StorageConfigError, StorageConnectionError } from '../../errors';
+import { RedisStorageAdapter } from '../redis';
 
 // Mock Redis client
 const createMockRedisClient = () => ({
@@ -25,9 +25,11 @@ const createMockRedisClient = () => ({
   unsubscribe: jest.fn(),
   ping: jest.fn(),
   quit: jest.fn(),
+  disconnect: jest.fn(),
   pipeline: jest.fn(),
   duplicate: jest.fn(),
   on: jest.fn(),
+  removeListener: jest.fn(),
 });
 
 // Mock ioredis module
@@ -906,6 +908,69 @@ describe('RedisStorageAdapter', () => {
         const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
 
         await expect(adapter.connect()).rejects.toThrow(StorageConnectionError);
+      });
+
+      it('should tear down the client it created when connect fails', async () => {
+        // ioredis keeps reconnecting in the background; left alone, the client
+        // logs "[ioredis] Unhandled error event" long after the caller moved on.
+        mockRedisInstance.ping.mockRejectedValue(new Error('Reached the max retries per request limit'));
+
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await expect(adapter.connect()).rejects.toThrow(StorageConnectionError);
+        expect(mockRedisInstance.disconnect).toHaveBeenCalledTimes(1);
+        expect(await adapter.ping()).toBe(false);
+      });
+
+      it('should create a fresh client when connect is retried after a failure', async () => {
+        mockRedisInstance.ping.mockRejectedValueOnce(new Error('ECONNREFUSED')).mockResolvedValue('PONG');
+
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await expect(adapter.connect()).rejects.toThrow(StorageConnectionError);
+        await expect(adapter.connect()).resolves.toBeUndefined();
+        expect(MockRedisClass).toHaveBeenCalledTimes(2);
+      });
+
+      it('should leave an external client connected when connect fails', async () => {
+        const externalClient = {
+          ...createMockRedisClient(),
+          ping: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: externalClient as unknown as import('ioredis').Redis,
+        });
+
+        await expect(adapter.connect()).rejects.toThrow(StorageConnectionError);
+        expect(externalClient.disconnect).not.toHaveBeenCalled();
+        expect(externalClient.quit).not.toHaveBeenCalled();
+        expect(externalClient.on).not.toHaveBeenCalled();
+      });
+
+      it('should report the socket error the client emitted while connecting', async () => {
+        // The ping only says the retries ran out; the reason is in the 'error' event.
+        mockRedisInstance.on.mockImplementation((event: string, listener: (error: Error) => void) => {
+          if (event === 'error') listener(new Error('connect ECONNREFUSED 127.0.0.1:6379'));
+          return mockRedisInstance;
+        });
+        mockRedisInstance.ping.mockRejectedValue(new Error('Reached the max retries per request limit'));
+
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await expect(adapter.connect()).rejects.toThrow(
+          'Failed to connect to Redis: connect ECONNREFUSED 127.0.0.1:6379',
+        );
+      });
+
+      it('should stop swallowing error events once connected', async () => {
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await adapter.connect();
+
+        const [[event, listener]] = mockRedisInstance.on.mock.calls.filter(([name]) => name === 'error');
+        expect(event).toBe('error');
+        expect(mockRedisInstance.removeListener).toHaveBeenCalledWith('error', listener);
       });
     });
   });

@@ -179,6 +179,16 @@ JSON-RPC id — carrying `inputResponses` and the echoed `requestState`.
   exchange restarts.
 </Warning>
 
+The signing key is `VAULT_SECRET`, else `JWT_SECRET`, else a random key generated
+when the process starts. With the per-process key, state minted by one instance
+fails verification on every other instance and after a restart, so a multi-round
+tool (`elicit()` / `sample()`) whose next round lands elsewhere asks its first
+question again. Set `VAULT_SECRET` (or `JWT_SECRET`) to the **same value on every
+instance** when you run more than one. In production, a server configured with
+`redis` or `transport.persistence` but neither secret logs a startup warning, and
+each rejected state is logged as `mcp-20260728: rejected requestState` with
+`reason: 'bad-signature'` and a `hint` naming `VAULT_SECRET`.
+
 Tools are **replayed**, not resumed: the tool runs again from the top and the
 recorded answers resolve inline. Keep tool bodies idempotent up to the point
 they ask for input.

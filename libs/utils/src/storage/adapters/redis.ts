@@ -5,10 +5,10 @@
  * Uses ioredis with dynamic import for browser compatibility.
  */
 
-import { BaseStorageAdapter } from './base';
-import type { RedisAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
-import { StorageConnectionError, StorageConfigError } from '../errors';
+import { StorageConfigError, StorageConnectionError } from '../errors';
+import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
+import { BaseStorageAdapter } from './base';
 
 // Type imports for ioredis (dynamic import at runtime)
 type Redis = import('ioredis').Redis;
@@ -29,10 +29,13 @@ function getRedisClass(): typeof import('ioredis').default {
         `Failed to load ioredis: ${msg}. ` +
           'This typically happens with ESM bundlers (esbuild, Vite). ' +
           'Ensure your bundler externalizes ioredis or use CJS mode.',
+        { cause: error },
       );
     }
 
-    throw new Error('ioredis is required for Redis storage adapter. Install it with: npm install ioredis');
+    throw new Error('ioredis is required for Redis storage adapter. Install it with: npm install ioredis', {
+      cause: error,
+    });
   }
 }
 
@@ -103,6 +106,14 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   async connect(): Promise<void> {
     if (this.connected) return;
 
+    // While connecting, an owned client's socket errors are recorded rather than
+    // left to ioredis's "Unhandled error event" logger: the ping only reports
+    // that its retries ran out, and the socket error says why.
+    let socketError: Error | undefined;
+    const recordSocketError = (error: Error): void => {
+      socketError = error;
+    };
+
     try {
       if (this.options.client) {
         // Use external client
@@ -116,13 +127,29 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
         } else {
           this.client = new RedisClass(this.buildRedisOptions());
         }
+        this.client.on('error', recordSocketError);
       }
 
       // Test connection
       await this.client.ping();
       this.connected = true;
+      if (this.ownsClient) this.client.removeListener('error', recordSocketError);
     } catch (e) {
-      throw new StorageConnectionError('Failed to connect to Redis', e instanceof Error ? e : undefined, 'redis');
+      // A client this adapter created keeps reconnecting in the background
+      // unless it is torn down, and `disconnect()` is a no-op while
+      // `connected` is false — so close it here. An external client belongs to
+      // the caller and is left as it was.
+      if (this.ownsClient && this.client) {
+        const failed = this.client;
+        this.client = undefined;
+        try {
+          failed.disconnect();
+        } catch {
+          // The client never came up; there is nothing left to close.
+        }
+      }
+      const cause = socketError ?? (e instanceof Error ? e : undefined);
+      throw new StorageConnectionError('Failed to connect to Redis', cause, 'redis');
     }
   }
 

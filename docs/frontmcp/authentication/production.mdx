@@ -348,6 +348,15 @@ export class Server {}
     }
     ```
 
+    **Also check `MCP_SESSION_SECRET`:** it must be the same on every instance. A session id minted under a different secret is answered with HTTP 404 (`-32000`) and the client re-initializes — in every auth mode, including `public`, where the id is the caller's only credential. The same happens once, by design, right after you rotate the secret.
+
+  </Accordion>
+
+  <Accordion title="A 2026-07-28 tool asks its first question again">
+    **Cause:** `requestState` is signed with `VAULT_SECRET`, else `JWT_SECRET`, else a random per-process key. With the per-process key, a round answered on another instance (or after a restart) fails verification (`mcp-20260728: rejected requestState`, `reason: 'bad-signature'`, with a `hint` naming `VAULT_SECRET`) and the exchange restarts.
+
+    **Solution:** Set `VAULT_SECRET` (or `JWT_SECRET`) to the same value on every instance. In production, a server with `redis` or `transport.persistence` but neither secret warns about this at startup.
+
   </Accordion>
 
   <Accordion title="JWKS fetch fails intermittently">
