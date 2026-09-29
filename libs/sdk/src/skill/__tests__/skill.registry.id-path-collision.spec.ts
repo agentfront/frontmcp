@@ -515,6 +515,58 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
       expect(await skillIds(parent)).toEqual({ search: [], list: [], count: ['0'] });
     });
 
+    it("shows a child's skill registered again even when the adopter failed to remove its old copy", async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+      providerOf(parent).remove = async () => {
+        throw new Error('provider unavailable');
+      };
+
+      await child.unregisterSkill('ledger');
+      await child.registerSkillContent(content('ledger', 'ledger', { description: 'ledger skill again' }));
+      await settle();
+
+      expect(await skillIds(parent)).toEqual({ search: ['ledger'], list: ['ledger'], count: ['1'] });
+      error.mockRestore();
+    });
+
+    it('skips a skill withdrawn while the provider answers a list or a count', async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await child.registerSkillContent(content('invoices', 'invoices'));
+      await settle();
+      // The child removes a skill while the parent's provider is answering (after it read its rows).
+      const provider = providerOf(parent);
+      const list = provider.list.bind(provider);
+      const count = provider.count.bind(provider);
+      let pending: string | undefined;
+      const removeDuringRead = () => {
+        if (pending) void child.unregisterSkill(pending);
+        pending = undefined;
+      };
+      provider.list = async (options) => {
+        const page = await list(options);
+        removeDuringRead();
+        return page;
+      };
+      provider.count = async (options) => {
+        const counted = await count(options);
+        removeDuringRead();
+        return counted;
+      };
+
+      pending = 'ledger';
+      expect((await parent.listSkills()).skills.map((m) => m.id ?? m.name)).toEqual(['invoices']);
+      pending = 'invoices';
+      await expect(parent.count()).resolves.toBe(0);
+    });
+
     it('counts what it lists when a removal completes between reading the count and the list', async () => {
       const registry = await emptyRegistry();
       await registry.registerSkillContent(content('ledger', 'ledger'));

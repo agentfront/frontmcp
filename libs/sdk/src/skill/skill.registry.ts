@@ -969,7 +969,11 @@ export default class SkillRegistry
    */
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
     const hidden = this.hiddenFromProviderRead();
-    if (this.dynamicContents.size === 0 && hidden.size === 0) return this.storageProvider.list(options);
+    if (this.dynamicContents.size === 0 && hidden.size === 0) {
+      const page = await this.storageProvider.list(options);
+      // A skill withdrawn while the provider answered makes the page stale: read again, filtered.
+      if (this.withdrawn.size === 0) return page;
+    }
 
     // One list, paged as a whole: the provider's skills in its order (dynamic content replacing the
     // rows it overrides), then the dynamic skills the provider doesn't hold. Merging per provider
@@ -1049,7 +1053,11 @@ export default class SkillRegistry
    */
   async count(options?: { tags?: string[]; includeHidden?: boolean }): Promise<number> {
     const hidden = this.hiddenFromProviderRead();
-    if (this.dynamicContents.size === 0 && hidden.size === 0) return this.storageProvider.count(options);
+    if (this.dynamicContents.size === 0 && hidden.size === 0) {
+      const counted = await this.storageProvider.count(options);
+      // A skill withdrawn while the provider answered may be in that count: count again, filtered.
+      if (this.withdrawn.size === 0) return counted;
+    }
     // We can't know which dynamic ids the provider already counted without
     // listing it, so we list with a large limit (matching the provider's own
     // semantics) and dedupe. For typical bundle sizes this is fine; very
@@ -1619,9 +1627,11 @@ export default class SkillRegistry
    */
   private withdrawGoneAdoptedSkills(previous: readonly IndexedSkill[]): void {
     const mutable = this.asMutableProvider(this.storageProvider);
-    if (!mutable || previous.length === 0) return;
+    if (!mutable) return;
     const skillIdOf = (entry: SkillEntry): string => entry.metadata.id ?? entry.metadata.name;
     const live = new Set(this.listAllIndexed().map((r) => skillIdOf(r.instance)));
+    // Also when nothing left: a skill the child registers again is live, even if the removal of its
+    // old copy is still queued or failed.
     for (const id of live) this.withdrawn.delete(id);
     for (const row of previous) {
       const id = skillIdOf(row.instance);
