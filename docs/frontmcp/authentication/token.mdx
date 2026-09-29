@@ -269,6 +269,30 @@ In `local` mode, your `authenticate()` handler can return and customize the clai
 
 Either way, read the claims via `this.context.authInfo?.user` (raw) or `this.auth.claims` (typed) inside tools, resources, prompts, and agents.
 
+### Anonymous and Static-Token Callers
+
+A caller that presents no JWT (a `public` caller, a tokenless `transparent` caller with `allowAnonymous`, or a `static` caller) is not issued a token. FrontMCP builds its claims with `anonymousCallerClaims(options, anonymousId)` from `@frontmcp/auth`, so a caller gets the same claims whether it resumes a session, starts one, or sends a sessionless (MCP 2026-07-28) request. A custom auth provider or a test can call it to build the same claims:
+
+```typescript
+import { anonymousCallerClaims } from '@frontmcp/auth';
+
+anonymousCallerClaims({ issuer: 'transparent-anon' }, 'c0ffee');
+// { sub: 'anon:c0ffee', iss: 'transparent-anon', name: 'Anonymous', scope: 'anonymous' }
+
+anonymousCallerClaims({ issuer: 'static', scopes: ['static'], subject: 'static:3f2a9c1d8e7b' }, 'c0ffee');
+// { sub: 'static:3f2a9c1d8e7b', iss: 'static', name: 'Static token', scope: 'static' }
+```
+
+`AnonymousCallerClaimsOptions`:
+
+| Option    | Type       | Default         | Description                                                                                                                                                                                                                         |
+| --------- | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issuer`  | `string`   | required        | The `iss` claim. FrontMCP uses `public`, `transparent-anon`, or `static`.                                                                                                                                                           |
+| `scopes`  | `string[]` | `['anonymous']` | Scopes granted to the caller, joined with spaces into the `scope` claim.                                                                                                                                                            |
+| `subject` | `string`   | none            | An explicit `sub`. Without it the caller is anonymous: `sub` is `anon:<anonymousId>`, `name` is `Anonymous`. With it (static mode passes `static:<12 hex chars>`, a digest prefix of the matching token), `name` is `Static token`. |
+
+`anonymousId` should be unique per caller: FrontMCP passes the session's `uuid`, or a fresh UUID for a new session or a sessionless request, so two anonymous callers never share a `sub`-keyed partition such as a rate limit.
+
 ---
 
 ## Consent & Tool Authorization
