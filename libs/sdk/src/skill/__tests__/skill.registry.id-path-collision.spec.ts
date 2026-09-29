@@ -37,6 +37,7 @@ function scopeOf(registry: SkillRegistry): ScopeEntry {
 }
 
 interface TestProvider {
+  add: (skill: SkillContent) => Promise<void>;
   remove: (id: string) => Promise<void>;
   list: (options?: { offset?: number; limit?: number }) => Promise<{
     skills: { id?: string; name: string }[];
@@ -433,6 +434,35 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
 
       expect((await skillIds(parent)).list).toEqual(['ledger']);
       expect((await skillIds(parent)).count).toEqual(['1']);
+    });
+
+    it("does not bring back a child's removed skill when the adopter's first write of it lands late", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await child.registerSkillContent(content('invoices', 'invoices'));
+      const provider = providerOf(parent);
+      const add = provider.add.bind(provider);
+      let release: () => void = () => undefined;
+      let begin: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => (begin = resolve));
+      const released = new Promise<void>((resolve) => (release = resolve));
+      provider.add = async (skill) => {
+        begin();
+        await released;
+        return add(skill);
+      };
+
+      const adopting = parent.adoptFromChild(child, owner());
+      await started;
+      await child.unregisterSkill('ledger');
+      await settle();
+      release();
+      await adopting;
+      await settle();
+
+      await expect(parent.loadSkill('ledger')).resolves.toBeUndefined();
+      expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
     });
 
     it('does not count a withdrawn skill that a paging provider lists on a later page', async () => {

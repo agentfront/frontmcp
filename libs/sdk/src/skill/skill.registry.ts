@@ -532,10 +532,12 @@ export default class SkillRegistry
       const row = this.makeRow(token, instance, lineage, this);
       this.localRows.push(row);
 
-      // Load skill content and add to storage provider for search
+      // Load skill content and add to storage provider for search (queued per id, like every write)
       try {
-        const content = await instance.load();
-        await (this.storageProvider as MemorySkillProvider).add(content);
+        await this.syncProvider(instance.metadata.id ?? instance.metadata.name, async () => {
+          const content = await instance.load();
+          await (this.storageProvider as MemorySkillProvider).add(content);
+        });
       } catch (error) {
         this.scope.logger.warn(`Failed to load skill ${instance.name}: ${(error as Error).message}`);
       }
@@ -620,12 +622,16 @@ export default class SkillRegistry
       }
     });
 
-    // Add adopted skills to storage provider - await to ensure they're searchable
+    // Add adopted skills to storage provider - await to ensure they're searchable. Queued per id
+    // like the change handler's writes, so a removal the child makes meanwhile runs after this write
+    // instead of being overtaken by it.
     await Promise.all(
       adoptedRows.map(async (row) => {
         try {
-          const content = await row.instance.load();
-          await (this.storageProvider as MemorySkillProvider).add(content);
+          await this.syncProvider(row.instance.metadata.id ?? row.instance.metadata.name, async () => {
+            const content = await row.instance.load();
+            await (this.storageProvider as MemorySkillProvider).add(content);
+          });
         } catch (error) {
           this.scope.logger.warn(`Failed to load adopted skill ${row.baseName}: ${(error as Error).message}`);
         }
