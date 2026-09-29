@@ -36,9 +36,36 @@ function scopeOf(registry: SkillRegistry): ScopeEntry {
   return { skills: registry } as unknown as ScopeEntry;
 }
 
-/** The registry's storage provider, whose `remove` a test can hold back or fail. */
-function providerOf(registry: SkillRegistry): { remove: (id: string) => Promise<void> } {
-  return (registry as unknown as { storageProvider: { remove: (id: string) => Promise<void> } }).storageProvider;
+interface TestProvider {
+  add: (skill: SkillContent) => Promise<void>;
+  count: (options?: { tags?: string[]; includeHidden?: boolean }) => Promise<number>;
+  remove: (id: string) => Promise<void>;
+  list: (options?: { offset?: number; limit?: number }) => Promise<{
+    skills: { id?: string; name: string }[];
+    total: number;
+    hasMore: boolean;
+  }>;
+}
+
+/** The registry's storage provider, whose `remove` or `list` a test can hold back, fail or cap. */
+function providerOf(registry: SkillRegistry): TestProvider {
+  return (registry as unknown as { storageProvider: TestProvider }).storageProvider;
+}
+
+/** Holds the provider's removals back until `release()`; `started` resolves once one begins. */
+function holdRemovals(registry: SkillRegistry): { started: Promise<void>; release: () => void } {
+  const provider = providerOf(registry);
+  const remove = provider.remove.bind(provider);
+  let release: () => void = () => undefined;
+  let begin: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => (begin = resolve));
+  const released = new Promise<void>((resolve) => (release = resolve));
+  provider.remove = async (id) => {
+    begin();
+    await released;
+    return remove(id);
+  };
+  return { started, release: () => release() };
 }
 
 /** Let the adopting registry's asynchronous provider updates settle. */
@@ -370,6 +397,223 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
       await expect(
         registry.registerSkillContent(content('target', 'other'), { supersedes: ['target-skill'] }),
       ).rejects.toThrow(PublicMcpError);
+    });
+  });
+
+  describe('the storage provider and adopting registries', () => {
+    it('stops the adopting registry serving a superseded skill while the removal is pending', async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('reports-v1', 'target'));
+      await settle();
+      const held = holdRemovals(child);
+
+      const registering = child.registerSkillContent(content('target', 'other'), { supersedes: ['reports-v1'] });
+      await held.started;
+
+      await expect(parent.loadSkill('reports-v1')).resolves.toBeUndefined();
+      expect(findSkillByPath(scopeOf(parent), 'target')?.metadata.name).toBe('other');
+      held.release();
+      await registering;
+    });
+
+    it("keeps a skill a child registers again while the adopter's removal of it is pending", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+      const held = holdRemovals(parent);
+
+      await child.unregisterSkill('ledger');
+      await held.started;
+      await child.registerSkillContent(content('ledger', 'ledger', { description: 'ledger skill again' }));
+      await settle();
+      held.release();
+      await settle();
+
+      expect((await skillIds(parent)).list).toEqual(['ledger']);
+      expect((await skillIds(parent)).count).toEqual(['1']);
+    });
+
+    it("does not bring back a child's removed skill when the adopter's first write of it lands late", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await child.registerSkillContent(content('invoices', 'invoices'));
+      const provider = providerOf(parent);
+      const add = provider.add.bind(provider);
+      let release: () => void = () => undefined;
+      let begin: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => (begin = resolve));
+      const released = new Promise<void>((resolve) => (release = resolve));
+      provider.add = async (skill) => {
+        begin();
+        await released;
+        return add(skill);
+      };
+
+      const adopting = parent.adoptFromChild(child, owner());
+      await started;
+      await child.unregisterSkill('ledger');
+      await settle();
+      release();
+      await adopting;
+      await settle();
+
+      await expect(parent.loadSkill('ledger')).resolves.toBeUndefined();
+      expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
+    });
+
+    it('keeps the storage provider in step when a change subscriber throws', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const registry = await emptyRegistry();
+      registry.subscribe({}, () => {
+        throw new Error('subscriber failed');
+      });
+      const providerIds = async () => (await providerOf(registry).list()).skills.map((m) => m.id ?? m.name);
+
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      expect(await providerIds()).toEqual(['ledger']);
+      await registry.unregisterSkill('ledger');
+      expect(await providerIds()).toEqual([]);
+      error.mockRestore();
+    });
+
+    it('does not bring back a skill a subscriber removes while its registration is being announced', async () => {
+      const registry = await emptyRegistry();
+      let removing = true;
+      registry.subscribe({}, () => {
+        if (!removing) return;
+        removing = false;
+        void registry.unregisterSkill('ledger');
+      });
+
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+
+      expect(registry.getSkills()).toHaveLength(0);
+      expect(await skillIds(registry)).toEqual({ search: [], list: [], count: ['0'] });
+    });
+
+    it("does not bring back a child's skill that a subscriber of the adopter removes while the change is announced", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      let removing = false;
+      parent.subscribe({}, () => {
+        if (!removing) return;
+        removing = false;
+        void child.unregisterSkill('ledger');
+      });
+
+      removing = true;
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+
+      expect(await skillIds(parent)).toEqual({ search: [], list: [], count: ['0'] });
+    });
+
+    it("shows a child's skill registered again even when the adopter failed to remove its old copy", async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+      providerOf(parent).remove = async () => {
+        throw new Error('provider unavailable');
+      };
+
+      await child.unregisterSkill('ledger');
+      await child.registerSkillContent(content('ledger', 'ledger', { description: 'ledger skill again' }));
+      await settle();
+
+      expect(await skillIds(parent)).toEqual({ search: ['ledger'], list: ['ledger'], count: ['1'] });
+      error.mockRestore();
+    });
+
+    it('skips a skill withdrawn while the provider answers a list or a count', async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await child.registerSkillContent(content('invoices', 'invoices'));
+      await settle();
+      // The child removes a skill while the parent's provider is answering (after it read its rows).
+      const provider = providerOf(parent);
+      const list = provider.list.bind(provider);
+      const count = provider.count.bind(provider);
+      let pending: string | undefined;
+      const removeDuringRead = () => {
+        if (pending) void child.unregisterSkill(pending);
+        pending = undefined;
+      };
+      provider.list = async (options) => {
+        const page = await list(options);
+        removeDuringRead();
+        return page;
+      };
+      provider.count = async (options) => {
+        const counted = await count(options);
+        removeDuringRead();
+        return counted;
+      };
+
+      pending = 'ledger';
+      expect((await parent.listSkills()).skills.map((m) => m.id ?? m.name)).toEqual(['invoices']);
+      pending = 'invoices';
+      await expect(parent.count()).resolves.toBe(0);
+    });
+
+    it('counts what it lists when a removal completes between reading the count and the list', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      await registry.registerSkillContent(content('reports', 'reports'));
+      const held = holdRemovals(registry);
+      const unregistering = registry.unregisterSkill('reports');
+      await held.started;
+      // The removal completes right after the provider's first read (its count, or its list).
+      const provider = providerOf(registry);
+      const count = provider.count.bind(provider);
+      const list = provider.list.bind(provider);
+      let firstRead = true;
+      const afterRead = async <T>(value: T): Promise<T> => {
+        if (firstRead) {
+          firstRead = false;
+          held.release();
+          await settle();
+        }
+        return value;
+      };
+      provider.count = async (options) => afterRead(await count(options));
+      provider.list = async (options) => afterRead(await list(options));
+
+      await expect(registry.count()).resolves.toBe(1);
+      await unregistering;
+      await expect(registry.count()).resolves.toBe((await registry.listSkills()).total);
+    });
+
+    it('does not count a withdrawn skill that a paging provider lists on a later page', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      await registry.registerSkillContent(content('reports-v1', 'target'));
+      const provider = providerOf(registry);
+      provider.remove = async () => {
+        throw new Error('provider unavailable');
+      };
+      // A provider that returns one skill per page and reports the rest with `hasMore`.
+      const list = provider.list.bind(provider);
+      provider.list = async (options) => {
+        const page = await list({ ...options, limit: Number.MAX_SAFE_INTEGER, offset: 0 });
+        const offset = options?.offset ?? 0;
+        return { skills: page.skills.slice(offset, offset + 1), total: page.total, hasMore: offset + 1 < page.total };
+      };
+
+      await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports-v1'] });
+
+      await expect(registry.count()).resolves.toBe(2);
     });
   });
 
