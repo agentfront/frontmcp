@@ -81,4 +81,18 @@ describe('SessionVerifyFlow — anonymous session id is server-controlled', () =
     // Both minted fresh sessions with unique uuids → distinct subs even within the same second.
     expect(a.output.authorization.user.sub).not.toBe(b.output.authorization.user.sub);
   });
+
+  it('keeps the anon sub a session started with when the session is resumed', async () => {
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedId = first.output.authorization.session?.id as string;
+
+    const second = await runPublic({ 'mcp-session-id': mintedId });
+    if (second.output?.kind !== 'authorized') throw new Error('not authorized');
+
+    // A `sub`-keyed partition (rate limits, per-caller state) must not split between the first
+    // request and the rest of the session.
+    expect(first.output.authorization.user.sub).toMatch(/^anon:/);
+    expect(second.output.authorization.user.sub).toBe(first.output.authorization.user.sub);
+  });
 });

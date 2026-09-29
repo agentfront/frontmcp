@@ -54,6 +54,7 @@ export type {
   SkillRegistryOptions,
   GetSkillsOptions,
   RegisterSkillContentOptions,
+  RegisteredSkillContent,
 } from './skill.registry';
 
 // Instance

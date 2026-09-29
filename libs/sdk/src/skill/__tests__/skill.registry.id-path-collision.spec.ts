@@ -180,27 +180,46 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
   // A bundle sync registers every skill of the new bundle, then unregisters the ones it drops, and
   // names in `supersedes` the previous bundle's skills it has not registered again yet.
   describe('registerSkillContent with supersedes', () => {
-    it('accepts a new skill whose id is the path of a skill the same change drops', async () => {
+    it('accepts a new skill whose id is the path of a skill the same change drops, removing that skill', async () => {
       const registry = await emptyRegistry();
       const previous = await registry.registerSkillContent(content('reports-v1', 'target'));
 
-      await expect(
-        registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports-v1'] }),
-      ).resolves.toMatchObject({ id: 'target' });
-      await previous.unregister();
+      const handle = await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports-v1'] });
 
+      // Removed in the same commit, so `skill://target/SKILL.md` and `loadSkill('target')` never
+      // name different skills, even before the caller's own removal runs.
+      expect(handle.removed).toEqual(['reports-v1']);
       expect(findSkillByPath(scopeOf(registry), 'target')?.metadata.name).toBe('other');
+      expect(registry.getSkills().map((s) => s.metadata.id)).toEqual(['target']);
+      await expect(previous.unregister()).resolves.toBeUndefined();
+      expect(registry.getSkills().map((s) => s.metadata.id)).toEqual(['target']);
     });
 
     it('accepts a change that renames a kept skill off the path a new id takes', async () => {
       const registry = await emptyRegistry();
       await registry.registerSkillContent(content('reports', 'target'));
 
-      await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports'] });
-      await registry.registerSkillContent(content('reports', 'quarterly'), { supersedes: ['reports'] });
+      const first = await registry.registerSkillContent(content('target', 'other'), { supersedes: ['reports'] });
+      expect(first.removed).toEqual(['reports']);
+      await registry.registerSkillContent(content('reports', 'quarterly'));
 
       expect(findSkillByPath(scopeOf(registry), 'quarterly')?.metadata.id).toBe('reports');
       expect(findSkillByPath(scopeOf(registry), 'target')?.metadata.name).toBe('other');
+    });
+
+    it('keeps a superseded skill that does not collide with the new one', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('invoices', 'invoices'));
+
+      const handle = await registry.registerSkillContent(content('refunds', 'refunds'), { supersedes: ['invoices'] });
+
+      expect(handle.removed).toEqual([]);
+      expect(
+        registry
+          .getSkills()
+          .map((s) => s.metadata.id)
+          .sort(),
+      ).toEqual(['invoices', 'refunds']);
     });
 
     it('refuses the registration that brings a superseded skill back to the colliding path', async () => {

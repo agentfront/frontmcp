@@ -161,10 +161,23 @@ export interface RegisterSkillContentOptions {
 
   /**
    * Ids of skills registered through `registerSkillContent` that the caller replaces or removes as
-   * part of the same change. The id/path collision check treats them as already gone; they stay
-   * registered until the caller re-registers or unregisters them. Other skills are not affected.
+   * part of the same change. The id/path collision check treats them as already gone. One that the
+   * new skill collides with is removed in the same commit, so the two are never served together;
+   * the others stay registered until the caller re-registers or unregisters them.
    */
   supersedes?: readonly string[];
+}
+
+/**
+ * What {@link SkillRegistryInterface.registerSkillContent} returns.
+ */
+export interface RegisteredSkillContent {
+  /** The registered skill's id. */
+  id: string;
+  /** Removes this registration; a no-op once a later registration replaced it. */
+  unregister: () => Promise<void>;
+  /** Ids of superseded skills this registration removed because the new skill collided with them. */
+  removed?: readonly string[];
 }
 
 /**
@@ -304,17 +317,16 @@ export interface SkillRegistryInterface {
    * the dynamically-registered skills that the caller replaces or removes as part of the same change,
    * such as a bundle sync that registers the new bundle before dropping the old one's skills. The
    * check treats them as already gone, so a change whose end state is free of collisions is not
-   * refused over a skill it is about to drop. Until the caller removes them they stay registered.
+   * refused over a skill it is about to drop. A superseded skill the new one collides with is
+   * removed in the same commit (listed in `removed`); the others stay registered until the caller
+   * removes them.
    *
    * @param content - The skill content to register
    * @param opts - Optional registration metadata: `source` (identifier for diagnostics) and
    *   `supersedes` (ids of dynamically-registered skills the same change replaces or removes)
-   * @returns Handle exposing `unregister()` and the resolved skill id
+   * @returns Handle exposing `unregister()`, the resolved skill id, and the superseded skills removed
    */
-  registerSkillContent(
-    content: SkillContent,
-    opts?: RegisterSkillContentOptions,
-  ): Promise<{ id: string; unregister: () => Promise<void> }>;
+  registerSkillContent(content: SkillContent, opts?: RegisterSkillContentOptions): Promise<RegisteredSkillContent>;
 
   /**
    * Remove a previously-registered dynamic skill by id.
@@ -1350,7 +1362,7 @@ export default class SkillRegistry
   async registerSkillContent(
     content: SkillContent,
     opts?: RegisterSkillContentOptions,
-  ): Promise<{ id: string; unregister: () => Promise<void> }> {
+  ): Promise<RegisteredSkillContent> {
     if (!content || typeof content.id !== 'string' || content.id.length === 0) {
       throw new PublicMcpError('registerSkillContent: SkillContent.id is required', 'INVALID_PARAMS');
     }
@@ -1421,6 +1433,20 @@ export default class SkillRegistry
     if (existingIdx !== -1) {
       this.dynamicRows.splice(existingIdx, 1);
     }
+    // A superseded skill the new one collides with leaves in this same commit. Left in place until
+    // the caller removes it, `skill://<id>/SKILL.md` would serve it while `loadSkill(<id>)` found
+    // the new skill.
+    const removed = this.dynamicRows
+      .filter((r) => superseded.has(r.instance.name) && findIdPathCollision([r.instance, instance]))
+      .map((r) => r.instance.name);
+    for (const removedId of removed) {
+      this.dynamicRows.splice(
+        this.dynamicRows.findIndex((r) => r.instance.name === removedId),
+        1,
+      );
+      this.dynamicContents.delete(removedId);
+      this.dynamicGenerations.delete(removedId);
+    }
 
     const lineage: EntryLineage = this.owner ? [this.owner] : [];
     const row = this.makeRow(provideToken, instance, lineage, this);
@@ -1441,6 +1467,15 @@ export default class SkillRegistry
     // skills visible regardless of provider mutability.
     const mutable = this.asMutableProvider(this.storageProvider);
     if (mutable) {
+      for (const removedId of removed) {
+        try {
+          await mutable.remove(removedId);
+        } catch (error) {
+          this.scope.logger.warn(
+            `[SkillRegistry] Failed to remove superseded skill ${removedId} from storage provider: ${(error as Error).message}`,
+          );
+        }
+      }
       try {
         if (await mutable.exists(id)) {
           await mutable.update(id, content);
@@ -1476,7 +1511,7 @@ export default class SkillRegistry
       `[SkillRegistry] Registered dynamic skill ${id}${opts?.source ? ` (source: ${opts.source})` : ''}`,
     );
 
-    return { id, unregister };
+    return { id, unregister, removed };
   }
 
   /**
