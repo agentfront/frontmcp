@@ -815,14 +815,13 @@ export default class SkillRegistry
 
   async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const topK = options?.topK;
+    const hidden = this.hiddenFromProviderRead();
     // Ask for as many more as could be withdrawn, so skipping them still leaves `topK` results.
     const providerOptions =
-      this.withdrawn.size > 0 && typeof topK === 'number' && topK >= 0
-        ? { ...options, topK: topK + this.withdrawn.size }
-        : options;
+      hidden.size > 0 && typeof topK === 'number' && topK >= 0 ? { ...options, topK: topK + hidden.size } : options;
     let baseResults = await this.storageProvider.search(query, providerOptions);
-    if (this.withdrawn.size > 0) {
-      baseResults = baseResults.filter((r) => !this.isWithdrawn(r.metadata));
+    if (hidden.size > 0 || this.withdrawn.size > 0) {
+      baseResults = baseResults.filter((r) => !hidden.has(r.metadata));
       if (typeof topK === 'number' && topK >= 0) baseResults = baseResults.slice(0, topK);
     }
     if (this.dynamicContents.size === 0) return baseResults;
@@ -926,9 +925,10 @@ export default class SkillRegistry
     }
 
     // Try storage provider (for external skills)
-    if (this.withdrawn.has(skillId)) return undefined;
+    const hidden = this.hiddenFromProviderRead();
+    if (hidden.has({ name: skillId })) return undefined;
     const result = await this.storageProvider.load(skillId);
-    if (result && this.isWithdrawn(result.skill)) return undefined;
+    if (result && hidden.has(result.skill)) return undefined;
     return result ?? undefined;
   }
 
@@ -966,14 +966,15 @@ export default class SkillRegistry
    * and `hasMore` stay correct.
    */
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
-    if (this.dynamicContents.size === 0 && this.withdrawn.size === 0) return this.storageProvider.list(options);
+    const hidden = this.hiddenFromProviderRead();
+    if (this.dynamicContents.size === 0 && hidden.size === 0) return this.storageProvider.list(options);
 
     // One list, paged as a whole: the provider's skills in its order (dynamic content replacing the
     // rows it overrides), then the dynamic skills the provider doesn't hold. Merging per provider
     // page compared the dynamic skills only with that page, so a skill held on another page was
     // appended again, and `total` changed from page to page. As in `count()`, the provider is read
     // whole to know which ids it holds.
-    const base = (await this.listAllFromProvider(options)).filter((meta) => !this.isWithdrawn(meta));
+    const base = (await this.listAllFromProvider(options)).filter((meta) => !hidden.has(meta));
     const baseIds = new Set<string>();
     const merged: SkillMetadata[] = base.map((meta) => {
       const id = meta.id ?? meta.name;
@@ -1041,24 +1042,27 @@ export default class SkillRegistry
   /**
    * Get total skill count.
    *
-   * Sums the provider count with overlay rows the provider does not know
+   * Counts the provider's rows with overlay rows the provider does not know
    * about so callers see the same surface as `search` / `listSkills`.
    */
   async count(options?: { tags?: string[]; includeHidden?: boolean }): Promise<number> {
-    const baseCount = await this.storageProvider.count(options);
-    if (this.dynamicContents.size === 0 && this.withdrawn.size === 0) return baseCount;
+    const hidden = this.hiddenFromProviderRead();
+    if (this.dynamicContents.size === 0 && hidden.size === 0) return this.storageProvider.count(options);
     // We can't know which dynamic ids the provider already counted without
     // listing it, so we list with a large limit (matching the provider's own
     // semantics) and dedupe. For typical bundle sizes this is fine; very
     // large catalogs should override the storage provider with one whose
     // count() honors the dynamic overlay natively.
-    // Every page: a provider may cap `limit` and report the rest with `hasMore`.
-    const baseList = await this.listAllFromProvider({ tags: options?.tags, includeHidden: options?.includeHidden });
+    // Every page: a provider may cap `limit` and report the rest with `hasMore`. The count comes
+    // from this one read, as `listSkills` does: a separate `count()` read could disagree with it
+    // when a queued provider write completes in between.
+    const baseList = (
+      await this.listAllFromProvider({ tags: options?.tags, includeHidden: options?.includeHidden })
+    ).filter((m) => !hidden.has(m));
     const baseIds = new Set<string>();
     for (const m of baseList) baseIds.add(m.id ?? m.name);
-    const withdrawnCounted = baseList.filter((m) => this.isWithdrawn(m)).length;
     const overlay = this.collectDynamicMetadata(options).filter((m) => !baseIds.has(m.id ?? m.name));
-    return baseCount - withdrawnCounted + overlay.length;
+    return baseList.length + overlay.length;
   }
 
   /**
@@ -1622,9 +1626,20 @@ export default class SkillRegistry
     }
   }
 
-  /** Whether a provider-backed row is a withdrawn dynamic skill. */
-  private isWithdrawn(meta: { id?: string; name: string }): boolean {
-    return this.withdrawn.size > 0 && this.withdrawn.has(meta.id ?? meta.name);
+  /**
+   * Which provider-backed rows a read that starts now must skip: a skill withdrawn when the read
+   * starts (its removal may complete while the provider answers, clearing the withdrawal, yet the
+   * answer can still hold it), or withdrawn by the time the answer arrives.
+   */
+  private hiddenFromProviderRead(): { size: number; has: (meta: { id?: string; name: string }) => boolean } {
+    const atStart = new Set(this.withdrawn.keys());
+    return {
+      size: atStart.size,
+      has: (meta) => {
+        const id = meta.id ?? meta.name;
+        return atStart.has(id) || this.withdrawn.has(id);
+      },
+    };
   }
 
   /* -------------------- Internal helpers -------------------- */

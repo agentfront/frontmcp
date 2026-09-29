@@ -38,6 +38,7 @@ function scopeOf(registry: SkillRegistry): ScopeEntry {
 
 interface TestProvider {
   add: (skill: SkillContent) => Promise<void>;
+  count: (options?: { tags?: string[]; includeHidden?: boolean }) => Promise<number>;
   remove: (id: string) => Promise<void>;
   list: (options?: { offset?: number; limit?: number }) => Promise<{
     skills: { id?: string; name: string }[];
@@ -463,6 +464,34 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
 
       await expect(parent.loadSkill('ledger')).resolves.toBeUndefined();
       expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
+    });
+
+    it('counts what it lists when a removal completes between reading the count and the list', async () => {
+      const registry = await emptyRegistry();
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      await registry.registerSkillContent(content('reports', 'reports'));
+      const held = holdRemovals(registry);
+      const unregistering = registry.unregisterSkill('reports');
+      await held.started;
+      // The removal completes right after the provider's first read (its count, or its list).
+      const provider = providerOf(registry);
+      const count = provider.count.bind(provider);
+      const list = provider.list.bind(provider);
+      let firstRead = true;
+      const afterRead = async <T>(value: T): Promise<T> => {
+        if (firstRead) {
+          firstRead = false;
+          held.release();
+          await settle();
+        }
+        return value;
+      };
+      provider.count = async (options) => afterRead(await count(options));
+      provider.list = async (options) => afterRead(await list(options));
+
+      await expect(registry.count()).resolves.toBe(1);
+      await unregistering;
+      await expect(registry.count()).resolves.toBe((await registry.listSkills()).total);
     });
 
     it('does not count a withdrawn skill that a paging provider lists on a later page', async () => {
