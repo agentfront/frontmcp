@@ -272,8 +272,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Create new anonymous session
     const now = Date.now();
-    const user = anonymousCallerClaims(options, randomUUID());
+    // One uuid for the payload and the claims: a resumed session derives its `sub` from
+    // `payload.uuid`, so the first request and the rest of the session share one identity.
     const uuid = randomUUID();
+    const user = anonymousCallerClaims(options, uuid);
 
     // Detect platform from User-Agent header for UI rendering support
     const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;

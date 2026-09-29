@@ -1,5 +1,10 @@
 import { BundleStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
-import { type RegisterSkillContentOptions, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+import {
+  type RegisteredSkillContent,
+  type RegisterSkillContentOptions,
+  type SkillContent,
+  type SkillRegistryInterface,
+} from '@frontmcp/sdk';
 
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { BundleSyncService } from '../sync/bundle-sync.service';
@@ -22,12 +27,16 @@ class FakeRegistry implements Partial<SkillRegistryInterface> {
   public registeredOptions: (RegisterSkillContentOptions | undefined)[] = [];
   public unregistered: string[] = [];
   public failNext = false;
+  /** Registrations to fail, by skill id. */
+  public failOn = new Set<string>();
+  /** Superseded ids a registration reports as removed, by the registered skill's id. */
+  public removedBy = new Map<string, string[]>();
 
   async registerSkillContent(
     content: SkillContent,
     opts?: RegisterSkillContentOptions,
-  ): Promise<{ id: string; unregister: () => Promise<void> }> {
-    if (this.failNext) {
+  ): Promise<RegisteredSkillContent> {
+    if (this.failNext || this.failOn.has(content.id)) {
       this.failNext = false;
       throw new Error('synthetic registration failure');
     }
@@ -38,6 +47,7 @@ class FakeRegistry implements Partial<SkillRegistryInterface> {
       unregister: async () => {
         this.unregistered.push(content.id);
       },
+      removed: this.removedBy.get(content.id) ?? [],
     };
   }
   async unregisterSkill(): Promise<boolean> {
@@ -274,6 +284,54 @@ describe('BundleSyncService', () => {
     );
     expect(supersededById.get('target')).toContain('invoices');
     expect(fakeReg.unregistered).toEqual(['invoices']);
+  });
+
+  it('treats the superseded skills a registration removed as removed, and restores them on rollback', async () => {
+    const fakeReg = new FakeRegistry();
+    const sync = new BundleSyncService(
+      fakeReg as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    const skill = (id: string, name: string) => ({
+      id,
+      name,
+      description: `${name} skill`,
+      instructions: `# ${name}`,
+      operationIds: [],
+    });
+    await sync.apply(buildBundle({ skills: [skill('invoices', 'target')], operations: {} }));
+
+    // The registry removes `invoices` when `target` takes its path.
+    fakeReg.removedBy.set('target', ['invoices']);
+    const applied = await sync.apply(buildBundle({ skills: [skill('target', 'other')], operations: {}, version: '2' }));
+    expect(applied.applied).toBe(true);
+    // Already removed by the registry: its own handle is not called again.
+    expect(fakeReg.unregistered).toEqual([]);
+
+    // A failed apply restores a skill the registry removed that way.
+    const again = new FakeRegistry();
+    const failing = new BundleSyncService(
+      again as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    await failing.apply(buildBundle({ skills: [skill('invoices', 'target')], operations: {} }));
+    again.registered = [];
+    again.removedBy.set('target', ['invoices']);
+    again.failOn.add('zeta');
+    const rolledBack = await failing.apply(
+      buildBundle({ skills: [skill('target', 'other'), skill('zeta', 'zeta')], operations: {}, version: '2' }),
+    );
+
+    expect(rolledBack.applied).toBe(false);
+    expect(again.unregistered).toEqual(['target']);
+    expect(again.registered.map((content) => content.id)).toEqual(['target', 'invoices']);
+    expect(again.registered[1].name).toBe('target');
   });
 
   it('rolls back hidden-op state if registration fails mid-apply', async () => {
