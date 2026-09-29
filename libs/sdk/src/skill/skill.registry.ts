@@ -609,8 +609,9 @@ export default class SkillRegistry
       this.adopted.set(child, latest);
       this.reindex();
       this.withdrawGoneAdoptedSkills(previous);
-      this.bump('reset');
-      // Re-add skills to storage provider on changes, after any earlier write for the same id
+      // Re-add skills to storage provider on changes, after any earlier write for the same id. Queued
+      // before this registry announces the change, so a change its subscribers make in response is
+      // queued after these writes.
       for (const row of latest) {
         const skillId = row.instance.metadata.id ?? row.instance.metadata.name;
         this.syncProvider(skillId, async () => {
@@ -620,6 +621,7 @@ export default class SkillRegistry
           this.scope.logger.warn(`Failed to reload adopted skill ${row.baseName}: ${(error as Error).message}`);
         });
       }
+      this.bump('reset');
     });
 
     // Add adopted skills to storage provider - await to ensure they're searchable. Queued per id
@@ -1491,32 +1493,35 @@ export default class SkillRegistry
     // captures this registration's generation and not a stale earlier value.
     const generation = (this.dynamicGenerations.get(id) ?? 0) + 1;
     this.dynamicGenerations.set(id, generation);
-    // Lookups, and the registries that adopt this one, see this commit before anything below is
-    // awaited.
+    // Lookups see this commit before anything below is awaited.
     this.reindex();
-    this.bump('reset');
 
     // Push the original SkillContent (with actions/bundleVersion preserved) into
     // the storage provider so search/list/load see it unchanged. If the storage
     // provider isn't mutable (read-only external provider), skip silently — the
     // dynamicContents overlay merged into search/listSkills/count keeps these
-    // skills visible regardless of provider mutability.
-    if (mutable) {
-      await Promise.all(removed.map((removedId) => this.removeFromProvider(mutable, removedId)));
-      try {
-        await this.syncProvider(id, async () => {
-          if (await mutable.exists(id)) {
-            await mutable.update(id, content);
-          } else {
-            await mutable.add(content);
-          }
-        });
-      } catch (error) {
-        this.scope.logger.warn(
-          `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
-        );
-      }
-    }
+    // skills visible regardless of provider mutability. The writes are queued
+    // before the change is announced, so a change a subscriber makes in
+    // response is queued after them rather than overtaken by them.
+    const providerWrites = mutable
+      ? [
+          ...removed.map((removedId) => this.removeFromProvider(mutable, removedId)),
+          this.syncProvider(id, async () => {
+            if (await mutable.exists(id)) {
+              await mutable.update(id, content);
+            } else {
+              await mutable.add(content);
+            }
+          }).catch((error: unknown) => {
+            this.scope.logger.warn(
+              `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
+            );
+          }),
+        ]
+      : [];
+    // The registries that adopt this one see the commit before anything is awaited too.
+    this.bump('reset');
+    await Promise.all(providerWrites);
 
     // Generation-tagged handle: a later registerSkillContent for the same id
     // bumps the generation counter, so a caller still holding this earlier
@@ -1549,10 +1554,10 @@ export default class SkillRegistry
     const mutable = this.asMutableProvider(this.storageProvider);
     this.withdrawDynamicSkill(id, mutable);
     this.reindex();
+    // Queued before the change is announced, so a change a subscriber makes in response comes after it.
+    const removal = mutable ? this.removeFromProvider(mutable, id) : undefined;
     this.bump('reset');
-    if (mutable) {
-      await this.removeFromProvider(mutable, id);
-    }
+    await removal;
 
     this.scope.logger.debug(`[SkillRegistry] Unregistered dynamic skill ${id}`);
     return true;

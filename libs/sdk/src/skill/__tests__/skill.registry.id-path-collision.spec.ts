@@ -466,6 +466,55 @@ describe('SkillRegistry — a skill id that is another skill path', () => {
       expect(await skillIds(parent)).toEqual({ search: ['invoices'], list: ['invoices'], count: ['1'] });
     });
 
+    it('keeps the storage provider in step when a change subscriber throws', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const registry = await emptyRegistry();
+      registry.subscribe({}, () => {
+        throw new Error('subscriber failed');
+      });
+      const providerIds = async () => (await providerOf(registry).list()).skills.map((m) => m.id ?? m.name);
+
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      expect(await providerIds()).toEqual(['ledger']);
+      await registry.unregisterSkill('ledger');
+      expect(await providerIds()).toEqual([]);
+      error.mockRestore();
+    });
+
+    it('does not bring back a skill a subscriber removes while its registration is being announced', async () => {
+      const registry = await emptyRegistry();
+      let removing = true;
+      registry.subscribe({}, () => {
+        if (!removing) return;
+        removing = false;
+        void registry.unregisterSkill('ledger');
+      });
+
+      await registry.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+
+      expect(registry.getSkills()).toHaveLength(0);
+      expect(await skillIds(registry)).toEqual({ search: [], list: [], count: ['0'] });
+    });
+
+    it("does not bring back a child's skill that a subscriber of the adopter removes while the change is announced", async () => {
+      const parent = await emptyRegistry();
+      const child = await emptyRegistry();
+      await parent.adoptFromChild(child, owner());
+      let removing = false;
+      parent.subscribe({}, () => {
+        if (!removing) return;
+        removing = false;
+        void child.unregisterSkill('ledger');
+      });
+
+      removing = true;
+      await child.registerSkillContent(content('ledger', 'ledger'));
+      await settle();
+
+      expect(await skillIds(parent)).toEqual({ search: [], list: [], count: ['0'] });
+    });
+
     it('counts what it lists when a removal completes between reading the count and the list', async () => {
       const registry = await emptyRegistry();
       await registry.registerSkillContent(content('ledger', 'ledger'));

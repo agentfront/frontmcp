@@ -4,7 +4,7 @@
  * Tests for skill change events and emitter.
  */
 
-import { SkillEmitter, SkillChangeEvent, SkillChangeKind, SkillChangeScope } from '../skill.events';
+import { SkillEmitter, type SkillChangeEvent, type SkillChangeKind, type SkillChangeScope } from '../skill.events';
 
 describe('skill.events', () => {
   describe('SkillEmitter', () => {
@@ -20,6 +20,22 @@ describe('skill.events', () => {
 
     it('should start with zero listeners', () => {
       expect(emitter.listenerCount).toBe(0);
+    });
+
+    it('keeps notifying the other listeners when one throws, and does not throw itself', () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const after = jest.fn();
+      emitter.on(() => {
+        throw new Error('listener failed');
+      });
+      emitter.on(after);
+
+      expect(() =>
+        emitter.emit({ kind: 'reset', changeScope: 'global', version: 1, snapshot: [] } as SkillChangeEvent),
+      ).not.toThrow();
+      expect(after).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith('SkillEmitter listener error:', 'listener failed');
+      error.mockRestore();
     });
 
     it('should register listeners with on()', () => {
