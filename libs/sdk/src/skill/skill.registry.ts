@@ -393,9 +393,16 @@ export default class SkillRegistry
   /**
    * Ids of skills that left the registry (its own dynamic skills, or an adopted child's) whose copy
    * in the storage provider is not removed yet: the removal is pending, or the provider failed it.
-   * Provider-backed reads skip them until the removal succeeds or the id is served again.
+   * Provider-backed reads skip them until the removal succeeds or the id is served again. Each maps
+   * to the number of its withdrawal.
    */
-  private readonly withdrawn = new Set<string>();
+  private readonly withdrawn = new Map<string, number>();
+
+  /** Numbers each withdrawal, so a removal that completes late clears only its own. */
+  private withdrawals = 0;
+
+  /** The last storage-provider write queued per skill id ({@link syncProvider}). */
+  private readonly providerWrites = new Map<string, Promise<void>>();
 
   /** Whether a plugin registers skills at runtime ({@link expectDynamicSkills}). */
   private dynamicSkillsExpected = false;
@@ -525,10 +532,12 @@ export default class SkillRegistry
       const row = this.makeRow(token, instance, lineage, this);
       this.localRows.push(row);
 
-      // Load skill content and add to storage provider for search
+      // Load skill content and add to storage provider for search (queued per id, like every write)
       try {
-        const content = await instance.load();
-        await (this.storageProvider as MemorySkillProvider).add(content);
+        await this.syncProvider(instance.metadata.id ?? instance.metadata.name, async () => {
+          const content = await instance.load();
+          await (this.storageProvider as MemorySkillProvider).add(content);
+        });
       } catch (error) {
         this.scope.logger.warn(`Failed to load skill ${instance.name}: ${(error as Error).message}`);
       }
@@ -600,26 +609,31 @@ export default class SkillRegistry
       this.adopted.set(child, latest);
       this.reindex();
       this.withdrawGoneAdoptedSkills(previous);
-      this.bump('reset');
-      // Re-add skills to storage provider on changes
+      // Re-add skills to storage provider on changes, after any earlier write for the same id. Queued
+      // before this registry announces the change, so a change its subscribers make in response is
+      // queued after these writes.
       for (const row of latest) {
-        row.instance
-          .load()
-          .then((content) => {
-            (this.storageProvider as MemorySkillProvider).add(content);
-          })
-          .catch((error) => {
-            this.scope.logger.warn(`Failed to reload adopted skill ${row.baseName}: ${(error as Error).message}`);
-          });
+        const skillId = row.instance.metadata.id ?? row.instance.metadata.name;
+        this.syncProvider(skillId, async () => {
+          const content = await row.instance.load();
+          await (this.storageProvider as MemorySkillProvider).add(content);
+        }).catch((error) => {
+          this.scope.logger.warn(`Failed to reload adopted skill ${row.baseName}: ${(error as Error).message}`);
+        });
       }
+      this.bump('reset');
     });
 
-    // Add adopted skills to storage provider - await to ensure they're searchable
+    // Add adopted skills to storage provider - await to ensure they're searchable. Queued per id
+    // like the change handler's writes, so a removal the child makes meanwhile runs after this write
+    // instead of being overtaken by it.
     await Promise.all(
       adoptedRows.map(async (row) => {
         try {
-          const content = await row.instance.load();
-          await (this.storageProvider as MemorySkillProvider).add(content);
+          await this.syncProvider(row.instance.metadata.id ?? row.instance.metadata.name, async () => {
+            const content = await row.instance.load();
+            await (this.storageProvider as MemorySkillProvider).add(content);
+          });
         } catch (error) {
           this.scope.logger.warn(`Failed to load adopted skill ${row.baseName}: ${(error as Error).message}`);
         }
@@ -803,14 +817,13 @@ export default class SkillRegistry
 
   async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const topK = options?.topK;
+    const hidden = this.hiddenFromProviderRead();
     // Ask for as many more as could be withdrawn, so skipping them still leaves `topK` results.
     const providerOptions =
-      this.withdrawn.size > 0 && typeof topK === 'number' && topK >= 0
-        ? { ...options, topK: topK + this.withdrawn.size }
-        : options;
+      hidden.size > 0 && typeof topK === 'number' && topK >= 0 ? { ...options, topK: topK + hidden.size } : options;
     let baseResults = await this.storageProvider.search(query, providerOptions);
-    if (this.withdrawn.size > 0) {
-      baseResults = baseResults.filter((r) => !this.isWithdrawn(r.metadata));
+    if (hidden.size > 0 || this.withdrawn.size > 0) {
+      baseResults = baseResults.filter((r) => !hidden.has(r.metadata));
       if (typeof topK === 'number' && topK >= 0) baseResults = baseResults.slice(0, topK);
     }
     if (this.dynamicContents.size === 0) return baseResults;
@@ -914,9 +927,10 @@ export default class SkillRegistry
     }
 
     // Try storage provider (for external skills)
-    if (this.withdrawn.has(skillId)) return undefined;
+    const hidden = this.hiddenFromProviderRead();
+    if (hidden.has({ name: skillId })) return undefined;
     const result = await this.storageProvider.load(skillId);
-    if (result && this.isWithdrawn(result.skill)) return undefined;
+    if (result && hidden.has(result.skill)) return undefined;
     return result ?? undefined;
   }
 
@@ -954,14 +968,19 @@ export default class SkillRegistry
    * and `hasMore` stay correct.
    */
   async listSkills(options?: SkillListOptions): Promise<SkillListResult> {
-    if (this.dynamicContents.size === 0 && this.withdrawn.size === 0) return this.storageProvider.list(options);
+    const hidden = this.hiddenFromProviderRead();
+    if (this.dynamicContents.size === 0 && hidden.size === 0) {
+      const page = await this.storageProvider.list(options);
+      // A skill withdrawn while the provider answered makes the page stale: read again, filtered.
+      if (this.withdrawn.size === 0) return page;
+    }
 
     // One list, paged as a whole: the provider's skills in its order (dynamic content replacing the
     // rows it overrides), then the dynamic skills the provider doesn't hold. Merging per provider
     // page compared the dynamic skills only with that page, so a skill held on another page was
     // appended again, and `total` changed from page to page. As in `count()`, the provider is read
     // whole to know which ids it holds.
-    const base = (await this.listAllFromProvider(options)).filter((meta) => !this.isWithdrawn(meta));
+    const base = (await this.listAllFromProvider(options)).filter((meta) => !hidden.has(meta));
     const baseIds = new Set<string>();
     const merged: SkillMetadata[] = base.map((meta) => {
       const id = meta.id ?? meta.name;
@@ -1029,27 +1048,31 @@ export default class SkillRegistry
   /**
    * Get total skill count.
    *
-   * Sums the provider count with overlay rows the provider does not know
+   * Counts the provider's rows with overlay rows the provider does not know
    * about so callers see the same surface as `search` / `listSkills`.
    */
   async count(options?: { tags?: string[]; includeHidden?: boolean }): Promise<number> {
-    const baseCount = await this.storageProvider.count(options);
-    if (this.dynamicContents.size === 0 && this.withdrawn.size === 0) return baseCount;
+    const hidden = this.hiddenFromProviderRead();
+    if (this.dynamicContents.size === 0 && hidden.size === 0) {
+      const counted = await this.storageProvider.count(options);
+      // A skill withdrawn while the provider answered may be in that count: count again, filtered.
+      if (this.withdrawn.size === 0) return counted;
+    }
     // We can't know which dynamic ids the provider already counted without
     // listing it, so we list with a large limit (matching the provider's own
     // semantics) and dedupe. For typical bundle sizes this is fine; very
     // large catalogs should override the storage provider with one whose
     // count() honors the dynamic overlay natively.
-    const baseList = await this.storageProvider.list({
-      tags: options?.tags,
-      includeHidden: options?.includeHidden,
-      limit: Number.MAX_SAFE_INTEGER,
-    });
+    // Every page: a provider may cap `limit` and report the rest with `hasMore`. The count comes
+    // from this one read, as `listSkills` does: a separate `count()` read could disagree with it
+    // when a queued provider write completes in between.
+    const baseList = (
+      await this.listAllFromProvider({ tags: options?.tags, includeHidden: options?.includeHidden })
+    ).filter((m) => !hidden.has(m));
     const baseIds = new Set<string>();
-    for (const m of baseList.skills) baseIds.add(m.id ?? m.name);
-    const withdrawnCounted = baseList.skills.filter((m) => this.isWithdrawn(m)).length;
+    for (const m of baseList) baseIds.add(m.id ?? m.name);
     const overlay = this.collectDynamicMetadata(options).filter((m) => !baseIds.has(m.id ?? m.name));
-    return baseCount - withdrawnCounted + overlay.length;
+    return baseList.length + overlay.length;
   }
 
   /**
@@ -1485,25 +1508,28 @@ export default class SkillRegistry
     // the storage provider so search/list/load see it unchanged. If the storage
     // provider isn't mutable (read-only external provider), skip silently — the
     // dynamicContents overlay merged into search/listSkills/count keeps these
-    // skills visible regardless of provider mutability.
-    if (mutable) {
-      for (const removedId of removed) {
-        await this.removeFromProvider(mutable, removedId);
-      }
-      try {
-        if (await mutable.exists(id)) {
-          await mutable.update(id, content);
-        } else {
-          await mutable.add(content);
-        }
-      } catch (error) {
-        this.scope.logger.warn(
-          `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
-        );
-      }
-    }
-
+    // skills visible regardless of provider mutability. The writes are queued
+    // before the change is announced, so a change a subscriber makes in
+    // response is queued after them rather than overtaken by them.
+    const providerWrites = mutable
+      ? [
+          ...removed.map((removedId) => this.removeFromProvider(mutable, removedId)),
+          this.syncProvider(id, async () => {
+            if (await mutable.exists(id)) {
+              await mutable.update(id, content);
+            } else {
+              await mutable.add(content);
+            }
+          }).catch((error: unknown) => {
+            this.scope.logger.warn(
+              `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
+            );
+          }),
+        ]
+      : [];
+    // The registries that adopt this one see the commit before anything is awaited too.
     this.bump('reset');
+    await Promise.all(providerWrites);
 
     // Generation-tagged handle: a later registerSkillContent for the same id
     // bumps the generation counter, so a caller still holding this earlier
@@ -1536,11 +1562,11 @@ export default class SkillRegistry
     const mutable = this.asMutableProvider(this.storageProvider);
     this.withdrawDynamicSkill(id, mutable);
     this.reindex();
-    if (mutable) {
-      await this.removeFromProvider(mutable, id);
-    }
-
+    // Queued before the change is announced, so a change a subscriber makes in response comes after it.
+    const removal = mutable ? this.removeFromProvider(mutable, id) : undefined;
     this.bump('reset');
+    await removal;
+
     this.scope.logger.debug(`[SkillRegistry] Unregistered dynamic skill ${id}`);
     return true;
   }
@@ -1557,20 +1583,40 @@ export default class SkillRegistry
     );
     this.dynamicContents.delete(id);
     this.dynamicGenerations.set(id, (this.dynamicGenerations.get(id) ?? 0) + 1);
-    if (mutable) this.withdrawn.add(id);
+    if (mutable) this.withdrawn.set(id, ++this.withdrawals);
   }
 
   /** Remove a withdrawn skill's copy from the provider. If that fails it stays withdrawn from reads. */
   private async removeFromProvider(mutable: MutableSkillStorageProvider, id: string): Promise<void> {
+    const withdrawal = this.withdrawn.get(id);
     try {
-      await mutable.remove(id);
-      // The provider no longer holds it, so reads need not skip it.
-      this.withdrawn.delete(id);
+      await this.syncProvider(id, () => mutable.remove(id));
+      // The provider no longer holds it, so reads need not skip it, unless it was withdrawn again
+      // (registered and removed once more) while this removal was queued.
+      if (this.withdrawn.get(id) === withdrawal) this.withdrawn.delete(id);
     } catch (error) {
       this.scope.logger.warn(
         `[SkillRegistry] Failed to remove skill ${id} from storage provider; it stays hidden from provider-backed reads: ${(error as Error).message}`,
       );
     }
+  }
+
+  /**
+   * Run a storage-provider write for one skill id after the ones queued before it for that id, so a
+   * removal that completes late cannot delete the copy a later registration added. The returned
+   * promise settles with the write; a failure does not hold back the next one.
+   */
+  private syncProvider(id: string, write: () => Promise<void>): Promise<void> {
+    const run = (this.providerWrites.get(id) ?? Promise.resolve()).then(write);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.providerWrites.set(id, settled);
+    void settled.then(() => {
+      if (this.providerWrites.get(id) === settled) this.providerWrites.delete(id);
+    });
+    return run;
   }
 
   /**
@@ -1581,21 +1627,34 @@ export default class SkillRegistry
    */
   private withdrawGoneAdoptedSkills(previous: readonly IndexedSkill[]): void {
     const mutable = this.asMutableProvider(this.storageProvider);
-    if (!mutable || previous.length === 0) return;
+    if (!mutable) return;
     const skillIdOf = (entry: SkillEntry): string => entry.metadata.id ?? entry.metadata.name;
     const live = new Set(this.listAllIndexed().map((r) => skillIdOf(r.instance)));
+    // Also when nothing left: a skill the child registers again is live, even if the removal of its
+    // old copy is still queued or failed.
     for (const id of live) this.withdrawn.delete(id);
     for (const row of previous) {
       const id = skillIdOf(row.instance);
       if (live.has(id) || this.withdrawn.has(id)) continue;
-      this.withdrawn.add(id);
+      this.withdrawn.set(id, ++this.withdrawals);
       void this.removeFromProvider(mutable, id);
     }
   }
 
-  /** Whether a provider-backed row is a withdrawn dynamic skill. */
-  private isWithdrawn(meta: { id?: string; name: string }): boolean {
-    return this.withdrawn.size > 0 && this.withdrawn.has(meta.id ?? meta.name);
+  /**
+   * Which provider-backed rows a read that starts now must skip: a skill withdrawn when the read
+   * starts (its removal may complete while the provider answers, clearing the withdrawal, yet the
+   * answer can still hold it), or withdrawn by the time the answer arrives.
+   */
+  private hiddenFromProviderRead(): { size: number; has: (meta: { id?: string; name: string }) => boolean } {
+    const atStart = new Set(this.withdrawn.keys());
+    return {
+      size: atStart.size,
+      has: (meta) => {
+        const id = meta.id ?? meta.name;
+        return atStart.has(id) || this.withdrawn.has(id);
+      },
+    };
   }
 
   /* -------------------- Internal helpers -------------------- */
