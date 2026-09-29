@@ -205,6 +205,54 @@ Adopt skills from a child registry.
 adoptFromChild(child: SkillRegistry, childOwner: Owner): void
 ```
 
+When a child's skill is removed, the adopting registry stops serving it at once, including from its storage provider.
+
+### registerSkillContent()
+
+Register a skill at runtime from a fully resolved `SkillContent`. Registering again with the same `id` replaces the skill.
+
+```typescript
+registerSkillContent(content: SkillContent, opts?: RegisterSkillContentOptions): Promise<RegisteredSkillContent>
+```
+
+| Option       | Type                | Description                                                                                                                                     |
+| ------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`     | `string`            | Where the skill came from, for logs                                                                                                             |
+| `supersedes` | `readonly string[]` | Ids of skills registered this way that the same change replaces or removes. The id/path collision check treats them as already gone (see below) |
+
+`RegisteredSkillContent`:
+
+| Field        | Type                  | Description                                                                                  |
+| ------------ | --------------------- | -------------------------------------------------------------------------------------------- |
+| `id`         | `string`              | The registered skill's id                                                                    |
+| `unregister` | `() => Promise<void>` | Removes this registration; a no-op once a later registration of the same id replaced it      |
+| `removed`    | `readonly string[]`   | Ids of superseded skills this registration removed, because the new skill collided with them |
+
+A skill whose `id` is another skill's `skill://` path, or whose path is another skill's `id`, is refused with `INVALID_PARAMS` and nothing changes, since `skill://<id>/SKILL.md` would serve one for the other. The check covers every registry that serves this one's skills: the registries that adopt it, and their other children.
+
+A change that registers its new skills before removing the old ones, such as a skill bundle sync, names the old ones in `supersedes`, so a new skill can take the name of one it drops or renames. A superseded skill the new one collides with is removed in the same step, so the two are never served together, and is listed in `removed`. The other superseded skills stay registered until the caller registers them again or unregisters them.
+
+**Example:**
+
+```typescript
+const handle = await scope.skills.registerSkillContent(
+  { id: 'reports', name: 'reports', description: 'Quarterly reports', instructions: '# Reports', tools: [] },
+  { source: 'my-plugin', supersedes: ['reports-v1'] },
+);
+console.log(handle.removed); // ['reports-v1'] when that skill held the path `reports`
+await handle.unregister();
+```
+
+### unregisterSkill()
+
+Remove a skill registered with `registerSkillContent()`. Returns `false` when no such skill is registered.
+
+```typescript
+unregisterSkill(id: string): Promise<boolean>
+```
+
+The skill leaves the registry at once. If the storage provider fails to remove its copy, the registry still stops serving it from `search()`, `listSkills()`, `count()` and `loadSkill()`.
+
 ## External Storage
 
 Skills can be synced to external storage for persistence:
