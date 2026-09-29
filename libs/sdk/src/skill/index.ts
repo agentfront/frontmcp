@@ -48,7 +48,13 @@
 
 // Registry
 export { default as SkillRegistry } from './skill.registry';
-export type { SkillRegistryInterface, IndexedSkill, SkillRegistryOptions, GetSkillsOptions } from './skill.registry';
+export type {
+  SkillRegistryInterface,
+  IndexedSkill,
+  SkillRegistryOptions,
+  GetSkillsOptions,
+  RegisterSkillContentOptions,
+} from './skill.registry';
 
 // Instance
 export { SkillInstance, createSkillInstance } from './skill.instance';

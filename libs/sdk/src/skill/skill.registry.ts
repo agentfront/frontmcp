@@ -16,7 +16,7 @@ import { logAvailabilityFiltering } from '../common/availability';
 import { type SkillContent } from '../common/interfaces';
 import type { SkillMetadata } from '../common/metadata';
 import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/records';
-import { PublicMcpError } from '../errors';
+import { InvalidSkillError, PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
@@ -46,6 +46,43 @@ import type { SyncResult } from './sync/sync-state.interface';
 
 /** Page size of `listSkills` when the caller names no `limit` (the skill providers' default). */
 const DEFAULT_LIST_LIMIT = 50;
+
+/** A skill whose id is another skill's `<skill-path>`, and that other skill. */
+interface IdPathCollision {
+  idOwner: SkillEntry;
+  pathOwner: SkillEntry;
+}
+
+/**
+ * The first skill whose id is another skill's `<skill-path>`.
+ *
+ * `skill://<id>/SKILL.md` also addresses a skill by its id (`findSkillByPath`), the form
+ * `skills/list` and the Skilled OpenAPI meta-tools report. When the id is another skill's path, the
+ * URI resolves to the path's owner while `loadSkill(<id>)` finds the id's owner, so the URI serves,
+ * or is judged as, the other skill. An id that is its own path addresses only that skill.
+ */
+function findIdPathCollision(skills: readonly SkillEntry[]): IdPathCollision | undefined {
+  const byPath = new Map<string, SkillEntry>();
+  for (const skill of skills) {
+    const path = skill.getSkillPath();
+    if (!byPath.has(path)) byPath.set(path, skill);
+  }
+  for (const idOwner of skills) {
+    const id = idOwner.metadata.id;
+    if (!id || id === idOwner.getSkillPath()) continue;
+    const pathOwner = byPath.get(id);
+    if (pathOwner) return { idOwner, pathOwner };
+  }
+  return undefined;
+}
+
+function describeIdPathCollision({ idOwner, pathOwner }: IdPathCollision): string {
+  const id = idOwner.metadata.id;
+  return (
+    `id "${id}" of skill "${idOwner.metadata.name}" is the skill:// path of skill "${pathOwner.metadata.name}", ` +
+    `so skill://${id}/SKILL.md would serve one for the other. Give one of them another id or name.`
+  );
+}
 
 /**
  * Indexed skill for efficient lookup.
@@ -113,6 +150,21 @@ export interface GetSkillsOptions {
    * - 'all': All skills regardless of visibility (default)
    */
   visibility?: 'mcp' | 'http' | 'all';
+}
+
+/**
+ * Options for {@link SkillRegistryInterface.registerSkillContent}.
+ */
+export interface RegisterSkillContentOptions {
+  /** Where the skill came from, for diagnostics. */
+  source?: string;
+
+  /**
+   * Ids of skills registered through `registerSkillContent` that the caller replaces or removes as
+   * part of the same change. The id/path collision check treats them as already gone; they stay
+   * registered until the caller re-registers or unregisters them. Other skills are not affected.
+   */
+  supersedes?: readonly string[];
 }
 
 /**
@@ -247,13 +299,21 @@ export interface SkillRegistryInterface {
    * {@link listSkills}, {@link count}, and {@link getSkills}. They participate
    * in `notifications/skills/list_changed` broadcasts.
    *
+   * A skill whose id is another skill's `skill://` path (or whose path is another skill's id) is
+   * refused, since `skill://<id>/SKILL.md` would serve one for the other. `opts.supersedes` names
+   * the dynamically-registered skills that the caller replaces or removes as part of the same change,
+   * such as a bundle sync that registers the new bundle before dropping the old one's skills. The
+   * check treats them as already gone, so a change whose end state is free of collisions is not
+   * refused over a skill it is about to drop. Until the caller removes them they stay registered.
+   *
    * @param content - The skill content to register
-   * @param opts - Optional registration metadata (e.g. source identifier for diagnostics)
+   * @param opts - Optional registration metadata: `source` (identifier for diagnostics) and
+   *   `supersedes` (ids of dynamically-registered skills the same change replaces or removes)
    * @returns Handle exposing `unregister()` and the resolved skill id
    */
   registerSkillContent(
     content: SkillContent,
-    opts?: { source?: string },
+    opts?: RegisterSkillContentOptions,
   ): Promise<{ id: string; unregister: () => Promise<void> }>;
 
   /**
@@ -325,6 +385,8 @@ export default class SkillRegistry
 
   /** Children registries */
   private children = new Set<SkillRegistry>();
+  /** The registries that adopted this one: a skill registered here is served through them too. */
+  private readonly adopters = new Set<SkillRegistry>();
 
   /** O(1) indexes */
   private byQualifiedId = new Map<string, IndexedSkill>();
@@ -476,6 +538,11 @@ export default class SkillRegistry
       }
     }
 
+    const collision = findIdPathCollision(this.listAllInstances());
+    if (collision) {
+      throw new InvalidSkillError(collision.idOwner.metadata.name, describeIdPathCollision(collision));
+    }
+
     // Build indexes
     this.reindex();
 
@@ -504,6 +571,7 @@ export default class SkillRegistry
 
     this.adopted.set(child, adoptedRows);
     this.children.add(child);
+    child.adopters.add(this);
 
     // Subscribe to child changes
     child.subscribe({ immediate: false }, () => {
@@ -538,6 +606,39 @@ export default class SkillRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * The `skill://` namespaces this registry's skills are served in: its own, and that of every
+   * registry that adopts it, directly or through another, sibling registries included.
+   */
+  private namespacesServingThis(): SkillEntry[][] {
+    const registries = new Set<SkillRegistry>();
+    const climb = (registry: SkillRegistry): void => {
+      if (registries.has(registry)) return;
+      registries.add(registry);
+      for (const adopter of registry.adopters) climb(adopter);
+    };
+    climb(this);
+    return [...registries].map((registry) => registry.liveSkills());
+  }
+
+  /**
+   * This registry's skills and those of every registry it adopted, read from each registry's own rows.
+   * An adopter's copy of a child's rows is refreshed only on the child's change event, which a
+   * registration emits after it has committed its row and awaited the storage provider.
+   */
+  private liveSkills(): SkillEntry[] {
+    const registries = new Set<SkillRegistry>();
+    const skills = new Set<SkillEntry>();
+    const descend = (registry: SkillRegistry): void => {
+      if (registries.has(registry)) return;
+      registries.add(registry);
+      for (const row of [...registry.localRows, ...registry.dynamicRows]) skills.add(row.instance);
+      for (const child of registry.children) descend(child);
+    };
+    descend(this);
+    return [...skills];
   }
 
   /* -------------------- Public API -------------------- */
@@ -1248,7 +1349,7 @@ export default class SkillRegistry
    */
   async registerSkillContent(
     content: SkillContent,
-    opts?: { source?: string },
+    opts?: RegisterSkillContentOptions,
   ): Promise<{ id: string; unregister: () => Promise<void> }> {
     if (!content || typeof content.id !== 'string' || content.id.length === 0) {
       throw new PublicMcpError('registerSkillContent: SkillContent.id is required', 'INVALID_PARAMS');
@@ -1258,12 +1359,6 @@ export default class SkillRegistry
     }
 
     const id = content.id;
-
-    // Replace if already registered with the same id
-    const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
-    if (existingIdx !== -1) {
-      this.dynamicRows.splice(existingIdx, 1);
-    }
 
     // Synthesize a SkillValueRecord from the SkillContent
     const metadata: SkillMetadata = {
@@ -1296,6 +1391,7 @@ export default class SkillRegistry
     };
 
     const instance = createSkillInstance(record, this.providers, this.owner);
+
     // Pre-load instructions so subsequent loads return the same content (no file/URL
     // resolution: instructions came in as an inline string).
     try {
@@ -1306,6 +1402,24 @@ export default class SkillRegistry
           (error as Error).message
         }`,
       );
+    }
+
+    // From here to the commit below nothing is awaited, so two registrations can't both pass the
+    // check. Refused before anything changes, so the version this would replace stays registered.
+    // The version this replaces and the skills the caller supersedes are left out of the check.
+    const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
+    const superseded = new Set(opts?.supersedes);
+    const leaving = new Set<SkillEntry>(
+      this.dynamicRows.filter((r) => r.instance.name === id || superseded.has(r.instance.name)).map((r) => r.instance),
+    );
+    for (const skills of this.namespacesServingThis()) {
+      const collision = findIdPathCollision([...skills.filter((other) => !leaving.has(other)), instance]);
+      if (collision) {
+        throw new PublicMcpError(`registerSkillContent: ${describeIdPathCollision(collision)}`, 'INVALID_PARAMS');
+      }
+    }
+    if (existingIdx !== -1) {
+      this.dynamicRows.splice(existingIdx, 1);
     }
 
     const lineage: EntryLineage = this.owner ? [this.owner] : [];

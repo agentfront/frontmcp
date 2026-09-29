@@ -263,11 +263,13 @@ export class BundleSyncService {
         if (e instanceof SkillDependencyCycleError) {
           throw new Error(
             `[bundle-sync] dependency cycle in ${bundle.bundleId}@${bundle.version}: ${e.cycle.join(' -> ')}`,
+            { cause: e },
           );
         }
         if (e instanceof SkillDependencyMissingError) {
           throw new Error(
             `[bundle-sync] missing dependency in ${bundle.bundleId}@${bundle.version}: skill "${e.skillId}" requires "${e.missingId}"`,
+            { cause: e },
           );
         }
         throw e;
@@ -279,11 +281,19 @@ export class BundleSyncService {
       //    once their replacement has been registered. If any registration
       //    throws, the rollback path re-registers prior versions from
       //    `priorContents`.
+      //    The prior bundle's skills not registered again yet are replaced or
+      //    dropped by the end of this apply, so they are named in `supersedes`:
+      //    the registry's id/path collision check leaves them out, and a
+      //    bundle free of collisions applies even when a new skill takes the
+      //    path or id a dropped or renamed skill holds until then.
+      const pendingPriorIds = new Set(priorHandles.keys());
       for (const skill of orderedSkills) {
         const content = this.toSkillContent(skill, bundle);
         const handle = await this.skillRegistry.registerSkillContent(content, {
           source: `skilled-openapi:${bundle.bundleId}`,
+          supersedes: [...pendingPriorIds],
         });
+        pendingPriorIds.delete(content.id);
         newHandles.push(handle);
       }
 
