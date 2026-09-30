@@ -295,7 +295,11 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async listResources(): Promise<ListResourcesResult> {
-    return this.mcpClient.listResources();
+    const resources = await listAllPages<ListResourcesResult['resources'][number]>('resources/list', async (cursor) => {
+      const result = await this.mcpClient.listResources(cursor ? { cursor } : undefined);
+      return { items: result.resources, nextCursor: result.nextCursor };
+    });
+    return { resources };
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
@@ -303,7 +307,14 @@ export class DirectClientImpl implements DirectClient {
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
-    return this.mcpClient.listResourceTemplates();
+    const resourceTemplates = await listAllPages<ListResourceTemplatesResult['resourceTemplates'][number]>(
+      'resources/templates/list',
+      async (cursor) => {
+        const result = await this.mcpClient.listResourceTemplates(cursor ? { cursor } : undefined);
+        return { items: result.resourceTemplates, nextCursor: result.nextCursor };
+      },
+    );
+    return { resourceTemplates };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -311,7 +322,11 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async listPrompts(): Promise<ListPromptsResult> {
-    return this.mcpClient.listPrompts();
+    const prompts = await listAllPages<ListPromptsResult['prompts'][number]>('prompts/list', async (cursor) => {
+      const result = await this.mcpClient.listPrompts(cursor ? { cursor } : undefined);
+      return { items: result.prompts, nextCursor: result.nextCursor };
+    });
+    return { prompts };
   }
 
   async getPrompt(name: string, args?: Record<string, string>): Promise<GetPromptResult> {
