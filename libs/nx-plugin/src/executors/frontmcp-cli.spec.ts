@@ -10,6 +10,7 @@ import {
   resolveFrontmcpBin,
   runFrontmcp,
   spawnFrontmcp,
+  stopChild,
   toAbsolute,
   waitForExit,
 } from './frontmcp-cli';
@@ -130,8 +131,15 @@ describe('frontmcp-cli', () => {
 
   describe('spawnFrontmcp / waitForExit', () => {
     function child() {
-      const c = new EventEmitter() as EventEmitter & { killed: boolean; kill: jest.Mock };
+      const c = new EventEmitter() as EventEmitter & {
+        killed: boolean;
+        exitCode: number | null;
+        signalCode: string | null;
+        kill: jest.Mock;
+      };
       c.killed = false;
+      c.exitCode = null;
+      c.signalCode = null;
       c.kill = jest.fn(() => {
         c.killed = true;
       });
@@ -158,12 +166,11 @@ describe('frontmcp-cli', () => {
       bare.cleanup();
     });
 
-    it('resolves with the exit code and kills a child that is still alive', async () => {
+    it('resolves with the exit code', async () => {
       const c = child();
       const done = waitForExit(c as never);
       c.emit('close', 3);
       expect(await done).toBe(3);
-      expect(c.kill).toHaveBeenCalled();
     });
 
     it('treats a null exit code and spawn errors as failure', async () => {
@@ -178,13 +185,27 @@ describe('frontmcp-cli', () => {
       expect(await doneB).toBe(1);
     });
 
-    it('does not kill a child that already exited', async () => {
+    it('stopChild kills a child that is still running', () => {
       const c = child();
-      c.killed = true;
-      const done = waitForExit(c as never);
-      c.emit('close', 0);
-      await done;
-      expect(c.kill).not.toHaveBeenCalled();
+      stopChild(c as never);
+      expect(c.kill).toHaveBeenCalledTimes(1);
+    });
+
+    it('stopChild leaves a child that already exited or was killed alone', () => {
+      const exited = child();
+      exited.exitCode = 0;
+      stopChild(exited as never);
+      expect(exited.kill).not.toHaveBeenCalled();
+
+      const signalled = child();
+      signalled.signalCode = 'SIGTERM';
+      stopChild(signalled as never);
+      expect(signalled.kill).not.toHaveBeenCalled();
+
+      const killed = child();
+      killed.killed = true;
+      stopChild(killed as never);
+      expect(killed.kill).not.toHaveBeenCalled();
     });
   });
 });

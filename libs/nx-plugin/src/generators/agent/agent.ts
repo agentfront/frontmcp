@@ -14,12 +14,14 @@ export async function agentGenerator(tree: Tree, schema: AgentGeneratorSchema): 
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
+    .map((t) => ({ className: names(t).className, fileName: toFileName(t) }))
+    .filter((t, i, all) => all.findIndex((other) => other.className === t.className) === i)
     .map((t) => {
-      const importPath = relative(options.directory, join(toolsDir, `${toFileName(t)}.tool`))
+      const importPath = relative(options.directory, join(toolsDir, `${t.fileName}.tool`))
         .split('\\')
         .join('/');
       return {
-        className: names(t).className,
+        className: t.className,
         importPath: importPath.startsWith('.') ? importPath : `./${importPath}`,
       };
     });

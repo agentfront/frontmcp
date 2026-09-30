@@ -36,9 +36,20 @@ describe('buildEmittedAliases', () => {
       { basePath: '/ws', paths: { '@scope/dir': ['libs/dir/src'] } },
       entryDir,
       emittedEntryDir,
-      alwaysExists,
+      (file) => file.endsWith('/index.js'),
     );
     expect(result['@scope/dir$']).toBe('/ws/servers/gw/dist/vercel/libs/dir/src/index.js');
+  });
+
+  it('resolves an extensionless file target to the emitted file before the directory', () => {
+    const emittedFile = '/ws/servers/gw/dist/vercel/libs/shared/src/index.js';
+    const result = buildEmittedAliases(
+      { basePath: '/ws', paths: { '@scope/shared': ['libs/shared/src/index'] } },
+      entryDir,
+      emittedEntryDir,
+      (file) => file === emittedFile,
+    );
+    expect(result).toEqual({ '@scope/shared$': emittedFile });
   });
 
   it('skips aliases whose emitted output does not exist and tries the next target', () => {
@@ -83,6 +94,18 @@ describe('readTsPathAliases', () => {
     const result = readTsPathAliases(child, process.cwd());
     expect(result?.paths).toEqual({ '@x/y': ['libs/y/src/index.ts'] });
     expect(result?.basePath && realpathSync(result.basePath)).toBe(dir);
+  });
+
+  it('resolves paths against baseUrl when it is set, as tsc does', () => {
+    mkdirSync(path.join(dir, 'src'), { recursive: true });
+    const file = path.join(dir, 'tsconfig.json');
+    writeFileSync(
+      file,
+      JSON.stringify({ compilerOptions: { baseUrl: './src', paths: { '@shared': ['shared/index.ts'] } } }),
+    );
+
+    const result = readTsPathAliases(file, process.cwd());
+    expect(result?.basePath && realpathSync(result.basePath)).toBe(path.join(dir, 'src'));
   });
 
   it('returns undefined when the project declares no aliases', () => {

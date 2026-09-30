@@ -1,5 +1,5 @@
 import type { ExecutorContext } from '../executor-context.js';
-import { spawnFrontmcp, waitForExit } from '../frontmcp-cli.js';
+import { spawnFrontmcp, stopChild, waitForExit } from '../frontmcp-cli.js';
 import type { InspectorExecutorSchema } from './schema.js';
 
 export default async function* inspectorExecutor(
@@ -17,6 +17,10 @@ export default async function* inspectorExecutor(
     return;
   }
 
-  yield { success: true };
-  yield { success: (await waitForExit(child)) === 0 };
+  try {
+    yield { success: true };
+    yield { success: (await waitForExit(child)) === 0 };
+  } finally {
+    stopChild(child);
+  }
 }

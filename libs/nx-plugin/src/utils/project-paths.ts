@@ -10,6 +10,14 @@ export interface ProjectPaths {
   offset: string;
 }
 
+function normalizeDirectory(value: string): string {
+  let result = value.replace(/\\/g, '/');
+  if (result.startsWith('./')) result = result.slice(2);
+  let end = result.length;
+  while (end > 0 && result[end - 1] === '/') end--;
+  return result.slice(0, end);
+}
+
 /**
  * `directory` is relative to the tree root. When the tree root sits above the
  * workspace (the `workspace` generator scaffolds into `<name>/`), pass that
@@ -17,8 +25,8 @@ export interface ProjectPaths {
  * relative to the workspace itself.
  */
 export function resolveProjectPaths(directory: string, workspaceRoot?: string): ProjectPaths {
-  const normalized = directory.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  const base = (workspaceRoot ?? '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const normalized = normalizeDirectory(directory);
+  const base = normalizeDirectory(workspaceRoot ?? '');
   const projectRoot = base && normalized.startsWith(`${base}/`) ? normalized.slice(base.length + 1) : normalized;
   return { projectRoot, offset: offsetFromRoot(projectRoot) };
 }

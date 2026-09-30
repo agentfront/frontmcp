@@ -10,8 +10,15 @@ jest.mock('child_process', () => ({ execFileSync: jest.fn(), spawn: jest.fn() })
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
 function createMockChild() {
-  const child = new EventEmitter() as EventEmitter & { killed: boolean; kill: jest.Mock };
+  const child = new EventEmitter() as EventEmitter & {
+    killed: boolean;
+    exitCode: number | null;
+    signalCode: string | null;
+    kill: jest.Mock;
+  };
   child.killed = false;
+  child.exitCode = null;
+  child.signalCode = null;
   child.kill = jest.fn(() => {
     child.killed = true;
   });
@@ -85,9 +92,26 @@ describe('inspector executor', () => {
     expect((await secondPromise).value?.success).toBe(false);
   });
 
-  it('kills the child when the generator finishes and the child is alive', async () => {
-    const { child } = await run({});
-    expect(child.kill).toHaveBeenCalled();
+  it('kills the child when Nx cancels the executor while it is running', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child as never);
+    const gen = inspectorExecutor({}, ws.context);
+    await gen.next();
+    await gen.return(undefined);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not kill a child that already exited', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child as never);
+    const gen = inspectorExecutor({}, ws.context);
+    await gen.next();
+    const secondPromise = gen.next();
+    child.exitCode = 0;
+    child.emit('close', 0);
+    await secondPromise;
+    await gen.next();
+    expect(child.kill).not.toHaveBeenCalled();
   });
 
   it('fails without spawning when the CLI is not installed', async () => {

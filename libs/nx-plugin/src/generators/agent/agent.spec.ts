@@ -45,6 +45,19 @@ describe('agent generator', () => {
     expect(content).not.toContain("'search'");
   });
 
+  it('should import each tool once when the tool list repeats a name', async () => {
+    await agentGenerator(tree, {
+      name: 'researcher',
+      project: 'my-app',
+      tools: 'search, search, Search',
+      skipFormat: true,
+    });
+
+    const content = tree.read('apps/my-app/src/agents/researcher.agent.ts', 'utf-8') as string;
+    expect(content.match(/import SearchTool/g)).toHaveLength(1);
+    expect(content).toContain('tools: [SearchTool]');
+  });
+
   it('should point tool imports at the tools folder from a nested directory', async () => {
     await agentGenerator(tree, {
       name: 'researcher',

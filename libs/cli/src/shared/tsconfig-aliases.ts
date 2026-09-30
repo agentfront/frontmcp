@@ -24,7 +24,7 @@ export function readTsPathAliases(tsconfigPath: string, cwd: string): TsPathAlia
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(tsconfigPath));
   const paths = parsed.options.paths;
   if (!paths || Object.keys(paths).length === 0) return undefined;
-  const basePath = (parsed.options['pathsBasePath'] as string | undefined) ?? parsed.options.baseUrl ?? cwd;
+  const basePath = parsed.options.baseUrl ?? (parsed.options['pathsBasePath'] as string | undefined) ?? cwd;
   return { basePath, paths };
 }
 
@@ -57,8 +57,11 @@ export function buildEmittedAliases(
           break;
         }
       } else {
-        const file = /\.(d\.)?tsx?$/.test(source) ? candidate : path.join(candidate, 'index.js');
-        if (exists(file)) {
+        const hasExtension = /\.(d\.)?tsx?$/.test(source);
+        const file = hasExtension
+          ? candidate
+          : [`${candidate}.js`, path.join(candidate, 'index.js')].find((option) => exists(option));
+        if (file && exists(file)) {
           result[`${alias}$`] = file;
           break;
         }

@@ -109,14 +109,15 @@ export function spawnFrontmcp(
   }
 }
 
-/** Resolve with the child's exit code; kill the child if the executor is stopped early. */
-export async function waitForExit(child: ChildProcess): Promise<number> {
-  try {
-    return await new Promise<number>((resolvePromise) => {
-      child.on('error', () => resolvePromise(1));
-      child.on('close', (code) => resolvePromise(code ?? 1));
-    });
-  } finally {
-    if (!child.killed) child.kill();
-  }
+/** Resolve with the child's exit code. */
+export function waitForExit(child: ChildProcess): Promise<number> {
+  return new Promise<number>((resolvePromise) => {
+    child.on('error', () => resolvePromise(1));
+    child.on('close', (code) => resolvePromise(code ?? 1));
+  });
+}
+
+/** Stop the child if it is still running — Nx returns from the generator to cancel a long-running executor. */
+export function stopChild(child: ChildProcess): void {
+  if (child.exitCode === null && child.signalCode === null && !child.killed) child.kill();
 }

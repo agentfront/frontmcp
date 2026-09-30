@@ -1,5 +1,5 @@
 import type { ExecutorContext } from '../executor-context.js';
-import { spawnFrontmcp, toAbsolute, waitForExit } from '../frontmcp-cli.js';
+import { spawnFrontmcp, stopChild, toAbsolute, waitForExit } from '../frontmcp-cli.js';
 import type { DevExecutorSchema } from './schema.js';
 
 export default async function* devExecutor(
@@ -16,6 +16,10 @@ export default async function* devExecutor(
     return;
   }
 
-  yield { success: true, ...(options.port !== undefined && { baseUrl: `http://localhost:${options.port}` }) };
-  yield { success: (await waitForExit(child)) === 0 };
+  try {
+    yield { success: true, ...(options.port !== undefined && { baseUrl: `http://localhost:${options.port}` }) };
+    yield { success: (await waitForExit(child)) === 0 };
+  } finally {
+    stopChild(child);
+  }
 }

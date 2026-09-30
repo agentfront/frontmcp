@@ -27,6 +27,13 @@ describe('resolveProjectPaths', () => {
     expect(resolveProjectPaths('./my-project/apps/demo/', './my-project/').projectRoot).toBe('apps/demo');
   });
 
+  it('strips long runs of trailing slashes without backtracking', () => {
+    const start = Date.now();
+    expect(resolveProjectPaths(`apps/demo${'/'.repeat(100000)}`).projectRoot).toBe('apps/demo');
+    expect(resolveProjectPaths('/'.repeat(100000)).projectRoot).toBe('');
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
   it('keeps the directory when it is outside the given workspace folder', () => {
     expect(resolveProjectPaths('other/apps/demo', 'my-project').projectRoot).toBe('other/apps/demo');
   });

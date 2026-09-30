@@ -5,6 +5,7 @@ import { getFrontmcpVersion } from '../../utils/versions';
 import { uiComponentGenerator } from '../ui-component/ui-component';
 import { uiPageGenerator } from '../ui-page/ui-page';
 import { uiShellGenerator } from '../ui-shell/ui-shell';
+import { addUiEntry } from './add-ui-entry';
 import { ensureUiPackage } from './ensure-ui-package';
 
 describe('ensureUiPackage', () => {
@@ -24,6 +25,33 @@ describe('ensureUiPackage', () => {
     expect(readJson(tree, 'ui/components/tsconfig.json').compilerOptions.jsx).toBe('react-jsx');
     expect(readJson(tree, 'ui/components/tsconfig.json').extends).toBe('../../tsconfig.base.json');
     expect(tree.read('ui/components/jest.config.cjs', 'utf-8')).toContain("testEnvironment: 'jsdom'");
+  });
+
+  it('gives a new package build targets that addUiEntry can extend', () => {
+    ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
+
+    const { targets } = readJson(tree, 'ui/components/project.json');
+    expect(targets['build-cjs']).toMatchObject({
+      executor: '@nx/esbuild:esbuild',
+      options: { main: 'ui/components/src/index.ts', tsConfig: 'ui/components/tsconfig.json', format: ['cjs'] },
+    });
+    expect(targets['build-esm'].dependsOn).toEqual(['build-cjs']);
+    expect(targets.build.dependsOn).toEqual(['build-cjs', 'build-esm']);
+
+    addUiEntry(tree, { packageRoot: 'ui/components', entryName: 'LoginForm', importPath: '@acme/ui-components' });
+    const updated = readJson(tree, 'ui/components/project.json').targets;
+    expect(updated['build-cjs'].options.additionalEntryPoints).toContain('ui/components/src/LoginForm/index.ts');
+    expect(updated['build-esm'].options.additionalEntryPoints).toContain('ui/components/src/LoginForm/index.ts');
+  });
+
+  it('installs the esbuild builder and the DOM testing library peer', () => {
+    ensureUiPackage(tree, { packageRoot: 'ui/components', projectName: 'ui-components', kind: 'react' });
+    ensureUiPackage(tree, { packageRoot: 'ui/shells', projectName: 'ui-shells', kind: 'shell' });
+
+    const dev = readJson(tree, 'package.json').devDependencies;
+    expect(dev['@testing-library/dom']).toBeDefined();
+    expect(dev['@nx/esbuild']).toBeDefined();
+    expect(dev.esbuild).toBeDefined();
   });
 
   it('leaves an existing package untouched', () => {

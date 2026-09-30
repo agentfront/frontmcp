@@ -150,7 +150,7 @@ Creates a `SKILL.md`-based skill directory in `apps/my-app/src/skills/my-skill/`
 nx g @frontmcp/nx:agent my-agent --project=my-app
 ```
 
-Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `use-agent:<agent_id>` tools.
+Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `use-agent:<agent_id>` tools. The generated `llm` block picks `anthropic` (`ANTHROPIC_API_KEY`) for `claude*` models and `openai` (`OPENAI_API_KEY`) otherwise, and `--tools a,b` imports each tool class from `../tools/<name>.tool` (de-duplicated) instead of using string names.
 
 ### Plugin
 
@@ -158,7 +158,7 @@ Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are aut
 nx g @frontmcp/nx:plugin my-plugin --project=my-app
 ```
 
-Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/`. Plugins participate in lifecycle events and can contribute additional capabilities.
+Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/`. The plugin takes its options in the constructor and contributes providers through a **static** `dynamicProviders(options)` method; there is no `onRegister` hook to implement.
 
 ### Adapter
 
@@ -166,7 +166,7 @@ Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/
 nx g @frontmcp/nx:adapter my-adapter --project=my-app
 ```
 
-Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapters/`. Adapters convert external definitions (OpenAPI, Lambda, etc.) into generated tools, resources, and prompts.
+Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapters/`. Adapters convert external definitions (OpenAPI, Lambda, etc.) into generated tools, resources, and prompts. The generated class stores its `{ name } & Options` constructor argument and `fetch()` returns a `FrontMcpAdapterResponse`.
 
 ### Provider
 
@@ -174,7 +174,7 @@ Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapt
 nx g @frontmcp/nx:provider my-provider --project=my-app
 ```
 
-Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named singletons resolved via DI (e.g., database pools, API clients, config).
+Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named singletons resolved via DI (e.g., database pools, API clients, config). The class is its own token: register `providers: [MyProvider]` and resolve it with `this.get(MyProvider)`; `--scope singleton` maps to `ProviderScope.GLOBAL`, `request`/`context` to `ProviderScope.CONTEXT`.
 
 ### Flow
 
@@ -182,7 +182,7 @@ Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named
 nx g @frontmcp/nx:flow my-flow --project=my-app
 ```
 
-Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages.
+Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages. The generated flow declares its schemas, registers itself through `declare global { interface ExtendFlows }` so `runFlow` is typed, and implements each plan step with a `@Stage` method from `FlowHooksOf(name)`.
 
 ### Job
 
