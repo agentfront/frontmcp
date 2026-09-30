@@ -120,6 +120,22 @@ export const SYSTEM_TOOL_NAMES = new Set([
  * or a config object usable by connect().
  */
 export async function extractSchemas(bundlePath: string): Promise<ExtractedSchema> {
+  // Booting the server to read its metadata must not leave a log file in the
+  // user's real ~/.frontmcp/logs on every build; LOGS_MAX=0 disables file logging.
+  const prevLogsMax = process.env['FRONTMCP_LOGS_MAX'];
+  process.env['FRONTMCP_LOGS_MAX'] = '0';
+  try {
+    return await extractSchemasFromBundle(bundlePath);
+  } finally {
+    if (prevLogsMax === undefined) {
+      delete process.env['FRONTMCP_LOGS_MAX'];
+    } else {
+      process.env['FRONTMCP_LOGS_MAX'] = prevLogsMax;
+    }
+  }
+}
+
+async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSchema> {
   // Suppress @FrontMcp() decorator bootstrap — we only need metadata, not a running server
   const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
   process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';

@@ -174,14 +174,15 @@ bundled JS, so a partial matrix is fine.
 
 ## Troubleshooting
 
-| Problem                                                | Cause                                                          | Solution                                                                                                                    |
-| ------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `@frontmcp/sdk is required for schema extraction`      | SDK missing or externalized from bundle                        | Ensure `@frontmcp/sdk` is installed                                                                                         |
-| Archive > 100 MB                                       | node_modules bundled or node runtime bloated                   | Tune `build.esbuild.external`, drop `--sea`, or disable `includeNodeModules`                                                |
-| `Unknown substitution variable` on validate            | Typo in `mcp_config.args` / `env`                              | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed |
-| `entry_point is not present in archive`                | Custom `--entry` flag or bundler moved the file                | Re-run without the override, or update the config's `entry`                                                                 |
-| Two builds produce different SHA-256                   | `--no-deterministic` set, or inputs embed a changing timestamp | Restore deterministic mode; scan your sources for live date/time values                                                     |
-| `platform_overrides.{platform}.command` missing binary | `--merge-from` folders don't match MCPB platform keys          | See the expected layout below                                                                                               |
+| Problem                                                          | Cause                                                          | Solution                                                                                                                             |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `@frontmcp/sdk is required for schema extraction`                | SDK missing or externalized from bundle                        | Ensure `@frontmcp/sdk` is installed                                                                                                  |
+| `… requires "@frontmcp/sdk" but the archive has no node_modules` | Server entry still `require()`s a runtime package              | Rebuild with `frontmcp build --target mcpb` so runtime packages are bundled; `validate` reports archives that are not self-contained |
+| Archive > 100 MB                                                 | node_modules bundled or node runtime bloated                   | Tune `build.esbuild.external`, drop `--sea`, or disable `includeNodeModules`                                                         |
+| `Unknown substitution variable` on validate                      | Typo in `mcp_config.args` / `env`                              | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed          |
+| `entry_point is not present in archive`                          | Custom `--entry` flag or bundler moved the file                | Re-run without the override, or update the config's `entry`                                                                          |
+| Two builds produce different SHA-256                             | `--no-deterministic` set, or inputs embed a changing timestamp | Restore deterministic mode; scan your sources for live date/time values                                                              |
+| `platform_overrides.{platform}.command` missing binary           | `--merge-from` folders don't match MCPB platform keys          | See the expected layout below                                                                                                        |
 
 Expected `--merge-from` layout (platform dirs must match MCPB platform keys):
 

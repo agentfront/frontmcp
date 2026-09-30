@@ -216,8 +216,24 @@ describe('generateMcpbManifest', () => {
       userConfigEnv: { API_KEY: '${user_config.apiKey}' },
     });
 
-    expect(manifest.server.mcp_config.env).toEqual({ API_KEY: '${user_config.apiKey}' });
+    expect(manifest.server.mcp_config.env).toEqual({
+      FRONTMCP_STDIO: '1',
+      API_KEY: '${user_config.apiKey}',
+    });
     expect(manifest.user_config?.apiKey.sensitive).toBe(true);
+  });
+
+  it('always sets FRONTMCP_STDIO so the server speaks stdio to the MCPB host', () => {
+    const manifest = generateMcpbManifest({
+      name: 'demo',
+      version: '1.0.0',
+      cwd: tmp,
+      schema: emptySchema(),
+      userConfig: {},
+      userConfigEnv: {},
+    });
+
+    expect(manifest.server.mcp_config.env).toEqual({ FRONTMCP_STDIO: '1' });
   });
 
   it('includes platform_overrides when provided', () => {

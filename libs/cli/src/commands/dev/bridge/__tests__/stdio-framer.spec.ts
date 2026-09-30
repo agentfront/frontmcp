@@ -179,4 +179,34 @@ describe('stdio-framer (issue #399)', () => {
     await writePromise;
     expect(resolved).toBe(true);
   });
+
+  it('calls onClose exactly once when the input stream ends', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const { logger } = makeLog();
+    const onClose = jest.fn();
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: () => undefined, onClose });
+    framer.start();
+
+    input.end();
+    await new Promise((r) => setImmediate(r));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    framer.stop();
+  });
+
+  it('does not call onClose after stop()', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const { logger } = makeLog();
+    const onClose = jest.fn();
+    const framer = createStdioFramer({ input, output, log: logger, onFrame: () => undefined, onClose });
+    framer.start();
+    framer.stop();
+
+    input.end();
+    await new Promise((r) => setImmediate(r));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

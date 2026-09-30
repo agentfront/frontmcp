@@ -149,7 +149,14 @@ describe('buildMcpb integration', () => {
     expect(manifest.prompts_generated).toBe(true);
     expect(manifest.server.type).toBe('node');
     expect(manifest.server.entry_point).toBe('server/index.js');
+    expect(mockBundleWithEsbuild).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.anything(),
+      expect.objectContaining({ bundleRuntime: true, selfContained: true }),
+    );
     expect(manifest.server.mcp_config.env).toEqual({
+      FRONTMCP_STDIO: '1',
       API_TOKEN: '${user_config.apiToken}',
       MAX_ITEMS: '${user_config.maxItems}',
     });

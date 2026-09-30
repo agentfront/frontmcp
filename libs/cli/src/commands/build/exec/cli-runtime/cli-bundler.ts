@@ -5,7 +5,7 @@
 
 import * as path from 'path';
 import { type FrontmcpExecConfig } from '../config';
-import { enclaveCoreExactExternalPlugin } from '../esbuild-bundler';
+import { enclaveCoreExactExternalPlugin, missingOptionalPeers } from '../esbuild-bundler';
 
 export interface CliBundleResult {
   bundlePath: string;
@@ -51,6 +51,7 @@ export async function bundleCliWithEsbuild(
         'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
+        ...missingOptionalPeers(),
         ...(config.dependencies?.nativeAddons || []),
       ]
     : [
@@ -61,6 +62,7 @@ export async function bundleCliWithEsbuild(
         'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
+        ...missingOptionalPeers(),
         ...(config.dependencies?.nativeAddons || []),
         ...(config.esbuild?.external || []),
       ];

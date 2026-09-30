@@ -186,6 +186,8 @@ A failed build is kept, and requests are refused with it, until a retry delay pa
 
 ### Background tasks
 
+Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
+
 Background tasks need a store that outlives a single request and is shared between isolates, which an edge runtime cannot provide in-process. FrontMCP disables them automatically when no distributed store is configured, and the worker serves normally without them — no `tasks: { enabled: false }` opt-out is needed. Setting `tasks: { enabled: true }` without `tasks.redis` fails the build rather than the deployed worker.
 
 ### Startup checks

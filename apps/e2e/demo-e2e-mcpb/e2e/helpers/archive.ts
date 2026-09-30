@@ -62,3 +62,34 @@ export async function sha256File(filePath: string): Promise<string> {
   const buf = await readFileBuffer(filePath);
   return sha256Hex(buf);
 }
+
+/** Read one entry of a .mcpb archive as UTF-8 text. */
+export function readArchiveEntry(archivePath: string, entryName: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    yauzl.open(archivePath, { lazyEntries: true }, (err: Error | null, zip: ZipFile | undefined) => {
+      if (err || !zip) {
+        reject(err || new Error('yauzl returned no handle'));
+        return;
+      }
+      zip.readEntry();
+      zip.on('entry', (entry: Entry) => {
+        if (entry.fileName !== entryName) {
+          zip.readEntry();
+          return;
+        }
+        zip.openReadStream(entry, (streamErr, stream) => {
+          if (streamErr || !stream) {
+            reject(streamErr || new Error(`Failed to open ${entryName}`));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+          stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+          stream.on('error', reject);
+        });
+      });
+      zip.on('end', () => reject(new Error(`${entryName} not found in archive`)));
+      zip.on('error', reject);
+    });
+  });
+}

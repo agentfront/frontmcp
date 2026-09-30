@@ -1,5 +1,6 @@
 import type { CloudflareDeployment, DeploymentTarget } from '../../../config/frontmcp-config.types';
 import type { AdapterBuildContext, AdapterTemplate } from '../types';
+import { entryPathEnvLine } from './http-entry-path';
 import { mergeWranglerToml, renderWranglerToml, type ManagedWranglerFields } from './wrangler-toml';
 
 /**
@@ -90,10 +91,7 @@ export const cloudflareAdapter: AdapterTemplate = {
   // FRONTMCP_HTTP_ENTRY_PATH reuses the seam `frontmcp dev` already uses (#446):
   // it supplies the *default*, so an explicit decorator `entryPath` still wins.
   getSetupTemplate: (context?: AdapterBuildContext) => {
-    const entryPath = context?.transportHttpPath;
-    const entryPathLine = entryPath
-      ? `process.env.FRONTMCP_HTTP_ENTRY_PATH = ${JSON.stringify(entryPath)};\n`
-      : '';
+    const entryPathLine = entryPathEnvLine(context);
     return `// Auto-generated — sets env before the @FrontMcp decorator runs.
 process.env.FRONTMCP_SERVERLESS = '1';
 process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
@@ -197,7 +195,12 @@ ${bridgeCall}    if (!handlerPromise) {
       typeof decoratorConfig['redis'] === 'object' &&
       decoratorConfig['redis'] !== null;
     const sqliteSeen = sqliteIsLiteral || !!info?.keysSeenInSource?.includes('sqlite');
-    const redisSeen = redisIsLiteral || !!info?.keysSeenInSource?.includes('redis');
+    // `provider: 'vercel-kv'` talks to an HTTP endpoint (fetch), so it runs on
+    // Workers; only the TCP clients (ioredis) are incompatible. A `redis` key
+    // whose value cannot be read statically is still rejected.
+    const redisIsHttp =
+      redisIsLiteral && (decoratorConfig?.['redis'] as Record<string, unknown>)['provider'] === 'vercel-kv';
+    const redisSeen = !redisIsHttp && (redisIsLiteral || !!info?.keysSeenInSource?.includes('redis'));
 
     if (sqliteSeen) {
       errors.push(
@@ -211,7 +214,7 @@ ${bridgeCall}    if (!handlerPromise) {
       errors.push(
         'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
           'Even an env-gated `redis: process.env.X ? {...} : undefined` still ships the Node-only ' +
-          'branch in the worker bundle. Use Vercel KV / Upstash Redis (HTTP), or move the redis ' +
+          'branch in the worker bundle. Use `redis: { provider: \'vercel-kv\' }` (HTTP), or move the redis ' +
           'config behind a build-time `define` so the bundler can dead-code-eliminate it.',
       );
     }

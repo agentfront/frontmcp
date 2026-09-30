@@ -3,11 +3,12 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
-import { ServicePlatform } from './types';
-import { readPidFile } from './pidfile';
+import * as path from 'path';
+
 import { ensurePmDirs } from './paths';
+import { readPidFile } from './pidfile';
+import { type PidFileData, type ServicePlatform } from './types';
 
 export function detectPlatform(): ServicePlatform {
   if (process.platform === 'win32') {
@@ -24,7 +25,24 @@ function systemdUnitPath(name: string): string {
   return path.join(os.homedir(), '.config', 'systemd', 'user', `frontmcp-${name}.service`);
 }
 
-function generateLaunchdPlist(name: string, entry: string): string {
+/** Arguments of the `frontmcp start` command the service must run (port, socket, db and restart limit included). */
+export function buildStartArgs(
+  data: Pick<PidFileData, 'name' | 'entry' | 'port' | 'socketPath' | 'dbPath' | 'maxRestarts'>,
+): string[] {
+  const args = ['start', data.name, '--entry', data.entry];
+  if (data.port !== undefined) args.push('--port', String(data.port));
+  if (data.socketPath) args.push('--socket', data.socketPath);
+  if (data.dbPath) args.push('--db', data.dbPath);
+  if (data.maxRestarts !== undefined) args.push('--max-restarts', String(data.maxRestarts));
+  return args;
+}
+
+function xmlEscape(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export function generateLaunchdPlist(data: Parameters<typeof buildStartArgs>[0]): string {
+  const name = data.name;
   const frontmcpBin = process.argv[1] || 'frontmcp';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -37,10 +55,9 @@ function generateLaunchdPlist(name: string, entry: string): string {
   <array>
     <string>${process.execPath}</string>
     <string>${frontmcpBin}</string>
-    <string>start</string>
-    <string>${name}</string>
-    <string>--entry</string>
-    <string>${entry}</string>
+${buildStartArgs(data)
+  .map((arg) => `    <string>${xmlEscape(arg)}</string>`)
+  .join('\n')}
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -54,7 +71,8 @@ function generateLaunchdPlist(name: string, entry: string): string {
 </plist>`;
 }
 
-function generateSystemdUnit(name: string, entry: string): string {
+export function generateSystemdUnit(data: Parameters<typeof buildStartArgs>[0]): string {
+  const name = data.name;
   const frontmcpBin = process.argv[1] || 'frontmcp';
 
   return `[Unit]
@@ -63,7 +81,9 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart="${process.execPath}" "${frontmcpBin}" start ${name} --entry "${entry}"
+ExecStart="${process.execPath}" "${frontmcpBin}" ${buildStartArgs(data)
+    .map((arg) => `"${arg.replace(/(["\\])/g, '\\$1')}"`)
+    .join(' ')}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -88,7 +108,7 @@ export function installService(name: string): string {
 
   if (platform === 'launchd') {
     const plistPath = launchdPlistPath(name);
-    const content = generateLaunchdPlist(name, pidData.entry);
+    const content = generateLaunchdPlist(pidData);
     const dir = path.dirname(plistPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -97,7 +117,7 @@ export function installService(name: string): string {
     return plistPath;
   } else {
     const unitPath = systemdUnitPath(name);
-    const content = generateSystemdUnit(name, pidData.entry);
+    const content = generateSystemdUnit(pidData);
     const dir = path.dirname(unitPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

@@ -1,5 +1,60 @@
+import * as path from 'path';
 import { rspack } from '@rspack/core';
+
+import { fileExists } from '@frontmcp/utils';
 import { c } from '../../core/colors';
+
+/**
+ * Packages the SDK `require()`s lazily behind a try/catch (storage backends,
+ * observability, Vercel KV). A fresh project has none of them installed, and
+ * rspack treats every `require()` as a hard import — so a missing one failed the
+ * whole build with "Module not found". They are bundled when installed and left
+ * as a runtime `require()` (which the SDK already guards) when they are not.
+ */
+export const OPTIONAL_RUNTIME_PACKAGES = [
+  '@frontmcp/storage-sqlite',
+  '@frontmcp/observability',
+  '@vercel/kv',
+  '@opentelemetry/sdk-trace-base',
+];
+
+/** Native addons can never be inlined into a single-file bundle. */
+export const NATIVE_ADDON_PACKAGES = ['better-sqlite3'];
+
+function packageNameOf(request: string): string {
+  const parts = request.split('/');
+  return request.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+}
+
+// Walks node_modules upward from `from`, the way the bundler's resolver does.
+async function isInstalled(name: string, from: string): Promise<boolean> {
+  let dir = from;
+  for (;;) {
+    if (await fileExists(path.join(dir, 'node_modules', name, 'package.json'))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+/**
+ * rspack externals callback: externalize native addons always, and optional
+ * runtime packages only when they are not installed.
+ */
+export function externalizeOptionalPackages(
+  cwd: string,
+): (data: { request?: string; context?: string }, callback: (err?: Error, result?: string) => void) => void {
+  return ({ request, context }, callback) => {
+    if (!request) return callback();
+    const name = packageNameOf(request);
+    if (NATIVE_ADDON_PACKAGES.includes(name)) return callback(undefined, `commonjs ${request}`);
+    if (!OPTIONAL_RUNTIME_PACKAGES.includes(name)) return callback();
+    isInstalled(name, context ?? cwd).then(
+      (installed) => (installed ? callback() : callback(undefined, `commonjs ${request}`)),
+      (err: Error) => callback(err),
+    );
+  };
+}
 
 /**
  * Bundle the serverless entry point into a single CJS file using rspack.
@@ -27,7 +82,9 @@ export async function bundleForServerless(
     // Use node externals preset for built-in modules
     externalsPresets: { node: true },
     // Exclude problematic optional dependencies (native binaries that can't be bundled)
-    externals: {
+    externals: [
+      externalizeOptionalPackages(process.cwd()),
+      {
       '@swc/core': '@swc/core',
       fsevents: 'fsevents',
       esbuild: 'esbuild',
@@ -53,7 +110,8 @@ export async function bundleForServerless(
       // executes if the user wires up the corresponding agent.
       openai: 'openai',
       '@anthropic-ai/sdk': '@anthropic-ai/sdk',
-    },
+      },
+    ],
     resolve: {
       extensions: ['.js', '.mjs', '.cjs', '.json'],
       // Allow imports without file extensions (TypeScript compiles without .js
@@ -86,9 +144,13 @@ export async function bundleForServerless(
         },
       },
     },
-    // Don't minimize to preserve readability for debugging
+    // Don't minimize to preserve readability for debugging.
+    // `nodeEnv: false` — `mode: 'production'` would otherwise replace every
+    // `process.env.NODE_ENV` with the literal "production", so a function deployed
+    // with NODE_ENV=development still reported production.
     optimization: {
       minimize: false,
+      nodeEnv: false,
     },
     // Suppress known third-party library warnings that don't affect runtime
     ignoreWarnings: [

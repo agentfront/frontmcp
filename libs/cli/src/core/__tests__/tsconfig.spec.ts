@@ -154,6 +154,20 @@ describe('tsconfig utilities', () => {
       expect(result.compilerOptions.experimentalDecorators).toBe(true);
     });
 
+    it.each(['nodenext', 'NodeNext', 'node16'])(
+      'replaces moduleResolution %s, which TypeScript rejects together with module esnext (TS5110)',
+      (moduleResolution) => {
+        const result = ensureRequiredTsOptions({ compilerOptions: { module: 'nodenext', moduleResolution } });
+        expect(result.compilerOptions.module).toBe('esnext');
+        expect(result.compilerOptions.moduleResolution).toBe('node');
+      },
+    );
+
+    it.each(['bundler', 'node'])('keeps a compatible moduleResolution (%s)', (moduleResolution) => {
+      const result = ensureRequiredTsOptions({ compilerOptions: { moduleResolution } });
+      expect(result.compilerOptions.moduleResolution).toBe(moduleResolution);
+    });
+
     it('should preserve other compiler options', () => {
       const result = ensureRequiredTsOptions({
         compilerOptions: {
@@ -176,6 +190,17 @@ describe('tsconfig utilities', () => {
   });
 
   describe('checkRequiredTsOptions', () => {
+    it('reports the module/moduleResolution combination that triggers TS5110', () => {
+      const { issues } = checkRequiredTsOptions({
+        target: 'es2021',
+        module: 'esnext',
+        emitDecoratorMetadata: true,
+        experimentalDecorators: true,
+        moduleResolution: 'nodenext',
+      });
+      expect(issues.join('\n')).toContain('TS5110');
+    });
+
     it('should return all ok for correct config', () => {
       const { ok, issues } = checkRequiredTsOptions({
         target: 'es2021',
@@ -280,6 +305,18 @@ describe('tsconfig utilities', () => {
       expect(writeJSON).toHaveBeenCalledWith(path.join('/test/dir', 'tsconfig.json'), RECOMMENDED_TSCONFIG);
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('not found'));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Created tsconfig.json'));
+    });
+
+    it('rewrites moduleResolution nodenext so the result has no TS5110 conflict', async () => {
+      (readJSON as jest.Mock).mockResolvedValue({
+        compilerOptions: { module: 'nodenext', moduleResolution: 'nodenext' },
+      });
+
+      await runInit('/test/dir');
+
+      const written = (writeJSON as jest.Mock).mock.calls.at(-1)?.[1] as { compilerOptions: Record<string, unknown> };
+      expect(written.compilerOptions['module']).toBe('esnext');
+      expect(written.compilerOptions['moduleResolution']).toBe('node');
     });
 
     it('should merge existing tsconfig.json with required options', async () => {

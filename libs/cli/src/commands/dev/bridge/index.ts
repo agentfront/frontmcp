@@ -97,6 +97,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     });
   }
 
+  // Teardown needs the supervisor + watcher, which are built after the framer.
+  // If stdin closes while the first child is still booting, shutdown is
+  // deferred until `teardownReady` flips.
+  let stdinClosed = false;
+  let teardownReady = false;
+
   // ─── construct framer + FSM. Closures bind to each other by reference,
   // so referencing `fsm`/`framer` inside a callback executed at runtime
   // is safe even though `framer` is declared first textually. ───
@@ -105,6 +111,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     output: process.stdout,
     log,
     onFrame: (frame) => fsm.enqueue(frame),
+    // The MCP client closed our stdin (or died): nothing can talk to us any
+    // more, so tear the child down instead of leaving it orphaned.
+    onClose: () => {
+      stdinClosed = true;
+      if (teardownReady) void shutdown('stdin-closed');
+    },
   });
 
   const fsm = createBridgeStateMachine({
@@ -202,7 +214,11 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
 
   // ─── teardown wiring ───
   let stopping = false;
-  async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  let resolveStopped: () => void = () => undefined;
+  const stopped = new Promise<void>((resolve) => {
+    resolveStopped = resolve;
+  });
+  async function shutdown(signal: NodeJS.Signals | 'stdin-closed'): Promise<void> {
     if (stopping) return;
     stopping = true;
     log.info('bridge-stop', { signal });
@@ -228,14 +244,18 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     }
     framer.stop();
     await log.close();
-    process.exit(0);
+    resolveStopped();
   }
 
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  teardownReady = true;
+  if (stdinClosed) void shutdown('stdin-closed');
 
-  // Bridge runs until SIGINT/SIGTERM — keep the event loop alive via the
-  // open stdin + watcher.
+  // The bridge is long-lived: resolve only once it has shut down (signal or
+  // stdin closed). Returning earlier lets the CLI entry point exit the
+  // process straight away and orphan the dev server child.
+  await stopped;
 }
 
 export { type BridgeLogger, type BridgeStateMachine, type ChildSupervisor, type StdioFramer, type UpstreamClient };
