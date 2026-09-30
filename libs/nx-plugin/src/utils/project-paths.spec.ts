@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 
 import { getIgnoreDeprecations, resolveProjectPaths } from './project-paths';
@@ -51,5 +55,47 @@ describe('getIgnoreDeprecations', () => {
 
   it('is empty when TypeScript is not declared', () => {
     expect(getIgnoreDeprecations(withTypescript())).toBe('');
+  });
+
+  describe('installed typescript', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'nx-plugin-ts-'));
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    function installTypescript(content: string) {
+      mkdirSync(join(dir, 'node_modules', 'typescript'), { recursive: true });
+      writeFileSync(join(dir, 'node_modules', 'typescript', 'package.json'), content);
+      const tree = createTreeWithEmptyWorkspace();
+      tree.root = dir;
+      return tree;
+    }
+
+    it('prefers the installed compiler over the declared range', () => {
+      const tree = installTypescript(JSON.stringify({ version: '6.0.3' }));
+      tree.write('package.json', JSON.stringify({ devDependencies: { typescript: '~5.9.2' } }));
+      expect(getIgnoreDeprecations(tree)).toBe('6.0');
+    });
+
+    it('reports nothing for an installed TypeScript 5', () => {
+      expect(getIgnoreDeprecations(installTypescript(JSON.stringify({ version: '5.9.3' })))).toBe('');
+    });
+
+    it('falls back to the declared range when the installed package.json is unreadable', () => {
+      const tree = installTypescript('{ not json');
+      tree.write('package.json', JSON.stringify({ devDependencies: { typescript: '~6.0.3' } }));
+      expect(getIgnoreDeprecations(tree)).toBe('6.0');
+    });
+
+    it('falls back to the declared range when the installed package.json has no version', () => {
+      const tree = installTypescript(JSON.stringify({ name: 'typescript' }));
+      tree.write('package.json', JSON.stringify({ dependencies: { typescript: '^6.0.0' } }));
+      expect(getIgnoreDeprecations(tree)).toBe('6.0');
+    });
   });
 });

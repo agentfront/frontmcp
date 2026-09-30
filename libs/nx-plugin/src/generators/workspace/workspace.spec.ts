@@ -206,6 +206,38 @@ describe('workspace generator', () => {
       expect(execSyncMock).not.toHaveBeenCalledWith('git init', expect.anything());
     });
 
+    it('should install packages and then initialize git when skipInstall is false', async () => {
+      const devkit = require('@nx/devkit');
+      const installSpy = jest.spyOn(devkit, 'installPackagesTask').mockImplementation(() => undefined);
+      try {
+        const callback = await workspaceGenerator(tree, { name: 'installed-project', skipInstall: false });
+        callback();
+
+        expect(installSpy).toHaveBeenCalledWith(tree);
+        expect(execSyncMock).toHaveBeenCalledWith('git init', expect.objectContaining({ stdio: 'ignore' }));
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
+    it('should not initialize git after installing when skipGit is true', async () => {
+      const devkit = require('@nx/devkit');
+      const installSpy = jest.spyOn(devkit, 'installPackagesTask').mockImplementation(() => undefined);
+      try {
+        const callback = await workspaceGenerator(tree, {
+          name: 'installed-no-git',
+          skipInstall: false,
+          skipGit: true,
+        });
+        callback();
+
+        expect(installSpy).toHaveBeenCalled();
+        expect(execSyncMock).not.toHaveBeenCalledWith('git init', expect.anything());
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
     it('should silently skip git init when git is not available', async () => {
       execSyncMock.mockImplementation(() => {
         throw new Error('git: command not found');

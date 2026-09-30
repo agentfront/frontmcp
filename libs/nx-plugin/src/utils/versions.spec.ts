@@ -2,6 +2,7 @@ import {
   getFrontmcpDependencies,
   getFrontmcpDevDependencies,
   getFrontmcpVersion,
+  getJestDevDependencies,
   getNxDependencies,
   getNxDevDependencies,
   getNxVersion,
@@ -80,6 +81,13 @@ describe('versions', () => {
       const [rMajor, rMinor] = floor(deps['@swc-node/register']);
       expect(rMajor).toBe(nMajor);
       expect(rMinor).toBeGreaterThanOrEqual(nMinor);
+    });
+  });
+
+  describe('getJestDevDependencies', () => {
+    it('lists what frontmcp test and the generated jest config need', () => {
+      const deps = getJestDevDependencies();
+      expect(Object.keys(deps)).toEqual(expect.arrayContaining(['@swc/core', '@swc/jest', '@types/jest', 'jest']));
     });
   });
 });

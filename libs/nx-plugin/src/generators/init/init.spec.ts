@@ -84,4 +84,10 @@ describe('init generator', () => {
     await initGenerator(tree, { skipFormat: true });
     expect(readJson(tree, 'nx.json')).toEqual(first);
   });
+
+  it('leaves a workspace without nx.json alone', async () => {
+    tree.delete('nx.json');
+    await initGenerator(tree, { skipFormat: true });
+    expect(tree.exists('nx.json')).toBe(false);
+  });
 });
