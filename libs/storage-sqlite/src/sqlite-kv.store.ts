@@ -8,7 +8,7 @@
 import type Database from 'better-sqlite3';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
-import { openDatabase } from './open-database';
+import { openDatabase, withBusyRetry } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
@@ -44,19 +44,17 @@ export class SqliteKvStore {
 
   constructor(options: SqliteStorageOptions) {
     // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteKvStore');
-
-    // Enable WAL mode for better concurrency
-    if (options.walMode !== false) {
-      this.db.pragma('journal_mode = WAL');
-    }
+    this.db = openDatabase(options.path, 'SqliteKvStore', {
+      busyTimeoutMs: options.busyTimeoutMs,
+      walMode: options.walMode !== false,
+    });
 
     // Derive encryption key if secret provided
     if (options.encryption?.secret) {
       this.encryptionKey = deriveEncryptionKey(options.encryption.secret);
     }
 
-    this.initSchema();
+    withBusyRetry(() => this.initSchema());
     this.prepareStatements();
 
     // Start periodic TTL cleanup

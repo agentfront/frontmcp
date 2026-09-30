@@ -93,12 +93,13 @@ export default class Server {}
 
 ## Configuration Options
 
-| Option                 | Type      | Default    | Description                                           |
-| ---------------------- | --------- | ---------- | ----------------------------------------------------- |
-| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                   |
-| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
-| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency           |
-| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys               |
+| Option                 | Type      | Default    | Description                                                                                      |
+| ---------------------- | --------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                                                              |
+| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256                                            |
+| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency                                                      |
+| `busyTimeoutMs`        | `number`  | `5000`     | How long a connection waits for a lock held by another process before failing with `SQLITE_BUSY` |
+| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys                                                          |
 
 <Note>
   The database location can also be supplied through the `FRONTMCP_SQLITE_PATH` environment variable (used by `frontmcp start --db`, `frontmcp socket --db` and the generated installer). It overrides `sqlite.path`; other `sqlite` options are kept.
@@ -205,26 +206,23 @@ const elicitation = new SqliteElicitationStore({
   </Accordion>
 
   <Accordion title="SQLITE_CANTOPEN: unable to open database file">
-    **Cause**: The parent directory for the SQLite file doesn't exist.
+    **Cause**: The parent directory is created for you, so this means the path itself cannot be opened: no permission to create the directory, a path that points at a directory or a file that is not a database, or a read-only file system.
 
-    **Solution**: Ensure the directory exists before starting the server:
-    ```bash
-    mkdir -p ~/.frontmcp/data
-    ```
+    **Solution**: Check the permissions and that `path` names a file. Serverless targets with a read-only file system need a writable path such as `/tmp`, or a different store.
 
   </Accordion>
 
   <Accordion title="Database is locked">
     **Cause**: Multiple processes are trying to write to the same SQLite file simultaneously.
 
-    **Solution**: SQLite is designed for single-process access. If you need multiple processes, use Redis instead. WAL mode (enabled by default) helps with read concurrency but doesn't solve multi-writer scenarios.
+    **Solution**: The store sets `busy_timeout` (5 s by default) before it enables WAL and creates tables, and retries `SQLITE_BUSY` during startup, so two processes starting on the same file wait for each other. If a writer holds the lock longer than that, raise `busyTimeoutMs`. SQLite still allows one writer at a time: for many writer processes, use Redis.
 
   </Accordion>
 
   <Accordion title="Encryption errors after changing the secret">
     **Cause**: Existing data was encrypted with a different secret.
 
-    **Solution**: Either restore the original secret or delete the database file and let the server create a fresh one. There is no migration path between encryption keys.
+    **Solution**: Reading a value written under another secret throws `SqliteDecryptionError` (code `SQLITE_DECRYPTION_FAILED`) with a message that names the secret as the likely cause. Restore the original secret or delete the database file and let the server create a fresh one. There is no migration path between encryption keys.
 
   </Accordion>
 </AccordionGroup>

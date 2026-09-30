@@ -90,6 +90,8 @@ export default MyServer;
 
 Provision the KV store in the Vercel dashboard under **Storage > Create Database > KV (Redis)**, then link it to your project. Vercel automatically injects the required environment variables.
 
+> **Tasks and elicitation on Vercel KV:** Vercel KV has no pub/sub, so background tasks and elicitation cannot use it. The server still starts — tasks are skipped with a `[tasks]` startup warning unless `tasks: { enabled: true }` is set (which keeps `TaskStoreNotSupportedError`), and elicitation throws `ElicitationNotSupportedError` only when its store actually resolves to Vercel KV. Give tasks their own backend with `tasks: { redis }` or `tasks: { sqlite }` (an explicit backend ignores the ambient `KV_REST_API_URL`).
+
 ## Step 3: Environment Variables
 
 Vercel KV variables are injected automatically when the store is linked. For manual setup or additional configuration, set them in the Vercel dashboard (**Settings > Environment Variables**) or via the CLI:
@@ -210,13 +212,14 @@ Serverless functions are stateless between invocations. All persistent state mus
 
 ## Troubleshooting
 
-| Problem              | Cause                                   | Solution                                                                                       |
-| -------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Function timeout     | Operation exceeds plan's max duration   | Check plan limits (Hobby: 10s, Pro: 60s); upgrade plan or refactor the slow tool               |
-| KV connection errors | KV store not linked or env vars missing | Re-link the KV store in the Vercel dashboard; verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` |
-| 404 on every route   | Build did not produce `.vercel/output/` | Ensure `frontmcp build --target vercel` ran before `vercel` deploys                            |
-| Bundle too large     | Unnecessary dependencies included       | Review dependencies and remove unused packages to reduce bundle size                           |
-| Cold starts too slow | Heavy decorator initialization          | Lazy-load providers; defer heavy work until first tool call                                    |
+| Problem                    | Cause                                                                                | Solution                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Function timeout           | Operation exceeds plan's max duration                                                | Check plan limits (Hobby: 10s, Pro: 60s); upgrade plan or refactor the slow tool                            |
+| KV connection errors       | KV store not linked or env vars missing                                              | Re-link the KV store in the Vercel dashboard; verify `KV_REST_API_URL` and `KV_REST_API_TOKEN`              |
+| 404 on every route         | Build did not produce `.vercel/output/`                                              | Ensure `frontmcp build --target vercel` ran before `vercel` deploys                                         |
+| Bundle too large           | Unnecessary dependencies included                                                    | Review dependencies and remove unused packages to reduce bundle size                                        |
+| Cold starts too slow       | Heavy decorator initialization                                                       | Lazy-load providers; defer heavy work until first tool call                                                 |
+| 500 `server_misconfigured` | A required secret is missing (`SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, ...) | The response body names the `code` and the remedy; set the variable in Vercel Project Settings and redeploy |
 
 ## Examples
 

@@ -3,7 +3,7 @@
  *
  * Tests for the TransportService which manages transport sessions and their lifecycle.
  */
-import { createHash } from 'crypto';
+import { sha256Hex } from '@frontmcp/utils';
 
 import { TransportService } from '../transport.registry';
 
@@ -359,7 +359,7 @@ describe('TransportService', () => {
     });
 
     it('should return session when token matches', async () => {
-      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      const tokenHash = sha256Hex('test-token');
       const storedSession = {
         session: { id: 'session-123', protocol: 'streamable-http' },
         authorizationId: tokenHash,
@@ -411,7 +411,7 @@ describe('TransportService', () => {
     });
 
     it('should recreate transporter from stored session', async () => {
-      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      const tokenHash = sha256Hex('test-token');
       const storedSession = {
         session: {
           id: 'session-123',
@@ -436,7 +436,7 @@ describe('TransportService', () => {
     });
 
     it('should return existing transport if already recreated', async () => {
-      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      const tokenHash = sha256Hex('test-token');
       const storedSession = {
         session: {
           id: 'session-123',
@@ -468,7 +468,7 @@ describe('TransportService', () => {
     });
 
     it('should handle concurrent recreation with mutex', async () => {
-      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      const tokenHash = sha256Hex('test-token');
       const storedSession = {
         session: {
           id: 'session-mutex',
@@ -565,7 +565,7 @@ describe('TransportService', () => {
         expect.objectContaining({
           session: expect.objectContaining({ id: 'redis-lifecycle' }),
         }),
-        undefined, // defaultTtlMs not configured in this test
+        3600000, // one-hour default when a backend is configured without a TTL
       );
 
       mockRedisSessionStore.set.mockClear();
@@ -663,7 +663,7 @@ describe('TransportService', () => {
 
     it('should check Redis when not in local history', async () => {
       // wasSessionCreatedAsync now uses getStoredSession() to verify token hash (security fix)
-      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      const tokenHash = sha256Hex('test-token');
       mockRedisSessionStore.get.mockResolvedValue({
         authorizationId: tokenHash,
         session: { id: 'redis-session', createdAt: Date.now() },
@@ -893,7 +893,7 @@ describe('TransportService', () => {
       });
 
       it('should recreate transport when not in memory but in Redis', async () => {
-        const tokenHash = createHash('sha256').update('cold-start-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('cold-start-token');
         const storedSession = {
           session: {
             id: 'cold-start-session',
@@ -924,7 +924,7 @@ describe('TransportService', () => {
       });
 
       it('should validate token hash before recreation', async () => {
-        const tokenHash = createHash('sha256').update('valid-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('valid-token');
         const storedSession = {
           session: { id: 'validated-session', protocol: 'streamable-http' },
           authorizationId: tokenHash,
@@ -943,7 +943,7 @@ describe('TransportService', () => {
       });
 
       it('should reject recreation with mismatched token', async () => {
-        const wrongTokenHash = createHash('sha256').update('attacker-token', 'utf8').digest('hex');
+        const wrongTokenHash = sha256Hex('attacker-token');
         const storedSession = {
           session: { id: 'hijack-target', protocol: 'streamable-http' },
           authorizationId: wrongTokenHash,
@@ -962,7 +962,7 @@ describe('TransportService', () => {
       });
 
       it('should update lastAccessedAt on recreation', async () => {
-        const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('test-token');
         const oldTimestamp = Date.now() - 60000;
         const storedSession = {
           session: {
@@ -1000,7 +1000,7 @@ describe('TransportService', () => {
       });
 
       it('should allow different node to recreate session', async () => {
-        const tokenHash = createHash('sha256').update('failover-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('failover-token');
         const storedSession = {
           session: {
             id: 'failover-session',
@@ -1027,7 +1027,7 @@ describe('TransportService', () => {
       });
 
       it('should preserve original session metadata', async () => {
-        const tokenHash = createHash('sha256').update('metadata-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('metadata-token');
         const originalCreatedAt = Date.now() - 120000;
         const storedSession = {
           session: {
@@ -1050,7 +1050,7 @@ describe('TransportService', () => {
       });
 
       it('should handle concurrent recreation attempts', async () => {
-        const tokenHash = createHash('sha256').update('concurrent-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('concurrent-token');
         const storedSession = {
           session: {
             id: 'concurrent-session',
@@ -1087,7 +1087,7 @@ describe('TransportService', () => {
       });
 
       it('should handle rapid sequential recreations', async () => {
-        const tokenHash = createHash('sha256').update('rapid-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('rapid-token');
         const storedSession = {
           session: {
             id: 'rapid-session',
@@ -1139,7 +1139,7 @@ describe('TransportService', () => {
       });
 
       it('should reject session recreation with invalid token', async () => {
-        const legitimateHash = createHash('sha256').update('legitimate-token', 'utf8').digest('hex');
+        const legitimateHash = sha256Hex('legitimate-token');
         const storedSession = {
           session: { id: 'protected-session', protocol: 'streamable-http' },
           authorizationId: legitimateHash,
@@ -1154,7 +1154,7 @@ describe('TransportService', () => {
       });
 
       it('should validate client fingerprint on recreation', async () => {
-        const tokenHash = createHash('sha256').update('fingerprint-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('fingerprint-token');
         const storedSession = {
           session: {
             id: 'fingerprint-session',
@@ -1235,7 +1235,7 @@ describe('TransportService', () => {
 
       it('should handle session with wrong token hash gracefully', async () => {
         // Stored session has a different token hash than the request
-        const differentHash = createHash('sha256').update('different-token', 'utf8').digest('hex');
+        const differentHash = sha256Hex('different-token');
         mockRedisSessionStore.get.mockResolvedValue({
           session: { id: 'partial-session', protocol: 'streamable-http' },
           authorizationId: differentHash,
@@ -1259,7 +1259,7 @@ describe('TransportService', () => {
       });
 
       it('should restore client capabilities from stored session on recreation', async () => {
-        const tokenHash = createHash('sha256').update('cap-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('cap-token');
         const clientCapabilities = { elicitation: { form: {} }, roots: { listChanged: true } };
         const storedSession = {
           session: {
@@ -1287,7 +1287,7 @@ describe('TransportService', () => {
       });
 
       it('should skip capability restoration when stored session has no capabilities', async () => {
-        const tokenHash = createHash('sha256').update('no-cap-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('no-cap-token');
         const storedSession = {
           session: {
             id: 'no-cap-session',
@@ -1323,7 +1323,7 @@ describe('TransportService', () => {
       });
 
       it('should preserve transportState in stored session', async () => {
-        const tokenHash = createHash('sha256').update('state-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('state-token');
         const storedSession = {
           session: {
             id: 'state-session',
@@ -1351,7 +1351,7 @@ describe('TransportService', () => {
       });
 
       it('should handle SSE transportState with lastEventId', async () => {
-        const tokenHash = createHash('sha256').update('sse-state-token', 'utf8').digest('hex');
+        const tokenHash = sha256Hex('sse-state-token');
         const storedSession = {
           session: {
             id: 'sse-state-session',
@@ -1374,6 +1374,218 @@ describe('TransportService', () => {
         // This test verifies the structure is preserved
         expect(storedSession.transportState.lastEventId).toBe(150);
       });
+    });
+  });
+});
+
+describe('TransportService - Redis HA behaviour (#646)', () => {
+  let service: TransportService | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRedisSessionStore.ping.mockResolvedValue(true);
+    mockRedisSessionStore.get.mockResolvedValue(null);
+    mockRedisSessionStore.exists.mockResolvedValue(false);
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await service?.destroy();
+    service = undefined;
+  });
+
+  describe('session TTL resolution', () => {
+    const ttlOf = (svc: TransportService) =>
+      (svc as unknown as { getDefaultTtlMs(): number | undefined }).getDefaultTtlMs();
+
+    it('prefers persistence.defaultTtlMs over redis.defaultTtlMs', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          defaultTtlMs: 111000,
+          redis: { host: 'localhost', defaultTtlMs: 222000 },
+        } as never,
+      );
+      await service.ready;
+      expect(ttlOf(service)).toBe(111000);
+    });
+
+    it('falls back to redis.defaultTtlMs', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          redis: { host: 'localhost', defaultTtlMs: 222000 },
+        } as never,
+      );
+      await service.ready;
+      expect(ttlOf(service)).toBe(222000);
+    });
+
+    it('falls back to one hour when neither is set', async () => {
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect(ttlOf(service)).toBe(3600000);
+    });
+
+    it('is undefined without a persistence backend', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      expect(ttlOf(service)).toBeUndefined();
+    });
+  });
+
+  describe('getSessionKeyPrefix', () => {
+    it('includes the session: segment the store appends', async () => {
+      service = new TransportService(
+        mockScope as never,
+        {
+          redis: { host: 'localhost', keyPrefix: 'myapp:' },
+        } as never,
+      );
+      await service.ready;
+      expect(service.getSessionKeyPrefix()).toBe('myapp:session:');
+    });
+
+    it('defaults to the transport namespace', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      expect(service.getSessionKeyPrefix()).toBe('mcp:transport:session:');
+    });
+  });
+
+  describe('HA takeover key', () => {
+    it('uses the stored session key including session:', async () => {
+      const attemptTakeover = jest.fn().mockResolvedValue({ success: false });
+      const scope = { ...mockScope, haManager: { attemptTakeover } };
+      service = new TransportService(
+        scope as never,
+        {
+          redis: { host: 'localhost', keyPrefix: 'myapp:' },
+        } as never,
+      );
+      await service.ready;
+
+      const tokenHash = sha256Hex('tok');
+      const storedSession = {
+        session: {
+          id: 'sess-1',
+          authorizationId: tokenHash,
+          protocol: 'streamable-http',
+          createdAt: Date.now(),
+          nodeId: 'other-node',
+        },
+        authorizationId: tokenHash,
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      };
+
+      await service
+        .recreateTransporter('streamable-http', 'tok', 'sess-1', storedSession as never, mockResponse as never)
+        .catch(() => undefined);
+
+      const keys = attemptTakeover.mock.calls.map((c) => c[0]);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) expect(key).toBe('myapp:session:sess-1');
+    });
+  });
+
+  describe('TTL refresh while serving a session', () => {
+    async function withSession(config: Record<string, unknown>) {
+      service = new TransportService(mockScope as never, config as never);
+      await service.ready;
+      await service.createTransporter('streamable-http', 'tok', 'sess-ttl', mockResponse as never);
+      mockRedisSessionStore.get.mockClear();
+      return service;
+    }
+
+    it('reads the stored session (sliding TTL) at most once per quarter TTL', async () => {
+      jest.useFakeTimers({ now: 1_000_000 });
+      const svc = await withSession({ redis: { host: 'localhost' }, defaultTtlMs: 40000 });
+
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).toHaveBeenCalledTimes(1);
+      expect(mockRedisSessionStore.get).toHaveBeenCalledWith('sess-ttl');
+
+      jest.setSystemTime(1_000_000 + 10_001);
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).toHaveBeenCalledTimes(2);
+    });
+
+    it("forgets a session's refresh time when the session ends", async () => {
+      const svc = await withSession({ redis: { host: 'localhost' } });
+      await svc.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      const refreshTimes = (svc as unknown as { lastTtlRefreshAt: Map<string, number> }).lastTtlRefreshAt;
+      expect(refreshTimes.has('sess-ttl')).toBe(true);
+
+      const { LocalTransporter } = jest.requireMock('../transport.local') as { LocalTransporter: jest.Mock };
+      const onDispose = LocalTransporter.mock.calls[LocalTransporter.mock.calls.length - 1][3] as () => void;
+      onDispose();
+
+      expect(refreshTimes.has('sess-ttl')).toBe(false);
+    });
+
+    it('does not throw when the refresh fails', async () => {
+      const svc = await withSession({ redis: { host: 'localhost' } });
+      mockRedisSessionStore.get.mockRejectedValueOnce(new Error('redis down'));
+      await expect(svc.getTransporter('streamable-http', 'tok', 'sess-ttl')).resolves.toBeDefined();
+    });
+
+    it('does nothing without a persistence backend', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      await service.createTransporter('streamable-http', 'tok', 'sess-ttl', mockResponse as never);
+      await service.getTransporter('streamable-http', 'tok', 'sess-ttl');
+      expect(mockRedisSessionStore.get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('startup retry', () => {
+    it('recovers the session store after Redis was down at startup', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValueOnce(false).mockResolvedValue(true);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect((service as unknown as { sessionStore?: unknown }).sessionStore).toBeUndefined();
+
+      await jest.advanceTimersByTimeAsync(1000);
+
+      expect((service as unknown as { sessionStore?: unknown }).sessionStore).toBeDefined();
+    });
+
+    it('backs off exponentially while Redis stays down', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValue(false);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(1999);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(mockRedisSessionStore.ping).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops retrying after destroy()', async () => {
+      jest.useFakeTimers();
+      mockRedisSessionStore.ping.mockResolvedValue(false);
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' } } as never);
+      await service.ready;
+      await service.destroy();
+      mockRedisSessionStore.ping.mockClear();
+
+      await jest.advanceTimersByTimeAsync(60000);
+      expect(mockRedisSessionStore.ping).not.toHaveBeenCalled();
+    });
+
+    it('does not retry when no backend is configured', async () => {
+      jest.useFakeTimers();
+      service = new TransportService(mockScope as never);
+      await service.ready;
+      await jest.advanceTimersByTimeAsync(60000);
+      expect(mockRedisSessionStore.ping).not.toHaveBeenCalled();
     });
   });
 });

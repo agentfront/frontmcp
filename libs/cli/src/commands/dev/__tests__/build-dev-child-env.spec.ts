@@ -67,4 +67,15 @@ describe('buildDevChildEnv (#446)', () => {
     });
     expect(env['FRONTMCP_HTTP_ENTRY_PATH']).toBe('/from-shell');
   });
+
+  it('applies config-derived security header env below the real environment', () => {
+    const env = buildDevChildEnv({
+      effectiveEnv: {},
+      baseEnv: { FRONTMCP_FRAME_OPTIONS: 'SAMEORIGIN' },
+      port: 3000,
+      securityHeadersEnv: { FRONTMCP_FRAME_OPTIONS: 'DENY', FRONTMCP_HSTS: 'max-age=1' },
+    });
+    expect(env['FRONTMCP_FRAME_OPTIONS']).toBe('SAMEORIGIN');
+    expect(env['FRONTMCP_HSTS']).toBe('max-age=1');
+  });
 });

@@ -260,10 +260,12 @@ http: {
 }
 ```
 
-| Option            | Type               | Default                   | Notes                                                                  |
-| ----------------- | ------------------ | ------------------------- | ---------------------------------------------------------------------- |
-| `bodyLimit`       | `number \| string` | `'4mb'`                   | Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, `'2gb'`, …). |
-| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies.   |
+| Option            | Type               | Default                   | Notes                                                                                    |
+| ----------------- | ------------------ | ------------------------- | ---------------------------------------------------------------------------------------- |
+| `bodyLimit`       | `number \| string` | `'4mb'`                   | Bytes (number) or body-parser string (`'4mb'`, `'500kb'`, `'2gb'`, …).                   |
+| `urlencodedLimit` | `number \| string` | falls back to `bodyLimit` | Independent override for `application/x-www-form-urlencoded` bodies (Express host only). |
+
+The fetch handler used on Cloudflare Workers, Vercel Edge and Deno enforces `bodyLimit` too: it answers 413 for an oversized `Content-Length` without reading the body and stops reading a chunked body at the limit.
 
 Requests exceeding the configured limit receive a structured JSON-RPC 413
 response — never an Express HTML error page:

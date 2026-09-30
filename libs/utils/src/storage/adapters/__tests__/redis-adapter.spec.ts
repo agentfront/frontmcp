@@ -5,7 +5,7 @@
  */
 
 import { StorageConfigError, StorageConnectionError } from '../../errors';
-import { RedisStorageAdapter } from '../redis';
+import { createRedisClient, RedisStorageAdapter } from '../redis';
 
 // Mock Redis client
 const createMockRedisClient = () => ({
@@ -996,6 +996,56 @@ describe('RedisStorageAdapter', () => {
         expect(event).toBe('error');
         expect(mockRedisInstance.removeListener).toHaveBeenCalledWith('error', listener);
       });
+
+      it('should keep a permanent error listener after connecting so a later outage is not unhandled', async () => {
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+
+        await adapter.connect();
+
+        const errorListeners = mockRedisInstance.on.mock.calls.filter(([name]) => name === 'error');
+        expect(errorListeners).toHaveLength(2);
+        const [, permanent] = errorListeners[1];
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        expect(() => permanent(new Error('ECONNRESET'))).not.toThrow();
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
+      });
+
+      it('should remove the permanent error listener on disconnect', async () => {
+        const adapter = new RedisStorageAdapter({ url: 'redis://localhost:6379' });
+        await adapter.connect();
+        const errorListeners = mockRedisInstance.on.mock.calls.filter(([name]) => name === 'error');
+        const [, permanent] = errorListeners[1];
+
+        await adapter.disconnect();
+
+        expect(mockRedisInstance.removeListener).toHaveBeenCalledWith('error', permanent);
+      });
     });
+  });
+});
+
+describe('createRedisClient', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Object.assign(mockRedisInstance, createMockRedisClient());
+  });
+
+  it('builds a client from host options and attaches an error listener', () => {
+    const client = createRedisClient({ host: 'redis.local', port: 6380, password: 'x', db: 2, tls: true });
+
+    expect(client).toBe(mockRedisInstance);
+    expect(MockRedisClass).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'redis.local', port: 6380, db: 2, tls: {} }),
+    );
+    expect(mockRedisInstance.on).toHaveBeenCalledWith('error', expect.any(Function));
+  });
+
+  it('passes a url through and defaults host and port otherwise', () => {
+    createRedisClient({ url: 'redis://h:1' });
+    expect(MockRedisClass).toHaveBeenLastCalledWith('redis://h:1', expect.any(Object));
+
+    createRedisClient({});
+    expect(MockRedisClass).toHaveBeenLastCalledWith(expect.objectContaining({ host: 'localhost', port: 6379 }));
   });
 });

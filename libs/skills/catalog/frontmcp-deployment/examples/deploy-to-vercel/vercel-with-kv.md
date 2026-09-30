@@ -82,3 +82,5 @@ curl https://your-project.vercel.app/healthz
 ## Related
 
 - See `deploy-to-vercel` for KV provisioning, environment variables, and cold start optimization
+
+> **Tasks and elicitation on Vercel KV:** Vercel KV has no pub/sub, so background tasks and elicitation cannot use it. The server still starts — tasks are skipped with a `[tasks]` startup warning unless `tasks: { enabled: true }` is set (which keeps `TaskStoreNotSupportedError`), and elicitation throws `ElicitationNotSupportedError` only when its store actually resolves to Vercel KV. Give tasks their own backend with `tasks: { redis }` or `tasks: { sqlite }` (an explicit backend ignores the ambient `KV_REST_API_URL`).

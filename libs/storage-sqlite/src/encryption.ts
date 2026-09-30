@@ -6,13 +6,29 @@
  */
 
 import {
-  encryptAesGcm,
+  base64urlDecode,
+  base64urlEncode,
   decryptAesGcm,
+  encryptAesGcm,
   hkdfSha256,
   randomBytes,
-  base64urlEncode,
-  base64urlDecode,
 } from '@frontmcp/utils';
+
+/**
+ * Thrown when a stored value cannot be decrypted: the encryption secret differs
+ * from the one the value was written with, or the value was tampered with.
+ */
+export class SqliteDecryptionError extends Error {
+  readonly code = 'SQLITE_DECRYPTION_FAILED';
+  constructor() {
+    super(
+      'SqliteKvStore: failed to decrypt a stored value. The encryption secret differs from the one the database ' +
+        'was written with (or the value is corrupted). Restore the original secret, or delete the database file ' +
+        'to start empty.',
+    );
+    this.name = 'SqliteDecryptionError';
+  }
+}
 
 const HKDF_SALT = new TextEncoder().encode('frontmcp-sqlite-storage-v1');
 const HKDF_INFO = new TextEncoder().encode('aes-256-gcm-value-encryption');
@@ -68,6 +84,9 @@ export function decryptValue(key: Uint8Array, encrypted: string): string {
   const tag = base64urlDecode(parts[1]);
   const ciphertext = base64urlDecode(parts[2]);
 
-  const plaintext = decryptAesGcm(key, ciphertext, iv, tag);
-  return new TextDecoder().decode(plaintext);
+  try {
+    return new TextDecoder().decode(decryptAesGcm(key, ciphertext, iv, tag));
+  } catch {
+    throw new SqliteDecryptionError();
+  }
 }

@@ -85,12 +85,16 @@ Runs all registered probes in parallel, returns aggregate status with catalog in
 | CLI (stdio)                | Yes        | No        | No HTTP server                     |
 | Browser                    | Yes        | Yes       | Full support                       |
 
+<Note>
+  The fetch handler (Cloudflare Workers, Vercel Edge, Deno) reads the same `health` settings: `healthzPath`, `readyzPath`, `readyz.enabled` and `enabled: false` (which answers 404). `/readyz` is off on those runtimes unless you set `readyz.enabled: true`.
+</Note>
+
 ## Auto-Discovered Probes
 
 FrontMCP automatically registers probes for infrastructure it knows about:
 
 - **Session store** --- pings Redis or Vercel KV when transport persistence is configured
-- **Remote MCP apps** --- reads health status from the built-in `HealthCheckManager`
+- **Remote MCP apps** --- reads health status from the built-in `HealthCheckManager`. Until the first check completes the probe reports `degraded` (`state: unknown`), which keeps `/readyz` at 200. A remote that fails its checks is `unhealthy` and turns `/readyz` into 503.
 
 No configuration needed --- if you configure `redis` + `transport.persistence`, the session-store probe appears automatically.
 

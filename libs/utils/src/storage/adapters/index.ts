@@ -6,7 +6,8 @@
 
 export { BaseStorageAdapter } from './base';
 export { MemoryStorageAdapter } from './memory';
-export { RedisStorageAdapter } from './redis';
+export { RedisStorageAdapter, createRedisClient } from './redis';
+export type { CreateRedisClientOptions } from './redis';
 export { VercelKvStorageAdapter } from './vercel-kv';
 export { UpstashStorageAdapter } from './upstash';
 export { CloudflareKvStorageAdapter } from './cloudflare-kv';

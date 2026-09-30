@@ -20,7 +20,7 @@ Every FrontMCP instance has a stable machine ID used for session ownership, HA h
 | 7        | Random UUID                 | Production fallback                          |
 
 <Note>
-  The `.frontmcp/machine-id` file is only created in development (`NODE_ENV !== 'production'`). In production without an env var, a random UUID is generated on each startup.
+  The `.frontmcp/machine-id` file is only read and written in standalone development (`NODE_ENV !== 'production'`, no `MACHINE_ID`). It is created on the first `getMachineId()` call, in the background and without blocking startup, with the directory at mode `0700` and the file at `0600`. It is never written in `distributed` (the ID comes from `HOSTNAME` / `os.hostname()`) or `serverless` mode. In production without an env var, a random UUID is generated on each startup, so session ownership does not survive a restart: set `MACHINE_ID` or run in distributed mode.
 </Note>
 
 ## Usage

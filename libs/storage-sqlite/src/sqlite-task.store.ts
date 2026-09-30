@@ -29,7 +29,7 @@ import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
-import { openDatabase } from './open-database';
+import { openDatabase, withBusyRetry } from './open-database';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 // ───────────────────────────────────────────────────────────────
@@ -167,11 +167,10 @@ export class SqliteTaskStore implements TaskStoreInterface {
 
   constructor(options: SqliteTaskStoreOptions) {
     // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteTaskStore');
-
-    if (options.walMode !== false) {
-      this.db.pragma('journal_mode = WAL');
-    }
+    this.db = openDatabase(options.path, 'SqliteTaskStore', {
+      busyTimeoutMs: options.busyTimeoutMs,
+      walMode: options.walMode !== false,
+    });
 
     this.logger = options.logger;
     this.liveness = options.livenessProbe ?? defaultLivenessProbe;
@@ -180,7 +179,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
     }
     this.emitter.setMaxListeners(200);
 
-    this.initSchema();
+    withBusyRetry(() => this.initSchema());
     this.prepareStatements();
 
     const cleanupInterval = options.ttlCleanupIntervalMs ?? 60_000;

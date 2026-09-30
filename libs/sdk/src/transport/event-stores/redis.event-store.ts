@@ -1,4 +1,5 @@
 import { type EventId, type EventStore, type JSONRPCMessage, type StreamId } from '@frontmcp/protocol';
+import { attachRedisErrorListener } from '@frontmcp/utils';
 
 import { type RedisOptionsInput } from '../../common';
 import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
@@ -107,6 +108,9 @@ export class RedisEventStore implements EventStore {
         lazyConnect: true,
         enableReadyCheck: false,
         maxRetriesPerRequest: 3,
+      });
+      attachRedisErrorListener(this.client as Parameters<typeof attachRedisErrorListener>[0], {
+        label: 'RedisEventStore',
       });
 
       await (this.client as { connect: () => Promise<void> }).connect();

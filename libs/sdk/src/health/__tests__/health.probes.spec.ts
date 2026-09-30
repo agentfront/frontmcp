@@ -1,4 +1,4 @@
-import { createStorageProbe, createRemoteAppProbe, createTransportSessionProbe } from '../health.probes';
+import { createRemoteAppProbe, createStorageProbe, createTransportSessionProbe } from '../health.probes';
 
 describe('createStorageProbe', () => {
   it('should return healthy when ping succeeds', async () => {
@@ -99,17 +99,17 @@ describe('createRemoteAppProbe', () => {
     expect(result.error).toBe('Connection timeout');
   });
 
-  it('should return unhealthy when no health check result available', async () => {
+  it('should report degraded (unknown), not unhealthy, before the first health check completes (#646)', async () => {
     const provider = { getHealthStatus: jest.fn().mockReturnValue(undefined) };
     const probe = createRemoteAppProbe('unknown-svc', provider);
 
     const result = await probe.check();
 
-    expect(result.status).toBe('unhealthy');
-    expect(result.error).toBe('No health check result available');
+    expect(result.status).toBe('degraded');
+    expect(result.details).toEqual({ state: 'unknown' });
   });
 
-  it('should return unhealthy for unknown status', async () => {
+  it('should report degraded (unknown) for a checker that has not failed or passed enough yet (#646)', async () => {
     const provider = {
       getHealthStatus: jest.fn().mockReturnValue({
         status: 'unknown',
@@ -122,7 +122,24 @@ describe('createRemoteAppProbe', () => {
 
     const result = await probe.check();
 
+    expect(result.status).toBe('degraded');
+    expect(result.details).toEqual({ state: 'unknown' });
+  });
+
+  it('should stay unhealthy for an unknown status that already has failed checks', async () => {
+    const provider = {
+      getHealthStatus: jest.fn().mockReturnValue({
+        status: 'unknown',
+        lastChecked: new Date(),
+        consecutiveFailures: 1,
+        consecutiveSuccesses: 0,
+        error: 'ECONNREFUSED',
+      }),
+    };
+    const result = await createRemoteAppProbe('down-svc', provider).check();
+
     expect(result.status).toBe('unhealthy');
+    expect(result.error).toBe('ECONNREFUSED');
   });
 });
 
