@@ -1,3 +1,4 @@
+import { GuardError, GuardStorageUnavailableError } from '../../errors';
 import { createGuardManager } from '../guard.factory';
 import { GuardManager } from '../guard.manager';
 import type { GuardConfig, GuardLogger } from '../types';
@@ -59,7 +60,9 @@ describe('createGuardManager', () => {
     expect(mockCreateStorage).toHaveBeenCalledWith(config.storage);
     expect(mockCreateMemoryStorage).not.toHaveBeenCalled();
     expect(mockConnect).toHaveBeenCalled();
-    expect(mockNamespace).toHaveBeenCalledWith('test:guard:');
+    // The namespace adds its own separator, so the trailing colon is dropped
+    // rather than doubled (`test:guard::…`).
+    expect(mockNamespace).toHaveBeenCalledWith('test:guard');
     expect(manager).toBeInstanceOf(GuardManager);
   });
 
@@ -88,7 +91,13 @@ describe('createGuardManager', () => {
 
     await createGuardManager({ config });
 
-    expect(mockNamespace).toHaveBeenCalledWith('mcp:guard:');
+    expect(mockNamespace).toHaveBeenCalledWith('mcp:guard');
+  });
+
+  it('passes a prefix without a trailing colon through unchanged', async () => {
+    await createGuardManager({ config: { enabled: true, keyPrefix: 'acme:rl' } });
+
+    expect(mockNamespace).toHaveBeenCalledWith('acme:rl');
   });
 
   it('should log initialization details when logger is provided', async () => {
@@ -154,6 +163,54 @@ describe('createGuardManager', () => {
     };
 
     await expect(createGuardManager({ config })).resolves.toBeInstanceOf(GuardManager);
+  });
+});
+
+describe('createGuardManager — throttle.storage is unreachable', () => {
+  const redisStorage = {
+    type: 'redis',
+    redis: { config: { host: 'localhost' } },
+  } as unknown as GuardConfig['storage'];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rejects with a guard error that names throttle.storage and the memory fallback', async () => {
+    mockCreateStorage.mockRejectedValueOnce(
+      new Error('Failed to connect to Redis: connect ECONNREFUSED 127.0.0.1:6379'),
+    );
+
+    const failure = createGuardManager({ config: { enabled: true, storage: redisStorage } });
+
+    await expect(failure).rejects.toBeInstanceOf(GuardStorageUnavailableError);
+    await expect(failure).rejects.toBeInstanceOf(GuardError);
+    await expect(failure).rejects.toThrow(/throttle\.storage/);
+    await expect(failure).rejects.toThrow(/throttle\.storage\.fallback: 'memory'/);
+    await expect(failure).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it('keeps the storage failure as the cause and reports the backend type', async () => {
+    const cause = new Error('connect ECONNREFUSED 127.0.0.1:6379');
+    mockCreateStorage.mockRejectedValueOnce(cause);
+
+    const error = await createGuardManager({ config: { enabled: true, storage: redisStorage } }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(GuardStorageUnavailableError);
+    const unavailable = error as GuardStorageUnavailableError;
+    expect(unavailable.cause).toBe(cause);
+    expect(unavailable.storageType).toBe('redis');
+    expect(unavailable.code).toBe('GUARD_STORAGE_UNAVAILABLE');
+  });
+
+  it('wraps a connect() failure on the created storage the same way', async () => {
+    mockConnect.mockRejectedValueOnce(new Error('connection lost'));
+
+    await expect(createGuardManager({ config: { enabled: true, storage: redisStorage } })).rejects.toBeInstanceOf(
+      GuardStorageUnavailableError,
+    );
   });
 });
 

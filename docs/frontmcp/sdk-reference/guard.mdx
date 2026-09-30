@@ -24,17 +24,17 @@ When using `@frontmcp/sdk`, guard features are integrated automatically via the 
 
 Top-level configuration for the guard system. Passed to `@FrontMcp({ throttle: ... })` or `createGuardManager()`.
 
-| Field                | Type                | Default        | Description                                              |
-| -------------------- | ------------------- | -------------- | -------------------------------------------------------- |
-| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features                     |
-| `storage`            | `StorageConfig`     | in-memory      | Storage backend configuration                            |
-| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys                              |
-| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests                       |
-| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit                                 |
-| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default rate limit for entities without explicit config  |
-| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default concurrency for entities without explicit config |
-| `defaultTimeout`     | `TimeoutConfig`     | —              | Default timeout for entity execution                     |
-| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration                               |
+| Field                | Type                | Default        | Description                                                                                         |
+| -------------------- | ------------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features                                                                |
+| `storage`            | `StorageConfig`     | in-memory      | Storage backend configuration (`{ type: 'redis', redis: { config \| url }, fallback? }`, see below) |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys; a trailing `:` is dropped, so keys read `mcp:guard:<entity>:…`         |
+| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests                                                                  |
+| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit                                                                            |
+| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default rate limit for entities without explicit config                                             |
+| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default concurrency for entities without explicit config                                            |
+| `defaultTimeout`     | `TimeoutConfig`     | —              | Default timeout for entity execution                                                                |
+| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration                                                                          |
 
 ### `RateLimitConfig`
 
@@ -377,9 +377,11 @@ async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardMa
 **Behavior:**
 
 1. Creates storage backend from `config.storage` (or in-memory if not set)
-2. Connects the storage backend
-3. Creates namespaced storage with `config.keyPrefix`
+2. Connects the storage backend. A configured backend that cannot be created or reached rejects with `GuardStorageUnavailableError` — rate limits fail closed — unless `config.storage.fallback` is `'memory'`. `createStorage` defaults `fallback` to `'error'` in production and `'memory'` otherwise.
+3. Creates namespaced storage with `config.keyPrefix`, minus any trailing `:` (the namespace adds its own separator)
 4. Returns initialized `GuardManager`
+
+`config.storage` is a `StorageConfig` from `@frontmcp/utils`: `type` selects the backend and its options go under the key of that name — `{ type: 'redis', redis: { config: { host, port, password?, tls? } } }`, `{ type: 'redis', redis: { url } }`, `{ type: 'vercel-kv', vercelKv: { url, token } }` or `{ type: 'upstash', upstash: { url, token } }`. A block without `type` is auto-detected from the environment.
 
 ```typescript
 import { createGuardManager } from '@frontmcp/guard';
@@ -387,12 +389,16 @@ import { createGuardManager } from '@frontmcp/guard';
 const manager = await createGuardManager({
   config: {
     enabled: true,
-    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    storage: { type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } },
     global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
   },
   logger: console,
 });
 ```
+
+<Note>
+  Keys are `mcp:guard:<entity>:<partition>:<kind>:…`. Before 1.8.6 the default prefix wrote `mcp:guard::<entity>:…`; the two versions do not read each other's counters, so limits briefly split during a rolling deploy.
+</Note>
 
 ---
 
@@ -537,6 +543,17 @@ For your own code to throw when a client IP is not on an allow list and `default
 | `code`       | `string` | `'IP_NOT_ALLOWED'`      |
 | `statusCode` | `number` | `403`                   |
 | `clientIp`   | `string` | The rejected IP address |
+
+### `GuardStorageUnavailableError`
+
+Thrown by `createGuardManager()` when the configured `storage` backend cannot be created or reached — at SDK startup, when `throttle.storage` is down. The message names `throttle.storage` and says to set `throttle.storage.fallback: 'memory'` to start with per-instance counters.
+
+| Property      | Type      | Value                                       |
+| ------------- | --------- | ------------------------------------------- |
+| `code`        | `string`  | `'GUARD_STORAGE_UNAVAILABLE'`               |
+| `statusCode`  | `number`  | `503`                                       |
+| `storageType` | `string`  | The configured `storage.type` (or `'auto'`) |
+| `cause`       | `unknown` | The error the storage backend failed with   |
 
 ---
 

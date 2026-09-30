@@ -1,10 +1,11 @@
 import {
-  GuardError,
-  ExecutionTimeoutError,
   ConcurrencyLimitError,
-  QueueTimeoutError,
+  ExecutionTimeoutError,
+  GuardError,
+  GuardStorageUnavailableError,
   IpBlockedError,
   IpNotAllowedError,
+  QueueTimeoutError,
 } from '../index';
 
 describe('GuardError', () => {
@@ -90,5 +91,30 @@ describe('IpNotAllowedError', () => {
     expect(err.clientIp).toBe('10.0.0.1');
     expect(err).toBeInstanceOf(GuardError);
     expect(err).toBeInstanceOf(IpNotAllowedError);
+  });
+});
+
+describe('GuardStorageUnavailableError', () => {
+  it('should set all properties correctly', () => {
+    const cause = new Error('connect ECONNREFUSED 127.0.0.1:6379');
+    const err = new GuardStorageUnavailableError('redis', cause);
+
+    expect(err.message).toBe(
+      'throttle.storage (redis) is unavailable: connect ECONNREFUSED 127.0.0.1:6379. Rate limits fail closed, ' +
+        "so the server will not start without it. Set throttle.storage.fallback: 'memory' to start with " +
+        'per-instance counters instead.',
+    );
+    expect(err.code).toBe('GUARD_STORAGE_UNAVAILABLE');
+    expect(err.statusCode).toBe(503);
+    expect(err.name).toBe('GuardStorageUnavailableError');
+    expect(err.storageType).toBe('redis');
+    expect(err.cause).toBe(cause);
+    expect(err).toBeInstanceOf(GuardError);
+    expect(err).toBeInstanceOf(GuardStorageUnavailableError);
+  });
+
+  it('should describe a non-Error cause and a missing one', () => {
+    expect(new GuardStorageUnavailableError('auto', 'timeout').message).toContain('unavailable: timeout.');
+    expect(new GuardStorageUnavailableError('auto').message).toContain('unavailable: unknown error.');
   });
 });

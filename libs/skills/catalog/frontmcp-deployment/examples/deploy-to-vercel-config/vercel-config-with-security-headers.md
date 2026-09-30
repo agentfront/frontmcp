@@ -25,11 +25,12 @@ The Vercel adapter emits a minimal `vercel.json` (version + buildCommand + insta
 
 ```json
 // vercel.json — extends the auto-generated minimum with regions + headers.
-// The adapter regenerates buildCommand/installCommand from your lockfile,
-// so keep them aligned (or let the build rewrite them).
+// The build never overwrites an existing vercel.json, so keep buildCommand
+// building the vercel target (`<exec> frontmcp build --target vercel`) —
+// `yarn build` would run the config's deployments and deploy nothing.
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install",
   "regions": ["iad1"],
   "headers": [

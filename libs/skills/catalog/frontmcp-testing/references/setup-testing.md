@@ -275,6 +275,7 @@ test.use({
 });
 
 test('server exposes expected tools', async ({ mcp }) => {
+  // Every page: `list()` follows `nextCursor`, so this holds past 40 tools too.
   const tools = await mcp.tools.list();
   expect(tools).toContainTool('create_record');
   expect(tools).toContainTool('delete_record');
@@ -586,7 +587,7 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 ### E2E Tests
 
 - [ ] Fixture-based tests use `test.use({ server, port })` for server lifecycle
-- [ ] Tools appear in `tools/list` response via `toContainTool()` matcher
+- [ ] Tools appear in `tools/list` response via `toContainTool()` matcher (`mcp.tools.list()` and the other `list()` calls return every page, so no cursor handling is needed)
 - [ ] Tool calls return expected results via `toBeSuccessful()` matcher
 - [ ] Authenticated tests use `TestTokenFactory` and verify rejection without token
 

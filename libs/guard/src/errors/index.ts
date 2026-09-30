@@ -5,4 +5,5 @@ export {
   QueueTimeoutError,
   IpBlockedError,
   IpNotAllowedError,
+  GuardStorageUnavailableError,
 } from './errors';

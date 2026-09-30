@@ -2,9 +2,13 @@
  * Tests for the parseInput stage helpers of HandleStreamableHttpFlow.
  *
  * Validates session resolution priority:
- * 1. mcp-session-id header (client reconnect)
+ * 1. mcp-session-id header, only when `session:verify` verified that exact id
  * 2. authorization.session (from auth verification)
  * 3. Create new session (fresh initialize)
+ *
+ * A header `session:verify` did not verify (minted under another
+ * MCP_SESSION_SECRET, for another token, or forged) is answered 404 so the
+ * client re-initializes; it is never used as a transport key.
  */
 
 import { ServerRequestTokens } from '../../../common';
@@ -49,29 +53,35 @@ describe('HandleStreamableHttpFlow - parseInput session resolution', () => {
       expect(result.createdNew).toBe(false);
     });
 
-    it('should use header ID without payload when header differs from auth session', () => {
-      const authSession = { id: 'old-session', payload: { protocol: 'streamable-http' as const } };
+    it('should respond 404 when the header differs from the verified session', () => {
+      // An anonymous mode mints a fresh session when the presented id does not
+      // decrypt under this deployment's secret; the raw header must not win.
+      const authSession = { id: 'freshly-minted', payload: { protocol: 'streamable-http' as const } };
+      const createSession = jest.fn(() => ({ id: 'unused' }));
 
       const result = resolveStreamableHttpSession({
-        rawHeader: 'reconnect-session-xyz',
+        rawHeader: 'minted-under-another-secret',
         authorizationSession: authSession,
-        createSession: () => ({ id: 'unused' }),
+        createSession,
       });
 
-      expect(result.session?.id).toBe('reconnect-session-xyz');
-      expect(result.session?.payload).toBeUndefined();
+      expect(result.responded404).toBe(true);
+      expect(result.session).toBeUndefined();
       expect(result.createdNew).toBe(false);
+      expect(createSession).not.toHaveBeenCalled();
     });
 
-    it('should use header ID when auth session is undefined', () => {
+    it('should respond 404 when a header was sent but no session was verified', () => {
+      // Authenticated modes verify the id against the caller's token; an id that
+      // fails that check leaves authorization.session unset.
       const result = resolveStreamableHttpSession({
         rawHeader: 'client-session-id',
         authorizationSession: undefined,
         createSession: () => ({ id: 'unused' }),
       });
 
-      expect(result.session?.id).toBe('client-session-id');
-      expect(result.session?.payload).toBeUndefined();
+      expect(result.responded404).toBe(true);
+      expect(result.session).toBeUndefined();
       expect(result.createdNew).toBe(false);
     });
   });

@@ -364,6 +364,24 @@ describe('DirectClientImpl', () => {
   });
 
   describe('listTools', () => {
+    it('should return every page of tools/list', async () => {
+      mockMcpClient.listTools.mockImplementation(async (params?: { cursor?: string }) =>
+        params?.cursor === 'page-2'
+          ? { tools: [{ name: 'second', inputSchema: { type: 'object', properties: {} } }] }
+          : { tools: [{ name: 'first', inputSchema: { type: 'object', properties: {} } }], nextCursor: 'page-2' },
+      );
+      const mockScope = createMockScope();
+      const client = await DirectClientImpl.create(mockScope as Scope);
+
+      const tools = (await client.listTools()) as Array<{ name: string }>;
+
+      expect(tools.map((t) => t.name)).toEqual(['first', 'second']);
+      expect(mockMcpClient.listTools.mock.calls.map(([params]: [unknown]) => params)).toEqual([
+        undefined,
+        { cursor: 'page-2' },
+      ]);
+    });
+
     it('should format tools for detected platform', async () => {
       const mockScope = createMockScope();
       const client = await DirectClientImpl.create(mockScope as Scope, {

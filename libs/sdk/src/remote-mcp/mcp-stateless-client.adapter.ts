@@ -14,16 +14,27 @@ import { type ServerCapabilities } from '@frontmcp/protocol';
 
 import { McpStatelessClient, type McpStatelessClientOptions } from '../transport/mcp-20260728';
 
+/** One page of a list request, as `McpClientService` pages through it. */
+interface ListPageParams {
+  cursor?: string;
+}
+
 /** The `Client` surface `McpClientService` depends on. */
 export interface RemoteClientLike {
-  listTools(): Promise<{ tools: unknown[] }>;
+  listTools(params?: ListPageParams): Promise<{ tools: unknown[]; nextCursor?: string }>;
   callTool(params: { name: string; arguments?: Record<string, unknown> }): Promise<unknown>;
-  listResources(): Promise<{ resources: unknown[] }>;
+  listResources(params?: ListPageParams): Promise<{ resources: unknown[]; nextCursor?: string }>;
   readResource(params: { uri: string }): Promise<unknown>;
-  listPrompts(): Promise<{ prompts: unknown[] }>;
+  listPrompts(params?: ListPageParams): Promise<{ prompts: unknown[]; nextCursor?: string }>;
   getPrompt(params: { name: string; arguments?: Record<string, string> }): Promise<unknown>;
   getServerCapabilities(): ServerCapabilities | undefined;
   close(): Promise<void>;
+}
+
+/** `{ nextCursor }` when a list result carries one, else nothing. */
+function nextCursorOf(result: Record<string, unknown>): { nextCursor?: string } {
+  const next = result['nextCursor'];
+  return typeof next === 'string' && next.length > 0 ? { nextCursor: next } : {};
 }
 
 export class McpStatelessClientAdapter implements RemoteClientLike {
@@ -49,10 +60,11 @@ export class McpStatelessClientAdapter implements RemoteClientLike {
     return this.capabilities;
   }
 
-  async listTools(): Promise<{ tools: unknown[] }> {
+  async listTools(): Promise<{ tools: unknown[]; nextCursor?: string }> {
     // Goes through the client's own listTools so tools with invalid
     // `x-mcp-header` annotations are dropped and the schemas are cached for
-    // header mirroring on subsequent calls.
+    // header mirroring on subsequent calls. It already follows every page, so
+    // there is no cursor to hand back.
     return { tools: await this.client.listTools() };
   }
 
@@ -60,18 +72,24 @@ export class McpStatelessClientAdapter implements RemoteClientLike {
     return this.client.callTool(params.name, params.arguments ?? {});
   }
 
-  async listResources(): Promise<{ resources: unknown[] }> {
-    const result = await this.client.listResources();
-    return { resources: Array.isArray(result['resources']) ? (result['resources'] as unknown[]) : [] };
+  async listResources(params?: ListPageParams): Promise<{ resources: unknown[]; nextCursor?: string }> {
+    const result = await this.client.listResources(params?.cursor);
+    return {
+      resources: Array.isArray(result['resources']) ? (result['resources'] as unknown[]) : [],
+      ...nextCursorOf(result),
+    };
   }
 
   async readResource(params: { uri: string }): Promise<unknown> {
     return this.client.readResource(params.uri);
   }
 
-  async listPrompts(): Promise<{ prompts: unknown[] }> {
-    const result = await this.client.listPrompts();
-    return { prompts: Array.isArray(result['prompts']) ? (result['prompts'] as unknown[]) : [] };
+  async listPrompts(params?: ListPageParams): Promise<{ prompts: unknown[]; nextCursor?: string }> {
+    const result = await this.client.listPrompts(params?.cursor);
+    return {
+      prompts: Array.isArray(result['prompts']) ? (result['prompts'] as unknown[]) : [],
+      ...nextCursorOf(result),
+    };
   }
 
   async getPrompt(params: { name: string; arguments?: Record<string, string> }): Promise<unknown> {

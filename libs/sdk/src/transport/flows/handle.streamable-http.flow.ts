@@ -59,6 +59,16 @@ export const stateSchema = z.object({
 type StreamableHttpSession = z.infer<typeof stateSchema>['session'];
 export type StreamableHttpRequestType = NonNullable<z.infer<typeof stateSchema>['requestType']>;
 
+/**
+ * Resolve the session a non-initialize streamable-HTTP request belongs to.
+ *
+ * A presented `mcp-session-id` is honored only when `session:verify` verified
+ * that exact id (it decrypts under this deployment's `MCP_SESSION_SECRET` and
+ * its signature matches the caller). Anything else is answered as an unknown
+ * session (404), which tells the client to re-initialize. Falling back to the
+ * raw header would hand a transport to an id nothing verified: anonymous and
+ * static-key sessions all share `token: ''`, so the id is their only credential.
+ */
 export function resolveStreamableHttpSession(params: {
   rawHeader: unknown;
   authorizationSession?: StreamableHttpSession;
@@ -81,7 +91,7 @@ export function resolveStreamableHttpSession(params: {
       return { session: authorizationSession, createdNew: false, responded404: false };
     }
 
-    return { session: { id: mcpSessionHeader }, createdNew: false, responded404: false };
+    return { responded404: true, createdNew: false };
   }
 
   if (authorizationSession) {
@@ -294,7 +304,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // Initialize + active session (transport exists):
     //   → MCP SDK rejects with 400 "Server already initialized"
     // Non-initialize:
-    //   → Standard resolution: header → auth session → error
+    //   → Standard resolution: verified header → auth session → error; a header
+    //     session:verify did not verify is a 404 (the client re-initializes)
     const body = request.body as { method?: string } | undefined;
     const isInitialize = body?.method === 'initialize';
 
@@ -315,8 +326,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       // For initialize: reuse the session ID if the session verify flow resolved one.
       // authorization.session.id is set when the client sends a valid mcp-session-id
       // header that decrypts successfully (or is recognized in anonymous/public mode).
-      // The payload may be undefined (e.g., nodeId mismatch after restart, terminated
-      // session with cleared cache) — but the id is still the correct transport key.
+      // The payload may be undefined (e.g., terminated session with cleared cache) —
+      // but the id is still the correct transport key.
       if (authorization.session?.id) {
         // Session ID resolved from header — reuse it for re-initialization
         sessionResolution = { session: authorization.session, createdNew: false, responded404: false };
@@ -334,7 +345,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     }
 
     if (sessionResolution.responded404 || !sessionResolution.session) {
-      logger.warn('parseInput: invalid mcp-session-id header');
+      logger.warn('parseInput: mcp-session-id is not a session this server verified');
       this.respond(httpRespond.sessionNotFound('invalid session id'));
       return;
     }

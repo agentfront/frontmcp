@@ -72,7 +72,7 @@ List all available tools.
 mcp.tools.list(): Promise<Tool[]>
 ```
 
-**Returns:** Array of tool definitions with `name`, `description`, and `inputSchema`.
+**Returns:** Array of tool definitions with `name`, `description`, and `inputSchema` — every page. The client follows `nextCursor` until the server stops returning one, so a server with more tools than one page (40 by default) is listed in full. It throws if the server hands back a cursor it already returned, or pages past 1000 pages.
 
 #### tools.call
 
@@ -125,7 +125,7 @@ List static resources.
 mcp.resources.list(): Promise<Resource[]>
 ```
 
-**Returns:** Array of resources with `uri`, `name`, `description`, and `mimeType`.
+**Returns:** Array of resources with `uri`, `name`, `description`, and `mimeType`, across every page (as for [`tools.list`](#tools-list)).
 
 #### resources.listTemplates
 
@@ -135,7 +135,7 @@ List resource templates.
 mcp.resources.listTemplates(): Promise<ResourceTemplate[]>
 ```
 
-**Returns:** Array of templates with `uriTemplate`, `name`, and `description`.
+**Returns:** Array of templates with `uriTemplate`, `name`, and `description`, across every page.
 
 #### resources.read
 
@@ -173,7 +173,7 @@ List available prompts.
 mcp.prompts.list(): Promise<Prompt[]>
 ```
 
-**Returns:** Array of prompts with `name`, `description`, and `arguments`.
+**Returns:** Array of prompts with `name`, `description`, and `arguments`, across every page.
 
 #### prompts.get
 
