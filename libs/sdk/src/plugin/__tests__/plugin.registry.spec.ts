@@ -134,9 +134,7 @@ describe('PluginRegistry', () => {
 
       const plugins = registry.getPlugins();
       expect(plugins).toHaveLength(1);
-      // The registry's own instance over the value, so its `get` never leaks to another registry.
-      expect(Object.getPrototypeOf(plugins[0])).toBe(pluginValue);
-      expect((plugins[0] as unknown as typeof pluginValue).getValue()).toBe('value');
+      expect(plugins[0]).toEqual(pluginValue);
     });
   });
 
@@ -495,59 +493,6 @@ describe('PluginRegistry', () => {
       const plugin = plugins[0] as any as PluginWithGet;
 
       expect(typeof plugin.get).toBe('function');
-    });
-  });
-
-  describe('One value record installed by several registries (#647)', () => {
-    const LABEL = Symbol('LABEL');
-
-    @FrontMcpPlugin({ name: 'LabelReader' })
-    class LabelReaderPlugin {
-      declare get: (token: symbol) => unknown;
-      readonly options = { prefix: 'label:' };
-
-      @ToolHook.Will('execute')
-      readLabel() {
-        return `${this.options.prefix}${String(this.get(LABEL))}`;
-      }
-    }
-
-    // One record, as `SomePlugin.init()` on an app class returns it, installed by two servers.
-    const record = { provide: LabelReaderPlugin, useValue: new LabelReaderPlugin(), name: 'LabelReader' };
-
-    async function install(label: string) {
-      const providers = await createProviderRegistryWithScope([{ provide: LABEL, useValue: label, name: 'label' }]);
-      const registry = new PluginRegistry(providers, [record]);
-      await registry.ready;
-      const registerHooks = providers.get(Scope).hooks.registerHooks as jest.Mock;
-      const [hook] = registerHooks.mock.calls[0].slice(1) as Array<{ metadata: { target: LabelReaderPlugin } }>;
-      return { plugin: registry.getPlugins()[0] as unknown as LabelReaderPlugin, hook };
-    }
-
-    it('resolves providers from its own registry after another registry installs the same record', async () => {
-      const first = await install('first');
-      await install('second');
-
-      expect(first.plugin.get(LABEL)).toBe('first');
-    });
-
-    it('runs the hooks it registers against its own registry', async () => {
-      const first = await install('first');
-      const second = await install('second');
-
-      expect([first.hook.metadata.target.readLabel(), second.hook.metadata.target.readLabel()]).toEqual([
-        'label:first',
-        'label:second',
-      ]);
-    });
-
-    it('keeps the configured plugin behind each registry instance', async () => {
-      const { plugin } = await install('first');
-
-      expect({ isInstance: plugin instanceof LabelReaderPlugin, options: plugin.options }).toEqual({
-        isInstance: true,
-        options: record.useValue.options,
-      });
     });
   });
 

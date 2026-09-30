@@ -458,7 +458,7 @@ const CreateUserTool = tool({
 </CardGroup>
 
 <Tip>
-If you don't provide examples, `codecall:describe` generates one from the tool's intent (create, list, get, update, delete, search). Its arguments come only from the properties your input schema declares: a query-like property (or else the first filter property such as `status`) for a search, the pagination properties the tool really has for a list, the required properties always, and the first value of an enum. With nothing to go on the example passes `{}`; it never invents an argument like `query`. When you provide examples, `codecall:describe` returns only yours (up to 5), with no generated example next to them.
+If you don't provide examples, `codecall:describe` generates one from the tool's intent (create, list, get, update, delete, search). Its arguments come only from the properties your input schema declares: a query-like property (or else the first filter property such as `status`) for a search, the pagination properties the tool really has for a list, the required properties, and the first value of an enum. Values stay within the property's `enum`, `const`, bounds and length limits; a `pattern` or `format` is not generated, so an optional property that has one is left out. With nothing to go on the example passes `{}`; it never invents an argument like `query`. When you provide examples, `codecall:describe` returns only yours (up to 5), with no generated example next to them.
 </Tip>
 
 ---

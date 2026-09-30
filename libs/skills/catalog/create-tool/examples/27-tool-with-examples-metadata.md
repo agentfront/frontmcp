@@ -75,7 +75,7 @@ export class ConvertCurrencyTool extends ToolContext {
 ## Where examples show up
 
 - **`codecall:describe`** — the CodeCall plugin's `describe` tool returns these as the tool's usage examples (capped at 5), with no auto-generated example next to them. This is the one place `examples` is actually read.
-- **Without `examples`** — `codecall:describe` generates one example from the tool's intent, with arguments built only from the input schema's properties (required ones, the query-like or first filter property for a search, the real pagination properties for a list, the first enum value), or `{}` when none fits. It never shows an argument the schema does not declare, such as a made-up `query`.
+- **Without `examples`** — `codecall:describe` generates one example from the tool's intent, with arguments built only from the input schema's properties (required ones, the query-like or first filter property for a search, the real pagination properties for a list, the first enum value), or `{}` when none fits. Values stay within the property's `enum`, `const`, bounds and length limits; a `pattern` or `format` is not generated, so an optional property that has one is left out. It never shows an argument the schema does not declare, such as a made-up `query`.
 - **Not in `tools/list`** — the `tools/list` MCP response does not include `examples`; clients never see them there.
 
 ## When to include `output?`
