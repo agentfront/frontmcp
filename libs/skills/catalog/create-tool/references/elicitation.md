@@ -129,6 +129,7 @@ There are no server-to-client requests in this revision. `this.elicit()` answers
 - A client without the `elicitation` capability for the mode gets error `-32021`. Capabilities come with each request, and `this.elicit()` checks them itself. A session-based check such as `this.scope.notifications.getClientCapabilities(sessionId)` finds nothing here, so call `this.elicit()` directly.
 - `sendElicitationResult` is not listed to 2026-07-28 clients.
 - Anonymous callers keep their `requestState` across rounds (it binds to one shared anonymous principal).
+- **More than one instance? Set `VAULT_SECRET` (or `JWT_SECRET`) to the same value on every instance.** `requestState` is signed with `VAULT_SECRET`, else `JWT_SECRET`, else a random per-process key; under the per-process key a round that lands on another instance (or after a restart) fails verification and the tool asks its first question again. Production servers with `redis`/`transport.persistence` but neither secret log a startup warning, and each rejected round logs `reason: 'bad-signature'` with a `hint` naming `VAULT_SECRET`.
 
 ## See also
 

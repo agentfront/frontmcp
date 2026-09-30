@@ -53,7 +53,7 @@ export default class MyServer {}
 // buildCommand/installCommand are detected from your lockfile.
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install"
 }
 ```

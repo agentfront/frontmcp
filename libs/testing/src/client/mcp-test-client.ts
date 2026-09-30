@@ -58,6 +58,11 @@ const DEFAULT_CLIENT_INFO = {
   name: '@frontmcp/testing',
   version: '0.4.0',
 };
+/**
+ * Most pages one `list()` call follows. A server whose cursor never runs out
+ * fails the spec with a clear error instead of hanging it.
+ */
+const MAX_LIST_PAGES = 1000;
 
 // ═══════════════════════════════════════════════════════════════════
 // MAIN CLIENT CLASS
@@ -376,13 +381,13 @@ export class McpTestClient {
     /**
      * List all available tools
      */
-    list: async (): Promise<Tool[]> => {
-      const response = await this.listTools();
-      if (!response.success || !response.data) {
-        throw new Error(`Failed to list tools: ${response.error?.message}`);
-      }
-      return response.data.tools;
-    },
+    list: async (): Promise<Tool[]> =>
+      this.listAllPages(
+        'tools/list',
+        'tools',
+        (cursor) => this.listTools(cursor),
+        (page) => page.tools,
+      ),
 
     /**
      * Call a tool by name with arguments
@@ -405,24 +410,24 @@ export class McpTestClient {
     /**
      * List all static resources
      */
-    list: async (): Promise<Resource[]> => {
-      const response = await this.listResources();
-      if (!response.success || !response.data) {
-        throw new Error(`Failed to list resources: ${response.error?.message}`);
-      }
-      return response.data.resources;
-    },
+    list: async (): Promise<Resource[]> =>
+      this.listAllPages(
+        'resources/list',
+        'resources',
+        (cursor) => this.listResources(cursor),
+        (page) => page.resources,
+      ),
 
     /**
      * List all resource templates
      */
-    listTemplates: async (): Promise<ResourceTemplate[]> => {
-      const response = await this.listResourceTemplates();
-      if (!response.success || !response.data) {
-        throw new Error(`Failed to list resource templates: ${response.error?.message}`);
-      }
-      return response.data.resourceTemplates;
-    },
+    listTemplates: async (): Promise<ResourceTemplate[]> =>
+      this.listAllPages(
+        'resources/templates/list',
+        'resource templates',
+        (cursor) => this.listResourceTemplates(cursor),
+        (page) => page.resourceTemplates,
+      ),
 
     /**
      * Read a resource by URI
@@ -457,13 +462,13 @@ export class McpTestClient {
     /**
      * List all available prompts
      */
-    list: async (): Promise<Prompt[]> => {
-      const response = await this.listPrompts();
-      if (!response.success || !response.data) {
-        throw new Error(`Failed to list prompts: ${response.error?.message}`);
-      }
-      return response.data.prompts;
-    },
+    list: async (): Promise<Prompt[]> =>
+      this.listAllPages(
+        'prompts/list',
+        'prompts',
+        (cursor) => this.listPrompts(cursor),
+        (page) => page.prompts,
+      ),
 
     /**
      * Get a prompt with arguments
@@ -922,8 +927,42 @@ export class McpTestClient {
     });
   }
 
-  private async listTools(): Promise<McpResponse<ListToolsResult>> {
-    return this.request<ListToolsResult>('tools/list', {});
+  private async listTools(cursor?: string): Promise<McpResponse<ListToolsResult>> {
+    return this.request<ListToolsResult>('tools/list', cursor ? { cursor } : {});
+  }
+
+  /**
+   * Follow `nextCursor` until the server stops returning one, concatenating the
+   * pages. A server that hands back a cursor it already returned, or never stops
+   * paging, fails the call rather than looping.
+   */
+  private async listAllPages<TPage extends { nextCursor?: string }, TItem>(
+    method: string,
+    label: string,
+    fetchPage: (cursor?: string) => Promise<McpResponse<TPage>>,
+    itemsOf: (page: TPage) => TItem[] | undefined,
+  ): Promise<TItem[]> {
+    const items: TItem[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const response = await fetchPage(cursor);
+      if (!response.success || !response.data) {
+        throw new Error(`Failed to list ${label}: ${response.error?.message}`);
+      }
+      items.push(...(itemsOf(response.data) ?? []));
+
+      const next = response.data.nextCursor;
+      if (!next) return items;
+      if (seenCursors.has(next)) {
+        throw new Error(`Failed to list ${label}: ${method} returned the cursor "${next}" twice`);
+      }
+      seenCursors.add(next);
+      cursor = next;
+    }
+
+    throw new Error(`Failed to list ${label}: ${method} did not finish within ${MAX_LIST_PAGES} pages`);
   }
 
   private async callTool(
@@ -956,20 +995,20 @@ export class McpTestClient {
     });
   };
 
-  private async listResources(): Promise<McpResponse<ListResourcesResult>> {
-    return this.request<ListResourcesResult>('resources/list', {});
+  private async listResources(cursor?: string): Promise<McpResponse<ListResourcesResult>> {
+    return this.request<ListResourcesResult>('resources/list', cursor ? { cursor } : {});
   }
 
-  private async listResourceTemplates(): Promise<McpResponse<ListResourceTemplatesResult>> {
-    return this.request<ListResourceTemplatesResult>('resources/templates/list', {});
+  private async listResourceTemplates(cursor?: string): Promise<McpResponse<ListResourceTemplatesResult>> {
+    return this.request<ListResourceTemplatesResult>('resources/templates/list', cursor ? { cursor } : {});
   }
 
   private async readResource(uri: string): Promise<McpResponse<ReadResourceResult>> {
     return this.request<ReadResourceResult>('resources/read', { uri });
   }
 
-  private async listPrompts(): Promise<McpResponse<ListPromptsResult>> {
-    return this.request<ListPromptsResult>('prompts/list', {});
+  private async listPrompts(cursor?: string): Promise<McpResponse<ListPromptsResult>> {
+    return this.request<ListPromptsResult>('prompts/list', cursor ? { cursor } : {});
   }
 
   private async getPrompt(name: string, args?: Record<string, string>): Promise<McpResponse<GetPromptResult>> {

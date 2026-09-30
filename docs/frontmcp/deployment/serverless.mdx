@@ -112,14 +112,29 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/frontmcp/deploy
 ```json
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install"
 }
 ```
 
+The `buildCommand` runs the **vercel target** through your package manager, detected from the lockfile:
+
+| Lockfile                    | `buildCommand`                             | `installCommand` |
+| --------------------------- | ------------------------------------------ | ---------------- |
+| `package-lock.json` or none | `npx frontmcp build --target vercel`       | `npm install`    |
+| `yarn.lock`                 | `yarn frontmcp build --target vercel`      | `yarn install`   |
+| `pnpm-lock.yaml`            | `pnpm exec frontmcp build --target vercel` | `pnpm install`   |
+| `bun.lock` / `bun.lockb`    | `bunx frontmcp build --target vercel`      | `bun install`    |
+
+`frontmcp create --target vercel` writes the same file (with a `$schema` line).
+
 <Note>
-The `buildCommand` and `installCommand` are auto-detected based on the lockfile in your project (yarn, npm, pnpm, or bun). The `vercel` target deploys a **Node.js** handler using Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), not Vercel Edge Runtime. You can customize this file after generation — the build command will not overwrite existing config files.
+The `vercel` target deploys a **Node.js** handler using Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), not Vercel Edge Runtime. You can customize this file after generation — the build command will not overwrite existing config files.
 </Note>
+
+<Warning>
+Do not point `buildCommand` at your `build` script (`npm run build`). That script runs `frontmcp build`, which builds the deployments in your `frontmcp.config` (typically `node`) and never writes `.vercel/output`, so Vercel has nothing to deploy. Config files generated before 1.8.6 used `<pm> run build`; change them to the command in the table above.
+</Warning>
 
 ### How It Works
 

@@ -1,6 +1,10 @@
 // file: libs/cli/src/commands/build/__tests__/adapters.spec.ts
 
+import * as os from 'os';
+import * as path from 'path';
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 import { ADAPTERS, nodeAdapter, lambdaAdapter, cloudflareAdapter, vercelAdapter, distributedAdapter } from '../adapters';
+import { buildVercelJson } from '../adapters/vercel';
 
 describe('Build Adapters', () => {
   describe('ADAPTERS registry', () => {
@@ -270,6 +274,48 @@ describe('Build Adapters', () => {
 
     it('should have postBundle hook', () => {
       expect(vercelAdapter.postBundle).toBeDefined();
+    });
+  });
+
+  describe('vercelAdapter vercel.json commands', () => {
+    // `<pm> run build` runs the project's `build` script — `frontmcp build`, which
+    // builds the config's deployments (e.g. node) and never the vercel target.
+    let dir: string;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-vercel-'));
+    });
+
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    it.each([
+      ['package-lock.json', 'npx frontmcp build --target vercel', 'npm install'],
+      ['yarn.lock', 'yarn frontmcp build --target vercel', 'yarn install'],
+      ['pnpm-lock.yaml', 'pnpm exec frontmcp build --target vercel', 'pnpm install'],
+      ['bun.lockb', 'bunx frontmcp build --target vercel', 'bun install'],
+      ['bun.lock', 'bunx frontmcp build --target vercel', 'bun install'],
+    ])('with %s builds the vercel target', async (lockfile, buildCommand, installCommand) => {
+      await writeFile(path.join(dir, lockfile), '');
+
+      expect(vercelAdapter.getConfig?.(dir)).toEqual({ version: 2, buildCommand, installCommand });
+    });
+
+    it('defaults to npm when there is no lockfile', () => {
+      expect(vercelAdapter.getConfig?.(dir)).toEqual({
+        version: 2,
+        buildCommand: 'npx frontmcp build --target vercel',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('buildVercelJson returns the same commands for a known package manager', () => {
+      expect(buildVercelJson('pnpm')).toEqual({
+        version: 2,
+        buildCommand: 'pnpm exec frontmcp build --target vercel',
+        installCommand: 'pnpm install',
+      });
     });
   });
 

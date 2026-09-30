@@ -6,8 +6,10 @@ import {
   decodeRequestState,
   encodeRequestState,
   getRequestStateKey,
+  getRequestStateKeySource,
   MAX_REQUEST_STATE_BYTES,
   resetRequestStateKey,
+  warnIfRequestStateKeyNotShared,
   type RequestStateBinding,
 } from '../request-state';
 
@@ -149,6 +151,142 @@ describe('getRequestStateKey', () => {
     // Cached, so repeated reads within a process agree — otherwise a retry
     // could never verify state minted moments earlier.
     expect(getRequestStateKey()).toBe(key);
+  });
+});
+
+describe('getRequestStateKeySource', () => {
+  const originalVault = process.env['VAULT_SECRET'];
+  const originalJwt = process.env['JWT_SECRET'];
+
+  function withSecrets(vault: string | undefined, jwt: string | undefined): void {
+    if (vault === undefined) delete process.env['VAULT_SECRET'];
+    else process.env['VAULT_SECRET'] = vault;
+    if (jwt === undefined) delete process.env['JWT_SECRET'];
+    else process.env['JWT_SECRET'] = jwt;
+    resetRequestStateKey();
+  }
+
+  afterEach(() => {
+    withSecrets(originalVault, originalJwt);
+  });
+
+  it('names VAULT_SECRET when it is set, even alongside JWT_SECRET', () => {
+    withSecrets('vault-pepper', 'jwt-pepper');
+    expect(getRequestStateKeySource()).toBe('VAULT_SECRET');
+  });
+
+  it('names JWT_SECRET when only it is set', () => {
+    withSecrets(undefined, 'jwt-pepper');
+    expect(getRequestStateKeySource()).toBe('JWT_SECRET');
+  });
+
+  it('reports a per-process key when neither is set', () => {
+    withSecrets(undefined, undefined);
+    expect(getRequestStateKeySource()).toBe('per-process');
+  });
+
+  it('treats a blank VAULT_SECRET as unset and uses JWT_SECRET', () => {
+    withSecrets('   ', 'jwt-pepper');
+    expect(getRequestStateKeySource()).toBe('JWT_SECRET');
+    expect(Buffer.from(getRequestStateKey()).toString('utf8')).toBe('jwt-pepper');
+  });
+
+  it('treats blank secrets as unset', () => {
+    withSecrets('', ' \t ');
+    expect(getRequestStateKeySource()).toBe('per-process');
+    expect(getRequestStateKey().length).toBe(32);
+  });
+
+  it('agrees with the key already in use', () => {
+    withSecrets(undefined, undefined);
+    getRequestStateKey();
+    // A secret set after the key was cached does not change the key, so the source must not change either.
+    process.env['VAULT_SECRET'] = 'late-secret';
+    expect(getRequestStateKeySource()).toBe('per-process');
+  });
+});
+
+describe('warnIfRequestStateKeyNotShared', () => {
+  const originalVault = process.env['VAULT_SECRET'];
+  const originalJwt = process.env['JWT_SECRET'];
+  const originalNodeEnv = process.env['NODE_ENV'];
+
+  function setup(env: { nodeEnv?: string; vault?: string }): { warn: jest.Mock } {
+    if (env.nodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = env.nodeEnv;
+    if (env.vault === undefined) delete process.env['VAULT_SECRET'];
+    else process.env['VAULT_SECRET'] = env.vault;
+    delete process.env['JWT_SECRET'];
+    resetRequestStateKey();
+    return { warn: jest.fn() };
+  }
+
+  afterEach(() => {
+    if (originalVault === undefined) delete process.env['VAULT_SECRET'];
+    else process.env['VAULT_SECRET'] = originalVault;
+    if (originalJwt === undefined) delete process.env['JWT_SECRET'];
+    else process.env['JWT_SECRET'] = originalJwt;
+    if (originalNodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = originalNodeEnv;
+    resetRequestStateKey();
+  });
+
+  const REDIS = { redis: { provider: 'redis', host: 'localhost' } };
+
+  it('warns in production with a per-process key and top-level redis', () => {
+    const logger = setup({ nodeEnv: 'production' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [message] = logger.warn.mock.calls[0] as [string];
+    expect(message).toContain('Multi-round tools (elicit/sample) restart when a round lands on another instance');
+    expect(message).toContain('set VAULT_SECRET (or JWT_SECRET) to the same value on every instance');
+  });
+
+  it('warns in production with a per-process key and transport persistence', () => {
+    const logger = setup({ nodeEnv: 'production' });
+
+    warnIfRequestStateKeyNotShared({
+      logger,
+      metadata: { transport: { persistence: { redis: { host: 'localhost' } } } },
+    });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns once per process', () => {
+    const logger = setup({ nodeEnv: 'production' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when a shared secret is configured', () => {
+    const logger = setup({ nodeEnv: 'production', vault: 'shared' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet outside production', () => {
+    const logger = setup({ nodeEnv: 'development' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet for a single instance with no shared store', () => {
+    const logger = setup({ nodeEnv: 'production' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: {} });
+    warnIfRequestStateKeyNotShared({ logger, metadata: { transport: { persistence: false } } });
+
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
 

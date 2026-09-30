@@ -58,7 +58,7 @@ vercel env add LOG_LEVEL info
 // Do not add functions/rewrites referencing api/frontmcp.* (no such file).
 {
   "version": 2,
-  "buildCommand": "yarn build",
+  "buildCommand": "yarn frontmcp build --target vercel",
   "installCommand": "yarn install"
 }
 ```

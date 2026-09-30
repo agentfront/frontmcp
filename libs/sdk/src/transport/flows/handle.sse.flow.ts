@@ -68,7 +68,7 @@ declare global {
 }
 
 /** Extract sessionId from query string for legacy SSE /message endpoint */
-function getQuerySessionId(urlPath?: string): string | undefined {
+export function getQuerySessionId(urlPath?: string): string | undefined {
   if (!urlPath) return undefined;
   try {
     const u = new URL(String(urlPath), 'http://local');
@@ -76,6 +76,60 @@ function getQuerySessionId(urlPath?: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+type LegacySseSession = z.infer<typeof stateSchema>['session'];
+
+/**
+ * Resolve the session a legacy SSE request belongs to.
+ *
+ * The client names its session with the `mcp-session-id` header or, on the
+ * legacy `/message` endpoint, the `?sessionId=` query param (header first — the
+ * same order `session:verify` reads them in). A named id is honored only when
+ * `session:verify` verified that exact id; anything else is answered 404 so the
+ * client reconnects. Anonymous and static-key sessions share `token: ''`, so the
+ * id is their only credential — a raw, unverified id must never become a
+ * transport key.
+ */
+export function resolveLegacySseSession(params: {
+  rawHeader: unknown;
+  requestUrl?: string;
+  authorizationSession?: LegacySseSession;
+  createSession: () => LegacySseSession;
+}): { responded404: boolean; session?: LegacySseSession; createdNew: boolean } {
+  const { rawHeader, requestUrl, authorizationSession, createSession } = params;
+  const rawMcpSessionHeader = typeof rawHeader === 'string' ? rawHeader : undefined;
+  const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
+
+  // Also check for sessionId in query params (legacy SSE sends it there)
+  const querySessionId = getQuerySessionId(requestUrl);
+  const validatedQuerySessionId = querySessionId ? validateMcpSessionHeader(querySessionId) : undefined;
+
+  // A header or query param that fails format validation is a 404
+  if (rawHeader !== undefined && !mcpSessionHeader) {
+    return { responded404: true, createdNew: false };
+  }
+  if (querySessionId !== undefined && !validatedQuerySessionId) {
+    return { responded404: true, createdNew: false };
+  }
+
+  // Use header session ID first, then query param (legacy SSE /message endpoint)
+  const effectiveSessionId = mcpSessionHeader ?? validatedQuerySessionId;
+
+  if (effectiveSessionId) {
+    if (authorizationSession?.id === effectiveSessionId) {
+      return { session: authorizationSession, createdNew: false, responded404: false };
+    }
+    return { responded404: true, createdNew: false };
+  }
+
+  if (authorizationSession) {
+    // No id presented: anonymous modes mint the session in session:verify
+    return { session: authorizationSession, createdNew: false, responded404: false };
+  }
+
+  // No session - create new one (initialize request)
+  return { session: createSession(), createdNew: true, responded404: false };
 }
 
 @Flow({
@@ -93,65 +147,33 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
 
-    // CRITICAL: The mcp-session-id header is the client's reference to their session.
-    // We MUST use this exact ID for transport registry lookup.
-    //
-    // Priority 1: Use mcp-session-id header if present (client's session ID for lookup)
-    //             This is the ID the client received from initialize and is referencing.
-    // Priority 2: Use sessionId query param (for legacy SSE /message endpoint)
-    //             The SSE transport sends: /message?sessionId=xxx
-    // Priority 3: Use session from authorization if header matches or is absent
-    // Priority 4: Create new session (first request - no header, no authorization.session)
-    const raw = request.headers?.['mcp-session-id'];
-    const rawMcpSessionHeader = typeof raw === 'string' ? raw : undefined;
-    const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
-
-    // Also check for sessionId in query params (legacy SSE sends it there)
+    // The session is named by the mcp-session-id header or, on the legacy
+    // /message endpoint, the sessionId query param. Only an id session:verify
+    // verified is used for the transport lookup — see resolveLegacySseSession.
     const anyReq = request as { url?: string; path?: string };
-    const querySessionId = getQuerySessionId(anyReq.url ?? anyReq.path);
-    const validatedQuerySessionId = querySessionId ? validateMcpSessionHeader(querySessionId) : undefined;
+    const resolution = resolveLegacySseSession({
+      rawHeader: request.headers?.['mcp-session-id'],
+      requestUrl: anyReq.url ?? anyReq.path,
+      authorizationSession: authorization.session,
+      createSession: () => {
+        // Detect skills_only mode from query params
+        const query = request.query as Record<string, string | string[]> | undefined;
+        const skillsOnlyMode = detectSkillsOnlyMode(query);
 
-    // If client sent a header but validation failed, return 404
-    if (raw !== undefined && !mcpSessionHeader) {
+        return createSessionId('legacy-sse', token, {
+          userAgent: request.headers?.['user-agent'] as string | undefined,
+          platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
+          skillsOnlyMode,
+        });
+      },
+    });
+
+    if (resolution.responded404 || !resolution.session) {
       this.respond(httpRespond.sessionNotFound('invalid session id'));
       return;
     }
 
-    // If client sent query param but validation failed, return 404
-    if (querySessionId !== undefined && !validatedQuerySessionId) {
-      this.respond(httpRespond.sessionNotFound('invalid session id'));
-      return;
-    }
-
-    // Use header session ID first, then query param (legacy SSE /message endpoint)
-    const effectiveSessionId = mcpSessionHeader ?? validatedQuerySessionId;
-
-    let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
-
-    if (effectiveSessionId) {
-      // Client sent session ID - ALWAYS use it for transport lookup
-      // If authorization.session exists and matches, use its payload for protocol detection
-      // If authorization.session differs or is missing, still use header ID (payload may be undefined)
-      if (authorization.session?.id === effectiveSessionId) {
-        session = authorization.session;
-      } else {
-        session = { id: effectiveSessionId };
-      }
-    } else if (authorization.session) {
-      // No header but authorization has session - use it (shouldn't happen in normal flow)
-      session = authorization.session;
-    } else {
-      // No session - create new one (initialize request)
-      // Detect skills_only mode from query params
-      const query = request.query as Record<string, string | string[]> | undefined;
-      const skillsOnlyMode = detectSkillsOnlyMode(query);
-
-      session = createSessionId('legacy-sse', token, {
-        userAgent: request.headers?.['user-agent'] as string | undefined,
-        platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
-        skillsOnlyMode,
-      });
-    }
+    const session = resolution.session;
 
     this.state.set(stateSchema.parse({ token, session }));
   }

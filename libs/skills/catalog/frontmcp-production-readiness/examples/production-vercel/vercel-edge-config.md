@@ -28,6 +28,7 @@ Checklist for verifying the Vercel Build Output API v3 artifact and edge config 
 - [ ] `.vercel/output/functions/index.func/handler.cjs` exists — this is the actual function bundle
 - [ ] `.vercel/output/functions/index.func/.vc-config.json` declares `runtime: nodejs24.x` (the default written by the build adapter) and `handler: "handler.cjs"`
 - [ ] No hand-written `vercel.json` with the obsolete `{ "builds": [...], "routes": [...] }` shape — modern adapter emits `{ "version": 2, "buildCommand": ..., "installCommand": ... }` and routes through Build Output API
+- [ ] `vercel.json` `buildCommand` builds the vercel target — `npx|yarn|pnpm exec|bunx frontmcp build --target vercel` — not `<pm> run build` (the `build` script runs `frontmcp build`, which builds the config's deployments and never writes `.vercel/output`; configs generated before 1.8.6 used `yarn build` / `npm run build`)
 - [ ] No hand-written `src/lambda.ts` / `api/mcp.ts` with a fictional `createVercelHandler(...)` import — the build adapter generates `index.js` that requires your decorated `@FrontMcp` class
 
 ## Runtime config (`@FrontMcp` decorator)
