@@ -1,15 +1,17 @@
-import { type Tree, formatFiles, generateFiles, names as nxNames, type GeneratorCallback } from '@nx/devkit';
 import * as fs from 'fs';
 import { join } from 'path';
-import type { ServerGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, names as nxNames, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizeOptions } from './lib/index.js';
+import type { ServerGeneratorSchema } from './schema.js';
 
 export async function serverGenerator(tree: Tree, schema: ServerGeneratorSchema): Promise<GeneratorCallback | void> {
   return serverGeneratorInternal(tree, schema);
 }
 
 async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema): Promise<GeneratorCallback | void> {
-  const options = normalizeOptions(schema);
+  const options = normalizeOptions(tree, schema);
 
   const templateVars = {
     ...options,

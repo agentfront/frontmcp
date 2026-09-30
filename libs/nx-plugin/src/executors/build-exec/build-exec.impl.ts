@@ -1,26 +1,13 @@
 import type { ExecutorContext } from '../executor-context.js';
-import { execSync } from 'child_process';
+import { runFrontmcp, toAbsolute } from '../frontmcp-cli.js';
 import type { BuildExecExecutorSchema } from './schema.js';
 
 export default async function buildExecExecutor(
   options: BuildExecExecutorSchema,
   context: ExecutorContext,
 ): Promise<{ success: boolean }> {
-  const args: string[] = ['npx', 'frontmcp', 'build', '--target', 'node'];
-  if (options.entry) args.push('--entry', options.entry);
-  if (options.outputPath) args.push('--out-dir', options.outputPath);
-
-  const command = args.join(' ');
-  console.log(`Running: ${command}`);
-
-  try {
-    execSync(command, {
-      cwd: context.root,
-      stdio: 'inherit',
-      env: { ...process.env, FORCE_COLOR: '1' },
-    });
-    return { success: true };
-  } catch {
-    return { success: false };
-  }
+  const args: string[] = ['build', '--target', 'node'];
+  if (options.entry) args.push('--entry', toAbsolute(context, options.entry));
+  if (options.outputPath) args.push('--out-dir', toAbsolute(context, options.outputPath));
+  return runFrontmcp(context, args);
 }

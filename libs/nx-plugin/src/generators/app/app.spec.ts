@@ -1,5 +1,6 @@
+import { readJson, updateJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { appGenerator } from './app';
 
 describe('app generator', () => {
@@ -19,7 +20,7 @@ describe('app generator', () => {
     expect(tree.exists('apps/demo/tsconfig.json')).toBe(true);
     expect(tree.exists('apps/demo/tsconfig.lib.json')).toBe(true);
     expect(tree.exists('apps/demo/tsconfig.spec.json')).toBe(true);
-    expect(tree.exists('apps/demo/jest.config.ts')).toBe(true);
+    expect(tree.exists('apps/demo/jest.config.cjs')).toBe(true);
   });
 
   it('should use custom directory when provided', async () => {
@@ -67,5 +68,84 @@ describe('app generator', () => {
   it('should export default', async () => {
     const mod = await import('./app');
     expect(mod.default).toBe(appGenerator);
+  });
+
+  describe('project layout', () => {
+    it('emits a package.json so `frontmcp build` can name the project', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      expect(readJson(tree, 'apps/demo/package.json')).toMatchObject({ name: 'demo', private: true });
+    });
+
+    it('maps tsconfig path aliases in the jest config from the right depth', async () => {
+      await appGenerator(tree, { name: 'deep', directory: 'apps/team/deep', skipFormat: true });
+
+      const jestConfig = tree.read('apps/team/deep/jest.config.cjs', 'utf-8') ?? '';
+      expect(jestConfig).toContain("join(__dirname, '../../../')");
+      expect(jestConfig).toContain('moduleNameMapper');
+    });
+
+    it('sets sourceRoot relative to the workspace, without the scaffold folder', async () => {
+      await appGenerator(tree, {
+        name: 'demo',
+        directory: 'my-project/apps/demo',
+        workspaceRoot: 'my-project',
+        skipFormat: true,
+      });
+
+      const projectJson = readJson(tree, 'my-project/apps/demo/project.json');
+      expect(projectJson.sourceRoot).toBe('apps/demo/src');
+      expect(projectJson.$schema).toBe('../../node_modules/nx/schemas/project-schema.json');
+    });
+
+    it('extends the base tsconfig from any directory depth', async () => {
+      await appGenerator(tree, { name: 'deep', directory: 'apps/team/platform/deep', skipFormat: true });
+
+      expect(readJson(tree, 'apps/team/platform/deep/tsconfig.json').extends).toBe('../../../../tsconfig.base.json');
+      expect(readJson(tree, 'apps/team/platform/deep/project.json').$schema).toBe(
+        '../../../../node_modules/nx/schemas/project-schema.json',
+      );
+    });
+
+    it('generates self-consistent compiler options so the CLI build does not hit TS5110', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      const { compilerOptions } = readJson(tree, 'apps/demo/tsconfig.json');
+      expect(compilerOptions.module).toBe('commonjs');
+      expect(compilerOptions.moduleResolution).toBe('node10');
+      expect(compilerOptions.experimentalDecorators).toBe(true);
+      expect(compilerOptions.emitDecoratorMetadata).toBe(true);
+      expect(compilerOptions.rootDir).toBeUndefined();
+    });
+
+    it('acknowledges the node10 deprecation on TypeScript 6 workspaces only', async () => {
+      await appGenerator(tree, { name: 'ts5', skipFormat: true });
+      expect(readJson(tree, 'apps/ts5/tsconfig.json').compilerOptions.ignoreDeprecations).toBeUndefined();
+
+      updateJson(tree, 'package.json', (json) => ({
+        ...json,
+        devDependencies: { ...json.devDependencies, typescript: '~6.0.3' },
+      }));
+      await appGenerator(tree, { name: 'ts6', skipFormat: true });
+      expect(readJson(tree, 'apps/ts6/tsconfig.json').compilerOptions.ignoreDeprecations).toBe('6.0');
+    });
+
+    it('makes build and test cacheable', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      const { targets } = readJson(tree, 'apps/demo/project.json');
+      expect(targets.build.cache).toBe(true);
+      expect(targets.test.cache).toBe(true);
+      expect(targets.dev.cache).toBeUndefined();
+    });
+
+    it('generates a jest config that loads the FrontMCP test setup and needs no missing preset', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+
+      const config = tree.read('apps/demo/jest.config.cjs', 'utf-8') ?? '';
+      expect(config).toContain('@frontmcp/testing/setup');
+      expect(config).not.toContain('jest.preset');
+      expect(tree.exists('apps/demo/jest.config.ts')).toBe(false);
+    });
   });
 });

@@ -52,7 +52,7 @@ apps/billing/
     index.ts          # barrel exports updated automatically
   project.json
   tsconfig.json
-  jest.config.ts
+  jest.config.cjs
 ```
 
 ```bash

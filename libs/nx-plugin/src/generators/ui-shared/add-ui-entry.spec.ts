@@ -1,5 +1,6 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { addUiEntry, type AddUiEntryOptions } from './add-ui-entry';
 
 describe('addUiEntry', () => {

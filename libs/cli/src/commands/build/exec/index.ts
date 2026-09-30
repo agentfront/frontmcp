@@ -25,6 +25,7 @@ import { generateRunnerScript } from './runner-script';
 import { generateInstallerScript } from './installer-script';
 import { validateStepGraph } from './setup';
 import { ensureDir, fileExists } from '@frontmcp/utils';
+import { resolveEmittedEntry } from '../../../shared/emitted-entry';
 import { runTsc } from '../../../shared/tsc';
 import { cleanIntermediateFiles } from './clean-intermediates';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
@@ -143,10 +144,7 @@ export async function buildExec(
 
   // 5. Bundle with esbuild
   console.log(`${c('cyan', '[build:exec]')} bundling with esbuild...`);
-  const compiledEntry = path.join(
-    outDir,
-    path.basename(entry).replace(/\.tsx?$/, '.js'),
-  );
+  const { compiledEntry, emittedEntryDir } = resolveEmittedEntry(outDir, entry);
 
   // Always build non-self-contained first (schema extraction needs host SDK)
   const bundleResult = await bundleWithEsbuild(compiledEntry, outDir, config);
@@ -414,7 +412,19 @@ export async function buildExec(
     'bin-meta.json',
   ]);
 
-  const cleaned = cleanIntermediateFiles(outDir, keepFiles, buildStartedAt);
+  let cleaned = cleanIntermediateFiles(outDir, keepFiles, buildStartedAt);
+  if (emittedEntryDir !== outDir) {
+    // tsc mirrored a common root above the entry (shared workspace code):
+    // those folders only held the intermediate output that was just bundled.
+    for (const entryName of fs.readdirSync(outDir)) {
+      if (keepFiles.has(entryName)) continue;
+      const dirPath = path.join(outDir, entryName);
+      if (fs.statSync(dirPath).isDirectory()) {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        cleaned++;
+      }
+    }
+  }
   if (cleaned > 0) {
     console.log(
       `${c('gray', '[build:exec]')} cleaned ${cleaned} intermediate file(s)`,

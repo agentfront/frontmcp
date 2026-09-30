@@ -1,17 +1,14 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "<%= offset %>tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "commonjs",
+    "moduleResolution": "node10",<% if (ignoreDeprecations) { %>
+    "ignoreDeprecations": "<%= ignoreDeprecations %>",<% } %>
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
-  "files": [],
-  "include": [],
-  "references": [
-    { "path": "./tsconfig.lib.json" },
-    { "path": "./tsconfig.spec.json" }
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
 }

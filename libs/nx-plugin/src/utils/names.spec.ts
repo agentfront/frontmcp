@@ -1,4 +1,4 @@
-import { toClassName, toPropertyName, toFileName, toConstantName, sanitizeProjectName } from './names';
+import { sanitizeProjectName, toClassName, toConstantName, toFileName, toPropertyName } from './names';
 
 describe('names', () => {
   describe('toClassName', () => {

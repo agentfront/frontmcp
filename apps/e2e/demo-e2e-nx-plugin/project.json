@@ -1,0 +1,42 @@
+{
+  "name": "demo-e2e-nx-plugin",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-nx-plugin/e2e",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:nx-plugin"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "dependsOn": [
+        {
+          "projects": ["nx-plugin"],
+          "target": "build"
+        },
+        {
+          "projects": ["cli"],
+          "target": "build"
+        },
+        {
+          "projects": ["sdk"],
+          "target": "build"
+        },
+        {
+          "projects": ["testing"],
+          "target": "build"
+        }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-nx-plugin"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-nx-plugin/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-nx-plugin"
+      }
+    }
+  }
+}

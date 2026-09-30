@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { authProviderGenerator } from './auth-provider';
 
 describe('auth-provider generator', () => {
@@ -24,7 +25,7 @@ describe('auth-provider generator', () => {
     await authProviderGenerator(tree, { name: 'github', project: 'my-app', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/auth/github.auth-provider.ts', 'utf-8');
-    expect(content).toContain("type: 'bearer'");
+    expect(content).toContain('Bearer ${token}');
     expect(content).toContain('Bearer');
   });
 
@@ -32,7 +33,7 @@ describe('auth-provider generator', () => {
     await authProviderGenerator(tree, { name: 'stripe', project: 'my-app', type: 'api-key', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/auth/stripe.auth-provider.ts', 'utf-8');
-    expect(content).toContain("type: 'api-key'");
+    expect(content).toContain("'X-API-Key': apiKey");
     expect(content).toContain('X-API-Key');
   });
 
@@ -40,7 +41,7 @@ describe('auth-provider generator', () => {
     await authProviderGenerator(tree, { name: 'google', project: 'my-app', type: 'oauth', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/auth/google.auth-provider.ts', 'utf-8');
-    expect(content).toContain("type: 'oauth'");
+    expect(content).toContain('async refreshToken()');
     expect(content).toContain('refreshToken');
   });
 
@@ -48,7 +49,7 @@ describe('auth-provider generator', () => {
     await authProviderGenerator(tree, { name: 'legacy', project: 'my-app', type: 'basic', skipFormat: true });
 
     const content = tree.read('apps/my-app/src/auth/legacy.auth-provider.ts', 'utf-8');
-    expect(content).toContain("type: 'basic'");
+    expect(content).toContain('Basic ${encoded}');
     expect(content).toContain('Basic');
   });
 
