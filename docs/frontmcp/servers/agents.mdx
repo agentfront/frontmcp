@@ -611,6 +611,10 @@ class SafeAgent extends AgentContext {
 }
 ```
 
+### Output that does not match `outputSchema`
+
+An agent's reply is checked against its `outputSchema` exactly as a tool's result is. When it does not match, for example the model answers `{"priority":"urgent"}` for a `z.enum(['low', 'normal', 'high'])` field or replies with text that is not JSON, the call fails with `_meta.code: "INVALID_OUTPUT"` and the message `Tool output validation failed (output does not match outputSchema at priority)`. The result carries no stack trace or server file path.
+
 ---
 
 ## Nested Agents
