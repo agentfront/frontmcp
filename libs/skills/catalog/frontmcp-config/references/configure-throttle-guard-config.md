@@ -11,13 +11,23 @@ description: Complete GuardConfig interface reference for rate limiting, concurr
 interface GuardConfig {
   enabled: boolean;
 
-  // Storage for distributed rate limiting
+  // Storage for distributed rate limiting -- a StorageConfig from @frontmcp/utils,
+  // NOT the top-level `redis` shape (a block without `type` is auto-detected
+  // from REDIS_URL / REDIS_HOST and otherwise runs in memory)
   storage?: {
-    type: 'memory' | 'redis';
-    redis?: RedisOptionsInput;
+    type?: 'memory' | 'redis' | 'vercel-kv' | 'upstash' | 'auto';
+    redis?:
+      | { config: { host: string; port?: number; password?: string; db?: number; tls?: boolean } }
+      | { url: string };
+    vercelKv?: { url?: string; token?: string };
+    upstash?: { url?: string; token?: string };
+    // What to do when the backend is unreachable at startup:
+    // 'error' (default in production) -- startup fails with GuardStorageUnavailableError (rate limits fail closed)
+    // 'memory' (default otherwise)   -- start with per-instance counters
+    fallback?: 'error' | 'memory';
   };
 
-  keyPrefix?: string; // default: 'mcp:guard:'
+  keyPrefix?: string; // default: 'mcp:guard:' -- a trailing ':' is dropped, keys read 'mcp:guard:<entity>:...'
 
   // Server-wide limits
   global?: RateLimitConfig;
@@ -56,6 +66,11 @@ interface IpFilterConfig {
   trustedProxyDepth?: number; // NOT read (startup warning) -- set FRONTMCP_TRUSTED_PROXY_DEPTH
 }
 ```
+
+## Storage Failure and Key Format
+
+- **Fails closed.** When `storage` cannot be reached at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (code `GUARD_STORAGE_UNAVAILABLE`), whose message names `throttle.storage`. That is the default in production. Set `storage.fallback: 'memory'` to start with per-instance counters instead. (The top-level `redis` and `transport.persistence` differ: they fall back to memory with an error log.)
+- **Keys.** `<keyPrefix><entity>:<partition>:<kind>:...`, e.g. `mcp:guard:export_tickets:global:rl:1790722980000`. Before 1.8.6 the default prefix wrote `mcp:guard::export_tickets:...`; old and new instances do not read each other's counters, so limits briefly split during a rolling deploy. A custom `keyPrefix` without a trailing `:` keeps its keys.
 
 ## Partition Strategies
 

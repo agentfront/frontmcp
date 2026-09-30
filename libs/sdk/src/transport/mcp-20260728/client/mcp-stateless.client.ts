@@ -20,6 +20,7 @@
  */
 import { MCP_20260728_META, PROTOCOL_2026_07_28, type Implementation } from '@frontmcp/protocol';
 
+import { listAllPages } from '../../../common/utils/list-all-pages.utils';
 import { encodeHeaderValue } from '../header-codec';
 import { NAME_FROM_PARAMS_NAME, NAME_FROM_PARAMS_URI } from '../protocol-20260728.constants';
 import { TASKS_EXTENSION_ID, TERMINAL_TASK_STATUSES } from '../tasks-extension';
@@ -116,10 +117,22 @@ export class McpStatelessClient {
    * The spec requires this: one malformed tool definition must not prevent the
    * other tools from being used, so the offender is excluded and logged rather
    * than failing the call.
+   *
+   * Every page is fetched (`nextCursor` is followed to the end), since the
+   * schemas cached here are what later `tools/call` headers are derived from.
    */
   async listTools(): Promise<Array<Record<string, unknown>>> {
-    const result = await this.request('tools/list');
-    const tools = Array.isArray(result['tools']) ? (result['tools'] as Array<Record<string, unknown>>) : [];
+    const tools = await listAllPages(
+      'tools/list',
+      async (cursor) => {
+        const result = await this.request('tools/list', cursor ? { cursor } : {});
+        return {
+          items: Array.isArray(result['tools']) ? (result['tools'] as Array<Record<string, unknown>>) : [],
+          nextCursor: typeof result['nextCursor'] === 'string' ? result['nextCursor'] : undefined,
+        };
+      },
+      (message) => new McpStatelessError(-32603, message),
+    );
 
     const usable: Array<Record<string, unknown>> = [];
     for (const tool of tools) {
@@ -142,12 +155,14 @@ export class McpStatelessClient {
     return this.request('resources/read', { uri });
   }
 
-  async listResources(): Promise<Record<string, unknown>> {
-    return this.request('resources/list');
+  /** One page of `resources/list`; pass the previous page's `nextCursor` for the next. */
+  async listResources(cursor?: string): Promise<Record<string, unknown>> {
+    return this.request('resources/list', cursor ? { cursor } : {});
   }
 
-  async listPrompts(): Promise<Record<string, unknown>> {
-    return this.request('prompts/list');
+  /** One page of `prompts/list`; pass the previous page's `nextCursor` for the next. */
+  async listPrompts(cursor?: string): Promise<Record<string, unknown>> {
+    return this.request('prompts/list', cursor ? { cursor } : {});
   }
 
   async getPrompt(name: string, args: Record<string, string> = {}): Promise<Record<string, unknown>> {

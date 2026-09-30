@@ -307,6 +307,33 @@ redis-cli -h localhost -p 6379 keys "mcp:*"
 
 You should see session keys like `mcp:session:<session-id>`.
 
+## Step 8 -- Multiple Instances and Redis Outages
+
+### Share the secrets, not just Redis
+
+Every instance behind the load balancer needs the **same** values:
+
+- `MCP_SESSION_SECRET` -- session ids are encrypted with it. An id minted under a different secret is answered with HTTP 404 and the client re-initializes (every auth mode, including `public`, where the id is the caller's only credential). An anonymous session minted by one instance is honored by any instance with the same secret.
+- `VAULT_SECRET` (or `JWT_SECRET`) -- signs MCP 2026-07-28 `requestState`. Without either, each instance uses a random per-process key and a multi-round tool (`elicit()` / `sample()`) whose next round lands elsewhere asks its first question again. In production, `redis` or `transport.persistence` without either secret logs a startup warning; each rejected round logs `mcp-20260728: rejected requestState` with `reason: 'bad-signature'` and a `hint` naming `VAULT_SECRET`.
+
+### What happens when Redis is down at startup
+
+- `redis` and `transport.persistence` fall back to in-memory storage and log the failure (`[TransportService] Failed to connect to redis - session persistence disabled`); the server starts.
+- `throttle.storage` fails closed: startup aborts with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`), the default in production. Opt in to per-instance counters explicitly:
+
+```typescript
+throttle: {
+  enabled: true,
+  storage: {
+    type: 'redis',
+    redis: { config: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+    fallback: 'memory', // per-instance counters while Redis is down
+  },
+},
+```
+
+`throttle.storage` takes the `@frontmcp/utils` storage shape (`{ type: 'redis', redis: { config } }` or `{ type: 'redis', redis: { url } }`), not the top-level `redis` shape.
+
 ## Common Patterns
 
 | Pattern                | Recommended                                                                                | Less explicit                                           | Why                                                                                                                                                                                        |
@@ -340,13 +367,16 @@ You should see session keys like `mcp:session:<session-id>`.
 
 ## Troubleshooting
 
-| Problem                               | Cause                                               | Solution                                                                                                      |
-| ------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `ECONNREFUSED 127.0.0.1:6379`         | Redis is not running or Docker container is stopped | Start the container with `docker compose up -d redis` or check the Redis service status                       |
-| `NOAUTH Authentication required`      | Password is set on Redis but not provided in config | Add `password` to the `redis` config or set `REDIS_PASSWORD` environment variable                             |
-| `ERR max number of clients reached`   | Too many open connections from the application      | Set `maxRetriesPerRequest` or use connection pooling; check for connection leaks                              |
-| Vercel KV `401 Unauthorized`          | Missing or invalid KV tokens in the environment     | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
-| Sessions lost after container restart | Redis running without append-only persistence       | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
+| Problem                                                                                           | Cause                                                            | Solution                                                                                                      |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ECONNREFUSED 127.0.0.1:6379`                                                                     | Redis is not running or Docker container is stopped              | Start the container with `docker compose up -d redis` or check the Redis service status                       |
+| `NOAUTH Authentication required`                                                                  | Password is set on Redis but not provided in config              | Add `password` to the `redis` config or set `REDIS_PASSWORD` environment variable                             |
+| `ERR max number of clients reached`                                                               | Too many open connections from the application                   | Set `maxRetriesPerRequest` or use connection pooling; check for connection leaks                              |
+| Vercel KV `401 Unauthorized`                                                                      | Missing or invalid KV tokens in the environment                  | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
+| Sessions lost after container restart                                                             | Redis running without append-only persistence                    | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
+| Startup fails with `GuardStorageUnavailableError`                                                 | `throttle.storage` Redis is unreachable; rate limits fail closed | Bring Redis up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters              |
+| Clients get 404 for a session they just used (load-balanced)                                      | Instances run with different `MCP_SESSION_SECRET` values         | Set the same `MCP_SESSION_SECRET` on every instance                                                           |
+| A 2026-07-28 tool repeats its first question; log shows `rejected requestState` / `bad-signature` | `VAULT_SECRET`/`JWT_SECRET` unset or different per instance      | Set `VAULT_SECRET` to the same value on every instance                                                        |
 
 ## Examples
 

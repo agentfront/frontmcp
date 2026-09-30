@@ -397,11 +397,15 @@ In-memory storage works for development but does not persist across restarts or 
       throttle: {
         enabled: true,
         storage: {
-          provider: 'redis',
-          host: process.env.REDIS_HOST ?? 'localhost',
-          port: Number(process.env.REDIS_PORT ?? 6379),
-          password: process.env.REDIS_PASSWORD,
-          tls: process.env.NODE_ENV === 'production',
+          type: 'redis',
+          redis: {
+            config: {
+              host: process.env.REDIS_HOST ?? 'localhost',
+              port: Number(process.env.REDIS_PORT ?? 6379),
+              password: process.env.REDIS_PASSWORD,
+              tls: process.env.NODE_ENV === 'production',
+            },
+          },
         },
         keyPrefix: 'mcp:guard:',
         global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
@@ -414,7 +418,26 @@ In-memory storage works for development but does not persist across restarts or 
     class ProductionApp {}
     ```
 
-    All rate limit counters and semaphore tickets are stored in Redis, shared across all server instances.
+    All rate limit counters and semaphore tickets are stored in Redis, shared across all server instances, under keys like `mcp:guard:search_documents:session-…:rl:…` (a trailing `:` on `keyPrefix` is dropped; before 1.8.6 the default prefix wrote `mcp:guard::…`, so counters briefly split between versions during a rolling deploy).
+
+    `throttle.storage` takes the `@frontmcp/utils` storage shape — `type` picks the backend and its options go under the matching key (`redis: { config }` or `redis: { url }`). It is **not** the top-level `redis` shape: a block without `type` is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
+
+  </Step>
+
+  <Step title="Decide what happens when Redis is down">
+    Rate limits fail closed. If the throttle store is unreachable at startup, the server does not start: startup rejects with `GuardStorageUnavailableError` (`throttle.storage (redis) is unavailable: …`). That is the default in production, where `fallback` defaults to `'error'`.
+
+    To keep serving with per-instance counters instead, say so:
+
+    ```typescript
+    storage: {
+      type: 'redis',
+      redis: { url: process.env.REDIS_URL },
+      fallback: 'memory',
+    },
+    ```
+
+    The top-level `redis` and `transport.persistence` behave differently: they fall back to in-memory storage and log the failure.
 
   </Step>
 
@@ -428,9 +451,11 @@ In-memory storage works for development but does not persist across restarts or 
 
     ```typescript
     storage: {
-      provider: 'vercel-kv',
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN,
+      type: 'vercel-kv',
+      vercelKv: {
+        url: process.env.KV_REST_API_URL,
+        token: process.env.KV_REST_API_TOKEN,
+      },
     },
     ```
 
@@ -545,9 +570,8 @@ class ReportTool extends ToolContext {
   throttle: {
     enabled: true,
     storage: {
-      provider: 'redis',
-      host: process.env.REDIS_HOST ?? 'localhost',
-      port: 6379,
+      type: 'redis',
+      redis: { config: { host: process.env.REDIS_HOST ?? 'localhost', port: 6379 } },
     },
     global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
     defaultTimeout: { executeMs: 30_000 },

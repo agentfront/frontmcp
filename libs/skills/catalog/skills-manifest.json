@@ -943,7 +943,8 @@
                 "Configuring `storage: { type: 'redis' }` so rate limit counters are shared across instances",
                 "Using `keyPrefix` to namespace guard keys in a shared Redis instance",
                 "Combining `partitionBy: 'ip'` for global limits with `partitionBy: 'session'` per tool",
-                "In-memory counters are per-process and would allow N times the intended rate with N instances"
+                "In-memory counters are per-process and would allow N times the intended rate with N instances",
+                "Startup fails closed with `GuardStorageUnavailableError` when Redis is down, unless `fallback: 'memory'`"
               ]
             },
             {
@@ -1412,6 +1413,7 @@
               "tags": ["deployment", "vercel", "serverless", "config", "minimal"],
               "features": [
                 "The exact shape of the auto-generated `vercel.json` \u2014 three keys, nothing else",
+                "That `buildCommand` builds the vercel target (`<exec> frontmcp build --target vercel`), not the `build` script",
                 "That routing and function configuration live in `.vercel/output/`, not `vercel.json`",
                 "That hand-authoring `api/frontmcp.ts` references in `vercel.json` is unnecessary and breaks deploys"
               ]

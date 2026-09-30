@@ -10,6 +10,9 @@
  */
 import 'reflect-metadata';
 
+import { encryptJson, resetCachedKey } from '@frontmcp/auth';
+import { getMachineId, setMachineIdOverride } from '@frontmcp/utils';
+
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { httpRequestInputSchema, type FlowMetadata } from '../../../common';
 import SessionVerifyFlow, { sessionVerifyOutputSchema } from '../session.verify.flow';
@@ -24,10 +27,10 @@ function createMetadata(): FlowMetadata<'session:verify'> {
   } as unknown as FlowMetadata<'session:verify'>;
 }
 
-function runPublic(headers: Record<string, string>) {
+function runPublic(headers: Record<string, string>, body?: unknown) {
   const scope = createMockScopeEntry({ auth: { mode: 'public' } as never });
   (scope.auth as unknown as Record<string, unknown>)['options'] = { mode: 'public' };
-  const input = createMockHttpRequest({ method: 'POST', path: '/', headers });
+  const input = createMockHttpRequest({ method: 'POST', path: '/', headers, body });
   const flow = new SessionVerifyFlow(createMetadata(), input as never, scope, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'handlePublicMode']);
 }
@@ -94,5 +97,115 @@ describe('SessionVerifyFlow — anonymous session id is server-controlled', () =
     // request and the rest of the session.
     expect(first.output.authorization.user.sub).toMatch(/^anon:/);
     expect(second.output.authorization.user.sub).toBe(first.output.authorization.user.sub);
+  });
+});
+
+describe('SessionVerifyFlow — anonymous sessions across secrets and instances', () => {
+  const originalSecret = process.env['MCP_SESSION_SECRET'];
+
+  function useSessionSecret(secret: string | undefined): void {
+    if (secret === undefined) delete process.env['MCP_SESSION_SECRET'];
+    else process.env['MCP_SESSION_SECRET'] = secret;
+    resetCachedKey();
+  }
+
+  function publicPayload(nodeId: string) {
+    return {
+      uuid: '5b0d6a52-2c8e-4c4b-9d1b-7f3a0c1e2d44',
+      nodeId,
+      authSig: 'public',
+      iat: Math.floor(Date.now() / 1000),
+      isPublic: true,
+      authMode: 'public',
+    };
+  }
+
+  afterEach(() => {
+    setMachineIdOverride(undefined);
+    useSessionSecret(originalSecret);
+  });
+
+  it('ignores an id minted under a different MCP_SESSION_SECRET and mints a fresh one', async () => {
+    useSessionSecret('secret-of-another-deployment');
+    const foreignId = encryptJson(publicPayload(getMachineId()));
+
+    useSessionSecret('this-deployment-secret');
+    const { output } = await runPublic({ 'mcp-session-id': foreignId });
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).toBeDefined();
+    expect(output.authorization.session?.id).not.toBe(foreignId);
+    expect(output.authorization.session?.payload?.nodeId).toBe(getMachineId());
+  });
+
+  it('honors an id minted by another instance that shares the secret', async () => {
+    // Node affinity is the transport registry's job (it keys takeover off the
+    // STORED session's nodeId); the AES-GCM tag already proves this deployment
+    // minted the id.
+    useSessionSecret('shared-deployment-secret');
+    setMachineIdOverride('instance-a');
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedOnA = first.output.authorization.session?.id as string;
+    expect(first.output.authorization.session?.payload?.nodeId).toBe('instance-a');
+
+    setMachineIdOverride('instance-b');
+    const second = await runPublic({ 'mcp-session-id': mintedOnA });
+
+    expect(second.output?.kind).toBe('authorized');
+    if (second.output?.kind !== 'authorized') return;
+    expect(second.output.authorization.session?.id).toBe(mintedOnA);
+    expect(second.output.authorization.session?.payload?.nodeId).toBe('instance-a');
+    expect(second.output.authorization.user.sub).toBe(first.output.authorization.user.sub);
+  });
+
+  it('mints a fresh session for an initialize that presents an id another instance owns', async () => {
+    // A re-initialize reusing a peer's id would build a second transport for that id here while
+    // the peer keeps its own: notifications and session state would split across the two.
+    useSessionSecret('shared-deployment-secret');
+    setMachineIdOverride('instance-a');
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedOnA = first.output.authorization.session?.id as string;
+
+    setMachineIdOverride('instance-b');
+    const { output } = await runPublic(
+      { 'mcp-session-id': mintedOnA },
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    );
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).not.toBe(mintedOnA);
+    expect(output.authorization.session?.payload?.nodeId).toBe('instance-b');
+  });
+
+  it('keeps the id of an initialize that this instance owns', async () => {
+    useSessionSecret('shared-deployment-secret');
+    setMachineIdOverride('instance-a');
+    const first = await runPublic({});
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    const mintedOnA = first.output.authorization.session?.id as string;
+
+    const { output } = await runPublic(
+      { 'mcp-session-id': mintedOnA },
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    );
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).toBe(mintedOnA);
+  });
+
+  it('honors an id minted before a restart that changed the machine id', async () => {
+    useSessionSecret('shared-deployment-secret');
+    const beforeRestart = encryptJson(publicPayload('previous-process'));
+
+    const { output } = await runPublic({ 'mcp-session-id': beforeRestart });
+
+    expect(output?.kind).toBe('authorized');
+    if (output?.kind !== 'authorized') return;
+    expect(output.authorization.session?.id).toBe(beforeRestart);
   });
 });

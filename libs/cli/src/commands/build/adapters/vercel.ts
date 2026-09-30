@@ -3,23 +3,13 @@ import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { mkdir, readdir, stat, cp, copyFile, readFile, writeFile } from '@frontmcp/utils';
 import type { AdapterTemplate } from '../types';
+import { buildVercelJson, type VercelPackageManager } from './vercel-config';
 
-type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+export { buildVercelJson, type VercelPackageManager } from './vercel-config';
 
-interface PackageManagerConfig {
-  install: string;
-  run: string;
-}
-
-const PACKAGE_MANAGERS: Record<PackageManager, PackageManagerConfig> = {
-  bun: { install: 'bun install', run: 'bun run build' },
-  pnpm: { install: 'pnpm install', run: 'pnpm run build' },
-  yarn: { install: 'yarn install', run: 'yarn build' },
-  npm: { install: 'npm install', run: 'npm run build' },
-};
-
-const LOCKFILE_TO_PM: Record<string, PackageManager> = {
+const LOCKFILE_TO_PM: Record<string, VercelPackageManager> = {
   'bun.lockb': 'bun',
+  'bun.lock': 'bun',
   'pnpm-lock.yaml': 'pnpm',
   'yarn.lock': 'yarn',
   'package-lock.json': 'npm',
@@ -29,7 +19,7 @@ const LOCKFILE_TO_PM: Record<string, PackageManager> = {
  * Detect package manager based on lockfile presence.
  * Priority: bun > pnpm > yarn > npm (fastest to slowest install times)
  */
-function detectPackageManager(cwd: string): PackageManager {
+function detectPackageManager(cwd: string): VercelPackageManager {
   for (const [lockfile, pm] of Object.entries(LOCKFILE_TO_PM)) {
     if (existsSync(path.join(cwd, lockfile))) {
       return pm;
@@ -92,15 +82,7 @@ module.exports.default = module.exports;
 `,
 
   // Detect package manager and generate appropriate vercel.json
-  getConfig: (cwd: string) => {
-    const pm = detectPackageManager(cwd);
-    const config = PACKAGE_MANAGERS[pm];
-    return {
-      version: 2,
-      buildCommand: config.run,
-      installCommand: config.install,
-    };
-  },
+  getConfig: (cwd: string) => buildVercelJson(detectPackageManager(cwd)),
 
   configFileName: 'vercel.json',
 

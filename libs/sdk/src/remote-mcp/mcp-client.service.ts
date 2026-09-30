@@ -19,6 +19,7 @@ import {
 } from '@frontmcp/protocol';
 
 import { type FrontMcpLogger } from '../common';
+import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { InternalMcpError } from '../errors/mcp.error';
 import {
   RemoteAuthError,
@@ -885,10 +886,15 @@ export class McpClientService {
     return httpOptions?.fallbackToSSE ?? true;
   }
 
+  // Each list follows `nextCursor` to the end: a FrontMCP remote pages its lists
+  // (40 per page by default), and proxying only the first page silently dropped
+  // everything after it.
   private async listToolsInternal(connection: McpClientConnection): Promise<Tool[]> {
     try {
-      const result = await connection.client.listTools();
-      return result.tools || [];
+      return await listAllPages('tools/list', async (cursor) => {
+        const result = await connection.client.listTools(cursor ? { cursor } : undefined);
+        return { items: result.tools, nextCursor: result.nextCursor };
+      });
     } catch (error) {
       this.logger.warn(`Failed to list tools: ${(error as Error).message}`);
       return [];
@@ -897,8 +903,10 @@ export class McpClientService {
 
   private async listResourcesInternal(connection: McpClientConnection): Promise<Resource[]> {
     try {
-      const result = await connection.client.listResources();
-      return result.resources || [];
+      return await listAllPages('resources/list', async (cursor) => {
+        const result = await connection.client.listResources(cursor ? { cursor } : undefined);
+        return { items: result.resources, nextCursor: result.nextCursor };
+      });
     } catch (error) {
       this.logger.warn(`Failed to list resources: ${(error as Error).message}`);
       return [];
@@ -907,8 +915,10 @@ export class McpClientService {
 
   private async listResourceTemplatesInternal(connection: McpClientConnection): Promise<ResourceTemplate[]> {
     try {
-      const result = await connection.client.listResourceTemplates();
-      return result.resourceTemplates || [];
+      return await listAllPages('resources/templates/list', async (cursor) => {
+        const result = await connection.client.listResourceTemplates(cursor ? { cursor } : undefined);
+        return { items: result.resourceTemplates, nextCursor: result.nextCursor };
+      });
     } catch (error) {
       this.logger.warn(`Failed to list resource templates: ${(error as Error).message}`);
       return [];
@@ -917,8 +927,10 @@ export class McpClientService {
 
   private async listPromptsInternal(connection: McpClientConnection): Promise<Prompt[]> {
     try {
-      const result = await connection.client.listPrompts();
-      return result.prompts || [];
+      return await listAllPages('prompts/list', async (cursor) => {
+        const result = await connection.client.listPrompts(cursor ? { cursor } : undefined);
+        return { items: result.prompts, nextCursor: result.nextCursor };
+      });
     } catch (error) {
       this.logger.warn(`Failed to list prompts: ${(error as Error).message}`);
       return [];

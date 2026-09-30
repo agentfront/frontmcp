@@ -29,9 +29,9 @@ When calling `checkRateLimit` or `acquireSemaphore`, you pass the entity-level c
 
 The `createGuardManager` function handles storage initialization:
 
-1. If `config.storage` is provided, it calls `createStorage(config.storage)` to set up the backend (Redis, Vercel KV, etc.).
+1. If `config.storage` is provided, it calls `createStorage(config.storage)` to set up the backend (Redis, Vercel KV, etc.). If the backend cannot be created or reached it rejects with `GuardStorageUnavailableError` (rate limits fail closed) unless `config.storage.fallback` is `'memory'`.
 2. Otherwise, it creates an in-memory storage and logs a warning.
-3. Connects the storage and creates a namespace using `config.keyPrefix` (default: `'mcp:guard:'`).
+3. Connects the storage and creates a namespace using `config.keyPrefix` (default: `'mcp:guard:'`). A trailing `:` is dropped because the namespace adds its own separator, so keys read `mcp:guard:<entity>:…`.
 4. Returns an initialized `GuardManager`.
 
 ## Exports
@@ -50,7 +50,7 @@ import { createGuardManager } from '@frontmcp/guard';
 const guard = await createGuardManager({
   config: {
     enabled: true,
-    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    storage: { type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } },
     defaultRateLimit: { maxRequests: 100, windowMs: 60_000, partitionBy: 'session' },
     defaultConcurrency: { maxConcurrent: 10, queueTimeoutMs: 5_000 },
     defaultTimeout: { executeMs: 30_000 },

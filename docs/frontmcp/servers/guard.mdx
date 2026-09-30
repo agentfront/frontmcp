@@ -362,7 +362,7 @@ The `throttle` field in `@FrontMcp` configures all guard features at the app lev
     enabled: true,
 
     // Storage backend (defaults to in-memory)
-    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    storage: { type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } },
     keyPrefix: 'mcp:guard:',
 
     // Global limits (checked before per-entity)
@@ -425,14 +425,20 @@ For distributed rate limiting across multiple server instances:
 throttle: {
   enabled: true,
   storage: {
-    provider: 'redis',
-    host: 'redis.example.com',
-    port: 6379,
-    password: process.env.REDIS_PASSWORD,
-    tls: true,
+    type: 'redis',
+    redis: {
+      config: {
+        host: 'redis.example.com',
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+        tls: true,
+      },
+    },
   },
 }
 ```
+
+`storage` is a `StorageConfig` from `@frontmcp/utils`, not the top-level `redis` shape: the backend is chosen by `type`, and its connection goes under the key of that name (`redis: { config }` or `redis: { url: process.env.REDIS_URL }`). A block without `type` (such as `{ provider: 'redis', host, port }`) is auto-detected from `REDIS_URL` / `REDIS_HOST` and otherwise runs in memory.
 
 Redis enables pub/sub-based semaphore notifications for more efficient concurrency slot release detection.
 
@@ -444,12 +450,43 @@ For serverless environments:
 throttle: {
   enabled: true,
   storage: {
-    provider: 'vercel-kv',
-    url: process.env.KV_REST_API_URL,
-    token: process.env.KV_REST_API_TOKEN,
+    type: 'vercel-kv',
+    vercelKv: {
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    },
   },
 }
 ```
+
+Upstash is `{ type: 'upstash', upstash: { url, token } }`.
+
+### When the store is unreachable
+
+Rate limits are a security control, so they **fail closed**. If the configured backend cannot be reached at startup, the server does not start: `createGuardManager` rejects with `GuardStorageUnavailableError` (`GUARD_STORAGE_UNAVAILABLE`), whose message names `throttle.storage`. This is the default in production, where `fallback` defaults to `'error'` (it defaults to `'memory'` otherwise).
+
+To keep serving with per-instance counters while the store is down, opt in explicitly:
+
+```typescript
+throttle: {
+  enabled: true,
+  storage: {
+    type: 'redis',
+    redis: { url: process.env.REDIS_URL },
+    fallback: 'memory', // each instance counts on its own until Redis is back and the server restarts
+  },
+}
+```
+
+This differs from the top-level `redis` and `transport.persistence`, which fall back to in-memory storage with an error log.
+
+### Key format
+
+Keys are `<keyPrefix><entity>:<partition>:<kind>:…`, for example `mcp:guard:export_tickets:global:rl:1790722980000`. A trailing `:` on `keyPrefix` is dropped, because the storage namespace adds its own separator.
+
+<Note>
+  Before 1.8.6 the default prefix produced a double colon (`mcp:guard::export_tickets:…`). Counters written by an older instance are not read by a newer one, so during a rolling deploy to 1.8.6 each version counts separately until the old instances are gone, and a window's limit can briefly be exceeded. A custom `keyPrefix` without a trailing colon keeps its keys.
+</Note>
 
 ---
 
@@ -457,14 +494,15 @@ throttle: {
 
 Guard throws specific error classes when limits are exceeded:
 
-| Error Class             | Code                  | HTTP Status | When Thrown                   |
-| ----------------------- | --------------------- | ----------- | ----------------------------- |
-| `RateLimitError`        | `RATE_LIMIT_EXCEEDED` | 429         | Request exceeds rate limit    |
-| `ConcurrencyLimitError` | `CONCURRENCY_LIMIT`   | 429         | No concurrency slot available |
-| `QueueTimeoutError`     | `QUEUE_TIMEOUT`       | 429         | Queue wait time exceeded      |
-| `ExecutionTimeoutError` | `EXECUTION_TIMEOUT`   | 408         | Execution exceeded deadline   |
-| `IpBlockedError`        | `IP_BLOCKED`          | 403         | Exported for your own code    |
-| `IpNotAllowedError`     | `IP_NOT_ALLOWED`      | 403         | Exported for your own code    |
+| Error Class                    | Code                        | HTTP Status | When Thrown                                        |
+| ------------------------------ | --------------------------- | ----------- | -------------------------------------------------- |
+| `RateLimitError`               | `RATE_LIMIT_EXCEEDED`       | 429         | Request exceeds rate limit                         |
+| `ConcurrencyLimitError`        | `CONCURRENCY_LIMIT`         | 429         | No concurrency slot available                      |
+| `QueueTimeoutError`            | `QUEUE_TIMEOUT`             | 429         | Queue wait time exceeded                           |
+| `ExecutionTimeoutError`        | `EXECUTION_TIMEOUT`         | 408         | Execution exceeded deadline                        |
+| `IpBlockedError`               | `IP_BLOCKED`                | 403         | Exported for your own code                         |
+| `IpNotAllowedError`            | `IP_NOT_ALLOWED`            | 403         | Exported for your own code                         |
+| `GuardStorageUnavailableError` | `GUARD_STORAGE_UNAVAILABLE` | 503         | At startup, when `throttle.storage` is unreachable |
 
 A `tools/call` that hits a limit answers with an error result whose `_meta.code` is the code above, in production too.
 The built-in `ipFilter` does not throw: it answers the HTTP request with 403 before any tool runs (see [Filter Precedence](#filter-precedence)).
@@ -530,14 +568,14 @@ The agent flow follows the same stage ordering: `acquireQuota` → `acquireSemap
 
 ### `GuardConfig` (App-Level)
 
-| Field                | Type                | Default        | Description                          |
-| -------------------- | ------------------- | -------------- | ------------------------------------ |
-| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features |
-| `storage`            | `StorageConfig`     | in-memory      | Storage backend configuration        |
-| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys          |
-| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests   |
-| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit             |
-| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default per-entity rate limit        |
-| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default per-entity concurrency       |
-| `defaultTimeout`     | `TimeoutConfig`     | —              | Default per-entity timeout           |
-| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration           |
+| Field                | Type                | Default        | Description                                                                                                     |
+| -------------------- | ------------------- | -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `enabled`            | `boolean`           | _required_     | Enable or disable all guard features                                                                            |
+| `storage`            | `StorageConfig`     | in-memory      | Storage backend (`{ type, redis \| vercelKv \| upstash, fallback? }`); fails closed unless `fallback: 'memory'` |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys (a trailing `:` is dropped)                                                         |
+| `global`             | `RateLimitConfig`   | —              | Global rate limit for all requests                                                                              |
+| `globalConcurrency`  | `ConcurrencyConfig` | —              | Global concurrency limit                                                                                        |
+| `defaultRateLimit`   | `RateLimitConfig`   | —              | Default per-entity rate limit                                                                                   |
+| `defaultConcurrency` | `ConcurrencyConfig` | —              | Default per-entity concurrency                                                                                  |
+| `defaultTimeout`     | `TimeoutConfig`     | —              | Default per-entity timeout                                                                                      |
+| `ipFilter`           | `IpFilterConfig`    | —              | IP filtering configuration                                                                                      |

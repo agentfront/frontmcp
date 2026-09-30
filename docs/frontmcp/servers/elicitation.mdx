@@ -578,6 +578,10 @@ Otherwise the same rules apply as in a session:
 - The `sendElicitationResult` fallback tool is not listed to 2026-07-28 clients.
 - Anonymous callers can answer across rounds: their `requestState` is bound to one shared anonymous principal, not to the per-request anonymous id.
 
+<Warning>
+  With more than one instance, set `VAULT_SECRET` (or `JWT_SECRET`) to the **same value on every instance**. `requestState` is signed with `VAULT_SECRET`, else `JWT_SECRET`, else a random per-process key. Under the per-process key a round that lands on another instance, or arrives after a restart, fails verification and the tool asks its first question again. In production, a server with `redis` or `transport.persistence` but neither secret logs a warning at startup, and each rejected round logs `mcp-20260728: rejected requestState` with `reason: 'bad-signature'` and a `hint` naming `VAULT_SECRET`.
+</Warning>
+
 ## Client Capability Detection
 
 Not all MCP clients support elicitation. FrontMCP automatically checks client capabilities before sending elicitation requests.

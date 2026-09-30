@@ -214,7 +214,7 @@ import { createGuardManager } from '@frontmcp/guard';
 const guard = await createGuardManager({
   config: {
     enabled: true,
-    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    storage: { type: 'redis', redis: { config: { host: 'localhost', port: 6379 } } },
     keyPrefix: 'myapp:guard:',
     global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
     globalConcurrency: { maxConcurrent: 50, partitionBy: 'global' },
@@ -247,7 +247,7 @@ await guard.destroy();
 | -------------------- | ------------------- | -------------- | -------------------------------------------------------- |
 | `enabled`            | `boolean`           | --             | Whether the guard system is active                       |
 | `storage`            | `StorageConfig`     | memory         | Storage backend configuration                            |
-| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys                              |
+| `keyPrefix`          | `string`            | `'mcp:guard:'` | Prefix for all storage keys (a trailing `:` is dropped)  |
 | `global`             | `RateLimitConfig`   | --             | Global rate limit for ALL requests                       |
 | `globalConcurrency`  | `ConcurrencyConfig` | --             | Global concurrency limit                                 |
 | `defaultRateLimit`   | `RateLimitConfig`   | --             | Default rate limit for entities without explicit config  |
@@ -299,6 +299,15 @@ The guard library delegates all persistence to the `StorageAdapter` interface fr
 | **Upstash**   | Serverless environments. HTTP-based Redis compatible.                                                        |
 
 If no `storage` config is provided, the factory falls back to in-memory storage and logs a warning.
+
+`storage` is a `StorageConfig` from `@frontmcp/utils`: `{ type: 'redis', redis: { config: { host, port } } }` or
+`{ type: 'redis', redis: { url } }`. When a configured backend cannot be reached, `createGuardManager` rejects with
+`GuardStorageUnavailableError` — rate limits fail closed, including in production where `createStorage` defaults
+`fallback` to `'error'`. Set `storage.fallback: 'memory'` to start with per-instance counters instead.
+
+Keys are written as `<keyPrefix><entity>:<partition>:<kind>:…` with a single `:` after the prefix (for example
+`mcp:guard:export_tickets:global:rl:…`). Before 1.8.6 the default prefix produced `mcp:guard::export_tickets:…`;
+counters written by an older instance are not read by a newer one, so limits briefly split during a rolling deploy.
 
 ## Error Handling
 
