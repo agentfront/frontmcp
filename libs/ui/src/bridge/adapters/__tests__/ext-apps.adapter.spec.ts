@@ -178,6 +178,34 @@ describe('ExtAppsAdapter', () => {
       adapterWithConfig = new ExtAppsAdapter();
     });
 
+    describe('setSize', () => {
+      it('reports the size with the standard size-changed notification, not a ui/setSize request', async () => {
+        const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+
+        await adapterWithConfig.setSize({ width: 320, height: 480, aspectRatio: 1.5 });
+
+        expect(postMessage).toHaveBeenCalledTimes(1);
+        expect(postMessage).toHaveBeenCalledWith(
+          { jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: 320, height: 480 } },
+          expect.any(String),
+        );
+        postMessage.mockRestore();
+      });
+
+      it('leaves out a dimension that was not given', async () => {
+        const postMessage = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => undefined);
+
+        await adapterWithConfig.setSize({ height: 200 });
+
+        expect(postMessage.mock.calls[0][0]).toEqual({
+          jsonrpc: '2.0',
+          method: 'ui/notifications/size-changed',
+          params: { height: 200 },
+        });
+        postMessage.mockRestore();
+      });
+    });
+
     describe('updateModelContext', () => {
       it('should throw ExtAppsNotSupportedError when modelContextUpdate capability is not present', async () => {
         // Host capabilities don't include modelContextUpdate

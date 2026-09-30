@@ -228,15 +228,14 @@ export class ExtAppsAdapter extends BaseAdapter {
   }
 
   /**
-   * Report a desired widget size to the host via the FrontMCP `ui/setSize`
-   * request (parallels `ui/setDisplayMode`).
+   * Report the widget's size to the host with the standard
+   * `ui/notifications/size-changed` notification (`{ width?, height? }` in px).
    */
   override async setSize(size: WidgetSize): Promise<void> {
-    await this._sendRequest('ui/setSize', {
-      height: size.height,
-      width: size.width,
-      aspectRatio: size.aspectRatio,
-    });
+    const params: { width?: number; height?: number } = {};
+    if (typeof size.width === 'number') params.width = size.width;
+    if (typeof size.height === 'number') params.height = size.height;
+    this._sendNotification('ui/notifications/size-changed', params);
   }
 
   override async requestClose(): Promise<void> {
@@ -621,7 +620,7 @@ export class ExtAppsAdapter extends BaseAdapter {
         // Origin is already set from first successful message
       }
     } catch (error) {
-      throw new Error(`ext-apps handshake failed: ${error}`);
+      throw new Error(`ext-apps handshake failed: ${error}`, { cause: error });
     }
   }
 

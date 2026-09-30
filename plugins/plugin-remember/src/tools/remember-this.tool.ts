@@ -3,6 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
  * Input schema for the remember_this tool.
@@ -32,23 +33,30 @@ export type RememberThisInput = z.infer<z.ZodObject<typeof rememberThisInputSche
 
 export type RememberThisOutput = z.infer<typeof rememberThisOutputSchema>;
 
+export function rememberThisDescription(names: RememberToolNames = rememberToolNames()): string {
+  return (
+    `Remember something for later: store a value under a key that ${names.recall} can read back, in the scope you choose ` +
+    '(this session by default; user scope for the signed-in user across sessions). It lasts until it is forgotten ' +
+    'or its ttl runs out. ' +
+    'Use this when the user asks you to remember preferences, settings, or any information they want to persist.'
+  );
+}
+
+export function rememberThisToolMetadata(names: RememberToolNames = rememberToolNames()) {
+  return {
+    name: names.rememberThis,
+    description: rememberThisDescription(names),
+    inputSchema: rememberThisInputSchema,
+    outputSchema: rememberThisOutputSchema,
+    annotations: { readOnlyHint: false },
+  };
+}
+
 /**
  * Tool to store a value in memory.
  * Enables LLM to remember things for later use.
  */
-@Tool({
-  name: 'remember_this',
-  description:
-    'Remember something for later: store a value under a key that recall can read back, in the scope you choose ' +
-    '(this session by default; user scope for the signed-in user across sessions). It lasts until it is forgotten ' +
-    'or its ttl runs out. ' +
-    'Use this when the user asks you to remember preferences, settings, or any information they want to persist.',
-  inputSchema: rememberThisInputSchema,
-  outputSchema: rememberThisOutputSchema,
-  annotations: {
-    readOnlyHint: false,
-  },
-})
+@Tool(rememberThisToolMetadata())
 export default class RememberThisTool extends ToolContext {
   async execute(input: RememberThisInput): Promise<RememberThisOutput> {
     const remember = this.get(RememberAccessorToken);

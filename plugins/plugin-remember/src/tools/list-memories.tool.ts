@@ -3,6 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
  * Input schema for the list_memories tool.
@@ -27,20 +28,27 @@ export type ListMemoriesInput = z.infer<z.ZodObject<typeof listMemoriesInputSche
 
 export type ListMemoriesOutput = z.infer<typeof listMemoriesOutputSchema>;
 
+export function listMemoriesDescription(names: RememberToolNames = rememberToolNames()): string {
+  return (
+    'List the remembered keys in one scope (default: session). ' +
+    `Use this to see what memories are stored before you ${names.recall} or ${names.forget} one.`
+  );
+}
+
+export function listMemoriesToolMetadata(names: RememberToolNames = rememberToolNames()) {
+  return {
+    name: names.listMemories,
+    description: listMemoriesDescription(names),
+    inputSchema: listMemoriesInputSchema,
+    outputSchema: listMemoriesOutputSchema,
+    annotations: { readOnlyHint: true },
+  };
+}
+
 /**
  * Tool to list all remembered keys in a scope.
  */
-@Tool({
-  name: 'list_memories',
-  description:
-    'List the remembered keys in one scope (default: session). ' +
-    'Use this to see what memories are stored before you recall or forget one.',
-  inputSchema: listMemoriesInputSchema,
-  outputSchema: listMemoriesOutputSchema,
-  annotations: {
-    readOnlyHint: true,
-  },
-})
+@Tool(listMemoriesToolMetadata())
 export default class ListMemoriesTool extends ToolContext {
   async execute(input: ListMemoriesInput): Promise<ListMemoriesOutput> {
     const remember = this.get(RememberAccessorToken);

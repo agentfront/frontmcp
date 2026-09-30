@@ -227,7 +227,7 @@ export interface PlatformAdapter {
    *
    * Behaviour is host-specific: hosts that measure the DOM themselves
    * (Claude, generic web) treat this as a no-op; ext-apps hosts receive a
-   * `ui/setSize` request; OpenAI forwards to its Apps SDK when available.
+   * `ui/notifications/size-changed` notification; OpenAI forwards to its Apps SDK when available.
    *
    * @param size - Desired widget dimensions
    */

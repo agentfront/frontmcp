@@ -244,7 +244,7 @@ Per-host behavior:
 
 - **Claude / static widgets** — the host measures the iframe DOM height itself, so auto-resize is effectively CSS-only (the `setSize` report is a no-op). The injected CSS is what makes a fixed-tall widget (media players, canvases) open without clipping.
 - **OpenAI ChatGPT** — auto-resize forwards to the Apps SDK sizing API when one is exposed; otherwise the SDK's own DOM measurement applies.
-- **ext-apps hosts** — the measured size is reported via a `ui/setSize` request (parallels `ui/setDisplayMode`).
+- **ext-apps hosts** — the measured size is reported with the standard `ui/notifications/size-changed` notification (`{ width, height }` in px), which any spec-compliant host handles.
 - **Gemini / generic / unknown** — `setSize` is a no-op; only the static CSS applies.
 
 `displayMode: 'fullscreen'` remains a separate, best-effort hint a host may ignore.

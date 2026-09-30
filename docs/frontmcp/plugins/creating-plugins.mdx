@@ -182,6 +182,21 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 }
 ```
 
+## Options named like plugin metadata, and option-derived tools
+
+`init(options)` spreads your options into the plugin's metadata, so an option whose name matches a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`) used to be read as that list. `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup for that reason. A value that is not an array under one of those keys is now an option and is left out of the metadata; an array still contributes, as before.
+
+A plugin that registers tools only when an option asks for it declares `static dynamicTools(options)`, the counterpart of `dynamicProviders`. Its tools are added to the ones from `@Plugin({ tools })` and from an array `tools` option:
+
+```typescript
+export default class MemoryPlugin extends DynamicPlugin<MemoryOptions, MemoryOptionsInput> {
+  static override dynamicTools = (options: MemoryOptionsInput): readonly ToolType[] =>
+    options.tools?.enabled ? [RememberTool, RecallTool] : [];
+}
+```
+
+`dynamicTools` runs for `init(options)`; `init({ inject, useFactory })` takes its tools from the `@Plugin` metadata, since the options are not known until the factory runs.
+
 ## Extending Tool Metadata
 
 Plugins can add custom fields to tool metadata via global type augmentation:
