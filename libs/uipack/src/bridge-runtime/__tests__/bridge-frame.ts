@@ -87,6 +87,8 @@ export interface BridgeFrame {
   settle(): Promise<void>;
   /** Requests the widget posted for `method`. */
   requests(method: string): JsonRpcMessage[];
+  /** Notifications (messages without an id) the widget posted for `method`. */
+  notifications(method: string): JsonRpcMessage[];
   /** Answer the latest `method` request with a result. */
   answer(method: string, result: unknown): Promise<void>;
   /** Answer the latest `method` request with a JSON-RPC error. */
@@ -149,6 +151,9 @@ export function createBridgeFrame(options: BridgeFrameOptions = {}): BridgeFrame
     },
     requests(method: string) {
       return posted.filter((m) => m.method === method && typeof m.id === 'number');
+    },
+    notifications(method: string) {
+      return posted.filter((m) => m.method === method && m.id === undefined);
     },
     async answer(method: string, result: unknown) {
       const request = latestRequest(method);

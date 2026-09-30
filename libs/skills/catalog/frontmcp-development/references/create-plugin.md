@@ -68,6 +68,7 @@ For plugins that accept runtime configuration, extend `DynamicPlugin<TOptions, T
 ```typescript
 abstract class DynamicPlugin<TOptions extends object, TInput extends object = TOptions> {
   static dynamicProviders?(options: any): readonly ProviderType[];
+  static dynamicTools?(options: any): readonly ToolType[];
   static init<TThis>(options: InitOptions<TInput>): PluginReturn<TOptions>;
   get<T>(token: Reference<T>): T;
 }
@@ -77,6 +78,7 @@ abstract class DynamicPlugin<TOptions extends object, TInput extends object = TO
 - `TInput` -- the input type users provide to `init()` (may have optional fields)
 - `init()` creates a provider entry for use in `plugins: [...]` arrays
 - `dynamicProviders()` returns providers computed from the input options
+- `dynamicTools()` returns tools computed from the input options
 
 ## Quick Start: Minimal DynamicPlugin
 
@@ -327,6 +329,21 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOpt
 ```
 
 The reverse does not work: an option-derived provider cannot inject a provider that a nested plugin exports.
+
+### Options named like plugin metadata, and option-derived tools
+
+`init(options)` spreads the options into the plugin's metadata, so an option named like a list-valued metadata key (`tools`, `resources`, `prompts`, `skills`, `adapters`, `plugins`, `exports`) used to be read as that list: `RememberPlugin.init({ tools: { enabled: true } })` crashed at startup. A non-array value under one of those keys is now an option and stays out of the metadata; an array still contributes.
+
+To register tools only when an option asks for it, declare `static dynamicTools(options)`, the counterpart of `dynamicProviders`. Its tools are added to those from `@Plugin({ tools })` and from an array `tools` option:
+
+```typescript
+export default class MemoryPlugin extends DynamicPlugin<MemoryOptions, MemoryOptionsInput> {
+  static override dynamicTools = (options: MemoryOptionsInput): readonly ToolType[] =>
+    options.tools?.enabled ? [RememberTool, RecallTool] : [];
+}
+```
+
+`dynamicTools` runs for `init(options)`; `init({ inject, useFactory })` takes its tools from the `@Plugin` metadata, since the options are unknown until the factory runs.
 
 ### Installing the same plugin in several apps
 

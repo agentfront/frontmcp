@@ -208,15 +208,15 @@ const client = await connectOpenAI(config, {
 
 All `connect*()` functions return a `DirectClient` with these methods:
 
-| Method                  | Description                            |
-| ----------------------- | -------------------------------------- |
-| `listTools()`           | List tools in platform-specific format |
-| `callTool(name, args)`  | Execute a tool                         |
-| `listResources()`       | List available resources               |
-| `readResource(uri)`     | Read a resource                        |
-| `listPrompts()`         | List available prompts                 |
-| `getPrompt(name, args)` | Get a prompt                           |
-| `close()`               | Clean up connection                    |
+| Method                  | Description                             |
+| ----------------------- | --------------------------------------- |
+| `listTools()`           | List tools in platform-specific format  |
+| `callTool(name, args)`  | Execute a tool                          |
+| `listResources()`       | List all resources (follows every page) |
+| `readResource(uri)`     | Read a resource                         |
+| `listPrompts()`         | List all prompts (follows every page)   |
+| `getPrompt(name, args)` | Get a prompt                            |
+| `close()`               | Clean up connection                     |
 
 ## SDK vs Node Target
 

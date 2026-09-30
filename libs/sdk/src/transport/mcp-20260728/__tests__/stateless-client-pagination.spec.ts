@@ -28,6 +28,10 @@ function pagedFetch(): { fetchImpl: typeof fetch; sent: SentRequest[] } {
       ],
       'resources/list': [{ resources: [{ uri: 'test://a', name: 'a' }], nextCursor: 'page-2' }, { resources: [] }],
       'prompts/list': [{ prompts: [{ name: 'a' }], nextCursor: 'page-2' }, { prompts: [{ name: 'b' }] }],
+      'resources/templates/list': [
+        { resourceTemplates: [{ uriTemplate: 'test://a/{id}', name: 'a' }], nextCursor: 'page-2' },
+        { resourceTemplates: [{ uriTemplate: 'test://b/{id}', name: 'b' }] },
+      ],
     };
     const result = pages[body.method]?.[second ? 1 : 0] ?? {};
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }), {
@@ -66,7 +70,38 @@ describe('McpStatelessClient — list pagination', () => {
   });
 });
 
+describe('McpStatelessClient — resource templates', () => {
+  it('listResourceTemplates forwards a cursor and reports nextCursor', async () => {
+    const { fetchImpl, sent } = pagedFetch();
+    const client = new McpStatelessClient({ url: 'http://remote.test/', fetchImpl });
+
+    const first = await client.listResourceTemplates();
+    const second = await client.listResourceTemplates(first['nextCursor'] as string);
+
+    expect(first['nextCursor']).toBe('page-2');
+    expect(second['nextCursor']).toBeUndefined();
+    expect(sent.map((r) => [r.method, r.params])).toEqual([
+      ['resources/templates/list', {}],
+      ['resources/templates/list', { cursor: 'page-2' }],
+    ]);
+  });
+});
+
 describe('McpStatelessClientAdapter — list pagination', () => {
+  it('serves resource templates, which McpClientService asks every remote for', async () => {
+    const { fetchImpl } = pagedFetch();
+    const adapter = new McpStatelessClientAdapter({ url: 'http://remote.test/', fetchImpl });
+
+    const first = await adapter.listResourceTemplates();
+    const second = await adapter.listResourceTemplates({ cursor: first.nextCursor });
+
+    expect(first).toEqual({
+      resourceTemplates: [{ uriTemplate: 'test://a/{id}', name: 'a' }],
+      nextCursor: 'page-2',
+    });
+    expect(second).toEqual({ resourceTemplates: [{ uriTemplate: 'test://b/{id}', name: 'b' }] });
+  });
+
   it('passes the cursor through and reports nextCursor', async () => {
     const { fetchImpl } = pagedFetch();
     const adapter = new McpStatelessClientAdapter({ url: 'http://remote.test/', fetchImpl });

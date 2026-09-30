@@ -4,6 +4,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import type { RememberScope } from '../remember.types';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
  * Input schema for the recall tool.
@@ -32,20 +33,27 @@ export type RecallInput = {
 
 export type RecallOutput = z.infer<typeof recallOutputSchema>;
 
+export function recallDescription(names: RememberToolNames = rememberToolNames()): string {
+  return (
+    'Recall something that was previously remembered. ' +
+    `Use this to retrieve stored preferences, settings, or any information that was saved with ${names.rememberThis}.`
+  );
+}
+
+export function recallToolMetadata(names: RememberToolNames = rememberToolNames()) {
+  return {
+    name: names.recall,
+    description: recallDescription(names),
+    inputSchema: recallInputSchema,
+    outputSchema: recallOutputSchema,
+    annotations: { readOnlyHint: true },
+  };
+}
+
 /**
  * Tool to recall a previously remembered value.
  */
-@Tool({
-  name: 'recall',
-  description:
-    'Recall something that was previously remembered. ' +
-    'Use this to retrieve stored preferences, settings, or any information that was saved with remember_this.',
-  inputSchema: recallInputSchema,
-  outputSchema: recallOutputSchema,
-  annotations: {
-    readOnlyHint: true,
-  },
-})
+@Tool(recallToolMetadata())
 export default class RecallTool extends ToolContext {
   async execute(input: RecallInput): Promise<RecallOutput> {
     const remember = this.get(RememberAccessorToken);

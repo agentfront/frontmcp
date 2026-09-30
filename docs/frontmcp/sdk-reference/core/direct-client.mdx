@@ -152,7 +152,7 @@ const result = await client.callTool('my_tool', {
 
 ### listResources()
 
-List all static resources.
+List all static resources. Every page is fetched (a FrontMCP server pages its lists 40 at a time by default), so the result never carries a `nextCursor`.
 
 ```typescript
 const { resources } = await client.listResources();
@@ -170,7 +170,7 @@ console.log(contents[0].text);
 
 ### listResourceTemplates()
 
-List all resource templates.
+List all resource templates, following every page like `listResources()`.
 
 ```typescript
 const { resourceTemplates } = await client.listResourceTemplates();
@@ -181,7 +181,7 @@ resourceTemplates.forEach(t => console.log(t.uriTemplate));
 
 ### listPrompts()
 
-List all prompts.
+List all prompts, following every page like `listResources()`.
 
 ```typescript
 const { prompts } = await client.listPrompts();

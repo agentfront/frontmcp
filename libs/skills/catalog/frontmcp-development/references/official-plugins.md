@@ -346,6 +346,9 @@ clear the legacy prefixes manually if you want the storage back.
 - `forget` -- Remove a stored value by key
 - `list_memories` -- List all stored keys, optionally filtered by pattern
 
+`tools.prefix` renames them (`prefix: 'memory_'` gives `memory_recall`, ...; each description names the prefixed siblings) and
+`tools.allowedScopes` rejects any other `scope`. With `enabled` unset or `false` none is registered.
+
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
 across its requests; `user` is the signed-in caller across all of its sessions; `tool` is the tool

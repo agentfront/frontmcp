@@ -160,6 +160,11 @@ export class McpStatelessClient {
     return this.request('resources/list', cursor ? { cursor } : {});
   }
 
+  /** One page of `resources/templates/list`; pass the previous page's `nextCursor` for the next. */
+  async listResourceTemplates(cursor?: string): Promise<Record<string, unknown>> {
+    return this.request('resources/templates/list', cursor ? { cursor } : {});
+  }
+
   /** One page of `prompts/list`; pass the previous page's `nextCursor` for the next. */
   async listPrompts(cursor?: string): Promise<Record<string, unknown>> {
     return this.request('prompts/list', cursor ? { cursor } : {});

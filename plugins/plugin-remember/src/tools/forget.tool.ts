@@ -3,6 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
 import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
  * Input schema for the forget tool.
@@ -26,20 +27,27 @@ export type ForgetInput = z.infer<z.ZodObject<typeof forgetInputSchema>>;
 
 export type ForgetOutput = z.infer<typeof forgetOutputSchema>;
 
+export function forgetDescription(): string {
+  return (
+    'Forget a previously remembered value. ' +
+    'Use this when the user wants to delete stored preferences or information.'
+  );
+}
+
+export function forgetToolMetadata(names: RememberToolNames = rememberToolNames()) {
+  return {
+    name: names.forget,
+    description: forgetDescription(),
+    inputSchema: forgetInputSchema,
+    outputSchema: forgetOutputSchema,
+    annotations: { readOnlyHint: false },
+  };
+}
+
 /**
  * Tool to forget a previously remembered value.
  */
-@Tool({
-  name: 'forget',
-  description:
-    'Forget a previously remembered value. ' +
-    'Use this when the user wants to delete stored preferences or information.',
-  inputSchema: forgetInputSchema,
-  outputSchema: forgetOutputSchema,
-  annotations: {
-    readOnlyHint: false,
-  },
-})
+@Tool(forgetToolMetadata())
 export default class ForgetTool extends ToolContext {
   async execute(input: ForgetInput): Promise<ForgetOutput> {
     const remember = this.get(RememberAccessorToken);
