@@ -388,11 +388,10 @@ export class Scope extends ScopeEntry {
 
     // Vercel KV has no pub/sub, so it cannot back tasks. Unless tasks were
     // explicitly requested, skip them instead of crashing startup (#646).
+    const gateTasksRedis = tasksConfig?.redis ?? this.metadata.redis;
+    const tasksUseSqlite = Boolean(tasksConfig?.sqlite ?? (gateTasksRedis ? undefined : resolvedTopLevelSqlite));
     const tasksUnavailableOnVercelKv =
-      !tasksExplicitlyEnabled &&
-      !tasksConfig?.sqlite &&
-      !this.metadata.sqlite &&
-      resolvesToVercelKvTaskBackend(tasksConfig?.redis ?? this.metadata.redis);
+      !tasksExplicitlyEnabled && !tasksUseSqlite && resolvesToVercelKvTaskBackend(gateTasksRedis);
     if (tasksUnavailableOnVercelKv && !tasksExplicitlyDisabled) {
       this.logger.warn(
         '[tasks] Background tasks are disabled: Vercel KV has no pub/sub, which task results and ' +

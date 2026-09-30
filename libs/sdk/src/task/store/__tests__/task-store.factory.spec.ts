@@ -1,9 +1,16 @@
+import { createStorage } from '@frontmcp/utils';
+
 import {
   createMemoryTaskStore,
   createTaskStore,
   resolvesToVercelKvTaskBackend,
   TaskStoreNotSupportedError,
 } from '../task-store.factory';
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, createStorage: jest.fn(actual.createStorage) };
+});
 
 describe('task-store.factory', () => {
   it('createMemoryTaskStore returns a usable memory-backed store', async () => {
@@ -66,6 +73,15 @@ describe('task-store.factory', () => {
       process.env['KV_REST_API_URL'] = 'https://kv.example.invalid';
       const { type } = await createTaskStore({ storage: { type: 'memory' } });
       expect(type).toBe('memory');
+    });
+
+    it('gives a provided redis option precedence over ambient Vercel KV when storage is type auto', async () => {
+      process.env['KV_REST_API_URL'] = 'https://kv.example.invalid';
+      const redis = { provider: 'redis' as const, host: 'localhost', port: 1 };
+      expect(resolvesToVercelKvTaskBackend(redis, { type: 'auto' })).toBe(false);
+      (createStorage as jest.Mock).mockClear();
+      await createTaskStore({ redis, storage: { type: 'auto' }, keyPrefix: 'test:auto-redis:' });
+      expect((createStorage as jest.Mock).mock.calls[0]?.[0]).toMatchObject({ type: 'redis' });
     });
 
     it('resolvesToVercelKvTaskBackend reports explicit config before the environment', () => {

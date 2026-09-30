@@ -131,7 +131,7 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
 
   let finalStorageConfig: StorageConfig | undefined = storageConfig;
 
-  if (redis && !storageConfig) {
+  if (redis && !isExplicitStorage(storageConfig)) {
     if ('provider' in redis && redis.provider === 'vercel-kv') {
       throw new TaskStoreNotSupportedError(
         'Vercel KV is not supported for task stores. Task result blocking and cancel signalling require pub/sub. Use Redis or Upstash instead.',

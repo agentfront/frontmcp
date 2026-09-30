@@ -3,7 +3,7 @@
  *
  * Tests for the TransportService which manages transport sessions and their lifecycle.
  */
-import { sha256Hex } from '@frontmcp/utils';
+import { createHash } from 'crypto';
 
 import { TransportService } from '../transport.registry';
 
@@ -359,7 +359,7 @@ describe('TransportService', () => {
     });
 
     it('should return session when token matches', async () => {
-      const tokenHash = sha256Hex('test-token');
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
       const storedSession = {
         session: { id: 'session-123', protocol: 'streamable-http' },
         authorizationId: tokenHash,
@@ -411,7 +411,7 @@ describe('TransportService', () => {
     });
 
     it('should recreate transporter from stored session', async () => {
-      const tokenHash = sha256Hex('test-token');
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
       const storedSession = {
         session: {
           id: 'session-123',
@@ -436,7 +436,7 @@ describe('TransportService', () => {
     });
 
     it('should return existing transport if already recreated', async () => {
-      const tokenHash = sha256Hex('test-token');
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
       const storedSession = {
         session: {
           id: 'session-123',
@@ -468,7 +468,7 @@ describe('TransportService', () => {
     });
 
     it('should handle concurrent recreation with mutex', async () => {
-      const tokenHash = sha256Hex('test-token');
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
       const storedSession = {
         session: {
           id: 'session-mutex',
@@ -663,7 +663,7 @@ describe('TransportService', () => {
 
     it('should check Redis when not in local history', async () => {
       // wasSessionCreatedAsync now uses getStoredSession() to verify token hash (security fix)
-      const tokenHash = sha256Hex('test-token');
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
       mockRedisSessionStore.get.mockResolvedValue({
         authorizationId: tokenHash,
         session: { id: 'redis-session', createdAt: Date.now() },
@@ -893,7 +893,7 @@ describe('TransportService', () => {
       });
 
       it('should recreate transport when not in memory but in Redis', async () => {
-        const tokenHash = sha256Hex('cold-start-token');
+        const tokenHash = createHash('sha256').update('cold-start-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'cold-start-session',
@@ -924,7 +924,7 @@ describe('TransportService', () => {
       });
 
       it('should validate token hash before recreation', async () => {
-        const tokenHash = sha256Hex('valid-token');
+        const tokenHash = createHash('sha256').update('valid-token', 'utf8').digest('hex');
         const storedSession = {
           session: { id: 'validated-session', protocol: 'streamable-http' },
           authorizationId: tokenHash,
@@ -943,7 +943,7 @@ describe('TransportService', () => {
       });
 
       it('should reject recreation with mismatched token', async () => {
-        const wrongTokenHash = sha256Hex('attacker-token');
+        const wrongTokenHash = createHash('sha256').update('attacker-token', 'utf8').digest('hex');
         const storedSession = {
           session: { id: 'hijack-target', protocol: 'streamable-http' },
           authorizationId: wrongTokenHash,
@@ -962,7 +962,7 @@ describe('TransportService', () => {
       });
 
       it('should update lastAccessedAt on recreation', async () => {
-        const tokenHash = sha256Hex('test-token');
+        const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
         const oldTimestamp = Date.now() - 60000;
         const storedSession = {
           session: {
@@ -1000,7 +1000,7 @@ describe('TransportService', () => {
       });
 
       it('should allow different node to recreate session', async () => {
-        const tokenHash = sha256Hex('failover-token');
+        const tokenHash = createHash('sha256').update('failover-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'failover-session',
@@ -1027,7 +1027,7 @@ describe('TransportService', () => {
       });
 
       it('should preserve original session metadata', async () => {
-        const tokenHash = sha256Hex('metadata-token');
+        const tokenHash = createHash('sha256').update('metadata-token', 'utf8').digest('hex');
         const originalCreatedAt = Date.now() - 120000;
         const storedSession = {
           session: {
@@ -1050,7 +1050,7 @@ describe('TransportService', () => {
       });
 
       it('should handle concurrent recreation attempts', async () => {
-        const tokenHash = sha256Hex('concurrent-token');
+        const tokenHash = createHash('sha256').update('concurrent-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'concurrent-session',
@@ -1087,7 +1087,7 @@ describe('TransportService', () => {
       });
 
       it('should handle rapid sequential recreations', async () => {
-        const tokenHash = sha256Hex('rapid-token');
+        const tokenHash = createHash('sha256').update('rapid-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'rapid-session',
@@ -1139,7 +1139,7 @@ describe('TransportService', () => {
       });
 
       it('should reject session recreation with invalid token', async () => {
-        const legitimateHash = sha256Hex('legitimate-token');
+        const legitimateHash = createHash('sha256').update('legitimate-token', 'utf8').digest('hex');
         const storedSession = {
           session: { id: 'protected-session', protocol: 'streamable-http' },
           authorizationId: legitimateHash,
@@ -1154,7 +1154,7 @@ describe('TransportService', () => {
       });
 
       it('should validate client fingerprint on recreation', async () => {
-        const tokenHash = sha256Hex('fingerprint-token');
+        const tokenHash = createHash('sha256').update('fingerprint-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'fingerprint-session',
@@ -1235,7 +1235,7 @@ describe('TransportService', () => {
 
       it('should handle session with wrong token hash gracefully', async () => {
         // Stored session has a different token hash than the request
-        const differentHash = sha256Hex('different-token');
+        const differentHash = createHash('sha256').update('different-token', 'utf8').digest('hex');
         mockRedisSessionStore.get.mockResolvedValue({
           session: { id: 'partial-session', protocol: 'streamable-http' },
           authorizationId: differentHash,
@@ -1259,7 +1259,7 @@ describe('TransportService', () => {
       });
 
       it('should restore client capabilities from stored session on recreation', async () => {
-        const tokenHash = sha256Hex('cap-token');
+        const tokenHash = createHash('sha256').update('cap-token', 'utf8').digest('hex');
         const clientCapabilities = { elicitation: { form: {} }, roots: { listChanged: true } };
         const storedSession = {
           session: {
@@ -1287,7 +1287,7 @@ describe('TransportService', () => {
       });
 
       it('should skip capability restoration when stored session has no capabilities', async () => {
-        const tokenHash = sha256Hex('no-cap-token');
+        const tokenHash = createHash('sha256').update('no-cap-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'no-cap-session',
@@ -1323,7 +1323,7 @@ describe('TransportService', () => {
       });
 
       it('should preserve transportState in stored session', async () => {
-        const tokenHash = sha256Hex('state-token');
+        const tokenHash = createHash('sha256').update('state-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'state-session',
@@ -1351,7 +1351,7 @@ describe('TransportService', () => {
       });
 
       it('should handle SSE transportState with lastEventId', async () => {
-        const tokenHash = sha256Hex('sse-state-token');
+        const tokenHash = createHash('sha256').update('sse-state-token', 'utf8').digest('hex');
         const storedSession = {
           session: {
             id: 'sse-state-session',
@@ -1465,7 +1465,7 @@ describe('TransportService - Redis HA behaviour (#646)', () => {
       );
       await service.ready;
 
-      const tokenHash = sha256Hex('tok');
+      const tokenHash = createHash('sha256').update('tok', 'utf8').digest('hex');
       const storedSession = {
         session: {
           id: 'sess-1',

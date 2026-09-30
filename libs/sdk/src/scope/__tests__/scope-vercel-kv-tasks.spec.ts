@@ -8,6 +8,9 @@
 
 import 'reflect-metadata';
 
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { App } from '../../common/decorators/app.decorator';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
@@ -57,6 +60,22 @@ describe('Scope task initialization with Vercel KV (#646)', () => {
     const instance = await FrontMcpInstance.createForGraph({
       info: { name: 'kv-tasks-ambient', version: '0.0.0' },
       apps: [KvTasksAmbientApp],
+    });
+
+    const [scope] = trackScopes(instance);
+    expect(scope).toBeDefined();
+    expect(scope.tasks).toBeUndefined();
+  });
+
+  it('skips tasks when Vercel KV is the selected backend even if a top-level sqlite is configured', async () => {
+    @App({ id: 'kv-tasks-sqlite', name: 'kv-tasks-sqlite' })
+    class KvTasksSqliteApp {}
+
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'kv-tasks-sqlite', version: '0.0.0' },
+      apps: [KvTasksSqliteApp],
+      redis: { provider: 'vercel-kv' },
+      sqlite: { path: path.join(os.tmpdir(), `kv-tasks-sqlite-${process.pid}.sqlite`) },
     });
 
     const [scope] = trackScopes(instance);
