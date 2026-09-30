@@ -26,6 +26,7 @@ import { generateInstallerScript } from './installer-script';
 import { validateStepGraph } from './setup';
 import { ensureDir, fileExists } from '@frontmcp/utils';
 import { runTsc } from '../../../shared/tsc';
+import { cleanIntermediateFiles } from './clean-intermediates';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 
 export async function buildExec(
@@ -40,6 +41,8 @@ export async function buildExec(
       // it from .ts files (and never read top-level nodeVersion at all in
       // the legacy shape).
       nodeVersion?: string;
+      /** `transport.http.path` — the runner exports it as FRONTMCP_HTTP_ENTRY_PATH (#642). */
+      httpEntryPath?: string;
     };
   },
 ): Promise<void> {
@@ -50,7 +53,7 @@ export async function buildExec(
 
   // 1. Load config (and merge in overrides forwarded from frontmcp.config —
   //    `build.storage`, `deployments[].cli.outputDefault`, etc.)
-  const rawConfig = await loadExecConfig(cwd);
+  const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   if (opts.execOverrides) {
     if (opts.execOverrides.storage && !rawConfig.storage) {
       rawConfig.storage = opts.execOverrides.storage;
@@ -71,6 +74,9 @@ export async function buildExec(
     if (opts.execOverrides.nodeVersion && !rawConfig.nodeVersion) {
       rawConfig.nodeVersion = opts.execOverrides.nodeVersion;
     }
+    if (opts.execOverrides.httpEntryPath && !rawConfig.httpEntryPath) {
+      rawConfig.httpEntryPath = opts.execOverrides.httpEntryPath;
+    }
   }
   const config = normalizeConfig(rawConfig);
   const cliEnabled = opts.cli || config.cli?.enabled;
@@ -86,7 +92,7 @@ export async function buildExec(
   }
 
   // 2. Resolve entry
-  const entry = await resolveEntry(cwd, config.entry || opts.entry);
+  const entry = await resolveEntry(cwd, opts.entry || config.entry);
   console.log(`${c('cyan', '[build:exec]')} entry: ${path.relative(cwd, entry)}`);
 
   // 3. Validate setup graph if present
@@ -112,6 +118,8 @@ export async function buildExec(
   // 4. Compile TypeScript
   console.log(`${c('cyan', '[build:exec]')} compiling TypeScript...`);
   await ensureDir(outDir);
+  // Slack covers coarse filesystem mtime granularity.
+  const buildStartedAt = Date.now() - 2000;
 
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
@@ -406,19 +414,7 @@ export async function buildExec(
     'bin-meta.json',
   ]);
 
-  const allFiles = fs.readdirSync(outDir);
-  let cleaned = 0;
-  for (const file of allFiles) {
-    if (!keepFiles.has(file)) {
-      const filePath = path.join(outDir, file);
-      const stat = fs.statSync(filePath);
-      // Only clean intermediate compiled files; preserve .md and _skills/ directory
-      if (stat.isFile() && !file.endsWith('.md')) {
-        fs.unlinkSync(filePath);
-        cleaned++;
-      }
-    }
-  }
+  const cleaned = cleanIntermediateFiles(outDir, keepFiles, buildStartedAt);
   if (cleaned > 0) {
     console.log(
       `${c('gray', '[build:exec]')} cleaned ${cleaned} intermediate file(s)`,

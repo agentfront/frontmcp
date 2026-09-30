@@ -116,7 +116,7 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
 
   // Issue #400 — resolve frontmcp.config so `entry`, `transport.http.port`,
   // and `env.shared`/`env.dev` overlays apply. Precedence:
-  //   CLI flag > FRONTMCP_<NAME> env > frontmcp.config field > built-in default.
+  //   CLI flag > frontmcp.config field > built-in default.
   const resolved = await resolveConfig({
     cwd,
     mode: 'dev',

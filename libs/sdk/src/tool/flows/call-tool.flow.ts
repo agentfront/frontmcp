@@ -1176,8 +1176,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         return;
       }
 
-      // A public error (e.g. InvalidInputError) already says what the caller should see
-      if (isClientFacingError(error)) throw error;
+      // A public error (e.g. InvalidInputError) already says what the caller should see; so does an
+      // InvalidOutputError from a flow the tool delegates to (an agent's `agents:call-agent`), which
+      // must reach the client as INVALID_OUTPUT, not wrapped with its stack.
+      if (isClientFacingError(error) || error instanceof InvalidOutputError) throw error;
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',
         error instanceof Error ? error : undefined,

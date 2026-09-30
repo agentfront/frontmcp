@@ -15,7 +15,7 @@
  */
 
 import type { FrontMcpConfigParsed } from '../../../config';
-import { emitClientSnippet } from '../mcp-client';
+import { buildClientPayload, emitClientSnippet, mergeClientConfig } from '../mcp-client';
 
 function baseConfig(overrides: Partial<FrontMcpConfigParsed> = {}): FrontMcpConfigParsed {
   return {
@@ -166,5 +166,56 @@ describe('emitClientSnippet (issue #400)', () => {
         expect(snippet.mcpServers.demo).toEqual({ command: 'npx', args: ['-y', 'demo'] });
       }
     });
+  });
+});
+
+describe('mergeClientConfig (#642)', () => {
+  const payload = { mcpServers: { demo: { command: 'npx', args: ['-y', 'demo'] } } };
+
+  it('creates the config when there is no existing file', () => {
+    expect(JSON.parse(mergeClientConfig(undefined, payload))).toEqual(payload);
+  });
+
+  it('treats an empty file like a missing one', () => {
+    expect(JSON.parse(mergeClientConfig('  \n', payload))).toEqual(payload);
+  });
+
+  it('keeps unrelated top-level keys and other servers', () => {
+    const existing = JSON.stringify({
+      theme: 'dark',
+      mcpServers: { other: { command: 'node', args: ['other.js'] } },
+    });
+    expect(JSON.parse(mergeClientConfig(existing, payload))).toEqual({
+      theme: 'dark',
+      mcpServers: { other: { command: 'node', args: ['other.js'] }, demo: payload.mcpServers.demo },
+    });
+  });
+
+  it('replaces only the matching server entry', () => {
+    const existing = JSON.stringify({ mcpServers: { demo: { command: 'old' }, other: { command: 'keep' } } });
+    const merged = JSON.parse(mergeClientConfig(existing, payload));
+    expect(merged.mcpServers.demo).toEqual(payload.mcpServers.demo);
+    expect(merged.mcpServers.other).toEqual({ command: 'keep' });
+  });
+
+  it('adds mcpServers when the existing file has none', () => {
+    expect(JSON.parse(mergeClientConfig('{"a":1}', payload))).toEqual({ a: 1, ...payload });
+  });
+
+  it('refuses to overwrite a file that is not valid JSON', () => {
+    expect(() => mergeClientConfig('{oops', payload)).toThrow(/not valid JSON/);
+  });
+
+  it.each(['[]', '"text"', 'null', '42'])('refuses to overwrite non-object JSON %p', (text) => {
+    expect(() => mergeClientConfig(text, payload)).toThrow(/not a JSON object/);
+  });
+
+  it('buildClientPayload matches the emitted snippet', () => {
+    const config = {
+      name: 'demo',
+      deployments: [{ target: 'node' }],
+      clients: { cursor: { transport: 'stdio' } },
+    } as unknown as FrontMcpConfigParsed;
+    expect(JSON.parse(emitClientSnippet('cursor', config))).toEqual(buildClientPayload('cursor', config));
   });
 });

@@ -44,8 +44,10 @@ Within a directory, the matching extensions are tried in this order:
 For every CLI option that's also expressible in the config, the effective value is computed as:
 
 ```
-explicit CLI flag  >  FRONTMCP_<NAME> env var  >  frontmcp.config field  >  built-in default
+explicit CLI flag  >  frontmcp.config field  >  built-in default
 ```
+
+There are no per-field `FRONTMCP_<NAME>` environment overrides. The only environment variable the CLI reads for configuration is `FRONTMCP_CONFIG`, which selects the config file (an explicit `--config <path>` flag wins over it).
 
 Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.port` in the config. With no flag, the resolver reads `transport.http.port`, then falls back to the framework default (3000).
 
@@ -78,15 +80,15 @@ Example: `frontmcp dev --port 5000` always wins, regardless of `transport.http.p
 
 ### Per-command consumption (issue #400)
 
-| Command                           | Config fields consumed                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                |
-| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                         |
+| Command                           | Config fields consumed                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `build`                           | `name`, `version`, `entry`, `deployments`, `build`, `nodeVersion`                                                    |
+| `dev`                             | `entry`, `transport.http.port`, `env.shared` ⊕ `env.dev`                                                             |
 | `test`                            | `test.timeoutMs`, `test.runInBand`, `test.coverage`, `test.testMatch`, `test.esmPackages`, `env.shared` ⊕ `env.test` |
-| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio.command/args`                       |
-| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`   |
-| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                      |
-| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                              |
+| `inspector`                       | `transport.default`, `transport.http.port`, `transport.stdio.command/args`                                           |
+| `pm start` / `socket` / `service` | `name`, `entry`, `transport.http.port`, `transport.http.socketPath`, `env.shared` ⊕ `env.ship`                       |
+| `skills install` / `export`       | `skills.provider`, `skills.bundle`, `skills.install`, `skills.exportTarget`                                          |
+| `eject-mcp-config <client>`       | `clients.<client>`, `name`, `transport`, `env.ship`                                                                  |
 
 ## Transport defaults
 
@@ -97,6 +99,16 @@ transport: {
   stdio: { command: 'node', args: ['dist/main.js'] },
 }
 ```
+
+`transport.http.path` is the mount path of the MCP endpoint for **every** build target, not only `frontmcp dev`:
+
+| Target                            | How the path reaches the server                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `node` (and its SEA binary)       | the generated runner script exports `FRONTMCP_HTTP_ENTRY_PATH` (default only; a real env var wins) |
+| `vercel`, `lambda`, `distributed` | the generated setup file assigns `process.env.FRONTMCP_HTTP_ENTRY_PATH` before the server loads    |
+| `cloudflare`                      | the generated worker setup assigns it the same way                                                 |
+
+A `@FrontMcp({ http: { entryPath } })` value still wins over the config. When the two differ, `frontmcp build` warns.
 
 ## Env overlays
 
@@ -132,6 +144,8 @@ frontmcp eject-mcp-config claude-code              # prints to stdout
 frontmcp eject-mcp-config claude-code --out ~/.config/claude/mcp.json
 frontmcp eject-mcp-config claude-code --out ~/.config/claude/mcp.json --dry-run
 ```
+
+`--out` merges into an existing client config instead of replacing it: the parent folder is created when missing, other top-level keys and other `mcpServers` entries are kept, and only this server's entry is replaced. A file that is not valid JSON (or not a JSON object) is refused and left untouched. `--dry-run` prints the merged result and writes nothing.
 
 ## Deployment Targets
 

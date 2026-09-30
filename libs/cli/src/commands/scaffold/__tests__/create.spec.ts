@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { fileExists, mkdir, mkdtemp, readFileSync, rm, runCmd, writeFile } from '@frontmcp/utils';
 
-import { runCreate } from '../create';
+import { runCreate, validateCreateFlags } from '../create';
 
 // Mock runCmd to prevent actual package manager execution (used only in Nx scaffold path)
 jest.mock('@frontmcp/utils', () => {
@@ -116,6 +116,37 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('GitHub Actions: No'))).toBe(true);
     });
 
+    it('pins @frontmcp libraries to the CLI version instead of a ~ range', async () => {
+      await runCreate('pinned-project', { yes: true });
+
+      const pkg = JSON.parse(readFileSync(path.join(tempDir, 'pinned-project', 'package.json'), 'utf8'));
+      const all = { ...pkg.dependencies, ...pkg.devDependencies };
+      for (const name of ['@frontmcp/sdk', '@frontmcp/adapters', '@frontmcp/testing', 'frontmcp']) {
+        expect(all[name]).toMatch(/^\d+\.\d+\.\d+/);
+      }
+    });
+
+    it('does not promise FRONTMCP_<NAME> overrides in the scaffolded config', async () => {
+      await runCreate('config-comment', { yes: true });
+
+      const config = readFileSync(path.join(tempDir, 'config-comment', 'frontmcp.config.ts'), 'utf8');
+      expect(config).not.toContain('FRONTMCP_<NAME>');
+      expect(config).toContain('FRONTMCP_CONFIG');
+    });
+
+    it.each([
+      ['target', 'foo'],
+      ['redis', 'maybe'],
+      ['pm', 'bun'],
+      ['skills', 'everything'],
+    ])('rejects an invalid --%s value without creating a folder', async (flag, value) => {
+      const dir = path.join(tempDir, 'bad-flag');
+      await expect(runCreate('bad-flag', { yes: true, [flag]: value } as never)).rejects.toThrow('process.exit called');
+
+      expect(consoleLogs.some((log) => log.includes(`Invalid --${flag} value '${value}'`))).toBe(true);
+      expect(await fileExists(dir)).toBe(false);
+    });
+
     it('should create Docker target files', async () => {
       await runCreate('docker-project', { yes: true, target: 'node' });
 
@@ -124,6 +155,27 @@ describe('runCreate', () => {
       expect(
         consoleLogs.some((log) => log.includes('ci/docker-compose.yml') || log.includes('docker-compose.yml')),
       ).toBe(true);
+    });
+
+    it('starts the container from the bundle the build writes, named after the config', async () => {
+      await runCreate('My Docker App', { yes: true, target: 'node' });
+
+      const dir = path.join(tempDir, 'my-docker-app');
+      const config = readFileSync(path.join(dir, 'frontmcp.config.ts'), 'utf8');
+      const configName = /name: '([^']+)'/.exec(config)?.[1];
+      const dockerfile = readFileSync(path.join(dir, 'ci', 'Dockerfile'), 'utf8');
+
+      expect(configName).toBeDefined();
+      expect(dockerfile).toContain(`CMD ["node", "dist/node/${configName}.bundle.js"]`);
+    });
+
+    it('points the SAM template at the lambda build output', async () => {
+      await runCreate('sam-app', { yes: true, target: 'lambda' });
+
+      const template = readFileSync(path.join(tempDir, 'sam-app', 'ci', 'template.yaml'), 'utf8');
+      expect(template).toContain('CodeUri: ../dist/lambda/');
+      expect(template).toContain('Handler: handler.handler');
+      expect(template).not.toContain('main.handler');
     });
 
     it('should create Vercel target files', async () => {
@@ -304,7 +356,8 @@ describe('runCreate', () => {
 
         // Entrypoint
         expect(content).toContain('EXPOSE 3000');
-        expect(content).toContain('CMD ["node", "dist/main.js"]');
+        expect(content).toContain('CMD ["node", "dist/node/docker-app.bundle.js"]');
+        expect(content).not.toContain('dist/main.js');
       });
 
       // The SDK binds 127.0.0.1 unless told otherwise, so a published container port would
@@ -946,6 +999,11 @@ describe('Nx scaffold (--nx flag)', () => {
     expect(consoleLogs.some((log) => log.includes('non-empty directory'))).toBe(true);
   });
 
+  it('validates flags before the Nx scaffold path too', async () => {
+    await expect(runCreate('bad-nx', { nx: true, target: 'foo' as never })).rejects.toThrow('process.exit called');
+    expect(mockWorkspaceGenerator).not.toHaveBeenCalled();
+  });
+
   it('should default project name to frontmcp-app when not provided', async () => {
     await runCreate(undefined, { nx: true });
 
@@ -953,5 +1011,19 @@ describe('Nx scaffold (--nx flag)', () => {
       expect.anything(),
       expect.objectContaining({ name: 'frontmcp-app' }),
     );
+  });
+});
+
+describe('validateCreateFlags', () => {
+  it('returns no problems for undefined flags and accepted values', () => {
+    expect(validateCreateFlags()).toEqual([]);
+    expect(validateCreateFlags({ target: 'vercel', redis: 'none', pm: 'pnpm', skills: 'full' })).toEqual([]);
+  });
+
+  it('lists every invalid flag with the accepted choices', () => {
+    const problems = validateCreateFlags({ target: 'foo' as never, pm: 'bun' as never });
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain('node, vercel, lambda, cloudflare');
+    expect(problems[1]).toContain('npm, yarn, pnpm');
   });
 });

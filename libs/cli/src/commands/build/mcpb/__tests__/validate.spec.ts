@@ -63,6 +63,49 @@ describe('validateMcpb', () => {
     expect(result.errors).toEqual([]);
   });
 
+  it('fails when the server requires runtime packages the archive does not ship', async () => {
+    const archive = path.join(tmp, 'unrunnable.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'require("reflect-metadata");\nconst sdk = require("@frontmcp/sdk");',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('"@frontmcp/sdk"') && e.includes('cannot start'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('"reflect-metadata"'))).toBe(true);
+  });
+
+  it('flags subpath requires of runtime packages', async () => {
+    const archive = path.join(tmp, 'subpath.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': "require('@frontmcp/utils/fs');",
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('"@frontmcp/utils"'))).toBe(true);
+  });
+
+  it('accepts externalized requires when the archive ships server/node_modules', async () => {
+    const archive = path.join(tmp, 'with-modules.mcpb');
+    await makeArchive(
+      {
+        'manifest.json': JSON.stringify(baseManifest()),
+        'server/index.js': 'require("@frontmcp/sdk");',
+        'server/node_modules/@frontmcp/sdk/index.js': 'module.exports = {};',
+      },
+      archive,
+    );
+    const result = await validateMcpb(archive);
+    expect(result.ok).toBe(true);
+  });
+
   it('fails when manifest.json is missing', async () => {
     const archive = path.join(tmp, 'no-manifest.mcpb');
     await makeArchive({ 'server/index.js': 'hi' }, archive);

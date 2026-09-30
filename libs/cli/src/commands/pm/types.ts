@@ -9,6 +9,7 @@ export interface PidFileData {
   port?: number;
   socketPath?: string;
   dbPath?: string;
+  maxRestarts?: number;
   startedAt: string; // ISO 8601
   restartCount: number;
   supervisorPid: number;

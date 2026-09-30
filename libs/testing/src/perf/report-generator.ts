@@ -3,16 +3,18 @@
  * @description Generate JSON and Markdown reports from performance measurements
  */
 
+import { ensureDir, writeFile } from '@frontmcp/utils';
+
+import { formatBytes, formatDuration, formatMicroseconds } from './metrics-collector';
+import { RegressionDetector } from './regression-detector';
 import type {
+  ParallelLeakDetectionResult,
+  PerfBaseline,
+  PerfMeasurement,
   PerfReport,
   PerfTestSummary,
   ProjectSummary,
-  PerfMeasurement,
-  PerfBaseline,
-  ParallelLeakDetectionResult,
 } from './types';
-import { RegressionDetector } from './regression-detector';
-import { formatBytes, formatDuration, formatMicroseconds } from './metrics-collector';
 
 // ═══════════════════════════════════════════════════════════════════
 // REPORT GENERATOR CLASS
@@ -352,8 +354,6 @@ export async function saveReports(
   baseline?: PerfBaseline,
   gitInfo?: { commitHash?: string; branch?: string },
 ): Promise<{ jsonPath: string; markdownPath: string }> {
-  const { writeFile, ensureDir } = await import('@frontmcp/utils');
-
   await ensureDir(outputDir);
 
   const generator = new ReportGenerator();

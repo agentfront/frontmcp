@@ -31,6 +31,8 @@ export interface StdioFramerOptions {
   output: Writable;
   log: BridgeLogger;
   onFrame: (frame: JsonRpcFrame) => void | Promise<void>;
+  /** Called once when the input stream ends or closes (the MCP client went away). */
+  onClose?: () => void;
 }
 
 export interface StdioFramer {
@@ -48,7 +50,7 @@ export interface StdioFramer {
  * frame must not kill the bridge.
  */
 export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
-  const { input, output, log, onFrame } = options;
+  const { input, output, log, onFrame, onClose } = options;
   let buffer = '';
   // True while `output.write` is signalling backpressure. Read by `onData`
   // to pause the inbound stream so we don't keep buffering frames when the
@@ -95,6 +97,13 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
     }
   }
 
+  let closed = false;
+  function onInputClosed(): void {
+    if (closed) return;
+    closed = true;
+    onClose?.();
+  }
+
   function onData(chunk: Buffer | string): void {
     buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
     flushBuffer();
@@ -130,11 +139,15 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
     start: () => {
       input.setEncoding?.('utf-8');
       input.on('data', onData);
+      input.on('end', onInputClosed);
+      input.on('close', onInputClosed);
       output.on('drain', onDrain);
     },
     write,
     stop: () => {
       input.off('data', onData);
+      input.off('end', onInputClosed);
+      input.off('close', onInputClosed);
       output.off('drain', onDrain);
       // Settle any queued write() promises so callers blocked on
       // backpressure don't hang past shutdown. Resume the input stream
