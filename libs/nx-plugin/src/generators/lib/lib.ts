@@ -17,7 +17,7 @@ async function libGeneratorInternal(
   tree: Tree,
   schema: LibGeneratorSchema,
 ): Promise<GeneratorCallback | void> {
-  const options = normalizeOptions(schema);
+  const options = normalizeOptions(tree, schema);
 
   // Generate project config files (project.json, tsconfig, jest)
   generateFiles(tree, join(__dirname, 'lib-project-files'), options.projectRoot, {

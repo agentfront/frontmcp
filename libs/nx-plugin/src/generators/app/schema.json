@@ -17,6 +17,11 @@
       "description": "The directory of the application (default: apps/<name>)",
       "x-priority": "important"
     },
+    "workspaceRoot": {
+      "type": "string",
+      "description": "Folder of the Nx workspace when it is not the tree root",
+      "x-priority": "internal"
+    },
     "tags": {
       "type": "string",
       "description": "Comma-separated tags for the project",

@@ -1,41 +1,57 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { join } from 'path';
 
-jest.mock('child_process', () => ({ execSync: jest.fn() }));
-
+import { createFakeWorkspace, type FakeWorkspace } from '../__tests__/fake-workspace';
 import testExecutor from './test.impl';
 
-const mockContext = {
-  root: '/workspace',
-  projectName: 'demo',
-  projectsConfigurations: { version: 2, projects: { demo: { root: 'apps/demo' } } },
-  cwd: '/workspace',
-  isVerbose: false,
-  projectGraph: { nodes: {}, dependencies: {} },
-  nxJsonConfiguration: {},
-} as any;
+jest.mock('child_process', () => ({ execFileSync: jest.fn(), spawn: jest.fn() }));
+
+const mockExecFileSync = execFileSync as jest.MockedFunction<typeof execFileSync>;
 
 describe('test executor', () => {
-  beforeEach(() => jest.clearAllMocks());
+  let ws: FakeWorkspace;
 
-  it('should run frontmcp test', async () => {
-    const result = await testExecutor({}, mockContext);
-    expect(execSync).toHaveBeenCalledWith('npx frontmcp test', expect.anything());
-    expect(result.success).toBe(true);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ws = createFakeWorkspace();
   });
+  afterEach(() => ws.cleanup());
 
-  it('should pass all flags', async () => {
-    await testExecutor({ runInBand: true, watch: true, coverage: true, verbose: true, timeout: 30000 }, mockContext);
-    expect(execSync).toHaveBeenCalledWith(
-      'npx frontmcp test --runInBand --watch --coverage --verbose --timeout 30000',
-      expect.anything(),
+  function lastArgs(): string[] {
+    const call = mockExecFileSync.mock.calls[0];
+    return (call?.[1] ?? []) as string[];
+  }
+
+  it('runs frontmcp test from the project folder, not the workspace root', async () => {
+    const result = await testExecutor({}, ws.context);
+
+    expect(result.success).toBe(true);
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      process.execPath,
+      [ws.binPath, 'test'],
+      expect.objectContaining({ cwd: join(ws.root, 'apps', 'demo') }),
     );
   });
 
-  it('should return failure on error', async () => {
-    (execSync as jest.Mock).mockImplementation(() => {
-      throw new Error('fail');
+  it('passes all flags', async () => {
+    await testExecutor({ runInBand: true, watch: true, coverage: true, verbose: true, timeout: 5000 }, ws.context);
+
+    expect(lastArgs()).toEqual([
+      ws.binPath,
+      'test',
+      '--runInBand',
+      '--watch',
+      '--coverage',
+      '--verbose',
+      '--timeout',
+      '5000',
+    ]);
+  });
+
+  it('reports failure when tests fail', async () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw Object.assign(new Error('failed'), { status: 1 });
     });
-    const result = await testExecutor({}, mockContext);
-    expect(result.success).toBe(false);
+    expect(await testExecutor({}, ws.context)).toEqual({ success: false });
   });
 });

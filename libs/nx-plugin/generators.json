@@ -1,5 +1,10 @@
 {
   "generators": {
+    "init": {
+      "factory": "./src/generators/init/init",
+      "schema": "./src/generators/init/schema.json",
+      "description": "Prepare an existing Nx workspace for FrontMCP (dependencies and cacheable executors)"
+    },
     "workspace": {
       "factory": "./src/generators/workspace/workspace",
       "schema": "./src/generators/workspace/schema.json",

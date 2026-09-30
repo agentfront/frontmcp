@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpInit",
+  "title": "FrontMCP Init Generator",
+  "description": "Prepare an existing Nx workspace for FrontMCP: install the FrontMCP packages and make the executors cacheable",
+  "type": "object",
+  "properties": {
+    "skipPackageJson": {
+      "type": "boolean",
+      "description": "Do not add FrontMCP dependencies to package.json",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Skip formatting files",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": []
+}

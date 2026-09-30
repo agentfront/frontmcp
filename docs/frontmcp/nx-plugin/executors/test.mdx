@@ -42,7 +42,7 @@ nx test my-app --runInBand --coverage
 
 ## Caching
 
-This executor is **cacheable**. Test results are cached when inputs haven't changed. Use with `coverage` for reproducible reports.
+This executor runs `frontmcp test` from the project root and is **cacheable** when the target sets `"cache": true` (generated projects do, and `nx add @frontmcp/nx` registers it in `targetDefaults`). Test results are cached when inputs haven't changed. Use with `coverage` for reproducible reports.
 
 ```bash
 # Run tests for affected projects only

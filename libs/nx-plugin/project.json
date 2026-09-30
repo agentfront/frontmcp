@@ -34,6 +34,11 @@
             "input": "libs/nx-plugin/src",
             "glob": "**/files/**",
             "output": "."
+          },
+          {
+            "input": "libs/nx-plugin/src",
+            "glob": "**/*__tmpl__",
+            "output": "."
           }
         ]
       }

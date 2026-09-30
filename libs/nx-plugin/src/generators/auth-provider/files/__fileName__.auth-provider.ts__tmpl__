@@ -2,7 +2,6 @@ import { AuthProvider } from '@frontmcp/sdk';
 
 @AuthProvider({
   name: '<%= name %>',
-  type: '<%= authType %>',
 })
 export class <%= className %>AuthProvider {
   async headers(): Promise<Record<string, string>> {

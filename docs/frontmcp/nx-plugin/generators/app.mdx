@@ -32,10 +32,11 @@ apps/my-app/
 │   └── tools/
 │       └── hello.tool.ts     # Sample @Tool
 ├── project.json               # Nx project config with targets
+├── package.json               # Minimal manifest so `frontmcp build` runs in the project root
 ├── tsconfig.json
 ├── tsconfig.lib.json
 ├── tsconfig.spec.json
-└── jest.config.ts
+└── jest.config.cjs            # swc transform, @frontmcp/testing setup, tsconfig path aliases
 ```
 
 ## Generated Code

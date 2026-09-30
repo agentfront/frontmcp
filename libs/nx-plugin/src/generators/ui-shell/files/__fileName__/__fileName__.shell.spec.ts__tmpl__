@@ -11,6 +11,7 @@ describe('build<%= className %>Shell', () => {
 
   it('should return an HTML string', () => {
     const result = build<%= className %>Shell({ toolName: 'test' });
-    expect(typeof result).toBe('string');
+    expect(typeof result.html).toBe('string');
+    expect(result.html).toContain('test');
   });
 });

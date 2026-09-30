@@ -1,4 +1,5 @@
-import { type Tree, getProjects, joinPathFragments } from '@nx/devkit';
+import { getProjects, joinPathFragments, type Tree } from '@nx/devkit';
+
 import { toFileName } from './names.js';
 
 export interface NormalizedPrimitiveOptions {

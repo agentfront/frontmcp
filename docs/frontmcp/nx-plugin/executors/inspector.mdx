@@ -29,9 +29,11 @@ nx inspector my-app
 
 ## Options
 
-| Option | Type     | Description    |
-| ------ | -------- | -------------- |
-| `port` | `number` | Inspector port |
+| Option | Type     | Description                                                              |
+| ------ | -------- | ------------------------------------------------------------------------ |
+| `port` | `number` | Inspector UI port. Passed to the inspector via the `CLIENT_PORT` env var |
+
+The `frontmcp inspector` command takes no flags, so the executor forwards `port` as the `CLIENT_PORT` environment variable instead.
 
 ## Behavior
 

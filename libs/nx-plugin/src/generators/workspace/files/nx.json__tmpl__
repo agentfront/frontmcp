@@ -12,7 +12,8 @@
       "!{projectRoot}/eslint.config.mjs",
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
       "!{projectRoot}/tsconfig.spec.json",
-      "!{projectRoot}/jest.config.[jt]s"
+      "!{projectRoot}/jest.config.[jt]s",
+      "!{projectRoot}/jest.config.cjs"
     ],
     "sharedGlobals": []
   },
@@ -44,6 +45,19 @@
     },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "@frontmcp/nx:build": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    },
+    "@frontmcp/nx:build-exec": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    },
+    "@frontmcp/nx:test": {
+      "cache": true
     }
   },
   "release": {

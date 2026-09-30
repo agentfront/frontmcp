@@ -1,31 +1,69 @@
-import { Flow, FlowBase } from '@frontmcp/sdk';
+import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } from '@frontmcp/sdk';
+
+const name = '<%= name %>' as const;
+
+const inputSchema = z.object({
+  // TODO: describe the flow input
+  value: z.string().default(''),
+});
+
+const outputSchema = z.object({
+  // TODO: describe the flow output
+  result: z.string(),
+});
+
+const stateSchema = z.object({
+  result: z.string().default(''),
+});
+
+const plan = {
+  pre: ['pre'],
+  execute: ['execute'],
+  post: ['post'],
+  finalize: ['finalize'],
+} as const satisfies FlowPlan<string>;
+
+declare global {
+  interface ExtendFlows {
+    [name]: FlowRunOptions<
+      <%= className %>Flow,
+      typeof plan,
+      typeof inputSchema,
+      typeof outputSchema,
+      typeof stateSchema
+    >;
+  }
+}
+
+const { Stage } = FlowHooksOf<typeof name>(name);
 
 @Flow({
-  name: '<%= name %>',
+  name,
   description: 'TODO: describe what this flow does',
-  plan: {
-    steps: ['pre', 'execute', 'post', 'finalize'],
-  },
+  plan,
+  inputSchema,
+  outputSchema,
+  access: 'public',
 })
-export default class <%= className %>Flow extends FlowBase {
-  async pre(): Promise<void> {
+export default class <%= className %>Flow extends FlowBase<typeof name> {
+  @Stage('pre')
+  async pre() {
     // TODO: pre-processing logic
   }
 
-  async execute(): Promise<void> {
+  @Stage('execute')
+  async execute() {
     // TODO: main execution logic
+    this.state.set('result', this.rawInput.value ?? '');
   }
 
-  async post(): Promise<void> {
+  @Stage('post')
+  async post() {
     // TODO: post-processing logic
   }
 
-  async finalize(): Promise<void> {
-    // TODO: finalization logic
-  }
-
-  async error(err: Error): Promise<void> {
-    // TODO: error handling logic
-    throw err;
+  @Stage('finalize')
+  async finalize() {
+    this.respond({ result: this.state.result ?? '' });
   }
 }
