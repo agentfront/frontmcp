@@ -74,7 +74,19 @@ describe('generateBridgeIIFE', () => {
       const result = generateBridgeIIFE();
       expect(result).toContain("typeof ResizeObserver === 'undefined'");
       expect(result).toContain('new ResizeObserver');
-      expect(result).toContain('.observe(target)');
+      expect(result).toContain('ro.observe(targets[i])');
+    });
+
+    it('should measure the whole document (<html> at fit-content), not #root', () => {
+      const result = generateBridgeIIFE();
+      expect(result).toContain('function __measureHeight()');
+      expect(result).toContain("de.style.height = 'fit-content'");
+      expect(result).not.toContain("document.getElementById('root') || document.body");
+    });
+
+    it('should send a report on bridge:ready', () => {
+      const result = generateBridgeIIFE();
+      expect(result).toContain("window.addEventListener('bridge:ready'");
     });
 
     it('should respect autoResize:false (opt-out short-circuit)', () => {
@@ -103,6 +115,24 @@ describe('generateBridgeIIFE', () => {
       const result = generateBridgeIIFE({ minify: true });
       expect(result).toContain('__initAutoResize');
       expect(result).toContain('__mcpWidgetSizing');
+      // The minifier drops spaces around punctuation, even inside strings; the
+      // selector and CSS keyword the bridge relies on have none.
+      expect(result).toContain("'fit-content'");
+      expect(result).toContain(`'meta[name="color-scheme"]'`);
+    });
+  });
+
+  describe('host theme', () => {
+    it('should apply the host theme from notifyContextChange', () => {
+      const result = generateBridgeIIFE();
+      expect(result).toContain('function __applyHostTheme(theme)');
+      expect(result).toContain('if (changes && changes.theme) __applyHostTheme(changes.theme);');
+    });
+
+    it('should notify context changes from the ext-apps handshake instead of merging silently', () => {
+      const result = generateBridgeIIFE({ adapters: ['ext-apps', 'generic'] });
+      expect(result).toContain('context.notifyContextChange(result.hostContext)');
+      expect(result).not.toContain('Object.assign(context.hostContext, result.hostContext)');
     });
   });
 });

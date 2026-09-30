@@ -425,6 +425,20 @@ export async function buildExec(
     );
   }
 
+  // 12b. Ship FileSource widgets (#649). `.widget.tsx` / `.widget.jsx` files are
+  //      read from disk when the tool is called and tsc never emits them. Every
+  //      module in the bundle (and the SEA binary) resolves `__dirname` to outDir,
+  //      so the widgets go there, flat. Copied after the cleanup above, which
+  //      would otherwise delete them.
+  const { shipWidgetSources } = await import('../copy-widgets.js');
+  await shipWidgetSources({
+    srcRoot: path.dirname(entry),
+    outDir,
+    layout: 'flat',
+    cwd,
+    label: '[build:exec]',
+  });
+
   // 13. Print summary
   console.log(`\n${c('green', 'Executable build completed.')}`);
   console.log(`\n${c('bold', 'Output:')}`);

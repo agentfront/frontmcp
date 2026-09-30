@@ -130,6 +130,61 @@ function resolveImportSource(source: ImportSource): ResolvedComponent {
   };
 }
 
+/** Output directory names whose widgets are usually missing because tsc doesn't copy them (#649). */
+const BUILD_DIR_SEGMENTS = new Set(['dist', 'build', 'out']);
+
+/**
+ * ENOENT for an absolute widget path: name the path, say when it is read and
+ * why a compiled tool may point at a file the build never produced, and name
+ * the source widget when one exists at the matching path under `src/`.
+ */
+function missingWidgetError(filePath: string, cause: unknown): NodeJS.ErrnoException {
+  const sourceWidget = findSourceWidget(filePath);
+  const error: NodeJS.ErrnoException = new Error(
+    `FileSource widget not found (ENOENT): no file at "${filePath}". ` +
+      `The widget source is read from this path when the tool is called, so it has to exist where the compiled tool runs — ` +
+      `a path built from \`__dirname\` or \`import.meta.url\` points into the build output once the tool is compiled. ` +
+      `tsc does not copy \`*.widget.tsx\` / \`*.widget.jsx\` files into its output; \`frontmcp build\` does, ` +
+      `and any other build needs a step that copies them next to the compiled tool.` +
+      (sourceWidget
+        ? ` The source widget exists at "${sourceWidget}" — copy it to "${filePath}", or build with \`frontmcp build\`.`
+        : ''),
+    { cause },
+  );
+  error.code = 'ENOENT';
+  error.path = filePath;
+  return error;
+}
+
+/**
+ * For a path inside a build directory (`dist/`, `build/`, `out/`), the same file
+ * under `src/` — directly (`dist/tools/x` → `src/tools/x`) or past a per-target
+ * directory (`dist/node/x` → `src/x`) — or next to the build directory when tsc
+ * compiles from the project root (`dist/x` → `x`), whichever exists first.
+ */
+function findSourceWidget(filePath: string): string | undefined {
+  const path = require('path') as typeof import('path');
+  const fs = require('fs') as typeof import('fs');
+  const parts = filePath.split(path.sep);
+  // The innermost build directory is the one the compiled tool ran from.
+  for (let i = parts.length - 2; i >= 0; i--) {
+    if (!BUILD_DIR_SEGMENTS.has(parts[i])) continue;
+    const candidates = [[...parts.slice(0, i), 'src', ...parts.slice(i + 1)]];
+    if (parts.length - i > 2) candidates.push([...parts.slice(0, i), 'src', ...parts.slice(i + 2)]);
+    candidates.push([...parts.slice(0, i), ...parts.slice(i + 1)]);
+    for (const candidate of candidates) {
+      const candidatePath = candidate.join(path.sep);
+      try {
+        if (fs.existsSync(candidatePath)) return candidatePath;
+      } catch {
+        // existsSync unavailable — no suggestion.
+      }
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
 function resolveFileSource(
   source: FileSource,
   options: { inlineReact?: boolean; transformOnly?: boolean } = {},
@@ -157,8 +212,10 @@ function resolveFileSource(
             `To anchor the path to the tool file, pass an absolute path — e.g. ` +
             `\`{ file: fileURLToPath(new URL('./widget.tsx', import.meta.url)) }\` from \`node:url\` ` +
             `(see issue #444).`,
+          { cause: err },
         );
       }
+      if (isNotFound) throw missingWidgetError(filePath, err);
       throw err;
     }
 

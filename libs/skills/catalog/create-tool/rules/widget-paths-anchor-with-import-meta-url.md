@@ -40,11 +40,11 @@ const widgetPath = fileURLToPath(new URL('./sales-chart.widget.tsx', import.meta
 
 - **`process.cwd()` is whoever launched the process.** `yarn dev` from the repo root, `node dist/main.js` from `/opt/app`, a containerized run from `/`, a serverless cold start from `/var/task`, an Nx executor from `apps/<thing>/` — all different cwds.
 - **Tool sources move around at build time.** ESM build output is often in `dist/`; `.tool.ts` becomes `.tool.js`. The relative reference's resolution chain is fragile to that.
-- **`fileURLToPath(new URL('./x', import.meta.url))` is invariant.** It anchors to the **source file** that contains the URL literal — same answer at dev, build, and runtime.
+- **`fileURLToPath(new URL('./x', import.meta.url))` is independent of cwd.** It anchors to the file that contains the URL literal — the source file under `frontmcp dev`, the **compiled** file once the tool is built. That's why the widget must ship with the build (below).
 
 ## CommonJS projects (`__dirname`)
 
-`import.meta.url` is **ESM-only**. In a CommonJS project (`package.json` `"type": "commonjs"`, or `tsconfig` `"module": "commonjs"`) `import.meta` is unavailable and the build fails. Anchor with `__dirname` instead — the CJS equivalent, equally invariant to `process.cwd()`:
+`import.meta.url` is **ESM-only**. In a CommonJS project (`package.json` `"type": "commonjs"`, or `tsconfig` `"module": "commonjs"`) `import.meta` is unavailable and the build fails. Anchor with `__dirname` instead — the CJS equivalent, equally independent of `process.cwd()`:
 
 ```typescript
 import { join } from 'node:path';
@@ -57,7 +57,14 @@ const widgetPath = join(__dirname, 'sales-chart.widget.tsx');
 })
 ```
 
-Pick the anchor that matches your module system — both resolve to the tool source's directory regardless of cwd. The rule is only that the path must **never** be a bare relative string.
+Pick the anchor that matches your module system — both resolve to the directory of the file that is running, regardless of cwd. The rule is only that the path must **never** be a bare relative string.
+
+## Ship the widget with the build (#649)
+
+The widget is read when the tool is called, from the path the **compiled** tool computes, so after a build it has to exist in the output — tsc never emits `*.widget.tsx`:
+
+- `frontmcp build` copies every `*.widget.tsx` / `*.widget.jsx` under the entry's directory. tsc-output targets get them next to each compiled tool (same relative path). Bundled targets (`node`, `cli`, `lambda`, `vercel`) get them directly next to the bundle, because every bundled module's `__dirname` is the bundle's directory — so keep each widget beside the tool that uses it and give it a unique file name.
+- A plain `tsc` build copies nothing — add a copy step, or the call fails with an `ENOENT` error that names the path it looked for.
 
 ## Also: name the widget `*.widget.tsx`
 

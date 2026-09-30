@@ -41,8 +41,22 @@ yarn add @frontmcp/ui
 **Required for `.tsx`/`.jsx` FileSource widgets.** When you point `ui.template` at a `.tsx`/`.jsx` file (the recommended pattern for non-trivial widgets), FrontMCP injects an auto-generated React mount that imports `McpBridgeProvider` from `@frontmcp/ui/react`. Server-side bundling fails without this package installed. Match the version to `@frontmcp/sdk`. `react` and `react-dom` stay external and load from the CDN at runtime, so only `@frontmcp/ui` needs to be present on disk.
 </Info>
 
+<Info>
+**`.tsx`/`.jsx` widgets also need `esbuild` at runtime.** `@frontmcp/uipack` loads `esbuild` on demand to bundle the widget when the tool is called, so it has to be installed where the server runs — as a dependency, not a devDependency:
+
+```bash
+npm install esbuild
+```
+
+Projects created with `frontmcp create` already have it through the `frontmcp` package. Without it, the call fails with an error that names the widget.
+
+</Info>
+
 <Warning>
 **Anchor FileSource paths to the tool file.** Relative `template: { file: './widget.tsx' }` paths are resolved against `process.cwd()`, not the tool source's directory. A widget at `src/tools/foo.widget.tsx` referenced as `./foo.widget.tsx` from `src/tools/foo.tool.ts` will fail with `ENOENT` at tool-call time. Use `fileURLToPath(new URL('./widget.tsx', import.meta.url))` (from `node:url`) or pass an absolute path. In a **CommonJS** project, `import.meta.url` is unavailable — use `join(__dirname, 'widget.tsx')` (from `node:path`) instead.
+
+The widget file is read when the tool is called, from where the **compiled** tool resolves that path — so it has to ship with the build. `frontmcp build` copies `*.widget.tsx` / `*.widget.jsx` files into the output (next to the bundle for the bundled `node`, `cli`, `lambda` and `vercel` targets, so keep widget file names unique). A plain `tsc` build doesn't copy them.
+
 </Warning>
 
 <Info>
@@ -428,6 +442,21 @@ export default class ExpenseSummaryTool extends ToolContext {
   }
 }
 ```
+
+---
+
+## Theme
+
+The widget page follows the host's theme. When an MCP Apps host sends `theme: 'light'` or `'dark'` — in its `ui/initialize` answer, or later in `ui/notifications/host-context-changed` — the bridge writes it to `<meta name="color-scheme">` and `<html data-theme>`. The frame's background and form controls then match the host, and your CSS can key off the attribute:
+
+```css
+[data-theme='dark'] .card {
+  background: #1f2937;
+  color: #f9fafb;
+}
+```
+
+`window.FrontMcpBridge.getTheme()` returns the same value, and `onContextChange` listeners fire for the handshake context as well as later changes. When the host sends no theme, nothing is written. A widget that only has light styles can opt out with `:root { color-scheme: light }`, which takes precedence over the meta tag.
 
 ---
 

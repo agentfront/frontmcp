@@ -95,6 +95,10 @@ jest.mock('../sea-builder', () => ({
   buildSea: jest.fn(),
 }));
 
+jest.mock('../../copy-widgets', () => ({
+  shipWidgetSources: jest.fn().mockResolvedValue({ copied: [], conflicts: [] }),
+}));
+
 // ---- Imports (after mocks are set up) ----
 
 import { buildExec } from '../index';
@@ -621,6 +625,30 @@ describe('buildExec() integration', () => {
 
         const runnerContent = fs.readFileSync(path.join(outDir, 'test-app'), 'utf-8');
         expect(runnerContent).toContain('single executable');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('FileSource widgets (#649)', () => {
+    it('ships widget sources flat into outDir, next to the bundle, after the intermediate cleanup', async () => {
+      const { shipWidgetSources } = require('../../copy-widgets');
+      (shipWidgetSources as jest.Mock).mockImplementation(async (opts: { outDir: string }) => {
+        fs.writeFileSync(path.join(opts.outDir, 'queue.widget.tsx'), 'export default () => null;');
+        return { copied: ['queue.widget.tsx'], conflicts: [] };
+      });
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        expect(shipWidgetSources).toHaveBeenCalledWith(
+          expect.objectContaining({ srcRoot: '/fake/src', outDir, layout: 'flat', label: '[build:exec]' }),
+        );
+        // Copied after the cleanup step, which deletes top-level intermediate files.
+        expect(fs.existsSync(path.join(outDir, 'queue.widget.tsx'))).toBe(true);
       } finally {
         process.chdir(originalCwd);
       }
