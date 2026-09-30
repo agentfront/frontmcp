@@ -44,7 +44,7 @@ That's it. The framework:
 | **FileSource (recommended)** | `{ file: widgetPath }`                  | `.tsx` / `.jsx` / `.html` source files. Anchor with `import.meta.url`.                                                             |
 | **Function**                 | `` (ctx) => ctx.helpers.html`…` ``      | Quick demo / one-liner HTML. Annotate `ctx: TemplateContext<In, Out>` ([why](#typescript-gotcha-ts7006)).                          |
 | **HTML / Markdown string**   | `'<div>…</div>'` or `'# Title\n- item'` | A string with both `<` and `>` is HTML as written; any other string is Markdown, converted on the server. MDX is **not** compiled. |
-| **React component**          | `MyWidget`                              | SSR React. Set `hydrate: false` (default) for Claude/ChatGPT.                                                                      |
+| **React component**          | `MyWidget`                              | A bare component reference cannot be bundled for the widget; use the `{ file }` form instead.                                      |
 
 The renderer auto-detects which one you passed.
 

@@ -10,20 +10,25 @@ import { escapeHtml } from '../utils';
 
 const SAFE_HREF = /^(https?:|mailto:|\/|#)/i;
 
+function emphasis(text: string): string {
+  return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
 function inline(text: string): string {
-  const codes: string[] = [];
-  // U+E000 delimits code-span placeholders, so it must not come from the input
-  let out = escapeHtml(text.replace(/\uE000/g, '')).replace(/`([^`]+)`/g, (_m, code: string) => {
-    codes.push(`<code>${code}</code>`);
-    return `\uE000${codes.length - 1}\uE000`;
-  });
-  out = out
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) =>
-      SAFE_HREF.test(href) ? `<a href="${href}" rel="noopener noreferrer">${label}</a>` : label,
-    );
-  return out.replace(/\uE000(\d+)\uE000/g, (_m, i: string) => codes[Number(i)]);
+  const stash: string[] = [];
+  const hold = (html: string) => `\uE000${stash.push(html) - 1}\uE000`;
+  // U+E000 delimits placeholders, so it must not come from the input
+  let out = escapeHtml(text.replace(/\uE000/g, '')).replace(/`([^`]+)`/g, (_m, code: string) =>
+    hold(`<code>${code}</code>`),
+  );
+  // Links are stashed before emphasis so `*` / `**` inside an href never becomes markup
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) =>
+    SAFE_HREF.test(href) ? hold(`<a href="${href}" rel="noopener noreferrer">${emphasis(label)}</a>`) : label,
+  );
+  out = emphasis(out);
+  // Stashed links can contain code-span placeholders, so restore until none are left
+  for (let i = 0; i < 2; i++) out = out.replace(/\uE000(\d+)\uE000/g, (_m, n: string) => stash[Number(n)]);
+  return out;
 }
 
 export function markdownToHtml(source: string): string {
@@ -45,11 +50,17 @@ export function markdownToHtml(source: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line.trimStart().startsWith('```')) {
+    const fence = /^\s*(`{3,})/.exec(line);
+    if (fence) {
       flushParagraph();
       flushList();
+      const fenceLength = fence[1].length;
+      const isClosing = (l: string) => {
+        const m = /^\s*(`{3,})\s*$/.exec(l);
+        return m !== null && m[1].length >= fenceLength;
+      };
       const code: string[] = [];
-      for (i++; i < lines.length && !lines[i].trimStart().startsWith('```'); i++) code.push(lines[i]);
+      for (i++; i < lines.length && !isClosing(lines[i]); i++) code.push(lines[i]);
       blocks.push(`<pre><code>${escapeHtml(code.join('\n'))}\n</code></pre>`);
       continue;
     }

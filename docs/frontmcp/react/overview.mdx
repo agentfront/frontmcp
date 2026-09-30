@@ -96,7 +96,7 @@ function GreetButton() {
 }
 ```
 
-No need to install `@frontmcp/sdk` or `zod` separately — `@frontmcp/react` re-exports `create`, `connect`, decorators, context classes, and `z` for tool schemas.
+You do not need to install `@frontmcp/sdk` separately. `@frontmcp/react` re-exports `create`, `connect`, decorators, context classes, and `z` for tool schemas. `zod` remains a required peer dependency of `@frontmcp/lazy-zod` and must be available in the consuming project.
 
 `data` is the complete MCP `CallToolResult` (`{ content, structuredContent?, isError? }`), not the tool's return value. A tool that fails resolves with `data.isError === true`; the `error` field is only set when the call itself throws (for example when the client is not connected).
 

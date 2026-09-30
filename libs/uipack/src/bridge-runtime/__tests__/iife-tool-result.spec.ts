@@ -80,4 +80,28 @@ describe.each([
     expect(frame.bridge.getToolOutput()).toEqual({ temp: 18 });
     expect(frame.bridge.getStructuredContent()).toEqual({ temp: 18 });
   });
+
+  it('propagates a changed toolInput from openai:set_globals', async () => {
+    frame = createBridgeFrame({
+      minify,
+      bodyHtml: '<div id="root"></div>',
+      beforeBridge: (win: FrameWindow) => {
+        (win as unknown as { openai: unknown }).openai = {
+          callTool: () => Promise.resolve({}),
+          toolInput: { city: 'Paris' },
+          toolOutput: { temp: 18 },
+        };
+      },
+    });
+    await frame.settle();
+    const received: unknown[] = [];
+    frame.win.addEventListener('tool:input', (e) => received.push((e as CustomEvent).detail.arguments));
+
+    frame.win.dispatchEvent(
+      new frame.win.CustomEvent('openai:set_globals', { detail: { globals: { toolInput: { city: 'Rome' } } } }),
+    );
+
+    expect((frame.bridge as unknown as { getToolInput(): unknown }).getToolInput()).toEqual({ city: 'Rome' });
+    expect(received).toEqual([{ city: 'Rome' }]);
+  });
 });

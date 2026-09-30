@@ -380,6 +380,10 @@ var OpenAIAdapter = {
     // The Apps SDK re-dispatches the changed globals in an 'openai:set_globals' event.
     window.addEventListener('openai:set_globals', function(event) {
       var globals = (event && event.detail && event.detail.globals) || window.openai || {};
+      if (globals.toolInput !== undefined && globals.toolInput !== null) {
+        context.toolInput = globals.toolInput;
+        window.dispatchEvent(new CustomEvent('tool:input', { detail: { arguments: context.toolInput } }));
+      }
       if (globals.toolOutput !== undefined && globals.toolOutput !== null) {
         context.structuredContent = globals.toolOutput;
         context.notifyToolResult(globals.toolOutput);

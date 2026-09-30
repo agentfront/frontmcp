@@ -40,4 +40,25 @@ describe('markdownToHtml', () => {
   it('ignores placeholder-like characters in the input', () => {
     expect(markdownToHtml('a \uE0000\uE000 `x`')).toBe('<p>a 0 <code>x</code></p>');
   });
+
+  it('does not turn emphasis markers inside a link href into markup', () => {
+    const out = markdownToHtml('[site](https://example.com/*a*/**b**)');
+    expect(out).toBe('<p><a href="https://example.com/*a*/**b**" rel="noopener noreferrer">site</a></p>');
+  });
+
+  it('still formats emphasis and code inside a link label', () => {
+    expect(markdownToHtml('[**bold** `c`](https://example.com)')).toBe(
+      '<p><a href="https://example.com" rel="noopener noreferrer"><strong>bold</strong> <code>c</code></a></p>',
+    );
+  });
+
+  it('closes a fenced block only on a fence at least as long as the opener', () => {
+    const out = markdownToHtml('````\n```\ninner\n```\n````\nafter');
+    expect(out).toBe('<pre><code>```\ninner\n```\n</code></pre>\n<p>after</p>');
+  });
+
+  it('does not close a fence on a line with trailing text', () => {
+    const out = markdownToHtml('```\ncode\n```js\nmore\n```');
+    expect(out).toBe('<pre><code>code\n```js\nmore\n</code></pre>');
+  });
 });
