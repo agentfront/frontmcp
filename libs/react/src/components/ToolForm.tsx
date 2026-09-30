@@ -5,8 +5,9 @@
  * Otherwise uses basic unstyled `<input>` / `<select>` / `<textarea>`.
  */
 
-import React, { useState, useCallback } from 'react';
-import type { ToolInfo, FieldRenderProps } from '../types';
+import React, { useCallback, useState } from 'react';
+
+import type { FieldRenderProps, ToolInfo } from '../types';
 
 export interface ToolFormProps {
   tool: ToolInfo;
@@ -26,12 +27,22 @@ export function ToolForm({
   const required = (schema['required'] ?? []) as string[];
   const [values, setValues] = useState<Record<string, string>>({});
 
+  // What an untouched field holds: an enum shows its default (or first option) as selected, so
+  // that is also what is submitted; other fields start empty.
+  const initialValue = (prop: Record<string, unknown>): string => {
+    const options = prop['enum'] as string[] | undefined;
+    if (!options) return '';
+    const fallback = prop['default'];
+    return typeof fallback === 'string' && options.includes(fallback) ? fallback : (options[0] ?? '');
+  };
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
       const args: Record<string, unknown> = {};
       for (const [key, prop] of Object.entries(properties)) {
-        const raw = values[key] ?? '';
+        const seeded = required.includes(key) || prop['default'] !== undefined;
+        const raw = values[key] ?? (seeded ? initialValue(prop) : '');
         if (!required.includes(key) && raw === '') continue;
         if (prop['type'] === 'number' || prop['type'] === 'integer') {
           args[key] = Number(raw);
@@ -57,7 +68,7 @@ export function ToolForm({
       const isRequired = required.includes(key);
       const enumValues = prop['enum'] as string[] | undefined;
       const fieldType = getFieldType(prop);
-      const value = values[key] ?? '';
+      const value = values[key] ?? initialValue(prop);
 
       if (renderField) {
         return React.createElement(
@@ -88,7 +99,7 @@ export function ToolForm({
               'select',
               {
                 id: `field-${key}`,
-                value: value || enumValues[0] || '',
+                value,
                 onChange: (e: React.ChangeEvent<HTMLSelectElement>) => handleChange(key, e.target.value),
               },
               ...enumValues.map((v) => React.createElement('option', { key: v, value: v }, v)),

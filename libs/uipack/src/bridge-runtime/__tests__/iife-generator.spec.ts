@@ -116,10 +116,22 @@ describe('generateBridgeIIFE', () => {
       const result = generateBridgeIIFE({ minify: true });
       expect(result).toContain('__initAutoResize');
       expect(result).toContain('__mcpWidgetSizing');
-      // The minifier drops spaces around punctuation, even inside strings; the
-      // selector and CSS keyword the bridge relies on have none.
       expect(result).toContain("'fit-content'");
       expect(result).toContain(`'meta[name="color-scheme"]'`);
+    });
+  });
+
+  describe('minification keeps string literals intact (#645)', () => {
+    it('does not remove spaces inside messages', () => {
+      const result = generateBridgeIIFE({ minify: true });
+      expect(result).toContain("'Tool calls not supported on this platform ('");
+      expect(result).toContain("'updateModelContext not supported on this platform'");
+    });
+
+    it('still produces valid JavaScript and is smaller than the unminified bundle', () => {
+      const minified = generateBridgeIIFE({ minify: true });
+      expect(() => new Function(minified)).not.toThrow();
+      expect(minified.length).toBeLessThan(generateBridgeIIFE().length);
     });
   });
 

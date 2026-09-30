@@ -18,6 +18,8 @@ function createRegistry(): ToolUIRegistry {
   return {
     getStaticWidget: jest.fn(() => undefined),
     getResourceMeta: jest.fn(() => undefined),
+    resolveCustomUri: jest.fn(() => undefined),
+    hasTool: jest.fn(() => true),
   } as unknown as ToolUIRegistry;
 }
 

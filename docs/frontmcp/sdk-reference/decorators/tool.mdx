@@ -92,7 +92,7 @@ class BadTool extends ToolContext {
 | `authProviders`     | `ToolAuthProviderRef[]`                                     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`)                                                                                                                                       |
 | `annotations`       | `ToolAnnotations`                                           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)                                                                                                                                           |
 | `examples`          | `ToolExample[]`                                             | Usage examples (`description`, `input`, optional `output`)                                                                                                                                                                          |
-| `ui`                | `ToolUIConfig`                                              | UI widget configuration (`template`, `csp`, sanitization options)                                                                                                                                                                   |
+| `ui`                | `ToolUIConfig`                                              | UI widget configuration (`template`, `csp`, `servingMode`, `escapeStringResults`)                                                                                                                                                                   |
 | `output`            | `OutputPolicy`                                              | Output-validation + output-schema exposure policy (`allowNonFinite`, `schemaMode`, `schemaDescriptionFormat`). Resolved Tool > App > server > default. See [Output schema exposure](/frontmcp/servers/tools#output-schema-exposure) |
 | `hideFromDiscovery` | `boolean`                                                   | Deprecated alias for `visibility: 'hidden'`                                                                                                                                                                                         |
 
@@ -213,18 +213,27 @@ unauthenticated / public requests.
 
 ### UI Configuration
 
-The `ui.template` field accepts a builder function, an HTML/MDX string, a React component, or a `FileSource` (for client-side transpilation):
+The `ui.template` field accepts a `FileSource` (recommended), a builder function, an HTML or Markdown string, or a React component. MDX is not compiled: a string containing `<` and `>` is used as HTML.
 
 ```typescript
 @Tool({
   name: 'user_profile',
   inputSchema: { userId: z.string() },
   ui: {
-    // `html` escapes interpolated values; plain string results render as markup unless `escapeStringResults: true`
-    template: (ctx) => ctx.helpers.html`<div>User ${ctx.input.userId}</div>`,
+    template: { file: fileURLToPath(new URL('./user-profile.widget.tsx', import.meta.url)) },
   },
 })
 ```
+
+The function form uses the `html` tagged template, which escapes interpolated values (plain string results render as markup unless `escapeStringResults: true`):
+
+```typescript
+ui: {
+  template: (ctx: TemplateContext<In, Out>) => ctx.helpers.html`<div>User ${ctx.input.userId}</div>`,
+}
+```
+
+Several `ui` options (`widgetDescription`, `widgetAccessible`, `displayMode`, `hydrate`, `mdxComponents`, `htmlResponsePrefix`, and others) are accepted but have no effect yet; startup logs a warning when one is set.
 
 See the [Tool UI guide](/frontmcp/servers/tools#tool-ui) for the full `ToolUIConfig` shape (CSP, sanitization, helpers, etc.), and [Trusted markup](/frontmcp/guides/building-tool-ui#trusted-markup) for `html` / `trustedHtml` and the `escapeStringResults` option (escaping becomes the default in 1.9).
 

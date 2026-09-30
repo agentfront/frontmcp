@@ -701,6 +701,18 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
+    if (this.scope.metadata.extApps?.enabled === false) {
+      const rpc = request.body as ExtAppsJsonRpcRequest;
+      logger.verbose('onExtApps: ext-apps disabled by config', { method: rpc?.method });
+      response.status(200).json({
+        jsonrpc: '2.0',
+        id: rpc?.id ?? null,
+        error: { code: -32601, message: `Method not found: ${rpc?.method}` },
+      });
+      this.handled();
+      return;
+    }
+
     logger.info('onExtApps: starting', {
       sessionId: session.id?.slice(0, 20),
       method: (request.body as { method?: string })?.method,
@@ -763,7 +775,19 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       serverToolProxy: configuredCapabilities?.serverToolProxy ?? true,
       logging: configuredCapabilities?.logging ?? true,
       ...configuredCapabilities,
+      // Only advertise what this host can serve: the context below provides callTool and nothing else
+      openLink: false,
+      modelContextUpdate: false,
+      widgetTools: false,
     };
+    const unsupported = (['openLink', 'modelContextUpdate', 'widgetTools'] as const).filter(
+      (key) => configuredCapabilities?.[key] === true,
+    );
+    if (unsupported.length > 0) {
+      logger.warn(
+        `onExtApps: extApps.hostCapabilities ${unsupported.join(', ')} are not supported yet and are not advertised`,
+      );
+    }
 
     const handler = createExtAppsMessageHandler({
       context: {

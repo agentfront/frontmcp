@@ -217,6 +217,20 @@ describe('ToolUIRegistry.getResourceMeta', () => {
     });
   });
 
+  it('records csp for a lean (template-less) compile so the widget resource has _meta before any call', async () => {
+    const registry = new ToolUIRegistry();
+
+    await registry.compileLeanWidgetAsync({
+      toolName: 'lean_tool',
+      uiConfig: { csp: { connectDomains: ['https://lean.example'] }, permissions: { camera: {} } },
+    });
+
+    expect(registry.getResourceMeta('lean_tool')).toEqual({
+      csp: { connectDomains: ['https://lean.example'] },
+      permissions: { camera: {} },
+    });
+  });
+
   it('clears resourceMeta on re-compile when csp/permissions removed from uiConfig', () => {
     // Exercise the private updateResourceMetaFromConfig hook by reaching in —
     // we want to confirm the "delete on absence" branch protects against
@@ -242,5 +256,53 @@ describe('ToolUIRegistry.getResourceMeta', () => {
     updateMeta('shifty', { csp: { connectDomains: ['https://b.example'] } });
     updateMeta('shifty', undefined);
     expect(registry.getResourceMeta('shifty')).toBeUndefined();
+  });
+});
+
+describe('handleUIResourceRead — custom resourceUri and unknown widgets (#645)', () => {
+  it('serves the widget of a tool that advertises a custom ui.resourceUri', () => {
+    const registry = new ToolUIRegistry();
+    registry.registerTool('custom_tool', 'ui://acme/dashboard');
+    (registry as unknown as { widgets: Map<string, string> }).widgets.set('custom_tool', '<html>custom</html>');
+
+    const result = handleUIResourceRead('ui://acme/dashboard', registry);
+
+    expect(result.error).toBeUndefined();
+    expect((result.result?.contents?.[0] as { text?: string }).text).toBe('<html>custom</html>');
+  });
+
+  it('serves a placeholder for a registered tool with a custom uri and no compiled widget', () => {
+    const registry = new ToolUIRegistry();
+    registry.registerTool('inline_tool', 'ui://acme/inline');
+
+    const result = handleUIResourceRead('ui://acme/inline', registry);
+
+    expect(result.error).toBeUndefined();
+    expect((result.result?.contents?.[0] as { text?: string }).text).toContain('inline_tool');
+  });
+
+  it('does not invent a placeholder for a tool that has no UI', () => {
+    const registry = new ToolUIRegistry();
+    registry.registerTool('real_tool');
+
+    const result = handleUIResourceRead('ui://widget/nope.html', registry);
+
+    expect(result.handled).toBe(true);
+    expect(result.result).toBeUndefined();
+    expect(result.error).toContain('ui://widget/nope.html');
+  });
+
+  it('still rejects an unadvertised custom-scheme URI', () => {
+    const registry = new ToolUIRegistry();
+    registry.registerTool('real_tool', 'ui://acme/dashboard');
+
+    expect(handleUIResourceRead('ui://acme/other', registry).error).toBeDefined();
+  });
+
+  it('resolves the app-qualified widget name of a registered tool', () => {
+    const registry = new ToolUIRegistry();
+    registry.registerTool('lookup');
+
+    expect(handleUIResourceRead('ui://widget/crm%3Alookup.html', registry).result).toBeDefined();
   });
 });

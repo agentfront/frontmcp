@@ -50,6 +50,8 @@ export interface ClientCapabilities {
     };
     [key: string]: unknown;
   };
+  /** Extension capabilities (SEP-2133), the home of MCP Apps on newer protocol revisions */
+  extensions?: Record<string, unknown>;
   /**
    * Elicitation capability - indicates the client supports interactive user input.
    * Per MCP 2025-11-25 specification.
@@ -79,16 +81,15 @@ export interface ClientInfo {
 export const MCP_APPS_EXTENSION_KEY = 'io.modelcontextprotocol/ui' as const;
 
 /**
- * Check if client capabilities include MCP Apps extension.
+ * Check if client capabilities include MCP Apps extension, under either
+ * `capabilities.experimental` or `capabilities.extensions`.
  * @param capabilities - Client capabilities from initialize request
  * @returns true if the client supports MCP Apps
  */
 export function hasMcpAppsExtension(capabilities?: ClientCapabilities): boolean {
-  if (!capabilities?.experimental) {
-    return false;
-  }
-  const uiExtension = capabilities.experimental[MCP_APPS_EXTENSION_KEY];
-  return uiExtension !== undefined && uiExtension !== null;
+  const declared =
+    capabilities?.experimental?.[MCP_APPS_EXTENSION_KEY] ?? capabilities?.extensions?.[MCP_APPS_EXTENSION_KEY];
+  return declared !== undefined && declared !== null;
 }
 
 /**

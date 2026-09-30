@@ -6,17 +6,19 @@
  */
 
 import type {
-  DirectMcpServer,
-  DirectClient,
   DirectCallOptions,
-  ListToolsResult,
+  DirectClient,
+  DirectMcpServer,
   ListResourcesResult,
+  ListToolsResult,
 } from '@frontmcp/sdk';
+
+import type { ResourceInfo, ToolInfo } from '../types';
 import type { DynamicRegistry } from './DynamicRegistry';
-import type { ToolInfo, ResourceInfo } from '../types';
 
 /**
- * Patch a DirectClient's callTool/readResource to check the DynamicRegistry first.
+ * Patch a DirectClient's callTool/readResource to check the DynamicRegistry first, and route
+ * resource subscriptions for dynamic URIs to the registry instead of the server.
  * Modifies the client in-place to preserve identity (important for tests and onConnected).
  */
 function patchClientWithDynamic(client: DirectClient, dynamicRegistry: DynamicRegistry): DirectClient {
@@ -39,6 +41,35 @@ function patchClientWithDynamic(client: DirectClient, dynamicRegistry: DynamicRe
         return dynamicResource.read();
       }
       return originalReadResource(uri);
+    };
+  }
+
+  if (typeof client.subscribeResource === 'function') {
+    const originalSubscribe = client.subscribeResource.bind(client);
+    client.subscribeResource = async (uri: string) => {
+      // Dynamic resources live in the page; the server knows nothing about them
+      if (dynamicRegistry.hasResource(uri)) return;
+      return originalSubscribe(uri);
+    };
+  }
+
+  if (typeof client.unsubscribeResource === 'function') {
+    const originalUnsubscribe = client.unsubscribeResource.bind(client);
+    client.unsubscribeResource = async (uri: string) => {
+      if (dynamicRegistry.hasResource(uri)) return;
+      return originalUnsubscribe(uri);
+    };
+  }
+
+  if (typeof client.onResourceUpdated === 'function') {
+    const originalOnUpdated = client.onResourceUpdated.bind(client);
+    client.onResourceUpdated = (handler: (uri: string) => void) => {
+      const offServer = originalOnUpdated(handler);
+      const offDynamic = dynamicRegistry.onResourceUpdated(handler);
+      return () => {
+        offServer();
+        offDynamic();
+      };
     };
   }
 

@@ -1,7 +1,8 @@
-import type { DirectMcpServer, CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
-import type { DynamicToolDef, DynamicResourceDef } from '../../types';
-import { DynamicRegistry } from '../DynamicRegistry';
+import type { CallToolResult, DirectMcpServer, ReadResourceResult } from '@frontmcp/sdk';
+
+import type { DynamicResourceDef, DynamicToolDef } from '../../types';
 import { createWrappedServer } from '../createWrappedServer';
+import { DynamicRegistry } from '../DynamicRegistry';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -462,6 +463,76 @@ describe('createWrappedServer', () => {
       const opts = { sessionId: 's', clientInfo: { name: 'test', version: '1.0' } };
       await wrapped.connect(opts);
       expect(base.connect).toHaveBeenCalledWith(opts);
+    });
+  });
+
+  describe('connect: dynamic resource subscriptions', () => {
+    function makeClient() {
+      let baseHandler: ((uri: string) => void) | undefined;
+      const offBase = jest.fn();
+      const baseSubscribe = jest.fn().mockResolvedValue(undefined);
+      const baseUnsubscribe = jest.fn().mockResolvedValue(undefined);
+      return {
+        baseSubscribe,
+        baseUnsubscribe,
+        client: {
+          subscribeResource: baseSubscribe,
+          unsubscribeResource: baseUnsubscribe,
+          onResourceUpdated: jest.fn((h: (uri: string) => void) => {
+            baseHandler = h;
+            return offBase;
+          }),
+        },
+        emitBase: (uri: string) => baseHandler?.(uri),
+        offBase,
+      };
+    }
+
+    it('notifies onResourceUpdated handlers when a dynamic resource changes', async () => {
+      const { client } = makeClient();
+      (base.connect as jest.Mock).mockResolvedValue(client);
+      const wrappedClient = await wrapped.connect();
+      dynamicRegistry.registerResource(createResourceDef({ uri: 'state://counter' }));
+
+      const handler = jest.fn();
+      wrappedClient.onResourceUpdated(handler);
+      dynamicRegistry.updateResourceRead('state://counter', jest.fn());
+
+      expect(handler).toHaveBeenCalledWith('state://counter');
+    });
+
+    it('still forwards server notifications and unsubscribes from both sources', async () => {
+      const { client, emitBase, offBase } = makeClient();
+      (base.connect as jest.Mock).mockResolvedValue(client);
+      const wrappedClient = await wrapped.connect();
+      dynamicRegistry.registerResource(createResourceDef({ uri: 'state://counter' }));
+
+      const handler = jest.fn();
+      const off = wrappedClient.onResourceUpdated(handler);
+      emitBase('file://remote');
+      expect(handler).toHaveBeenCalledWith('file://remote');
+
+      off();
+      expect(offBase).toHaveBeenCalled();
+      dynamicRegistry.updateResourceRead('state://counter', jest.fn());
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not ask the server to subscribe to dynamic resources', async () => {
+      const { client, baseSubscribe, baseUnsubscribe } = makeClient();
+      (base.connect as jest.Mock).mockResolvedValue(client);
+      const wrappedClient = await wrapped.connect();
+      dynamicRegistry.registerResource(createResourceDef({ uri: 'state://counter' }));
+
+      await wrappedClient.subscribeResource('state://counter');
+      await wrappedClient.unsubscribeResource('state://counter');
+      expect(baseSubscribe).not.toHaveBeenCalled();
+      expect(baseUnsubscribe).not.toHaveBeenCalled();
+
+      await wrappedClient.subscribeResource('file://remote');
+      await wrappedClient.unsubscribeResource('file://remote');
+      expect(baseSubscribe).toHaveBeenCalledWith('file://remote');
+      expect(baseUnsubscribe).toHaveBeenCalledWith('file://remote');
     });
   });
 
