@@ -1,0 +1,37 @@
+const { join } = require('path');
+const ts = require('typescript');
+
+// Mirror the tsconfig.base.json path aliases so imports across projects (e.g. `@scope/lib`) resolve in tests.
+const workspaceRoot = join(__dirname, '<%= offset %>');
+const { config: baseConfig } = ts.readConfigFile(join(workspaceRoot, 'tsconfig.base.json'), ts.sys.readFile);
+const aliases = (baseConfig && baseConfig.compilerOptions && baseConfig.compilerOptions.paths) || {};
+const moduleNameMapper = Object.fromEntries(
+  Object.entries(aliases).map(([alias, [target]]) => [
+    '^' + alias.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace('*', '(.*)') + '$',
+    join(workspaceRoot, target).replace('*', '$1'),
+  ]),
+);
+
+module.exports = {
+  displayName: '<%= projectName %>',
+  testEnvironment: 'node',
+  transform: {
+    '^.+\\.[tj]s$': ['@swc/jest', {
+      jsc: {
+        target: 'es2022',
+        parser: { syntax: 'typescript', decorators: true, dynamicImport: true },
+        transform: { decoratorMetadata: true, legacyDecorator: true },
+        keepClassNames: true,
+        externalHelpers: true,
+        loose: true,
+      },
+      sourceMaps: true,
+      swcrc: false,
+    }],
+  },
+  setupFilesAfterEnv: ['@frontmcp/testing/setup'],
+  moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleNameMapper,
+  // Transpile ESM-only deps; the `.pnpm` skip keeps this correct under pnpm (issue #519).
+  transformIgnorePatterns: ['node_modules[/\\\\](?!\\.pnpm[/\\\\])(?!(jose)[/\\\\])'],
+};

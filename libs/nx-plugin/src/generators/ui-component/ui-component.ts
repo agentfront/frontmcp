@@ -1,7 +1,10 @@
-import { type Tree, formatFiles, generateFiles, names, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { UiComponentGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, names, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { addUiEntry } from '../ui-shared/add-ui-entry.js';
+import { ensureUiPackage } from '../ui-shared/ensure-ui-package.js';
+import type { UiComponentGeneratorSchema } from './schema.js';
 
 const PACKAGE_ROOT = 'ui/components';
 const IMPORT_PATH = '@frontmcp/ui-components';
@@ -16,6 +19,8 @@ export async function uiComponentGenerator(
   }
 
   const { className } = names(trimmedName);
+
+  const installTask = ensureUiPackage(tree, { packageRoot: PACKAGE_ROOT, projectName: 'ui-components', kind: 'react' });
 
   // Generate component files from templates
   generateFiles(tree, join(__dirname, 'files'), `${PACKAGE_ROOT}/src`, {
@@ -35,6 +40,8 @@ export async function uiComponentGenerator(
   if (!schema.skipFormat) {
     await formatFiles(tree);
   }
+
+  return installTask;
 }
 
 export default uiComponentGenerator;

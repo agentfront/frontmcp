@@ -1,5 +1,6 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { workspaceGenerator } from './workspace';
 
 // Mock the app generator to avoid dependency issues in unit tests
@@ -22,6 +23,14 @@ describe('workspace generator', () => {
     expect(tree.exists('my-project/package.json')).toBe(true);
     expect(tree.exists('my-project/.gitignore')).toBe(true);
     expect(tree.exists('my-project/.prettierrc')).toBe(true);
+  });
+
+  it('should pin swc to the versions the nx peer range accepts', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const pkg = readJson(tree, 'my-project/package.json');
+    expect(pkg.devDependencies['@swc/core']).toBe('~1.15.8');
+    expect(pkg.devDependencies['@swc-node/register']).toBe('~1.11.1');
   });
 
   it('should create apps, libs, servers directories', async () => {
@@ -85,6 +94,16 @@ describe('workspace generator', () => {
 
     const nxJson = readJson(tree, 'my-project/nx.json');
     expect(nxJson.cli.packageManager).toBe('npm');
+  });
+
+  it('should make the FrontMCP build and test executors cacheable', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const { targetDefaults, namedInputs } = readJson(tree, 'my-project/nx.json');
+    expect(targetDefaults['@frontmcp/nx:build']).toMatchObject({ cache: true, inputs: ['production', '^production'] });
+    expect(targetDefaults['@frontmcp/nx:build-exec']).toMatchObject({ cache: true });
+    expect(targetDefaults['@frontmcp/nx:test']).toMatchObject({ cache: true });
+    expect(namedInputs.production).toContain('!{projectRoot}/jest.config.cjs');
   });
 
   it('should return install task when skipInstall is false', async () => {
@@ -185,6 +204,38 @@ describe('workspace generator', () => {
       callback();
 
       expect(execSyncMock).not.toHaveBeenCalledWith('git init', expect.anything());
+    });
+
+    it('should install packages and then initialize git when skipInstall is false', async () => {
+      const devkit = require('@nx/devkit');
+      const installSpy = jest.spyOn(devkit, 'installPackagesTask').mockImplementation(() => undefined);
+      try {
+        const callback = await workspaceGenerator(tree, { name: 'installed-project', skipInstall: false });
+        callback();
+
+        expect(installSpy).toHaveBeenCalledWith(tree);
+        expect(execSyncMock).toHaveBeenCalledWith('git init', expect.objectContaining({ stdio: 'ignore' }));
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
+    it('should not initialize git after installing when skipGit is true', async () => {
+      const devkit = require('@nx/devkit');
+      const installSpy = jest.spyOn(devkit, 'installPackagesTask').mockImplementation(() => undefined);
+      try {
+        const callback = await workspaceGenerator(tree, {
+          name: 'installed-no-git',
+          skipInstall: false,
+          skipGit: true,
+        });
+        callback();
+
+        expect(installSpy).toHaveBeenCalled();
+        expect(execSyncMock).not.toHaveBeenCalledWith('git init', expect.anything());
+      } finally {
+        installSpy.mockRestore();
+      }
     });
 
     it('should silently skip git init when git is not available', async () => {

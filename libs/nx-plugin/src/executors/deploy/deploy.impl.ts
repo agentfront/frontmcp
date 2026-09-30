@@ -1,5 +1,6 @@
-import type { ExecutorContext } from '../executor-context.js';
 import { execSync } from 'child_process';
+
+import type { ExecutorContext } from '../executor-context.js';
 import type { DeployExecutorSchema } from './schema.js';
 
 const DEPLOY_COMMANDS: Record<string, string> = {

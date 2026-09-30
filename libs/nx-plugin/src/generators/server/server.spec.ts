@@ -1,5 +1,7 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
+import { appGenerator } from '../app/app';
 import { serverGenerator } from './server';
 
 describe('server generator', () => {
@@ -121,5 +123,43 @@ describe('server generator', () => {
   it('should export default', async () => {
     const mod = await import('./server');
     expect(mod.default).toBe(serverGenerator);
+  });
+
+  describe('project layout', () => {
+    it('emits a package.json so `frontmcp build` can name the server', async () => {
+      await serverGenerator(tree, { name: 'gateway', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      expect(readJson(tree, 'servers/gateway/package.json')).toMatchObject({ name: 'server-gateway', private: true });
+    });
+
+    it('imports the apps through their real project location', async () => {
+      await appGenerator(tree, { name: 'demo', skipFormat: true });
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'node', skipFormat: true });
+
+      const main = tree.read('servers/prod/src/main.ts', 'utf-8') ?? '';
+      expect(main).toContain("from '../../../apps/demo/src/demo.app'");
+      expect(main).not.toContain('../../apps/demo/demo.app');
+    });
+
+    it('never passes the unknown --adapter option to the build target', async () => {
+      await serverGenerator(tree, { name: 'prod', apps: 'demo', deploymentTarget: 'vercel', skipFormat: true });
+
+      const { targets } = readJson(tree, 'servers/prod/project.json');
+      expect(targets.build.options.adapter).toBeUndefined();
+      expect(targets.build.options.target).toBe('vercel');
+      expect(targets.build.cache).toBe(true);
+    });
+
+    it('extends the base tsconfig from any directory depth', async () => {
+      await serverGenerator(tree, {
+        name: 'prod',
+        apps: 'demo',
+        deploymentTarget: 'node',
+        directory: 'servers/eu/prod',
+        skipFormat: true,
+      });
+
+      expect(readJson(tree, 'servers/eu/prod/tsconfig.json').extends).toBe('../../../tsconfig.base.json');
+    });
   });
 });

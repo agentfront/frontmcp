@@ -8,6 +8,8 @@ keywords: ['frontmcp', 'mcp', 'model context protocol', 'nx', 'monorepo', 'execu
 
 Executors wrap FrontMCP CLI commands as Nx targets, enabling caching, dependency ordering, and `nx affected` support.
 
+Every executor runs from the project root and uses the `frontmcp` CLI installed in your workspace (`node_modules/.bin/frontmcp`); none of them download a CLI with `npx`. The **Cacheable** executors are cached once the target sets `"cache": true` — generated projects do, and `nx add @frontmcp/nx` adds matching `targetDefaults` to `nx.json` for existing workspaces.
+
 ## Summary
 
 | Executor                                                 | CLI Command                    | Cacheable | Long-Running |

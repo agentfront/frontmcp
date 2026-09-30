@@ -1,16 +1,18 @@
-import { type Tree, formatFiles, generateFiles, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { AppGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizeOptions } from './lib/index.js';
+import type { AppGeneratorSchema } from './schema.js';
 
 export async function appGenerator(tree: Tree, schema: AppGeneratorSchema): Promise<GeneratorCallback | void> {
   return appGeneratorInternal(tree, schema);
 }
 
 async function appGeneratorInternal(tree: Tree, schema: AppGeneratorSchema): Promise<GeneratorCallback | void> {
-  const options = normalizeOptions(schema);
+  const options = normalizeOptions(tree, schema);
 
-  generateFiles(tree, join(__dirname, 'files'), options.projectRoot, {
+  generateFiles(tree, join(__dirname, 'files'), options.outputRoot, {
     ...options,
     tmpl: '',
   });

@@ -108,7 +108,9 @@ describe('ui-shell generator', () => {
   it('should not crash when project.json is missing', async () => {
     tree.delete('ui/shells/project.json');
 
-    await expect(uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true })).resolves.not.toThrow();
+    await expect(uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts')).toBe(true);
   });
@@ -116,7 +118,9 @@ describe('ui-shell generator', () => {
   it('should not crash when tsconfig.base.json is missing', async () => {
     tree.delete('tsconfig.base.json');
 
-    await expect(uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true })).resolves.not.toThrow();
+    await expect(uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true })).resolves.toEqual(
+      expect.any(Function),
+    );
 
     expect(tree.exists('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts')).toBe(true);
   });

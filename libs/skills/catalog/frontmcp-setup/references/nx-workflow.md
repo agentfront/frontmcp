@@ -41,11 +41,13 @@ This creates a full Nx workspace with `@frontmcp/nx` pre-installed, sample app, 
 
 ### Option B: Add FrontMCP to an existing Nx workspace
 
-Install the plugin:
+Install the plugin with `nx add`. It runs the plugin's `init` generator, which adds `@frontmcp/sdk`, `frontmcp`, `@frontmcp/testing` and the Jest toolchain to `package.json` (existing versions are kept) and makes the `@frontmcp/nx:build`, `build-exec` and `test` executors cacheable in `nx.json` `targetDefaults`:
 
 ```bash
-yarn add -D @frontmcp/nx
+nx add @frontmcp/nx
 ```
+
+If you install the packages yourself (`yarn add -D @frontmcp/nx @frontmcp/sdk frontmcp @frontmcp/testing`), run `nx g @frontmcp/nx:init` once to get the same setup.
 
 Then initialize the workspace structure:
 
@@ -148,7 +150,7 @@ Creates a `SKILL.md`-based skill directory in `apps/my-app/src/skills/my-skill/`
 nx g @frontmcp/nx:agent my-agent --project=my-app
 ```
 
-Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `use-agent:<agent_id>` tools.
+Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are autonomous AI components with their own LLM providers and isolated scopes, automatically exposed as `use-agent:<agent_id>` tools. The generated `llm` block picks `anthropic` (`ANTHROPIC_API_KEY`) for `claude*` models and `openai` (`OPENAI_API_KEY`) otherwise, and `--tools a,b` imports each tool class from `../tools/<name>.tool` (de-duplicated) instead of using string names.
 
 ### Plugin
 
@@ -156,7 +158,7 @@ Creates an `@Agent`-decorated class in `apps/my-app/src/agents/`. Agents are aut
 nx g @frontmcp/nx:plugin my-plugin --project=my-app
 ```
 
-Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/`. Plugins participate in lifecycle events and can contribute additional capabilities.
+Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/`. The plugin takes its options in the constructor and contributes providers through a **static** `dynamicProviders(options)` method; there is no `onRegister` hook to implement.
 
 ### Adapter
 
@@ -164,7 +166,7 @@ Creates a `@Plugin` class extending `DynamicPlugin` in `apps/my-app/src/plugins/
 nx g @frontmcp/nx:adapter my-adapter --project=my-app
 ```
 
-Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapters/`. Adapters convert external definitions (OpenAPI, Lambda, etc.) into generated tools, resources, and prompts.
+Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapters/`. Adapters convert external definitions (OpenAPI, Lambda, etc.) into generated tools, resources, and prompts. The generated class stores its `{ name } & Options` constructor argument and `fetch()` returns a `FrontMcpAdapterResponse`.
 
 ### Provider
 
@@ -172,7 +174,7 @@ Creates an `@Adapter` class extending `DynamicAdapter` in `apps/my-app/src/adapt
 nx g @frontmcp/nx:provider my-provider --project=my-app
 ```
 
-Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named singletons resolved via DI (e.g., database pools, API clients, config).
+Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named singletons resolved via DI (e.g., database pools, API clients, config). The class is its own token: register `providers: [MyProvider]` and resolve it with `this.get(MyProvider)`; `--scope singleton` maps to `ProviderScope.GLOBAL`, `request`/`context` to `ProviderScope.CONTEXT`.
 
 ### Flow
 
@@ -180,7 +182,7 @@ Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named
 nx g @frontmcp/nx:flow my-flow --project=my-app
 ```
 
-Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages.
+Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages. The generated flow declares its schemas, registers itself through `declare global { interface ExtendFlows }` so `runFlow` is typed, and implements each plan step with a `@Stage` method from `FlowHooksOf(name)`.
 
 ### Job
 
@@ -214,7 +216,9 @@ Creates an `@AuthProvider` class in `apps/my-app/src/auth-providers/`. Auth prov
 nx build my-server
 ```
 
-Builds the server and all its dependencies in the correct order. Nx caches build outputs so subsequent builds of unchanged projects are instant.
+Builds the server and all its dependencies in the correct order. Nx caches build outputs so subsequent builds of unchanged projects are instant (generated projects set `cache: true`, and `init` covers existing workspaces).
+
+The `@frontmcp/nx:build` executor runs `frontmcp build` from the project root using the `frontmcp` CLI installed in the workspace (never `npx`, which would download the newest CLI). Choose the platform with the `target` option (`node`, `vercel`, `lambda`, `cloudflare`); `adapter` is a deprecated alias. Code imported from workspace libraries through `tsconfig.base.json` path aliases is resolved and bundled for every target.
 
 ### Test a Single Project
 
@@ -222,7 +226,9 @@ Builds the server and all its dependencies in the correct order. Nx caches build
 nx test my-app
 ```
 
-Runs Jest tests for the specified project. Test files must use `.spec.ts` extension (not `.test.ts`).
+Runs `frontmcp test` from the project root. The generated `jest.config.cjs` uses the swc transform, loads `@frontmcp/testing/setup`, and maps the `tsconfig.base.json` path aliases so imports of workspace libraries resolve. Test files must use `.spec.ts` extension (not `.test.ts`).
+
+The `inspector` executor forwards its `port` option as the `CLIENT_PORT` environment variable (the `frontmcp inspector` command has no port flag).
 
 ### Build All Projects
 
@@ -284,8 +290,9 @@ my-project/
         my-app.app.ts  # @App class
         index.ts       # barrel exports
       project.json
+      package.json     # minimal manifest so `frontmcp build` runs in the project root
       tsconfig.json
-      jest.config.ts
+      jest.config.cjs
   libs/
     my-lib/
       src/
@@ -405,13 +412,14 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 
 ## Troubleshooting
 
-| Problem                                        | Cause                                                       | Solution                                                                                             |
-| ---------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `Cannot find module '@frontmcp/nx'`            | Plugin not installed                                        | Run `yarn add -D @frontmcp/nx` and ensure it appears in `devDependencies`                            |
-| Generator creates files in the wrong directory | Missing or incorrect `--project` flag                       | Always pass `--project=<app-name>` for primitive generators; verify the app exists in `apps/`        |
-| `nx affected` runs nothing despite changes     | Base branch not configured or no dependency link            | Check `nx.json` for `defaultBase` setting; verify the changed file belongs to a project in the graph |
-| Build fails with circular dependency error     | Library A imports from Library B and vice versa             | Use `nx graph` to visualize the cycle; extract shared code into a new library                        |
-| Cache not working (full rebuild every time)    | Missing or misconfigured `cacheableOperations` in `nx.json` | Ensure `build`, `test`, and `lint` are listed in `targetDefaults` with `cache: true`                 |
+| Problem                                        | Cause                                              | Solution                                                                                             |
+| ---------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Cannot find module '@frontmcp/nx'`            | Plugin not installed                               | Run `yarn add -D @frontmcp/nx` and ensure it appears in `devDependencies`                            |
+| Generator creates files in the wrong directory | Missing or incorrect `--project` flag              | Always pass `--project=<app-name>` for primitive generators; verify the app exists in `apps/`        |
+| `nx affected` runs nothing despite changes     | Base branch not configured or no dependency link   | Check `nx.json` for `defaultBase` setting; verify the changed file belongs to a project in the graph |
+| Build fails with circular dependency error     | Library A imports from Library B and vice versa    | Use `nx graph` to visualize the cycle; extract shared code into a new library                        |
+| Cache not working (full rebuild every time)    | Executor targets are not marked cacheable          | Run `nx g @frontmcp/nx:init`, or set `cache: true` on the target / in `targetDefaults`               |
+| `Cannot find module '@scope/lib'` in Jest      | Old `jest.config.ts` without the path-alias mapper | Use the generated `jest.config.cjs` (maps `tsconfig.base.json` paths) or add a `moduleNameMapper`    |
 
 ## Examples
 
