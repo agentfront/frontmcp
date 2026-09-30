@@ -123,6 +123,8 @@ npx wrangler kv:namespace create FRONTMCP_KV
 
 Copy the returned `id` into your `wrangler.toml`.
 
+Cloudflare storage: `redis: { provider: 'vercel-kv' }` (the HTTP-based Upstash/Vercel KV client) is accepted by `--target cloudflare`; only TCP `redis` and `sqlite` configs are rejected at build time, since Workers cannot open raw sockets or load native modules.
+
 ## Step 4: Configure the Server
 
 ```typescript

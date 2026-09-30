@@ -18,8 +18,11 @@ export function registerBuildCommands(program: Command): void {
     .option('--no-deterministic', 'Disable deterministic archive output (mcpb target)')
     .option('--stage-only', 'Leave the MCPB staging directory intact and skip zipping (mcpb target)')
     .option('--no-clean', "Keep the output directory's existing contents instead of clearing it first")
-    .action(async (options) => {
+    .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       options.outDir = options.outDir || 'dist';
+      // Forward the top-level --config flag so `runBuild` builds from that file.
+      const topOpts = cmd.parent?.opts?.() ?? {};
+      if (typeof topOpts['config'] === 'string') options.config = topOpts['config'];
       const { runBuild } = await import('./index.js');
       await runBuild(toParsedArgs('build', [], options));
     });

@@ -31,6 +31,38 @@ const DEFAULT_EXTERNALS = [
   'reflect-metadata',
 ];
 
+// Runtime packages that are normally externalized for single-copy semantics.
+// Archives with no node_modules (mcpb) must inline them instead.
+export const RUNTIME_PACKAGE_EXTERNALS = [
+  '@frontmcp/sdk',
+  '@frontmcp/di',
+  '@frontmcp/utils',
+  '@frontmcp/auth',
+  '@frontmcp/adapters',
+  '@frontmcp/lazy-zod',
+  'reflect-metadata',
+];
+
+// Optional peers the SDK `require()`s lazily. A fresh project does not have them
+// installed, and inlining the SDK (SEA / mcpb) made esbuild fail with
+// `Could not resolve "@frontmcp/observability"`. They are bundled when installed
+// and left as a guarded runtime `require()` when they are not.
+const OPTIONAL_PEER_PACKAGES = ['@frontmcp/observability', '@opentelemetry/sdk-trace-base'];
+
+export function missingOptionalPeers(
+  cwd: string = process.cwd(),
+  resolve: (request: string, options: { paths: string[] }) => string = require.resolve,
+): string[] {
+  return OPTIONAL_PEER_PACKAGES.filter((pkg) => {
+    try {
+      resolve(pkg, { paths: [cwd] });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
 export interface BundleResult {
   bundlePath: string;
   bundleSize: number;
@@ -59,7 +91,7 @@ export async function bundleWithEsbuild(
   entryPath: string,
   outDir: string,
   config: FrontmcpExecConfig,
-  options?: { selfContained?: boolean; outputName?: string },
+  options?: { selfContained?: boolean; bundleRuntime?: boolean; outputName?: string },
 ): Promise<BundleResult> {
   // Lazy-load esbuild
   let esbuild: typeof import('esbuild');
@@ -76,13 +108,18 @@ export async function bundleWithEsbuild(
   const bundlePath = path.join(outDir, bundleName);
 
   // In self-contained mode (SEA), only keep true native addons external
+  const baseExternals = options?.bundleRuntime
+    ? DEFAULT_EXTERNALS.filter((e) => !RUNTIME_PACKAGE_EXTERNALS.includes(e))
+    : DEFAULT_EXTERNALS;
   const external = options?.selfContained
     ? [
-        ...DEFAULT_EXTERNALS,
+        ...baseExternals,
+        ...missingOptionalPeers(),
         ...(config.dependencies?.nativeAddons || []),
       ]
     : [
-        ...DEFAULT_EXTERNALS,
+        ...baseExternals,
+        ...missingOptionalPeers(),
         ...(config.dependencies?.nativeAddons || []),
         ...(config.esbuild?.external || []),
       ];

@@ -52,7 +52,7 @@ export async function buildMcpb(
     : new Set<string>();
 
   // 1. Resolve exec + mcpb config
-  const rawConfig = await loadExecConfig(cwd);
+  const rawConfig = await loadExecConfig(cwd, { configPath: opts.config, configDir: opts.configDir });
   const execConfig = normalizeConfig(rawConfig);
 
   // When a v1 frontmcp.config is present, its build.esbuild / build.dependencies
@@ -84,7 +84,7 @@ export async function buildMcpb(
   console.log(`${c('cyan', '[build:mcpb]')} version: ${execConfig.version}`);
 
   // 2. Resolve entry
-  const entry = await resolveEntry(cwd, execConfig.entry || opts.entry);
+  const entry = await resolveEntry(cwd, opts.entry || execConfig.entry);
   console.log(`${c('cyan', '[build:mcpb]')} entry: ${path.relative(cwd, entry)}`);
 
   // 3. TypeScript compile (same as exec pipeline)
@@ -117,6 +117,17 @@ export async function buildMcpb(
   const userToolCount = schema.tools.filter((t) => !SYSTEM_TOOL_NAMES.has(t.name)).length;
   console.log(
     `${c('cyan', '[build:mcpb]')} extracted: ${userToolCount} tools, ${schema.resources.length} resources, ${schema.prompts.length} prompts`,
+  );
+
+  // The archive has no node_modules, so the shipped server inlines the runtime
+  // packages. The externalized bundle above is only used for schema extraction.
+  const shippedBundle = await bundleWithEsbuild(compiledEntry, outDir, execConfig, {
+    selfContained: true,
+    bundleRuntime: true,
+    outputName: `${execConfig.name}.server`,
+  });
+  console.log(
+    `${c('green', '[build:mcpb]')} server bundle (runtime inlined): ${formatSize(shippedBundle.bundleSize)}`,
   );
 
   // 6. SEA binaries (optional)
@@ -191,7 +202,7 @@ export async function buildMcpb(
   const stageResult = stageMcpbDirectory({
     stageDir,
     cwd,
-    serverBundlePath: bundleResult.bundlePath,
+    serverBundlePath: shippedBundle.bundlePath,
     name: execConfig.name,
     version: execConfig.version,
     schema,

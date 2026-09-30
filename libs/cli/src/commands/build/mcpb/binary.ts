@@ -78,6 +78,7 @@ export function buildPlatformOverrides(
     overrides[platform] = {
       command: `\${__dirname}/bin/${platform}/${fileName}`,
       args: [],
+      env: { FRONTMCP_STDIO: '1' },
     };
   }
   return overrides;

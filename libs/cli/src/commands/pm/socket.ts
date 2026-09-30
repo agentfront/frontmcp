@@ -1,10 +1,11 @@
-import * as path from 'path';
+import { spawn, type ChildProcess } from 'child_process';
 import * as os from 'os';
-import { spawn, ChildProcess } from 'child_process';
-import { ParsedArgs } from '../../core/args';
+import * as path from 'path';
+
+import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { resolveEntry } from '../../shared/fs';
 import { loadDevEnv } from '../../shared/env';
+import { resolveEntry } from '../../shared/fs';
 
 function ensureDir(dir: string): void {
   const fs = require('fs');
@@ -98,7 +99,7 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
   // Set environment variables for the child process
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
-    FRONTMCP_SOCKET_PATH: socketPath,
+    FRONTMCP_DAEMON_SOCKET: socketPath,
   };
   if (dbPath) {
     env['FRONTMCP_SQLITE_PATH'] = dbPath;
