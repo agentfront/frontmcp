@@ -2,10 +2,10 @@
  * ProcessManager class — orchestrates all PM modules.
  */
 
-import { readPidFile, isProcessAlive, listPidFiles, removePidFile } from './pidfile';
 import { formatUptime } from './format';
+import { isProcessAlive, listPidFiles, readPidFile, removePidFile } from './pidfile';
 import { Supervisor } from './spawn';
-import { StartOptions, StopOptions, ProcessInfo } from './types';
+import { type ProcessInfo, type StartOptions, type StopOptions } from './types';
 
 // Track running supervisors in this process
 const supervisors = new Map<string, Supervisor>();
@@ -115,6 +115,7 @@ export class ProcessManager {
       port: pidData.port,
       socketPath: pidData.socketPath,
       dbPath: pidData.dbPath,
+      maxRestarts: pidData.maxRestarts,
       socket: !!pidData.socketPath,
     });
   }

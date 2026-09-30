@@ -18,7 +18,7 @@ export interface CreateTokenOptions {
   aud?: string | string[];
   /** OAuth scopes */
   scopes?: string[];
-  /** Expiration time in seconds from now (default: 3600) */
+  /** Lifetime in seconds (default: 3600); the token is valid for at least this long */
   exp?: number;
   /** Additional custom claims */
   claims?: Record<string, unknown>;
@@ -135,15 +135,18 @@ export class TestTokenFactory {
   async createTestToken(options: CreateTokenOptions): Promise<string> {
     await this.ensureKeys();
 
-    const now = Math.floor(Date.now() / 1000);
+    // `iat` is whole seconds rounded down; `exp` counts from the next whole second so the token
+    // lives at least `exp` seconds — `exp: 1` must not be able to expire before its first use.
+    const nowMs = Date.now();
+    const iat = Math.floor(nowMs / 1000);
     const exp = options.exp ?? 3600;
 
     const payload: JWTPayload = {
       iss: options.iss ?? this.issuer,
       sub: options.sub,
       aud: options.aud ?? this.audience,
-      iat: now,
-      exp: now + exp,
+      iat,
+      exp: Math.ceil(nowMs / 1000) + exp,
       scope: options.scopes?.join(' '),
       ...options.claims,
     };
@@ -187,10 +190,11 @@ export class TestTokenFactory {
   /**
    * Create an anonymous user token
    */
-  async createAnonymousToken(): Promise<string> {
+  async createAnonymousToken(expiresIn?: number): Promise<string> {
     return this.createTestToken({
       sub: `anon:${Date.now()}`,
       scopes: ['anonymous'],
+      exp: expiresIn,
       claims: {
         name: 'Anonymous',
         role: 'anonymous',

@@ -50,6 +50,8 @@ export interface FrontmcpExecConfig {
     nativeAddons?: string[];
   };
   nodeVersion?: string;
+  /** MCP HTTP mount path from `transport.http.path`; exported as FRONTMCP_HTTP_ENTRY_PATH by the runner (#642). */
+  httpEntryPath?: string;
   esbuild?: {
     external?: string[];
     define?: Record<string, string>;
@@ -76,58 +78,94 @@ const CONFIG_FILENAMES = [
   'frontmcp.config.cjs',
 ];
 
-/**
- * Load frontmcp.config.{ts,js,json,mjs,cjs} from the given directory.
- * Falls back to deriving minimal config from package.json.
- */
-export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
-  for (const filename of CONFIG_FILENAMES) {
-    const configPath = path.join(cwd, filename);
-    if (fs.existsSync(configPath)) {
-      if (filename.endsWith('.json')) {
-        const content = fs.readFileSync(configPath, 'utf-8');
-        return JSON.parse(content) as FrontmcpExecConfig;
-      }
-      if (filename.endsWith('.ts')) {
-        // Delegate to the new loader's esbuild transpile so `.ts` configs
-        // work under `"type": "commonjs"` projects. Hard-fails on parse error
-        // (no silent default) — matches frontmcp-config.loader semantics.
-        // tsc uses `--moduleResolution nodenext`, so the dynamic import
-        // needs an explicit `.js` suffix that resolves to the compiled
-        // output. The barrel (`../../../config/index.js`) re-exports
-        // `loadFrontMcpConfig` from the loader module.
-        const { loadFrontMcpConfig } = await import('../../../config/index.js');
-        try {
-          // The new-shape loader returns a parsed config — we only consume the
-          // legacy-shape fields here. Fields that exist in both shapes
-          // (name, version, entry, nodeVersion) carry through; new-shape-only
-          // fields like `deployments` are ignored by this consumer.
-          const newShape = await loadFrontMcpConfig(cwd);
-          return newShape as unknown as FrontmcpExecConfig;
-        } catch (err) {
-          throw new Error(
-            `Failed to load ${filename}: ${(err as Error).message}\n` +
-              `If your config doesn't match the new schema (deployments[] etc.), ` +
-              `rename it to .js or use the legacy module.exports shape.`,
-          );
-        }
-      }
-      // JS/MJS/CJS config — require it
+/** Where `loadExecConfig` looks for the config file. */
+export interface ExecConfigSource {
+  /** Explicit config file (`--config` / `FRONTMCP_CONFIG`); wins over `configDir`. */
+  configPath?: string;
+  /** Directory holding `frontmcp.config.*` when it was found above `cwd`. */
+  configDir?: string;
+}
 
-      const mod = require(configPath);
-      return (mod.default || mod) as FrontmcpExecConfig;
+async function loadExecConfigFile(configPath: string): Promise<FrontmcpExecConfig> {
+  const filename = path.basename(configPath);
+  if (filename.endsWith('.json')) {
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(content) as FrontmcpExecConfig;
+  }
+  if (filename.endsWith('.ts')) {
+    // Delegate to the new loader's esbuild transpile so `.ts` configs
+    // work under `"type": "commonjs"` projects. Hard-fails on parse error
+    // (no silent default) — matches frontmcp-config.loader semantics.
+    // tsc uses `--moduleResolution nodenext`, so the dynamic import
+    // needs an explicit `.js` suffix that resolves to the compiled
+    // output. The barrel (`../../../config/index.js`) re-exports
+    // `loadFrontMcpConfigFromFile` from the loader module.
+    const { loadFrontMcpConfigFromFile } = await import('../../../config/index.js');
+    try {
+      // The new-shape loader returns a parsed config — we only consume the
+      // legacy-shape fields here. Fields that exist in both shapes
+      // (name, version, entry, nodeVersion) carry through; new-shape-only
+      // fields like `deployments` are ignored by this consumer.
+      const newShape = await loadFrontMcpConfigFromFile(configPath);
+      return newShape as unknown as FrontmcpExecConfig;
+    } catch (err) {
+      throw new Error(
+        `Failed to load ${filename}: ${(err as Error).message}\n` +
+          `If your config doesn't match the new schema (deployments[] etc.), ` +
+          `rename it to .js or use the legacy module.exports shape.`,
+        { cause: err },
+      );
+    }
+  }
+  // JS/MJS/CJS config — require it
+
+  const mod = require(configPath);
+  return (mod.default || mod) as FrontmcpExecConfig;
+}
+
+function readPackageJson(dir: string): { name?: string; version?: string; main?: string } | undefined {
+  const pkgPath = path.join(dir, 'package.json');
+  if (!fs.existsSync(pkgPath)) return undefined;
+  return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+}
+
+/**
+ * Load frontmcp.config.{ts,js,json,mjs,cjs}.
+ *
+ * The file comes from `source.configPath`, else from `source.configDir`, else
+ * from `cwd`. A config that omits `version` inherits the project's
+ * `package.json` version, so the bundle, manifest and archive names match what
+ * the project publishes. Falls back to deriving a minimal config from
+ * package.json when no config file exists.
+ */
+export async function loadExecConfig(cwd: string, source: ExecConfigSource = {}): Promise<FrontmcpExecConfig> {
+  const configDir = source.configDir ?? cwd;
+
+  if (source.configPath) {
+    const configPath = path.isAbsolute(source.configPath) ? source.configPath : path.resolve(cwd, source.configPath);
+    if (!fs.existsSync(configPath)) {
+      throw new Error(`Config file not found: ${source.configPath}`);
+    }
+    const loaded = await loadExecConfigFile(configPath);
+    return { ...loaded, version: loaded.version ?? readPackageJson(cwd)?.version };
+  }
+
+  for (const filename of CONFIG_FILENAMES) {
+    const configPath = path.join(configDir, filename);
+    if (fs.existsSync(configPath)) {
+      const loaded = await loadExecConfigFile(configPath);
+      return { ...loaded, version: loaded.version ?? readPackageJson(cwd)?.version };
     }
   }
 
   // Fallback: derive from package.json
-  const pkgPath = path.join(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) {
+  const pkg = readPackageJson(cwd);
+  if (!pkg) {
     throw new Error(
       'No frontmcp.config.js/json found and no package.json. Create a frontmcp.config.js for build targets.',
     );
   }
 
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   return {
     name: pkg.name?.replace(/^@[^/]+\//, '') || path.basename(cwd),
     version: pkg.version || '1.0.0',

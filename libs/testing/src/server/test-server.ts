@@ -3,8 +3,10 @@
  * @description Test server management for E2E testing
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'child_process';
+
 import { sha256Hex } from '@frontmcp/utils';
+
 import { ServerStartError } from '../errors';
 import { reservePort } from './port-registry';
 
@@ -39,8 +41,13 @@ export interface TestServerInfo {
   baseUrl: string;
   /** Port the server is running on */
   port: number;
-  /** Process ID (if available) */
+  /**
+   * Process ID of the server: the process listening on `port` when it can be found, otherwise the
+   * pid of the shell the command was spawned through.
+   */
   pid?: number;
+  /** Process ID of the shell the command was spawned through */
+  shellPid?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -74,9 +81,17 @@ export class TestServer {
   private readonly options: Required<Omit<TestServerOptions, 'project'>> & { project?: string };
   private _info: TestServerInfo;
   private logs: string[] = [];
+  /** Frees the port reservation (socket and cross-process lock); held until stop() */
   private portRelease: (() => Promise<void>) | null = null;
+  /** Frees only the reservation socket, just before the server is spawned */
+  private portReleaseSocket: (() => Promise<void>) | null = null;
 
-  private constructor(options: TestServerOptions, port: number, portRelease?: () => Promise<void>) {
+  private constructor(
+    options: TestServerOptions,
+    port: number,
+    portRelease?: () => Promise<void>,
+    portReleaseSocket?: () => Promise<void>,
+  ) {
     this.options = {
       port,
       project: options.project,
@@ -88,6 +103,7 @@ export class TestServer {
       debug: options.debug ?? DEBUG_SERVER,
     };
     this.portRelease = portRelease ?? null;
+    this.portReleaseSocket = portReleaseSocket ?? portRelease ?? null;
 
     this._info = {
       baseUrl: `http://localhost:${port}`,
@@ -103,8 +119,8 @@ export class TestServer {
     const maxAttempts = 3;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const { port, release } = await reservePort(project, options.port);
-      const server = new TestServer(options, port, release);
+      const { port, release, releaseSocket } = await reservePort(project, options.port);
+      const server = new TestServer(options, port, release, releaseSocket);
 
       try {
         await server.startProcess();
@@ -156,7 +172,7 @@ export class TestServer {
     const maxAttempts = 3;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const { port, release } = await reservePort(project, options.port);
+      const { port, release, releaseSocket } = await reservePort(project, options.port);
 
       const serverOptions: TestServerOptions = {
         ...options,
@@ -166,7 +182,7 @@ export class TestServer {
         cwd: options.cwd ?? process.cwd(),
       };
 
-      const server = new TestServer(serverOptions, port, release);
+      const server = new TestServer(serverOptions, port, release, releaseSocket);
       try {
         await server.startProcess();
         return server;
@@ -237,11 +253,18 @@ export class TestServer {
    * Stop the test server
    */
   async stop(): Promise<void> {
-    if (this.portRelease) {
-      await this.portRelease();
-      this.portRelease = null;
+    try {
+      await this.stopProcess();
+    } finally {
+      if (this.portRelease) {
+        await this.portRelease();
+        this.portRelease = null;
+      }
+      this.portReleaseSocket = null;
     }
+  }
 
+  private async stopProcess(): Promise<void> {
     if (this.process) {
       this.log('Stopping server...');
 
@@ -331,7 +354,8 @@ export class TestServer {
    * Restart the server
    */
   async restart(): Promise<void> {
-    await this.stop();
+    // The port reservation is kept across a restart so nobody else can take the port in between
+    await this.stopProcess();
     await this.startProcess();
   }
 
@@ -369,10 +393,11 @@ export class TestServer {
     };
     const runtimeEnv = withWorkspaceProtocolFallback(env, this.options.cwd);
 
-    // Release port reservation just before spawning so the server can bind it
-    if (this.portRelease) {
-      await this.portRelease();
-      this.portRelease = null;
+    // Release the reservation socket just before spawning so the server can bind the port
+    // (the cross-process lock stays until stop())
+    if (this.portReleaseSocket) {
+      await this.portReleaseSocket();
+      this.portReleaseSocket = null;
       // Brief delay to allow OS to fully release the socket
       await sleep(300);
     }
@@ -387,10 +412,10 @@ export class TestServer {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // pid can be undefined if spawn fails
-    if (this.process.pid !== undefined) {
-      this._info.pid = this.process.pid;
-    }
+    // pid can be undefined if spawn fails. This is the shell's pid; the server's own pid is
+    // looked up once it is listening.
+    this._info.pid = this.process.pid;
+    this._info.shellPid = this.process.pid;
 
     // Track process exit for early failure detection
     let processExited = false;
@@ -508,6 +533,8 @@ export class TestServer {
         if (response.ok || response.status === 404) {
           // 404 is okay - it means the server is running but might not have a health endpoint
           this.log(`Server is ready after ${healthCheckAttempts} health check attempts`);
+          const listeningPid = await findListeningPid(this.options.port);
+          if (listeningPid !== undefined) this._info.pid = listeningPid;
           return;
         }
         lastHealthCheckError = `HTTP ${response.status}: ${response.statusText}`;
@@ -564,6 +591,24 @@ export class TestServer {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Find the pid of the process listening on a TCP port (macOS/Linux, via lsof).
+ * Best effort: resolves undefined where lsof is unavailable or finds nothing.
+ */
+function findListeningPid(port: number): Promise<number | undefined> {
+  if (process.platform === 'win32') return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    execFile('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { timeout: 2000 }, (error, stdout) => {
+      if (error) {
+        resolve(undefined);
+        return;
+      }
+      const pid = parseInt(String(stdout).split('\n')[0] ?? '', 10);
+      resolve(Number.isInteger(pid) && pid > 0 ? pid : undefined);
+    });
+  });
 }
 
 /**

@@ -332,6 +332,25 @@ describe('Build Adapters', () => {
       );
     });
 
+    it('accepts redis with the HTTP-based vercel-kv provider (#642)', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.(
+          { redis: { provider: 'vercel-kv', url: 'https://kv.example.com', token: 't' } },
+          { keysSeenInSource: ['redis'] },
+        ),
+      ).not.toThrow();
+    });
+
+    it('still rejects a redis value whose provider cannot be read statically (#642)', () => {
+      expect(() => cloudflareAdapter.validate?.({}, { keysSeenInSource: ['redis'] })).toThrow(
+        /redis.*not supported on --target cloudflare/,
+      );
+    });
+
+    it('points at the vercel-kv provider in the redis error (#642)', () => {
+      expect(() => cloudflareAdapter.validate?.({ redis: { host: 'localhost' } })).toThrow(/provider: 'vercel-kv'/);
+    });
+
     it('passes when neither sqlite nor redis is declared', () => {
       expect(() => cloudflareAdapter.validate?.({})).not.toThrow();
     });
@@ -462,6 +481,32 @@ describe('Build Adapters', () => {
 
     it('uses commonjs module format', () => {
       expect(distributedAdapter.moduleFormat).toBe('commonjs');
+    });
+  });
+
+  describe('transport.http.path reaches every built server (#642)', () => {
+    it.each([
+      ['vercel', vercelAdapter],
+      ['lambda', lambdaAdapter],
+      ['distributed', distributedAdapter],
+      ['cloudflare', cloudflareAdapter],
+    ])('%s setup file sets the configured entry path before the decorator runs', (_name, adapter) => {
+      const setup = adapter.getSetupTemplate?.({ transportHttpPath: '/mcp' });
+      expect(setup).toContain('process.env.FRONTMCP_HTTP_ENTRY_PATH = "/mcp"');
+    });
+
+    it.each([
+      ['vercel', vercelAdapter],
+      ['lambda', lambdaAdapter],
+      ['distributed', distributedAdapter],
+    ])('%s setup file leaves the path alone when none is configured', (_name, adapter) => {
+      expect(adapter.getSetupTemplate?.()).not.toContain('FRONTMCP_HTTP_ENTRY_PATH');
+      expect(adapter.getSetupTemplate?.({})).not.toContain('FRONTMCP_HTTP_ENTRY_PATH');
+    });
+
+    it('escapes the configured path as a JS string literal', () => {
+      const setup = vercelAdapter.getSetupTemplate?.({ transportHttpPath: '/a"b' });
+      expect(setup).toContain('process.env.FRONTMCP_HTTP_ENTRY_PATH = "/a\\"b"');
     });
   });
 });

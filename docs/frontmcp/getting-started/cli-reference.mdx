@@ -47,6 +47,8 @@ Manage long-running MCP servers with automatic supervision, restart policies, an
 | `logs <name>`             | Tail log output for a managed server                              |
 | `service <action> [name]` | Install/uninstall systemd/launchd service (optional service name) |
 
+An app registered by `frontmcp install` starts by name (`frontmcp start my-app`) from its install directory, using the installed bundle, the `.env` the installer wrote and the port chosen at install time. Pass `--entry` to run a different file instead.
+
 ---
 
 ## Package Manager Commands
@@ -58,6 +60,8 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 | `install <source>` | Install an MCP app from npm, local path, or git |
 | `uninstall <name>` | Remove an installed MCP app                     |
 | `configure <name>` | Re-run setup questionnaire for an installed app |
+
+`install` accepts a project directory, its `dist/` folder or a per-target folder such as `dist/node` (the manifest is searched in all of them; a directory holding a `frontmcp.config.*` is installed after `npm install` when it has no `node_modules`). It installs the runtime packages the bundle keeps external (for example `@frontmcp/sdk`) at the versions the project depends on, plus any native addons the manifest lists.
 
 ---
 

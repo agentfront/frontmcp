@@ -17,7 +17,7 @@ import {
   findDeployment,
   type FrontMcpConfigParsed,
   getDeploymentTargets,
-  tryLoadFrontMcpConfig,
+  resolveConfig,
 } from '../../config';
 
 function isTsLike(p: string): boolean {
@@ -171,7 +171,14 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
   // …and hard failures:
   //   - file exists but can't be parsed (TS syntax error, broken require)
   //     → the error propagates, no silent-default regression.
-  const config: FrontMcpConfigParsed | undefined = await tryLoadFrontMcpConfig(cwd);
+  //
+  // The file is located like every other command: `--config <path>`, then the
+  // `FRONTMCP_CONFIG` env var, then the nearest `frontmcp.config.*` walking up
+  // from the cwd. The location is forwarded so the exec/mcpb builds read the
+  // same file instead of searching the cwd again.
+  const resolved = await resolveConfig({ cwd, mode: 'build:ship', configPath: opts.config });
+  const config: FrontMcpConfigParsed | undefined = resolved.config;
+  opts = { ...opts, config: resolved.configPath ?? opts.config, configDir: resolved.configDir };
 
   // If no -t flag and config has deployments, build all targets from config
   if (!opts.buildTarget && config && config.deployments.length > 0) {
@@ -238,6 +245,8 @@ async function buildSingleTarget(
     // wasn't forwarded into buildExec. The exec build's manifest emitter
     // shipped the SDK default (`>=22.0.0`) instead of the user's value.
     nodeVersion?: string;
+    // #642 — `transport.http.path` reaches the exec/node runner as an env default.
+    httpEntryPath?: string;
   } = {
     storage: config?.build?.storage,
     cli: cliDeploymentConfig
@@ -250,6 +259,7 @@ async function buildSingleTarget(
         }
       : undefined,
     nodeVersion: config?.nodeVersion,
+    httpEntryPath: config?.transport?.http?.path,
   };
 
   switch (target) {

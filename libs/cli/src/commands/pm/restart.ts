@@ -1,6 +1,7 @@
-import { ParsedArgs } from '../../core/args';
+import { formatProcessDetail, ProcessManager } from '.';
+import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { ProcessManager, formatProcessDetail } from '.';
+import { superviseUntilSignalled } from './keep-alive';
 
 export async function runRestart(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];
@@ -14,4 +15,7 @@ export async function runRestart(opts: ParsedArgs): Promise<void> {
   const info = await pm.restart(name);
   console.log(`\n${c('green', 'Restarted successfully:')}\n`);
   console.log(formatProcessDetail(info));
+
+  // The restarted child belongs to this process; exiting here would kill it.
+  await superviseUntilSignalled(pm, name);
 }

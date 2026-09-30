@@ -308,14 +308,15 @@ and for absolute paths that should probably be `${__dirname}/…`.
 
 ## Troubleshooting
 
-| Symptom                                           | Cause / Fix                                                                                                            |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `@frontmcp/sdk is required for schema extraction` | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                               |
-| Archive > 100 MB                                  | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                              |
-| `Unknown substitution variable`                   | Only the allow-listed variables above and declared `user_config` keys are valid.                                       |
-| `entry_point is not present in the archive`       | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.           |
-| `platform_overrides.darwin-arm64.command` missing | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.     |
-| Two builds produce different SHA-256s             | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content. |
+| Symptom                                                          | Cause / Fix                                                                                                                                                                              |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/sdk is required for schema extraction`                | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                                                                                                 |
+| `… requires "@frontmcp/sdk" but the archive has no node_modules` | The server entry still `require()`s a runtime package. Rebuild with `frontmcp build --target mcpb`, which bundles the SDK into `server/index.js`; `validate` flags archives that do not. |
+| Archive > 100 MB                                                 | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                                                                                                |
+| `Unknown substitution variable`                                  | Only the allow-listed variables above and declared `user_config` keys are valid.                                                                                                         |
+| `entry_point is not present in the archive`                      | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.                                                                             |
+| `platform_overrides.darwin-arm64.command` missing                | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.                                                                       |
+| Two builds produce different SHA-256s                            | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content.                                                                   |
 
 ## Reference
 

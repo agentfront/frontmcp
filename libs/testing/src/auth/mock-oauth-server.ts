@@ -45,22 +45,11 @@
  * ```
  */
 
-import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
+
+import { base64urlEncode, randomBytes, sha256Base64url } from '@frontmcp/utils';
+
 import type { TestTokenFactory } from './token-factory';
-
-// Lazy-loaded crypto utilities
-let _randomBytes: typeof import('@frontmcp/utils').randomBytes;
-let _sha256Base64url: typeof import('@frontmcp/utils').sha256Base64url;
-let _base64urlEncode: typeof import('@frontmcp/utils').base64urlEncode;
-
-async function loadCryptoUtils(): Promise<void> {
-  if (!_randomBytes) {
-    const utils = await import('@frontmcp/utils');
-    _randomBytes = utils.randomBytes;
-    _sha256Base64url = utils.sha256Base64url;
-    _base64urlEncode = utils.base64urlEncode;
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
@@ -543,7 +532,7 @@ export class MockOAuthServer {
 
     if (grantType === 'anonymous') {
       // Issue an anonymous token
-      const token = await this.tokenFactory.createAnonymousToken();
+      const token = await this.tokenFactory.createAnonymousToken(this.accessTokenTtlSeconds);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
@@ -697,6 +686,8 @@ export class MockOAuthServer {
     // Generate tokens
     const accessToken = await this.tokenFactory.createTestToken({
       sub: codeRecord.user.sub,
+      scopes: codeRecord.scopes,
+      exp: this.accessTokenTtlSeconds,
       claims: {
         email: codeRecord.user.email,
         name: codeRecord.user.name,
@@ -707,6 +698,7 @@ export class MockOAuthServer {
     // Generate ID token (same as access token for simplicity)
     const idToken = await this.tokenFactory.createTestToken({
       sub: codeRecord.user.sub,
+      exp: this.accessTokenTtlSeconds,
       claims: {
         email: codeRecord.user.email,
         name: codeRecord.user.name,
@@ -795,6 +787,8 @@ export class MockOAuthServer {
     // Generate new access token
     const accessToken = await this.tokenFactory.createTestToken({
       sub: tokenRecord.user.sub,
+      scopes: tokenRecord.scopes,
+      exp: this.accessTokenTtlSeconds,
       claims: {
         email: tokenRecord.user.email,
         name: tokenRecord.user.name,
@@ -1077,8 +1071,7 @@ export class MockOAuthServer {
    * Generate a random authorization code
    */
   private async generateCodeAsync(): Promise<string> {
-    await loadCryptoUtils();
-    return _base64urlEncode(_randomBytes(32));
+    return base64urlEncode(randomBytes(32));
   }
 
   /**
@@ -1098,8 +1091,7 @@ export class MockOAuthServer {
    */
   private async computeCodeChallengeAsync(verifier: string, method?: string): Promise<string> {
     if (method === 'S256') {
-      await loadCryptoUtils();
-      return _sha256Base64url(verifier);
+      return sha256Base64url(verifier);
     }
     // Plain method (not recommended but supported)
     return verifier;

@@ -19,7 +19,7 @@ import {
 import { frontmcpConfigSchema, type FrontMcpConfigParsed } from './frontmcp-config.schema';
 import type { DeploymentTarget, FrontMcpConfig } from './frontmcp-config.types';
 
-const CONFIG_FILENAMES = [
+export const CONFIG_FILENAMES = [
   'frontmcp.config.ts',
   'frontmcp.config.js',
   'frontmcp.config.json',
@@ -214,6 +214,7 @@ async function loadRawFileAtPath(configPath: string, filename: string): Promise<
             `  ${(esbuildErr as Error).message}\n` +
             `Hint: ensure the file exports a default config (e.g., ` +
             `\`export default defineConfig({...})\`) and that all imports resolve.`,
+          { cause: esbuildErr },
         );
       }
     }
@@ -243,6 +244,7 @@ async function loadRawFileAtPath(configPath: string, filename: string): Promise<
           `  esbuild error:   ${(esbuildErr as Error).message}\n` +
           `Hint: ensure the file exports a default config (e.g., ` +
           `\`export default defineConfig({...})\`) and that all imports resolve.`,
+        { cause: esbuildErr },
       );
     }
   }

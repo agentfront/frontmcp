@@ -396,6 +396,27 @@ You usually do not need to set this: when the client's first request 404s and th
 
 `baseUrl` may also be supplied alongside `server` to override the booted server's own URL (for a proxy, or a different host than it binds).
 
+### Scoping config, parameterised tests, ports and restarts
+
+- `test.use()` is scoped to the `describe` block it is called in. Nested blocks merge over outer ones (`env` key by key); each distinct configuration gets its own server, stopped by the block that configured it. At file level it applies to the whole file.
+- `port: 0` (or omitting `port`) picks any free port. Ports are reserved with a cross-process lock, so parallel Jest workers do not collide.
+- `auth: { mode, type }` reaches the server process as `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`; `mode: 'public'` also keeps the `mcp` client anonymous.
+- `test.each` / `test.describe.each` pass the row values to the callback (fixtures first for `test.each`):
+
+```typescript
+test.each([
+  ['read', 1],
+  ['write', 2],
+])('scope %s', async ({ mcp }, scope, level) => {
+  expect(mcp.isConnected()).toBe(true);
+});
+```
+
+- `server.info.pid` is the pid of the process that listens on the port. `server.restart()` reconnects `mcp` and every client made with `server.createClient()`.
+- `mcp.logs` holds the log notifications the client received; `server.getLogs()` holds the server process output. They are different sources.
+- `mcp.intercept.failMethod(method, message)` makes matching calls reject with `message`; the returned function removes it.
+- `httpMock` patches `fetch` in the test process only (see above) and `interceptor.restore()` puts the original `fetch` back.
+
 ### Gating a block on credentials
 
 `test.skip(condition, reason)` is the Playwright signature and skips every test registered after it in the enclosing block:
@@ -607,7 +628,7 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 | `toContainTool` matcher not found            | Using `expect` from Jest instead of `@frontmcp/testing` | Import `expect` from `@frontmcp/testing` to get MCP-specific matchers                                 |
 | `McpTestClient.create()` connection refused  | Test server not running or wrong `baseUrl`              | Ensure `TestServer.start()` completes before creating client; verify port matches                     |
 | Istanbul shows 0% coverage for async methods | TypeScript compilation source-map mismatch              | Known issue with `ts-jest` and certain async patterns; check `tsconfig.spec.json` source-map settings |
-| Auth E2E test returns 401 unexpectedly       | Token not set or expired                                | Call `mcp.setAuthToken(token)` before the tool call; use `auth.createToken()` with valid claims       |
+| Auth E2E test returns 401 unexpectedly       | Token not set or expired                                | Call `await mcp.authenticate(token)` before the tool call; use `auth.createToken()` with valid claims |
 
 ## Examples
 

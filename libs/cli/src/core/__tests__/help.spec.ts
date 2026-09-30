@@ -123,3 +123,32 @@ describe('customizeHelp', () => {
     expect(output).toContain('--out-dir');
   });
 });
+
+describe('per-command help', () => {
+  async function helpFor(args: string[]): Promise<string> {
+    const program = await createProgram(process.cwd(), ['node', 'frontmcp', ...args]);
+    let output = '';
+    const apply = (cmd: import('commander').Command): void => {
+      cmd.exitOverride();
+      cmd.configureOutput({ writeOut: (str) => (output += str), writeErr: (str) => (output += str) });
+      cmd.commands.forEach(apply);
+    };
+    apply(program);
+    await program.parseAsync(['node', 'frontmcp', ...args]).catch(() => undefined);
+    return output;
+  }
+
+  it('prints the subcommand usage for `plugin install --help`, not the top-level help', async () => {
+    const help = await helpFor(['plugin', 'install', '--help']);
+    expect(help).toContain('Usage: frontmcp plugin install');
+    expect(help).not.toContain('Getting Started');
+    expect(help).not.toContain('Examples');
+  });
+
+  it('prints the command usage for `dev --help`', async () => {
+    const help = await helpFor(['dev', '--help']);
+    expect(help).toContain('Usage: frontmcp dev');
+    expect(help).toContain('--stdio');
+    expect(help).not.toContain('Getting Started');
+  });
+});

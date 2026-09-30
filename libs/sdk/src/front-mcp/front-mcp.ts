@@ -24,6 +24,7 @@ import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task';
+import { IpcServerTransport, isIpcStdioRequested } from '../transport/ipc-server.transport';
 import {
   createDeferredServerBuild,
   createWebFetchHandler,
@@ -223,7 +224,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
-    const parsedConfig = frontMcpMetadataSchema.parse(options);
+    // `frontmcp start --db`, `frontmcp socket --db` and the generated installer
+    // hand the database location over as FRONTMCP_SQLITE_PATH.
+    const sqlitePath = process.env['FRONTMCP_SQLITE_PATH'];
+    const parsedConfig = frontMcpMetadataSchema.parse(
+      sqlitePath
+        ? {
+            ...options,
+            sqlite: { ...((options.sqlite as Record<string, unknown> | undefined) ?? {}), path: sqlitePath },
+          }
+        : options,
+    );
 
     // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
     // run in Unix socket mode instead of normal HTTP server
@@ -749,7 +760,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
       }
 
       // Create stdio transport and connect
-      const transport = new StdioServerTransport();
+      // `frontmcp dev --stdio --serve` forks us with an IPC channel instead of
+      // giving us the real stdin/stdout.
+      const transport = isIpcStdioRequested() ? new IpcServerTransport() : new StdioServerTransport();
       startupCleanups.push(() => transport.close());
       await mcpServer.connect(transport);
       // The transport now owns stdin/stdout — the guard must stay set even on a
